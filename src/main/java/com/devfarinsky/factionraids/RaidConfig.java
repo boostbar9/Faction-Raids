@@ -29,6 +29,11 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue OWNER_ONLY_MANAGEMENT;
     public static final ForgeConfigSpec.BooleanValue GLOW_FINAL_ENEMIES;
     public static final ForgeConfigSpec.IntValue VICTORY_EXPERIENCE;
+    public static final ForgeConfigSpec.BooleanValue VICTORY_LOOT_ENABLED;
+    public static final ForgeConfigSpec.ConfigValue<String> VICTORY_LOOT_TABLE;
+    public static final ForgeConfigSpec.IntValue MAX_ROSTER_MEMBERS;
+    public static final ForgeConfigSpec.IntValue MAX_DEFENSE_POINTS;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_ILLUSIONERS;
     public static final ForgeConfigSpec.BooleanValue PROTECT_VILLAGERS;
     public static final ForgeConfigSpec.BooleanValue ANNOUNCE_GLOBALLY;
     public static final ForgeConfigSpec.BooleanValue REQUIRE_PLAYER_NEAR_ANCHOR;
@@ -82,6 +87,16 @@ public final class RaidConfig {
                 .define("glowFinalEnemies", true);
         VICTORY_EXPERIENCE = b.comment("Experience points awarded to each online faction member after a victory. Set to zero to disable.")
                 .defineInRange("victoryExperiencePerPlayer", 250, 0, 10000);
+        VICTORY_LOOT_ENABLED = b.comment("Give each online faction member items from victoryLootTable after a real victory.")
+                .define("victoryLootEnabled", true);
+        VICTORY_LOOT_TABLE = b.comment("Loot table used for each online faction member after victory. Datapacks may replace it.")
+                .define("victoryLootTable", "factionraids:gameplay/invasion_victory");
+        MAX_ROSTER_MEMBERS = b.comment("Maximum players in one Faction Raids internal roster.")
+                .defineInRange("maximumRosterMembers", 16, 1, 100);
+        MAX_DEFENSE_POINTS = b.comment("Maximum named invasion targets registered to one faction.")
+                .defineInRange("maximumDefensePoints", 4, 1, 16);
+        ENABLE_ILLUSIONERS = b.comment("Include vanilla illusioners in late invasion waves.")
+                .define("enableIllusioners", true);
         PROTECT_VILLAGERS = b.comment("Prevent raiders spawned by this mod from damaging villagers and iron golems.")
                 .define("protectVillagers", true);
         ANNOUNCE_GLOBALLY = b.comment("Send invasion messages to the whole server instead of only the affected faction.")

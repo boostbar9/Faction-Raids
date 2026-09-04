@@ -5,11 +5,13 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
@@ -29,10 +31,16 @@ import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.monster.Vex;
 import net.minecraft.world.entity.npc.AbstractVillager;
 import net.minecraft.world.entity.raid.Raider;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.LootTable;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -64,26 +72,38 @@ public final class RaidEvents {
 
     @SubscribeEvent
     public static void onEntityJoin(EntityJoinLevelEvent event) {
-        if (!(event.getLevel() instanceof ServerLevel level) || !(event.getEntity() instanceof Vex vex)) return;
-        Mob owner = vex.getOwner();
-        if (owner == null || !owner.getPersistentData().contains(RAID_TEAM_TAG)) return;
-        String teamKey = owner.getPersistentData().getString(RAID_TEAM_TAG);
+        if (!(event.getLevel() instanceof ServerLevel level) || !(event.getEntity() instanceof Mob mob)) return;
+        if (!(mob instanceof Raider) && !(mob instanceof Vex)) return;
+        if (mob instanceof Vex vex && !mob.getPersistentData().contains(RAID_TEAM_TAG)) {
+            Mob owner = vex.getOwner();
+            if (owner != null && owner.getPersistentData().contains(RAID_TEAM_TAG)) {
+                mob.getPersistentData().putString(RAID_TEAM_TAG,
+                        owner.getPersistentData().getString(RAID_TEAM_TAG));
+                mob.setPersistenceRequired();
+            }
+        }
+        String teamKey = mob.getPersistentData().getString(RAID_TEAM_TAG);
         if (teamKey.isBlank()) return;
-        vex.getPersistentData().putString(RAID_TEAM_TAG, teamKey);
-        vex.setPersistenceRequired();
         RaidSavedData data = RaidSavedData.get(level.getServer());
         RaidSavedData.RaidState state = data.raids.get(teamKey);
-        if (state != null) {
-            state.raiders.add(vex.getUUID());
-            data.setDirty();
+        if (state == null) {
+            // Clean up an invasion mob that was unloaded when its raid ended or was stopped.
+            mob.discard();
+            return;
         }
+        state.raiders.add(mob.getUUID());
+        if (RaidConfig.PAUSE_WHEN_FACTION_OFFLINE.get() &&
+                onlineMembers(level.getServer(), teamKey).isEmpty()) mob.setNoAi(true);
+        data.setDirty();
     }
 
     @SubscribeEvent
     public static void onLivingAttack(LivingAttackEvent event) {
         if (!RaidConfig.PROTECT_VILLAGERS.get()) return;
         Entity attacker = event.getSource().getEntity();
-        if (!(attacker instanceof Mob mob) || !mob.getPersistentData().contains(RAID_TEAM_TAG)) return;
+        if (!(attacker instanceof Raider) && !(attacker instanceof Vex)) return;
+        Mob mob = (Mob) attacker;
+        if (!mob.getPersistentData().contains(RAID_TEAM_TAG)) return;
         if (event.getEntity() instanceof AbstractVillager || event.getEntity() instanceof IronGolem) {
             event.setCanceled(true);
             mob.setTarget(null);
@@ -102,8 +122,33 @@ public final class RaidEvents {
                         .then(Commands.literal("set").executes(ctx -> setAnchor(ctx.getSource())))
                         .then(Commands.literal("claim").executes(ctx -> claimLegacyAnchor(ctx.getSource())))
                         .then(Commands.literal("remove").executes(ctx -> removeAnchor(ctx.getSource()))))
-                .then(Commands.literal("start").executes(ctx -> startOwnRaid(ctx.getSource())))
+                .then(Commands.literal("territory")
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("name", StringArgumentType.word())
+                                        .executes(ctx -> addDefensePoint(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("name", StringArgumentType.word())
+                                        .executes(ctx -> removeDefensePoint(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.literal("list").executes(ctx -> listDefensePoints(ctx.getSource()))))
+                .then(Commands.literal("member")
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(ctx -> addMember(ctx.getSource(),
+                                                EntityArgument.getPlayer(ctx, "player")))))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(ctx -> removeMember(ctx.getSource(),
+                                                EntityArgument.getPlayer(ctx, "player")))))
+                        .then(Commands.literal("list").executes(ctx -> listMembers(ctx.getSource()))))
+                .then(Commands.literal("start")
+                        .executes(ctx -> startOwnRaid(ctx.getSource(), null))
+                        .then(Commands.argument("point", StringArgumentType.word())
+                                .executes(ctx -> startOwnRaid(ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "point")))))
                 .then(Commands.literal("status").executes(ctx -> status(ctx.getSource())))
+                .then(Commands.literal("debug").executes(ctx -> debug(ctx.getSource())))
                 .then(Commands.literal("stop").requires(s -> s.hasPermission(2))
                         .executes(ctx -> stopOwnRaid(ctx.getSource())))
                 .then(Commands.literal("admin").requires(s -> s.hasPermission(2))
@@ -113,15 +158,18 @@ public final class RaidEvents {
                                         .executes(ctx -> adminStop(ctx.getSource(), StringArgumentType.getString(ctx, "team")))))
                         .then(Commands.literal("remove")
                                 .then(Commands.argument("team", StringArgumentType.word())
-                                        .executes(ctx -> adminRemove(ctx.getSource(), StringArgumentType.getString(ctx, "team")))))));
+                                        .executes(ctx -> adminRemove(ctx.getSource(), StringArgumentType.getString(ctx, "team")))))
+                        .then(Commands.literal("repair")
+                                .then(Commands.argument("team", StringArgumentType.word())
+                                        .executes(ctx -> adminRepair(ctx.getSource(), StringArgumentType.getString(ctx, "team")))))));
     }
 
     private static int setAnchor(CommandSourceStack source) {
         try {
             ServerPlayer player = source.getPlayerOrException();
-            String key = teamKey(player);
-            String display = teamDisplay(player);
             RaidSavedData data = RaidSavedData.get(source.getServer());
+            String key = factionKeyForPlayer(data, player);
+            String display = teamDisplay(player);
             RaidSavedData.Anchor existing = data.anchors.get(key);
             if (data.raids.containsKey(key)) {
                 source.sendFailure(Component.literal("Stop the active invasion before moving this faction's anchor."));
@@ -132,8 +180,19 @@ public final class RaidEvents {
                 return 0;
             }
             long next = source.getServer().overworld().getGameTime() + randomCooldownTicks(source.getServer().overworld().random);
-            data.anchors.put(key, new RaidSavedData.Anchor(key, display, player.getUUID(),
-                    player.level().dimension().location(), player.blockPosition(), next));
+            RaidSavedData.DefensePoint home = new RaidSavedData.DefensePoint(RaidSavedData.HOME_POINT,
+                    player.level().dimension().location(), player.blockPosition());
+            RaidSavedData.Anchor updated;
+            if (existing == null) {
+                Set<UUID> members = seedRoster(source.getServer(), player);
+                Map<String, RaidSavedData.DefensePoint> points = new LinkedHashMap<>();
+                points.put(RaidSavedData.HOME_POINT, home);
+                updated = new RaidSavedData.Anchor(key, display, player.getUUID(), members,
+                        true, points, next);
+            } else {
+                updated = existing.withIdentity(key, display).withPoint(home).withNextRaid(next);
+            }
+            data.anchors.put(key, updated);
             data.setDirty();
             source.sendSuccess(() -> Component.literal("Faction raid anchor set at " + formatPos(player.blockPosition()) +
                     ". Illager invasions will target your faction players here.").withStyle(ChatFormatting.GREEN), false);
@@ -147,8 +206,8 @@ public final class RaidEvents {
     private static int claimLegacyAnchor(CommandSourceStack source) {
         try {
             ServerPlayer player = source.getPlayerOrException();
-            String key = teamKey(player);
             RaidSavedData data = RaidSavedData.get(source.getServer());
+            String key = factionKeyForPlayer(data, player);
             RaidSavedData.Anchor anchor = data.anchors.get(key);
             if (anchor == null) {
                 source.sendFailure(Component.literal("Your faction does not have an anchor."));
@@ -172,8 +231,8 @@ public final class RaidEvents {
     private static int removeAnchor(CommandSourceStack source) {
         try {
             ServerPlayer player = source.getPlayerOrException();
-            String key = teamKey(player);
             RaidSavedData data = RaidSavedData.get(source.getServer());
+            String key = factionKeyForPlayer(data, player);
             RaidSavedData.Anchor anchor = data.anchors.get(key);
             if (anchor == null) {
                 source.sendFailure(Component.literal("Your faction does not have a raid anchor."));
@@ -197,11 +256,214 @@ public final class RaidEvents {
         }
     }
 
-    private static int startOwnRaid(CommandSourceStack source) {
+    private static int addDefensePoint(CommandSourceStack source, String suppliedName) {
         try {
             ServerPlayer player = source.getPlayerOrException();
-            String key = teamKey(player);
             RaidSavedData data = RaidSavedData.get(source.getServer());
+            String key = factionKeyForPlayer(data, player);
+            RaidSavedData.Anchor anchor = data.anchors.get(key);
+            if (anchor == null) {
+                source.sendFailure(Component.literal("Set your home anchor first with /factionraids anchor set"));
+                return 0;
+            }
+            if (!canManage(player, anchor)) {
+                source.sendFailure(Component.literal("Only the anchor owner or an operator can manage defense points."));
+                return 0;
+            }
+            if (data.raids.containsKey(key)) {
+                source.sendFailure(Component.literal("Stop the active invasion before changing defense points."));
+                return 0;
+            }
+            String name = normalizePointName(suppliedName);
+            if (name == null || RaidSavedData.HOME_POINT.equals(name)) {
+                source.sendFailure(Component.literal("Use a 1–24 character name other than 'home'."));
+                return 0;
+            }
+            if (!anchor.defensePoints().containsKey(name) &&
+                    anchor.defensePoints().size() >= RaidConfig.MAX_DEFENSE_POINTS.get()) {
+                source.sendFailure(Component.literal("This faction has reached its defense-point limit."));
+                return 0;
+            }
+            RaidSavedData.DefensePoint point = new RaidSavedData.DefensePoint(name,
+                    player.level().dimension().location(), player.blockPosition());
+            data.anchors.put(key, anchor.withPoint(point));
+            data.setDirty();
+            source.sendSuccess(() -> Component.literal("Defense point '" + name + "' saved at " +
+                    formatPos(point.pos()) + ".").withStyle(ChatFormatting.GREEN), false);
+            return 1;
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("Only a player can add a defense point."));
+            return 0;
+        }
+    }
+
+    private static int removeDefensePoint(CommandSourceStack source, String suppliedName) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            RaidSavedData data = RaidSavedData.get(source.getServer());
+            String key = factionKeyForPlayer(data, player);
+            RaidSavedData.Anchor anchor = data.anchors.get(key);
+            if (anchor == null) {
+                source.sendFailure(Component.literal("Your faction does not have an anchor."));
+                return 0;
+            }
+            if (!canManage(player, anchor)) {
+                source.sendFailure(Component.literal("Only the anchor owner or an operator can manage defense points."));
+                return 0;
+            }
+            if (data.raids.containsKey(key)) {
+                source.sendFailure(Component.literal("Stop the active invasion before changing defense points."));
+                return 0;
+            }
+            String name = normalizePointName(suppliedName);
+            if (RaidSavedData.HOME_POINT.equals(name)) {
+                source.sendFailure(Component.literal("The home point is moved with /factionraids anchor set, not removed."));
+                return 0;
+            }
+            if (name == null || !anchor.defensePoints().containsKey(name)) {
+                source.sendFailure(Component.literal("No defense point named '" + suppliedName + "'."));
+                return 0;
+            }
+            data.anchors.put(key, anchor.withoutPoint(name));
+            data.setDirty();
+            source.sendSuccess(() -> Component.literal("Defense point '" + name + "' removed.")
+                    .withStyle(ChatFormatting.YELLOW), false);
+            return 1;
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("Only a player can remove a defense point."));
+            return 0;
+        }
+    }
+
+    private static int listDefensePoints(CommandSourceStack source) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            RaidSavedData data = RaidSavedData.get(source.getServer());
+            RaidSavedData.Anchor anchor = data.anchors.get(factionKeyForPlayer(data, player));
+            if (anchor == null) {
+                source.sendFailure(Component.literal("Your faction does not have an anchor."));
+                return 0;
+            }
+            source.sendSuccess(() -> Component.literal("Defense points for " + anchor.teamDisplay() + ":")
+                    .withStyle(ChatFormatting.AQUA), false);
+            anchor.defensePoints().values().forEach(point -> source.sendSuccess(() -> Component.literal(
+                    "• " + point.name() + " — " + point.dimension() + " at " + formatPos(point.pos())), false));
+            return anchor.defensePoints().size();
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("Only a player can list defense points."));
+            return 0;
+        }
+    }
+
+    private static int addMember(CommandSourceStack source, ServerPlayer target) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            RaidSavedData data = RaidSavedData.get(source.getServer());
+            String key = factionKeyForPlayer(data, player);
+            RaidSavedData.Anchor anchor = data.anchors.get(key);
+            if (anchor == null) {
+                source.sendFailure(Component.literal("Set your faction anchor before creating a roster."));
+                return 0;
+            }
+            if (!canManage(player, anchor)) {
+                source.sendFailure(Component.literal("Only the anchor owner or an operator can manage the roster."));
+                return 0;
+            }
+            String otherKey = associatedAnchorKeyForPlayer(data, target.getUUID());
+            if (otherKey != null && !otherKey.equals(key)) {
+                source.sendFailure(Component.literal(target.getGameProfile().getName() +
+                        " already belongs to another Faction Raids roster."));
+                return 0;
+            }
+            Set<UUID> members = anchor.internalRoster() ? new LinkedHashSet<>(anchor.members()) :
+                    seedLegacyRoster(source.getServer(), anchor, player);
+            if (!members.contains(target.getUUID()) && members.size() >= RaidConfig.MAX_ROSTER_MEMBERS.get()) {
+                source.sendFailure(Component.literal("This faction has reached its roster limit."));
+                return 0;
+            }
+            members.add(target.getUUID());
+            data.anchors.put(key, anchor.withRoster(members, true));
+            data.setDirty();
+            source.sendSuccess(() -> Component.literal(target.getGameProfile().getName() +
+                    " added to the Faction Raids roster.").withStyle(ChatFormatting.GREEN), false);
+            target.sendSystemMessage(Component.literal("You joined " + anchor.teamDisplay() +
+                    "'s Faction Raids roster.").withStyle(ChatFormatting.AQUA));
+            return 1;
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("A player must manage the faction roster."));
+            return 0;
+        }
+    }
+
+    private static int removeMember(CommandSourceStack source, ServerPlayer target) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            RaidSavedData data = RaidSavedData.get(source.getServer());
+            String key = factionKeyForPlayer(data, player);
+            RaidSavedData.Anchor anchor = data.anchors.get(key);
+            if (anchor == null || !anchor.internalRoster()) {
+                source.sendFailure(Component.literal("Your faction is not using an internal roster yet."));
+                return 0;
+            }
+            if (!canManage(player, anchor)) {
+                source.sendFailure(Component.literal("Only the anchor owner or an operator can manage the roster."));
+                return 0;
+            }
+            if (target.getUUID().equals(anchor.ownerUuid())) {
+                source.sendFailure(Component.literal("The anchor owner cannot be removed from the roster."));
+                return 0;
+            }
+            Set<UUID> members = new LinkedHashSet<>(anchor.members());
+            if (!members.remove(target.getUUID())) {
+                source.sendFailure(Component.literal(target.getGameProfile().getName() + " is not on this roster."));
+                return 0;
+            }
+            data.anchors.put(key, anchor.withRoster(members, true));
+            data.setDirty();
+            source.sendSuccess(() -> Component.literal(target.getGameProfile().getName() +
+                    " removed from the Faction Raids roster.").withStyle(ChatFormatting.YELLOW), false);
+            return 1;
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("A player must manage the faction roster."));
+            return 0;
+        }
+    }
+
+    private static int listMembers(CommandSourceStack source) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            RaidSavedData data = RaidSavedData.get(source.getServer());
+            String key = factionKeyForPlayer(data, player);
+            RaidSavedData.Anchor anchor = data.anchors.get(key);
+            if (anchor == null) {
+                source.sendFailure(Component.literal("Your faction does not have an anchor."));
+                return 0;
+            }
+            List<ServerPlayer> online = onlineMembers(source.getServer(), key);
+            source.sendSuccess(() -> Component.literal(anchor.internalRoster() ?
+                    "Internal roster: " + anchor.members().size() + " members, " + online.size() + " online." :
+                    "Legacy scoreboard roster: " + online.size() + " members currently online.")
+                    .withStyle(ChatFormatting.AQUA), false);
+            if (anchor.internalRoster()) {
+                anchor.members().forEach(id -> source.sendSuccess(() -> Component.literal("• " +
+                        playerName(source.getServer(), id) + (id.equals(anchor.ownerUuid()) ? " [owner]" : "") +
+                        (source.getServer().getPlayerList().getPlayer(id) != null ? " [online]" : "")), false));
+            } else {
+                online.forEach(member -> source.sendSuccess(() -> Component.literal("• " +
+                        member.getGameProfile().getName() + " [online]"), false));
+            }
+            return anchor.internalRoster() ? anchor.members().size() : online.size();
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("Only a player can list faction members."));
+            return 0;
+        }
+    }
+
+    private static int startOwnRaid(CommandSourceStack source, String suppliedPoint) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            RaidSavedData data = RaidSavedData.get(source.getServer());
+            String key = factionKeyForPlayer(data, player);
             RaidSavedData.Anchor anchor = data.anchors.get(key);
             if (anchor == null) {
                 source.sendFailure(Component.literal("Set your faction's anchor first with /factionraids anchor set"));
@@ -215,11 +477,22 @@ public final class RaidEvents {
                 source.sendFailure(Component.literal("Your faction already has an active invasion."));
                 return 0;
             }
-            if (!hasDefenderNear(source.getServer(), anchor, onlineMembers(source.getServer(), key))) {
-                source.sendFailure(Component.literal("Stand near your faction anchor before starting the invasion."));
+            RaidSavedData.DefensePoint point;
+            if (suppliedPoint != null) {
+                String pointName = normalizePointName(suppliedPoint);
+                point = pointName == null ? null : anchor.defensePoints().get(pointName);
+                if (point == null) {
+                    source.sendFailure(Component.literal("Unknown defense point. Use /factionraids territory list"));
+                    return 0;
+                }
+            } else {
+                point = closestDefensePoint(source.getServer(), anchor, player);
+            }
+            if (!hasDefenderNear(source.getServer(), point, onlineMembers(source.getServer(), key))) {
+                source.sendFailure(Component.literal("Stand near the selected defense point before starting the invasion."));
                 return 0;
             }
-            if (!beginRaid(source.getServer(), data, anchor)) {
+            if (!beginRaid(source.getServer(), data, anchor, point)) {
                 source.sendFailure(Component.literal("The server has reached its configured concurrent raid limit."));
                 return 0;
             }
@@ -233,8 +506,8 @@ public final class RaidEvents {
     private static int stopOwnRaid(CommandSourceStack source) {
         try {
             ServerPlayer player = source.getPlayerOrException();
-            String key = teamKey(player);
             RaidSavedData data = RaidSavedData.get(source.getServer());
+            String key = factionKeyForPlayer(data, player);
             if (!data.raids.containsKey(key)) {
                 source.sendFailure(Component.literal("Your faction has no active invasion."));
                 return 0;
@@ -251,8 +524,8 @@ public final class RaidEvents {
     private static int status(CommandSourceStack source) {
         try {
             ServerPlayer player = source.getPlayerOrException();
-            String key = teamKey(player);
             RaidSavedData data = RaidSavedData.get(source.getServer());
+            String key = factionKeyForPlayer(data, player);
             RaidSavedData.Anchor anchor = data.anchors.get(key);
             if (anchor == null) {
                 source.sendSuccess(() -> Component.literal("No faction raid anchor. Use /factionraids anchor set"), false);
@@ -260,13 +533,16 @@ public final class RaidEvents {
             }
             RaidSavedData.RaidState state = data.raids.get(key);
             if (state != null) {
+                RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
                 source.sendSuccess(() -> Component.literal("Invasion active: wave " + state.wave + "/" +
-                        RaidConfig.WAVES.get() + ", " + state.raiders.size() + " enemies tracked. Team key: " + key), false);
+                        RaidConfig.WAVES.get() + ", " + state.raiders.size() + " enemies tracked at '" +
+                        point.name() + "'. Faction key: " + key), false);
             } else {
                 long now = source.getServer().overworld().getGameTime();
                 long seconds = Math.max(0L, (anchor.nextRaidGameTime() - now) / 20L);
-                source.sendSuccess(() -> Component.literal("Anchor " + formatPos(anchor.pos()) +
-                        "; next automatic invasion eligible in " + formatTime(seconds) + ". Team key: " + key), false);
+                source.sendSuccess(() -> Component.literal(anchor.defensePoints().size() + " defense point(s); " +
+                        anchor.members().size() + " saved member(s); next automatic invasion eligible in " +
+                        formatTime(seconds) + ". Faction key: " + key), false);
             }
             return 1;
         } catch (Exception e) {
@@ -280,9 +556,53 @@ public final class RaidEvents {
         source.sendSuccess(() -> Component.literal("Faction Raids anchors: " + data.anchors.size() +
                 ", active invasions: " + data.raids.size()).withStyle(ChatFormatting.AQUA), false);
         data.anchors.values().stream().sorted(Comparator.comparing(RaidSavedData.Anchor::teamKey)).forEach(anchor ->
-                source.sendSuccess(() -> Component.literal(anchor.teamKey() + " — " + anchor.teamDisplay() + " at " +
-                        formatPos(anchor.pos()) + (data.raids.containsKey(anchor.teamKey()) ? " [ACTIVE]" : "")), false));
+                source.sendSuccess(() -> Component.literal(anchor.teamKey() + " — " + anchor.teamDisplay() + " — " +
+                        anchor.defensePoints().size() + " point(s), " + anchor.members().size() + " saved member(s)" +
+                        (data.raids.containsKey(anchor.teamKey()) ? " [ACTIVE]" : "")), false));
         return data.anchors.size();
+    }
+
+    private static int debug(CommandSourceStack source) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            RaidSavedData data = RaidSavedData.get(source.getServer());
+            String key = factionKeyForPlayer(data, player);
+            RaidSavedData.Anchor anchor = data.anchors.get(key);
+            if (anchor == null) {
+                source.sendFailure(Component.literal("No Faction Raids anchor is associated with you."));
+                return 0;
+            }
+            List<ServerPlayer> online = onlineMembers(source.getServer(), key);
+            double tps = approximateTps(source.getServer());
+            source.sendSuccess(() -> Component.literal("Faction Raids diagnostic for " + anchor.teamDisplay())
+                    .withStyle(ChatFormatting.AQUA), false);
+            source.sendSuccess(() -> Component.literal("Key: " + key + " | owner: " +
+                    playerName(source.getServer(), anchor.ownerUuid())), false);
+            source.sendSuccess(() -> Component.literal("Roster: " + (anchor.internalRoster() ? "internal" : "scoreboard fallback") +
+                    " | saved: " + anchor.members().size() + " | online: " + online.stream()
+                    .map(p -> p.getGameProfile().getName()).toList()), false);
+            source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT,
+                    "Defense points: %d | approximate TPS: %.1f | global tracked raiders: %d/%d",
+                    anchor.defensePoints().size(), tps, globalTrackedCount(data), RaidConfig.MAX_GLOBAL_RAIDERS.get())), false);
+            RaidSavedData.RaidState state = data.raids.get(key);
+            if (state == null) {
+                source.sendSuccess(() -> Component.literal("Raid state: inactive"), false);
+            } else {
+                long loaded = state.raiders.stream().filter(id -> {
+                    RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
+                    ServerLevel level = getLevel(source.getServer(), point);
+                    return level != null && level.getEntity(id) != null;
+                }).count();
+                source.sendSuccess(() -> Component.literal("Raid state: wave " + state.wave + "/" + RaidConfig.WAVES.get() +
+                        " at '" + state.defensePointName + "' | tracked: " + state.raiders.size() +
+                        " | loaded: " + loaded + " | missing grace: " + state.missingTicks.size() +
+                        " | abandonment: " + (state.abandonedTicks / 20) + "s"), false);
+            }
+            return 1;
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("Only a player can inspect their faction diagnostic."));
+            return 0;
+        }
     }
 
     private static int adminStop(CommandSourceStack source, String suppliedKey) {
@@ -313,6 +633,30 @@ public final class RaidEvents {
         return 1;
     }
 
+    private static int adminRepair(CommandSourceStack source, String suppliedKey) {
+        RaidSavedData data = RaidSavedData.get(source.getServer());
+        String key = normalizeTeamKey(data, suppliedKey);
+        RaidSavedData.Anchor anchor = data.anchors.get(key);
+        RaidSavedData.RaidState state = data.raids.get(key);
+        if (anchor == null || state == null) {
+            source.sendFailure(Component.literal("No active invasion found for " + suppliedKey));
+            return 0;
+        }
+        RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
+        ServerLevel level = getLevel(source.getServer(), point);
+        if (level == null) {
+            source.sendFailure(Component.literal("The invasion dimension is not available."));
+            return 0;
+        }
+        state.reconcileTicks = 0;
+        reconcileTaggedMobs(level, point, state);
+        updateTrackedMobs(level, state);
+        data.setDirty();
+        source.sendSuccess(() -> Component.literal("Reconciled invasion " + key + ": " +
+                state.raiders.size() + " enemies tracked.").withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
     private static void tick(MinecraftServer server) {
         RaidSavedData data = RaidSavedData.get(server);
         refreshIdleAnchorIdentities(server, data);
@@ -324,8 +668,9 @@ public final class RaidEvents {
                 if (data.raids.containsKey(anchor.teamKey()) || now < anchor.nextRaidGameTime()) continue;
                 List<ServerPlayer> members = onlineMembers(server, anchor.teamKey());
                 if (members.isEmpty()) continue;
-                if (RaidConfig.REQUIRE_PLAYER_NEAR_ANCHOR.get() && !hasDefenderNear(server, anchor, members)) continue;
-                beginRaid(server, data, anchor);
+                RaidSavedData.DefensePoint point = selectAutomaticPoint(server, anchor, members);
+                if (point == null) continue;
+                beginRaid(server, data, anchor, point);
             }
         }
 
@@ -333,13 +678,16 @@ public final class RaidEvents {
         data.setDirty();
     }
 
-    private static boolean beginRaid(MinecraftServer server, RaidSavedData data, RaidSavedData.Anchor anchor) {
+    private static boolean beginRaid(MinecraftServer server, RaidSavedData data, RaidSavedData.Anchor anchor,
+                                     RaidSavedData.DefensePoint point) {
         if (data.raids.size() >= RaidConfig.MAX_CONCURRENT_RAIDS.get()) return false;
-        RaidSavedData.RaidState state = new RaidSavedData.RaidState(anchor.teamKey(), RaidConfig.WARNING_SECONDS.get() * 20);
+        RaidSavedData.RaidState state = new RaidSavedData.RaidState(anchor.teamKey(), point.name(),
+                RaidConfig.WARNING_SECONDS.get() * 20);
         data.raids.put(anchor.teamKey(), state);
         data.setDirty();
         announce(server, anchor.teamKey(), Component.literal("[Faction Raid] ").withStyle(ChatFormatting.DARK_RED)
-                .append(Component.literal("Illager scouts have found " + anchor.teamDisplay() + "! The invasion begins in " +
+                .append(Component.literal("Illager scouts have found " + anchor.teamDisplay() + " at '" + point.name() +
+                        "'! The invasion begins in " +
                         formatTime(RaidConfig.WARNING_SECONDS.get()) + ". Villagers are not the objective—defend the territory yourselves.")
                         .withStyle(ChatFormatting.GOLD)), true);
         updateBossBar(server, anchor, state, false);
@@ -350,25 +698,28 @@ public final class RaidEvents {
         RaidSavedData.Anchor anchor = data.anchors.get(teamKey);
         RaidSavedData.RaidState state = data.raids.get(teamKey);
         if (anchor == null || state == null) return;
-        ServerLevel level = getLevel(server, anchor);
+        RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
+        ServerLevel level = getLevel(server, point);
         if (level == null) return;
 
         List<ServerPlayer> members = onlineMembers(server, teamKey);
         if (members.isEmpty() && RaidConfig.PAUSE_WHEN_FACTION_OFFLINE.get()) {
             state.offlinePauseAnnounced = true;
+            setRaidMobsFrozen(level, state, true);
             updateBossBar(server, anchor, state, true);
             return;
         }
+        setRaidMobsFrozen(level, state, false);
         if (state.offlinePauseAnnounced) {
             state.offlinePauseAnnounced = false;
             announce(server, teamKey, Component.literal("The paused invasion has resumed.").withStyle(ChatFormatting.YELLOW), false);
         }
 
-        reconcileTaggedMobs(level, anchor, state);
+        reconcileTaggedMobs(level, point, state);
         updateTrackedMobs(level, state);
         redirectRaiders(level, state, members);
 
-        boolean defended = hasDefenderNear(server, anchor, members);
+        boolean defended = hasDefenderNear(server, point, members);
         if (defended) state.abandonedTicks = 0;
         else state.abandonedTicks += 20;
         if (state.abandonedTicks >= RaidConfig.ABANDON_DEFEAT_MINUTES.get() * 60 * 20) {
@@ -406,7 +757,7 @@ public final class RaidEvents {
                     }
                 } else {
                     state.performancePauseAnnounced = false;
-                    spawnWave(server, level, data, anchor, state, members);
+                    spawnWave(server, level, data, anchor, point, state, members);
                 }
             }
         }
@@ -432,13 +783,13 @@ public final class RaidEvents {
         }
     }
 
-    private static void reconcileTaggedMobs(ServerLevel level, RaidSavedData.Anchor anchor,
+    private static void reconcileTaggedMobs(ServerLevel level, RaidSavedData.DefensePoint point,
                                             RaidSavedData.RaidState state) {
         state.reconcileTicks -= 20;
         if (state.reconcileTicks > 0) return;
         state.reconcileTicks = 10 * 20;
         double radius = RaidConfig.DEFENSE_RADIUS.get() + RaidConfig.MAX_SPAWN_DISTANCE.get() + 32.0;
-        AABB area = new AABB(anchor.pos()).inflate(radius, 128.0, radius);
+        AABB area = new AABB(point.pos()).inflate(radius, 128.0, radius);
         for (Mob mob : level.getEntitiesOfClass(Mob.class, area,
                 m -> state.teamKey.equals(m.getPersistentData().getString(RAID_TEAM_TAG)))) {
             if (mob.isAlive()) {
@@ -449,7 +800,8 @@ public final class RaidEvents {
     }
 
     private static void spawnWave(MinecraftServer server, ServerLevel level, RaidSavedData data,
-                                  RaidSavedData.Anchor anchor, RaidSavedData.RaidState state,
+                                  RaidSavedData.Anchor anchor, RaidSavedData.DefensePoint point,
+                                  RaidSavedData.RaidState state,
                                   List<ServerPlayer> members) {
         int nextWave = state.wave + 1;
         int playerCount = Math.max(1, members.size());
@@ -466,7 +818,7 @@ public final class RaidEvents {
         for (int i = 0; i < wanted; i++) {
             Raider raider = createRaiderForWave(level, nextWave, i);
             if (raider == null) continue;
-            BlockPos spawn = findSpawnPosition(level, anchor.pos(), level.random, raider);
+            BlockPos spawn = findSpawnPosition(level, point.pos(), level.random, raider);
             if (spawn == null) continue;
             raider.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5,
                     level.random.nextFloat() * 360.0F, 0.0F);
@@ -489,15 +841,18 @@ public final class RaidEvents {
         state.waveStartingCount = spawned;
         state.ticksToNextWave = 0;
         announce(server, anchor.teamKey(), Component.literal("Wave " + state.wave + "/" + RaidConfig.WAVES.get() +
-                " has begun—" + spawned + " illagers are attacking your faction!").withStyle(ChatFormatting.RED), true);
+                " has begun—" + spawned + " illagers are attacking '" + point.name() + "'!")
+                .withStyle(ChatFormatting.RED), true);
         data.setDirty();
     }
 
     private static Raider createRaiderForWave(ServerLevel level, int wave, int index) {
         EntityType<? extends Raider> type;
         if (wave >= 5 && index == 0) type = EntityType.RAVAGER;
-        else if (wave >= 4 && index == 1) type = EntityType.EVOKER;
-        else if (wave >= 3 && index == 2) type = EntityType.WITCH;
+        else if (wave >= 4 && index == (wave >= 5 ? 1 : 0)) type = EntityType.EVOKER;
+        else if (RaidConfig.ENABLE_ILLUSIONERS.get() && wave >= 4 && index == (wave >= 5 ? 2 : 1))
+            type = EntityType.ILLUSIONER;
+        else if (wave >= 3 && index == (wave >= 5 ? 3 : 2)) type = EntityType.WITCH;
         else if ((index + wave) % 3 == 0) type = EntityType.VINDICATOR;
         else type = EntityType.PILLAGER;
         return type.create(level);
@@ -546,15 +901,25 @@ public final class RaidEvents {
         }
     }
 
-    private static boolean hasDefenderNear(MinecraftServer server, RaidSavedData.Anchor anchor,
+    private static void setRaidMobsFrozen(ServerLevel level, RaidSavedData.RaidState state, boolean frozen) {
+        for (UUID id : state.raiders) {
+            Entity entity = level.getEntity(id);
+            if (entity instanceof Mob mob && mob.isAlive()) {
+                mob.setNoAi(frozen);
+                if (frozen) mob.setTarget(null);
+            }
+        }
+    }
+
+    private static boolean hasDefenderNear(MinecraftServer server, RaidSavedData.DefensePoint point,
                                            List<ServerPlayer> members) {
-        ServerLevel level = getLevel(server, anchor);
+        ServerLevel level = getLevel(server, point);
         if (level == null) return false;
         double radiusSq = (double) RaidConfig.DEFENSE_RADIUS.get() * RaidConfig.DEFENSE_RADIUS.get();
         for (ServerPlayer player : members) {
             if (player.level() == level && player.isAlive() && !player.isSpectator() &&
-                    player.distanceToSqr(anchor.pos().getX() + 0.5, anchor.pos().getY() + 0.5,
-                            anchor.pos().getZ() + 0.5) <= radiusSq) return true;
+                    player.distanceToSqr(point.pos().getX() + 0.5, point.pos().getY() + 0.5,
+                            point.pos().getZ() + 0.5) <= radiusSq) return true;
         }
         return false;
     }
@@ -564,7 +929,8 @@ public final class RaidEvents {
         RaidSavedData.RaidState state = data.raids.remove(teamKey);
         RaidSavedData.Anchor anchor = data.anchors.get(teamKey);
         if (state != null && anchor != null) {
-            ServerLevel level = getLevel(server, anchor);
+            RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
+            ServerLevel level = getLevel(server, point);
             if (level != null) {
                 for (UUID id : state.raiders) {
                     Entity entity = level.getEntity(id);
@@ -576,7 +942,9 @@ public final class RaidEvents {
         }
         if (victory && reward) {
             int experience = RaidConfig.VICTORY_EXPERIENCE.get();
-            if (experience > 0) onlineMembers(server, teamKey).forEach(p -> p.giveExperiencePoints(experience));
+            List<ServerPlayer> winners = onlineMembers(server, teamKey);
+            if (experience > 0) winners.forEach(p -> p.giveExperiencePoints(experience));
+            if (RaidConfig.VICTORY_LOOT_ENABLED.get()) winners.forEach(p -> giveVictoryLoot(server, p));
         }
         ServerBossEvent bar = BOSS_BARS.remove(teamKey);
         if (bar != null) bar.removeAllPlayers();
@@ -600,8 +968,9 @@ public final class RaidEvents {
         float clearedFraction = state.waveStartingCount <= 0 ? 0.0F :
                 1.0F - (float) state.raiders.size() / state.waveStartingCount;
         bar.setProgress(Mth.clamp((completedWaves + clearedFraction) / totalWaves, 0.0F, 1.0F));
-        String label = paused ? "Invasion paused — faction offline" : state.wave == 0 ? "Invasion approaching" :
-                "Wave " + state.wave + "/" + totalWaves + " • " + state.raiders.size() + " remaining";
+        String label = paused ? "Invasion paused — faction offline" : state.wave == 0 ?
+                "Invasion approaching " + state.defensePointName : "Wave " + state.wave + "/" + totalWaves +
+                " • " + state.raiders.size() + " remaining • " + state.defensePointName;
         bar.setName(Component.literal(label));
     }
 
@@ -615,8 +984,11 @@ public final class RaidEvents {
 
     private static List<ServerPlayer> onlineMembers(MinecraftServer server, String key) {
         List<ServerPlayer> result = new ArrayList<>();
+        RaidSavedData.Anchor anchor = RaidSavedData.get(server).anchors.get(key);
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (teamKey(player).equals(key)) result.add(player);
+            if (anchor != null && anchor.internalRoster()) {
+                if (anchor.members().contains(player.getUUID())) result.add(player);
+            } else if (teamKey(player).equals(key)) result.add(player);
         }
         return result;
     }
@@ -631,8 +1003,15 @@ public final class RaidEvents {
             String currentKey = teamKey(owner);
             String currentDisplay = teamDisplay(owner);
             // Some faction mods assign their scoreboard team a moment after login. Never
-            // downgrade a shared faction anchor to a solo-player anchor during that window.
+            // downgrade a shared faction identity during that window.
             if (oldKey.startsWith("team:") && currentKey.startsWith("player:")) continue;
+            if (anchor.internalRoster()) {
+                if (!currentDisplay.equals(anchor.teamDisplay())) {
+                    data.anchors.put(oldKey, anchor.withIdentity(oldKey, currentDisplay));
+                    data.setDirty();
+                }
+                continue;
+            }
             if (!currentKey.equals(oldKey)) {
                 if (data.anchors.containsKey(currentKey)) continue;
                 data.anchors.remove(oldKey);
@@ -653,9 +1032,7 @@ public final class RaidEvents {
     private static boolean shouldPauseForPerformance(MinecraftServer server, RaidSavedData data) {
         if (globalTrackedCount(data) >= RaidConfig.MAX_GLOBAL_RAIDERS.get()) return true;
         if (!RaidConfig.PAUSE_SPAWNING_BELOW_TPS.get()) return false;
-        float averageTickMs = server.getAverageTickTime();
-        double approximateTps = averageTickMs <= 0.0F ? 20.0 : Math.min(20.0, 1000.0 / averageTickMs);
-        return approximateTps < RaidConfig.MINIMUM_TPS_TO_SPAWN.get();
+        return approximateTps(server) < RaidConfig.MINIMUM_TPS_TO_SPAWN.get();
     }
 
     private static int globalTrackedCount(RaidSavedData data) {
@@ -679,9 +1056,116 @@ public final class RaidEvents {
         return player.getGameProfile().getName();
     }
 
-    private static ServerLevel getLevel(MinecraftServer server, RaidSavedData.Anchor anchor) {
-        ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, anchor.dimension());
+    private static ServerLevel getLevel(MinecraftServer server, RaidSavedData.DefensePoint point) {
+        ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, point.dimension());
         return server.getLevel(key);
+    }
+
+    private static String factionKeyForPlayer(RaidSavedData data, ServerPlayer player) {
+        UUID id = player.getUUID();
+        for (RaidSavedData.Anchor anchor : data.anchors.values()) {
+            if (anchor.ownerUuid().equals(id) || anchor.internalRoster() && anchor.members().contains(id)) {
+                return anchor.teamKey();
+            }
+        }
+        return teamKey(player);
+    }
+
+    private static String associatedAnchorKeyForPlayer(RaidSavedData data, UUID id) {
+        for (RaidSavedData.Anchor anchor : data.anchors.values()) {
+            if (anchor.ownerUuid().equals(id) || anchor.internalRoster() && anchor.members().contains(id)) {
+                return anchor.teamKey();
+            }
+        }
+        return null;
+    }
+
+    private static Set<UUID> seedRoster(MinecraftServer server, ServerPlayer owner) {
+        Set<UUID> members = new LinkedHashSet<>();
+        members.add(owner.getUUID());
+        String scoreboardKey = teamKey(owner);
+        if (scoreboardKey.startsWith("team:")) {
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                if (members.size() >= RaidConfig.MAX_ROSTER_MEMBERS.get()) break;
+                if (scoreboardKey.equals(teamKey(player))) members.add(player.getUUID());
+            }
+        }
+        return members;
+    }
+
+    private static Set<UUID> seedLegacyRoster(MinecraftServer server, RaidSavedData.Anchor anchor,
+                                              ServerPlayer manager) {
+        Set<UUID> members = new LinkedHashSet<>(anchor.members());
+        members.add(manager.getUUID());
+        if (!RaidSavedData.UNKNOWN_OWNER.equals(anchor.ownerUuid())) members.add(anchor.ownerUuid());
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (teamKey(player).equals(anchor.teamKey())) members.add(player.getUUID());
+        }
+        return members;
+    }
+
+    private static String playerName(MinecraftServer server, UUID id) {
+        if (RaidSavedData.UNKNOWN_OWNER.equals(id)) return "unclaimed";
+        ServerPlayer online = server.getPlayerList().getPlayer(id);
+        if (online != null) return online.getGameProfile().getName();
+        return server.getProfileCache().get(id).map(profile -> profile.getName()).orElse(id.toString());
+    }
+
+    private static RaidSavedData.DefensePoint selectAutomaticPoint(MinecraftServer server,
+                                                                    RaidSavedData.Anchor anchor,
+                                                                    List<ServerPlayer> members) {
+        List<RaidSavedData.DefensePoint> eligible = new ArrayList<>();
+        for (RaidSavedData.DefensePoint point : anchor.defensePoints().values()) {
+            if (!RaidConfig.REQUIRE_PLAYER_NEAR_ANCHOR.get() || hasDefenderNear(server, point, members)) {
+                eligible.add(point);
+            }
+        }
+        if (eligible.isEmpty()) return null;
+        return eligible.get(server.overworld().random.nextInt(eligible.size()));
+    }
+
+    private static RaidSavedData.DefensePoint closestDefensePoint(MinecraftServer server,
+                                                                   RaidSavedData.Anchor anchor,
+                                                                   ServerPlayer player) {
+        RaidSavedData.DefensePoint closest = null;
+        double closestDistance = Double.MAX_VALUE;
+        for (RaidSavedData.DefensePoint point : anchor.defensePoints().values()) {
+            ServerLevel level = getLevel(server, point);
+            if (level == null || player.level() != level) continue;
+            double distance = player.distanceToSqr(point.pos().getX() + 0.5, point.pos().getY() + 0.5,
+                    point.pos().getZ() + 0.5);
+            if (distance < closestDistance) {
+                closest = point;
+                closestDistance = distance;
+            }
+        }
+        return closest != null ? closest : anchor.primaryPoint();
+    }
+
+    private static String normalizePointName(String supplied) {
+        if (supplied == null) return null;
+        String normalized = supplied.toLowerCase(Locale.ROOT);
+        return normalized.matches("[a-z0-9_-]{1,24}") ? normalized : null;
+    }
+
+    private static double approximateTps(MinecraftServer server) {
+        float averageTickMs = server.getAverageTickTime();
+        return averageTickMs <= 0.0F ? 20.0 : Math.min(20.0, 1000.0 / averageTickMs);
+    }
+
+    private static void giveVictoryLoot(MinecraftServer server, ServerPlayer player) {
+        ResourceLocation id = ResourceLocation.tryParse(RaidConfig.VICTORY_LOOT_TABLE.get());
+        if (id == null || !(player.level() instanceof ServerLevel level)) return;
+        LootTable table = server.getLootData().getLootTable(id);
+        LootParams params = new LootParams.Builder(level)
+                .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(player.blockPosition()))
+                .withOptionalParameter(LootContextParams.THIS_ENTITY, player)
+                .create(LootContextParamSets.CHEST);
+        table.getRandomItems(params, stack -> giveOrDrop(player, stack));
+    }
+
+    private static void giveOrDrop(ServerPlayer player, ItemStack stack) {
+        if (!player.getInventory().add(stack)) player.drop(stack, false);
     }
 
     private static long randomCooldownTicks(RandomSource random) {
