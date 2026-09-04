@@ -2,6 +2,22 @@
 
 All notable changes to Faction Raids are documented here.
 
+## 2.6.0 - 2026-09-04
+
+- Replaced the default generic assault roster with hostile Villager Recruits soldiers.
+- Added Recruits shieldmen, bowmen, crossbowmen, captains, assassins, patrol leaders and siege
+  engineers across escalating waves while retaining select vanilla raid specialists.
+- Put invading Recruits into their native raid combat state and prevented same-invasion friendly fire.
+- Added a configurable fallback switch for servers that prefer the previous vanilla-illager roster.
+- Added real temporary war camps built from vanilla campfires, tents, supply blocks and banners.
+- Spawned assault squads around their camp so reinforcements now visibly deploy from it.
+- Added safe camp cleanup that removes only unchanged blocks placed by Faction Raids.
+- Added a one-time migration attempt that gives already-active upgraded sieges a physical camp.
+- Replaced abstract perimeter pressure with a compact, concrete approach-side breach objective.
+- Added visible red-banner breach markers and required local numerical control for progress to rise.
+- Added war-camp and marked-objective coordinates to `/factionraids status` and camp information to
+  the command dashboard.
+
 ## 2.5.0 - 2026-09-04
 
 - Added a configurable outer-perimeter breach phase before stronghold occupation can begin.

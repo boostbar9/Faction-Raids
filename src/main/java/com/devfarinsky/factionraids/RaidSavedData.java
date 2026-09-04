@@ -14,7 +14,7 @@ import java.util.*;
 
 public final class RaidSavedData extends SavedData {
     public static final String DATA_NAME = "factionraids_data";
-    public static final int DATA_VERSION = 7;
+    public static final int DATA_VERSION = 8;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Map<String, Anchor> anchors = new HashMap<>();
@@ -200,6 +200,9 @@ public final class RaidSavedData extends SavedData {
         public int breachTicks;
         public boolean breached;
         public int lastBreachWarningBand;
+        public BlockPos campPos;
+        public boolean campBuildAttempted;
+        public final Map<Long, String> campBlocks = new LinkedHashMap<>();
         public double approachAngle;
         public int lastCaptureWarningBand;
         public UUID commanderUuid;
@@ -238,6 +241,16 @@ public final class RaidSavedData extends SavedData {
             tag.putInt("BreachTicks", breachTicks);
             tag.putBoolean("Breached", breached);
             tag.putInt("BreachWarningBand", lastBreachWarningBand);
+            if (campPos != null) tag.putLong("CampPosition", campPos.asLong());
+            tag.putBoolean("CampBuildAttempted", campBuildAttempted);
+            ListTag camp = new ListTag();
+            campBlocks.forEach((position, block) -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putLong("Position", position);
+                entry.putString("Block", block);
+                camp.add(entry);
+            });
+            tag.put("CampBlocks", camp);
             tag.putDouble("ApproachAngle", approachAngle);
             tag.putInt("CaptureWarningBand", lastCaptureWarningBand);
             if (commanderUuid != null) tag.putUUID("Commander", commanderUuid);
@@ -278,6 +291,14 @@ public final class RaidSavedData extends SavedData {
             state.breached = tag.contains("Breached", Tag.TAG_BYTE) ?
                     tag.getBoolean("Breached") : state.wave > 0;
             state.lastBreachWarningBand = tag.getInt("BreachWarningBand");
+            state.campPos = tag.contains("CampPosition", Tag.TAG_LONG) ?
+                    BlockPos.of(tag.getLong("CampPosition")) : null;
+            state.campBuildAttempted = tag.getBoolean("CampBuildAttempted");
+            ListTag camp = tag.getList("CampBlocks", Tag.TAG_COMPOUND);
+            for (int i = 0; i < camp.size(); i++) {
+                CompoundTag entry = camp.getCompound(i);
+                state.campBlocks.put(entry.getLong("Position"), entry.getString("Block"));
+            }
             state.approachAngle = tag.contains("ApproachAngle", Tag.TAG_DOUBLE) ?
                     tag.getDouble("ApproachAngle") : 0.0D;
             state.lastCaptureWarningBand = tag.getInt("CaptureWarningBand");

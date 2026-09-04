@@ -1,4 +1,4 @@
-# Faction Raids 2.5.0
+# Faction Raids 2.6.0
 
 Faction Raids is a server-authoritative Forge 1.20.1 addon that turns player homes into siege
 objectives. Illager armies establish an approach front, deploy in marching squads, advance on a
@@ -23,6 +23,11 @@ point, defenders can push breach pressure back, and the boss bar, dashboard, tit
 track the current siege stage. Ships and siege engines also remember the faction that last crewed
 them, so briefly dismounting no longer makes a legitimate war asset disappear from detection.
 
+Version 2.6 makes the invading army use Villager Recruits' own soldier classes by default, including
+shieldmen, bowmen, crossbowmen, captains, assassins and siege engineers. Every siege now attempts to
+raise a real temporary war camp on the approach side. Red-banner perimeter markers identify the exact
+breach objective, and breach pressure rises only while attackers outnumber defenders at that point.
+
 No administrator setup is required. A player's bed or respawn anchor becomes a valid stronghold
 automatically. Players in the same Villager Recruits faction share one raid schedule, while any
 online faction member's home can be selected as the next target.
@@ -43,8 +48,10 @@ These companion mods are optional and are detected automatically:
 - [Small Ships](https://github.com/talhanation/smallships)
 - [Siege Weapons](https://github.com/talhanation/siegeweapons)
 
-Faction Raids adds no blocks, ores, biomes, dimensions or structures. It can be installed in an
-existing world after making a normal backup. Never keep two Faction Raids versions in `mods`.
+Faction Raids adds no registered blocks, ores, biomes, dimensions or world-generated structures. It
+does assemble a small temporary camp from vanilla blocks during a siege and removes unchanged camp
+blocks afterward by default. It can be installed in an existing world after making a normal backup.
+Never keep two Faction Raids versions in `mods`.
 
 ## Zero-setup gameplay
 
@@ -62,20 +69,22 @@ cannot move an active battlefield.
 
 ## How a siege works
 
-- Scouts provide advance warning and reveal the direction of the enemy war camp.
+- Scouts provide advance warning and reveal the direction and coordinates of a physically built enemy war camp.
+- Invaders use hostile Villager Recruits soldiers by default, preserving their melee, ranged, shield,
+  morale and specialist combat behavior. A config switch retains the older vanilla-illager roster.
 - Every wave enters from one coherent front instead of appearing randomly around the base.
 - Waves deploy as smaller squads at configurable intervals, reducing spawn spikes and creating a
   visible stream of reinforcements from the war camp.
-- The vanguard is followed by mixed assault troops, breach companies, war casters and a command
-  assault containing elite illagers and a ravager.
+- The vanguard is followed by mixed Recruit assault troops, shieldmen, marksmen, captains, assassins,
+  siege engineers and a final command assault supported by selected vanilla raid specialists.
 - Breachers move aggressively, squad captains are tougher, marksmen and war casters retain their
   specialized vanilla combat behavior, and the final assault contains a named elite commander.
-- Killing the commander removes 30 seconds of accumulated occupation pressure.
+- Killing the commander removes 30 seconds of accumulated breach or occupation pressure.
 - Major moments use vanilla title overlays, sounds and faction-only chat announcements by default.
 - Assault squads arrive through a brief smoke effect and reinforcement updates appear above the hotbar.
 - Invaders path toward the stronghold when they do not have a reachable defender to fight.
-- Before the inner objective can be occupied, attackers must outnumber defenders inside a larger
-  outer perimeter long enough to establish a breach.
+- Before the inner objective can be occupied, attackers must outnumber defenders at the visibly
+  marked approach-side breach point long enough to establish a breach.
 - Until the breach opens, unengaged raiders rally on the approach side of that perimeter instead of
   immediately piling onto the stronghold center.
 - Defenders can reverse breach pressure by regaining control of the outer line. Once breached, the
@@ -89,7 +98,7 @@ cannot move an active battlefield.
   them while worker protection is enabled.
 - Crewed Small Ships and Siege Weapons belonging to faction members are recognized without taking
   over their movement, sailing, ammunition or firing controls.
-- The illagers win only after outnumbering defenders inside the inner capture ring long enough.
+- The invasion wins only after outnumbering defenders inside the inner capture ring long enough.
 - Retaking the ring rapidly removes occupation progress.
 - Player death never causes an instant defeat, and leaving the outer defense radius does not cause
   defeat unless the optional legacy abandonment timer is enabled.

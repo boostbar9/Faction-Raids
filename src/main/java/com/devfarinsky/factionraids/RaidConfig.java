@@ -48,6 +48,10 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue BREACH_RADIUS;
     public static final ForgeConfigSpec.IntValue BREACH_TIME_SECONDS;
     public static final ForgeConfigSpec.IntValue BREACH_DECAY_PER_SECOND;
+    public static final ForgeConfigSpec.IntValue BREACH_OBJECTIVE_RADIUS;
+    public static final ForgeConfigSpec.BooleanValue USE_RECRUIT_INVADERS;
+    public static final ForgeConfigSpec.BooleanValue BUILD_WAR_CAMPS;
+    public static final ForgeConfigSpec.BooleanValue CLEANUP_WAR_CAMPS;
     public static final ForgeConfigSpec.DoubleValue RAIDER_ADVANCE_SPEED;
     public static final ForgeConfigSpec.BooleanValue ALLOW_WORLD_SPAWN_FALLBACK;
     public static final ForgeConfigSpec.BooleanValue STAGED_SQUADS;
@@ -159,6 +163,14 @@ public final class RaidConfig {
                 .defineInRange("breachTimeSeconds", 45, 15, 300);
         BREACH_DECAY_PER_SECOND = b.comment("Seconds of breach progress removed each second while defenders control the perimeter.")
                 .defineInRange("breachDecayPerSecond", 2, 1, 10);
+        BREACH_OBJECTIVE_RADIUS = b.comment("Radius around the marked approach-side breach point in which attackers and defenders contest progress.")
+                .defineInRange("breachObjectiveRadius", 10, 4, 24);
+        USE_RECRUIT_INVADERS = b.comment("Use Villager Recruits soldiers as the core enemy army, retaining a few vanilla special units.")
+                .define("useVillagerRecruitsArmy", true);
+        BUILD_WAR_CAMPS = b.comment("Build a small physical temporary war camp at the invasion staging point.")
+                .define("buildTemporaryWarCamps", true);
+        CLEANUP_WAR_CAMPS = b.comment("Remove untouched temporary camp blocks when the invasion ends. Player-modified blocks are never removed.")
+                .define("cleanupTemporaryWarCamps", true);
         RAIDER_ADVANCE_SPEED = b.comment("Navigation speed used when invasion forces advance toward the stronghold.")
                 .defineInRange("raiderAdvanceSpeed", 1.05, 0.5, 1.5);
         ALLOW_WORLD_SPAWN_FALLBACK = b.comment("Use the overworld spawn when a player has no bed or respawn anchor. Disabled by default to avoid attacking public spawn.")

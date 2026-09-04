@@ -28,6 +28,7 @@ public final class RecruitsBridge {
     private static Method getFactionByStringId;
     private static Method getFactionLeaderUuid;
     private static Method getOwnerUuid;
+    private static Method setCombatState;
     private static boolean factionReflectionAttempted;
     private static boolean ownerReflectionAttempted;
 
@@ -87,6 +88,20 @@ public final class RecruitsBridge {
                 ", ownership API " + (getOwnerUuid != null ? "ready" : "fallback");
     }
 
+    /** Put an unowned Recruit into its built-in raid combat state. */
+    public static boolean configureHostileRaidRecruit(Mob recruit) {
+        initializeOwnerReflection();
+        if (recruitClass == null || setCombatState == null || !recruitClass.isInstance(recruit)) return false;
+        try {
+            // Recruits state 2 is its native RAID mode. With no owner/team it can
+            // fight players and faction soldiers while retaining class-specific AI.
+            setCombatState.invoke(recruit, 2);
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return false;
+        }
+    }
+
     private static synchronized void initializeFactionReflection() {
         if (factionReflectionAttempted) return;
         factionReflectionAttempted = true;
@@ -110,9 +125,11 @@ public final class RecruitsBridge {
         try {
             recruitClass = Class.forName(ABSTRACT_RECRUIT);
             getOwnerUuid = recruitClass.getMethod("getOwnerUUID");
+            setCombatState = recruitClass.getMethod("setState", int.class);
         } catch (ReflectiveOperationException | LinkageError ignored) {
             recruitClass = null;
             getOwnerUuid = null;
+            setCombatState = null;
         }
     }
 

@@ -41,6 +41,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
@@ -59,6 +61,7 @@ import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.*;
 
@@ -86,7 +89,6 @@ public final class RaidEvents {
     @SubscribeEvent
     public static void onEntityJoin(EntityJoinLevelEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level) || !(event.getEntity() instanceof Mob mob)) return;
-        if (!(mob instanceof Raider) && !(mob instanceof Vex)) return;
         if (mob instanceof Vex vex && !mob.getPersistentData().contains(RAID_TEAM_TAG)) {
             Mob owner = vex.getOwner();
             if (owner != null && owner.getPersistentData().contains(RAID_TEAM_TAG)) {
@@ -122,9 +124,14 @@ public final class RaidEvents {
     @SubscribeEvent
     public static void onLivingAttack(LivingAttackEvent event) {
         Entity attacker = event.getSource().getEntity();
-        if (!(attacker instanceof Raider) && !(attacker instanceof Vex)) return;
-        Mob mob = (Mob) attacker;
+        if (!(attacker instanceof Mob mob)) return;
         if (!mob.getPersistentData().contains(RAID_TEAM_TAG)) return;
+        if (event.getEntity().getPersistentData().getString(RAID_TEAM_TAG)
+                .equals(mob.getPersistentData().getString(RAID_TEAM_TAG))) {
+            event.setCanceled(true);
+            mob.setTarget(null);
+            return;
+        }
         boolean protectedVanillaCivilian = RaidConfig.PROTECT_VILLAGERS.get() &&
                 (event.getEntity() instanceof AbstractVillager || event.getEntity() instanceof IronGolem);
         String defendedFaction = mob.getPersistentData().getString(RAID_TEAM_TAG);
@@ -667,6 +674,7 @@ public final class RaidEvents {
                     .withStyle(ChatFormatting.GOLD)), false);
             if (state != null) {
                 RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
+                ServerLevel raidLevel = getLevel(source.getServer(), point);
                 int occupation = state.captureTicks * 100 /
                         Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20);
                 int breach = breachPercent(state);
@@ -680,10 +688,16 @@ public final class RaidEvents {
                         .append(Component.literal(state.raiders.size() + " deployed • " +
                                 state.pendingWaveSpawns + " reinforcing • " + state.totalDefeated + " defeated")
                                 .withStyle(ChatFormatting.YELLOW)), false);
+                source.sendSuccess(() -> Component.literal("War camp: ").withStyle(ChatFormatting.GRAY)
+                        .append(Component.literal(state.campPos == null ? "No safe camp site was available" :
+                                formatPos(state.campPos)).withStyle(state.campPos == null ?
+                                ChatFormatting.YELLOW : ChatFormatting.RED)), false);
                 source.sendSuccess(() -> Component.literal("Objective: ").withStyle(ChatFormatting.GRAY)
                         .append(Component.literal("'" + point.name() + "' at " + formatPos(point.pos()) +
                                 (state.breached || !RaidConfig.ENABLE_BREACH_PHASE.get() ?
-                                        " • occupation " + occupation + "%" : " • outer perimeter contested"))
+                                        " • occupation " + occupation + "%" : " • marked breach point " +
+                                        (raidLevel == null ? "unavailable" :
+                                                formatVec(invasionBreachObjective(raidLevel, point, state)))))
                                 .withStyle(occupation >= 75 ? ChatFormatting.RED : ChatFormatting.AQUA)), false);
             } else {
                 long now = source.getServer().overworld().getGameTime();
@@ -875,10 +889,13 @@ public final class RaidEvents {
         state.approachAngle = server.overworld().random.nextDouble() * Math.PI * 2.0D;
         state.startedGameTime = server.overworld().getGameTime();
         state.rewardEligible = rewardEligible;
+        ServerLevel raidLevel = getLevel(server, point);
+        if (raidLevel != null && RaidConfig.BUILD_WAR_CAMPS.get()) buildWarCamp(raidLevel, point, state);
         data.raids.put(anchor.teamKey(), state);
         data.setDirty();
         announce(server, anchor.teamKey(), Component.literal("Illager scouts have found " + anchor.teamDisplay() + " at '" + point.name() +
-                        "'! A war camp is forming to the " + approachDirection(state.approachAngle) + ". The siege begins in " +
+                        "'! A war camp " + (state.campPos == null ? "is forming" : "has been raised at " + formatPos(state.campPos)) +
+                        " to the " + approachDirection(state.approachAngle) + ". The siege begins in " +
                         formatTime(RaidConfig.WARNING_SECONDS.get()) + ". Rally your Recruits and defend the stronghold.")
                         .withStyle(ChatFormatting.GOLD), true);
         showTitle(server, anchor.teamKey(), Component.literal("SIEGE INCOMING").withStyle(ChatFormatting.DARK_RED),
@@ -895,6 +912,12 @@ public final class RaidEvents {
         RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
         ServerLevel level = getLevel(server, point);
         if (level == null) return;
+
+        // Upgrade active raids from older saves exactly once. Those raids did
+        // not persist a physical camp, so build one when 2.6 first processes it.
+        if (RaidConfig.BUILD_WAR_CAMPS.get() && !state.campBuildAttempted) {
+            buildWarCamp(level, point, state);
+        }
 
         List<ServerPlayer> members = onlineMembers(server, teamKey);
         if (members.isEmpty() && RaidConfig.PAUSE_WHEN_FACTION_OFFLINE.get()) {
@@ -1083,15 +1106,17 @@ public final class RaidEvents {
         int spawned = 0;
         for (int i = 0; i < wanted; i++) {
             int waveIndex = state.waveStartingCount + spawned;
-            Raider raider = createRaiderForWave(level, state.wave, waveIndex);
+            Mob raider = createAttackerForWave(level, state.wave, waveIndex);
             if (raider == null) continue;
-            BlockPos spawn = findSpawnPosition(level, point.pos(), level.random, raider, state.approachAngle);
+            BlockPos spawn = findSpawnPosition(level, point.pos(), level.random, raider,
+                    state.approachAngle, state.campPos);
             if (spawn == null) continue;
             raider.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5,
                     level.random.nextFloat() * 360.0F, 0.0F);
             raider.finalizeSpawn(level, level.getCurrentDifficultyAt(spawn), MobSpawnType.EVENT, null, null);
             boolean squadLeader = spawned == 0;
-            if (squadLeader) raider.setPatrolLeader(true);
+            if (squadLeader && raider instanceof Raider vanillaRaider) vanillaRaider.setPatrolLeader(true);
+            RecruitsBridge.configureHostileRaidRecruit(raider);
             raider.setPersistenceRequired();
             raider.getPersistentData().putString(RAID_TEAM_TAG, anchor.teamKey());
             if (level.addFreshEntity(raider)) {
@@ -1129,15 +1154,20 @@ public final class RaidEvents {
         data.setDirty();
     }
 
-    private static void assignSiegeRole(Raider raider, RaidSavedData.RaidState state,
+    private static void assignSiegeRole(Mob raider, RaidSavedData.RaidState state,
                                         int waveIndex, boolean squadLeader) {
         boolean commander = RaidConfig.ENABLE_COMMANDER.get() && state.wave >= RaidConfig.WAVES.get() &&
                 waveIndex == 0;
         String role;
+        ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(raider.getType());
+        String recruitType = typeId != null && "recruits".equals(typeId.getNamespace()) ? typeId.getPath() : "";
         if (commander) role = "commander";
-        else if (raider.getType() == EntityType.VINDICATOR || raider.getType() == EntityType.RAVAGER) role = "breacher";
+        else if (raider.getType() == EntityType.VINDICATOR || raider.getType() == EntityType.RAVAGER ||
+                recruitType.equals("recruit") || recruitType.equals("recruit_shieldman") ||
+                recruitType.equals("siege_engineer")) role = "breacher";
         else if (raider.getType() == EntityType.WITCH || raider.getType() == EntityType.EVOKER ||
                 raider.getType() == EntityType.ILLUSIONER) role = "warcaster";
+        else if (recruitType.equals("captain") || recruitType.equals("patrol_leader")) role = "captain";
         else if (squadLeader) role = "captain";
         else role = "marksman";
         raider.getPersistentData().putString(RAID_ROLE_TAG, role);
@@ -1176,20 +1206,52 @@ public final class RaidEvents {
                 .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
     }
 
-    private static Raider createRaiderForWave(ServerLevel level, int wave, int index) {
-        EntityType<? extends Raider> type;
-        if (wave >= 5 && index == 0) type = EntityType.RAVAGER;
-        else if (wave >= 4 && index == (wave >= 5 ? 1 : 0)) type = EntityType.EVOKER;
-        else if (RaidConfig.ENABLE_ILLUSIONERS.get() && wave >= 4 && index == (wave >= 5 ? 2 : 1))
-            type = EntityType.ILLUSIONER;
-        else if (wave >= 3 && index == (wave >= 5 ? 3 : 2)) type = EntityType.WITCH;
-        else if ((index + wave) % 3 == 0) type = EntityType.VINDICATOR;
-        else type = EntityType.PILLAGER;
-        return type.create(level);
+    private static Mob createAttackerForWave(ServerLevel level, int wave, int index) {
+        if (!RaidConfig.USE_RECRUIT_INVADERS.get()) return createVanillaAttacker(level, wave, index);
+        if (wave >= RaidConfig.WAVES.get() && index == 1) return EntityType.RAVAGER.create(level);
+        if (RaidConfig.ENABLE_ILLUSIONERS.get() && wave >= 4 && index == 2) {
+            return EntityType.ILLUSIONER.create(level);
+        }
+
+        String recruitType;
+        if (wave >= RaidConfig.WAVES.get() && index == 0) recruitType = "patrol_leader";
+        else if (wave >= 4 && index % 9 == 1 && ForgeRegistries.ENTITY_TYPES.containsKey(
+                new ResourceLocation("recruits", "siege_engineer"))) recruitType = "siege_engineer";
+        else if (wave >= 4 && index % 8 == 3) recruitType = "assassin";
+        else if (wave >= 3 && index % 7 == 0) recruitType = "captain";
+        else if ((index + wave) % 4 == 0) recruitType = "recruit_shieldman";
+        else if ((index + wave) % 3 == 0) recruitType = "bowman";
+        else if ((index + wave) % 2 == 0) recruitType = "crossbowman";
+        else recruitType = "recruit";
+
+        EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("recruits", recruitType));
+        Entity created = type == null ? null : type.create(level);
+        if (created instanceof Mob mob) return mob;
+        return index % 3 == 0 ? EntityType.VINDICATOR.create(level) : EntityType.PILLAGER.create(level);
+    }
+
+    private static Mob createVanillaAttacker(ServerLevel level, int wave, int index) {
+        if (wave >= RaidConfig.WAVES.get() && index == 0) return EntityType.RAVAGER.create(level);
+        if (wave >= 4 && index == 1) return EntityType.EVOKER.create(level);
+        if (RaidConfig.ENABLE_ILLUSIONERS.get() && wave >= 4 && index == 2) {
+            return EntityType.ILLUSIONER.create(level);
+        }
+        if (wave >= 3 && index == 3) return EntityType.WITCH.create(level);
+        return (index + wave) % 3 == 0 ? EntityType.VINDICATOR.create(level) : EntityType.PILLAGER.create(level);
     }
 
     private static BlockPos findSpawnPosition(ServerLevel level, BlockPos anchor, RandomSource random, Mob mob,
-                                              double approachAngle) {
+                                              double approachAngle, BlockPos camp) {
+        if (camp != null) {
+            for (int attempt = 0; attempt < 20; attempt++) {
+                double angle = random.nextDouble() * Math.PI * 2.0D;
+                int distance = 4 + random.nextInt(7);
+                int x = camp.getX() + Mth.floor(Math.cos(angle) * distance);
+                int z = camp.getZ() + Mth.floor(Math.sin(angle) * distance);
+                BlockPos candidate = safeSurfaceSpawn(level, anchor, mob, x, z);
+                if (candidate != null) return candidate;
+            }
+        }
         int min = RaidConfig.MIN_SPAWN_DISTANCE.get();
         int max = Math.max(min, RaidConfig.MAX_SPAWN_DISTANCE.get());
         for (int attempt = 0; attempt < 32; attempt++) {
@@ -1199,18 +1261,123 @@ public final class RaidEvents {
             int distance = min + random.nextInt(max - min + 1);
             int x = anchor.getX() + Mth.floor(Math.cos(angle) * distance);
             int z = anchor.getZ() + Mth.floor(Math.sin(angle) * distance);
-            if (!level.hasChunk(x >> 4, z >> 4)) continue;
-            int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
-            if (Math.abs(y - anchor.getY()) > 48) continue;
-            BlockPos p = new BlockPos(x, y, z);
-            BlockState ground = level.getBlockState(p.below());
-            if (!level.getWorldBorder().isWithinBounds(p) || !level.getFluidState(p).isEmpty() ||
-                    !level.getFluidState(p.below()).isEmpty() || !level.isEmptyBlock(p) ||
-                    !level.isEmptyBlock(p.above()) || !ground.isFaceSturdy(level, p.below(), Direction.UP)) continue;
-            mob.moveTo(x + 0.5, y, z + 0.5, 0.0F, 0.0F);
-            if (level.noCollision(mob)) return p;
+            BlockPos candidate = safeSurfaceSpawn(level, anchor, mob, x, z);
+            if (candidate != null) return candidate;
         }
         return null;
+    }
+
+    private static BlockPos safeSurfaceSpawn(ServerLevel level, BlockPos anchor, Mob mob, int x, int z) {
+        if (!level.hasChunk(x >> 4, z >> 4)) return null;
+        int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+        if (Math.abs(y - anchor.getY()) > 48) return null;
+        BlockPos p = new BlockPos(x, y, z);
+        BlockState ground = level.getBlockState(p.below());
+        if (!level.getWorldBorder().isWithinBounds(p) || !level.getFluidState(p).isEmpty() ||
+                !level.getFluidState(p.below()).isEmpty() || !level.isEmptyBlock(p) ||
+                !level.isEmptyBlock(p.above()) || !ground.isFaceSturdy(level, p.below(), Direction.UP)) return null;
+        mob.moveTo(x + 0.5, y, z + 0.5, 0.0F, 0.0F);
+        return level.noCollision(mob) ? p : null;
+    }
+
+    private static void buildWarCamp(ServerLevel level, RaidSavedData.DefensePoint point,
+                                     RaidSavedData.RaidState state) {
+        state.campBuildAttempted = true;
+        BlockPos camp = findWarCampPosition(level, point.pos(), state.approachAngle);
+        if (camp == null) return;
+        state.campPos = camp;
+
+        placeCampBlock(level, state, surfacePosition(level, camp.getX(), camp.getZ()), Blocks.CAMPFIRE);
+        placeCampBlock(level, state, surfacePosition(level, camp.getX() - 2, camp.getZ()), Blocks.BARREL);
+        placeCampBlock(level, state, surfacePosition(level, camp.getX() + 2, camp.getZ()), Blocks.CRAFTING_TABLE);
+        placeCampBlock(level, state, surfacePosition(level, camp.getX(), camp.getZ() - 3), Blocks.RED_BANNER);
+
+        int tentY = camp.getY();
+        for (int dx : new int[]{-3, 3}) {
+            for (int dz : new int[]{3, 6}) {
+                placeCampBlock(level, state, new BlockPos(camp.getX() + dx, tentY,
+                        camp.getZ() + dz), Blocks.SPRUCE_FENCE);
+                placeCampBlock(level, state, new BlockPos(camp.getX() + dx, tentY + 1,
+                        camp.getZ() + dz), Blocks.SPRUCE_FENCE);
+            }
+        }
+        for (int dx = -3; dx <= 3; dx++) {
+            for (int dz = 3; dz <= 6; dz++) {
+                placeCampBlock(level, state, new BlockPos(camp.getX() + dx, tentY + 2,
+                        camp.getZ() + dz), Blocks.RED_WOOL);
+            }
+        }
+
+        Vec3 breach = invasionObjective(level, point, state);
+        int bx = Mth.floor(breach.x);
+        int bz = Mth.floor(breach.z);
+        double perpendicular = state.approachAngle + Math.PI / 2.0D;
+        for (int side : new int[]{-1, 1}) {
+            int x = bx + Mth.floor(Math.cos(perpendicular) * 4.0D * side);
+            int z = bz + Mth.floor(Math.sin(perpendicular) * 4.0D * side);
+            BlockPos marker = surfacePosition(level, x, z);
+            placeCampBlock(level, state, marker, Blocks.RED_WOOL);
+            placeCampBlock(level, state, marker.above(), Blocks.RED_BANNER);
+        }
+    }
+
+    private static BlockPos findWarCampPosition(ServerLevel level, BlockPos anchor, double approachAngle) {
+        int min = RaidConfig.MIN_SPAWN_DISTANCE.get();
+        int max = Math.max(min, RaidConfig.MAX_SPAWN_DISTANCE.get());
+        for (int attempt = 0; attempt < 32; attempt++) {
+            double angle = approachAngle + (level.random.nextDouble() - 0.5D) * 0.5D;
+            int distance = Math.max(min, max - level.random.nextInt(Math.max(1, Math.min(16, max - min + 1))));
+            int x = anchor.getX() + Mth.floor(Math.cos(angle) * distance);
+            int z = anchor.getZ() + Mth.floor(Math.sin(angle) * distance);
+            if (!level.hasChunk(x >> 4, z >> 4)) continue;
+            BlockPos center = surfacePosition(level, x, z);
+            if (!validCampSurface(level, center, anchor)) continue;
+            return center;
+        }
+        return null;
+    }
+
+    private static boolean validCampSurface(ServerLevel level, BlockPos center, BlockPos anchor) {
+        if (!level.getWorldBorder().isWithinBounds(center) || Math.abs(center.getY() - anchor.getY()) > 48 ||
+                !level.getFluidState(center).isEmpty() || !level.getBlockState(center).canBeReplaced() ||
+                !level.getBlockState(center.below()).isFaceSturdy(level, center.below(), Direction.UP)) return false;
+        for (int dx : new int[]{-3, 3}) {
+            for (int dz : new int[]{-3, 6}) {
+                BlockPos sample = surfacePosition(level, center.getX() + dx, center.getZ() + dz);
+                if (Math.abs(sample.getY() - center.getY()) > 2 || !level.getFluidState(sample).isEmpty()) return false;
+            }
+        }
+        return true;
+    }
+
+    private static BlockPos surfacePosition(ServerLevel level, int x, int z) {
+        return new BlockPos(x, level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z);
+    }
+
+    private static void placeCampBlock(ServerLevel level, RaidSavedData.RaidState state,
+                                       BlockPos pos, Block block) {
+        if (!level.getWorldBorder().isWithinBounds(pos) || !level.getFluidState(pos).isEmpty() ||
+                !level.getBlockState(pos).canBeReplaced()) return;
+        if (!level.setBlock(pos, block.defaultBlockState(), 3)) return;
+        ResourceLocation id = ForgeRegistries.BLOCKS.getKey(block);
+        if (id != null) state.campBlocks.put(pos.asLong(), id.toString());
+    }
+
+    private static void cleanupWarCamp(ServerLevel level, RaidSavedData.RaidState state) {
+        if (!RaidConfig.CLEANUP_WAR_CAMPS.get()) return;
+        // Remove banners and canopy before their supports so neighbor updates
+        // cannot pop temporary camp blocks into collectible item drops.
+        List<Map.Entry<Long, String>> placed = new ArrayList<>(state.campBlocks.entrySet());
+        placed.sort((left, right) -> Integer.compare(
+                BlockPos.of(right.getKey()).getY(), BlockPos.of(left.getKey()).getY()));
+        for (Map.Entry<Long, String> entry : placed) {
+            BlockPos pos = BlockPos.of(entry.getKey());
+            ResourceLocation current = ForgeRegistries.BLOCKS.getKey(level.getBlockState(pos).getBlock());
+            if (current != null && current.toString().equals(entry.getValue())) {
+                level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+            }
+        }
+        state.campBlocks.clear();
     }
 
     private static void redirectRaiders(ServerLevel level, RaidSavedData.RaidState state,
@@ -1309,10 +1476,11 @@ public final class RaidEvents {
         if (state.wave <= 0) return false;
         Vec3 center = Vec3.atCenterOf(point.pos());
         if (RaidConfig.ENABLE_BREACH_PHASE.get() && !state.breached) {
-            double breachRadius = effectiveBreachRadius();
-            double breachRadiusSq = breachRadius * breachRadius;
-            int attackers = attackersInside(level, state, center, breachRadiusSq);
-            int defenders = defendersInside(level, members, recruits, center, breachRadiusSq);
+            Vec3 breachObjective = invasionObjective(level, point, state);
+            double objectiveRadius = RaidConfig.BREACH_OBJECTIVE_RADIUS.get();
+            double breachRadiusSq = objectiveRadius * objectiveRadius;
+            int attackers = attackersInside(level, state, breachObjective, breachRadiusSq);
+            int defenders = defendersInside(level, members, recruits, breachObjective, breachRadiusSq);
             int maximum = RaidConfig.BREACH_TIME_SECONDS.get() * 20;
             if (attackers > defenders && attackers > 0) {
                 state.breachTicks = Math.min(maximum, state.breachTicks + 20);
@@ -1390,12 +1558,21 @@ public final class RaidEvents {
     private static Vec3 invasionObjective(ServerLevel level, RaidSavedData.DefensePoint point,
                                           RaidSavedData.RaidState state) {
         if (!RaidConfig.ENABLE_BREACH_PHASE.get() || state.breached) return Vec3.atCenterOf(point.pos());
+        return invasionBreachObjective(level, point, state);
+    }
+
+    private static Vec3 invasionBreachObjective(ServerLevel level, RaidSavedData.DefensePoint point,
+                                                RaidSavedData.RaidState state) {
         double distance = effectiveBreachRadius() - 3.0D;
         int x = point.pos().getX() + Mth.floor(Math.cos(state.approachAngle) * distance);
         int z = point.pos().getZ() + Mth.floor(Math.sin(state.approachAngle) * distance);
         int y = level.hasChunk(x >> 4, z >> 4) ?
                 level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) : point.pos().getY();
         return new Vec3(x + 0.5D, y, z + 0.5D);
+    }
+
+    private static String formatVec(Vec3 position) {
+        return Mth.floor(position.x) + ", " + Mth.floor(position.y) + ", " + Mth.floor(position.z);
     }
 
     private static int breachPercent(RaidSavedData.RaidState state) {
@@ -1443,6 +1620,7 @@ public final class RaidEvents {
                     Entity entity = level.getEntity(id);
                     if (entity != null) entity.discard();
                 }
+                cleanupWarCamp(level, state);
             }
             long next = server.overworld().getGameTime() + randomCooldownTicks(server.overworld().random);
             data.anchors.put(teamKey, anchor.withNextRaid(next));
@@ -1594,7 +1772,9 @@ public final class RaidEvents {
         int occupation = state.captureTicks * 100 /
                 Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20);
         return new DashboardSnapshot(anchor.teamDisplay(), true, true,
-                point.dimension() + " • " + formatPos(point.pos()), state.wave, RaidConfig.WAVES.get(),
+                point.dimension() + " • " + formatPos(point.pos()) +
+                        (state.campPos == null ? " • camp unavailable" : " • camp " + formatPos(state.campPos)),
+                state.wave, RaidConfig.WAVES.get(),
                 state.raiders.size(), state.pendingWaveSpawns, state.totalDefeated, occupation,
                 state.breached || !RaidConfig.ENABLE_BREACH_PHASE.get(), breachPercent(state),
                 recruits, compat.workers(), compat.ships(), compat.siegeWeapons(), assetScalingEnemies(compat), "Siege active",
