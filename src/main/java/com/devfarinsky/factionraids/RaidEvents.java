@@ -38,6 +38,8 @@ import net.minecraft.world.entity.monster.Vex;
 import net.minecraft.world.entity.npc.AbstractVillager;
 import net.minecraft.world.entity.raid.Raider;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -130,6 +132,10 @@ public final class RaidEvents {
         if (state == null || !state.raiders.remove(event.getEntity().getUUID())) return;
         state.missingTicks.remove(event.getEntity().getUUID());
         state.totalDefeated++;
+        if (event.getEntity().getUUID().equals(state.commanderUuid) && !state.commanderDefeated) {
+            RaidSavedData.Anchor anchor = data.anchors.get(teamKey);
+            if (anchor != null) markCommanderDefeated(level.getServer(), anchor, state);
+        }
         data.setDirty();
     }
 
@@ -141,6 +147,8 @@ public final class RaidEvents {
 
     private static void registerCommands(CommandDispatcher<CommandSourceStack> d) {
         d.register(Commands.literal("factionraids")
+                .executes(ctx -> openDashboard(ctx.getSource()))
+                .then(Commands.literal("menu").executes(ctx -> openDashboard(ctx.getSource())))
                 .then(Commands.literal("anchor")
                         .then(Commands.literal("set").executes(ctx -> setAnchor(ctx.getSource())))
                         .then(Commands.literal("claim").executes(ctx -> claimLegacyAnchor(ctx.getSource())))
@@ -595,7 +603,8 @@ public final class RaidEvents {
                 source.sendFailure(Component.literal("Stand near the selected defense point before starting the invasion."));
                 return 0;
             }
-            if (!beginRaid(source.getServer(), data, anchor, point)) {
+            if (!beginRaid(source.getServer(), data, anchor, point,
+                    RaidConfig.MANUAL_RAIDS_GRANT_REWARDS.get())) {
                 source.sendFailure(Component.literal("The server has reached its configured concurrent raid limit."));
                 return 0;
             }
@@ -821,7 +830,7 @@ public final class RaidEvents {
                 if (members.isEmpty()) continue;
                 RaidSavedData.DefensePoint point = selectAutomaticPoint(server, anchor, members);
                 if (point == null) continue;
-                beginRaid(server, data, anchor, point);
+                beginRaid(server, data, anchor, point, true);
             }
         }
 
@@ -830,7 +839,7 @@ public final class RaidEvents {
     }
 
     private static boolean beginRaid(MinecraftServer server, RaidSavedData data, RaidSavedData.Anchor anchor,
-                                     RaidSavedData.DefensePoint point) {
+                                     RaidSavedData.DefensePoint point, boolean rewardEligible) {
         if (data.raids.size() >= RaidConfig.MAX_CONCURRENT_RAIDS.get()) return false;
         // Persist the selected player's respawn target for the full siege. This
         // allows a faction with several bases to be attacked at any member's
@@ -841,6 +850,7 @@ public final class RaidEvents {
                 RaidConfig.WARNING_SECONDS.get() * 20);
         state.approachAngle = server.overworld().random.nextDouble() * Math.PI * 2.0D;
         state.startedGameTime = server.overworld().getGameTime();
+        state.rewardEligible = rewardEligible;
         data.raids.put(anchor.teamKey(), state);
         data.setDirty();
         announce(server, anchor.teamKey(), Component.literal("Illager scouts have found " + anchor.teamDisplay() + " at '" + point.name() +
@@ -877,7 +887,6 @@ public final class RaidEvents {
 
         reconcileTaggedMobs(level, point, state);
         updateTrackedMobs(level, state);
-        handleCommanderDefeat(server, anchor, state);
         List<Mob> recruits = alliedRecruits(level, point, anchor);
         if (RaidConfig.MOBILIZE_RECRUITS.get()) mobilizeRecruits(level, recruits, state);
         redirectRaiders(level, state, members, recruits, point);
@@ -1125,9 +1134,8 @@ public final class RaidEvents {
         }
     }
 
-    private static void handleCommanderDefeat(MinecraftServer server, RaidSavedData.Anchor anchor,
+    private static void markCommanderDefeated(MinecraftServer server, RaidSavedData.Anchor anchor,
                                               RaidSavedData.RaidState state) {
-        if (state.commanderUuid == null || state.commanderDefeated || state.raiders.contains(state.commanderUuid)) return;
         state.commanderDefeated = true;
         state.captureTicks = Math.max(0, state.captureTicks - 30 * 20);
         announce(server, anchor.teamKey(), Component.literal("The siege commander has fallen! Illager occupation lost 30 seconds of progress.")
@@ -1316,10 +1324,13 @@ public final class RaidEvents {
             long next = server.overworld().getGameTime() + randomCooldownTicks(server.overworld().random);
             data.anchors.put(teamKey, anchor.withNextRaid(next));
         }
-        if (victory && reward) {
+        boolean eligibleVictory = victory && reward && state != null && state.rewardEligible;
+        if (eligibleVictory) {
             int experience = RaidConfig.VICTORY_EXPERIENCE.get();
             List<ServerPlayer> winners = onlineMembers(server, teamKey);
             if (experience > 0) winners.forEach(p -> p.giveExperiencePoints(experience));
+            int emeralds = guaranteedEmeraldReward(state);
+            if (emeralds > 0) winners.forEach(p -> giveEmeralds(p, emeralds));
             if (RaidConfig.VICTORY_LOOT_ENABLED.get()) winners.forEach(p -> giveVictoryLoot(server, p));
         }
         ServerBossEvent bar = BOSS_BARS.remove(teamKey);
@@ -1332,6 +1343,16 @@ public final class RaidEvents {
                 (elapsedTicks > 0 ? "; duration " + formatTime(elapsedTicks / 20) : "") + ".";
         announce(server, teamKey, Component.literal(message + summary)
                 .withStyle(victory ? ChatFormatting.GREEN : ChatFormatting.DARK_RED), victory);
+        if (victory && reward && !eligibleVictory) {
+            announce(server, teamKey, Component.literal("Practice siege complete. Manual test raids do not grant rewards by default.")
+                    .withStyle(ChatFormatting.YELLOW), false);
+        } else if (eligibleVictory) {
+            int emeralds = guaranteedEmeraldReward(state);
+            announce(server, teamKey, Component.literal("Victory spoils: " + emeralds +
+                    " guaranteed emeralds, " + RaidConfig.VICTORY_EXPERIENCE.get() +
+                    " experience and bonus campaign loot for each online faction member.")
+                    .withStyle(ChatFormatting.GREEN), false);
+        }
         showTitle(server, teamKey,
                 Component.literal(victory ? "SIEGE BROKEN" : "STRONGHOLD FALLEN")
                         .withStyle(victory ? ChatFormatting.GREEN : ChatFormatting.DARK_RED),
@@ -1391,6 +1412,71 @@ public final class RaidEvents {
     private static void sendActionBar(MinecraftServer server, String teamKey, Component message) {
         if (!RaidConfig.SHOW_ACTION_BAR_UPDATES.get()) return;
         onlineMembers(server, teamKey).forEach(player -> player.displayClientMessage(message, true));
+    }
+
+    private static int openDashboard(CommandSourceStack source) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            return player.openMenu(new SimpleMenuProvider(
+                    (id, inventory, ignored) -> new RaidDashboardMenu(id, inventory, player),
+                    Component.literal("Faction Raids • Command Table"))).isPresent() ? 1 : 0;
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("Only a player can open the faction dashboard."));
+            return 0;
+        }
+    }
+
+    static boolean dashboardStart(ServerPlayer player) {
+        return startOwnRaid(player.createCommandSourceStack(), null) > 0;
+    }
+
+    static boolean dashboardRefreshHome(ServerPlayer player) {
+        return refreshAutomaticHome(player.createCommandSourceStack()) > 0;
+    }
+
+    static void dashboardHelp(ServerPlayer player) {
+        help(player.createCommandSourceStack());
+    }
+
+    static DashboardSnapshot dashboardSnapshot(ServerPlayer player) {
+        MinecraftServer server = player.getServer();
+        if (server == null) return DashboardSnapshot.unavailable();
+        RaidSavedData data = RaidSavedData.get(server);
+        String key = factionKeyForPlayer(data, player);
+        RaidSavedData.Anchor anchor = data.anchors.get(key);
+        if (anchor == null) {
+            return new DashboardSnapshot(teamDisplay(player), false, false, "No stronghold registered",
+                    0, RaidConfig.WAVES.get(), 0, 0, 0, 0, 0, "Sleep at your base",
+                    defaultEmeraldReward(), false);
+        }
+        RaidSavedData.RaidState state = data.raids.get(key);
+        RaidSavedData.DefensePoint point = state == null ? anchor.primaryPoint() :
+                anchor.point(state.defensePointName);
+        ServerLevel level = getLevel(server, point);
+        int recruits = level == null ? 0 : alliedRecruits(level, point, anchor).size();
+        if (state == null) {
+            long seconds = Math.max(0L,
+                    (anchor.nextRaidGameTime() - server.overworld().getGameTime()) / 20L);
+            return new DashboardSnapshot(anchor.teamDisplay(), true, false,
+                    point.dimension() + " • " + formatPos(point.pos()), 0, RaidConfig.WAVES.get(),
+                    0, 0, 0, 0, recruits, formatTime(seconds), defaultEmeraldReward(), true);
+        }
+        int occupation = state.captureTicks * 100 /
+                Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20);
+        return new DashboardSnapshot(anchor.teamDisplay(), true, true,
+                point.dimension() + " • " + formatPos(point.pos()), state.wave, RaidConfig.WAVES.get(),
+                state.raiders.size(), state.pendingWaveSpawns, state.totalDefeated, occupation,
+                recruits, "Siege active", guaranteedEmeraldReward(state), state.rewardEligible);
+    }
+
+    record DashboardSnapshot(String faction, boolean registered, boolean active, String stronghold,
+                             int wave, int totalWaves, int deployed, int reinforcing, int defeated,
+                             int occupationPercent, int recruits, String cooldown,
+                             int emeraldReward, boolean rewardEligible) {
+        static DashboardSnapshot unavailable() {
+            return new DashboardSnapshot("Unavailable", false, false, "Server unavailable", 0, 0,
+                    0, 0, 0, 0, 0, "Unavailable", 0, false);
+        }
     }
 
     private static List<ServerPlayer> onlineMembers(MinecraftServer server, String key) {
@@ -1661,6 +1747,28 @@ public final class RaidEvents {
                 .withOptionalParameter(LootContextParams.THIS_ENTITY, player)
                 .create(LootContextParamSets.CHEST);
         table.getRandomItems(params, stack -> giveOrDrop(player, stack));
+    }
+
+    private static int defaultEmeraldReward() {
+        return RaidConfig.VICTORY_EMERALDS_BASE.get() +
+                RaidConfig.VICTORY_EMERALDS_PER_WAVE.get() * RaidConfig.WAVES.get() +
+                (RaidConfig.ENABLE_COMMANDER.get() ? RaidConfig.COMMANDER_EMERALD_BONUS.get() : 0);
+    }
+
+    private static int guaranteedEmeraldReward(RaidSavedData.RaidState state) {
+        int reward = RaidConfig.VICTORY_EMERALDS_BASE.get() +
+                RaidConfig.VICTORY_EMERALDS_PER_WAVE.get() * Math.max(0, state.wave);
+        if (state.commanderDefeated) reward += RaidConfig.COMMANDER_EMERALD_BONUS.get();
+        return reward;
+    }
+
+    private static void giveEmeralds(ServerPlayer player, int amount) {
+        int remaining = Math.max(0, amount);
+        while (remaining > 0) {
+            int count = Math.min(Items.EMERALD.getMaxStackSize(), remaining);
+            giveOrDrop(player, new ItemStack(Items.EMERALD, count));
+            remaining -= count;
+        }
     }
 
     private static void giveOrDrop(ServerPlayer player, ItemStack stack) {

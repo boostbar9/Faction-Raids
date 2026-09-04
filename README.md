@@ -1,13 +1,17 @@
-# Faction Raids 2.2.0
+# Faction Raids 2.3.0
 
 Faction Raids is a server-authoritative Forge 1.20.1 addon that turns player homes into siege
 objectives. Illager armies establish an approach front, deploy in marching squads, advance on a
 stronghold, fight the defending players and their Villager Recruits, and attempt to occupy the
 heart of the base under the command of a final-wave siege commander.
 
-Version 2.2 adds a complete presentation pass: cinematic siege titles, reinforcement and
+Version 2.2 added a complete presentation pass: cinematic siege titles, reinforcement and
 occupation action-bar updates, smoke at enemy arrival points, responsive boss-bar colors,
 cleaner command output and persistent after-action battle summaries.
+
+Version 2.3 adds a faction command dashboard and a guaranteed emerald treasury reward designed
+for Villager Recruits economies. Open it with `/factionraids` to see the stronghold, current siege,
+nearby allied Recruits, occupation pressure, cooldown and expected victory spoils in one place.
 
 No administrator setup is required. A player's bed or respawn anchor becomes a valid stronghold
 automatically. Players in the same Villager Recruits faction share one raid schedule, while any
@@ -86,6 +90,8 @@ prevents an NPC claim from being transferred merely because a PvE invasion occur
 
 | Command | Purpose |
 |---|---|
+| `/factionraids` | Open the faction command dashboard |
+| `/factionraids menu` | Open the faction command dashboard explicitly |
 | `/factionraids status` | Show the stronghold, cooldown or active siege occupation |
 | `/factionraids debug` | Show faction identity, TPS and tracked siege state |
 | `/factionraids help` | Show the essential player command guide |
@@ -105,6 +111,21 @@ event arenas in addition to automatic player homes:
 
 The older `/factionraids member` commands remain for legacy solo parties. Recruits factions do not
 need them because their scoreboard membership is authoritative.
+
+## Faction command dashboard
+
+The dashboard uses Minecraft's standard six-row container screen, so it adds no UI dependency and
+no continuous rendering workload. It shows:
+
+- Faction and stronghold identity
+- Automatic-siege cooldown or active wave
+- Deployed enemies, queued reinforcements and confirmed defeats
+- Current stronghold occupation pressure
+- Nearby allied Villager Recruits
+- Guaranteed emerald and campaign-loot rewards
+
+The lower controls refresh the automatic home, begin a practice siege, print command help or close
+the table. Dashboard icons cannot be removed or placed into player inventories.
 
 ## Administrator commands
 
@@ -144,8 +165,24 @@ concurrent limits gradually after profiling.
 
 ## Rewards and datapacks
 
-Every online faction member receives the configured experience award and rolls this loot table
-after a successful defense:
+Every online faction member receives guaranteed emeralds, the configured experience award and a
+roll from the campaign loot table after an eligible successful defense. With default settings, a
+five-wave victory with the commander defeated awards each online member:
+
+- 16 base emeralds
+- 20 emeralds for completing five waves
+- 12 emeralds for defeating the commander
+- 250 experience points
+- Additional items from the campaign loot table
+
+That is **48 guaranteed emeralds per online faction member**, plus the existing bonus loot roll.
+The base, per-wave and commander amounts are independently configurable.
+
+Automatic scheduled sieges are reward eligible. Sieges started manually with `/factionraids start`
+or the dashboard test button do not grant rewards by default, preventing unlimited farming. Public
+servers can deliberately enable `manualRaidsGrantRewards` if they use another cooldown system.
+
+The additional campaign loot comes from:
 
 ```text
 factionraids:gameplay/invasion_victory
@@ -155,7 +192,7 @@ Datapacks can replace
 `data/factionraids/loot_tables/gameplay/invasion_victory.json` to award modded equipment,
 currencies, spell scrolls or collectibles without adding more hard dependencies.
 
-## Updating from 1.x, 2.0 or 2.1
+## Updating from 1.x through 2.2
 
 Saved anchors, cooldowns and active raids migrate automatically. Existing manually created homes
 remain manual so an update cannot unexpectedly move a live server's established castle. Run this
@@ -175,6 +212,9 @@ players without beds are not registered unless `allowWorldSpawnFallback` is enab
 Active 2.1 sieges also migrate safely. Currently tracked attackers seed the new deployment count;
 earlier casualties cannot be reconstructed, while all existing enemies, waves, occupation pressure
 and commander state remain intact.
+
+Existing 2.2 sieges remain reward eligible when first loaded in 2.3, preserving the outcome players
+were already fighting toward. Newly started practice sieges follow `manualRaidsGrantRewards`.
 
 ## Building from source
 

@@ -14,7 +14,7 @@ import java.util.*;
 
 public final class RaidSavedData extends SavedData {
     public static final String DATA_NAME = "factionraids_data";
-    public static final int DATA_VERSION = 6;
+    public static final int DATA_VERSION = 7;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Map<String, Anchor> anchors = new HashMap<>();
@@ -205,6 +205,7 @@ public final class RaidSavedData extends SavedData {
         public int totalSpawned;
         public int totalDefeated;
         public int totalEscaped;
+        public boolean rewardEligible = true;
         public int lastWarningSecond = Integer.MAX_VALUE;
         public final Set<UUID> raiders = new HashSet<>();
         public final Map<UUID, Integer> missingTicks = new HashMap<>();
@@ -239,6 +240,7 @@ public final class RaidSavedData extends SavedData {
             tag.putInt("TotalSpawned", totalSpawned);
             tag.putInt("TotalDefeated", totalDefeated);
             tag.putInt("TotalEscaped", totalEscaped);
+            tag.putBoolean("RewardEligible", rewardEligible);
             ListTag ids = new ListTag();
             raiders.forEach(id -> ids.add(StringTag.valueOf(id.toString())));
             tag.put("Raiders", ids);
@@ -275,6 +277,8 @@ public final class RaidSavedData extends SavedData {
             state.totalSpawned = tag.getInt("TotalSpawned");
             state.totalDefeated = tag.getInt("TotalDefeated");
             state.totalEscaped = tag.getInt("TotalEscaped");
+            state.rewardEligible = !tag.contains("RewardEligible", Tag.TAG_BYTE) ||
+                    tag.getBoolean("RewardEligible");
             ListTag ids = tag.getList("Raiders", Tag.TAG_STRING);
             for (int i = 0; i < ids.size(); i++) {
                 try {

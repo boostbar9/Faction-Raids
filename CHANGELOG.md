@@ -2,6 +2,19 @@
 
 All notable changes to Faction Raids are documented here.
 
+## 2.3.0 - 2026-09-04
+
+- Added a polished six-row faction command dashboard using Minecraft's lightweight vanilla interface.
+- Made `/factionraids` and `/factionraids menu` open the dashboard without requiring an extra UI library.
+- Added live stronghold, siege phase, reinforcement, occupation, Recruit-army and reward information.
+- Added dashboard buttons for refreshing the automatic stronghold, starting a practice siege and opening help.
+- Added guaranteed configurable emerald rewards for every online faction member after an eligible victory.
+- Added configurable per-wave and commander-defeat emerald bonuses.
+- Kept the existing datapack-controlled campaign loot as an additional victory reward.
+- Marked automatic scheduled sieges as reward eligible and practice sieges as non-rewarding by default.
+- Added an opt-in configuration switch for servers that deliberately want rewarded manual sieges.
+- Persisted reward eligibility across restarts and active-siege migrations.
+
 ## 2.2.0 - 2026-09-04
 
 - Added cinematic title and subtitle overlays for siege arrival, the command assault, victory and defeat.

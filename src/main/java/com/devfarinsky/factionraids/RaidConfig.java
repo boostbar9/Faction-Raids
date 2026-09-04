@@ -56,6 +56,10 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue SHOW_RAID_TITLES;
     public static final ForgeConfigSpec.BooleanValue SHOW_ACTION_BAR_UPDATES;
     public static final ForgeConfigSpec.BooleanValue SPAWN_ARRIVAL_EFFECTS;
+    public static final ForgeConfigSpec.IntValue VICTORY_EMERALDS_BASE;
+    public static final ForgeConfigSpec.IntValue VICTORY_EMERALDS_PER_WAVE;
+    public static final ForgeConfigSpec.IntValue COMMANDER_EMERALD_BONUS;
+    public static final ForgeConfigSpec.BooleanValue MANUAL_RAIDS_GRANT_REWARDS;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -160,6 +164,14 @@ public final class RaidConfig {
                 .define("showActionBarUpdates", true);
         SPAWN_ARRIVAL_EFFECTS = b.comment("Create a brief smoke effect when an assault squad enters the battlefield.")
                 .define("spawnArrivalEffects", true);
+        VICTORY_EMERALDS_BASE = b.comment("Guaranteed emeralds awarded to each online faction member after an eligible victory.")
+                .defineInRange("victoryEmeraldsBase", 16, 0, 512);
+        VICTORY_EMERALDS_PER_WAVE = b.comment("Additional guaranteed emeralds per completed wave for each online faction member.")
+                .defineInRange("victoryEmeraldsPerWave", 4, 0, 64);
+        COMMANDER_EMERALD_BONUS = b.comment("Additional guaranteed emeralds when the faction defeats the siege commander.")
+                .defineInRange("commanderEmeraldBonus", 12, 0, 256);
+        MANUAL_RAIDS_GRANT_REWARDS = b.comment("Allow raids started with /factionraids start or the dashboard test button to grant rewards. Disabled to prevent farming by default.")
+                .define("manualRaidsGrantRewards", false);
         b.pop();
         SPEC = b.build();
     }
