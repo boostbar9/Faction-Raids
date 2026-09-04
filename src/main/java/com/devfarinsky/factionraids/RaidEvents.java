@@ -9,6 +9,7 @@ import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
@@ -39,11 +40,16 @@ import net.minecraft.world.entity.npc.AbstractVillager;
 import net.minecraft.world.entity.raid.Raider;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.FenceBlock;
+import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -255,7 +261,7 @@ public final class RaidEvents {
             data.anchors.put(key, updated);
             data.setDirty();
             source.sendSuccess(() -> Component.literal("Faction raid anchor set at " + formatPos(player.blockPosition()) +
-                    ". Illager invasions will target your faction players here.").withStyle(ChatFormatting.GREEN), false);
+                    ". Enemy invasions will target your faction players here.").withStyle(ChatFormatting.GREEN), false);
             return 1;
         } catch (Exception e) {
             source.sendFailure(Component.literal("Only a player can set a faction raid anchor."));
@@ -692,6 +698,13 @@ public final class RaidEvents {
                         .append(Component.literal(state.campPos == null ? "No safe camp site was available" :
                                 formatPos(state.campPos)).withStyle(state.campPos == null ?
                                 ChatFormatting.YELLOW : ChatFormatting.RED)), false);
+                source.sendSuccess(() -> Component.literal("Physical breach: ").withStyle(ChatFormatting.GRAY)
+                        .append(Component.literal(state.currentBreachBlock == null ?
+                                state.breachedBlocks.size() + " defense block(s) awaiting repair" :
+                                formatPos(state.currentBreachBlock) + " • " + gateBreachPercent(state) + "% • " +
+                                        state.breachedBlocks.size() + " awaiting repair")
+                                .withStyle(state.currentBreachBlock == null ? ChatFormatting.GREEN :
+                                        ChatFormatting.RED)), false);
                 source.sendSuccess(() -> Component.literal("Objective: ").withStyle(ChatFormatting.GRAY)
                         .append(Component.literal("'" + point.name() + "' at " + formatPos(point.pos()) +
                                 (state.breached || !RaidConfig.ENABLE_BREACH_PHASE.get() ?
@@ -893,7 +906,7 @@ public final class RaidEvents {
         if (raidLevel != null && RaidConfig.BUILD_WAR_CAMPS.get()) buildWarCamp(raidLevel, point, state);
         data.raids.put(anchor.teamKey(), state);
         data.setDirty();
-        announce(server, anchor.teamKey(), Component.literal("Illager scouts have found " + anchor.teamDisplay() + " at '" + point.name() +
+        announce(server, anchor.teamKey(), Component.literal("Enemy scouts have found " + anchor.teamDisplay() + " at '" + point.name() +
                         "'! A war camp " + (state.campPos == null ? "is forming" : "has been raised at " + formatPos(state.campPos)) +
                         " to the " + approachDirection(state.approachAngle) + ". The siege begins in " +
                         formatTime(RaidConfig.WARNING_SECONDS.get()) + ". Rally your Recruits and defend the stronghold.")
@@ -937,10 +950,11 @@ public final class RaidEvents {
         List<Mob> recruits = alliedRecruits(level, point, anchor);
         if (RaidConfig.MOBILIZE_RECRUITS.get()) mobilizeRecruits(level, recruits, state);
         redirectRaiders(level, state, members, recruits, point);
+        processPhysicalBreaching(level, point, state);
 
         if (updateCaptureProgress(server, anchor, point, state, level, members, recruits)) {
             finishRaid(server, data, teamKey, false, false,
-                    anchor.teamDisplay() + "'s stronghold has fallen to the illager siege!");
+                    anchor.teamDisplay() + "'s stronghold has fallen to the enemy siege!");
             return;
         }
 
@@ -950,7 +964,7 @@ public final class RaidEvents {
         int abandonmentMinutes = RaidConfig.ABANDON_DEFEAT_MINUTES.get();
         if (abandonmentMinutes > 0 && state.abandonedTicks >= abandonmentMinutes * 60 * 20) {
             finishRaid(server, data, teamKey, false, false,
-                    anchor.teamDisplay() + " abandoned its territory. The illager invasion has prevailed!");
+                    anchor.teamDisplay() + " abandoned its territory. The invasion has prevailed!");
             return;
         }
 
@@ -975,7 +989,7 @@ public final class RaidEvents {
                 state.ticksToNextWave <= 0) {
             if (state.wave >= RaidConfig.WAVES.get()) {
                 finishRaid(server, data, teamKey, true, true,
-                        anchor.teamDisplay() + " has crushed the illager invasion!");
+                        anchor.teamDisplay() + " has crushed the enemy invasion!");
                 return;
             }
             state.ticksToNextWave = RaidConfig.TIME_BETWEEN_WAVES_SECONDS.get() * 20;
@@ -989,7 +1003,7 @@ public final class RaidEvents {
             int seconds = Math.max(0, (state.ticksToNextWave + 19) / 20);
             if (shouldWarn(seconds) && seconds < state.lastWarningSecond) {
                 state.lastWarningSecond = seconds;
-                announce(server, teamKey, Component.literal("Illager wave arrives in " + seconds + " seconds!")
+                announce(server, teamKey, Component.literal("Enemy wave arrives in " + seconds + " seconds!")
                         .withStyle(ChatFormatting.GOLD), seconds == 10);
             }
             if (state.ticksToNextWave <= 0) {
@@ -1183,7 +1197,7 @@ public final class RaidEvents {
                 raider.setHealth(raider.getMaxHealth());
             }
             raider.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 20 * 60 * 60, 0, false, false));
-            raider.setCustomName(Component.literal("Illager Siege Commander").withStyle(ChatFormatting.DARK_RED));
+            raider.setCustomName(Component.literal("Siege Commander").withStyle(ChatFormatting.DARK_RED));
             raider.setCustomNameVisible(true);
             state.commanderUuid = raider.getUUID();
             state.commanderDefeated = false;
@@ -1198,7 +1212,7 @@ public final class RaidEvents {
         } else state.captureTicks = Math.max(0, state.captureTicks - 30 * 20);
         String pressure = !state.breached && RaidConfig.ENABLE_BREACH_PHASE.get() ?
                 "breach pressure" : "occupation";
-        announce(server, anchor.teamKey(), Component.literal("The siege commander has fallen! Illager " +
+        announce(server, anchor.teamKey(), Component.literal("The siege commander has fallen! Enemy " +
                         pressure + " lost 30 seconds of progress.")
                 .withStyle(ChatFormatting.GREEN), true);
         sendActionBar(server, anchor.teamKey(), Component.literal("COMMANDER DEFEATED • " +
@@ -1292,20 +1306,39 @@ public final class RaidEvents {
         placeCampBlock(level, state, surfacePosition(level, camp.getX() + 2, camp.getZ()), Blocks.CRAFTING_TABLE);
         placeCampBlock(level, state, surfacePosition(level, camp.getX(), camp.getZ() - 3), Blocks.RED_BANNER);
 
+        // A compact field-command pavilion makes the camp a real battlefield
+        // location rather than a few decorative markers.
         int tentY = camp.getY();
-        for (int dx : new int[]{-3, 3}) {
-            for (int dz : new int[]{3, 6}) {
+        for (int dx = -4; dx <= 4; dx++) {
+            for (int dz = 3; dz <= 7; dz++) {
                 placeCampBlock(level, state, new BlockPos(camp.getX() + dx, tentY,
-                        camp.getZ() + dz), Blocks.SPRUCE_FENCE);
-                placeCampBlock(level, state, new BlockPos(camp.getX() + dx, tentY + 1,
-                        camp.getZ() + dz), Blocks.SPRUCE_FENCE);
+                        camp.getZ() + dz), Blocks.DARK_OAK_PLANKS);
             }
         }
-        for (int dx = -3; dx <= 3; dx++) {
-            for (int dz = 3; dz <= 6; dz++) {
-                placeCampBlock(level, state, new BlockPos(camp.getX() + dx, tentY + 2,
+        for (int dx : new int[]{-4, 4}) {
+            for (int dz : new int[]{3, 7}) {
+                for (int dy = 1; dy <= 3; dy++) {
+                    placeCampBlock(level, state, new BlockPos(camp.getX() + dx, tentY + dy,
+                            camp.getZ() + dz), Blocks.SPRUCE_LOG);
+                }
+            }
+        }
+        for (int dx = -4; dx <= 4; dx++) {
+            for (int dz = 3; dz <= 7; dz++) {
+                placeCampBlock(level, state, new BlockPos(camp.getX() + dx, tentY + 4,
                         camp.getZ() + dz), Blocks.RED_WOOL);
             }
+        }
+        for (int dx = -4; dx <= 4; dx++) {
+            if (dx == 0 || dx == 1) continue;
+            for (int dy = 1; dy <= 3; dy++) {
+                placeCampBlock(level, state, new BlockPos(camp.getX() + dx, tentY + dy,
+                        camp.getZ() + 7), Blocks.RED_WOOL);
+            }
+        }
+        for (int offset = -7; offset <= 7; offset += 2) {
+            placeCampBlock(level, state, surfacePosition(level, camp.getX() + offset,
+                    camp.getZ() - 6), Blocks.SPRUCE_FENCE);
         }
 
         Vec3 breach = invasionObjective(level, point, state);
@@ -1341,8 +1374,8 @@ public final class RaidEvents {
         if (!level.getWorldBorder().isWithinBounds(center) || Math.abs(center.getY() - anchor.getY()) > 48 ||
                 !level.getFluidState(center).isEmpty() || !level.getBlockState(center).canBeReplaced() ||
                 !level.getBlockState(center.below()).isFaceSturdy(level, center.below(), Direction.UP)) return false;
-        for (int dx : new int[]{-3, 3}) {
-            for (int dz : new int[]{-3, 6}) {
+        for (int dx : new int[]{-4, 4}) {
+            for (int dz : new int[]{-6, 7}) {
                 BlockPos sample = surfacePosition(level, center.getX() + dx, center.getZ() + dz);
                 if (Math.abs(sample.getY() - center.getY()) > 2 || !level.getFluidState(sample).isEmpty()) return false;
             }
@@ -1378,6 +1411,206 @@ public final class RaidEvents {
             }
         }
         state.campBlocks.clear();
+    }
+
+    private static void processPhysicalBreaching(ServerLevel level, RaidSavedData.DefensePoint point,
+                                                 RaidSavedData.RaidState state) {
+        BlockPos previousTarget = state.currentBreachBlock;
+        state.currentBreachBlock = null;
+        state.currentBreachRequired = 0;
+        if (!RaidConfig.ENABLE_GATE_BREACHING.get() || state.wave <= 0 ||
+                state.breachedBlocks.size() >= RaidConfig.MAX_RESTORABLE_BLOCKS.get()) {
+            if (previousTarget != null) level.destroyBlockProgress(breakerAnimationId(state), previousTarget, -1);
+            return;
+        }
+
+        Vec3 objective = invasionObjective(level, point, state);
+        Map<BlockPos, Integer> pressure = new HashMap<>();
+        int evaluatedBreachers = 0;
+        for (UUID id : state.raiders) {
+            Entity entity = level.getEntity(id);
+            if (!(entity instanceof Mob mob) || !mob.isAlive()) continue;
+            String role = mob.getPersistentData().getString(RAID_ROLE_TAG);
+            if (!role.equals("breacher") && !role.equals("commander")) continue;
+            if (++evaluatedBreachers > 8) break;
+            BlockPos target = findNearbyBreachableBlock(level, mob, objective, point.pos(), state);
+            if (target != null) pressure.merge(target.immutable(), 1, Integer::sum);
+        }
+        if (pressure.isEmpty()) {
+            if (previousTarget != null) level.destroyBlockProgress(breakerAnimationId(state), previousTarget, -1);
+            state.blockBreachProgress.replaceAll((position, progress) -> Math.max(0, progress - 1));
+            state.blockBreachProgress.values().removeIf(progress -> progress <= 0);
+            return;
+        }
+
+        Map.Entry<BlockPos, Integer> focus = pressure.entrySet().stream()
+                .max(Map.Entry.comparingByValue()).orElse(null);
+        if (focus == null) return;
+        BlockPos target = focus.getKey();
+        BlockState targetState = level.getBlockState(target);
+        int required = breachWorkRequired(targetState);
+        if (previousTarget != null && !previousTarget.equals(target)) {
+            level.destroyBlockProgress(breakerAnimationId(state), previousTarget, -1);
+        }
+        state.blockBreachProgress.replaceAll((position, oldProgress) ->
+                position == target.asLong() ? oldProgress : Math.max(0, oldProgress - 1));
+        state.blockBreachProgress.values().removeIf(oldProgress -> oldProgress <= 0);
+        int progress = state.blockBreachProgress.merge(target.asLong(), Math.min(4, focus.getValue()), Integer::sum);
+        state.currentBreachBlock = target;
+        state.currentBreachRequired = required;
+        level.destroyBlockProgress(breakerAnimationId(state), target,
+                Mth.clamp(progress * 10 / Math.max(1, required), 0, 9));
+
+        if (progress == 1 || progress % Math.max(2, required / 4) == 0) {
+            level.playSound(null, target, SoundEvents.ZOMBIE_ATTACK_WOODEN_DOOR,
+                    SoundSource.HOSTILE, 0.75F, 0.75F + level.random.nextFloat() * 0.25F);
+            level.sendParticles(ParticleTypes.CRIT, target.getX() + 0.5D, target.getY() + 0.5D,
+                    target.getZ() + 0.5D, 6, 0.35D, 0.35D, 0.35D, 0.05D);
+        }
+        if (progress >= required) breachAndRemember(level, state, target);
+    }
+
+    private static int breakerAnimationId(RaidSavedData.RaidState state) {
+        return 0x60000000 ^ state.teamKey.hashCode();
+    }
+
+    private static BlockPos findNearbyBreachableBlock(ServerLevel level, Mob mob, Vec3 objective,
+                                                       BlockPos stronghold,
+                                                       RaidSavedData.RaidState state) {
+        BlockPos origin = mob.blockPosition();
+        double maximumDistanceSq = (double) RaidConfig.DEFENSE_RADIUS.get() * RaidConfig.DEFENSE_RADIUS.get();
+        BlockPos best = null;
+        double bestScore = Double.MAX_VALUE;
+        for (BlockPos candidate : BlockPos.betweenClosed(origin.offset(-3, -1, -3), origin.offset(3, 2, 3))) {
+            if (candidate.distSqr(stronghold) > maximumDistanceSq ||
+                    state.campBlocks.containsKey(candidate.asLong())) continue;
+            BlockState blockState = level.getBlockState(candidate);
+            if (!isBreachableDefense(blockState)) continue;
+            double mobDistance = candidate.distSqr(origin);
+            double objectiveDistance = Vec3.atCenterOf(candidate).distanceToSqr(objective);
+            double score = mobDistance * 4.0D + objectiveDistance * 0.02D;
+            if (score < bestScore) {
+                best = candidate.immutable();
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    private static boolean isBreachableDefense(BlockState state) {
+        Block block = state.getBlock();
+        if (state.hasProperty(BlockStateProperties.OPEN) && state.getValue(BlockStateProperties.OPEN)) return false;
+        return block instanceof DoorBlock || block instanceof FenceGateBlock ||
+                block instanceof TrapDoorBlock || block instanceof FenceBlock || block == Blocks.IRON_BARS;
+    }
+
+    private static int breachWorkRequired(BlockState state) {
+        boolean reinforced = state.getBlock() == Blocks.IRON_DOOR || state.getBlock() == Blocks.IRON_TRAPDOOR ||
+                state.getBlock() == Blocks.IRON_BARS;
+        return reinforced ? RaidConfig.REINFORCED_BREACH_SECONDS.get() : RaidConfig.WOODEN_BREACH_SECONDS.get();
+    }
+
+    private static void breachAndRemember(ServerLevel level, RaidSavedData.RaidState raid, BlockPos target) {
+        boolean firstPhysicalBreach = raid.breachedBlocks.isEmpty();
+        List<BlockPos> affected = new ArrayList<>();
+        affected.add(target.immutable());
+        BlockState initial = level.getBlockState(target);
+        if (initial.getBlock() instanceof DoorBlock) {
+            for (BlockPos adjacent : List.of(target.above(), target.below())) {
+                if (level.getBlockState(adjacent).getBlock() == initial.getBlock()) affected.add(adjacent.immutable());
+            }
+        }
+        affected.removeIf(position -> raid.breachedBlocks.containsKey(position.asLong()));
+        int capacity = RaidConfig.MAX_RESTORABLE_BLOCKS.get() - raid.breachedBlocks.size();
+        if (affected.isEmpty() || affected.size() > capacity) return;
+
+        for (BlockPos position : affected) {
+            BlockState state = level.getBlockState(position);
+            if (!isBreachableDefense(state)) continue;
+            raid.breachedBlocks.put(position.asLong(), serializeBlockState(state));
+        }
+        affected.sort((left, right) -> Integer.compare(right.getY(), left.getY()));
+        for (BlockPos position : affected) {
+            if (raid.breachedBlocks.containsKey(position.asLong())) {
+                level.setBlock(position, Blocks.AIR.defaultBlockState(), 3);
+                raid.blockBreachProgress.remove(position.asLong());
+            }
+        }
+        raid.currentBreachBlock = null;
+        raid.currentBreachRequired = 0;
+        level.destroyBlockProgress(breakerAnimationId(raid), target, -1);
+        level.playSound(null, target, SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR,
+                SoundSource.HOSTILE, 1.1F, 0.8F);
+        level.sendParticles(ParticleTypes.POOF, target.getX() + 0.5D, target.getY() + 0.5D,
+                target.getZ() + 0.5D, 14, 0.5D, 0.75D, 0.5D, 0.08D);
+        sendActionBar(level.getServer(), raid.teamKey, Component.literal("DEFENSE BROKEN • " +
+                raid.breachedBlocks.size() + " block(s) queued for repair").withStyle(ChatFormatting.RED));
+        if (firstPhysicalBreach || raid.breachedBlocks.size() % 5 == 0) {
+            announce(level.getServer(), raid.teamKey, Component.literal("The attackers have broken through a defense at " +
+                    formatPos(target) + ". It is queued for restoration after the siege.")
+                    .withStyle(ChatFormatting.DARK_RED), false);
+        }
+    }
+
+    private static CompoundTag serializeBlockState(BlockState state) {
+        CompoundTag tag = new CompoundTag();
+        ResourceLocation id = ForgeRegistries.BLOCKS.getKey(state.getBlock());
+        if (id == null) return tag;
+        tag.putString("Name", id.toString());
+        CompoundTag properties = new CompoundTag();
+        for (Property<?> property : state.getProperties()) {
+            properties.putString(property.getName(), propertyValueName(state, property));
+        }
+        tag.put("Properties", properties);
+        return tag;
+    }
+
+    private static <T extends Comparable<T>> String propertyValueName(BlockState state, Property<T> property) {
+        return property.getName(state.getValue(property));
+    }
+
+    private static BlockState deserializeBlockState(CompoundTag tag) {
+        ResourceLocation id = ResourceLocation.tryParse(tag.getString("Name"));
+        Block block = id == null ? null : ForgeRegistries.BLOCKS.getValue(id);
+        if (block == null || block == Blocks.AIR) return Blocks.AIR.defaultBlockState();
+        BlockState state = block.defaultBlockState();
+        CompoundTag properties = tag.getCompound("Properties");
+        for (Property<?> property : state.getProperties()) {
+            if (properties.contains(property.getName())) {
+                state = applySerializedProperty(state, property, properties.getString(property.getName()));
+            }
+        }
+        return state;
+    }
+
+    private static <T extends Comparable<T>> BlockState applySerializedProperty(BlockState state,
+                                                                                 Property<T> property,
+                                                                                 String value) {
+        return property.getValue(value).map(parsed -> state.setValue(property, parsed)).orElse(state);
+    }
+
+    private static void restoreBreachedBlocks(ServerLevel level, RaidSavedData.RaidState raid) {
+        if (!RaidConfig.RESTORE_BREACHED_BLOCKS.get()) return;
+        List<Map.Entry<Long, CompoundTag>> blocks = new ArrayList<>(raid.breachedBlocks.entrySet());
+        blocks.sort(Comparator.comparingInt(entry -> BlockPos.of(entry.getKey()).getY()));
+        int restoredCount = 0;
+        int preservedCount = 0;
+        for (Map.Entry<Long, CompoundTag> entry : blocks) {
+            BlockPos position = BlockPos.of(entry.getKey());
+            if (!level.getBlockState(position).isAir()) {
+                preservedCount++;
+                continue;
+            }
+            BlockState restored = deserializeBlockState(entry.getValue());
+            if (!restored.isAir() && level.setBlock(position, restored, 3)) restoredCount++;
+        }
+        raid.breachedBlocks.clear();
+        raid.blockBreachProgress.clear();
+        if (restoredCount > 0 || preservedCount > 0) {
+            announce(level.getServer(), raid.teamKey, Component.literal("Siege recovery restored " + restoredCount +
+                    " defense block(s)" + (preservedCount > 0 ? "; " + preservedCount +
+                    " player-replaced position(s) were preserved." : ".")).withStyle(ChatFormatting.GREEN), false);
+        }
     }
 
     private static void redirectRaiders(ServerLevel level, RaidSavedData.RaidState state,
@@ -1499,7 +1732,7 @@ public final class RaidEvents {
             if (state.breachTicks >= maximum) {
                 state.breached = true;
                 state.lastCaptureWarningBand = 0;
-                announce(server, anchor.teamKey(), Component.literal("The perimeter has been breached! Illagers are pushing for the stronghold heart.")
+                announce(server, anchor.teamKey(), Component.literal("The perimeter has been breached! Invaders are pushing for the stronghold heart.")
                         .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD), true);
                 showTitle(server, anchor.teamKey(), Component.literal("PERIMETER BREACHED")
                                 .withStyle(ChatFormatting.DARK_RED),
@@ -1524,7 +1757,7 @@ public final class RaidEvents {
             state.lastCaptureWarningBand = band;
             int percent = band * 25;
             announce(server, anchor.teamKey(), Component.literal("Stronghold occupation: " + percent +
-                    "%. Push the illagers out of the inner defense ring!").withStyle(ChatFormatting.DARK_RED),
+                    "%. Push the invaders out of the inner defense ring!").withStyle(ChatFormatting.DARK_RED),
                     band >= 3);
             sendActionBar(server, anchor.teamKey(), Component.literal("STRONGHOLD OCCUPATION: " + percent + "%")
                     .withStyle(band >= 3 ? ChatFormatting.RED : ChatFormatting.GOLD, ChatFormatting.BOLD));
@@ -1620,6 +1853,7 @@ public final class RaidEvents {
                     Entity entity = level.getEntity(id);
                     if (entity != null) entity.discard();
                 }
+                restoreBreachedBlocks(level, state);
                 cleanupWarCamp(level, state);
             }
             long next = server.overworld().getGameTime() + randomCooldownTicks(server.overworld().random);
@@ -1657,7 +1891,7 @@ public final class RaidEvents {
         showTitle(server, teamKey,
                 Component.literal(victory ? "SIEGE BROKEN" : "STRONGHOLD FALLEN")
                         .withStyle(victory ? ChatFormatting.GREEN : ChatFormatting.DARK_RED),
-                Component.literal(victory ? "Your faction held the line" : "The illagers seized the objective")
+                Component.literal(victory ? "Your faction held the line" : "The invaders seized the objective")
                         .withStyle(ChatFormatting.GOLD));
         data.setDirty();
     }
@@ -1665,7 +1899,7 @@ public final class RaidEvents {
     private static void updateBossBar(MinecraftServer server, RaidSavedData.Anchor anchor,
                                       RaidSavedData.RaidState state, boolean paused) {
         ServerBossEvent bar = BOSS_BARS.computeIfAbsent(anchor.teamKey(), key ->
-                new ServerBossEvent(Component.literal("Illager Invasion"), BossEvent.BossBarColor.RED,
+                new ServerBossEvent(Component.literal("Faction Invasion"), BossEvent.BossBarColor.RED,
                         BossEvent.BossBarOverlay.NOTCHED_10));
         List<ServerPlayer> currentMembers = onlineMembers(server, anchor.teamKey());
         for (ServerPlayer shown : new ArrayList<>(bar.getPlayers())) {
@@ -1722,9 +1956,8 @@ public final class RaidEvents {
     private static int openDashboard(CommandSourceStack source) {
         try {
             ServerPlayer player = source.getPlayerOrException();
-            return player.openMenu(new SimpleMenuProvider(
-                    (id, inventory, ignored) -> new RaidDashboardMenu(id, inventory, player),
-                    Component.literal("Faction Raids • Command Table"))).isPresent() ? 1 : 0;
+            RaidNetwork.openDashboard(player);
+            return 1;
         } catch (Exception e) {
             source.sendFailure(Component.literal("Only a player can open the faction dashboard."));
             return 0;
@@ -1751,7 +1984,8 @@ public final class RaidEvents {
         RaidSavedData.Anchor anchor = data.anchors.get(key);
         if (anchor == null) {
             return new DashboardSnapshot(teamDisplay(player), false, false, "No stronghold registered",
-                    0, RaidConfig.WAVES.get(), 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0, "Sleep at your base",
+                    0, RaidConfig.WAVES.get(), 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0,
+                    0, "No gate under attack", 0, "Sleep at your base",
                     defaultEmeraldReward(), false);
         }
         RaidSavedData.RaidState state = data.raids.get(key);
@@ -1767,7 +2001,8 @@ public final class RaidEvents {
             return new DashboardSnapshot(anchor.teamDisplay(), true, false,
                     point.dimension() + " • " + formatPos(point.pos()), 0, RaidConfig.WAVES.get(),
                     0, 0, 0, 0, false, 0, recruits, compat.workers(), compat.ships(), compat.siegeWeapons(),
-                    assetScalingEnemies(compat), formatTime(seconds), defaultEmeraldReward(), true);
+                    assetScalingEnemies(compat), 0, "No gate under attack", 0,
+                    formatTime(seconds), defaultEmeraldReward(), true);
         }
         int occupation = state.captureTicks * 100 /
                 Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20);
@@ -1777,19 +2012,30 @@ public final class RaidEvents {
                 state.wave, RaidConfig.WAVES.get(),
                 state.raiders.size(), state.pendingWaveSpawns, state.totalDefeated, occupation,
                 state.breached || !RaidConfig.ENABLE_BREACH_PHASE.get(), breachPercent(state),
-                recruits, compat.workers(), compat.ships(), compat.siegeWeapons(), assetScalingEnemies(compat), "Siege active",
+                recruits, compat.workers(), compat.ships(), compat.siegeWeapons(), assetScalingEnemies(compat),
+                state.breachedBlocks.size(),
+                state.currentBreachBlock == null ? "No gate under attack" : formatPos(state.currentBreachBlock),
+                gateBreachPercent(state), "Siege active",
                 guaranteedEmeraldReward(state), state.rewardEligible);
     }
 
-    record DashboardSnapshot(String faction, boolean registered, boolean active, String stronghold,
+    private static int gateBreachPercent(RaidSavedData.RaidState state) {
+        if (state.currentBreachBlock == null || state.currentBreachRequired <= 0) return 0;
+        return Mth.clamp(state.blockBreachProgress.getOrDefault(state.currentBreachBlock.asLong(), 0) * 100 /
+                state.currentBreachRequired, 0, 100);
+    }
+
+    public record DashboardSnapshot(String faction, boolean registered, boolean active, String stronghold,
                              int wave, int totalWaves, int deployed, int reinforcing, int defeated,
                              int occupationPercent, boolean breached, int breachPercent,
                              int recruits, int workers, int ships,
-                             int siegeWeapons, int assetScalingEnemies, String cooldown,
+                             int siegeWeapons, int assetScalingEnemies, int breachedBlockCount,
+                             String gateTarget, int gateBreachPercent, String cooldown,
                              int emeraldReward, boolean rewardEligible) {
         static DashboardSnapshot unavailable() {
             return new DashboardSnapshot("Unavailable", false, false, "Server unavailable", 0, 0,
-                    0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0, "Unavailable", 0, false);
+                    0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0,
+                    0, "Unavailable", 0, "Unavailable", 0, false);
         }
     }
 

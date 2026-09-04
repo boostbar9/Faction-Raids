@@ -11,6 +11,7 @@ public final class FactionRaids {
 
     public FactionRaids() {
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, RaidConfig.SPEC);
+        RaidNetwork.init();
         MinecraftForge.EVENT_BUS.register(RaidEvents.class);
     }
 }

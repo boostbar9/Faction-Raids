@@ -14,7 +14,7 @@ import java.util.*;
 
 public final class RaidSavedData extends SavedData {
     public static final String DATA_NAME = "factionraids_data";
-    public static final int DATA_VERSION = 8;
+    public static final int DATA_VERSION = 9;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Map<String, Anchor> anchors = new HashMap<>();
@@ -203,6 +203,10 @@ public final class RaidSavedData extends SavedData {
         public BlockPos campPos;
         public boolean campBuildAttempted;
         public final Map<Long, String> campBlocks = new LinkedHashMap<>();
+        public final Map<Long, CompoundTag> breachedBlocks = new LinkedHashMap<>();
+        public final Map<Long, Integer> blockBreachProgress = new HashMap<>();
+        public BlockPos currentBreachBlock;
+        public int currentBreachRequired;
         public double approachAngle;
         public int lastCaptureWarningBand;
         public UUID commanderUuid;
@@ -251,6 +255,24 @@ public final class RaidSavedData extends SavedData {
                 camp.add(entry);
             });
             tag.put("CampBlocks", camp);
+            ListTag breached = new ListTag();
+            breachedBlocks.forEach((position, blockState) -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putLong("Position", position);
+                entry.put("State", blockState.copy());
+                breached.add(entry);
+            });
+            tag.put("BreachedBlocks", breached);
+            ListTag breachProgress = new ListTag();
+            blockBreachProgress.forEach((position, progress) -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putLong("Position", position);
+                entry.putInt("Progress", progress);
+                breachProgress.add(entry);
+            });
+            tag.put("BlockBreachProgress", breachProgress);
+            if (currentBreachBlock != null) tag.putLong("CurrentBreachBlock", currentBreachBlock.asLong());
+            tag.putInt("CurrentBreachRequired", currentBreachRequired);
             tag.putDouble("ApproachAngle", approachAngle);
             tag.putInt("CaptureWarningBand", lastCaptureWarningBand);
             if (commanderUuid != null) tag.putUUID("Commander", commanderUuid);
@@ -299,6 +321,19 @@ public final class RaidSavedData extends SavedData {
                 CompoundTag entry = camp.getCompound(i);
                 state.campBlocks.put(entry.getLong("Position"), entry.getString("Block"));
             }
+            ListTag breached = tag.getList("BreachedBlocks", Tag.TAG_COMPOUND);
+            for (int i = 0; i < breached.size(); i++) {
+                CompoundTag entry = breached.getCompound(i);
+                state.breachedBlocks.put(entry.getLong("Position"), entry.getCompound("State").copy());
+            }
+            ListTag breachProgress = tag.getList("BlockBreachProgress", Tag.TAG_COMPOUND);
+            for (int i = 0; i < breachProgress.size(); i++) {
+                CompoundTag entry = breachProgress.getCompound(i);
+                state.blockBreachProgress.put(entry.getLong("Position"), entry.getInt("Progress"));
+            }
+            state.currentBreachBlock = tag.contains("CurrentBreachBlock", Tag.TAG_LONG) ?
+                    BlockPos.of(tag.getLong("CurrentBreachBlock")) : null;
+            state.currentBreachRequired = tag.getInt("CurrentBreachRequired");
             state.approachAngle = tag.contains("ApproachAngle", Tag.TAG_DOUBLE) ?
                     tag.getDouble("ApproachAngle") : 0.0D;
             state.lastCaptureWarningBand = tag.getInt("CaptureWarningBand");

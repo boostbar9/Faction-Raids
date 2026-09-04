@@ -2,6 +2,23 @@
 
 All notable changes to Faction Raids are documented here.
 
+## 2.7.0 - 2026-09-04
+
+- Replaced the six-row chest dashboard with a dedicated client-rendered tactical command screen.
+- Added a responsive campaign-table layout, custom cards and buttons, live strategic and gate-breach
+  progress bars, army totals, war assets, rewards and reconstruction status.
+- Added a versioned Forge network channel with server-authoritative dashboard actions and validation.
+- Required matching Faction Raids versions on the server/host and every client for the custom UI.
+- Added physical breaching for doors, trapdoors, fence gates, fences and iron bars near tracked
+  invasion breachers; ordinary walls, storage, machines and unrelated blocks remain protected.
+- Added visible cracking, impact sounds, particles and configurable breach times.
+- Persisted exact registry names and block-state properties before any siege removal.
+- Automatically restored siege-breached defenses after victory, defeat or administrative stop while
+  preserving any player replacement placed during the battle.
+- Added a configurable restoration safety cap and persisted in-progress breach work across restarts.
+- Expanded the temporary camp into a field-command pavilion with a platform, canopy, rear wall,
+  supplies, banners and a forward palisade.
+
 ## 2.6.0 - 2026-09-04
 
 - Replaced the default generic assault roster with hostile Villager Recruits soldiers.

@@ -1,7 +1,7 @@
-# Faction Raids 2.6.0
+# Faction Raids 2.7.0
 
-Faction Raids is a server-authoritative Forge 1.20.1 addon that turns player homes into siege
-objectives. Illager armies establish an approach front, deploy in marching squads, advance on a
+Faction Raids is a synchronized Forge 1.20.1 addon that turns player homes into siege
+objectives. Hostile armies establish an approach front, deploy in marching squads, advance on a
 stronghold, fight the defending players and their Villager Recruits, and attempt to occupy the
 heart of the base under the command of a final-wave siege commander.
 
@@ -28,6 +28,11 @@ shieldmen, bowmen, crossbowmen, captains, assassins and siege engineers. Every s
 raise a real temporary war camp on the approach side. Red-banner perimeter markers identify the exact
 breach objective, and breach pressure rises only while attackers outnumber defenders at that point.
 
+Version 2.7 replaces the chest inventory with a purpose-built live tactical interface. It also adds
+physical gate breaching: assault troops visibly crack and temporarily remove doors, trapdoors, fence
+gates, fences and iron bars that block their advance. Exact block states are persisted and restored
+when the siege ends. The war camp now includes a full field-command pavilion and palisade line.
+
 No administrator setup is required. A player's bed or respawn anchor becomes a valid stronghold
 automatically. Players in the same Villager Recruits faction share one raid schedule, while any
 online faction member's home can be selected as the next target.
@@ -41,6 +46,8 @@ online faction member's home can be selected as the next target.
 
 Villager Recruits is a hard dependency and must be installed wherever it is normally required.
 Faction Raids does not redistribute any Villager Recruits code or assets.
+Faction Raids 2.7 must also be installed on every joining client because its tactical screen and
+network synchronization are client-visible. Clients and the server must use the same version.
 
 These companion mods are optional and are detected automatically:
 
@@ -83,6 +90,10 @@ cannot move an active battlefield.
 - Major moments use vanilla title overlays, sounds and faction-only chat announcements by default.
 - Assault squads arrive through a brief smoke effect and reinforcement updates appear above the hotbar.
 - Invaders path toward the stronghold when they do not have a reachable defender to fight.
+- Breachers standing beside a gate, door, trapdoor, fence or iron bar visibly damage it over time.
+  Several breachers work faster, while other blocks and machines are never selected.
+- Every block removed by the siege is stored with its exact properties and automatically rebuilt when
+  the battle ends. A player replacement is never overwritten.
 - Before the inner objective can be occupied, attackers must outnumber defenders at the visibly
   marked approach-side breach point long enough to establish a breach.
 - Until the breach opens, unengaged raiders rally on the approach side of that perimeter instead of
@@ -128,7 +139,7 @@ passengers and public ownership information. It never imports optional-mod class
 optional companion mod cannot make Faction Raids fail to load.
 
 - **Villager Workers:** nearby allied Workers are displayed as civilians in the command dashboard.
-  Illagers spawned by Faction Raids clear Workers as attack targets and cannot damage them. Workers
+  Invaders spawned by Faction Raids clear Workers as attack targets and cannot damage them. Workers
   do not count as soldiers or artificially hold the capture ring.
 - **Small Ships:** boarding a ship records the crew member's current faction. It remains a recognized
   naval asset after the crew dismounts and can be captured by a different faction boarding it.
@@ -139,8 +150,8 @@ optional companion mod cannot make Faction Raids fail to load.
   capped at four extra invaders. This stays inside the existing per-raid and global entity caps.
 
 All integrations, Worker protection, asset detection radius and equipment scaling can be changed in
-the `compatibility` section of `factionraids-common.toml`. The scans occur only when a wave is planned
-or a player refreshes the dashboard, not every server tick.
+the `compatibility` section of `factionraids-common.toml`. The scans occur when a wave is planned or
+while a player has the live dashboard open, never every server tick.
 
 ## Player commands
 
@@ -170,21 +181,23 @@ need them because their scoreboard membership is authoritative.
 
 ## Faction command dashboard
 
-The dashboard uses Minecraft's standard six-row container screen, so it adds no UI dependency and
-no continuous rendering workload. It shows:
+The dashboard is a dedicated responsive tactical screen with a dark campaign-table layout, live
+two-second synchronization, custom status cards, progress bars and controls. It does not use a chest
+inventory or require a separate GUI library. It shows:
 
 - Faction and stronghold identity
 - Automatic-siege cooldown or active wave
 - Deployed enemies, queued reinforcements and confirmed defeats
 - Current stronghold occupation pressure
 - Current outer-perimeter breach pressure before occupation begins
+- The physical gate currently under attack and its destruction progress
+- How many removed defenses are queued for automatic reconstruction
 - Nearby allied Villager Recruits
 - Nearby protected Villager Workers
 - Crewed Small Ships and Siege Weapons
 - Guaranteed emerald and campaign-loot rewards
 
-The lower controls refresh the automatic home, begin a practice siege, print command help or close
-the table. Dashboard icons cannot be removed or placed into player inventories.
+The lower controls refresh the automatic home, begin a practice siege or print command help.
 
 ## Administrator commands
 
@@ -211,6 +224,9 @@ Forge creates `config/factionraids-common.toml`. Important defaults are:
 - 60–90 minutes between automatic sieges per faction
 - 18-block capture ring requiring 120 seconds of enemy control
 - 36-block outer perimeter requiring 45 seconds of attacker control before the inner objective opens
+- Wooden gates and doors requiring about 10 seconds of focused breach work
+- Iron doors and bars requiring about 24 seconds of focused breach work
+- A 64-block safety cap on temporary, automatically restored siege damage
 - Two seconds of breach pressure removed per second after defenders regain the perimeter
 - Two seconds of occupation removed per second after defenders regain control
 - 128-block Recruit mobilization radius
@@ -287,6 +303,10 @@ as already breached when first loaded, so updating cannot move an ongoing battle
 invasions use the full perimeter phase. Vehicle faction markers are stored on the optional-mod entity
 and require no world conversion; board an existing ship or siege engine once to register it.
 
+Version 2.6 active raids receive a one-time camp construction attempt after updating to 2.7. Gate
+restoration data is introduced empty, so an update never claims or rewrites pre-existing air blocks.
+The new dashboard requires 2.7 on the host/server and every client.
+
 ## Building from source
 
 The build pins ForgeGradle 6.0.54 and declares the Forge and Maven Central repositories explicitly.
@@ -300,8 +320,9 @@ The reobfuscated release JAR is written to `build/libs`.
 
 ## Removal
 
-Stop active sieges before removing the mod so loaded invasion mobs can be cleaned up. Because the
-mod adds no world-generation content or custom blocks, terrain and player builds remain intact.
+Stop active sieges before removing the mod so loaded invasion mobs can be cleaned up and breached
+defenses can be restored. Because the mod adds no world-generation content or custom blocks, terrain
+and player builds remain intact after a properly completed or stopped siege.
 
 ## License and project
 

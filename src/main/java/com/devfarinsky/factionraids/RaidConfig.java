@@ -52,6 +52,11 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue USE_RECRUIT_INVADERS;
     public static final ForgeConfigSpec.BooleanValue BUILD_WAR_CAMPS;
     public static final ForgeConfigSpec.BooleanValue CLEANUP_WAR_CAMPS;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_GATE_BREACHING;
+    public static final ForgeConfigSpec.IntValue WOODEN_BREACH_SECONDS;
+    public static final ForgeConfigSpec.IntValue REINFORCED_BREACH_SECONDS;
+    public static final ForgeConfigSpec.IntValue MAX_RESTORABLE_BLOCKS;
+    public static final ForgeConfigSpec.BooleanValue RESTORE_BREACHED_BLOCKS;
     public static final ForgeConfigSpec.DoubleValue RAIDER_ADVANCE_SPEED;
     public static final ForgeConfigSpec.BooleanValue ALLOW_WORLD_SPAWN_FALLBACK;
     public static final ForgeConfigSpec.BooleanValue STAGED_SQUADS;
@@ -151,7 +156,7 @@ public final class RaidConfig {
                 .defineInRange("recruitMobilizationRadius", 128, 32, 384);
         CAPTURE_RADIUS = b.comment("Radius around the stronghold that the invaders must occupy to win the siege.")
                 .defineInRange("captureRadius", 18, 6, 64);
-        CAPTURE_TIME_SECONDS = b.comment("Continuous contested seconds required for illagers to capture the stronghold.")
+        CAPTURE_TIME_SECONDS = b.comment("Continuous contested seconds required for invaders to capture the stronghold.")
                 .defineInRange("captureTimeSeconds", 120, 30, 600);
         CAPTURE_DECAY_PER_SECOND = b.comment("Seconds of occupation progress removed each second after defenders regain control.")
                 .defineInRange("captureDecayPerSecond", 2, 1, 10);
@@ -171,13 +176,23 @@ public final class RaidConfig {
                 .define("buildTemporaryWarCamps", true);
         CLEANUP_WAR_CAMPS = b.comment("Remove untouched temporary camp blocks when the invasion ends. Player-modified blocks are never removed.")
                 .define("cleanupTemporaryWarCamps", true);
+        ENABLE_GATE_BREACHING = b.comment("Allow tracked siege breachers to break doors, trapdoors, fence gates and fences blocking their advance.")
+                .define("enableRestorableGateBreaching", true);
+        WOODEN_BREACH_SECONDS = b.comment("Approximate focused breach time for wooden defenses. Multiple nearby breachers accelerate it.")
+                .defineInRange("woodenBreachSeconds", 10, 3, 120);
+        REINFORCED_BREACH_SECONDS = b.comment("Approximate focused breach time for iron doors and iron bars.")
+                .defineInRange("reinforcedBreachSeconds", 24, 5, 240);
+        MAX_RESTORABLE_BLOCKS = b.comment("Safety cap on blocks one siege may temporarily breach and later restore.")
+                .defineInRange("maximumRestorableBlocks", 64, 4, 512);
+        RESTORE_BREACHED_BLOCKS = b.comment("Restore siege-breached blocks when the raid ends, without overwriting player replacements.")
+                .define("restoreBreachedBlocks", true);
         RAIDER_ADVANCE_SPEED = b.comment("Navigation speed used when invasion forces advance toward the stronghold.")
                 .defineInRange("raiderAdvanceSpeed", 1.05, 0.5, 1.5);
         ALLOW_WORLD_SPAWN_FALLBACK = b.comment("Use the overworld spawn when a player has no bed or respawn anchor. Disabled by default to avoid attacking public spawn.")
                 .define("allowWorldSpawnFallback", false);
         STAGED_SQUADS = b.comment("Deploy each wave as several marching squads instead of creating the entire wave in one server tick.")
                 .define("stagedSquads", true);
-        SQUAD_SIZE = b.comment("Maximum illagers deployed in one squad when stagedSquads is enabled.")
+        SQUAD_SIZE = b.comment("Maximum invaders deployed in one squad when stagedSquads is enabled.")
                 .defineInRange("squadSize", 4, 1, 20);
         SQUAD_INTERVAL_SECONDS = b.comment("Delay between squads belonging to the same wave.")
                 .defineInRange("squadIntervalSeconds", 6, 1, 60);
