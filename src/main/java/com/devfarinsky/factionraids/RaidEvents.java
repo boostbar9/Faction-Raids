@@ -1,11 +1,7 @@
 package com.devfarinsky.factionraids;
 
-import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.commands.Commands;
-import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
@@ -69,19 +65,22 @@ import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 
+import com.devfarinsky.factionraids.command.RaidCommands;
+import com.devfarinsky.factionraids.raid.RaidBossBars;
+
 import java.util.*;
 
 public final class RaidEvents {
-    private static final Component MESSAGE_PREFIX = Component.literal("[Faction Raids] ")
-            .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD);
-    private static final String RAID_TEAM_TAG = "FactionRaidsTeam";
-    private static final String RAID_ROLE_TAG = "FactionRaidsRole";
-    private static final Map<String, ServerBossEvent> BOSS_BARS = new HashMap<>();
+    // Shared constants live in ModConstants / raid.RaidTags; the local aliases below
+    // keep the huge body of this class readable while the incremental split continues.
+    private static final Component MESSAGE_PREFIX = ModConstants.MESSAGE_PREFIX;
+    private static final String RAID_TEAM_TAG = ModConstants.Tags.RAID_TEAM;
+    private static final String RAID_ROLE_TAG = ModConstants.Tags.RAID_ROLE;
     private static int tickCounter;
 
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
-        registerCommands(event.getDispatcher());
+        RaidCommands.register(event.getDispatcher());
     }
 
     @SubscribeEvent
@@ -171,63 +170,38 @@ public final class RaidEvents {
 
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
-        BOSS_BARS.values().forEach(ServerBossEvent::removeAllPlayers);
-        BOSS_BARS.clear();
+        RaidBossBars.shutdown();
     }
 
-    private static void registerCommands(CommandDispatcher<CommandSourceStack> d) {
-        d.register(Commands.literal("factionraids")
-                .executes(ctx -> openDashboard(ctx.getSource()))
-                .then(Commands.literal("menu").executes(ctx -> openDashboard(ctx.getSource())))
-                .then(Commands.literal("anchor")
-                        .then(Commands.literal("set").executes(ctx -> setAnchor(ctx.getSource())))
-                        .then(Commands.literal("claim").executes(ctx -> claimLegacyAnchor(ctx.getSource())))
-                        .then(Commands.literal("remove").executes(ctx -> removeAnchor(ctx.getSource()))))
-                .then(Commands.literal("home")
-                        .then(Commands.literal("automatic").executes(ctx -> enableAutomaticHome(ctx.getSource())))
-                        .then(Commands.literal("refresh").executes(ctx -> refreshAutomaticHome(ctx.getSource()))))
-                .then(Commands.literal("territory")
-                        .then(Commands.literal("add")
-                                .then(Commands.argument("name", StringArgumentType.word())
-                                        .executes(ctx -> addDefensePoint(ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "name")))))
-                        .then(Commands.literal("remove")
-                                .then(Commands.argument("name", StringArgumentType.word())
-                                        .executes(ctx -> removeDefensePoint(ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "name")))))
-                        .then(Commands.literal("list").executes(ctx -> listDefensePoints(ctx.getSource()))))
-                .then(Commands.literal("member")
-                        .then(Commands.literal("add")
-                                .then(Commands.argument("player", EntityArgument.player())
-                                        .executes(ctx -> addMember(ctx.getSource(),
-                                                EntityArgument.getPlayer(ctx, "player")))))
-                        .then(Commands.literal("remove")
-                                .then(Commands.argument("player", EntityArgument.player())
-                                        .executes(ctx -> removeMember(ctx.getSource(),
-                                                EntityArgument.getPlayer(ctx, "player")))))
-                        .then(Commands.literal("list").executes(ctx -> listMembers(ctx.getSource()))))
-                .then(Commands.literal("start")
-                        .executes(ctx -> startOwnRaid(ctx.getSource(), null))
-                        .then(Commands.argument("point", StringArgumentType.word())
-                                .executes(ctx -> startOwnRaid(ctx.getSource(),
-                                        StringArgumentType.getString(ctx, "point")))))
-                .then(Commands.literal("status").executes(ctx -> status(ctx.getSource())))
-                .then(Commands.literal("debug").executes(ctx -> debug(ctx.getSource())))
-                .then(Commands.literal("help").executes(ctx -> help(ctx.getSource())))
-                .then(Commands.literal("stop").requires(s -> s.hasPermission(2))
-                        .executes(ctx -> stopOwnRaid(ctx.getSource())))
-                .then(Commands.literal("admin").requires(s -> s.hasPermission(2))
-                        .then(Commands.literal("list").executes(ctx -> adminList(ctx.getSource())))
-                        .then(Commands.literal("stop")
-                                .then(Commands.argument("team", StringArgumentType.word())
-                                        .executes(ctx -> adminStop(ctx.getSource(), StringArgumentType.getString(ctx, "team")))))
-                        .then(Commands.literal("remove")
-                                .then(Commands.argument("team", StringArgumentType.word())
-                                        .executes(ctx -> adminRemove(ctx.getSource(), StringArgumentType.getString(ctx, "team")))))
-                        .then(Commands.literal("repair")
-                                .then(Commands.argument("team", StringArgumentType.word())
-                                        .executes(ctx -> adminRepair(ctx.getSource(), StringArgumentType.getString(ctx, "team")))))));
-    }
+    // ---------------------------------------------------------------------
+    // Command delegators.
+    //
+    // The Brigadier tree lives in command.RaidCommands. These package-visible
+    // wrappers keep every command entry point in one obvious block and let the
+    // handler bodies below stay unchanged until they are extracted into their
+    // own handler classes in a later pass.
+    // ---------------------------------------------------------------------
+    public static int openDashboardCmd(CommandSourceStack s) { return openDashboard(s); }
+    public static int setAnchorCmd(CommandSourceStack s) { return setAnchor(s); }
+    public static int claimLegacyAnchorCmd(CommandSourceStack s) { return claimLegacyAnchor(s); }
+    public static int removeAnchorCmd(CommandSourceStack s) { return removeAnchor(s); }
+    public static int enableAutomaticHomeCmd(CommandSourceStack s) { return enableAutomaticHome(s); }
+    public static int refreshAutomaticHomeCmd(CommandSourceStack s) { return refreshAutomaticHome(s); }
+    public static int addDefensePointCmd(CommandSourceStack s, String n) { return addDefensePoint(s, n); }
+    public static int removeDefensePointCmd(CommandSourceStack s, String n) { return removeDefensePoint(s, n); }
+    public static int listDefensePointsCmd(CommandSourceStack s) { return listDefensePoints(s); }
+    public static int addMemberCmd(CommandSourceStack s, ServerPlayer p) { return addMember(s, p); }
+    public static int removeMemberCmd(CommandSourceStack s, ServerPlayer p) { return removeMember(s, p); }
+    public static int listMembersCmd(CommandSourceStack s) { return listMembers(s); }
+    public static int startOwnRaidCmd(CommandSourceStack s, String p) { return startOwnRaid(s, p); }
+    public static int stopOwnRaidCmd(CommandSourceStack s) { return stopOwnRaid(s); }
+    public static int statusCmd(CommandSourceStack s) { return status(s); }
+    public static int debugCmd(CommandSourceStack s) { return debug(s); }
+    public static int helpCmd(CommandSourceStack s) { return help(s); }
+    public static int adminListCmd(CommandSourceStack s) { return adminList(s); }
+    public static int adminStopCmd(CommandSourceStack s, String k) { return adminStop(s, k); }
+    public static int adminRemoveCmd(CommandSourceStack s, String k) { return adminRemove(s, k); }
+    public static int adminRepairCmd(CommandSourceStack s, String k) { return adminRepair(s, k); }
 
     private static int setAnchor(CommandSourceStack source) {
         try {
@@ -1970,7 +1944,7 @@ public final class RaidEvents {
             if (emeralds > 0) winners.forEach(p -> giveEmeralds(p, emeralds));
             if (RaidConfig.VICTORY_LOOT_ENABLED.get()) winners.forEach(p -> giveVictoryLoot(server, p));
         }
-        ServerBossEvent bar = BOSS_BARS.remove(teamKey);
+        ServerBossEvent bar = RaidBossBars.remove(teamKey);
         if (bar != null) bar.removeAllPlayers();
         long elapsedTicks = state == null || state.startedGameTime <= 0 ? 0 :
                 Math.max(0, server.overworld().getGameTime() - state.startedGameTime);
@@ -2000,9 +1974,9 @@ public final class RaidEvents {
 
     private static void updateBossBar(MinecraftServer server, RaidSavedData.Anchor anchor,
                                       RaidSavedData.RaidState state, boolean paused) {
-        ServerBossEvent bar = BOSS_BARS.computeIfAbsent(anchor.teamKey(), key ->
-                new ServerBossEvent(Component.literal("Faction Invasion"), BossEvent.BossBarColor.RED,
-                        BossEvent.BossBarOverlay.NOTCHED_10));
+        ServerBossEvent bar = RaidBossBars.getOrCreate(anchor.teamKey(),
+                Component.literal("Faction Invasion"),
+                BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.NOTCHED_10);
         List<ServerPlayer> currentMembers = onlineMembers(server, anchor.teamKey());
         for (ServerPlayer shown : new ArrayList<>(bar.getPlayers())) {
             if (!currentMembers.contains(shown)) bar.removePlayer(shown);
