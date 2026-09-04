@@ -76,6 +76,15 @@ public final class RaidEvents {
     private static final Component MESSAGE_PREFIX = ModConstants.MESSAGE_PREFIX;
     private static final String RAID_TEAM_TAG = ModConstants.Tags.RAID_TEAM;
     private static final String RAID_ROLE_TAG = ModConstants.Tags.RAID_ROLE;
+
+    /**
+     * Runtime handles for in-progress camp construction, keyed by team key.
+     * NOT persisted — camps are ephemeral to the raid and get rebuilt on
+     * every raid start; on server restart mid-raid the entities remain but
+     * the phase advances immediately since we lost the tracking handle.
+     */
+    static final java.util.Map<String, com.devfarinsky.factionraids.camp.CampBuilder.CampState>
+            ACTIVE_CAMPS = new java.util.concurrent.ConcurrentHashMap<>();
     private static int tickCounter;
 
     @SubscribeEvent
@@ -902,6 +911,17 @@ public final class RaidEvents {
                                 : " siege engines have been raised at the war camp."))
                         .withStyle(ChatFormatting.GOLD), false);
             }
+            // Real Workers-driven camp construction phase. Runs in parallel
+            // to the prefab camp for now; the prefab guarantees a visible camp
+            // presence, while the Workers phase makes it feel alive when the
+            // Workers mod is installed. A future PR removes the prefab once the
+            // Workers path is proven at scale.
+            final RaidSavedData.Anchor anchorForCamp = anchor;
+            com.devfarinsky.factionraids.camp.CampBuilder.startCamp(
+                            raidLevel, point.pos(), state.approachAngle,
+                            Math.max(1, anchorForCamp.members().size()),
+                            anchorForCamp.ownerUuid(), anchorForCamp.teamKey())
+                    .ifPresent(cs -> ACTIVE_CAMPS.put(anchorForCamp.teamKey(), cs));
         }
         data.raids.put(anchor.teamKey(), state);
         data.setDirty();
@@ -942,6 +962,17 @@ public final class RaidEvents {
         if (state.offlinePauseAnnounced) {
             state.offlinePauseAnnounced = false;
             announce(server, teamKey, Component.literal("The paused invasion has resumed.").withStyle(ChatFormatting.YELLOW), false);
+        }
+
+        // Tick the Workers-driven camp construction phase if one is active
+        // for this raid. Phase completion just logs today; the follow-up PR
+        // wires this into the wave-scheduling code so the assault only starts
+        // once the camp is up.
+        com.devfarinsky.factionraids.camp.CampBuilder.CampState camp = ACTIVE_CAMPS.get(teamKey);
+        if (camp != null && camp.tick(level)) {
+            com.devfarinsky.factionraids.FactionLogger.LOG.info(
+                    "Camp phase for {} reached {} — assault may proceed.",
+                    teamKey, camp.phase);
         }
 
         reconcileTaggedMobs(level, point, state);
@@ -1931,6 +1962,8 @@ public final class RaidEvents {
                 }
                 restoreBreachedBlocks(level, state);
                 cleanupWarCamp(level, state);
+                com.devfarinsky.factionraids.camp.CampBuilder.CampState camp = ACTIVE_CAMPS.remove(teamKey);
+                if (camp != null) camp.cleanup(level);
             }
             long next = server.overworld().getGameTime() + randomCooldownTicks(server.overworld().random);
             data.anchors.put(teamKey, anchor.withNextRaid(next));
