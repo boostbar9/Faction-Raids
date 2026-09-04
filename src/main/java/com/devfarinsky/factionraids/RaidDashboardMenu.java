@@ -65,16 +65,21 @@ public final class RaidDashboardMenu extends ChestMenu {
                 snapshot.active() ? List.of("Wave " + snapshot.wave() + " / " + snapshot.totalWaves(),
                         snapshot.deployed() + " deployed • " + snapshot.reinforcing() + " reinforcing",
                         snapshot.defeated() + " enemies defeated",
-                        "Occupation pressure: " + snapshot.occupationPercent() + "%") :
+                        snapshot.breached() ? "Occupation pressure: " + snapshot.occupationPercent() + "%" :
+                                "Outer breach pressure: " + snapshot.breachPercent() + "%") :
                         List.of("Next automatic siege: " + snapshot.cooldown(), "The stronghold is currently secure")));
         dashboard.setItem(24, icon(Items.SHIELD, "Defending Army", ChatFormatting.BLUE,
                 List.of(snapshot.recruits() + " allied Recruits detected nearby",
                         snapshot.workers() + " protected Villager Workers nearby",
+                        "Workers integration: " + OptionalCompatBridge.workersStatus(),
                         "Recruits strengthen and defend the siege target")));
         dashboard.setItem(26, icon(Items.OAK_BOAT, "War Assets", ChatFormatting.DARK_AQUA,
-                List.of(snapshot.ships() + " crewed Small Ships nearby",
-                        snapshot.siegeWeapons() + " crewed Siege Weapons nearby",
-                        "Crewed equipment can modestly strengthen assaults")));
+                List.of(snapshot.ships() + " faction Small Ships nearby",
+                        snapshot.siegeWeapons() + " faction Siege Weapons nearby",
+                        "Integrations: ships " + OptionalCompatBridge.smallShipsStatus() +
+                                " • siege " + OptionalCompatBridge.siegeWeaponsStatus(),
+                        "+" + snapshot.assetScalingEnemies() + " equipment-scaled invaders per wave",
+                        "Mount equipment once to register or capture it")));
         dashboard.setItem(31, icon(Items.EMERALD_BLOCK, "Victory Treasury", ChatFormatting.GREEN,
                 List.of(snapshot.emeraldReward() + " guaranteed emeralds per online member",
                         RaidConfig.VICTORY_EXPERIENCE.get() + " experience plus campaign loot",

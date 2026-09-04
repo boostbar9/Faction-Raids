@@ -2,6 +2,21 @@
 
 All notable changes to Faction Raids are documented here.
 
+## 2.5.0 - 2026-09-04
+
+- Added a configurable outer-perimeter breach phase before stronghold occupation can begin.
+- Made unengaged invasion forces rally at the approach-side breach point until the perimeter opens.
+- Added contested breach progress and configurable defender-driven breach decay.
+- Added 25%, 50% and 75% breach warnings, action-bar pressure updates and a cinematic breach event.
+- Added breach phase and pressure to `/factionraids status`, `/factionraids debug`, the boss bar and
+  faction dashboard.
+- Added migration-safe persisted breach state; already-deployed 2.4 raids continue as breached.
+- Made Small Ships and Siege Weapons remember the faction of their last crew member after dismounting.
+- Allowed boarding equipment to register it or organically transfer it to a different faction.
+- Restricted Worker protection to Workers belonging to the faction actually being raided.
+- Made the effective breach radius remain outside the capture ring even with an invalid config pair.
+- Kept the siege non-destructive: no player blocks, claims or companion-mod controls are modified.
+
 ## 2.4.0 - 2026-09-04
 
 - Added optional compatibility for Villager Workers, Small Ships and Siege Weapons.

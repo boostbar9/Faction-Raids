@@ -54,6 +54,7 @@ import net.minecraft.world.scores.Team;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraftforge.event.entity.EntityMountEvent;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
@@ -110,6 +111,15 @@ public final class RaidEvents {
     }
 
     @SubscribeEvent
+    public static void onEntityMount(EntityMountEvent event) {
+        if (!event.isMounting() || !(event.getEntityMounting() instanceof ServerPlayer player)) return;
+        Entity vehicle = event.getEntityBeingMounted();
+        if (!OptionalCompatBridge.isSmallShip(vehicle) && !OptionalCompatBridge.isSiegeWeapon(vehicle)) return;
+        RaidSavedData data = RaidSavedData.get(player.getServer());
+        OptionalCompatBridge.rememberCrewedAsset(vehicle, player.getUUID(), factionKeyForPlayer(data, player));
+    }
+
+    @SubscribeEvent
     public static void onLivingAttack(LivingAttackEvent event) {
         Entity attacker = event.getSource().getEntity();
         if (!(attacker instanceof Raider) && !(attacker instanceof Vex)) return;
@@ -117,8 +127,12 @@ public final class RaidEvents {
         if (!mob.getPersistentData().contains(RAID_TEAM_TAG)) return;
         boolean protectedVanillaCivilian = RaidConfig.PROTECT_VILLAGERS.get() &&
                 (event.getEntity() instanceof AbstractVillager || event.getEntity() instanceof IronGolem);
-        boolean protectedWorker = RaidConfig.PROTECT_WORKERS.get() &&
-                OptionalCompatBridge.isWorker(event.getEntity());
+        String defendedFaction = mob.getPersistentData().getString(RAID_TEAM_TAG);
+        RaidSavedData.Anchor anchor = event.getEntity().level() instanceof ServerLevel level ?
+                RaidSavedData.get(level.getServer()).anchors.get(defendedFaction) : null;
+        boolean protectedWorker = RaidConfig.PROTECT_WORKERS.get() && anchor != null &&
+                OptionalCompatBridge.workerBelongsToFaction(event.getEntity(), defendedFaction,
+                        anchor.members());
         if (protectedVanillaCivilian || protectedWorker) {
             event.setCanceled(true);
             mob.setTarget(null);
@@ -655,9 +669,12 @@ public final class RaidEvents {
                 RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
                 int occupation = state.captureTicks * 100 /
                         Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20);
+                int breach = breachPercent(state);
                 source.sendSuccess(() -> Component.literal("Phase: ").withStyle(ChatFormatting.GRAY)
                         .append(Component.literal(state.wave == 0 ? "War camp forming" :
-                                waveTitle(state.wave) + " — wave " + state.wave + "/" + RaidConfig.WAVES.get())
+                                (!state.breached && RaidConfig.ENABLE_BREACH_PHASE.get() ?
+                                        "Perimeter breach " + breach + "% — wave " + state.wave + "/" + RaidConfig.WAVES.get() :
+                                        waveTitle(state.wave) + " — wave " + state.wave + "/" + RaidConfig.WAVES.get()))
                                 .withStyle(ChatFormatting.RED)), false);
                 source.sendSuccess(() -> Component.literal("Enemy force: ").withStyle(ChatFormatting.GRAY)
                         .append(Component.literal(state.raiders.size() + " deployed • " +
@@ -665,7 +682,8 @@ public final class RaidEvents {
                                 .withStyle(ChatFormatting.YELLOW)), false);
                 source.sendSuccess(() -> Component.literal("Objective: ").withStyle(ChatFormatting.GRAY)
                         .append(Component.literal("'" + point.name() + "' at " + formatPos(point.pos()) +
-                                " • occupation " + occupation + "%")
+                                (state.breached || !RaidConfig.ENABLE_BREACH_PHASE.get() ?
+                                        " • occupation " + occupation + "%" : " • outer perimeter contested"))
                                 .withStyle(occupation >= 75 ? ChatFormatting.RED : ChatFormatting.AQUA)), false);
             } else {
                 long now = source.getServer().overworld().getGameTime();
@@ -754,6 +772,7 @@ public final class RaidEvents {
                         " | loaded: " + loaded + " | missing grace: " + state.missingTicks.size() +
                         " | deployed/defeated/lost: " + state.totalSpawned + "/" +
                         state.totalDefeated + "/" + state.totalEscaped +
+                        " | breach: " + (state.breached ? "open" : breachPercent(state) + "%") +
                         " | occupation: " + (state.captureTicks / 20) + "s" +
                         (state.commanderUuid != null ? " | commander: " +
                                 (state.commanderDefeated ? "defeated" : "active") : "")), false);
@@ -1017,10 +1036,7 @@ public final class RaidEvents {
         if (divisor > 0) recruitScale = Math.min(RaidConfig.MAX_RECRUIT_SCALING_ENEMIES.get(),
                 recruits.size() / divisor);
         OptionalCompatBridge.CompatSnapshot compat = nearbyCompatAssets(level, point, anchor);
-        int assetScale = 0;
-        int assetDivisor = RaidConfig.CREWED_ASSETS_PER_EXTRA_ENEMY.get();
-        if (assetDivisor > 0) assetScale = Math.min(RaidConfig.MAX_ASSET_SCALING_ENEMIES.get(),
-                compat.crewedAssets() / assetDivisor);
+        int assetScale = assetScalingEnemies(compat);
         int wanted = RaidConfig.BASE_ENEMIES_PER_WAVE.get() +
                 (playerCount - 1) * RaidConfig.ENEMIES_PER_EXTRA_PLAYER.get() +
                 (nextWave - 1) * 2 + recruitScale + assetScale;
@@ -1147,10 +1163,16 @@ public final class RaidEvents {
     private static void markCommanderDefeated(MinecraftServer server, RaidSavedData.Anchor anchor,
                                               RaidSavedData.RaidState state) {
         state.commanderDefeated = true;
-        state.captureTicks = Math.max(0, state.captureTicks - 30 * 20);
-        announce(server, anchor.teamKey(), Component.literal("The siege commander has fallen! Illager occupation lost 30 seconds of progress.")
+        if (!state.breached && RaidConfig.ENABLE_BREACH_PHASE.get()) {
+            state.breachTicks = Math.max(0, state.breachTicks - 30 * 20);
+        } else state.captureTicks = Math.max(0, state.captureTicks - 30 * 20);
+        String pressure = !state.breached && RaidConfig.ENABLE_BREACH_PHASE.get() ?
+                "breach pressure" : "occupation";
+        announce(server, anchor.teamKey(), Component.literal("The siege commander has fallen! Illager " +
+                        pressure + " lost 30 seconds of progress.")
                 .withStyle(ChatFormatting.GREEN), true);
-        sendActionBar(server, anchor.teamKey(), Component.literal("COMMANDER DEFEATED • Occupation pushed back")
+        sendActionBar(server, anchor.teamKey(), Component.literal("COMMANDER DEFEATED • " +
+                        (state.breached ? "Occupation" : "Breach") + " pushed back")
                 .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
     }
 
@@ -1218,8 +1240,11 @@ public final class RaidEvents {
             }
             if (closest != null && closestDistance <= (double) RaidConfig.DEFENSE_RADIUS.get() *
                     RaidConfig.DEFENSE_RADIUS.get()) mob.setTarget(closest);
-            else mob.getNavigation().moveTo(point.pos().getX() + 0.5D, point.pos().getY(),
-                    point.pos().getZ() + 0.5D, RaidConfig.RAIDER_ADVANCE_SPEED.get());
+            else {
+                Vec3 objective = invasionObjective(level, point, state);
+                mob.getNavigation().moveTo(objective.x, objective.y, objective.z,
+                        RaidConfig.RAIDER_ADVANCE_SPEED.get());
+            }
             if (glow) mob.addEffect(new MobEffectInstance(MobEffects.GLOWING, 40, 0, false, false));
         }
     }
@@ -1243,8 +1268,14 @@ public final class RaidEvents {
                                           OptionalCompatBridge.CompatSnapshot compat) {
         List<String> details = new ArrayList<>();
         if (recruitScale > 0) details.add(recruits + " defending Recruits");
-        if (assetScale > 0) details.add(compat.crewedAssets() + " crewed war assets");
+        if (assetScale > 0) details.add(compat.crewedAssets() + " faction war assets");
         return details.isEmpty() ? "." : " after scouting " + String.join(" and ", details) + ".";
+    }
+
+    private static int assetScalingEnemies(OptionalCompatBridge.CompatSnapshot compat) {
+        int divisor = RaidConfig.CREWED_ASSETS_PER_EXTRA_ENEMY.get();
+        return divisor <= 0 ? 0 : Math.min(RaidConfig.MAX_ASSET_SCALING_ENEMIES.get(),
+                compat.crewedAssets() / divisor);
     }
 
     private static void mobilizeRecruits(ServerLevel level, List<Mob> recruits,
@@ -1276,21 +1307,44 @@ public final class RaidEvents {
                                                  RaidSavedData.RaidState state, ServerLevel level,
                                                  List<ServerPlayer> members, List<Mob> recruits) {
         if (state.wave <= 0) return false;
-        double radiusSq = (double) RaidConfig.CAPTURE_RADIUS.get() * RaidConfig.CAPTURE_RADIUS.get();
         Vec3 center = Vec3.atCenterOf(point.pos());
-        int attackers = 0;
-        for (UUID id : state.raiders) {
-            Entity entity = level.getEntity(id);
-            if (entity instanceof Mob mob && mob.isAlive() && mob.distanceToSqr(center) <= radiusSq) attackers++;
+        if (RaidConfig.ENABLE_BREACH_PHASE.get() && !state.breached) {
+            double breachRadius = effectiveBreachRadius();
+            double breachRadiusSq = breachRadius * breachRadius;
+            int attackers = attackersInside(level, state, center, breachRadiusSq);
+            int defenders = defendersInside(level, members, recruits, center, breachRadiusSq);
+            int maximum = RaidConfig.BREACH_TIME_SECONDS.get() * 20;
+            if (attackers > defenders && attackers > 0) {
+                state.breachTicks = Math.min(maximum, state.breachTicks + 20);
+            } else state.breachTicks = Math.max(0,
+                    state.breachTicks - RaidConfig.BREACH_DECAY_PER_SECOND.get() * 20);
+
+            int band = maximum <= 0 ? 0 : state.breachTicks * 4 / maximum;
+            if (band > state.lastBreachWarningBand && band < 4) {
+                state.lastBreachWarningBand = band;
+                int percent = band * 25;
+                announce(server, anchor.teamKey(), Component.literal("Perimeter breach pressure: " + percent +
+                        "%. Hold the outer defensive line!").withStyle(ChatFormatting.GOLD), band >= 3);
+                sendActionBar(server, anchor.teamKey(), Component.literal("PERIMETER BREACH: " + percent + "%")
+                        .withStyle(band >= 3 ? ChatFormatting.RED : ChatFormatting.GOLD, ChatFormatting.BOLD));
+            }
+            if (state.breachTicks >= maximum) {
+                state.breached = true;
+                state.lastCaptureWarningBand = 0;
+                announce(server, anchor.teamKey(), Component.literal("The perimeter has been breached! Illagers are pushing for the stronghold heart.")
+                        .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD), true);
+                showTitle(server, anchor.teamKey(), Component.literal("PERIMETER BREACHED")
+                                .withStyle(ChatFormatting.DARK_RED),
+                        Component.literal("Fall back and defend the stronghold heart")
+                                .withStyle(ChatFormatting.GOLD));
+            }
+            return false;
         }
-        int defenders = 0;
-        for (ServerPlayer player : members) {
-            if (player.level() == level && player.isAlive() && !player.isSpectator() &&
-                    player.distanceToSqr(center) <= radiusSq) defenders++;
-        }
-        for (Mob recruit : recruits) {
-            if (recruit.isAlive() && recruit.distanceToSqr(center) <= radiusSq) defenders++;
-        }
+
+        state.breached = true;
+        double radiusSq = (double) RaidConfig.CAPTURE_RADIUS.get() * RaidConfig.CAPTURE_RADIUS.get();
+        int attackers = attackersInside(level, state, center, radiusSq);
+        int defenders = defendersInside(level, members, recruits, center, radiusSq);
 
         int maximum = RaidConfig.CAPTURE_TIME_SECONDS.get() * 20;
         if (attackers > defenders && attackers > 0) state.captureTicks = Math.min(maximum, state.captureTicks + 20);
@@ -1308,6 +1362,50 @@ public final class RaidEvents {
                     .withStyle(band >= 3 ? ChatFormatting.RED : ChatFormatting.GOLD, ChatFormatting.BOLD));
         }
         return state.captureTicks >= maximum;
+    }
+
+    private static int attackersInside(ServerLevel level, RaidSavedData.RaidState state,
+                                       Vec3 center, double radiusSq) {
+        int attackers = 0;
+        for (UUID id : state.raiders) {
+            Entity entity = level.getEntity(id);
+            if (entity instanceof Mob mob && mob.isAlive() && mob.distanceToSqr(center) <= radiusSq) attackers++;
+        }
+        return attackers;
+    }
+
+    private static int defendersInside(ServerLevel level, List<ServerPlayer> members, List<Mob> recruits,
+                                       Vec3 center, double radiusSq) {
+        int defenders = 0;
+        for (ServerPlayer player : members) {
+            if (player.level() == level && player.isAlive() && !player.isSpectator() &&
+                    player.distanceToSqr(center) <= radiusSq) defenders++;
+        }
+        for (Mob recruit : recruits) {
+            if (recruit.isAlive() && recruit.distanceToSqr(center) <= radiusSq) defenders++;
+        }
+        return defenders;
+    }
+
+    private static Vec3 invasionObjective(ServerLevel level, RaidSavedData.DefensePoint point,
+                                          RaidSavedData.RaidState state) {
+        if (!RaidConfig.ENABLE_BREACH_PHASE.get() || state.breached) return Vec3.atCenterOf(point.pos());
+        double distance = effectiveBreachRadius() - 3.0D;
+        int x = point.pos().getX() + Mth.floor(Math.cos(state.approachAngle) * distance);
+        int z = point.pos().getZ() + Mth.floor(Math.sin(state.approachAngle) * distance);
+        int y = level.hasChunk(x >> 4, z >> 4) ?
+                level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) : point.pos().getY();
+        return new Vec3(x + 0.5D, y, z + 0.5D);
+    }
+
+    private static int breachPercent(RaidSavedData.RaidState state) {
+        if (state.breached || !RaidConfig.ENABLE_BREACH_PHASE.get()) return 100;
+        return Mth.clamp(state.breachTicks * 100 /
+                Math.max(1, RaidConfig.BREACH_TIME_SECONDS.get() * 20), 0, 100);
+    }
+
+    private static double effectiveBreachRadius() {
+        return Math.max(RaidConfig.BREACH_RADIUS.get(), RaidConfig.CAPTURE_RADIUS.get() + 4.0D);
     }
 
     private static void setRaidMobsFrozen(ServerLevel level, RaidSavedData.RaidState state, boolean frozen) {
@@ -1404,14 +1502,18 @@ public final class RaidEvents {
         bar.setProgress(Mth.clamp((completedWaves + clearedFraction) / totalWaves, 0.0F, 1.0F));
         int capturePercent = Mth.clamp(state.captureTicks * 100 /
                 Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20), 0, 100);
+        int breachPercent = breachPercent(state);
         String label = paused ? "Invasion paused — faction offline" : state.wave == 0 ?
                 "Siege camp forming to the " + approachDirection(state.approachAngle) :
-                waveTitle(state.wave) + " • " + state.raiders.size() + " deployed" +
-                        (state.pendingWaveSpawns > 0 ? " + " + state.pendingWaveSpawns + " reinforcing" : "") +
-                        " • stronghold " +
-                        capturePercent + "% occupied";
+                !state.breached && RaidConfig.ENABLE_BREACH_PHASE.get() ?
+                        "Perimeter assault • " + state.raiders.size() + " deployed • breach " +
+                                breachPercent + "%" :
+                        waveTitle(state.wave) + " • " + state.raiders.size() + " deployed" +
+                                (state.pendingWaveSpawns > 0 ? " + " + state.pendingWaveSpawns + " reinforcing" : "") +
+                                " • stronghold " + capturePercent + "% occupied";
         bar.setName(Component.literal(label));
-        bar.setColor(paused ? BossEvent.BossBarColor.WHITE : capturePercent >= 75 ?
+        bar.setColor(paused ? BossEvent.BossBarColor.WHITE : !state.breached ?
+                (breachPercent >= 75 ? BossEvent.BossBarColor.RED : BossEvent.BossBarColor.YELLOW) : capturePercent >= 75 ?
                 BossEvent.BossBarColor.PURPLE : state.wave == 0 ? BossEvent.BossBarColor.YELLOW :
                 BossEvent.BossBarColor.RED);
     }
@@ -1471,7 +1573,7 @@ public final class RaidEvents {
         RaidSavedData.Anchor anchor = data.anchors.get(key);
         if (anchor == null) {
             return new DashboardSnapshot(teamDisplay(player), false, false, "No stronghold registered",
-                    0, RaidConfig.WAVES.get(), 0, 0, 0, 0, 0, 0, 0, 0, "Sleep at your base",
+                    0, RaidConfig.WAVES.get(), 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0, "Sleep at your base",
                     defaultEmeraldReward(), false);
         }
         RaidSavedData.RaidState state = data.raids.get(key);
@@ -1486,26 +1588,28 @@ public final class RaidEvents {
                     (anchor.nextRaidGameTime() - server.overworld().getGameTime()) / 20L);
             return new DashboardSnapshot(anchor.teamDisplay(), true, false,
                     point.dimension() + " • " + formatPos(point.pos()), 0, RaidConfig.WAVES.get(),
-                    0, 0, 0, 0, recruits, compat.workers(), compat.ships(), compat.siegeWeapons(),
-                    formatTime(seconds), defaultEmeraldReward(), true);
+                    0, 0, 0, 0, false, 0, recruits, compat.workers(), compat.ships(), compat.siegeWeapons(),
+                    assetScalingEnemies(compat), formatTime(seconds), defaultEmeraldReward(), true);
         }
         int occupation = state.captureTicks * 100 /
                 Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20);
         return new DashboardSnapshot(anchor.teamDisplay(), true, true,
                 point.dimension() + " • " + formatPos(point.pos()), state.wave, RaidConfig.WAVES.get(),
                 state.raiders.size(), state.pendingWaveSpawns, state.totalDefeated, occupation,
-                recruits, compat.workers(), compat.ships(), compat.siegeWeapons(), "Siege active",
+                state.breached || !RaidConfig.ENABLE_BREACH_PHASE.get(), breachPercent(state),
+                recruits, compat.workers(), compat.ships(), compat.siegeWeapons(), assetScalingEnemies(compat), "Siege active",
                 guaranteedEmeraldReward(state), state.rewardEligible);
     }
 
     record DashboardSnapshot(String faction, boolean registered, boolean active, String stronghold,
                              int wave, int totalWaves, int deployed, int reinforcing, int defeated,
-                             int occupationPercent, int recruits, int workers, int ships,
-                             int siegeWeapons, String cooldown,
+                             int occupationPercent, boolean breached, int breachPercent,
+                             int recruits, int workers, int ships,
+                             int siegeWeapons, int assetScalingEnemies, String cooldown,
                              int emeraldReward, boolean rewardEligible) {
         static DashboardSnapshot unavailable() {
             return new DashboardSnapshot("Unavailable", false, false, "Server unavailable", 0, 0,
-                    0, 0, 0, 0, 0, 0, 0, 0, "Unavailable", 0, false);
+                    0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0, "Unavailable", 0, false);
         }
     }
 

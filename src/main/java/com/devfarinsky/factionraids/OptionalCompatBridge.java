@@ -26,6 +26,8 @@ public final class OptionalCompatBridge {
     public static final String WORKERS = "workers";
     public static final String SMALL_SHIPS = "smallships";
     public static final String SIEGE_WEAPONS = "siegeweapons";
+    private static final String ASSET_FACTION_TAG = "FactionRaidsAssetFaction";
+    private static final String ASSET_OWNER_TAG = "FactionRaidsAssetOwner";
     private static final Set<String> WORKER_ENTITY_PATHS = Set.of(
             "animal_farmer", "lumberjack", "farmer", "miner", "builder", "merchant",
             "fisherman", "cook", "courier");
@@ -68,10 +70,35 @@ public final class OptionalCompatBridge {
         return new CompatSnapshot(workers, ships, siegeWeapons);
     }
 
+    public static boolean workerBelongsToFaction(Entity worker, String factionKey,
+                                                 Iterable<UUID> factionMembers) {
+        if (!isWorker(worker)) return false;
+        Set<UUID> members = new HashSet<>();
+        factionMembers.forEach(members::add);
+        return belongsToFaction(worker, factionKey, members, true);
+    }
+
+    public static void rememberCrewedAsset(Entity vehicle, UUID playerId, String factionKey) {
+        if (!isSmallShip(vehicle) && !isSiegeWeapon(vehicle)) return;
+        vehicle.getPersistentData().putString(ASSET_FACTION_TAG, factionKey);
+        vehicle.getPersistentData().putUUID(ASSET_OWNER_TAG, playerId);
+    }
+
     public static String diagnosticStatus() {
-        return "Workers " + status(WORKERS, RaidConfig.ENABLE_WORKERS_COMPAT.get()) +
-                ", Small Ships " + status(SMALL_SHIPS, RaidConfig.ENABLE_SMALLSHIPS_COMPAT.get()) +
-                ", Siege Weapons " + status(SIEGE_WEAPONS, RaidConfig.ENABLE_SIEGEWEAPONS_COMPAT.get());
+        return "Workers " + workersStatus() + ", Small Ships " + smallShipsStatus() +
+                ", Siege Weapons " + siegeWeaponsStatus();
+    }
+
+    public static String workersStatus() {
+        return status(WORKERS, RaidConfig.ENABLE_WORKERS_COMPAT.get());
+    }
+
+    public static String smallShipsStatus() {
+        return status(SMALL_SHIPS, RaidConfig.ENABLE_SMALLSHIPS_COMPAT.get());
+    }
+
+    public static String siegeWeaponsStatus() {
+        return status(SIEGE_WEAPONS, RaidConfig.ENABLE_SIEGEWEAPONS_COMPAT.get());
     }
 
     private static boolean isSupported(Entity entity) {
@@ -82,6 +109,8 @@ public final class OptionalCompatBridge {
                                             boolean allowUncrewedOwner) {
         if (matchesTeam(entity, factionKey)) return true;
         if (allowUncrewedOwner && ownerUuid(entity).filter(members::contains).isPresent()) return true;
+        if ((isSmallShip(entity) || isSiegeWeapon(entity)) &&
+                factionKey.equals(entity.getPersistentData().getString(ASSET_FACTION_TAG))) return true;
         for (Entity passenger : entity.getIndirectPassengers()) {
             if (members.contains(passenger.getUUID()) || matchesTeam(passenger, factionKey)) return true;
         }

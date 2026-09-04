@@ -44,6 +44,10 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue CAPTURE_RADIUS;
     public static final ForgeConfigSpec.IntValue CAPTURE_TIME_SECONDS;
     public static final ForgeConfigSpec.IntValue CAPTURE_DECAY_PER_SECOND;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_BREACH_PHASE;
+    public static final ForgeConfigSpec.IntValue BREACH_RADIUS;
+    public static final ForgeConfigSpec.IntValue BREACH_TIME_SECONDS;
+    public static final ForgeConfigSpec.IntValue BREACH_DECAY_PER_SECOND;
     public static final ForgeConfigSpec.DoubleValue RAIDER_ADVANCE_SPEED;
     public static final ForgeConfigSpec.BooleanValue ALLOW_WORLD_SPAWN_FALLBACK;
     public static final ForgeConfigSpec.BooleanValue STAGED_SQUADS;
@@ -147,6 +151,14 @@ public final class RaidConfig {
                 .defineInRange("captureTimeSeconds", 120, 30, 600);
         CAPTURE_DECAY_PER_SECOND = b.comment("Seconds of occupation progress removed each second after defenders regain control.")
                 .defineInRange("captureDecayPerSecond", 2, 1, 10);
+        ENABLE_BREACH_PHASE = b.comment("Require attackers to establish control of an outer perimeter before stronghold occupation can begin.")
+                .define("enableBreachPhase", true);
+        BREACH_RADIUS = b.comment("Radius of the outer perimeter where attackers establish a breach. Keep this larger than captureRadius.")
+                .defineInRange("breachRadius", 36, 12, 96);
+        BREACH_TIME_SECONDS = b.comment("Continuous contested seconds required for attackers to breach the outer perimeter.")
+                .defineInRange("breachTimeSeconds", 45, 15, 300);
+        BREACH_DECAY_PER_SECOND = b.comment("Seconds of breach progress removed each second while defenders control the perimeter.")
+                .defineInRange("breachDecayPerSecond", 2, 1, 10);
         RAIDER_ADVANCE_SPEED = b.comment("Navigation speed used when invasion forces advance toward the stronghold.")
                 .defineInRange("raiderAdvanceSpeed", 1.05, 0.5, 1.5);
         ALLOW_WORLD_SPAWN_FALLBACK = b.comment("Use the overworld spawn when a player has no bed or respawn anchor. Disabled by default to avoid attacking public spawn.")
@@ -187,15 +199,15 @@ public final class RaidConfig {
                 .define("enableVillagerWorkers", true);
         PROTECT_WORKERS = b.comment("Prevent Faction Raids invaders from damaging Villager Workers. Workers keep their own flee and take-cover AI.")
                 .define("protectVillagerWorkers", true);
-        ENABLE_SMALLSHIPS_COMPAT = b.comment("Recognize crewed Small Ships as faction naval assets.")
+        ENABLE_SMALLSHIPS_COMPAT = b.comment("Recognize Small Ships crewed or previously registered by a faction member as naval assets.")
                 .define("enableSmallShips", true);
-        ENABLE_SIEGEWEAPONS_COMPAT = b.comment("Recognize crewed Siege Weapons as faction defensive assets.")
+        ENABLE_SIEGEWEAPONS_COMPAT = b.comment("Recognize Siege Weapons crewed or previously registered by a faction member as defensive assets.")
                 .define("enableSiegeWeapons", true);
-        COMPAT_ASSET_RADIUS = b.comment("Radius around a stronghold used to detect Workers, crewed Small Ships and crewed Siege Weapons.")
+        COMPAT_ASSET_RADIUS = b.comment("Radius around a stronghold used to detect Workers and registered faction equipment.")
                 .defineInRange("assetDetectionRadius", 128, 32, 384);
-        CREWED_ASSETS_PER_EXTRA_ENEMY = b.comment("Crewed Small Ships or Siege Weapons required to add one enemy to each wave. Set zero to disable equipment-based scaling.")
+        CREWED_ASSETS_PER_EXTRA_ENEMY = b.comment("Recognized Small Ships or Siege Weapons required to add one enemy to each wave. Set zero to disable equipment-based scaling.")
                 .defineInRange("crewedAssetsPerExtraEnemy", 2, 0, 20);
-        MAX_ASSET_SCALING_ENEMIES = b.comment("Maximum additional enemies per wave created from detected crewed equipment.")
+        MAX_ASSET_SCALING_ENEMIES = b.comment("Maximum additional enemies per wave created from recognized faction equipment.")
                 .defineInRange("maximumAssetScalingEnemies", 4, 0, 20);
         b.pop();
         SPEC = b.build();

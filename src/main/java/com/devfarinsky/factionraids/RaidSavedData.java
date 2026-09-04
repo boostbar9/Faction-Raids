@@ -197,6 +197,9 @@ public final class RaidSavedData extends SavedData {
         public int ticksToNextSquad;
         public int squadsSpawned;
         public int captureTicks;
+        public int breachTicks;
+        public boolean breached;
+        public int lastBreachWarningBand;
         public double approachAngle;
         public int lastCaptureWarningBand;
         public UUID commanderUuid;
@@ -232,6 +235,9 @@ public final class RaidSavedData extends SavedData {
             tag.putInt("NextSquad", ticksToNextSquad);
             tag.putInt("SquadsSpawned", squadsSpawned);
             tag.putInt("CaptureTicks", captureTicks);
+            tag.putInt("BreachTicks", breachTicks);
+            tag.putBoolean("Breached", breached);
+            tag.putInt("BreachWarningBand", lastBreachWarningBand);
             tag.putDouble("ApproachAngle", approachAngle);
             tag.putInt("CaptureWarningBand", lastCaptureWarningBand);
             if (commanderUuid != null) tag.putUUID("Commander", commanderUuid);
@@ -268,6 +274,10 @@ public final class RaidSavedData extends SavedData {
             state.ticksToNextSquad = tag.getInt("NextSquad");
             state.squadsSpawned = tag.getInt("SquadsSpawned");
             state.captureTicks = tag.getInt("CaptureTicks");
+            state.breachTicks = tag.getInt("BreachTicks");
+            state.breached = tag.contains("Breached", Tag.TAG_BYTE) ?
+                    tag.getBoolean("Breached") : state.wave > 0;
+            state.lastBreachWarningBand = tag.getInt("BreachWarningBand");
             state.approachAngle = tag.contains("ApproachAngle", Tag.TAG_DOUBLE) ?
                     tag.getDouble("ApproachAngle") : 0.0D;
             state.lastCaptureWarningBand = tag.getInt("CaptureWarningBand");

@@ -1,4 +1,4 @@
-# Faction Raids 2.4.0
+# Faction Raids 2.5.0
 
 Faction Raids is a server-authoritative Forge 1.20.1 addon that turns player homes into siege
 objectives. Illager armies establish an approach front, deploy in marching squads, advance on a
@@ -16,6 +16,12 @@ nearby allied Recruits, occupation pressure, cooldown and expected victory spoil
 Version 2.4 adds optional, zero-hard-link integrations for Villager Workers, Small Ships and Siege
 Weapons. Workers are recognized as protected faction civilians, while crewed ships and siege
 engines appear as war assets and can add a small, capped amount of enemy scaling.
+
+Version 2.5 deepens the siege itself. New invasions must establish control of an outer perimeter
+before occupation of the stronghold heart can begin. Raiders rally at the approach-side breach
+point, defenders can push breach pressure back, and the boss bar, dashboard, titles and alerts all
+track the current siege stage. Ships and siege engines also remember the faction that last crewed
+them, so briefly dismounting no longer makes a legitimate war asset disappear from detection.
 
 No administrator setup is required. A player's bed or respawn anchor becomes a valid stronghold
 automatically. Players in the same Villager Recruits faction share one raid schedule, while any
@@ -68,6 +74,12 @@ cannot move an active battlefield.
 - Major moments use vanilla title overlays, sounds and faction-only chat announcements by default.
 - Assault squads arrive through a brief smoke effect and reinforcement updates appear above the hotbar.
 - Invaders path toward the stronghold when they do not have a reachable defender to fight.
+- Before the inner objective can be occupied, attackers must outnumber defenders inside a larger
+  outer perimeter long enough to establish a breach.
+- Until the breach opens, unengaged raiders rally on the approach side of that perimeter instead of
+  immediately piling onto the stronghold center.
+- Defenders can reverse breach pressure by regaining control of the outer line. Once breached, the
+  fight falls back to the smaller, slower inner occupation objective.
 - Nearby soldiers belonging to the defending Villager Recruits faction acquire invasion targets.
 - Invaders also recognize those Recruits as defenders, producing an actual army-versus-army fight.
 - The wave budget accounts for the nearby defending Recruit army, but remains inside the per-raid
@@ -109,11 +121,12 @@ optional companion mod cannot make Faction Raids fail to load.
 - **Villager Workers:** nearby allied Workers are displayed as civilians in the command dashboard.
   Illagers spawned by Faction Raids clear Workers as attack targets and cannot damage them. Workers
   do not count as soldiers or artificially hold the capture ring.
-- **Small Ships:** a ship counts as a naval asset only while a member of the defending faction is
-  aboard. Empty boats do not scale a raid. Faction Raids does not steer or damage ships directly.
-- **Siege Weapons:** a siege engine counts as a war asset only while crewed by a defending faction
-  member. Its own mod remains responsible for aiming, ammunition, projectiles and damage.
-- **Balanced scaling:** by default, every two crewed ships or siege engines add one invader per wave,
+- **Small Ships:** boarding a ship records the crew member's current faction. It remains a recognized
+  naval asset after the crew dismounts and can be captured by a different faction boarding it.
+  Faction Raids does not steer or damage ships directly.
+- **Siege Weapons:** boarding a siege engine records or transfers its faction in the same way. Its
+  own mod remains responsible for aiming, ammunition, projectiles and damage.
+- **Balanced scaling:** by default, every two recognized ships or siege engines add one invader per wave,
   capped at four extra invaders. This stays inside the existing per-raid and global entity caps.
 
 All integrations, Worker protection, asset detection radius and equipment scaling can be changed in
@@ -155,6 +168,7 @@ no continuous rendering workload. It shows:
 - Automatic-siege cooldown or active wave
 - Deployed enemies, queued reinforcements and confirmed defeats
 - Current stronghold occupation pressure
+- Current outer-perimeter breach pressure before occupation begins
 - Nearby allied Villager Recruits
 - Nearby protected Villager Workers
 - Crewed Small Ships and Siege Weapons
@@ -187,6 +201,8 @@ Forge creates `config/factionraids-common.toml`. Important defaults are:
 - New waves delayed below approximately 18 TPS
 - 60–90 minutes between automatic sieges per faction
 - 18-block capture ring requiring 120 seconds of enemy control
+- 36-block outer perimeter requiring 45 seconds of attacker control before the inner objective opens
+- Two seconds of breach pressure removed per second after defenders regain the perimeter
 - Two seconds of occupation removed per second after defenders regain control
 - 128-block Recruit mobilization radius
 - Squads of four arriving six seconds apart
@@ -256,6 +272,11 @@ were already fighting toward. Newly started practice sieges follow `manualRaidsG
 
 Version 2.4 changes no saved-world schema. Existing strongholds, active sieges and reward eligibility
 continue unchanged. The optional integrations activate automatically when their mods are installed.
+
+Version 2.5 adds migration-safe breach state. A 2.4 raid that has already deployed a wave is treated
+as already breached when first loaded, so updating cannot move an ongoing battle backward. New
+invasions use the full perimeter phase. Vehicle faction markers are stored on the optional-mod entity
+and require no world conversion; board an existing ship or siege engine once to register it.
 
 ## Building from source
 
