@@ -28,7 +28,8 @@ public final class RecruitsBridge {
     private static Method getFactionByStringId;
     private static Method getFactionLeaderUuid;
     private static Method getOwnerUuid;
-    private static boolean reflectionAttempted;
+    private static boolean factionReflectionAttempted;
+    private static boolean ownerReflectionAttempted;
 
     public static boolean isRecruitSoldier(Entity entity) {
         if (!(entity instanceof Mob)) return false;
@@ -51,7 +52,7 @@ public final class RecruitsBridge {
 
     public static Optional<UUID> factionLeader(ServerPlayer player) {
         if (player.getTeam() == null) return Optional.of(player.getUUID());
-        initializeReflection();
+        initializeFactionReflection();
         if (factionManagerField == null || getFactionByStringId == null || getFactionLeaderUuid == null) {
             return Optional.empty();
         }
@@ -67,7 +68,7 @@ public final class RecruitsBridge {
     }
 
     private static Optional<UUID> ownerUuid(Entity entity) {
-        initializeReflection();
+        initializeOwnerReflection();
         if (recruitClass == null || getOwnerUuid == null || !recruitClass.isInstance(entity)) {
             return Optional.empty();
         }
@@ -79,9 +80,16 @@ public final class RecruitsBridge {
         }
     }
 
-    private static synchronized void initializeReflection() {
-        if (reflectionAttempted) return;
-        reflectionAttempted = true;
+    public static String diagnosticStatus() {
+        initializeFactionReflection();
+        initializeOwnerReflection();
+        return "faction API " + (factionManagerField != null ? "ready" : "fallback") +
+                ", ownership API " + (getOwnerUuid != null ? "ready" : "fallback");
+    }
+
+    private static synchronized void initializeFactionReflection() {
+        if (factionReflectionAttempted) return;
+        factionReflectionAttempted = true;
         try {
             Class<?> factionEvents = Class.forName(FACTION_EVENTS);
             factionManagerField = factionEvents.getField("recruitsFactionManager");
@@ -89,13 +97,20 @@ public final class RecruitsBridge {
             getFactionByStringId = managerClass.getMethod("getFactionByStringID", String.class);
             Class<?> factionClass = getFactionByStringId.getReturnType();
             getFactionLeaderUuid = factionClass.getMethod("getTeamLeaderUUID");
-
-            recruitClass = Class.forName(ABSTRACT_RECRUIT);
-            getOwnerUuid = recruitClass.getMethod("getOwnerUUID");
         } catch (ReflectiveOperationException | LinkageError ignored) {
             factionManagerField = null;
             getFactionByStringId = null;
             getFactionLeaderUuid = null;
+        }
+    }
+
+    private static synchronized void initializeOwnerReflection() {
+        if (ownerReflectionAttempted) return;
+        ownerReflectionAttempted = true;
+        try {
+            recruitClass = Class.forName(ABSTRACT_RECRUIT);
+            getOwnerUuid = recruitClass.getMethod("getOwnerUUID");
+        } catch (ReflectiveOperationException | LinkageError ignored) {
             recruitClass = null;
             getOwnerUuid = null;
         }

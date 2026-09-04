@@ -1,8 +1,9 @@
-# Faction Raids 2.0.0
+# Faction Raids 2.1.0
 
 Faction Raids is a server-authoritative Forge 1.20.1 addon that turns player homes into siege
-objectives. Illager armies establish an approach front, advance on a stronghold, fight the
-defending players and their Villager Recruits, and attempt to occupy the heart of the base.
+objectives. Illager armies establish an approach front, deploy in marching squads, advance on a
+stronghold, fight the defending players and their Villager Recruits, and attempt to occupy the
+heart of the base under the command of a final-wave siege commander.
 
 No administrator setup is required. A player's bed or respawn anchor becomes a valid stronghold
 automatically. Players in the same Villager Recruits faction share one raid schedule, while any
@@ -28,20 +29,29 @@ existing world after making a normal backup. Never keep two Faction Raids versio
 3. Join or create a Villager Recruits faction if playing as a group.
 4. Continue playing. The mod registers and updates the stronghold automatically.
 
-If a player has no personal respawn point, the overworld's shared spawn is used. Changing the
-faction leader's spawn updates the faction's idle stronghold, and an automatic invasion may target
-the respawn point of any online faction member. A selected location is locked for the duration of
-that siege so sleeping elsewhere cannot move an active battlefield.
+By default, a player without a personal respawn point is not registered. This prevents a public
+world spawn from accidentally becoming a faction stronghold. Servers that intentionally want that
+behavior can enable `allowWorldSpawnFallback`. Changing the faction leader's spawn updates the
+faction's idle stronghold, and an automatic invasion may target the respawn point of any online
+faction member. A selected location is locked for the duration of that siege so sleeping elsewhere
+cannot move an active battlefield.
 
 ## How a siege works
 
 - Scouts provide advance warning and reveal the direction of the enemy war camp.
 - Every wave enters from one coherent front instead of appearing randomly around the base.
+- Waves deploy as smaller squads at configurable intervals, reducing spawn spikes and creating a
+  visible stream of reinforcements from the war camp.
 - The vanguard is followed by mixed assault troops, breach companies, war casters and a command
   assault containing elite illagers and a ravager.
+- Breachers move aggressively, squad captains are tougher, marksmen and war casters retain their
+  specialized vanilla combat behavior, and the final assault contains a named elite commander.
+- Killing the commander removes 30 seconds of accumulated occupation pressure.
 - Invaders path toward the stronghold when they do not have a reachable defender to fight.
 - Nearby soldiers belonging to the defending Villager Recruits faction acquire invasion targets.
 - Invaders also recognize those Recruits as defenders, producing an actual army-versus-army fight.
+- The wave budget accounts for the nearby defending Recruit army, but remains inside the per-raid
+  and global entity caps.
 - Recruits' permanent follow, hold and group orders are not replaced by Faction Raids.
 - The illagers win only after outnumbering defenders inside the inner capture ring long enough.
 - Retaking the ring rapidly removes occupation progress.
@@ -114,6 +124,10 @@ Forge creates `config/factionraids-common.toml`. Important defaults are:
 - 18-block capture ring requiring 120 seconds of enemy control
 - Two seconds of occupation removed per second after defenders regain control
 - 128-block Recruit mobilization radius
+- Squads of four arriving six seconds apart
+- Up to eight strength-scaling enemies based on one extra enemy per three nearby Recruits
+- A final-wave commander with double normal maximum health
+- No world-spawn fallback until explicitly enabled
 - Legacy distance-only abandonment defeat disabled
 
 These are conservative integrated-server defaults. Dedicated-server packs can raise the global and
@@ -132,7 +146,7 @@ Datapacks can replace
 `data/factionraids/loot_tables/gameplay/invasion_victory.json` to award modded equipment,
 currencies, spell scrolls or collectibles without adding more hard dependencies.
 
-## Updating from 1.x
+## Updating from 1.x or 2.0
 
 Saved anchors, cooldowns and active raids migrate automatically. Existing manually created homes
 remain manual so an update cannot unexpectedly move a live server's established castle. Run this
@@ -144,6 +158,21 @@ once as the faction leader to opt that old home into the new behavior:
 
 Version 1.0 anchors without ownership can still be recovered with
 `/factionraids anchor claim`. Back up the world before every mod update.
+
+Active 2.0 sieges migrate safely. Their current wave continues normally; staged deployment begins
+with the following wave. Existing automatic strongholds at world spawn remain saved, but new
+players without beds are not registered unless `allowWorldSpawnFallback` is enabled.
+
+## Building from source
+
+The build pins ForgeGradle 6.0.54 and declares the Forge and Maven Central repositories explicitly.
+With Java 17 installed, run:
+
+```text
+./gradlew build
+```
+
+The reobfuscated release JAR is written to `build/libs`.
 
 ## Removal
 

@@ -45,6 +45,14 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue CAPTURE_TIME_SECONDS;
     public static final ForgeConfigSpec.IntValue CAPTURE_DECAY_PER_SECOND;
     public static final ForgeConfigSpec.DoubleValue RAIDER_ADVANCE_SPEED;
+    public static final ForgeConfigSpec.BooleanValue ALLOW_WORLD_SPAWN_FALLBACK;
+    public static final ForgeConfigSpec.BooleanValue STAGED_SQUADS;
+    public static final ForgeConfigSpec.IntValue SQUAD_SIZE;
+    public static final ForgeConfigSpec.IntValue SQUAD_INTERVAL_SECONDS;
+    public static final ForgeConfigSpec.IntValue RECRUITS_PER_EXTRA_ENEMY;
+    public static final ForgeConfigSpec.IntValue MAX_RECRUIT_SCALING_ENEMIES;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_COMMANDER;
+    public static final ForgeConfigSpec.DoubleValue COMMANDER_HEALTH_MULTIPLIER;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -127,6 +135,22 @@ public final class RaidConfig {
                 .defineInRange("captureDecayPerSecond", 2, 1, 10);
         RAIDER_ADVANCE_SPEED = b.comment("Navigation speed used when invasion forces advance toward the stronghold.")
                 .defineInRange("raiderAdvanceSpeed", 1.05, 0.5, 1.5);
+        ALLOW_WORLD_SPAWN_FALLBACK = b.comment("Use the overworld spawn when a player has no bed or respawn anchor. Disabled by default to avoid attacking public spawn.")
+                .define("allowWorldSpawnFallback", false);
+        STAGED_SQUADS = b.comment("Deploy each wave as several marching squads instead of creating the entire wave in one server tick.")
+                .define("stagedSquads", true);
+        SQUAD_SIZE = b.comment("Maximum illagers deployed in one squad when stagedSquads is enabled.")
+                .defineInRange("squadSize", 4, 1, 20);
+        SQUAD_INTERVAL_SECONDS = b.comment("Delay between squads belonging to the same wave.")
+                .defineInRange("squadIntervalSeconds", 6, 1, 60);
+        RECRUITS_PER_EXTRA_ENEMY = b.comment("Nearby allied Recruits required to add one scaling enemy. Set zero to disable Recruit-based scaling.")
+                .defineInRange("recruitsPerExtraEnemy", 3, 0, 20);
+        MAX_RECRUIT_SCALING_ENEMIES = b.comment("Maximum additional enemies per wave created from the defending Recruit army's strength.")
+                .defineInRange("maximumRecruitScalingEnemies", 8, 0, 40);
+        ENABLE_COMMANDER = b.comment("Create a named elite commander during the final assault.")
+                .define("enableCommander", true);
+        COMMANDER_HEALTH_MULTIPLIER = b.comment("Maximum-health multiplier applied to the final invasion commander.")
+                .defineInRange("commanderHealthMultiplier", 2.0, 1.0, 5.0);
         b.pop();
         SPEC = b.build();
     }

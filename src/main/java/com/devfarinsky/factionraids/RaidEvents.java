@@ -28,6 +28,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.monster.Vex;
 import net.minecraft.world.entity.npc.AbstractVillager;
@@ -55,6 +56,7 @@ import java.util.*;
 
 public final class RaidEvents {
     private static final String RAID_TEAM_TAG = "FactionRaidsTeam";
+    private static final String RAID_ROLE_TAG = "FactionRaidsRole";
     private static final Map<String, ServerBossEvent> BOSS_BARS = new HashMap<>();
     private static int tickCounter;
 
@@ -211,6 +213,10 @@ public final class RaidEvents {
     private static int enableAutomaticHome(CommandSourceStack source) {
         try {
             ServerPlayer player = source.getPlayerOrException();
+            if (respawnPoint(source.getServer(), player) == null) {
+                source.sendFailure(Component.literal("Set a bed or respawn anchor before enabling an automatic stronghold."));
+                return 0;
+            }
             RaidSavedData data = RaidSavedData.get(source.getServer());
             String key = factionKeyForPlayer(data, player);
             RaidSavedData.Anchor anchor = data.anchors.get(key);
@@ -243,6 +249,10 @@ public final class RaidEvents {
     private static int refreshAutomaticHome(CommandSourceStack source) {
         try {
             ServerPlayer player = source.getPlayerOrException();
+            if (respawnPoint(source.getServer(), player) == null) {
+                source.sendFailure(Component.literal("Set a bed or respawn anchor before refreshing the stronghold."));
+                return 0;
+            }
             RaidSavedData data = RaidSavedData.get(source.getServer());
             RaidSavedData.Anchor current = data.anchors.get(factionKeyForPlayer(data, player));
             if (current != null && !canManage(player, current)) {
@@ -556,6 +566,10 @@ public final class RaidEvents {
                 point = anchor.automaticHome() ? respawnPoint(source.getServer(), player) :
                         closestDefensePoint(source.getServer(), anchor, player);
             }
+            if (point == null) {
+                source.sendFailure(Component.literal("Set a bed or respawn anchor before starting an invasion, or enable allowWorldSpawnFallback in the config."));
+                return 0;
+            }
             if (!hasDefenderNear(source.getServer(), point, onlineMembers(source.getServer(), key))) {
                 source.sendFailure(Component.literal("Stand near the selected defense point before starting the invasion."));
                 return 0;
@@ -596,14 +610,15 @@ public final class RaidEvents {
             String key = factionKeyForPlayer(data, player);
             RaidSavedData.Anchor anchor = data.anchors.get(key);
             if (anchor == null) {
-                source.sendSuccess(() -> Component.literal("No stronghold is registered yet. It will be created automatically from your respawn point."), false);
+                source.sendSuccess(() -> Component.literal("No stronghold is registered yet. Sleep in a bed or use a respawn anchor to register one automatically."), false);
                 return 1;
             }
             RaidSavedData.RaidState state = data.raids.get(key);
             if (state != null) {
                 RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
                 source.sendSuccess(() -> Component.literal("Invasion active: wave " + state.wave + "/" +
-                        RaidConfig.WAVES.get() + ", " + state.raiders.size() + " enemies tracked at '" +
+                        RaidConfig.WAVES.get() + ", " + state.raiders.size() + " enemies deployed and " +
+                        state.pendingWaveSpawns + " reinforcing at '" +
                         point.name() + "', stronghold occupation " +
                         (state.captureTicks * 100 / Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20)) +
                         "%. Faction key: " + key), false);
@@ -653,6 +668,8 @@ public final class RaidEvents {
             source.sendSuccess(() -> Component.literal("Roster: " + (anchor.internalRoster() ? "internal" : "scoreboard fallback") +
                     " | saved: " + anchor.members().size() + " | online: " + online.stream()
                     .map(p -> p.getGameProfile().getName()).toList()), false);
+            source.sendSuccess(() -> Component.literal("Villager Recruits integration: " +
+                    RecruitsBridge.diagnosticStatus()), false);
             source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT,
                     "Defense points: %d | approximate TPS: %.1f | global tracked raiders: %d/%d",
                     anchor.defensePoints().size(), tps, globalTrackedCount(data), RaidConfig.MAX_GLOBAL_RAIDERS.get())), false);
@@ -667,8 +684,11 @@ public final class RaidEvents {
                 }).count();
                 source.sendSuccess(() -> Component.literal("Raid state: wave " + state.wave + "/" + RaidConfig.WAVES.get() +
                         " at '" + state.defensePointName + "' | tracked: " + state.raiders.size() +
+                        " | queued: " + state.pendingWaveSpawns + " | squads: " + state.squadsSpawned +
                         " | loaded: " + loaded + " | missing grace: " + state.missingTicks.size() +
-                        " | abandonment: " + (state.abandonedTicks / 20) + "s"), false);
+                        " | occupation: " + (state.captureTicks / 20) + "s" +
+                        (state.commanderUuid != null ? " | commander: " +
+                                (state.commanderDefeated ? "defeated" : "active") : "")), false);
             }
             return 1;
         } catch (Exception e) {
@@ -800,6 +820,7 @@ public final class RaidEvents {
 
         reconcileTaggedMobs(level, point, state);
         updateTrackedMobs(level, state);
+        handleCommanderDefeat(server, anchor, state);
         List<Mob> recruits = alliedRecruits(level, point, anchor);
         if (RaidConfig.MOBILIZE_RECRUITS.get()) mobilizeRecruits(level, recruits, state);
         redirectRaiders(level, state, members, recruits, point);
@@ -820,13 +841,32 @@ public final class RaidEvents {
             return;
         }
 
-        if (state.wave > 0 && state.raiders.isEmpty() && state.ticksToNextWave <= 0) {
+        if (state.pendingWaveSpawns > 0) {
+            state.ticksToNextSquad -= 20;
+            if (state.ticksToNextSquad <= 0) {
+                if (shouldPauseForPerformance(server, data)) {
+                    state.ticksToNextSquad = 10 * 20;
+                    if (!state.performancePauseAnnounced) {
+                        state.performancePauseAnnounced = true;
+                        announce(server, teamKey, Component.literal("The next assault squad is waiting for server performance to recover.")
+                                .withStyle(ChatFormatting.YELLOW), false);
+                    }
+                } else {
+                    state.performancePauseAnnounced = false;
+                    spawnNextSquad(server, level, data, anchor, point, state);
+                }
+            }
+        }
+
+        if (state.wave > 0 && state.pendingWaveSpawns <= 0 && state.raiders.isEmpty() &&
+                state.ticksToNextWave <= 0) {
             if (state.wave >= RaidConfig.WAVES.get()) {
                 finishRaid(server, data, teamKey, true, true,
                         anchor.teamDisplay() + " has crushed the illager invasion!");
                 return;
             }
             state.ticksToNextWave = RaidConfig.TIME_BETWEEN_WAVES_SECONDS.get() * 20;
+            state.lastWarningSecond = Integer.MAX_VALUE;
             announce(server, teamKey, Component.literal("Wave " + state.wave + " cleared. Next wave in " +
                     RaidConfig.TIME_BETWEEN_WAVES_SECONDS.get() + " seconds.").withStyle(ChatFormatting.GREEN), false);
         }
@@ -849,7 +889,7 @@ public final class RaidEvents {
                     }
                 } else {
                     state.performancePauseAnnounced = false;
-                    spawnWave(server, level, data, anchor, point, state, members);
+                    queueWave(server, level, data, anchor, point, state, members, recruits);
                 }
             }
         }
@@ -891,53 +931,131 @@ public final class RaidEvents {
         }
     }
 
-    private static void spawnWave(MinecraftServer server, ServerLevel level, RaidSavedData data,
+    private static void queueWave(MinecraftServer server, ServerLevel level, RaidSavedData data,
                                   RaidSavedData.Anchor anchor, RaidSavedData.DefensePoint point,
-                                  RaidSavedData.RaidState state,
-                                  List<ServerPlayer> members) {
+                                  RaidSavedData.RaidState state, List<ServerPlayer> members,
+                                  List<Mob> recruits) {
         int nextWave = state.wave + 1;
         int playerCount = Math.max(1, members.size());
+        int recruitScale = 0;
+        int divisor = RaidConfig.RECRUITS_PER_EXTRA_ENEMY.get();
+        if (divisor > 0) recruitScale = Math.min(RaidConfig.MAX_RECRUIT_SCALING_ENEMIES.get(),
+                recruits.size() / divisor);
         int wanted = RaidConfig.BASE_ENEMIES_PER_WAVE.get() +
-                (playerCount - 1) * RaidConfig.ENEMIES_PER_EXTRA_PLAYER.get() + (nextWave - 1) * 2;
-        int globalRemaining = Math.max(0, RaidConfig.MAX_GLOBAL_RAIDERS.get() - globalTrackedCount(data));
-        wanted = Math.min(wanted, Math.min(RaidConfig.MAX_ACTIVE_RAIDERS.get(), globalRemaining));
+                (playerCount - 1) * RaidConfig.ENEMIES_PER_EXTRA_PLAYER.get() +
+                (nextWave - 1) * 2 + recruitScale;
+        wanted = Math.min(wanted, RaidConfig.MAX_ACTIVE_RAIDERS.get());
         if (wanted <= 0) {
             state.ticksToNextWave = RaidConfig.SPAWN_RETRY_SECONDS.get() * 20;
             return;
         }
 
+        state.wave = nextWave;
+        state.plannedWaveSize = wanted;
+        state.waveStartingCount = 0;
+        state.pendingWaveSpawns = wanted;
+        state.squadsSpawned = 0;
+        state.ticksToNextWave = 0;
+        state.ticksToNextSquad = 0;
+        state.lastWarningSecond = Integer.MAX_VALUE;
+        announce(server, anchor.teamKey(), Component.literal(waveTitle(state.wave) + " — wave " + state.wave + "/" +
+                RaidConfig.WAVES.get() + ": " + wanted + " invaders are advancing from the " +
+                approachDirection(state.approachAngle) +
+                (recruitScale > 0 ? " after scouting " + recruits.size() + " defending Recruits." : "."))
+                .withStyle(ChatFormatting.RED), true);
+        spawnNextSquad(server, level, data, anchor, point, state);
+    }
+
+    private static void spawnNextSquad(MinecraftServer server, ServerLevel level, RaidSavedData data,
+                                       RaidSavedData.Anchor anchor, RaidSavedData.DefensePoint point,
+                                       RaidSavedData.RaidState state) {
+        int perSquad = RaidConfig.STAGED_SQUADS.get() ? RaidConfig.SQUAD_SIZE.get() : state.pendingWaveSpawns;
+        int factionCapacity = Math.max(0, RaidConfig.MAX_ACTIVE_RAIDERS.get() - state.raiders.size());
+        int globalCapacity = Math.max(0, RaidConfig.MAX_GLOBAL_RAIDERS.get() - globalTrackedCount(data));
+        int wanted = Math.min(state.pendingWaveSpawns, Math.min(perSquad, Math.min(factionCapacity, globalCapacity)));
+        if (wanted <= 0) {
+            state.ticksToNextSquad = RaidConfig.SPAWN_RETRY_SECONDS.get() * 20;
+            return;
+        }
+
         int spawned = 0;
         for (int i = 0; i < wanted; i++) {
-            Raider raider = createRaiderForWave(level, nextWave, i);
+            int waveIndex = state.waveStartingCount + spawned;
+            Raider raider = createRaiderForWave(level, state.wave, waveIndex);
             if (raider == null) continue;
             BlockPos spawn = findSpawnPosition(level, point.pos(), level.random, raider, state.approachAngle);
             if (spawn == null) continue;
             raider.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5,
                     level.random.nextFloat() * 360.0F, 0.0F);
             raider.finalizeSpawn(level, level.getCurrentDifficultyAt(spawn), MobSpawnType.EVENT, null, null);
-            if (i == 0) raider.setPatrolLeader(true);
+            boolean squadLeader = spawned == 0;
+            if (squadLeader) raider.setPatrolLeader(true);
             raider.setPersistenceRequired();
             raider.getPersistentData().putString(RAID_TEAM_TAG, anchor.teamKey());
             if (level.addFreshEntity(raider)) {
+                assignSiegeRole(raider, state, waveIndex, squadLeader);
                 state.raiders.add(raider.getUUID());
                 spawned++;
             }
         }
         if (spawned == 0) {
-            state.ticksToNextWave = RaidConfig.SPAWN_RETRY_SECONDS.get() * 20;
+            state.ticksToNextSquad = RaidConfig.SPAWN_RETRY_SECONDS.get() * 20;
             announce(server, anchor.teamKey(), Component.literal("No safe invasion entrance was found. Retrying in " +
                     RaidConfig.SPAWN_RETRY_SECONDS.get() + " seconds.").withStyle(ChatFormatting.YELLOW), false);
             return;
         }
 
-        state.wave = nextWave;
-        state.waveStartingCount = spawned;
-        state.ticksToNextWave = 0;
-        announce(server, anchor.teamKey(), Component.literal(waveTitle(state.wave) + " — wave " + state.wave + "/" +
-                RaidConfig.WAVES.get() + ": " + spawned + " invaders are advancing from the " +
-                approachDirection(state.approachAngle) + "!")
-                .withStyle(ChatFormatting.RED), true);
+        state.waveStartingCount += spawned;
+        state.pendingWaveSpawns -= spawned;
+        state.squadsSpawned++;
+        state.ticksToNextSquad = state.pendingWaveSpawns > 0 ?
+                RaidConfig.SQUAD_INTERVAL_SECONDS.get() * 20 : 0;
+        if (state.squadsSpawned > 1 || state.pendingWaveSpawns > 0) {
+            announce(server, anchor.teamKey(), Component.literal("Assault squad " + state.squadsSpawned +
+                    " entered the battlefield; " + state.pendingWaveSpawns + " reinforcements remain in the war camp.")
+                    .withStyle(ChatFormatting.GRAY), false);
+        }
         data.setDirty();
+    }
+
+    private static void assignSiegeRole(Raider raider, RaidSavedData.RaidState state,
+                                        int waveIndex, boolean squadLeader) {
+        boolean commander = RaidConfig.ENABLE_COMMANDER.get() && state.wave >= RaidConfig.WAVES.get() &&
+                waveIndex == 0;
+        String role;
+        if (commander) role = "commander";
+        else if (raider.getType() == EntityType.VINDICATOR || raider.getType() == EntityType.RAVAGER) role = "breacher";
+        else if (raider.getType() == EntityType.WITCH || raider.getType() == EntityType.EVOKER ||
+                raider.getType() == EntityType.ILLUSIONER) role = "warcaster";
+        else if (squadLeader) role = "captain";
+        else role = "marksman";
+        raider.getPersistentData().putString(RAID_ROLE_TAG, role);
+
+        if ("breacher".equals(role)) {
+            raider.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 20 * 60 * 60, 0, false, false));
+        } else if ("captain".equals(role)) {
+            raider.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 20 * 60 * 60, 0, false, false));
+        } else if (commander) {
+            var health = raider.getAttribute(Attributes.MAX_HEALTH);
+            if (health != null) {
+                health.setBaseValue(health.getBaseValue() * RaidConfig.COMMANDER_HEALTH_MULTIPLIER.get());
+                raider.setHealth(raider.getMaxHealth());
+            }
+            raider.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 20 * 60 * 60, 0, false, false));
+            raider.setCustomName(Component.literal("Illager Siege Commander").withStyle(ChatFormatting.DARK_RED));
+            raider.setCustomNameVisible(true);
+            state.commanderUuid = raider.getUUID();
+            state.commanderDefeated = false;
+        }
+    }
+
+    private static void handleCommanderDefeat(MinecraftServer server, RaidSavedData.Anchor anchor,
+                                              RaidSavedData.RaidState state) {
+        if (state.commanderUuid == null || state.commanderDefeated || state.raiders.contains(state.commanderUuid)) return;
+        state.commanderDefeated = true;
+        state.captureTicks = Math.max(0, state.captureTicks - 30 * 20);
+        announce(server, anchor.teamKey(), Component.literal("The siege commander has fallen! Illager occupation lost 30 seconds of progress.")
+                .withStyle(ChatFormatting.GREEN), true);
     }
 
     private static Raider createRaiderForWave(ServerLevel level, int wave, int index) {
@@ -1143,14 +1261,17 @@ public final class RaidEvents {
         for (ServerPlayer p : currentMembers) bar.addPlayer(p);
         int totalWaves = RaidConfig.WAVES.get();
         float completedWaves = Math.max(0, state.wave - 1);
-        float clearedFraction = state.waveStartingCount <= 0 ? 0.0F :
-                1.0F - (float) state.raiders.size() / state.waveStartingCount;
+        int planned = Math.max(state.plannedWaveSize, state.waveStartingCount + state.pendingWaveSpawns);
+        float clearedFraction = planned <= 0 ? 0.0F :
+                1.0F - (float) (state.raiders.size() + state.pendingWaveSpawns) / planned;
         bar.setProgress(Mth.clamp((completedWaves + clearedFraction) / totalWaves, 0.0F, 1.0F));
         int capturePercent = Mth.clamp(state.captureTicks * 100 /
                 Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20), 0, 100);
         String label = paused ? "Invasion paused — faction offline" : state.wave == 0 ?
                 "Siege camp forming to the " + approachDirection(state.approachAngle) :
-                waveTitle(state.wave) + " • " + state.raiders.size() + " invaders • stronghold " +
+                waveTitle(state.wave) + " • " + state.raiders.size() + " deployed" +
+                        (state.pendingWaveSpawns > 0 ? " + " + state.pendingWaveSpawns + " reinforcing" : "") +
+                        " • stronghold " +
                         capturePercent + "% occupied";
         bar.setName(Component.literal(label));
     }
@@ -1205,6 +1326,7 @@ public final class RaidEvents {
             // automatically the next time the leader joins.
             if (homePlayer == null) homePlayer = observedPlayer;
             RaidSavedData.DefensePoint home = respawnPoint(server, homePlayer);
+            if (home == null) return;
             Set<UUID> members = seedRoster(server, observedPlayer);
             members.add(leaderId);
             Map<String, RaidSavedData.DefensePoint> points = new LinkedHashMap<>();
@@ -1227,7 +1349,8 @@ public final class RaidEvents {
 
         if ((force || updated.automaticHome() && RaidConfig.FOLLOW_RESPAWN_POINT.get()) &&
                 homePlayer != null && !data.raids.containsKey(key)) {
-            updated = updated.withPoint(respawnPoint(server, homePlayer)).withAutomaticHome(true);
+            RaidSavedData.DefensePoint home = respawnPoint(server, homePlayer);
+            if (home != null) updated = updated.withPoint(home).withAutomaticHome(true);
         }
         if (!updated.equals(anchor)) {
             data.anchors.put(key, updated);
@@ -1239,6 +1362,7 @@ public final class RaidEvents {
         BlockPos pos = player.getRespawnPosition();
         ResourceLocation dimension;
         if (pos == null) {
+            if (!RaidConfig.ALLOW_WORLD_SPAWN_FALLBACK.get()) return null;
             pos = server.overworld().getSharedSpawnPos();
             dimension = Level.OVERWORLD.location();
         } else dimension = player.getRespawnDimension().location();
@@ -1371,6 +1495,7 @@ public final class RaidEvents {
             List<RaidSavedData.DefensePoint> playerHomes = new ArrayList<>();
             for (ServerPlayer member : members) {
                 RaidSavedData.DefensePoint home = respawnPoint(server, member);
+                if (home == null) continue;
                 if (!RaidConfig.REQUIRE_PLAYER_NEAR_ANCHOR.get() || hasDefenderNear(server, home, members)) {
                     playerHomes.add(home);
                 }

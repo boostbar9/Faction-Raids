@@ -2,6 +2,22 @@
 
 All notable changes to Faction Raids are documented here.
 
+## 2.1.0 - 2026-09-04
+
+- Added persistent staged-squad deployment for smoother, more organic waves.
+- Added configurable squad size and interval without weakening global performance caps.
+- Added Recruit-army strength scaling with a separate configurable ceiling.
+- Added breacher, captain, marksman, war-caster and commander battlefield roles.
+- Added a named final-wave siege commander with configurable maximum-health scaling.
+- Made commander defeat remove 30 seconds of accumulated occupation pressure.
+- Added queued reinforcements, squad counts and commander status to diagnostics and boss bars.
+- Added separate faction and Recruit-ownership compatibility diagnostics so one API fallback cannot disable the other.
+- Stopped automatically treating public world spawn as a stronghold for players without beds.
+- Added an opt-in world-spawn fallback for servers that deliberately want it.
+- Fixed later-wave countdown warnings not resetting after the first wave.
+- Persisted all new deployment and commander state across server restarts.
+- Pinned ForgeGradle and declared build repositories for reproducible public builds.
+
 ## 2.0.0 - 2026-09-04
 
 - Made Villager Recruits 1.15.2+ a required dependency.

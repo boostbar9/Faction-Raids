@@ -14,7 +14,7 @@ import java.util.*;
 
 public final class RaidSavedData extends SavedData {
     public static final String DATA_NAME = "factionraids_data";
-    public static final int DATA_VERSION = 4;
+    public static final int DATA_VERSION = 5;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Map<String, Anchor> anchors = new HashMap<>();
@@ -192,9 +192,15 @@ public final class RaidSavedData extends SavedData {
         public int ticksToNextWave;
         public int abandonedTicks;
         public int waveStartingCount;
+        public int plannedWaveSize;
+        public int pendingWaveSpawns;
+        public int ticksToNextSquad;
+        public int squadsSpawned;
         public int captureTicks;
         public double approachAngle;
         public int lastCaptureWarningBand;
+        public UUID commanderUuid;
+        public boolean commanderDefeated;
         public int lastWarningSecond = Integer.MAX_VALUE;
         public final Set<UUID> raiders = new HashSet<>();
         public final Map<UUID, Integer> missingTicks = new HashMap<>();
@@ -216,9 +222,15 @@ public final class RaidSavedData extends SavedData {
             tag.putInt("NextWave", ticksToNextWave);
             tag.putInt("Abandoned", abandonedTicks);
             tag.putInt("WaveStartingCount", waveStartingCount);
+            tag.putInt("PlannedWaveSize", plannedWaveSize);
+            tag.putInt("PendingWaveSpawns", pendingWaveSpawns);
+            tag.putInt("NextSquad", ticksToNextSquad);
+            tag.putInt("SquadsSpawned", squadsSpawned);
             tag.putInt("CaptureTicks", captureTicks);
             tag.putDouble("ApproachAngle", approachAngle);
             tag.putInt("CaptureWarningBand", lastCaptureWarningBand);
+            if (commanderUuid != null) tag.putUUID("Commander", commanderUuid);
+            tag.putBoolean("CommanderDefeated", commanderDefeated);
             ListTag ids = new ListTag();
             raiders.forEach(id -> ids.add(StringTag.valueOf(id.toString())));
             tag.put("Raiders", ids);
@@ -240,10 +252,17 @@ public final class RaidSavedData extends SavedData {
             state.wave = tag.getInt("Wave");
             state.abandonedTicks = tag.getInt("Abandoned");
             state.waveStartingCount = tag.getInt("WaveStartingCount");
+            state.plannedWaveSize = tag.contains("PlannedWaveSize", Tag.TAG_INT) ?
+                    tag.getInt("PlannedWaveSize") : state.waveStartingCount;
+            state.pendingWaveSpawns = tag.getInt("PendingWaveSpawns");
+            state.ticksToNextSquad = tag.getInt("NextSquad");
+            state.squadsSpawned = tag.getInt("SquadsSpawned");
             state.captureTicks = tag.getInt("CaptureTicks");
             state.approachAngle = tag.contains("ApproachAngle", Tag.TAG_DOUBLE) ?
                     tag.getDouble("ApproachAngle") : 0.0D;
             state.lastCaptureWarningBand = tag.getInt("CaptureWarningBand");
+            state.commanderUuid = tag.hasUUID("Commander") ? tag.getUUID("Commander") : null;
+            state.commanderDefeated = tag.getBoolean("CommanderDefeated");
             ListTag ids = tag.getList("Raiders", Tag.TAG_STRING);
             for (int i = 0; i < ids.size(); i++) {
                 try {

@@ -1,10 +1,17 @@
 pluginManagement {
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == 'net.minecraftforge.gradle') {
+                useModule("net.minecraftforge.gradle:ForgeGradle:${requested.version}")
+            }
+        }
+    }
     repositories {
-        gradlePluginPortal()
         maven {
             name = 'MinecraftForge'
             url = 'https://maven.minecraftforge.net/'
         }
+        gradlePluginPortal()
     }
 }
 
