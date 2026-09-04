@@ -1,9 +1,13 @@
-# Faction Raids 2.1.0
+# Faction Raids 2.2.0
 
 Faction Raids is a server-authoritative Forge 1.20.1 addon that turns player homes into siege
 objectives. Illager armies establish an approach front, deploy in marching squads, advance on a
 stronghold, fight the defending players and their Villager Recruits, and attempt to occupy the
 heart of the base under the command of a final-wave siege commander.
+
+Version 2.2 adds a complete presentation pass: cinematic siege titles, reinforcement and
+occupation action-bar updates, smoke at enemy arrival points, responsive boss-bar colors,
+cleaner command output and persistent after-action battle summaries.
 
 No administrator setup is required. A player's bed or respawn anchor becomes a valid stronghold
 automatically. Players in the same Villager Recruits faction share one raid schedule, while any
@@ -47,6 +51,8 @@ cannot move an active battlefield.
 - Breachers move aggressively, squad captains are tougher, marksmen and war casters retain their
   specialized vanilla combat behavior, and the final assault contains a named elite commander.
 - Killing the commander removes 30 seconds of accumulated occupation pressure.
+- Major moments use vanilla title overlays, sounds and faction-only chat announcements by default.
+- Assault squads arrive through a brief smoke effect and reinforcement updates appear above the hotbar.
 - Invaders path toward the stronghold when they do not have a reachable defender to fight.
 - Nearby soldiers belonging to the defending Villager Recruits faction acquire invasion targets.
 - Invaders also recognize those Recruits as defenders, producing an actual army-versus-army fight.
@@ -59,8 +65,9 @@ cannot move an active battlefield.
   defeat unless the optional legacy abandonment timer is enabled.
 - If every faction member logs out, the siege and its loaded enemies freeze until someone returns.
 
-The boss bar reports the current assault phase, remaining invaders and stronghold occupation.
-Occupation warnings are sent at 25%, 50% and 75%.
+The boss bar reports the current assault phase, remaining invaders and stronghold occupation. Its
+color changes as the threat develops. Occupation warnings are sent at 25%, 50% and 75%, and the
+finished siege reports deployed enemies, confirmed defeats, lost contacts and elapsed time.
 
 ## Villager Recruits integration
 
@@ -81,6 +88,7 @@ prevents an NPC claim from being transferred merely because a PvE invasion occur
 |---|---|
 | `/factionraids status` | Show the stronghold, cooldown or active siege occupation |
 | `/factionraids debug` | Show faction identity, TPS and tracked siege state |
+| `/factionraids help` | Show the essential player command guide |
 | `/factionraids start` | Start a controlled test at the caller's respawn point |
 | `/factionraids home automatic` | Convert an older/manual home to automatic respawn behavior |
 | `/factionraids home refresh` | Immediately refresh an automatic stronghold |
@@ -127,6 +135,7 @@ Forge creates `config/factionraids-common.toml`. Important defaults are:
 - Squads of four arriving six seconds apart
 - Up to eight strength-scaling enemies based on one extra enemy per three nearby Recruits
 - A final-wave commander with double normal maximum health
+- Cinematic titles, action-bar alerts and squad-arrival smoke enabled
 - No world-spawn fallback until explicitly enabled
 - Legacy distance-only abandonment defeat disabled
 
@@ -146,7 +155,7 @@ Datapacks can replace
 `data/factionraids/loot_tables/gameplay/invasion_victory.json` to award modded equipment,
 currencies, spell scrolls or collectibles without adding more hard dependencies.
 
-## Updating from 1.x or 2.0
+## Updating from 1.x, 2.0 or 2.1
 
 Saved anchors, cooldowns and active raids migrate automatically. Existing manually created homes
 remain manual so an update cannot unexpectedly move a live server's established castle. Run this
@@ -162,6 +171,10 @@ Version 1.0 anchors without ownership can still be recovered with
 Active 2.0 sieges migrate safely. Their current wave continues normally; staged deployment begins
 with the following wave. Existing automatic strongholds at world spawn remain saved, but new
 players without beds are not registered unless `allowWorldSpawnFallback` is enabled.
+
+Active 2.1 sieges also migrate safely. Currently tracked attackers seed the new deployment count;
+earlier casualties cannot be reconstructed, while all existing enemies, waves, occupation pressure
+and commander state remain intact.
 
 ## Building from source
 

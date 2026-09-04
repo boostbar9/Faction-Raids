@@ -14,7 +14,7 @@ import java.util.*;
 
 public final class RaidSavedData extends SavedData {
     public static final String DATA_NAME = "factionraids_data";
-    public static final int DATA_VERSION = 5;
+    public static final int DATA_VERSION = 6;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Map<String, Anchor> anchors = new HashMap<>();
@@ -201,6 +201,10 @@ public final class RaidSavedData extends SavedData {
         public int lastCaptureWarningBand;
         public UUID commanderUuid;
         public boolean commanderDefeated;
+        public long startedGameTime;
+        public int totalSpawned;
+        public int totalDefeated;
+        public int totalEscaped;
         public int lastWarningSecond = Integer.MAX_VALUE;
         public final Set<UUID> raiders = new HashSet<>();
         public final Map<UUID, Integer> missingTicks = new HashMap<>();
@@ -231,6 +235,10 @@ public final class RaidSavedData extends SavedData {
             tag.putInt("CaptureWarningBand", lastCaptureWarningBand);
             if (commanderUuid != null) tag.putUUID("Commander", commanderUuid);
             tag.putBoolean("CommanderDefeated", commanderDefeated);
+            tag.putLong("StartedGameTime", startedGameTime);
+            tag.putInt("TotalSpawned", totalSpawned);
+            tag.putInt("TotalDefeated", totalDefeated);
+            tag.putInt("TotalEscaped", totalEscaped);
             ListTag ids = new ListTag();
             raiders.forEach(id -> ids.add(StringTag.valueOf(id.toString())));
             tag.put("Raiders", ids);
@@ -263,11 +271,20 @@ public final class RaidSavedData extends SavedData {
             state.lastCaptureWarningBand = tag.getInt("CaptureWarningBand");
             state.commanderUuid = tag.hasUUID("Commander") ? tag.getUUID("Commander") : null;
             state.commanderDefeated = tag.getBoolean("CommanderDefeated");
+            state.startedGameTime = tag.getLong("StartedGameTime");
+            state.totalSpawned = tag.getInt("TotalSpawned");
+            state.totalDefeated = tag.getInt("TotalDefeated");
+            state.totalEscaped = tag.getInt("TotalEscaped");
             ListTag ids = tag.getList("Raiders", Tag.TAG_STRING);
             for (int i = 0; i < ids.size(); i++) {
                 try {
                     state.raiders.add(UUID.fromString(ids.getString(i)));
                 } catch (IllegalArgumentException ignored) {}
+            }
+            if (!tag.contains("TotalSpawned", Tag.TAG_INT)) {
+                // A 2.1 raid cannot reconstruct earlier casualties, but counting
+                // every currently tracked attacker keeps upgraded summaries sane.
+                state.totalSpawned = state.raiders.size();
             }
             ListTag missing = tag.getList("MissingEntities", Tag.TAG_COMPOUND);
             for (int i = 0; i < missing.size(); i++) {

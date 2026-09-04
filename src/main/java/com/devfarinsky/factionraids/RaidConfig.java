@@ -53,6 +53,9 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue MAX_RECRUIT_SCALING_ENEMIES;
     public static final ForgeConfigSpec.BooleanValue ENABLE_COMMANDER;
     public static final ForgeConfigSpec.DoubleValue COMMANDER_HEALTH_MULTIPLIER;
+    public static final ForgeConfigSpec.BooleanValue SHOW_RAID_TITLES;
+    public static final ForgeConfigSpec.BooleanValue SHOW_ACTION_BAR_UPDATES;
+    public static final ForgeConfigSpec.BooleanValue SPAWN_ARRIVAL_EFFECTS;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -151,6 +154,12 @@ public final class RaidConfig {
                 .define("enableCommander", true);
         COMMANDER_HEALTH_MULTIPLIER = b.comment("Maximum-health multiplier applied to the final invasion commander.")
                 .defineInRange("commanderHealthMultiplier", 2.0, 1.0, 5.0);
+        SHOW_RAID_TITLES = b.comment("Show cinematic vanilla title overlays for major siege moments. No client-side addon is required.")
+                .define("showRaidTitles", true);
+        SHOW_ACTION_BAR_UPDATES = b.comment("Show concise reinforcement and occupation updates above the hotbar during a siege.")
+                .define("showActionBarUpdates", true);
+        SPAWN_ARRIVAL_EFFECTS = b.comment("Create a brief smoke effect when an assault squad enters the battlefield.")
+                .define("spawnArrivalEffects", true);
         b.pop();
         SPEC = b.build();
     }

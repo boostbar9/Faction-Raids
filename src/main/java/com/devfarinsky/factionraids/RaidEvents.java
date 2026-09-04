@@ -10,6 +10,10 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -49,12 +53,15 @@ import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
+import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.util.*;
 
 public final class RaidEvents {
+    private static final Component MESSAGE_PREFIX = Component.literal("[Faction Raids] ")
+            .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD);
     private static final String RAID_TEAM_TAG = "FactionRaidsTeam";
     private static final String RAID_ROLE_TAG = "FactionRaidsRole";
     private static final Map<String, ServerBossEvent> BOSS_BARS = new HashMap<>();
@@ -114,6 +121,19 @@ public final class RaidEvents {
     }
 
     @SubscribeEvent
+    public static void onLivingDeath(LivingDeathEvent event) {
+        if (!(event.getEntity().level() instanceof ServerLevel level)) return;
+        String teamKey = event.getEntity().getPersistentData().getString(RAID_TEAM_TAG);
+        if (teamKey.isBlank()) return;
+        RaidSavedData data = RaidSavedData.get(level.getServer());
+        RaidSavedData.RaidState state = data.raids.get(teamKey);
+        if (state == null || !state.raiders.remove(event.getEntity().getUUID())) return;
+        state.missingTicks.remove(event.getEntity().getUUID());
+        state.totalDefeated++;
+        data.setDirty();
+    }
+
+    @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
         BOSS_BARS.values().forEach(ServerBossEvent::removeAllPlayers);
         BOSS_BARS.clear();
@@ -155,6 +175,7 @@ public final class RaidEvents {
                                         StringArgumentType.getString(ctx, "point")))))
                 .then(Commands.literal("status").executes(ctx -> status(ctx.getSource())))
                 .then(Commands.literal("debug").executes(ctx -> debug(ctx.getSource())))
+                .then(Commands.literal("help").executes(ctx -> help(ctx.getSource())))
                 .then(Commands.literal("stop").requires(s -> s.hasPermission(2))
                         .executes(ctx -> stopOwnRaid(ctx.getSource())))
                 .then(Commands.literal("admin").requires(s -> s.hasPermission(2))
@@ -610,26 +631,41 @@ public final class RaidEvents {
             String key = factionKeyForPlayer(data, player);
             RaidSavedData.Anchor anchor = data.anchors.get(key);
             if (anchor == null) {
-                source.sendSuccess(() -> Component.literal("No stronghold is registered yet. Sleep in a bed or use a respawn anchor to register one automatically."), false);
+                source.sendSuccess(() -> MESSAGE_PREFIX.copy().append(Component.literal("No stronghold registered")
+                        .withStyle(ChatFormatting.YELLOW)), false);
+                source.sendSuccess(() -> Component.literal("Sleep in a bed or use a respawn anchor near your base, then run /factionraids home refresh."), false);
                 return 1;
             }
             RaidSavedData.RaidState state = data.raids.get(key);
+            source.sendSuccess(() -> MESSAGE_PREFIX.copy().append(Component.literal(anchor.teamDisplay())
+                    .withStyle(ChatFormatting.GOLD)), false);
             if (state != null) {
                 RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
-                source.sendSuccess(() -> Component.literal("Invasion active: wave " + state.wave + "/" +
-                        RaidConfig.WAVES.get() + ", " + state.raiders.size() + " enemies deployed and " +
-                        state.pendingWaveSpawns + " reinforcing at '" +
-                        point.name() + "', stronghold occupation " +
-                        (state.captureTicks * 100 / Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20)) +
-                        "%. Faction key: " + key), false);
+                int occupation = state.captureTicks * 100 /
+                        Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20);
+                source.sendSuccess(() -> Component.literal("Phase: ").withStyle(ChatFormatting.GRAY)
+                        .append(Component.literal(state.wave == 0 ? "War camp forming" :
+                                waveTitle(state.wave) + " — wave " + state.wave + "/" + RaidConfig.WAVES.get())
+                                .withStyle(ChatFormatting.RED)), false);
+                source.sendSuccess(() -> Component.literal("Enemy force: ").withStyle(ChatFormatting.GRAY)
+                        .append(Component.literal(state.raiders.size() + " deployed • " +
+                                state.pendingWaveSpawns + " reinforcing • " + state.totalDefeated + " defeated")
+                                .withStyle(ChatFormatting.YELLOW)), false);
+                source.sendSuccess(() -> Component.literal("Objective: ").withStyle(ChatFormatting.GRAY)
+                        .append(Component.literal("'" + point.name() + "' at " + formatPos(point.pos()) +
+                                " • occupation " + occupation + "%")
+                                .withStyle(occupation >= 75 ? ChatFormatting.RED : ChatFormatting.AQUA)), false);
             } else {
                 long now = source.getServer().overworld().getGameTime();
                 long seconds = Math.max(0L, (anchor.nextRaidGameTime() - now) / 20L);
-                source.sendSuccess(() -> Component.literal((anchor.automaticHome() ? "Automatic" : "Manual") +
-                        " stronghold at " + formatPos(anchor.primaryPoint().pos()) + "; " +
-                        anchor.defensePoints().size() + " defense point(s); " +
-                        anchor.members().size() + " saved member(s); next automatic invasion eligible in " +
-                        formatTime(seconds) + ". Faction key: " + key), false);
+                source.sendSuccess(() -> Component.literal("Stronghold: ").withStyle(ChatFormatting.GRAY)
+                        .append(Component.literal((anchor.automaticHome() ? "automatic" : "manual") + " at " +
+                                formatPos(anchor.primaryPoint().pos())).withStyle(ChatFormatting.AQUA)), false);
+                source.sendSuccess(() -> Component.literal("Defenses: ").withStyle(ChatFormatting.GRAY)
+                        .append(Component.literal(anchor.defensePoints().size() + " registered location(s) • " +
+                                anchor.members().size() + " saved member(s)").withStyle(ChatFormatting.WHITE)), false);
+                source.sendSuccess(() -> Component.literal("Next siege eligible: ").withStyle(ChatFormatting.GRAY)
+                        .append(Component.literal(formatTime(seconds)).withStyle(ChatFormatting.GREEN)), false);
             }
             return 1;
         } catch (Exception e) {
@@ -647,6 +683,22 @@ public final class RaidEvents {
                         anchor.defensePoints().size() + " point(s), " + anchor.members().size() + " saved member(s)" +
                         (data.raids.containsKey(anchor.teamKey()) ? " [ACTIVE]" : "")), false));
         return data.anchors.size();
+    }
+
+    private static int help(CommandSourceStack source) {
+        source.sendSuccess(() -> MESSAGE_PREFIX.copy().append(Component.literal("Player commands")
+                .withStyle(ChatFormatting.GOLD)), false);
+        source.sendSuccess(() -> Component.literal("/factionraids status").withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(" — stronghold and siege status")), false);
+        source.sendSuccess(() -> Component.literal("/factionraids start").withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(" — begin a controlled siege test")), false);
+        source.sendSuccess(() -> Component.literal("/factionraids home refresh").withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(" — update the automatic stronghold from your respawn point")), false);
+        source.sendSuccess(() -> Component.literal("/factionraids territory list").withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(" — list every defended location")), false);
+        source.sendSuccess(() -> Component.literal("/factionraids debug").withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(" — show faction integration and performance details")), false);
+        return 1;
     }
 
     private static int debug(CommandSourceStack source) {
@@ -686,6 +738,8 @@ public final class RaidEvents {
                         " at '" + state.defensePointName + "' | tracked: " + state.raiders.size() +
                         " | queued: " + state.pendingWaveSpawns + " | squads: " + state.squadsSpawned +
                         " | loaded: " + loaded + " | missing grace: " + state.missingTicks.size() +
+                        " | deployed/defeated/lost: " + state.totalSpawned + "/" +
+                        state.totalDefeated + "/" + state.totalEscaped +
                         " | occupation: " + (state.captureTicks / 20) + "s" +
                         (state.commanderUuid != null ? " | commander: " +
                                 (state.commanderDefeated ? "defeated" : "active") : "")), false);
@@ -786,13 +840,16 @@ public final class RaidEvents {
         RaidSavedData.RaidState state = new RaidSavedData.RaidState(anchor.teamKey(), point.name(),
                 RaidConfig.WARNING_SECONDS.get() * 20);
         state.approachAngle = server.overworld().random.nextDouble() * Math.PI * 2.0D;
+        state.startedGameTime = server.overworld().getGameTime();
         data.raids.put(anchor.teamKey(), state);
         data.setDirty();
-        announce(server, anchor.teamKey(), Component.literal("[Faction Raid] ").withStyle(ChatFormatting.DARK_RED)
-                .append(Component.literal("Illager scouts have found " + anchor.teamDisplay() + " at '" + point.name() +
+        announce(server, anchor.teamKey(), Component.literal("Illager scouts have found " + anchor.teamDisplay() + " at '" + point.name() +
                         "'! A war camp is forming to the " + approachDirection(state.approachAngle) + ". The siege begins in " +
                         formatTime(RaidConfig.WARNING_SECONDS.get()) + ". Rally your Recruits and defend the stronghold.")
-                        .withStyle(ChatFormatting.GOLD)), true);
+                        .withStyle(ChatFormatting.GOLD), true);
+        showTitle(server, anchor.teamKey(), Component.literal("SIEGE INCOMING").withStyle(ChatFormatting.DARK_RED),
+                Component.literal("Enemy war camp sighted to the " + approachDirection(state.approachAngle))
+                        .withStyle(ChatFormatting.GOLD));
         updateBossBar(server, anchor, state, false);
         return true;
     }
@@ -907,11 +964,15 @@ public final class RaidEvents {
                 if (missing >= grace) {
                     iterator.remove();
                     state.missingTicks.remove(id);
+                    state.totalEscaped++;
                 } else state.missingTicks.put(id, missing);
                 continue;
             }
             state.missingTicks.remove(id);
-            if (!(entity instanceof Mob) || !entity.isAlive()) iterator.remove();
+            if (!(entity instanceof Mob) || !entity.isAlive()) {
+                iterator.remove();
+                state.totalDefeated++;
+            }
         }
     }
 
@@ -963,6 +1024,12 @@ public final class RaidEvents {
                 approachDirection(state.approachAngle) +
                 (recruitScale > 0 ? " after scouting " + recruits.size() + " defending Recruits." : "."))
                 .withStyle(ChatFormatting.RED), true);
+        if (state.wave >= RaidConfig.WAVES.get()) {
+            showTitle(server, anchor.teamKey(), Component.literal("COMMAND ASSAULT")
+                            .withStyle(ChatFormatting.DARK_RED),
+                    Component.literal("Break the commander and hold the stronghold")
+                            .withStyle(ChatFormatting.GOLD));
+        }
         spawnNextSquad(server, level, data, anchor, point, state);
     }
 
@@ -995,6 +1062,12 @@ public final class RaidEvents {
             if (level.addFreshEntity(raider)) {
                 assignSiegeRole(raider, state, waveIndex, squadLeader);
                 state.raiders.add(raider.getUUID());
+                state.totalSpawned++;
+                if (RaidConfig.SPAWN_ARRIVAL_EFFECTS.get()) {
+                    level.sendParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE,
+                            raider.getX(), raider.getY() + 0.5D, raider.getZ(),
+                            8, 0.6D, 0.25D, 0.6D, 0.02D);
+                }
                 spawned++;
             }
         }
@@ -1015,6 +1088,9 @@ public final class RaidEvents {
                     " entered the battlefield; " + state.pendingWaveSpawns + " reinforcements remain in the war camp.")
                     .withStyle(ChatFormatting.GRAY), false);
         }
+        sendActionBar(server, anchor.teamKey(), Component.literal("Wave " + state.wave + ": " +
+                state.raiders.size() + " deployed • " + state.pendingWaveSpawns + " reinforcing")
+                .withStyle(ChatFormatting.RED));
         data.setDirty();
     }
 
@@ -1056,6 +1132,8 @@ public final class RaidEvents {
         state.captureTicks = Math.max(0, state.captureTicks - 30 * 20);
         announce(server, anchor.teamKey(), Component.literal("The siege commander has fallen! Illager occupation lost 30 seconds of progress.")
                 .withStyle(ChatFormatting.GREEN), true);
+        sendActionBar(server, anchor.teamKey(), Component.literal("COMMANDER DEFEATED • Occupation pushed back")
+                .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
     }
 
     private static Raider createRaiderForWave(ServerLevel level, int wave, int index) {
@@ -1193,6 +1271,8 @@ public final class RaidEvents {
             announce(server, anchor.teamKey(), Component.literal("Stronghold occupation: " + percent +
                     "%. Push the illagers out of the inner defense ring!").withStyle(ChatFormatting.DARK_RED),
                     band >= 3);
+            sendActionBar(server, anchor.teamKey(), Component.literal("STRONGHOLD OCCUPATION: " + percent + "%")
+                    .withStyle(band >= 3 ? ChatFormatting.RED : ChatFormatting.GOLD, ChatFormatting.BOLD));
         }
         return state.captureTicks >= maximum;
     }
@@ -1244,8 +1324,19 @@ public final class RaidEvents {
         }
         ServerBossEvent bar = BOSS_BARS.remove(teamKey);
         if (bar != null) bar.removeAllPlayers();
-        announce(server, teamKey, Component.literal(message)
+        long elapsedTicks = state == null || state.startedGameTime <= 0 ? 0 :
+                Math.max(0, server.overworld().getGameTime() - state.startedGameTime);
+        String summary = state == null ? "" : " Defeated: " + state.totalDefeated +
+                " of " + state.totalSpawned + " deployed" +
+                (state.totalEscaped > 0 ? "; " + state.totalEscaped + " lost contact" : "") +
+                (elapsedTicks > 0 ? "; duration " + formatTime(elapsedTicks / 20) : "") + ".";
+        announce(server, teamKey, Component.literal(message + summary)
                 .withStyle(victory ? ChatFormatting.GREEN : ChatFormatting.DARK_RED), victory);
+        showTitle(server, teamKey,
+                Component.literal(victory ? "SIEGE BROKEN" : "STRONGHOLD FALLEN")
+                        .withStyle(victory ? ChatFormatting.GREEN : ChatFormatting.DARK_RED),
+                Component.literal(victory ? "Your faction held the line" : "The illagers seized the objective")
+                        .withStyle(ChatFormatting.GOLD));
         data.setDirty();
     }
 
@@ -1274,14 +1365,32 @@ public final class RaidEvents {
                         " • stronghold " +
                         capturePercent + "% occupied";
         bar.setName(Component.literal(label));
+        bar.setColor(paused ? BossEvent.BossBarColor.WHITE : capturePercent >= 75 ?
+                BossEvent.BossBarColor.PURPLE : state.wave == 0 ? BossEvent.BossBarColor.YELLOW :
+                BossEvent.BossBarColor.RED);
     }
 
     private static void announce(MinecraftServer server, String teamKey, Component message, boolean horn) {
+        Component branded = MESSAGE_PREFIX.copy().append(message);
         if (RaidConfig.ANNOUNCE_GLOBALLY.get()) {
-            server.getPlayerList().broadcastSystemMessage(message, false);
-        } else onlineMembers(server, teamKey).forEach(p -> p.sendSystemMessage(message));
+            server.getPlayerList().broadcastSystemMessage(branded, false);
+        } else onlineMembers(server, teamKey).forEach(p -> p.sendSystemMessage(branded));
         if (horn) onlineMembers(server, teamKey).forEach(p ->
                 p.playNotifySound(SoundEvents.RAID_HORN.value(), SoundSource.HOSTILE, 1.0F, 1.0F));
+    }
+
+    private static void showTitle(MinecraftServer server, String teamKey, Component title, Component subtitle) {
+        if (!RaidConfig.SHOW_RAID_TITLES.get()) return;
+        for (ServerPlayer player : onlineMembers(server, teamKey)) {
+            player.connection.send(new ClientboundSetTitlesAnimationPacket(10, 50, 15));
+            player.connection.send(new ClientboundSetSubtitleTextPacket(subtitle));
+            player.connection.send(new ClientboundSetTitleTextPacket(title));
+        }
+    }
+
+    private static void sendActionBar(MinecraftServer server, String teamKey, Component message) {
+        if (!RaidConfig.SHOW_ACTION_BAR_UPDATES.get()) return;
+        onlineMembers(server, teamKey).forEach(player -> player.displayClientMessage(message, true));
     }
 
     private static List<ServerPlayer> onlineMembers(MinecraftServer server, String key) {

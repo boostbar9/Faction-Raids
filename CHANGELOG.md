@@ -2,6 +2,20 @@
 
 All notable changes to Faction Raids are documented here.
 
+## 2.2.0 - 2026-09-04
+
+- Added cinematic title and subtitle overlays for siege arrival, the command assault, victory and defeat.
+- Added configurable action-bar updates for reinforcements, commander defeat and occupation milestones.
+- Added configurable smoke arrival effects for staged assault squads.
+- Added dynamic boss-bar colors for warning, active combat, critical occupation and offline pause states.
+- Standardized active-siege announcements with a recognizable Faction Raids prefix.
+- Added persistent deployed, defeated and lost-contact statistics across server restarts.
+- Added immediate invasion-mob death tracking for player and Recruit kills.
+- Added post-siege battle summaries with enemy totals and elapsed time.
+- Reworked `/factionraids status` into a readable multi-line stronghold or battlefield report.
+- Added `/factionraids help` with the essential player workflow.
+- Preserved automatic migration for every 1.x, 2.0 and 2.1 world.
+
 ## 2.1.0 - 2026-09-04
 
 - Added persistent staged-squad deployment for smoother, more organic waves.
