@@ -1,4 +1,4 @@
-# Faction Raids 1.0.0
+# Faction Raids 1.1.0
 
 Faction Raids is a server-authoritative Forge 1.20.1 addon for kingdom and faction modpacks.
 It creates illager invasions whose objective is the defending faction's online players, not
@@ -14,7 +14,8 @@ Minecraft villagers or beds.
   place faction members on the same vanilla scoreboard team
 - Does not add blocks, items, dimensions, biomes or world-generation content
 
-Install `factionraids-1.0.0.jar` in the `mods` folder for the host and every joining client.
+Install `factionraids-1.1.0.jar` in the host's `mods` folder. Version 1.1 is server-authoritative
+and can accept clients without the mod; installing the same JAR on every client is still fine.
 Back up the world before changing any mod list.
 
 ## First-time setup
@@ -33,11 +34,15 @@ scoreboard team receives a private solo anchor.
 
 | Command | Permission | Purpose |
 |---|---:|---|
-| `/factionraids anchor set` | Everyone | Set or move your faction's invasion anchor |
-| `/factionraids anchor remove` | Everyone | Remove your faction's anchor while no raid is active |
-| `/factionraids start` | Everyone | Start a test invasion for your own faction |
+| `/factionraids anchor set` | Anchor owner/operator | Set or move your faction's invasion anchor |
+| `/factionraids anchor claim` | Faction member | Claim management of an anchor created by version 1.0 |
+| `/factionraids anchor remove` | Anchor owner/operator | Remove your faction's anchor while no raid is active |
+| `/factionraids start` | Anchor owner/operator | Start a test invasion while standing near the anchor |
 | `/factionraids status` | Everyone | Show the anchor, cooldown or current wave |
 | `/factionraids stop` | Operator level 2 | Safely stop your faction's active invasion |
+| `/factionraids admin list` | Operator level 2 | List every anchor and active invasion |
+| `/factionraids admin stop <team>` | Operator level 2 | Stop an orphaned or remote invasion |
+| `/factionraids admin remove <team>` | Operator level 2 | Remove an inactive orphaned anchor |
 
 ## Rules
 
@@ -48,14 +53,25 @@ scoreboard team receives a private solo anchor.
   configured abandonment time (five minutes by default).
 - Victory happens after every configured wave is eliminated.
 - Automatic raids start only when a faction member is online and near the anchor.
-- A hard per-invasion mob cap prevents unlimited spawning.
+- Active raids pause completely while every faction member is offline; logout never causes defeat.
+- Temporarily unloaded mobs remain tracked and tagged mobs are recovered after restarts.
+- Vexes inherit the invasion tag and are counted, targeted and cleaned up with their summoner.
+- Unsafe terrain causes a delayed spawn retry instead of an empty wave or free victory.
+- Hard per-invasion and global mob caps prevent unlimited spawning.
+- New waves pause automatically when approximate server TPS falls below the configured threshold.
+- The final three enemies glow briefly to prevent a wave stalling on a hidden mob.
+- Each online faction member receives configurable experience after a real victory.
 
 ## Configuration
 
 Forge creates `config/factionraids-common.toml` after the first launch. Default settings are
 tuned for Devin and Godric's two-player world: five waves, 10 base enemies plus three for the
-second online faction member, 45 seconds between waves, 30 maximum active raiders, and a
-60–90 minute automatic cooldown.
+second online faction member, 45 seconds between waves, 30 maximum active raiders, 35 maximum
+globally, one concurrent invasion, and a 60–90 minute automatic cooldown.
+
+When upgrading from 1.0, existing anchors remain valid. Their previous owner is unknown, so
+stand in the same faction and run `/factionraids anchor claim` once before attempting to move
+the anchor or manually start an invasion.
 
 ## Interaction with existing faction sieges
 

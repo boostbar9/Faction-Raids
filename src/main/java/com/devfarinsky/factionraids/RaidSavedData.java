@@ -14,6 +14,8 @@ import java.util.*;
 
 public final class RaidSavedData extends SavedData {
     public static final String DATA_NAME = "factionraids_data";
+    public static final int DATA_VERSION = 2;
+    public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public final Map<String, Anchor> anchors = new HashMap<>();
     public final Map<String, RaidState> raids = new HashMap<>();
 
@@ -39,6 +41,7 @@ public final class RaidSavedData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag root) {
+        root.putInt("DataVersion", DATA_VERSION);
         ListTag anchorsTag = new ListTag();
         anchors.values().forEach(a -> anchorsTag.add(a.save()));
         root.put("Anchors", anchorsTag);
@@ -48,12 +51,13 @@ public final class RaidSavedData extends SavedData {
         return root;
     }
 
-    public record Anchor(String teamKey, String teamDisplay, ResourceLocation dimension, BlockPos pos,
-                         long nextRaidGameTime) {
+    public record Anchor(String teamKey, String teamDisplay, UUID ownerUuid, ResourceLocation dimension,
+                         BlockPos pos, long nextRaidGameTime) {
         public CompoundTag save() {
             CompoundTag t = new CompoundTag();
             t.putString("Team", teamKey);
             t.putString("Display", teamDisplay);
+            t.putUUID("Owner", ownerUuid);
             t.putString("Dimension", dimension.toString());
             t.putLong("Position", pos.asLong());
             t.putLong("NextRaid", nextRaidGameTime);
@@ -63,12 +67,21 @@ public final class RaidSavedData extends SavedData {
         public static Anchor load(CompoundTag t) {
             ResourceLocation dimension = ResourceLocation.tryParse(t.getString("Dimension"));
             if (dimension == null) dimension = Level.OVERWORLD.location();
-            return new Anchor(t.getString("Team"), t.getString("Display"), dimension, BlockPos.of(t.getLong("Position")),
-                    t.getLong("NextRaid"));
+            UUID owner = t.hasUUID("Owner") ? t.getUUID("Owner") : UNKNOWN_OWNER;
+            return new Anchor(t.getString("Team"), t.getString("Display"), owner, dimension,
+                    BlockPos.of(t.getLong("Position")), t.getLong("NextRaid"));
         }
 
         public Anchor withNextRaid(long time) {
-            return new Anchor(teamKey, teamDisplay, dimension, pos, time);
+            return new Anchor(teamKey, teamDisplay, ownerUuid, dimension, pos, time);
+        }
+
+        public Anchor withIdentity(String newTeamKey, String newDisplay) {
+            return new Anchor(newTeamKey, newDisplay, ownerUuid, dimension, pos, nextRaidGameTime);
+        }
+
+        public Anchor withOwner(UUID owner) {
+            return new Anchor(teamKey, teamDisplay, owner, dimension, pos, nextRaidGameTime);
         }
     }
 
@@ -80,6 +93,10 @@ public final class RaidSavedData extends SavedData {
         public int waveStartingCount;
         public int lastWarningSecond = Integer.MAX_VALUE;
         public final Set<UUID> raiders = new HashSet<>();
+        public final Map<UUID, Integer> missingTicks = new HashMap<>();
+        public int reconcileTicks;
+        public boolean performancePauseAnnounced;
+        public boolean offlinePauseAnnounced;
 
         public RaidState(String teamKey, int warningTicks) {
             this.teamKey = teamKey;
@@ -96,6 +113,14 @@ public final class RaidSavedData extends SavedData {
             ListTag ids = new ListTag();
             raiders.forEach(id -> ids.add(StringTag.valueOf(id.toString())));
             t.put("Raiders", ids);
+            ListTag missing = new ListTag();
+            missingTicks.forEach((id, ticks) -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putUUID("Id", id);
+                entry.putInt("Ticks", ticks);
+                missing.add(entry);
+            });
+            t.put("MissingEntities", missing);
             return t;
         }
 
@@ -107,6 +132,11 @@ public final class RaidSavedData extends SavedData {
             ListTag ids = t.getList("Raiders", Tag.TAG_STRING);
             for (int i = 0; i < ids.size(); i++) {
                 try { state.raiders.add(UUID.fromString(ids.getString(i))); } catch (IllegalArgumentException ignored) {}
+            }
+            ListTag missing = t.getList("MissingEntities", Tag.TAG_COMPOUND);
+            for (int i = 0; i < missing.size(); i++) {
+                CompoundTag entry = missing.getCompound(i);
+                if (entry.hasUUID("Id")) state.missingTicks.put(entry.getUUID("Id"), entry.getInt("Ticks"));
             }
             return state;
         }
