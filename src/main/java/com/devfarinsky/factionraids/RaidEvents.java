@@ -647,7 +647,7 @@ public final class RaidEvents {
 
     private static boolean canManage(ServerPlayer player, RaidSavedData.Anchor anchor) {
         return player.hasPermissions(2) || !RaidConfig.OWNER_ONLY_MANAGEMENT.get() ||
-                RaidSavedData.UNKNOWN_OWNER.equals(anchor.ownerUuid()) || player.getUUID().equals(anchor.ownerUuid());
+                player.getUUID().equals(anchor.ownerUuid());
     }
 
     private static boolean shouldPauseForPerformance(MinecraftServer server, RaidSavedData data) {
