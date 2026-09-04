@@ -69,7 +69,12 @@ public final class RaidDashboardMenu extends ChestMenu {
                         List.of("Next automatic siege: " + snapshot.cooldown(), "The stronghold is currently secure")));
         dashboard.setItem(24, icon(Items.SHIELD, "Defending Army", ChatFormatting.BLUE,
                 List.of(snapshot.recruits() + " allied Recruits detected nearby",
+                        snapshot.workers() + " protected Villager Workers nearby",
                         "Recruits strengthen and defend the siege target")));
+        dashboard.setItem(26, icon(Items.OAK_BOAT, "War Assets", ChatFormatting.DARK_AQUA,
+                List.of(snapshot.ships() + " crewed Small Ships nearby",
+                        snapshot.siegeWeapons() + " crewed Siege Weapons nearby",
+                        "Crewed equipment can modestly strengthen assaults")));
         dashboard.setItem(31, icon(Items.EMERALD_BLOCK, "Victory Treasury", ChatFormatting.GREEN,
                 List.of(snapshot.emeraldReward() + " guaranteed emeralds per online member",
                         RaidConfig.VICTORY_EXPERIENCE.get() + " experience plus campaign loot",

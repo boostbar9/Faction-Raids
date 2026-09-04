@@ -2,6 +2,20 @@
 
 All notable changes to Faction Raids are documented here.
 
+## 2.4.0 - 2026-09-04
+
+- Added optional compatibility for Villager Workers, Small Ships and Siege Weapons.
+- Protected Villager Workers from illagers spawned by Faction Raids while preserving native work,
+  take-cover and flee AI.
+- Added nearby allied Worker counts to the faction command dashboard.
+- Recognized only crewed faction Small Ships and Siege Weapons as war assets, preventing abandoned
+  equipment from inflating siege strength.
+- Added a dedicated War Assets dashboard panel for crewed ships and siege engines.
+- Added configurable, capped assault scaling based on crewed defensive equipment.
+- Added optional-mod state to `/factionraids debug` diagnostics.
+- Kept every integration class-link-free so Faction Raids remains safe when optional mods are absent.
+- Limited compatibility scans to wave planning and dashboard refreshes to avoid continuous overhead.
+
 ## 2.3.0 - 2026-09-04
 
 - Added a polished six-row faction command dashboard using Minecraft's lightweight vanilla interface.

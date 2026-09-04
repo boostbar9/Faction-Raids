@@ -1,4 +1,4 @@
-# Faction Raids 2.3.0
+# Faction Raids 2.4.0
 
 Faction Raids is a server-authoritative Forge 1.20.1 addon that turns player homes into siege
 objectives. Illager armies establish an approach front, deploy in marching squads, advance on a
@@ -13,6 +13,10 @@ Version 2.3 adds a faction command dashboard and a guaranteed emerald treasury r
 for Villager Recruits economies. Open it with `/factionraids` to see the stronghold, current siege,
 nearby allied Recruits, occupation pressure, cooldown and expected victory spoils in one place.
 
+Version 2.4 adds optional, zero-hard-link integrations for Villager Workers, Small Ships and Siege
+Weapons. Workers are recognized as protected faction civilians, while crewed ships and siege
+engines appear as war assets and can add a small, capped amount of enemy scaling.
+
 No administrator setup is required. A player's bed or respawn anchor becomes a valid stronghold
 automatically. Players in the same Villager Recruits faction share one raid schedule, while any
 online faction member's home can be selected as the next target.
@@ -26,6 +30,12 @@ online faction member's home can be selected as the next target.
 
 Villager Recruits is a hard dependency and must be installed wherever it is normally required.
 Faction Raids does not redistribute any Villager Recruits code or assets.
+
+These companion mods are optional and are detected automatically:
+
+- [Villager Workers](https://github.com/talhanation/workers)
+- [Small Ships](https://github.com/talhanation/smallships)
+- [Siege Weapons](https://github.com/talhanation/siegeweapons)
 
 Faction Raids adds no blocks, ores, biomes, dimensions or structures. It can be installed in an
 existing world after making a normal backup. Never keep two Faction Raids versions in `mods`.
@@ -63,6 +73,10 @@ cannot move an active battlefield.
 - The wave budget accounts for the nearby defending Recruit army, but remains inside the per-raid
   and global entity caps.
 - Recruits' permanent follow, hold and group orders are not replaced by Faction Raids.
+- Villager Workers keep their native work, take-cover and flee behavior; invasion mobs cannot hurt
+  them while worker protection is enabled.
+- Crewed Small Ships and Siege Weapons belonging to faction members are recognized without taking
+  over their movement, sailing, ammunition or firing controls.
 - The illagers win only after outnumbering defenders inside the inner capture ring long enough.
 - Retaking the ring rapidly removes occupation progress.
 - Player death never causes an instant defeat, and leaving the outer defense radius does not cause
@@ -85,6 +99,26 @@ recruit ownership information, so solo-owned soldiers are also recognized when p
 
 Faction Raids does not start or resolve Villager Recruits' separate claim-conquest system. This
 prevents an NPC claim from being transferred merely because a PvE invasion occurred.
+
+## Optional companion-mod integration
+
+The compatibility bridge uses entity registry namespaces plus vanilla faction teams, vehicle
+passengers and public ownership information. It never imports optional-mod classes, so removing an
+optional companion mod cannot make Faction Raids fail to load.
+
+- **Villager Workers:** nearby allied Workers are displayed as civilians in the command dashboard.
+  Illagers spawned by Faction Raids clear Workers as attack targets and cannot damage them. Workers
+  do not count as soldiers or artificially hold the capture ring.
+- **Small Ships:** a ship counts as a naval asset only while a member of the defending faction is
+  aboard. Empty boats do not scale a raid. Faction Raids does not steer or damage ships directly.
+- **Siege Weapons:** a siege engine counts as a war asset only while crewed by a defending faction
+  member. Its own mod remains responsible for aiming, ammunition, projectiles and damage.
+- **Balanced scaling:** by default, every two crewed ships or siege engines add one invader per wave,
+  capped at four extra invaders. This stays inside the existing per-raid and global entity caps.
+
+All integrations, Worker protection, asset detection radius and equipment scaling can be changed in
+the `compatibility` section of `factionraids-common.toml`. The scans occur only when a wave is planned
+or a player refreshes the dashboard, not every server tick.
 
 ## Player commands
 
@@ -122,6 +156,8 @@ no continuous rendering workload. It shows:
 - Deployed enemies, queued reinforcements and confirmed defeats
 - Current stronghold occupation pressure
 - Nearby allied Villager Recruits
+- Nearby protected Villager Workers
+- Crewed Small Ships and Siege Weapons
 - Guaranteed emerald and campaign-loot rewards
 
 The lower controls refresh the automatic home, begin a practice siege, print command help or close
@@ -155,6 +191,8 @@ Forge creates `config/factionraids-common.toml`. Important defaults are:
 - 128-block Recruit mobilization radius
 - Squads of four arriving six seconds apart
 - Up to eight strength-scaling enemies based on one extra enemy per three nearby Recruits
+- Optional companion assets detected within 128 blocks
+- Up to four additional enemies based on one extra enemy per two crewed ships or siege engines
 - A final-wave commander with double normal maximum health
 - Cinematic titles, action-bar alerts and squad-arrival smoke enabled
 - No world-spawn fallback until explicitly enabled
@@ -192,7 +230,7 @@ Datapacks can replace
 `data/factionraids/loot_tables/gameplay/invasion_victory.json` to award modded equipment,
 currencies, spell scrolls or collectibles without adding more hard dependencies.
 
-## Updating from 1.x through 2.2
+## Updating from 1.x through 2.3
 
 Saved anchors, cooldowns and active raids migrate automatically. Existing manually created homes
 remain manual so an update cannot unexpectedly move a live server's established castle. Run this
@@ -215,6 +253,9 @@ and commander state remain intact.
 
 Existing 2.2 sieges remain reward eligible when first loaded in 2.3, preserving the outcome players
 were already fighting toward. Newly started practice sieges follow `manualRaidsGrantRewards`.
+
+Version 2.4 changes no saved-world schema. Existing strongholds, active sieges and reward eligibility
+continue unchanged. The optional integrations activate automatically when their mods are installed.
 
 ## Building from source
 

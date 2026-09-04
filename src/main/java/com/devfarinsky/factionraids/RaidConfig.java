@@ -60,6 +60,13 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue VICTORY_EMERALDS_PER_WAVE;
     public static final ForgeConfigSpec.IntValue COMMANDER_EMERALD_BONUS;
     public static final ForgeConfigSpec.BooleanValue MANUAL_RAIDS_GRANT_REWARDS;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_WORKERS_COMPAT;
+    public static final ForgeConfigSpec.BooleanValue PROTECT_WORKERS;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_SMALLSHIPS_COMPAT;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_SIEGEWEAPONS_COMPAT;
+    public static final ForgeConfigSpec.IntValue COMPAT_ASSET_RADIUS;
+    public static final ForgeConfigSpec.IntValue CREWED_ASSETS_PER_EXTRA_ENEMY;
+    public static final ForgeConfigSpec.IntValue MAX_ASSET_SCALING_ENEMIES;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -172,6 +179,24 @@ public final class RaidConfig {
                 .defineInRange("commanderEmeraldBonus", 12, 0, 256);
         MANUAL_RAIDS_GRANT_REWARDS = b.comment("Allow raids started with /factionraids start or the dashboard test button to grant rewards. Disabled to prevent farming by default.")
                 .define("manualRaidsGrantRewards", false);
+        b.pop();
+
+        b.comment("Optional companion-mod integrations. These safely do nothing when the named mod is absent.")
+                .push("compatibility");
+        ENABLE_WORKERS_COMPAT = b.comment("Recognize Villager Workers as faction civilians during sieges.")
+                .define("enableVillagerWorkers", true);
+        PROTECT_WORKERS = b.comment("Prevent Faction Raids invaders from damaging Villager Workers. Workers keep their own flee and take-cover AI.")
+                .define("protectVillagerWorkers", true);
+        ENABLE_SMALLSHIPS_COMPAT = b.comment("Recognize crewed Small Ships as faction naval assets.")
+                .define("enableSmallShips", true);
+        ENABLE_SIEGEWEAPONS_COMPAT = b.comment("Recognize crewed Siege Weapons as faction defensive assets.")
+                .define("enableSiegeWeapons", true);
+        COMPAT_ASSET_RADIUS = b.comment("Radius around a stronghold used to detect Workers, crewed Small Ships and crewed Siege Weapons.")
+                .defineInRange("assetDetectionRadius", 128, 32, 384);
+        CREWED_ASSETS_PER_EXTRA_ENEMY = b.comment("Crewed Small Ships or Siege Weapons required to add one enemy to each wave. Set zero to disable equipment-based scaling.")
+                .defineInRange("crewedAssetsPerExtraEnemy", 2, 0, 20);
+        MAX_ASSET_SCALING_ENEMIES = b.comment("Maximum additional enemies per wave created from detected crewed equipment.")
+                .defineInRange("maximumAssetScalingEnemies", 4, 0, 20);
         b.pop();
         SPEC = b.build();
     }

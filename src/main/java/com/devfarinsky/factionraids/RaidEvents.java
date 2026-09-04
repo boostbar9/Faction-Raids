@@ -111,12 +111,15 @@ public final class RaidEvents {
 
     @SubscribeEvent
     public static void onLivingAttack(LivingAttackEvent event) {
-        if (!RaidConfig.PROTECT_VILLAGERS.get()) return;
         Entity attacker = event.getSource().getEntity();
         if (!(attacker instanceof Raider) && !(attacker instanceof Vex)) return;
         Mob mob = (Mob) attacker;
         if (!mob.getPersistentData().contains(RAID_TEAM_TAG)) return;
-        if (event.getEntity() instanceof AbstractVillager || event.getEntity() instanceof IronGolem) {
+        boolean protectedVanillaCivilian = RaidConfig.PROTECT_VILLAGERS.get() &&
+                (event.getEntity() instanceof AbstractVillager || event.getEntity() instanceof IronGolem);
+        boolean protectedWorker = RaidConfig.PROTECT_WORKERS.get() &&
+                OptionalCompatBridge.isWorker(event.getEntity());
+        if (protectedVanillaCivilian || protectedWorker) {
             event.setCanceled(true);
             mob.setTarget(null);
         }
@@ -731,6 +734,8 @@ public final class RaidEvents {
                     .map(p -> p.getGameProfile().getName()).toList()), false);
             source.sendSuccess(() -> Component.literal("Villager Recruits integration: " +
                     RecruitsBridge.diagnosticStatus()), false);
+            source.sendSuccess(() -> Component.literal("Optional integrations: " +
+                    OptionalCompatBridge.diagnosticStatus()), false);
             source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT,
                     "Defense points: %d | approximate TPS: %.1f | global tracked raiders: %d/%d",
                     anchor.defensePoints().size(), tps, globalTrackedCount(data), RaidConfig.MAX_GLOBAL_RAIDERS.get())), false);
@@ -1011,9 +1016,14 @@ public final class RaidEvents {
         int divisor = RaidConfig.RECRUITS_PER_EXTRA_ENEMY.get();
         if (divisor > 0) recruitScale = Math.min(RaidConfig.MAX_RECRUIT_SCALING_ENEMIES.get(),
                 recruits.size() / divisor);
+        OptionalCompatBridge.CompatSnapshot compat = nearbyCompatAssets(level, point, anchor);
+        int assetScale = 0;
+        int assetDivisor = RaidConfig.CREWED_ASSETS_PER_EXTRA_ENEMY.get();
+        if (assetDivisor > 0) assetScale = Math.min(RaidConfig.MAX_ASSET_SCALING_ENEMIES.get(),
+                compat.crewedAssets() / assetDivisor);
         int wanted = RaidConfig.BASE_ENEMIES_PER_WAVE.get() +
                 (playerCount - 1) * RaidConfig.ENEMIES_PER_EXTRA_PLAYER.get() +
-                (nextWave - 1) * 2 + recruitScale;
+                (nextWave - 1) * 2 + recruitScale + assetScale;
         wanted = Math.min(wanted, RaidConfig.MAX_ACTIVE_RAIDERS.get());
         if (wanted <= 0) {
             state.ticksToNextWave = RaidConfig.SPAWN_RETRY_SECONDS.get() * 20;
@@ -1031,7 +1041,7 @@ public final class RaidEvents {
         announce(server, anchor.teamKey(), Component.literal(waveTitle(state.wave) + " — wave " + state.wave + "/" +
                 RaidConfig.WAVES.get() + ": " + wanted + " invaders are advancing from the " +
                 approachDirection(state.approachAngle) +
-                (recruitScale > 0 ? " after scouting " + recruits.size() + " defending Recruits." : "."))
+                scoutingSummary(recruitScale, assetScale, recruits.size(), compat))
                 .withStyle(ChatFormatting.RED), true);
         if (state.wave >= RaidConfig.WAVES.get()) {
             showTitle(server, anchor.teamKey(), Component.literal("COMMAND ASSAULT")
@@ -1220,6 +1230,21 @@ public final class RaidEvents {
         AABB area = new AABB(point.pos()).inflate(radius, 64.0D, radius);
         return level.getEntitiesOfClass(Mob.class, area,
                 mob -> mob.isAlive() && RecruitsBridge.belongsTo(mob, anchor.teamKey(), anchor.members()));
+    }
+
+    private static OptionalCompatBridge.CompatSnapshot nearbyCompatAssets(ServerLevel level,
+            RaidSavedData.DefensePoint point, RaidSavedData.Anchor anchor) {
+        double radius = RaidConfig.COMPAT_ASSET_RADIUS.get();
+        AABB area = new AABB(point.pos()).inflate(radius, 64.0D, radius);
+        return OptionalCompatBridge.scan(level, area, anchor.teamKey(), anchor.members());
+    }
+
+    private static String scoutingSummary(int recruitScale, int assetScale, int recruits,
+                                          OptionalCompatBridge.CompatSnapshot compat) {
+        List<String> details = new ArrayList<>();
+        if (recruitScale > 0) details.add(recruits + " defending Recruits");
+        if (assetScale > 0) details.add(compat.crewedAssets() + " crewed war assets");
+        return details.isEmpty() ? "." : " after scouting " + String.join(" and ", details) + ".";
     }
 
     private static void mobilizeRecruits(ServerLevel level, List<Mob> recruits,
@@ -1446,7 +1471,7 @@ public final class RaidEvents {
         RaidSavedData.Anchor anchor = data.anchors.get(key);
         if (anchor == null) {
             return new DashboardSnapshot(teamDisplay(player), false, false, "No stronghold registered",
-                    0, RaidConfig.WAVES.get(), 0, 0, 0, 0, 0, "Sleep at your base",
+                    0, RaidConfig.WAVES.get(), 0, 0, 0, 0, 0, 0, 0, 0, "Sleep at your base",
                     defaultEmeraldReward(), false);
         }
         RaidSavedData.RaidState state = data.raids.get(key);
@@ -1454,28 +1479,33 @@ public final class RaidEvents {
                 anchor.point(state.defensePointName);
         ServerLevel level = getLevel(server, point);
         int recruits = level == null ? 0 : alliedRecruits(level, point, anchor).size();
+        OptionalCompatBridge.CompatSnapshot compat = level == null ?
+                OptionalCompatBridge.CompatSnapshot.EMPTY : nearbyCompatAssets(level, point, anchor);
         if (state == null) {
             long seconds = Math.max(0L,
                     (anchor.nextRaidGameTime() - server.overworld().getGameTime()) / 20L);
             return new DashboardSnapshot(anchor.teamDisplay(), true, false,
                     point.dimension() + " • " + formatPos(point.pos()), 0, RaidConfig.WAVES.get(),
-                    0, 0, 0, 0, recruits, formatTime(seconds), defaultEmeraldReward(), true);
+                    0, 0, 0, 0, recruits, compat.workers(), compat.ships(), compat.siegeWeapons(),
+                    formatTime(seconds), defaultEmeraldReward(), true);
         }
         int occupation = state.captureTicks * 100 /
                 Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20);
         return new DashboardSnapshot(anchor.teamDisplay(), true, true,
                 point.dimension() + " • " + formatPos(point.pos()), state.wave, RaidConfig.WAVES.get(),
                 state.raiders.size(), state.pendingWaveSpawns, state.totalDefeated, occupation,
-                recruits, "Siege active", guaranteedEmeraldReward(state), state.rewardEligible);
+                recruits, compat.workers(), compat.ships(), compat.siegeWeapons(), "Siege active",
+                guaranteedEmeraldReward(state), state.rewardEligible);
     }
 
     record DashboardSnapshot(String faction, boolean registered, boolean active, String stronghold,
                              int wave, int totalWaves, int deployed, int reinforcing, int defeated,
-                             int occupationPercent, int recruits, String cooldown,
+                             int occupationPercent, int recruits, int workers, int ships,
+                             int siegeWeapons, String cooldown,
                              int emeraldReward, boolean rewardEligible) {
         static DashboardSnapshot unavailable() {
             return new DashboardSnapshot("Unavailable", false, false, "Server unavailable", 0, 0,
-                    0, 0, 0, 0, 0, "Unavailable", 0, false);
+                    0, 0, 0, 0, 0, 0, 0, 0, "Unavailable", 0, false);
         }
     }
 
