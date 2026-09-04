@@ -37,6 +37,14 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue PROTECT_VILLAGERS;
     public static final ForgeConfigSpec.BooleanValue ANNOUNCE_GLOBALLY;
     public static final ForgeConfigSpec.BooleanValue REQUIRE_PLAYER_NEAR_ANCHOR;
+    public static final ForgeConfigSpec.BooleanValue AUTOMATIC_PLAYER_HOMES;
+    public static final ForgeConfigSpec.BooleanValue FOLLOW_RESPAWN_POINT;
+    public static final ForgeConfigSpec.BooleanValue MOBILIZE_RECRUITS;
+    public static final ForgeConfigSpec.IntValue RECRUIT_MOBILIZATION_RADIUS;
+    public static final ForgeConfigSpec.IntValue CAPTURE_RADIUS;
+    public static final ForgeConfigSpec.IntValue CAPTURE_TIME_SECONDS;
+    public static final ForgeConfigSpec.IntValue CAPTURE_DECAY_PER_SECOND;
+    public static final ForgeConfigSpec.DoubleValue RAIDER_ADVANCE_SPEED;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -69,8 +77,8 @@ public final class RaidConfig {
                 .defineInRange("maximumSpawnDistance", 72, 32, 256);
         DEFENSE_RADIUS = b.comment("Players inside this radius count as actively defending their territory.")
                 .defineInRange("defenseRadius", 160, 48, 512);
-        ABANDON_DEFEAT_MINUTES = b.comment("Defeat occurs only after no living online faction member remains in the defense radius for this long. Deaths by themselves never cause defeat.")
-                .defineInRange("abandonDefeatMinutes", 5, 1, 30);
+        ABANDON_DEFEAT_MINUTES = b.comment("Optional legacy abandonment defeat timer. Zero disables it so defeat requires actual stronghold occupation.")
+                .defineInRange("abandonDefeatMinutes", 0, 0, 30);
         MISSING_ENTITY_GRACE_SECONDS = b.comment("Keep temporarily unloaded raid mobs tracked for this long before treating them as missing.")
                 .defineInRange("missingEntityGraceSeconds", 120, 20, 900);
         SPAWN_RETRY_SECONDS = b.comment("Delay before retrying a wave that could not find safe spawn positions.")
@@ -103,6 +111,22 @@ public final class RaidConfig {
                 .define("announceGlobally", false);
         REQUIRE_PLAYER_NEAR_ANCHOR = b.comment("Automatic invasions only begin while a faction member is near the anchor.")
                 .define("requirePlayerNearAnchor", true);
+        AUTOMATIC_PLAYER_HOMES = b.comment("Automatically create siege targets from player respawn points. No command or admin setup is required.")
+                .define("automaticPlayerHomes", true);
+        FOLLOW_RESPAWN_POINT = b.comment("Move an automatically managed stronghold when its owner or Recruits faction leader changes respawn point.")
+                .define("followRespawnPoint", true);
+        MOBILIZE_RECRUITS = b.comment("Allow nearby soldiers from the defending Recruits faction to engage this mod's invaders. Their saved movement orders are not replaced.")
+                .define("mobilizeRecruits", true);
+        RECRUIT_MOBILIZATION_RADIUS = b.comment("Radius around the stronghold in which allied Recruits can join its defense.")
+                .defineInRange("recruitMobilizationRadius", 128, 32, 384);
+        CAPTURE_RADIUS = b.comment("Radius around the stronghold that the invaders must occupy to win the siege.")
+                .defineInRange("captureRadius", 18, 6, 64);
+        CAPTURE_TIME_SECONDS = b.comment("Continuous contested seconds required for illagers to capture the stronghold.")
+                .defineInRange("captureTimeSeconds", 120, 30, 600);
+        CAPTURE_DECAY_PER_SECOND = b.comment("Seconds of occupation progress removed each second after defenders regain control.")
+                .defineInRange("captureDecayPerSecond", 2, 1, 10);
+        RAIDER_ADVANCE_SPEED = b.comment("Navigation speed used when invasion forces advance toward the stronghold.")
+                .defineInRange("raiderAdvanceSpeed", 1.05, 0.5, 1.5);
         b.pop();
         SPEC = b.build();
     }

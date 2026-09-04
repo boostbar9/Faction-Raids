@@ -14,7 +14,7 @@ import java.util.*;
 
 public final class RaidSavedData extends SavedData {
     public static final String DATA_NAME = "factionraids_data";
-    public static final int DATA_VERSION = 3;
+    public static final int DATA_VERSION = 4;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Map<String, Anchor> anchors = new HashMap<>();
@@ -70,7 +70,8 @@ public final class RaidSavedData extends SavedData {
     }
 
     public record Anchor(String teamKey, String teamDisplay, UUID ownerUuid, Set<UUID> members,
-                         boolean internalRoster, Map<String, DefensePoint> defensePoints,
+                         boolean internalRoster, boolean automaticHome,
+                         Map<String, DefensePoint> defensePoints,
                          long nextRaidGameTime) {
         public Anchor {
             members = new LinkedHashSet<>(members);
@@ -83,6 +84,7 @@ public final class RaidSavedData extends SavedData {
             tag.putString("Display", teamDisplay);
             tag.putUUID("Owner", ownerUuid);
             tag.putBoolean("InternalRoster", internalRoster);
+            tag.putBoolean("AutomaticHome", automaticHome);
             tag.putLong("NextRaid", nextRaidGameTime);
 
             ListTag memberTags = new ListTag();
@@ -125,7 +127,8 @@ public final class RaidSavedData extends SavedData {
             }
 
             return new Anchor(tag.getString("Team"), tag.getString("Display"), owner, members,
-                    tag.getBoolean("InternalRoster"), points, tag.getLong("NextRaid"));
+                    tag.getBoolean("InternalRoster"), tag.getBoolean("AutomaticHome"),
+                    points, tag.getLong("NextRaid"));
         }
 
         public DefensePoint primaryPoint() {
@@ -139,40 +142,46 @@ public final class RaidSavedData extends SavedData {
         }
 
         public Anchor withNextRaid(long time) {
-            return new Anchor(teamKey, teamDisplay, ownerUuid, members, internalRoster, defensePoints, time);
+            return new Anchor(teamKey, teamDisplay, ownerUuid, members, internalRoster, automaticHome,
+                    defensePoints, time);
         }
 
         public Anchor withIdentity(String newTeamKey, String newDisplay) {
-            return new Anchor(newTeamKey, newDisplay, ownerUuid, members, internalRoster,
+            return new Anchor(newTeamKey, newDisplay, ownerUuid, members, internalRoster, automaticHome,
                     defensePoints, nextRaidGameTime);
         }
 
         public Anchor withOwner(UUID owner) {
             Set<UUID> updated = new LinkedHashSet<>(members);
             updated.add(owner);
-            return new Anchor(teamKey, teamDisplay, owner, updated, internalRoster,
+            return new Anchor(teamKey, teamDisplay, owner, updated, internalRoster, automaticHome,
                     defensePoints, nextRaidGameTime);
         }
 
         public Anchor withRoster(Set<UUID> updatedMembers, boolean managed) {
             Set<UUID> updated = new LinkedHashSet<>(updatedMembers);
             if (!UNKNOWN_OWNER.equals(ownerUuid)) updated.add(ownerUuid);
-            return new Anchor(teamKey, teamDisplay, ownerUuid, updated, managed,
+            return new Anchor(teamKey, teamDisplay, ownerUuid, updated, managed, automaticHome,
                     defensePoints, nextRaidGameTime);
         }
 
         public Anchor withPoint(DefensePoint point) {
             Map<String, DefensePoint> updated = new LinkedHashMap<>(defensePoints);
             updated.put(point.name(), point);
-            return new Anchor(teamKey, teamDisplay, ownerUuid, members, internalRoster,
+            return new Anchor(teamKey, teamDisplay, ownerUuid, members, internalRoster, automaticHome,
                     updated, nextRaidGameTime);
         }
 
         public Anchor withoutPoint(String name) {
             Map<String, DefensePoint> updated = new LinkedHashMap<>(defensePoints);
             updated.remove(name);
-            return new Anchor(teamKey, teamDisplay, ownerUuid, members, internalRoster,
+            return new Anchor(teamKey, teamDisplay, ownerUuid, members, internalRoster, automaticHome,
                     updated, nextRaidGameTime);
+        }
+
+        public Anchor withAutomaticHome(boolean automatic) {
+            return new Anchor(teamKey, teamDisplay, ownerUuid, members, internalRoster, automatic,
+                    defensePoints, nextRaidGameTime);
         }
     }
 
@@ -183,6 +192,9 @@ public final class RaidSavedData extends SavedData {
         public int ticksToNextWave;
         public int abandonedTicks;
         public int waveStartingCount;
+        public int captureTicks;
+        public double approachAngle;
+        public int lastCaptureWarningBand;
         public int lastWarningSecond = Integer.MAX_VALUE;
         public final Set<UUID> raiders = new HashSet<>();
         public final Map<UUID, Integer> missingTicks = new HashMap<>();
@@ -204,6 +216,9 @@ public final class RaidSavedData extends SavedData {
             tag.putInt("NextWave", ticksToNextWave);
             tag.putInt("Abandoned", abandonedTicks);
             tag.putInt("WaveStartingCount", waveStartingCount);
+            tag.putInt("CaptureTicks", captureTicks);
+            tag.putDouble("ApproachAngle", approachAngle);
+            tag.putInt("CaptureWarningBand", lastCaptureWarningBand);
             ListTag ids = new ListTag();
             raiders.forEach(id -> ids.add(StringTag.valueOf(id.toString())));
             tag.put("Raiders", ids);
@@ -225,6 +240,10 @@ public final class RaidSavedData extends SavedData {
             state.wave = tag.getInt("Wave");
             state.abandonedTicks = tag.getInt("Abandoned");
             state.waveStartingCount = tag.getInt("WaveStartingCount");
+            state.captureTicks = tag.getInt("CaptureTicks");
+            state.approachAngle = tag.contains("ApproachAngle", Tag.TAG_DOUBLE) ?
+                    tag.getDouble("ApproachAngle") : 0.0D;
+            state.lastCaptureWarningBand = tag.getInt("CaptureWarningBand");
             ListTag ids = tag.getList("Raiders", Tag.TAG_STRING);
             for (int i = 0; i < ids.size(); i++) {
                 try {

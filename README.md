@@ -1,150 +1,158 @@
-# Faction Raids 1.2.0
+# Faction Raids 2.0.0
 
-Faction Raids is a server-authoritative Forge 1.20.1 addon for kingdom and faction modpacks.
-It creates illager invasions whose objective is the defending faction's players and territory,
-not Minecraft villagers, recruits or beds.
+Faction Raids is a server-authoritative Forge 1.20.1 addon that turns player homes into siege
+objectives. Illager armies establish an approach front, advance on a stronghold, fight the
+defending players and their Villager Recruits, and attempt to occupy the heart of the base.
 
-## Compatibility
+No administrator setup is required. A player's bed or respawn anchor becomes a valid stronghold
+automatically. Players in the same Villager Recruits faction share one raid schedule, while any
+online faction member's home can be selected as the next target.
+
+## Requirements
 
 - Minecraft 1.20.1
-- Forge 47.4.16 (47.x)
+- Forge 47.x
 - Java 17
-- No required library mods
-- Compatible by design with Villager Recruits, Villager Workers and custom faction mods
-- Does not add blocks, dimensions, biomes or world-generation content
-- Safe to install in an existing world after making a backup
+- [Villager Recruits 1.15.2 or newer](https://www.curseforge.com/minecraft/mc-mods/recruits/files/8339846)
 
-Install `factionraids-1.2.0.jar` in the host's `mods` folder. The mod is server-authoritative,
-so clients may connect without it. Installing the same JAR on every client is also supported.
-Never leave an older Faction Raids JAR in the folder beside the new version.
+Villager Recruits is a hard dependency and must be installed wherever it is normally required.
+Faction Raids does not redistribute any Villager Recruits code or assets.
 
-## Recommended setup for Devin and Godric
+Faction Raids adds no blocks, ores, biomes, dimensions or structures. It can be installed in an
+existing world after making a normal backup. Never keep two Faction Raids versions in `mods`.
 
-1. Install the mod and start the world.
-2. Stand at the center of Black Beards Company's main base.
-3. Run `/factionraids anchor set`.
-4. Make sure Godric is online, then run `/factionraids member add Godric`.
-5. Confirm both names with `/factionraids member list`.
-6. Run `/factionraids start home` for a controlled test.
+## Zero-setup gameplay
 
-The internal roster is authoritative once enabled. After that, temporary scoreboard-team
-changes by another faction mod cannot split Devin and Godric into separate raid factions.
+1. Install Faction Raids and Villager Recruits.
+2. Sleep in a bed or charge and use a respawn anchor near the base you want to defend.
+3. Join or create a Villager Recruits faction if playing as a group.
+4. Continue playing. The mod registers and updates the stronghold automatically.
 
-## Territory points
+If a player has no personal respawn point, the overworld's shared spawn is used. Changing the
+faction leader's spawn updates the faction's idle stronghold, and an automatic invasion may target
+the respawn point of any online faction member. A selected location is locked for the duration of
+that siege so sleeping elsewhere cannot move an active battlefield.
 
-Every faction has a permanent `home` point created or moved with:
+## How a siege works
+
+- Scouts provide advance warning and reveal the direction of the enemy war camp.
+- Every wave enters from one coherent front instead of appearing randomly around the base.
+- The vanguard is followed by mixed assault troops, breach companies, war casters and a command
+  assault containing elite illagers and a ravager.
+- Invaders path toward the stronghold when they do not have a reachable defender to fight.
+- Nearby soldiers belonging to the defending Villager Recruits faction acquire invasion targets.
+- Invaders also recognize those Recruits as defenders, producing an actual army-versus-army fight.
+- Recruits' permanent follow, hold and group orders are not replaced by Faction Raids.
+- The illagers win only after outnumbering defenders inside the inner capture ring long enough.
+- Retaking the ring rapidly removes occupation progress.
+- Player death never causes an instant defeat, and leaving the outer defense radius does not cause
+  defeat unless the optional legacy abandonment timer is enabled.
+- If every faction member logs out, the siege and its loaded enemies freeze until someone returns.
+
+The boss bar reports the current assault phase, remaining invaders and stronghold occupation.
+Occupation warnings are sent at 25%, 50% and 75%.
+
+## Villager Recruits integration
+
+Villager Recruits factions are authoritative. Joining or leaving a Recruits faction automatically
+changes which Faction Raids siege schedule and stronghold the player belongs to; no duplicate
+member list has to be maintained. The Recruits faction leader is the default stronghold owner.
+
+Allied Recruit soldiers within `recruitMobilizationRadius` can defend. Nobles and messengers are
+excluded from automatic mobilization. The integration uses the Recruits faction team and public
+recruit ownership information, so solo-owned soldiers are also recognized when possible.
+
+Faction Raids does not start or resolve Villager Recruits' separate claim-conquest system. This
+prevents an NPC claim from being transferred merely because a PvE invasion occurred.
+
+## Player commands
+
+| Command | Purpose |
+|---|---|
+| `/factionraids status` | Show the stronghold, cooldown or active siege occupation |
+| `/factionraids debug` | Show faction identity, TPS and tracked siege state |
+| `/factionraids start` | Start a controlled test at the caller's respawn point |
+| `/factionraids home automatic` | Convert an older/manual home to automatic respawn behavior |
+| `/factionraids home refresh` | Immediately refresh an automatic stronghold |
+| `/factionraids territory list` | List the home and any optional manual targets |
+
+Manual anchors and named territories remain available for servers that want castles, towns or
+event arenas in addition to automatic player homes:
 
 ```mcfunction
 /factionraids anchor set
-```
-
-The owner can register additional named targets while standing at them:
-
-```mcfunction
-/factionraids territory add harbor
 /factionraids territory add castle
-/factionraids territory list
-/factionraids territory remove harbor
+/factionraids territory remove castle
 ```
 
-Automatic invasions randomly choose from eligible points near an online faction member.
-The default maximum is four total points, including `home`. Point names may contain lowercase
-letters, numbers, underscores and hyphens.
+The older `/factionraids member` commands remain for legacy solo parties. Recruits factions do not
+need them because their scoreboard membership is authoritative.
 
-## Commands
+## Administrator commands
 
-| Command | Permission | Purpose |
-|---|---:|---|
-| `/factionraids anchor set` | Owner/operator | Create or move the permanent home point |
-| `/factionraids anchor claim` | Faction member | Claim ownership of an unowned 1.0 anchor |
-| `/factionraids anchor remove` | Owner/operator | Remove the faction and all its defense points |
-| `/factionraids territory add <name>` | Owner/operator | Add or move a named defense point |
-| `/factionraids territory remove <name>` | Owner/operator | Remove a named point other than home |
-| `/factionraids territory list` | Member | List every registered target |
-| `/factionraids member add <online-player>` | Owner/operator | Add a player and enable the internal roster |
-| `/factionraids member remove <online-player>` | Owner/operator | Remove a non-owner member |
-| `/factionraids member list` | Member | Show saved and online members |
-| `/factionraids start [point]` | Owner/operator | Start a test at a named or nearby point |
-| `/factionraids status` | Member | Show cooldown or active-wave status |
-| `/factionraids debug` | Member | Explain faction, roster, TPS and raid state |
-| `/factionraids stop` | Operator level 2 | Stop the caller's invasion safely |
-| `/factionraids admin list` | Operator level 2 | List every faction and invasion |
-| `/factionraids admin stop <team>` | Operator level 2 | Stop an orphaned or remote invasion |
-| `/factionraids admin repair <team>` | Operator level 2 | Reconcile tracked enemies for an active invasion |
-| `/factionraids admin remove <team>` | Operator level 2 | Remove an inactive orphaned faction anchor |
+| Command | Purpose |
+|---|---|
+| `/factionraids stop` | Stop the caller's invasion safely |
+| `/factionraids admin list` | List registered strongholds and active sieges |
+| `/factionraids admin stop <faction>` | Stop an orphaned or remote siege |
+| `/factionraids admin repair <faction>` | Reconcile an active siege's tracked enemies |
+| `/factionraids admin remove <faction>` | Remove an inactive saved stronghold |
 
-## Invasion rules
+Operators never have to create homes or territories for ordinary players.
 
-- Mod-spawned enemies continually prioritize online players on the targeted roster.
-- Villagers and iron golems cannot be damaged by these enemies when `protectVillagers=true`.
-- Player death never causes immediate defeat; players may respawn and return.
-- Defeat occurs only when no living roster member remains within the defense radius for the
-  configured abandonment time.
-- Automatic invasions begin only at a point near an online member by default.
-- The invasion timer and loaded enemies freeze while the entire roster is offline.
-- Unloaded enemies remain tracked, and tagged mobs are recovered after restarts.
-- Orphaned tagged enemies are removed when their chunks load after an invasion ends.
-- Vexes summoned by invasion evokers are tracked and cleaned up.
-- Unsafe terrain triggers a delayed retry instead of an empty wave.
-- Per-invasion, global-mob, concurrent-invasion and TPS limits protect integrated-server performance.
-- The final three enemies glow so a wave cannot stall on a hidden mob.
-- Late waves include witches, evokers, illusioners and a final-wave ravager.
+## Default balance and performance limits
 
-## Victory rewards
+Forge creates `config/factionraids-common.toml`. Important defaults are:
 
-Each online faction member receives 250 experience points plus items from:
+- Five escalating waves
+- 10 base enemies per wave, plus three per additional online defender
+- 45 seconds between waves
+- One invasion at a time
+- 30 active enemies per invasion and 35 globally
+- New waves delayed below approximately 18 TPS
+- 60–90 minutes between automatic sieges per faction
+- 18-block capture ring requiring 120 seconds of enemy control
+- Two seconds of occupation removed per second after defenders regain control
+- 128-block Recruit mobilization radius
+- Legacy distance-only abandonment defeat disabled
+
+These are conservative integrated-server defaults. Dedicated-server packs can raise the global and
+concurrent limits gradually after profiling.
+
+## Rewards and datapacks
+
+Every online faction member receives the configured experience award and rolls this loot table
+after a successful defense:
 
 ```text
 factionraids:gameplay/invasion_victory
 ```
 
-The bundled table awards emeralds, arrows and a chance at a golden apple or crossbow. A datapack
-can replace:
+Datapacks can replace
+`data/factionraids/loot_tables/gameplay/invasion_victory.json` to award modded equipment,
+currencies, spell scrolls or collectibles without adding more hard dependencies.
 
-```text
-data/factionraids/loot_tables/gameplay/invasion_victory.json
-```
+## Updating from 1.x
 
-This allows a modpack to award spell scrolls, artifacts or collectible items without making those
-mods hard dependencies. Rewards can be disabled or redirected in `factionraids-common.toml`.
-
-## Configuration
-
-Forge creates `config/factionraids-common.toml`. Defaults remain tuned for a two-player,
-performance-sensitive integrated server:
-
-- Five escalating waves
-- 10 base enemies plus three for the second online member
-- 45 seconds between waves
-- 30 active enemies per invasion and 35 globally
-- One simultaneous invasion
-- 60–90 minutes between automatic invasions
-- Four defense points and 16 roster members maximum
-- New waves delayed below approximately 18 TPS
-
-Existing configuration files receive new 1.2 keys automatically.
-
-## Updating from 1.0 or 1.1
-
-Existing anchors, cooldowns and active raids migrate automatically. A former single anchor becomes
-the `home` defense point. Version 1.0 anchors without recorded ownership must be claimed once:
+Saved anchors, cooldowns and active raids migrate automatically. Existing manually created homes
+remain manual so an update cannot unexpectedly move a live server's established castle. Run this
+once as the faction leader to opt that old home into the new behavior:
 
 ```mcfunction
-/factionraids anchor claim
+/factionraids home automatic
 ```
 
-Version 1.1 factions continue using their scoreboard membership until the owner runs
-`/factionraids member add <player>`. That command safely seeds the internal roster from the
-currently online scoreboard team before adding the selected player.
+Version 1.0 anchors without ownership can still be recovered with
+`/factionraids anchor claim`. Back up the world before every mod update.
 
-## Interaction with Village Recruits
+## Removal
 
-Faction Raids does not alter another mod's internal settlement defeat checks or suppress its chat
-messages. If a Village Recruits addon announces that Black Beards Company “has been lost,” that
-message comes from the addon's separate siege/defeat system. Disable that old autonomous defeat
-system if Faction Raids is intended to be the only authority for player-territory invasions.
+Stop active sieges before removing the mod so loaded invasion mobs can be cleaned up. Because the
+mod adds no world-generation content or custom blocks, terrain and player builds remain intact.
 
-## Removal safety
+## License and project
 
-The mod adds no world blocks. Stop active invasions before removing it so every loaded invasion
-mob can be cleaned up. Existing terrain and builds remain intact.
+Faction Raids is MIT licensed. Source and issue tracking:
+[boostbar9/Faction-Raids](https://github.com/boostbar9/Faction-Raids).
+
+Villager Recruits is a separate project by TalhaNation and retains its own license.

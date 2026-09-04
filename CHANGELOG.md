@@ -2,6 +2,22 @@
 
 All notable changes to Faction Raids are documented here.
 
+## 2.0.0 - 2026-09-04
+
+- Made Villager Recruits 1.15.2+ a required dependency.
+- Added zero-command stronghold registration from player respawn points.
+- Added automatic Recruits-faction membership and leader detection.
+- Allowed automatic invasions to target any online faction member's home.
+- Added coherent siege fronts and directional war-camp warnings.
+- Made invaders advance on the stronghold instead of waiting for players.
+- Added automatic participation for nearby allied Recruit soldiers without replacing saved orders.
+- Allowed invasion forces and Recruits to select each other as combat targets.
+- Replaced distance-only defeat with a configurable, contested stronghold occupation system.
+- Added occupation recovery, milestone warnings and boss-bar pressure reporting.
+- Disabled legacy abandonment defeat by default while preserving it as an option.
+- Preserved manual anchors and named territories for server events and legacy worlds.
+- Added automatic migration for 1.x saved data and an opt-in command for legacy homes.
+
 ## 1.2.0 - 2026-09-04
 
 - Added persistent internal faction rosters independent of scoreboard-team timing.

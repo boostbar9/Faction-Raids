@@ -25,6 +25,7 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.animal.IronGolem;
@@ -122,6 +123,9 @@ public final class RaidEvents {
                         .then(Commands.literal("set").executes(ctx -> setAnchor(ctx.getSource())))
                         .then(Commands.literal("claim").executes(ctx -> claimLegacyAnchor(ctx.getSource())))
                         .then(Commands.literal("remove").executes(ctx -> removeAnchor(ctx.getSource()))))
+                .then(Commands.literal("home")
+                        .then(Commands.literal("automatic").executes(ctx -> enableAutomaticHome(ctx.getSource())))
+                        .then(Commands.literal("refresh").executes(ctx -> refreshAutomaticHome(ctx.getSource()))))
                 .then(Commands.literal("territory")
                         .then(Commands.literal("add")
                                 .then(Commands.argument("name", StringArgumentType.word())
@@ -188,9 +192,10 @@ public final class RaidEvents {
                 Map<String, RaidSavedData.DefensePoint> points = new LinkedHashMap<>();
                 points.put(RaidSavedData.HOME_POINT, home);
                 updated = new RaidSavedData.Anchor(key, display, player.getUUID(), members,
-                        true, points, next);
+                        true, false, points, next);
             } else {
-                updated = existing.withIdentity(key, display).withPoint(home).withNextRaid(next);
+                updated = existing.withIdentity(key, display).withPoint(home)
+                        .withAutomaticHome(false).withNextRaid(next);
             }
             data.anchors.put(key, updated);
             data.setDirty();
@@ -199,6 +204,63 @@ public final class RaidEvents {
             return 1;
         } catch (Exception e) {
             source.sendFailure(Component.literal("Only a player can set a faction raid anchor."));
+            return 0;
+        }
+    }
+
+    private static int enableAutomaticHome(CommandSourceStack source) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            RaidSavedData data = RaidSavedData.get(source.getServer());
+            String key = factionKeyForPlayer(data, player);
+            RaidSavedData.Anchor anchor = data.anchors.get(key);
+            if (anchor == null) {
+                syncAutomaticHome(source.getServer(), data, player, true);
+                anchor = data.anchors.get(teamKey(player));
+            } else if (!canManage(player, anchor)) {
+                source.sendFailure(Component.literal("Only the faction leader, home owner, or an operator can change the stronghold."));
+                return 0;
+            } else {
+                data.anchors.put(key, anchor.withAutomaticHome(true));
+                syncAutomaticHome(source.getServer(), data, player, true);
+            }
+            data.setDirty();
+            RaidSavedData.Anchor result = data.anchors.get(teamKey(player));
+            RaidSavedData.DefensePoint home = result == null ? null : result.primaryPoint();
+            if (home == null) {
+                source.sendFailure(Component.literal("The automatic stronghold could not be created."));
+                return 0;
+            }
+            source.sendSuccess(() -> Component.literal("Automatic stronghold enabled at " + formatPos(home.pos()) +
+                    ". It follows the faction leader's respawn point.").withStyle(ChatFormatting.GREEN), false);
+            return 1;
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("Only a player can enable an automatic stronghold."));
+            return 0;
+        }
+    }
+
+    private static int refreshAutomaticHome(CommandSourceStack source) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            RaidSavedData data = RaidSavedData.get(source.getServer());
+            RaidSavedData.Anchor current = data.anchors.get(factionKeyForPlayer(data, player));
+            if (current != null && !canManage(player, current)) {
+                source.sendFailure(Component.literal("Only the faction leader, home owner, or an operator can refresh the stronghold."));
+                return 0;
+            }
+            syncAutomaticHome(source.getServer(), data, player, true);
+            RaidSavedData.Anchor anchor = data.anchors.get(teamKey(player));
+            if (anchor == null) {
+                source.sendFailure(Component.literal("The automatic stronghold could not be refreshed."));
+                return 0;
+            }
+            RaidSavedData.DefensePoint home = anchor.primaryPoint();
+            source.sendSuccess(() -> Component.literal("Stronghold refreshed from respawn point: " +
+                    home.dimension() + " at " + formatPos(home.pos())).withStyle(ChatFormatting.GREEN), false);
+            return 1;
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("Only a player can refresh an automatic stronghold."));
             return 0;
         }
     }
@@ -466,8 +528,13 @@ public final class RaidEvents {
             String key = factionKeyForPlayer(data, player);
             RaidSavedData.Anchor anchor = data.anchors.get(key);
             if (anchor == null) {
-                source.sendFailure(Component.literal("Set your faction's anchor first with /factionraids anchor set"));
-                return 0;
+                syncAutomaticHome(source.getServer(), data, player, true);
+                key = teamKey(player);
+                anchor = data.anchors.get(key);
+                if (anchor == null) {
+                    source.sendFailure(Component.literal("Your automatic stronghold could not be created."));
+                    return 0;
+                }
             }
             if (!canManage(player, anchor)) {
                 source.sendFailure(Component.literal("Only the anchor owner or an operator can manually start an invasion."));
@@ -486,7 +553,8 @@ public final class RaidEvents {
                     return 0;
                 }
             } else {
-                point = closestDefensePoint(source.getServer(), anchor, player);
+                point = anchor.automaticHome() ? respawnPoint(source.getServer(), player) :
+                        closestDefensePoint(source.getServer(), anchor, player);
             }
             if (!hasDefenderNear(source.getServer(), point, onlineMembers(source.getServer(), key))) {
                 source.sendFailure(Component.literal("Stand near the selected defense point before starting the invasion."));
@@ -528,7 +596,7 @@ public final class RaidEvents {
             String key = factionKeyForPlayer(data, player);
             RaidSavedData.Anchor anchor = data.anchors.get(key);
             if (anchor == null) {
-                source.sendSuccess(() -> Component.literal("No faction raid anchor. Use /factionraids anchor set"), false);
+                source.sendSuccess(() -> Component.literal("No stronghold is registered yet. It will be created automatically from your respawn point."), false);
                 return 1;
             }
             RaidSavedData.RaidState state = data.raids.get(key);
@@ -536,11 +604,15 @@ public final class RaidEvents {
                 RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
                 source.sendSuccess(() -> Component.literal("Invasion active: wave " + state.wave + "/" +
                         RaidConfig.WAVES.get() + ", " + state.raiders.size() + " enemies tracked at '" +
-                        point.name() + "'. Faction key: " + key), false);
+                        point.name() + "', stronghold occupation " +
+                        (state.captureTicks * 100 / Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20)) +
+                        "%. Faction key: " + key), false);
             } else {
                 long now = source.getServer().overworld().getGameTime();
                 long seconds = Math.max(0L, (anchor.nextRaidGameTime() - now) / 20L);
-                source.sendSuccess(() -> Component.literal(anchor.defensePoints().size() + " defense point(s); " +
+                source.sendSuccess(() -> Component.literal((anchor.automaticHome() ? "Automatic" : "Manual") +
+                        " stronghold at " + formatPos(anchor.primaryPoint().pos()) + "; " +
+                        anchor.defensePoints().size() + " defense point(s); " +
                         anchor.members().size() + " saved member(s); next automatic invasion eligible in " +
                         formatTime(seconds) + ". Faction key: " + key), false);
             }
@@ -659,6 +731,11 @@ public final class RaidEvents {
 
     private static void tick(MinecraftServer server) {
         RaidSavedData data = RaidSavedData.get(server);
+        if (RaidConfig.AUTOMATIC_PLAYER_HOMES.get()) {
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                syncAutomaticHome(server, data, player, false);
+            }
+        }
         refreshIdleAnchorIdentities(server, data);
         long now = server.overworld().getGameTime();
 
@@ -681,14 +758,20 @@ public final class RaidEvents {
     private static boolean beginRaid(MinecraftServer server, RaidSavedData data, RaidSavedData.Anchor anchor,
                                      RaidSavedData.DefensePoint point) {
         if (data.raids.size() >= RaidConfig.MAX_CONCURRENT_RAIDS.get()) return false;
+        // Persist the selected player's respawn target for the full siege. This
+        // allows a faction with several bases to be attacked at any member's
+        // home without requiring one registered point per player.
+        anchor = anchor.withPoint(point);
+        data.anchors.put(anchor.teamKey(), anchor);
         RaidSavedData.RaidState state = new RaidSavedData.RaidState(anchor.teamKey(), point.name(),
                 RaidConfig.WARNING_SECONDS.get() * 20);
+        state.approachAngle = server.overworld().random.nextDouble() * Math.PI * 2.0D;
         data.raids.put(anchor.teamKey(), state);
         data.setDirty();
         announce(server, anchor.teamKey(), Component.literal("[Faction Raid] ").withStyle(ChatFormatting.DARK_RED)
                 .append(Component.literal("Illager scouts have found " + anchor.teamDisplay() + " at '" + point.name() +
-                        "'! The invasion begins in " +
-                        formatTime(RaidConfig.WARNING_SECONDS.get()) + ". Villagers are not the objective—defend the territory yourselves.")
+                        "'! A war camp is forming to the " + approachDirection(state.approachAngle) + ". The siege begins in " +
+                        formatTime(RaidConfig.WARNING_SECONDS.get()) + ". Rally your Recruits and defend the stronghold.")
                         .withStyle(ChatFormatting.GOLD)), true);
         updateBossBar(server, anchor, state, false);
         return true;
@@ -717,12 +800,21 @@ public final class RaidEvents {
 
         reconcileTaggedMobs(level, point, state);
         updateTrackedMobs(level, state);
-        redirectRaiders(level, state, members);
+        List<Mob> recruits = alliedRecruits(level, point, anchor);
+        if (RaidConfig.MOBILIZE_RECRUITS.get()) mobilizeRecruits(level, recruits, state);
+        redirectRaiders(level, state, members, recruits, point);
+
+        if (updateCaptureProgress(server, anchor, point, state, level, members, recruits)) {
+            finishRaid(server, data, teamKey, false, false,
+                    anchor.teamDisplay() + "'s stronghold has fallen to the illager siege!");
+            return;
+        }
 
         boolean defended = hasDefenderNear(server, point, members);
         if (defended) state.abandonedTicks = 0;
         else state.abandonedTicks += 20;
-        if (state.abandonedTicks >= RaidConfig.ABANDON_DEFEAT_MINUTES.get() * 60 * 20) {
+        int abandonmentMinutes = RaidConfig.ABANDON_DEFEAT_MINUTES.get();
+        if (abandonmentMinutes > 0 && state.abandonedTicks >= abandonmentMinutes * 60 * 20) {
             finishRaid(server, data, teamKey, false, false,
                     anchor.teamDisplay() + " abandoned its territory. The illager invasion has prevailed!");
             return;
@@ -818,11 +910,12 @@ public final class RaidEvents {
         for (int i = 0; i < wanted; i++) {
             Raider raider = createRaiderForWave(level, nextWave, i);
             if (raider == null) continue;
-            BlockPos spawn = findSpawnPosition(level, point.pos(), level.random, raider);
+            BlockPos spawn = findSpawnPosition(level, point.pos(), level.random, raider, state.approachAngle);
             if (spawn == null) continue;
             raider.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5,
                     level.random.nextFloat() * 360.0F, 0.0F);
             raider.finalizeSpawn(level, level.getCurrentDifficultyAt(spawn), MobSpawnType.EVENT, null, null);
+            if (i == 0) raider.setPatrolLeader(true);
             raider.setPersistenceRequired();
             raider.getPersistentData().putString(RAID_TEAM_TAG, anchor.teamKey());
             if (level.addFreshEntity(raider)) {
@@ -840,8 +933,9 @@ public final class RaidEvents {
         state.wave = nextWave;
         state.waveStartingCount = spawned;
         state.ticksToNextWave = 0;
-        announce(server, anchor.teamKey(), Component.literal("Wave " + state.wave + "/" + RaidConfig.WAVES.get() +
-                " has begun—" + spawned + " illagers are attacking '" + point.name() + "'!")
+        announce(server, anchor.teamKey(), Component.literal(waveTitle(state.wave) + " — wave " + state.wave + "/" +
+                RaidConfig.WAVES.get() + ": " + spawned + " invaders are advancing from the " +
+                approachDirection(state.approachAngle) + "!")
                 .withStyle(ChatFormatting.RED), true);
         data.setDirty();
     }
@@ -858,11 +952,14 @@ public final class RaidEvents {
         return type.create(level);
     }
 
-    private static BlockPos findSpawnPosition(ServerLevel level, BlockPos anchor, RandomSource random, Mob mob) {
+    private static BlockPos findSpawnPosition(ServerLevel level, BlockPos anchor, RandomSource random, Mob mob,
+                                              double approachAngle) {
         int min = RaidConfig.MIN_SPAWN_DISTANCE.get();
         int max = Math.max(min, RaidConfig.MAX_SPAWN_DISTANCE.get());
         for (int attempt = 0; attempt < 32; attempt++) {
-            double angle = random.nextDouble() * Math.PI * 2.0;
+            // A siege approaches from a coherent front instead of materializing
+            // in a random ring on every spawn attempt.
+            double angle = approachAngle + (random.nextDouble() - 0.5D) * 0.65D;
             int distance = min + random.nextInt(max - min + 1);
             int x = anchor.getX() + Mth.floor(Math.cos(angle) * distance);
             int z = anchor.getZ() + Mth.floor(Math.sin(angle) * distance);
@@ -881,12 +978,13 @@ public final class RaidEvents {
     }
 
     private static void redirectRaiders(ServerLevel level, RaidSavedData.RaidState state,
-                                        List<ServerPlayer> members) {
+                                        List<ServerPlayer> members, List<Mob> recruits,
+                                        RaidSavedData.DefensePoint point) {
         boolean glow = RaidConfig.GLOW_FINAL_ENEMIES.get() && state.raiders.size() <= 3;
         for (UUID id : state.raiders) {
             Entity entity = level.getEntity(id);
             if (!(entity instanceof Mob mob) || !mob.isAlive()) continue;
-            ServerPlayer closest = null;
+            LivingEntity closest = null;
             double closestDistance = Double.MAX_VALUE;
             for (ServerPlayer player : members) {
                 if (!player.isAlive() || player.level() != level || player.isSpectator()) continue;
@@ -896,9 +994,89 @@ public final class RaidEvents {
                     closestDistance = distance;
                 }
             }
-            if (closest != null) mob.setTarget(closest);
+            for (Mob recruit : recruits) {
+                if (!recruit.isAlive()) continue;
+                double distance = mob.distanceToSqr(recruit);
+                if (distance < closestDistance) {
+                    closest = recruit;
+                    closestDistance = distance;
+                }
+            }
+            if (closest != null && closestDistance <= (double) RaidConfig.DEFENSE_RADIUS.get() *
+                    RaidConfig.DEFENSE_RADIUS.get()) mob.setTarget(closest);
+            else mob.getNavigation().moveTo(point.pos().getX() + 0.5D, point.pos().getY(),
+                    point.pos().getZ() + 0.5D, RaidConfig.RAIDER_ADVANCE_SPEED.get());
             if (glow) mob.addEffect(new MobEffectInstance(MobEffects.GLOWING, 40, 0, false, false));
         }
+    }
+
+    private static List<Mob> alliedRecruits(ServerLevel level, RaidSavedData.DefensePoint point,
+                                            RaidSavedData.Anchor anchor) {
+        double radius = RaidConfig.RECRUIT_MOBILIZATION_RADIUS.get();
+        AABB area = new AABB(point.pos()).inflate(radius, 64.0D, radius);
+        return level.getEntitiesOfClass(Mob.class, area,
+                mob -> mob.isAlive() && RecruitsBridge.belongsTo(mob, anchor.teamKey(), anchor.members()));
+    }
+
+    private static void mobilizeRecruits(ServerLevel level, List<Mob> recruits,
+                                         RaidSavedData.RaidState state) {
+        List<Mob> attackers = new ArrayList<>();
+        for (UUID id : state.raiders) {
+            Entity entity = level.getEntity(id);
+            if (entity instanceof Mob mob && mob.isAlive()) attackers.add(mob);
+        }
+        if (attackers.isEmpty()) return;
+        for (Mob recruit : recruits) {
+            LivingEntity current = recruit.getTarget();
+            if (current != null && current.isAlive()) continue;
+            Mob closest = null;
+            double closestDistance = Double.MAX_VALUE;
+            for (Mob attacker : attackers) {
+                double distance = recruit.distanceToSqr(attacker);
+                if (distance < closestDistance) {
+                    closest = attacker;
+                    closestDistance = distance;
+                }
+            }
+            if (closest != null) recruit.setTarget(closest);
+        }
+    }
+
+    private static boolean updateCaptureProgress(MinecraftServer server, RaidSavedData.Anchor anchor,
+                                                 RaidSavedData.DefensePoint point,
+                                                 RaidSavedData.RaidState state, ServerLevel level,
+                                                 List<ServerPlayer> members, List<Mob> recruits) {
+        if (state.wave <= 0) return false;
+        double radiusSq = (double) RaidConfig.CAPTURE_RADIUS.get() * RaidConfig.CAPTURE_RADIUS.get();
+        Vec3 center = Vec3.atCenterOf(point.pos());
+        int attackers = 0;
+        for (UUID id : state.raiders) {
+            Entity entity = level.getEntity(id);
+            if (entity instanceof Mob mob && mob.isAlive() && mob.distanceToSqr(center) <= radiusSq) attackers++;
+        }
+        int defenders = 0;
+        for (ServerPlayer player : members) {
+            if (player.level() == level && player.isAlive() && !player.isSpectator() &&
+                    player.distanceToSqr(center) <= radiusSq) defenders++;
+        }
+        for (Mob recruit : recruits) {
+            if (recruit.isAlive() && recruit.distanceToSqr(center) <= radiusSq) defenders++;
+        }
+
+        int maximum = RaidConfig.CAPTURE_TIME_SECONDS.get() * 20;
+        if (attackers > defenders && attackers > 0) state.captureTicks = Math.min(maximum, state.captureTicks + 20);
+        else state.captureTicks = Math.max(0,
+                state.captureTicks - RaidConfig.CAPTURE_DECAY_PER_SECOND.get() * 20);
+
+        int band = maximum <= 0 ? 0 : state.captureTicks * 4 / maximum;
+        if (band > state.lastCaptureWarningBand && band < 4) {
+            state.lastCaptureWarningBand = band;
+            int percent = band * 25;
+            announce(server, anchor.teamKey(), Component.literal("Stronghold occupation: " + percent +
+                    "%. Push the illagers out of the inner defense ring!").withStyle(ChatFormatting.DARK_RED),
+                    band >= 3);
+        }
+        return state.captureTicks >= maximum;
     }
 
     private static void setRaidMobsFrozen(ServerLevel level, RaidSavedData.RaidState state, boolean frozen) {
@@ -968,9 +1146,12 @@ public final class RaidEvents {
         float clearedFraction = state.waveStartingCount <= 0 ? 0.0F :
                 1.0F - (float) state.raiders.size() / state.waveStartingCount;
         bar.setProgress(Mth.clamp((completedWaves + clearedFraction) / totalWaves, 0.0F, 1.0F));
+        int capturePercent = Mth.clamp(state.captureTicks * 100 /
+                Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20), 0, 100);
         String label = paused ? "Invasion paused — faction offline" : state.wave == 0 ?
-                "Invasion approaching " + state.defensePointName : "Wave " + state.wave + "/" + totalWaves +
-                " • " + state.raiders.size() + " remaining • " + state.defensePointName;
+                "Siege camp forming to the " + approachDirection(state.approachAngle) :
+                waveTitle(state.wave) + " • " + state.raiders.size() + " invaders • stronghold " +
+                        capturePercent + "% occupied";
         bar.setName(Component.literal(label));
     }
 
@@ -986,11 +1167,82 @@ public final class RaidEvents {
         List<ServerPlayer> result = new ArrayList<>();
         RaidSavedData.Anchor anchor = RaidSavedData.get(server).anchors.get(key);
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (anchor != null && anchor.internalRoster()) {
+            // Recruits factions are scoreboard teams. They are authoritative so
+            // faction joins/leaves require no second roster command in this mod.
+            if (key.startsWith("team:")) {
+                if (teamKey(player).equals(key)) result.add(player);
+            } else if (anchor != null && anchor.internalRoster()) {
                 if (anchor.members().contains(player.getUUID())) result.add(player);
             } else if (teamKey(player).equals(key)) result.add(player);
         }
         return result;
+    }
+
+    private static void syncAutomaticHome(MinecraftServer server, RaidSavedData data,
+                                          ServerPlayer observedPlayer, boolean force) {
+        String key = teamKey(observedPlayer);
+        RaidSavedData.Anchor anchor = data.anchors.get(key);
+
+        if (anchor == null) {
+            String oldKey = associatedAnchorKeyForPlayer(data, observedPlayer.getUUID());
+            if (oldKey != null && !oldKey.equals(key) && !data.raids.containsKey(oldKey)) {
+                RaidSavedData.Anchor old = data.anchors.remove(oldKey);
+                if (old != null) {
+                    anchor = old.withIdentity(key, teamDisplay(observedPlayer));
+                    data.anchors.put(key, anchor);
+                }
+            }
+        }
+
+        UUID leaderId = RecruitsBridge.factionLeader(observedPlayer)
+                .orElse(anchor != null && !RaidSavedData.UNKNOWN_OWNER.equals(anchor.ownerUuid()) ?
+                        anchor.ownerUuid() : observedPlayer.getUUID());
+        ServerPlayer homePlayer = server.getPlayerList().getPlayer(leaderId);
+
+        if (anchor == null) {
+            // If a faction leader is offline during first discovery, the first
+            // online member establishes a usable temporary home. It is corrected
+            // automatically the next time the leader joins.
+            if (homePlayer == null) homePlayer = observedPlayer;
+            RaidSavedData.DefensePoint home = respawnPoint(server, homePlayer);
+            Set<UUID> members = seedRoster(server, observedPlayer);
+            members.add(leaderId);
+            Map<String, RaidSavedData.DefensePoint> points = new LinkedHashMap<>();
+            points.put(RaidSavedData.HOME_POINT, home);
+            long next = server.overworld().getGameTime() + randomCooldownTicks(server.overworld().random);
+            RaidSavedData.Anchor created = new RaidSavedData.Anchor(key, teamDisplay(observedPlayer), leaderId,
+                    members, false, true, points, next);
+            data.anchors.put(key, created);
+            data.setDirty();
+            return;
+        }
+
+        Set<UUID> members = new LinkedHashSet<>(anchor.members());
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (teamKey(player).equals(key)) members.add(player.getUUID());
+        }
+        members.add(leaderId);
+        RaidSavedData.Anchor updated = anchor.withOwner(leaderId).withRoster(members, false)
+                .withIdentity(key, teamDisplay(observedPlayer));
+
+        if ((force || updated.automaticHome() && RaidConfig.FOLLOW_RESPAWN_POINT.get()) &&
+                homePlayer != null && !data.raids.containsKey(key)) {
+            updated = updated.withPoint(respawnPoint(server, homePlayer)).withAutomaticHome(true);
+        }
+        if (!updated.equals(anchor)) {
+            data.anchors.put(key, updated);
+            data.setDirty();
+        }
+    }
+
+    private static RaidSavedData.DefensePoint respawnPoint(MinecraftServer server, ServerPlayer player) {
+        BlockPos pos = player.getRespawnPosition();
+        ResourceLocation dimension;
+        if (pos == null) {
+            pos = server.overworld().getSharedSpawnPos();
+            dimension = Level.OVERWORLD.location();
+        } else dimension = player.getRespawnDimension().location();
+        return new RaidSavedData.DefensePoint(RaidSavedData.HOME_POINT, dimension, pos.immutable());
     }
 
     private static void refreshIdleAnchorIdentities(MinecraftServer server, RaidSavedData data) {
@@ -1026,7 +1278,8 @@ public final class RaidEvents {
 
     private static boolean canManage(ServerPlayer player, RaidSavedData.Anchor anchor) {
         return player.hasPermissions(2) || !RaidConfig.OWNER_ONLY_MANAGEMENT.get() ||
-                player.getUUID().equals(anchor.ownerUuid());
+                player.getUUID().equals(anchor.ownerUuid()) ||
+                RecruitsBridge.factionLeader(player).filter(player.getUUID()::equals).isPresent();
     }
 
     private static boolean shouldPauseForPerformance(MinecraftServer server, RaidSavedData data) {
@@ -1114,6 +1367,18 @@ public final class RaidEvents {
     private static RaidSavedData.DefensePoint selectAutomaticPoint(MinecraftServer server,
                                                                     RaidSavedData.Anchor anchor,
                                                                     List<ServerPlayer> members) {
+        if (anchor.automaticHome()) {
+            List<RaidSavedData.DefensePoint> playerHomes = new ArrayList<>();
+            for (ServerPlayer member : members) {
+                RaidSavedData.DefensePoint home = respawnPoint(server, member);
+                if (!RaidConfig.REQUIRE_PLAYER_NEAR_ANCHOR.get() || hasDefenderNear(server, home, members)) {
+                    playerHomes.add(home);
+                }
+            }
+            if (!playerHomes.isEmpty()) {
+                return playerHomes.get(server.overworld().random.nextInt(playerHomes.size()));
+            }
+        }
         List<RaidSavedData.DefensePoint> eligible = new ArrayList<>();
         for (RaidSavedData.DefensePoint point : anchor.defensePoints().values()) {
             if (!RaidConfig.REQUIRE_PLAYER_NEAR_ANCHOR.get() || hasDefenderNear(server, point, members)) {
@@ -1173,6 +1438,26 @@ public final class RaidEvents {
         int max = Math.max(min, RaidConfig.MAX_COOLDOWN_MINUTES.get());
         int minutes = min + random.nextInt(max - min + 1);
         return minutes * 60L * 20L;
+    }
+
+    private static String approachDirection(double angle) {
+        double normalized = (angle % (Math.PI * 2.0D) + Math.PI * 2.0D) % (Math.PI * 2.0D);
+        String[] directions = {"east", "southeast", "south", "southwest",
+                "west", "northwest", "north", "northeast"};
+        int index = (int) Math.floor((normalized + Math.PI / 8.0D) / (Math.PI / 4.0D)) & 7;
+        return directions[index];
+    }
+
+    private static String waveTitle(int wave) {
+        int total = RaidConfig.WAVES.get();
+        if (wave >= total) return "Command assault";
+        return switch (wave) {
+            case 1 -> "Vanguard";
+            case 2 -> "Main assault";
+            case 3 -> "Breach companies";
+            case 4 -> "War-caster advance";
+            default -> "Reinforcement wave";
+        };
     }
 
     private static boolean shouldWarn(int seconds) {
