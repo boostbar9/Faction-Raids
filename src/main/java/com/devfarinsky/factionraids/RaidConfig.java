@@ -47,6 +47,11 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue CAPTURE_RADIUS;
     public static final ForgeConfigSpec.IntValue CAPTURE_TIME_SECONDS;
     public static final ForgeConfigSpec.IntValue CAPTURE_DECAY_PER_SECOND;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_STRAGGLER_RESCUE;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_EFFORT_BONUS;
+    public static final ForgeConfigSpec.IntValue EFFORT_KILL_BONUS_SECONDS;
+    public static final ForgeConfigSpec.IntValue EFFORT_BREACH_BONUS_SECONDS;
+    public static final ForgeConfigSpec.IntValue EFFORT_MAX_BONUS_SECONDS;
     public static final ForgeConfigSpec.BooleanValue ENABLE_BREACH_PHASE;
     public static final ForgeConfigSpec.IntValue BREACH_RADIUS;
     public static final ForgeConfigSpec.IntValue BREACH_TIME_SECONDS;
@@ -190,6 +195,16 @@ public final class RaidConfig {
                 .defineInRange("captureRadius", 18, 6, 64);
         CAPTURE_TIME_SECONDS = b.comment("Continuous contested seconds required for invaders to capture the stronghold.")
                 .defineInRange("captureTimeSeconds", 120, 30, 600);
+        ENABLE_STRAGGLER_RESCUE = b.comment("Teleport raiders that stall on the way to the objective, and drop them from the wave count if they stall again. Prevents raids from grinding to a halt.")
+                .define("enableStragglerRescue", true);
+        ENABLE_EFFORT_BONUS = b.comment("Reward real raider effort (kills, block breaches) with bonus capture/breach progress on top of the presence baseline.")
+                .define("enableEffortBonus", true);
+        EFFORT_KILL_BONUS_SECONDS = b.comment("Bonus seconds of capture/breach progress awarded when a raider kills a defender.")
+                .defineInRange("effortKillBonusSeconds", 5, 0, 60);
+        EFFORT_BREACH_BONUS_SECONDS = b.comment("Bonus seconds of capture/breach progress awarded when a raider finishes breaking a wall/gate block.")
+                .defineInRange("effortBreachBonusSeconds", 2, 0, 60);
+        EFFORT_MAX_BONUS_SECONDS = b.comment("Maximum unspent effort-bonus reservoir (seconds). Prevents farmed events from cashing in all at once.")
+                .defineInRange("effortMaxBonusSeconds", 30, 0, 300);
         CAPTURE_DECAY_PER_SECOND = b.comment("Seconds of occupation progress removed each second after defenders regain control.")
                 .defineInRange("captureDecayPerSecond", 2, 1, 10);
         ENABLE_BREACH_PHASE = b.comment("Require attackers to establish control of an outer perimeter before stronghold occupation can begin.")
