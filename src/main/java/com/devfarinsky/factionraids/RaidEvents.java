@@ -1770,6 +1770,15 @@ public final class RaidEvents {
 
         final int cx = camp.getX();
         final int cz = camp.getZ();
+        // v2.17.0: capture the camp's validated plane Y so every prefab
+        // structure (watchtowers, forge, tents, banners) sits on the same
+        // plane as the palisade instead of each building following its own
+        // local heightmap. On rolling terrain the old per-column
+        // surfacePosition() calls placed one watchtower base on a hill and
+        // the diagonal-corner one 3 blocks lower, so the camp looked
+        // shattered. validCampSurface has already guaranteed every column
+        // inside the footprint is within +/-3 of this Y.
+        final int cy = camp.getY();
         final int r = 9;  // palisade ring "radius" (half-extent); actual footprint 19x19.
         final double frontAngle = state.approachAngle; // camp -> objective vector
 
@@ -1855,16 +1864,18 @@ public final class RaidEvents {
         // -----------------------------------------------------------------
         state.deferredCampBuilds.clear();
 
-        // Four corner watchtowers (one queued build per corner).
+        // Four corner watchtowers (one queued build per corner). All four
+        // share the palisade's plane Y so they line up as a coherent camp
+        // silhouette even when the ground slopes gently across the footprint.
         int[][] corners = {{-r, -r}, {-r, r}, {r, -r}, {r, r}};
         for (int[] c : corners) {
             final int wx = cx + c[0];
             final int wz = cz + c[1];
-            state.deferredCampBuilds.add(() -> buildWatchtower(level, state, wx, wz));
+            state.deferredCampBuilds.add(() -> buildWatchtower(level, state, wx, wz, cy));
         }
 
         // Forge cluster (single queued build).
-        state.deferredCampBuilds.add(() -> buildForge(level, state, cx, cz));
+        state.deferredCampBuilds.add(() -> buildForge(level, state, cx, cz, cy));
 
         // Two barracks tents (one queued build each).
         double rearAngle = frontAngle + Math.PI;
@@ -1875,7 +1886,7 @@ public final class RaidEvents {
         for (int tent = -1; tent <= 1; tent += 2) {
             final int tx = cx + rearDx + perpX * tent;
             final int tz = cz + rearDz + perpZ * tent;
-            state.deferredCampBuilds.add(() -> buildTent(level, state, tx, tz));
+            state.deferredCampBuilds.add(() -> buildTent(level, state, tx, tz, cy));
         }
         // First deferred build fires after a short delay so the camp core
         // has visibly "settled" before the next structure appears.
@@ -1956,31 +1967,58 @@ public final class RaidEvents {
         }
     }
 
-    /** One corner watchtower: 4-log column with a banner top. */
+    /**
+     * One corner watchtower: 4-log column with a banner top.
+     *
+     * <p>v2.17.0: anchored to the camp's plane Y rather than local terrain.
+     * If the ground under this corner deviates from the plane by more
+     * than 3 blocks (already unlikely thanks to validCampSurface's grid
+     * check) we skip this tower rather than build a floating or buried
+     * one.
+     */
     private static void buildWatchtower(ServerLevel level, RaidSavedData.RaidState state,
-                                        int cx, int cz) {
-        BlockPos base = surfacePosition(level, cx, cz);
+                                        int cx, int cz, int campY) {
+        BlockPos base = campPlanePosition(level, cx, cz, campY);
+        if (base == null) return;
         for (int dy = 0; dy < 4; dy++) {
             placeCampBlock(level, state, base.above(dy), Blocks.SPRUCE_LOG);
         }
         placeCampBlock(level, state, base.above(4), Blocks.RED_BANNER);
     }
 
-    /** Forge cluster: anvil + furnace + crafting table on the east side. */
+    /**
+     * Forge cluster: anvil + furnace + crafting table on the east side.
+     *
+     * <p>v2.17.0: anchored to the camp plane Y so the three pieces sit at
+     * the same height rather than tracking each column's individual
+     * surface (previously an anvil on a bump could float one block above
+     * the crafting table beside it).
+     */
     private static void buildForge(ServerLevel level, RaidSavedData.RaidState state,
-                                   int cx, int cz) {
-        placeCampBlock(level, state, surfacePosition(level, cx + 3, cz), Blocks.ANVIL);
-        placeCampBlock(level, state, surfacePosition(level, cx + 3, cz + 1), Blocks.FURNACE);
-        placeCampBlock(level, state, surfacePosition(level, cx + 3, cz - 1), Blocks.CRAFTING_TABLE);
+                                   int cx, int cz, int campY) {
+        BlockPos anvil = campPlanePosition(level, cx + 3, cz, campY);
+        BlockPos furnace = campPlanePosition(level, cx + 3, cz + 1, campY);
+        BlockPos craft = campPlanePosition(level, cx + 3, cz - 1, campY);
+        if (anvil != null) placeCampBlock(level, state, anvil, Blocks.ANVIL);
+        if (furnace != null) placeCampBlock(level, state, furnace, Blocks.FURNACE);
+        if (craft != null) placeCampBlock(level, state, craft, Blocks.CRAFTING_TABLE);
     }
 
     /**
      * Places one dark-oak-and-wool tent centered on the given world column.
      * The tent is 5 wide, 5 deep, and 4 tall with an open front. Called from
      * {@link #buildWarCamp} to place the two barracks tents.
+     *
+     * <p>v2.17.0: the floor Y is now the camp plane Y, not the local
+     * heightmap under the tent center. Previously a tent placed on a
+     * gentle rise ended up with its walls half-buried on the uphill side
+     * and floating on the downhill side. If the local terrain deviates
+     * from the plane by more than 3 blocks we skip the tent entirely.
      */
-    private static void buildTent(ServerLevel level, RaidSavedData.RaidState state, int cx, int cz) {
-        int floorY = surfacePosition(level, cx, cz).getY();
+    private static void buildTent(ServerLevel level, RaidSavedData.RaidState state, int cx, int cz, int campY) {
+        BlockPos anchor = campPlanePosition(level, cx, cz, campY);
+        if (anchor == null) return;
+        int floorY = anchor.getY();
         for (int dx = -2; dx <= 2; dx++) {
             for (int dz = -2; dz <= 2; dz++) {
                 placeCampBlock(level, state, new BlockPos(cx + dx, floorY, cz + dz),
@@ -2069,15 +2107,22 @@ public final class RaidEvents {
         // on the ocean.
         if (isWaterOrLava(level, center) || isWaterOrLava(level, center.below())) return false;
         if (!level.getBlockState(center.below()).isFaceSturdy(level, center.below(), Direction.UP)) return false;
-        // v2.13.0 checks the corners of a wider footprint (±9 on each axis)
-        // to match the new palisade prefab. If terrain drops off by more
-        // than 3 blocks or spills into fluid at any corner, skip this site.
-        for (int dx : new int[]{-9, 9}) {
-            for (int dz : new int[]{-9, 9}) {
+        // v2.17.0: sample the whole footprint on a coarse grid (every 3
+        // blocks across the 19x19 palisade), not just the corners. A
+        // corners-only check let camps spawn where a puddle or ravine
+        // sat mid-footprint, so shallow water at the interior would end
+        // up with fences submerged. Also reject if the terrain height at
+        // any sample deviates from the center by more than 3 blocks so
+        // watchtowers and tents don't end up floating or buried when the
+        // palisade sits across a ridge.
+        final int r = 9;
+        for (int dx = -r; dx <= r; dx += 3) {
+            for (int dz = -r; dz <= r; dz += 3) {
                 BlockPos sample = surfacePosition(level, center.getX() + dx, center.getZ() + dz);
-                // Same fix at the corners: check sample AND the block below
-                // for water/lava, not just sample (which is always air).
                 if (Math.abs(sample.getY() - center.getY()) > 3) return false;
+                // Check the sample (always air, being top-of-column) AND the
+                // block just below, which is what a fence or a tent floor
+                // actually stands on. Both must be dry.
                 if (isWaterOrLava(level, sample) || isWaterOrLava(level, sample.below())) return false;
             }
         }
@@ -2095,6 +2140,22 @@ public final class RaidEvents {
 
     private static BlockPos surfacePosition(ServerLevel level, int x, int z) {
         return new BlockPos(x, level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z);
+    }
+
+    /**
+     * v2.17.0: helper for prefab camp builders. Returns a position at the
+     * camp's plane Y (the validated flat center Y) rather than the local
+     * heightmap. On rolling terrain this keeps watchtower bases, tent
+     * floors, and forge platforms coplanar with the palisade instead of
+     * following every dip and rise, which used to produce floating tents
+     * and buried anvils. Returns null if the local terrain deviates from
+     * campY by more than 3 blocks -- caller should skip placement so we
+     * never sink structures into cliffs or hang them in mid-air.
+     */
+    private static BlockPos campPlanePosition(ServerLevel level, int x, int z, int campY) {
+        int localTop = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+        if (Math.abs(localTop - campY) > 3) return null;
+        return new BlockPos(x, campY, z);
     }
 
     private static void placeCampBlock(ServerLevel level, RaidSavedData.RaidState state,
