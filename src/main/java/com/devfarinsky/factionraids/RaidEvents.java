@@ -1778,12 +1778,41 @@ public final class RaidEvents {
         // -----------------------------------------------------------------
 
         // 1) Palisade ring with a front-facing sally gate.
+        //
+        // v2.16.4: the previous gate math measured Euclidean distance from a
+        // continuous point (cos*r, sin*r) to each fence block. At diagonal
+        // approach angles (~45\u00b0) that continuous point sits far from any
+        // palisade block \u2014 the nearest ring blocks at (\u00b1r, y) or (x, \u00b1r)
+        // ended up > 2.2 away, so ZERO fence blocks got removed and the
+        // camp had no exit at all. Raiders spawned inside then couldn't get
+        // out to path toward the objective.
+        //
+        // Fix: snap the gate to the palisade side whose normal is closest
+        // to the approach direction (the axis with the larger absolute
+        // component), then carve out a 3-wide gap of both fence rows on
+        // that side, centered on where the approach vector crosses the
+        // ring. This guarantees a passable gap on every approach angle,
+        // whether cardinal or diagonal.
+        final int gateHalfWidth = 1; // 1 -> gap is 3 blocks wide (\u00b11 + center)
+        final boolean gateOnXAxis = Math.abs(Math.cos(frontAngle)) >= Math.abs(Math.sin(frontAngle));
+        // Which side of the ring the gate cuts through, and where along that side.
+        final int gateWallCoord = gateOnXAxis
+                ? (Math.cos(frontAngle) >= 0 ? r : -r)
+                : (Math.sin(frontAngle) >= 0 ? r : -r);
+        // Where the approach vector crosses the chosen wall, clamped inside
+        // the wall span so we can never carve off the wall's corner.
+        final int gateCenterAlong = gateOnXAxis
+                ? Mth.clamp(Mth.floor(Math.sin(frontAngle) * r), -(r - gateHalfWidth), r - gateHalfWidth)
+                : Mth.clamp(Mth.floor(Math.cos(frontAngle) * r), -(r - gateHalfWidth), r - gateHalfWidth);
         for (int dx = -r; dx <= r; dx++) {
             for (int dz = -r; dz <= r; dz++) {
                 if (Math.abs(dx) != r && Math.abs(dz) != r) continue;
-                double gateX = Math.cos(frontAngle) * r;
-                double gateZ = Math.sin(frontAngle) * r;
-                if (Math.hypot(dx - gateX, dz - gateZ) < 2.2D) continue;
+                // Skip the gate slot: on the chosen wall, within the gate
+                // half-width of the crossing point.
+                boolean isGate = gateOnXAxis
+                        ? (dx == gateWallCoord && Math.abs(dz - gateCenterAlong) <= gateHalfWidth)
+                        : (dz == gateWallCoord && Math.abs(dx - gateCenterAlong) <= gateHalfWidth);
+                if (isGate) continue;
                 BlockPos ground = surfacePosition(level, cx + dx, cz + dz);
                 placeCampBlock(level, state, ground, Blocks.SPRUCE_FENCE);
                 placeCampBlock(level, state, ground.above(), Blocks.SPRUCE_FENCE);
