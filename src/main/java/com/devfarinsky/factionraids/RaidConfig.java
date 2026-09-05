@@ -23,6 +23,9 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue MIN_SPAWN_DISTANCE;
     public static final ForgeConfigSpec.IntValue MAX_SPAWN_DISTANCE;
     public static final ForgeConfigSpec.IntValue DEFENSE_RADIUS;
+    public static final ForgeConfigSpec.IntValue AGGRO_RADIUS;
+    public static final ForgeConfigSpec.IntValue OFF_AXIS_DRIFT_LIMIT;
+    public static final ForgeConfigSpec.BooleanValue BREACHERS_IGNORE_DEFENDERS;
     public static final ForgeConfigSpec.IntValue ABANDON_DEFEAT_MINUTES;
     public static final ForgeConfigSpec.IntValue MISSING_ENTITY_GRACE_SECONDS;
     public static final ForgeConfigSpec.IntValue SPAWN_RETRY_SECONDS;
@@ -155,6 +158,12 @@ public final class RaidConfig {
                 .defineInRange("maximumSpawnDistance", 72, 32, 256);
         DEFENSE_RADIUS = b.comment("Players inside this radius count as actively defending their territory.")
                 .defineInRange("defenseRadius", 160, 48, 512);
+        AGGRO_RADIUS = b.comment("Maximum distance at which a raider will lock onto a defender and break off from the objective. Smaller values keep raiders focused on the objective; larger values let them chase defenders across the base. 2.14.0 default 40 (down from the effective 160 in prior versions, which was the reason raiders ran into the base to chase far-away defenders).")
+                .defineInRange("aggroRadius", 40, 8, 160);
+        OFF_AXIS_DRIFT_LIMIT = b.comment("If a raider drifts this many blocks perpendicular to the invasion axis, drop its current defender target and re-lock onto the objective. Prevents raiders getting dragged sideways deep into the base by a fleeing defender.")
+                .defineInRange("offAxisDriftLimit", 24, 8, 128);
+        BREACHERS_IGNORE_DEFENDERS = b.comment("When true (default), breachers and the siege commander refuse to acquire defender targets and only path to the objective, so gate-breach progress is not interrupted by defender skirmishes. Melee raiders still engage defenders normally.")
+                .define("breachersIgnoreDefenders", true);
         ABANDON_DEFEAT_MINUTES = b.comment("Optional legacy abandonment defeat timer. Zero disables it so defeat requires actual stronghold occupation.")
                 .defineInRange("abandonDefeatMinutes", 0, 0, 30);
         MISSING_ENTITY_GRACE_SECONDS = b.comment("Keep temporarily unloaded raid mobs tracked for this long before treating them as missing. In 2.13.0 the timer only advances while the mob's chunk is unloaded — loaded chunks with a missing entity no longer count against grace.")

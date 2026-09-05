@@ -395,6 +395,18 @@ public final class RaidSavedData extends SavedData {
          * up the hill instead of turtling.
          */
         public BlockPos barrelPos;
+        /**
+         * Non-persisted, per-raid schedule of camp structures still waiting
+         * to be placed by the progressive builder. Populated when the
+         * strategic camp core is placed; drained one-per-N-ticks by the
+         * main tick loop so the camp feels like it is being constructed
+         * over time. When Villager Workers 2 is present we hand each entry
+         * to a Builder via BuildArea NBT instead of placing it directly.
+         * Rebuilt from scratch on server restart mid-raid.
+         */
+        public final transient java.util.Deque<Runnable> deferredCampBuilds = new java.util.ArrayDeque<>();
+        /** Ticks remaining until the next deferred camp structure is placed. */
+        public transient int deferredCampCooldown;
         public int reconcileTicks;
         public boolean performancePauseAnnounced;
         public boolean offlinePauseAnnounced;
