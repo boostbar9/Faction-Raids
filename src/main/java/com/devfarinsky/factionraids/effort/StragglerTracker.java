@@ -7,12 +7,14 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -23,16 +25,36 @@ import java.util.UUID;
  *
  * <p>Tracks two ints per raider (in memory, not persisted):
  * <ul>
- *   <li>{@code lastDistSq}   \u2014 last sampled squared distance to objective</li>
- *   <li>{@code strikes}      \u2014 how many stall-and-rescue cycles they've hit</li>
+ *   <li>{@code lastDist}   -- last sampled distance to objective, in blocks</li>
+ *   <li>{@code strikes}    -- how many stall-and-rescue cycles they've hit</li>
  * </ul>
  *
  * <p>Sample cadence: {@link #SAMPLE_INTERVAL_TICKS} ticks. Progress test:
- * distance to objective must decrease by at least
- * {@link #PROGRESS_EPSILON} blocks between samples, otherwise a strike lands.
- * First strike \u2192 teleport near the raider centroid, one block toward the
- * objective. Second strike \u2192 remove from {@code state.raiders} so the wave
- * can advance without them. The entity keeps living and can still fight.
+ * distance to objective must decrease by at least {@link #PROGRESS_EPSILON}
+ * blocks between samples, otherwise a strike lands. First strike -> teleport
+ * near the raider centroid, one block toward the objective. Second strike
+ * -> remove from {@code state.raiders} so the wave can advance without
+ * them. The entity keeps living and can still fight.
+ *
+ * <p>v2.18.0 audit fixes:
+ * <ul>
+ *   <li>Progress check compares real block distance (not squared distance)
+ *       so the threshold is consistent regardless of how far the raider
+ *       is from the objective. The old {@code delta >= EPSILON * EPSILON}
+ *       compared a squared-distance delta against 4, which meant a raider
+ *       100 blocks out only had to change squared-distance by 4 (roughly
+ *       0.02 real blocks) to pass, while one 3 blocks out needed a much
+ *       larger jump.</li>
+ *   <li>{@link #forget(String)} now drains all per-team UUID entries
+ *       from {@code TRACKS} instead of leaking them. Wave-end
+ *       {@code .discard()} does not fire death events, so the earlier
+ *       "TRACKS entries drain themselves" assumption was optimistic and
+ *       let the map grow unbounded over long uptimes.</li>
+ *   <li>Rescue teleport snaps to the surface Y at the rescue XZ instead
+ *       of using the centroid Y, so a raider stuck on a plateau does not
+ *       get warped down into a valley (or a raider in a valley up onto
+ *       a plateau).</li>
+ * </ul>
  */
 public final class StragglerTracker {
 
@@ -41,11 +63,16 @@ public final class StragglerTracker {
 
     private static final Map<UUID, int[]> TRACKS = new HashMap<>();
     private static final Map<String, Long> LAST_SAMPLE = new HashMap<>();
+    // v2.18.0: track which raider UUIDs belong to which team so forget()
+    // can drain the entries when a raid ends, instead of leaking them
+    // whenever a raider is removed via .discard() (which never fires a
+    // death event and so never triggers the old passive cleanup).
+    private static final Map<String, Set<UUID>> TEAM_RAIDERS = new HashMap<>();
 
     private StragglerTracker() {}
 
     /**
-     * Run one sampling pass for a raid. Cheap to call every server tick \u2014
+     * Run one sampling pass for a raid. Cheap to call every server tick --
      * internally rate-limited to SAMPLE_INTERVAL_TICKS per raid.
      *
      * @return number of raiders dropped from the wave this call
@@ -60,10 +87,12 @@ public final class StragglerTracker {
         LAST_SAMPLE.put(state.teamKey, now);
 
         Vec3 objVec = Vec3.atCenterOf(objective);
-        // Centroid of currently-alive raiders \u2014 rescue target when we teleport.
+        // Centroid of currently-alive raiders -- rescue target when we teleport.
         Vec3 centroid = centroidOfLiveRaiders(level, state, objVec);
         Vec3 toObjective = objVec.subtract(centroid).normalize();
         Vec3 rescueTarget = centroid.add(toObjective.scale(2.0D));
+
+        Set<UUID> teamSet = TEAM_RAIDERS.computeIfAbsent(state.teamKey, k -> new HashSet<>());
 
         int dropped = 0;
         Iterator<UUID> it = state.raiders.iterator();
@@ -72,43 +101,60 @@ public final class StragglerTracker {
             Entity e = level.getEntity(id);
             if (!(e instanceof Mob mob) || !mob.isAlive()) {
                 TRACKS.remove(id);
+                teamSet.remove(id);
                 continue;
             }
-            double distSq = mob.distanceToSqr(objVec);
+            // v2.18.0: compare real block distances, not squared. Old code
+            // stored distSq and compared delta against EPSILON*EPSILON,
+            // which made the threshold effectively vanish for raiders far
+            // from the objective (squared-distance changes a lot per meter
+            // when you're far out).
+            int distBlocks = (int) Math.min(Integer.MAX_VALUE, Math.sqrt(mob.distanceToSqr(objVec)));
             int[] track = TRACKS.get(id);
             if (track == null) {
-                TRACKS.put(id, new int[]{(int) Math.min(Integer.MAX_VALUE, distSq), 0});
+                TRACKS.put(id, new int[]{distBlocks, 0});
+                teamSet.add(id);
                 continue;
             }
-            double delta = track[0] - distSq;
-            if (delta >= PROGRESS_EPSILON * PROGRESS_EPSILON) {
-                // Made progress toward objective \u2014 reset strikes.
-                track[0] = (int) Math.min(Integer.MAX_VALUE, distSq);
+            int delta = track[0] - distBlocks;
+            if (delta >= PROGRESS_EPSILON) {
+                // Made progress toward objective -- reset strikes.
+                track[0] = distBlocks;
                 track[1] = 0;
                 continue;
             }
             // No meaningful progress in the sample window.
             track[1] += 1;
             if (track[1] == 1) {
-                rescueByTeleport(mob, rescueTarget);
-                track[0] = (int) Math.min(Integer.MAX_VALUE, mob.distanceToSqr(objVec));
+                rescueByTeleport(level, mob, rescueTarget);
+                track[0] = (int) Math.min(Integer.MAX_VALUE, Math.sqrt(mob.distanceToSqr(objVec)));
             } else if (track[1] >= 2) {
                 FactionLogger.LOG.debug("Dropping stuck raider {} from wave for team {}",
                         id, state.teamKey);
                 it.remove();
                 TRACKS.remove(id);
+                teamSet.remove(id);
                 dropped++;
             }
         }
         return dropped;
     }
 
-    /** Forget a raid's stall tracks \u2014 call on raid end. */
+    /**
+     * Forget a raid's stall tracks -- call on raid end.
+     *
+     * <p>v2.18.0: actually drains {@code TRACKS}. The old comment claimed
+     * entries "drain themselves as raiders die/despawn," but raiders
+     * removed with {@code Entity.discard()} on wave/raid end do not fire
+     * a death event, so their tracks used to leak permanently. Over long
+     * server uptime with many raids, the map grew unbounded.
+     */
     public static void forget(String teamKey) {
         LAST_SAMPLE.remove(teamKey);
-        // TRACKS entries drain themselves as raiders die/despawn; nothing to
-        // key on teamKey here without a heavier lookup. They're bounded by
-        // the total raider UUID space per raid, which is small.
+        Set<UUID> teamSet = TEAM_RAIDERS.remove(teamKey);
+        if (teamSet != null) {
+            for (UUID id : teamSet) TRACKS.remove(id);
+        }
     }
 
     private static Vec3 centroidOfLiveRaiders(ServerLevel level,
@@ -129,8 +175,15 @@ public final class StragglerTracker {
         return new Vec3(x / n, y / n, z / n);
     }
 
-    private static void rescueByTeleport(Mob mob, Vec3 target) {
-        // Use teleportTo so the client updates cleanly.
-        mob.teleportTo(target.x, target.y, target.z);
+    /**
+     * v2.18.0: snap the rescue Y to the surface height at the target XZ
+     * so a raider stuck on a plateau is not dumped into a valley (and
+     * vice versa). The old code used the centroid Y, which meant one
+     * outlier's rescue placed them anywhere from underwater to floating.
+     */
+    private static void rescueByTeleport(ServerLevel level, Mob mob, Vec3 target) {
+        int surfaceY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                (int) Math.floor(target.x), (int) Math.floor(target.z));
+        mob.teleportTo(target.x, surfaceY, target.z);
     }
 }
