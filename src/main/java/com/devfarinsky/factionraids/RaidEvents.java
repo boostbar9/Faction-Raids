@@ -904,6 +904,21 @@ public final class RaidEvents {
         state.rewardEligible = rewardEligible;
         ServerLevel raidLevel = getLevel(server, point);
         if (raidLevel != null && RaidConfig.BUILD_WAR_CAMPS.get()) buildWarCamp(raidLevel, point, state);
+        // Amphibious detection: if a large enough open-water body sits within
+        // reach of the objective, mark a staging point and beach. Boat spawns
+        // then run alongside land spawns for the rest of the raid.
+        if (raidLevel != null) {
+            com.devfarinsky.factionraids.naval.NavalStagingScanner.NavalStaging naval =
+                    com.devfarinsky.factionraids.naval.NavalStagingScanner.scan(raidLevel, point.pos());
+            if (naval.found()) {
+                state.navalStagingPos = naval.surface();
+                state.navalBeachPos = naval.beach();
+                announce(server, anchor.teamKey(), Component.literal(
+                        "Sails spotted offshore! A raider fleet is staging at " + formatPos(naval.surface()) +
+                        " and will beach near " + formatPos(naval.beach()) + ".")
+                        .withStyle(ChatFormatting.AQUA), false);
+            }
+        }
         data.raids.put(anchor.teamKey(), state);
         data.setDirty();
         announce(server, anchor.teamKey(), Component.literal("Enemy scouts have found " + anchor.teamDisplay() + " at '" + point.name() +
@@ -950,6 +965,19 @@ public final class RaidEvents {
         List<Mob> recruits = alliedRecruits(level, point, anchor);
         if (RaidConfig.MOBILIZE_RECRUITS.get()) mobilizeRecruits(level, recruits, state);
         redirectRaiders(level, state, members, recruits, point);
+
+        // Amphibious support: steer active raider boats toward the beach, and
+        // let stalled ground raiders drop planks over narrow water spans.
+        // Both are no-ops when the raid has no naval staging or the bridge/
+        // convoy has nothing to do.
+        com.devfarinsky.factionraids.naval.NavalConvoy.tick(teamKey, level);
+        if (com.devfarinsky.factionraids.naval.BridgeBuilder.tick(level, state, point.pos())) {
+            announce(server, teamKey, Component.literal(
+                    "Raiders have laid a bridge to bypass your defenses.")
+                    .withStyle(ChatFormatting.AQUA), false);
+            data.setDirty();
+        }
+
         processPhysicalBreaching(level, point, state);
 
         if (updateCaptureProgress(server, anchor, point, state, level, members, recruits)) {
@@ -1117,13 +1145,22 @@ public final class RaidEvents {
             return;
         }
 
+        // Naval share: when a staging point is available, route a percentage of
+        // this squad into boats. The rest still spawn on land as usual.
+        boolean amphibious = state.navalStagingPos != null && state.navalBeachPos != null;
+        int navalShare = amphibious ? (wanted * RaidConfig.NAVAL_WAVE_SHARE_PERCENT.get() + 50) / 100 : 0;
+
         int spawned = 0;
         for (int i = 0; i < wanted; i++) {
             int waveIndex = state.waveStartingCount + spawned;
             Mob raider = createAttackerForWave(level, state.wave, waveIndex);
             if (raider == null) continue;
-            BlockPos spawn = findSpawnPosition(level, point.pos(), level.random, raider,
-                    state.approachAngle, state.campPos);
+
+            boolean asNaval = i < navalShare;
+            BlockPos spawn = asNaval
+                    ? state.navalStagingPos
+                    : findSpawnPosition(level, point.pos(), level.random, raider,
+                            state.approachAngle, state.campPos);
             if (spawn == null) continue;
             raider.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5,
                     level.random.nextFloat() * 360.0F, 0.0F);
@@ -1137,6 +1174,21 @@ public final class RaidEvents {
                 assignSiegeRole(raider, state, waveIndex, squadLeader);
                 state.raiders.add(raider.getUUID());
                 state.totalSpawned++;
+                if (asNaval) {
+                    // Wrap the raider in a boat and hand it off to the convoy
+                    // for beach-bound steering. If the boat fails to spawn we
+                    // still have a raider swimming, which is a valid fallback.
+                    net.minecraft.world.entity.vehicle.Boat boat =
+                            new net.minecraft.world.entity.vehicle.Boat(level,
+                                    raider.getX(), raider.getY() + 0.1, raider.getZ());
+                    boat.setVariant(net.minecraft.world.entity.vehicle.Boat.Type.OAK);
+                    boat.setYRot(raider.getYRot());
+                    if (level.addFreshEntity(boat)) {
+                        raider.startRiding(boat, true);
+                        com.devfarinsky.factionraids.naval.NavalConvoy.enlist(
+                                anchor.teamKey(), boat, state.navalBeachPos);
+                    }
+                }
                 if (RaidConfig.SPAWN_ARRIVAL_EFFECTS.get()) {
                     level.sendParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE,
                             raider.getX(), raider.getY() + 0.5D, raider.getZ(),
@@ -1843,6 +1895,8 @@ public final class RaidEvents {
 
     private static void finishRaid(MinecraftServer server, RaidSavedData data, String teamKey,
                                    boolean victory, boolean reward, String message) {
+        com.devfarinsky.factionraids.naval.NavalConvoy.forget(teamKey);
+        com.devfarinsky.factionraids.naval.BridgeBuilder.forget(teamKey);
         RaidSavedData.RaidState state = data.raids.remove(teamKey);
         RaidSavedData.Anchor anchor = data.anchors.get(teamKey);
         if (state != null && anchor != null) {
