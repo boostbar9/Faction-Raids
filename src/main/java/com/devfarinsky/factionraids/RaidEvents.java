@@ -2191,31 +2191,51 @@ public final class RaidEvents {
         if (contributors.isEmpty()) return;
         if (!RaidConfig.PHYSICAL_BREACHING.get()) return;
 
-        // Nearest two contributors only. A ravager can't fit next to a
-        // door anyway and squeezing 8 mobs into one 1x2 slot is worse
-        // than letting them idle.
-        contributors.sort((a, b) -> Double.compare(
+        // v2.16.2: filter out ravagers before sorting. A ravager has a
+        // ~2x2 hitbox and cannot fit into the 1-block-wide neighbor slot
+        // beside a door - forcing it to try just makes it loop on nav
+        // failures. Ravagers still credit breach pressure (they scan the
+        // same 7x4x7 box) and their normal charge AI carries them into
+        // the wall for cosmetic ramming; they just don't get the "stand
+        // and swing" treatment.
+        List<Mob> eligible = new ArrayList<>(contributors.size());
+        for (Mob mob : contributors) {
+            if (mob.getType() == EntityType.RAVAGER) continue;
+            eligible.add(mob);
+        }
+        if (eligible.isEmpty()) return;
+
+        // Nearest two contributors only. Squeezing 8 mobs into one 1x2
+        // slot is worse than letting them idle - the extras still credit
+        // pressure so the door breaks at the same speed.
+        eligible.sort((a, b) -> Double.compare(
                 a.distanceToSqr(target.getX() + 0.5, target.getY() + 0.5, target.getZ() + 0.5),
                 b.distanceToSqr(target.getX() + 0.5, target.getY() + 0.5, target.getZ() + 0.5)));
-        int drive = Math.min(2, contributors.size());
+        int drive = Math.min(2, eligible.size());
 
         // Pick the best stand-next-to-the-block position: the horizontal
         // neighbor closest to the leading breacher, that the raider can
         // stand in without suffocating.
-        Mob leader = contributors.get(0);
+        Mob leader = eligible.get(0);
         BlockPos standPos = pickBreacherStandPos(level, target, leader);
 
         for (int i = 0; i < drive; i++) {
-            Mob mob = contributors.get(i);
-            // Path directly to the door face at a modest sprint. 1.15 is
-            // brisk enough to catch up to a defender kiting through the
-            // gate but slow enough that a ravager doesn't overshoot.
+            Mob mob = eligible.get(i);
+            // v2.16.2: re-issue the nav command every tick when the mob
+            // isn't already adjacent. The breacher's own goal system
+            // (MeleeAttackGoal, WalkTowardsTargetGoal from Recruits, etc.)
+            // fights us by re-pathing toward the objective - the 4-block
+            // gate we had in v2.16.0 let the mob's AI win and it faced
+            // away while swinging. 2.25-block gate + every-tick re-issue
+            // keeps the raider oriented on the door.
             if (standPos != null) {
                 double distSq = mob.distanceToSqr(standPos.getX() + 0.5,
                         standPos.getY(), standPos.getZ() + 0.5);
-                // Only re-issue the nav command when we're not already
-                // adjacent - constant moveTo calls thrash the path grid.
-                if (distSq > 4.0D || mob.getNavigation().isDone()) {
+                // Adjacent = 1.5^2 = 2.25. Beyond that, force the path
+                // every tick regardless of nav.isDone(); the cost is a
+                // path recompute for at most 2 mobs per raid tick, well
+                // under the pathfinding budget.
+                if (distSq > 2.25D) {
                     mob.getNavigation().moveTo(
                             standPos.getX() + 0.5, standPos.getY(), standPos.getZ() + 0.5, 1.15D);
                 }
