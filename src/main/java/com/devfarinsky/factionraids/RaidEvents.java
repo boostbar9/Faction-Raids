@@ -246,6 +246,9 @@ public final class RaidEvents {
     @SubscribeEvent
     public static void onServerStarted(net.minecraftforge.event.server.ServerStartedEvent event) {
         RecruitsBridge.ensureRaidersFaction(event.getServer());
+        // v2.15.0: register the role-colored glow teams so raiders can
+        // join them at spawn without a per-spawn registry check.
+        RaiderLabels.onServerStarted(event.getServer());
     }
 
 
@@ -1180,6 +1183,9 @@ public final class RaidEvents {
         // v2.14.0: drain the deferred camp-build queue one structure at a
         // time. Runs cheaply every tick and no-ops once the queue empties.
         progressDeferredCampBuilds(level, state);
+        // v2.15.0: render an objective marker column so defenders see
+        // exactly where the raiders are marching. Rate-limited inside.
+        broadcastObjectiveBeacon(level, point, state);
         List<Mob> recruits = alliedRecruits(level, point, anchor);
         if (RaidConfig.MOBILIZE_RECRUITS.get()) mobilizeRecruits(level, recruits, state);
         redirectRaiders(level, state, members, recruits, point);
@@ -1334,12 +1340,14 @@ public final class RaidEvents {
         while (iterator.hasNext()) {
             UUID id = iterator.next();
             Entity entity = level.getEntity(id);
-            if (entity != null && entity instanceof Mob && entity.isAlive()) {
+            if (entity != null && entity instanceof Mob mob && entity.isAlive()) {
                 // Alive and loaded — remember where they are so we can
                 // distinguish "unloaded" from "vanished" next tick.
                 state.lastKnownChunks.put(id,
                         new net.minecraft.world.level.ChunkPos(entity.blockPosition()).toLong());
                 state.missingTicks.remove(id);
+                // v2.15.0: refresh role label + glow visibility.
+                RaiderLabels.tick(mob);
                 continue;
             }
             if (entity != null) {
@@ -1577,6 +1585,8 @@ public final class RaidEvents {
         else if (squadLeader) role = "captain";
         else role = "marksman";
         raider.getPersistentData().putString(RAID_ROLE_TAG, role);
+        // v2.15.0: name tag + role-colored glow team membership.
+        RaiderLabels.applyRole(raider, role);
         // Mark this raider's unit id as discovered for the defending team.
         // We use the codex id, which for commander is fixed and for everyone
         // else is the entity type path (matches UnitCodex.Entry.id). This
@@ -1606,8 +1616,12 @@ public final class RaidEvents {
                 raider.setHealth(raider.getMaxHealth());
             }
             raider.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 20 * 60 * 60, 0, false, false));
-            raider.setCustomName(Component.literal("Siege Commander").withStyle(ChatFormatting.DARK_RED));
-            raider.setCustomNameVisible(true);
+            // v2.15.0: RaiderLabels.applyRole already set the styled name.
+            // Skip forcing visibility so PROXIMITY / OFF modes still apply.
+            if (RaidConfig.RAIDER_LABEL_MODE.get() == RaidConfig.LabelMode.ALWAYS) {
+                raider.setCustomName(Component.literal("Siege Commander").withStyle(ChatFormatting.DARK_RED));
+                raider.setCustomNameVisible(true);
+            }
             state.commanderUuid = raider.getUUID();
             state.commanderDefeated = false;
         }
@@ -1865,6 +1879,51 @@ public final class RaidEvents {
             }
         }
         state.deferredCampCooldown = DEFERRED_INTERVAL_TICKS;
+    }
+
+    /**
+     * v2.15.0: server-broadcast objective beacon.
+     *
+     * <p>Emits a vertical column of {@link ParticleTypes#FLAME} particles
+     * over the objective block so defenders can see exactly where the
+     * raiders are marching. Fades out for viewers within 16 blocks — by
+     * then you're already standing on the stronghold and don't need
+     * pointing at it.
+     *
+     * <p>Uses per-player {@link ServerLevel#sendParticles(ServerPlayer,
+     * net.minecraft.core.particles.ParticleOptions, boolean, double, double,
+     * double, int, double, double, double, double)} so viewers outside
+     * the fade radius still see it while a nearby defender doesn't get
+     * spammed. "Force" is true so distance doesn't cull it — the beacon
+     * needs to be visible from the far edge of the base.
+     */
+    private static void broadcastObjectiveBeacon(ServerLevel level,
+                                                 RaidSavedData.DefensePoint point,
+                                                 RaidSavedData.RaidState state) {
+        if (!RaidConfig.OBJECTIVE_BEACON.get()) return;
+        // No beacon while occupation is happening — raiders are on top of
+        // the objective and the marker becomes noise.
+        if (state.breached && state.captureTicks > 0) return;
+        Vec3 objective;
+        try {
+            objective = invasionObjective(level, point, state);
+        } catch (RuntimeException ex) {
+            return;
+        }
+        final double fadeRadiusSq = 16.0D * 16.0D;
+        for (ServerPlayer viewer : level.players()) {
+            if (viewer.isSpectator()) continue;
+            double dx = viewer.getX() - objective.x;
+            double dz = viewer.getZ() - objective.z;
+            if (dx * dx + dz * dz <= fadeRadiusSq) continue;
+            // 12-block flame column, one particle per meter, slight jitter
+            // for a torch-plume look. Speed 0 keeps it vertical.
+            for (int dy = 0; dy < 12; dy++) {
+                level.sendParticles(viewer, ParticleTypes.FLAME, true,
+                        objective.x, objective.y + dy, objective.z,
+                        1, 0.12D, 0.0D, 0.12D, 0.0D);
+            }
+        }
     }
 
     /** One corner watchtower: 4-log column with a banner top. */
@@ -2628,8 +2687,62 @@ public final class RaidEvents {
         data.setDirty();
     }
 
+    /**
+     * Server-authoritative HUD refresh. Owns the invasion boss bar shown to
+     * every defender. In v2.15.0 the bar became the primary "clear intent"
+     * surface — it now leads with an explicit phase name (Rally / March /
+     * Breach / Occupation), names the objective stronghold, and reports the
+     * front-line distance so defenders always know what the raiders want
+     * and how close they are to getting it.
+     */
+    /**
+     * v2.15.0: single-word phase name for the invasion HUD. Kept short so
+     * the boss bar has room for the objective name + distance behind it.
+     * Order matches the raid lifecycle: rally (camp forming) → march
+     * (advancing on the objective) → breach (attacking the walls) →
+     * occupation (standing on the stronghold to capture).
+     */
+    private static String raidPhaseLabel(RaidSavedData.RaidState state, boolean paused) {
+        if (paused) return "Paused";
+        if (state.wave == 0) return "Rally";
+        if (!state.breached && RaidConfig.ENABLE_BREACH_PHASE.get()) return "Breach";
+        if (state.captureTicks > 0) return "Occupation";
+        return "March";
+    }
+
+    /**
+     * v2.15.0: human-readable " • Nm" distance from the raider war camp to
+     * the current objective. Returns empty string when the camp position
+     * is unknown (no fixed camp placed yet).
+     */
+    private static String frontLineDistanceHint(MinecraftServer server,
+                                                RaidSavedData.Anchor anchor,
+                                                RaidSavedData.RaidState state) {
+        if (state.campPos == null || state.defensePointName == null) return "";
+        RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
+        if (point == null) return "";
+        ServerLevel level = server.overworld();
+        if (level == null) return "";
+        Vec3 objective;
+        try {
+            objective = invasionObjective(level, point, state);
+        } catch (RuntimeException ex) {
+            return "";
+        }
+        double dx = objective.x - state.campPos.getX();
+        double dz = objective.z - state.campPos.getZ();
+        int meters = (int) Math.round(Math.sqrt(dx * dx + dz * dz));
+        return " • " + meters + "m";
+    }
+
     private static void updateBossBar(MinecraftServer server, RaidSavedData.Anchor anchor,
                                       RaidSavedData.RaidState state, boolean paused) {
+        // v2.15.0: allow servers to fully suppress the invasion HUD.
+        if (!RaidConfig.HUD_ENABLED.get()) {
+            ServerBossEvent existing = RaidBossBars.remove(anchor.teamKey());
+            if (existing != null) existing.removeAllPlayers();
+            return;
+        }
         ServerBossEvent bar = RaidBossBars.getOrCreate(anchor.teamKey(),
                 Component.literal("Faction Invasion"),
                 BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.NOTCHED_10);
@@ -2647,14 +2760,31 @@ public final class RaidEvents {
         int capturePercent = Mth.clamp(state.captureTicks * 100 /
                 Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20), 0, 100);
         int breachPercent = breachPercent(state);
-        String label = paused ? "Invasion paused — faction offline" : state.wave == 0 ?
-                "Siege camp forming to the " + approachDirection(state.approachAngle) :
+
+        // v2.15.0 "Clear Intent" — lead with the current phase name so a
+        // player looking at the bar for one second knows the raider goal.
+        String phase = raidPhaseLabel(state, paused);
+        // Prefer the human-readable stronghold name when available; fall
+        // back to the raw defense point id.
+        String objectiveName = state.defensePointName != null && !state.defensePointName.isEmpty() ?
+                state.defensePointName : "stronghold";
+        // Front-line distance: how close the raiders' camp sits to the
+        // objective. Fixed while the camp exists so it reads as a stable
+        // "they're staging N blocks northeast" rather than jittering with
+        // whichever raider happens to be leading.
+        String distanceHint = frontLineDistanceHint(server, anchor, state);
+
+        String label = paused ? phase + " — faction offline" : state.wave == 0 ?
+                phase + " to the " + approachDirection(state.approachAngle) +
+                        " (target: " + objectiveName + distanceHint + ")" :
                 !state.breached && RaidConfig.ENABLE_BREACH_PHASE.get() ?
-                        "Perimeter assault • " + state.raiders.size() + " deployed • breach " +
+                        phase + ": " + objectiveName + distanceHint +
+                                " • " + state.raiders.size() + " deployed • breach " +
                                 breachPercent + "%" :
-                        waveTitle(state.wave) + " • " + state.raiders.size() + " deployed" +
-                                (state.pendingWaveSpawns > 0 ? " + " + state.pendingWaveSpawns + " reinforcing" : "") +
-                                " • stronghold " + capturePercent + "% occupied";
+                        phase + ": " + objectiveName + " " + capturePercent + "% held" +
+                                " • wave " + Math.max(1, state.wave) + "/" + totalWaves +
+                                " • " + state.raiders.size() + " deployed" +
+                                (state.pendingWaveSpawns > 0 ? " + " + state.pendingWaveSpawns + " reinforcing" : "");
         // Prepend the raider epithet if narrative is enabled and available, so
         // the boss bar reads e.g. "Ship-Wolves — Perimeter assault…" instead of
         // the generic "Faction Invasion" everyone gets today.
