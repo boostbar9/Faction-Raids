@@ -254,6 +254,118 @@ public final class RaidEvents {
         RaidBossBars.shutdown();
     }
 
+    /**
+     * v2.13.0: strategic camp-block break handler.
+     *
+     * <p>When a player breaks a block whose position matches any active
+     * raid's {@code campfirePos}, {@code bannerPos}, or {@code barrelPos},
+     * apply the corresponding effect:
+     * <ul>
+     *   <li>Campfire → reinforcements cancelled (pendingWaveSpawns = 0,
+     *       ticksToNextSquad = MAX), the war effort loses its heart.</li>
+     *   <li>Banner → morale broken; all currently-deployed raiders are
+     *       flagged as escaping and the wave advances early.</li>
+     *   <li>Barrel → drops a bonus stack of emeralds at the barrel
+     *       position (configurable).</li>
+     * </ul>
+     * The event itself is not cancelled — breaking still succeeds and the
+     * block's normal drops still apply. We just react to the break.
+     */
+    @SubscribeEvent
+    public static void onCampBlockBroken(net.minecraftforge.event.level.BlockEvent.BreakEvent event) {
+        if (!RaidConfig.CAMP_DESTRUCTIBLE_STRUCTURES.get()) return;
+        if (!(event.getLevel() instanceof ServerLevel level)) return;
+        RaidSavedData data = RaidSavedData.get(level.getServer());
+        BlockPos pos = event.getPos();
+        for (RaidSavedData.RaidState state : data.raids.values()) {
+            if (state.wave <= 0) continue;
+            if (pos.equals(state.campfirePos)) {
+                handleCampfireBroken(level, state);
+                data.setDirty();
+                return;
+            }
+            if (pos.equals(state.bannerPos)) {
+                handleBannerBroken(level, state);
+                data.setDirty();
+                return;
+            }
+            if (pos.equals(state.barrelPos)) {
+                handleBarrelBroken(level, state);
+                data.setDirty();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Reinforcement heart. Cancels pending squads for the current wave and
+     * suppresses future squads by pushing the next-squad timer far out.
+     * Existing deployed raiders keep fighting — defenders now just have to
+     * grind them down instead of holding an infinite tap.
+     */
+    private static void handleCampfireBroken(ServerLevel level, RaidSavedData.RaidState state) {
+        state.pendingWaveSpawns = 0;
+        state.ticksToNextSquad = Integer.MAX_VALUE;
+        // Null the tracked pos so we don't fire again if the block state
+        // change bubbles up multiple events.
+        state.campfirePos = null;
+        announce(level.getServer(), state.teamKey, Component.literal(
+                "The war camp campfire is extinguished — no reinforcements will march.")
+                .withStyle(ChatFormatting.GREEN), true);
+    }
+
+    /**
+     * Command banner. Broken morale ends the current wave: the wave-cleared
+     * bookkeeping path in the main tick loop already handles the "raiders
+     * defeated → next wave" transition, so we drop remaining raiders here
+     * and let the tick loop clean up naturally.
+     */
+    private static void handleBannerBroken(ServerLevel level, RaidSavedData.RaidState state) {
+        // Force-remove currently deployed raiders from the tracked set.
+        // They still exist in the world but no longer count — defenders
+        // can mop up. The wave-clear bookkeeping runs next tick.
+        for (UUID id : new ArrayList<>(state.raiders)) {
+            Entity entity = level.getEntity(id);
+            if (entity instanceof Mob mob && mob.isAlive()) {
+                // Small "scatter" push: apply a slight upward + outward
+                // impulse so it visually reads as "morale broken."
+                mob.setDeltaMovement(mob.getDeltaMovement().add(
+                        (level.random.nextDouble() - 0.5D) * 0.6D,
+                        0.3D,
+                        (level.random.nextDouble() - 0.5D) * 0.6D));
+            }
+        }
+        state.raiders.clear();
+        state.missingTicks.clear();
+        state.lastKnownChunks.clear();
+        state.pendingWaveSpawns = 0;
+        state.bannerPos = null;
+        announce(level.getServer(), state.teamKey, Component.literal(
+                "The command banner falls — the current wave's morale breaks and its raiders scatter.")
+                .withStyle(ChatFormatting.GREEN), true);
+    }
+
+    /**
+     * Supply barrel. Drops a bonus stack of emeralds at the barrel position
+     * so defenders who fight up the hill get concrete loot back.
+     */
+    private static void handleBarrelBroken(ServerLevel level, RaidSavedData.RaidState state) {
+        int count = RaidConfig.CAMP_BONUS_LOOT_EMERALDS.get();
+        if (count > 0) {
+            BlockPos drop = state.barrelPos;
+            ItemStack emeralds = new ItemStack(Items.EMERALD, count);
+            net.minecraft.world.entity.item.ItemEntity entity =
+                    new net.minecraft.world.entity.item.ItemEntity(level,
+                            drop.getX() + 0.5D, drop.getY() + 0.5D, drop.getZ() + 0.5D, emeralds);
+            entity.setDefaultPickUpDelay();
+            level.addFreshEntity(entity);
+        }
+        state.barrelPos = null;
+        announce(level.getServer(), state.teamKey, Component.literal(
+                "The war camp supply barrel spills its cargo — emeralds scatter across the ground.")
+                .withStyle(ChatFormatting.GOLD), false);
+    }
+
     // ---------------------------------------------------------------------
     // Command delegators.
     //
@@ -1110,11 +1222,10 @@ public final class RaidEvents {
         }
         // Rescue stragglers that stall on the way to the objective; drop the
         // second-time offenders from the wave count so the raid can advance.
-        int dropped = com.devfarinsky.factionraids.effort.StragglerTracker.tick(level, state, point.pos());
-        if (dropped > 0) {
-            announce(server, teamKey, Component.literal(dropped + " straggler(s) lost to the terrain — the wave presses on.")
-                    .withStyle(ChatFormatting.GRAY), false);
-        }
+        // v2.13.0: stragglers now dropped silently — the action bar already
+        // shows the live deployed/reinforcing counts, so a fresh chat line
+        // every time one raider gets stuck was pure noise.
+        com.devfarinsky.factionraids.effort.StragglerTracker.tick(level, state, point.pos());
         // When raiders stall against a wall, build a temporary ladder column.
         // Rate-limited internally; ladders are tracked in campBlocks and
         // cleaned up when the raid ends via the existing camp pipeline.
@@ -1196,25 +1307,70 @@ public final class RaidEvents {
         updateBossBar(server, anchor, state, false);
     }
 
+    /**
+     * Reconciles the tracked-raider set each tick with what's actually in the
+     * world. v2.13.0 rewrites the escape logic to be chunk-aware so raiders
+     * are no longer counted as escaped when they were simply out of view but
+     * their chunk was still loaded.
+     *
+     * <p>Rules:
+     * <ul>
+     *   <li>Entity found alive → refresh {@code lastKnownChunks}, clear
+     *       missing timer.</li>
+     *   <li>Entity found but not a live Mob → count as defeated, drop.</li>
+     *   <li>Entity not found AND last-known chunk is currently loaded → the
+     *       mob really is gone (probably died silently to fall damage or a
+     *       mob-remover). Count as defeated, drop.</li>
+     *   <li>Entity not found AND last-known chunk is unloaded → legitimate
+     *       chunk-unload. Only in this case does the grace timer advance.</li>
+     * </ul>
+     */
     private static void updateTrackedMobs(ServerLevel level, RaidSavedData.RaidState state) {
         int grace = RaidConfig.MISSING_ENTITY_GRACE_SECONDS.get() * 20;
         Iterator<UUID> iterator = state.raiders.iterator();
         while (iterator.hasNext()) {
             UUID id = iterator.next();
             Entity entity = level.getEntity(id);
-            if (entity == null) {
-                int missing = state.missingTicks.getOrDefault(id, 0) + 20;
-                if (missing >= grace) {
-                    iterator.remove();
-                    state.missingTicks.remove(id);
-                    state.totalEscaped++;
-                } else state.missingTicks.put(id, missing);
+            if (entity != null && entity instanceof Mob && entity.isAlive()) {
+                // Alive and loaded — remember where they are so we can
+                // distinguish "unloaded" from "vanished" next tick.
+                state.lastKnownChunks.put(id,
+                        new net.minecraft.world.level.ChunkPos(entity.blockPosition()).toLong());
+                state.missingTicks.remove(id);
                 continue;
             }
-            state.missingTicks.remove(id);
-            if (!(entity instanceof Mob) || !entity.isAlive()) {
+            if (entity != null) {
+                // Loaded but no longer a live mob (dying, removed, wrong type).
                 iterator.remove();
+                state.missingTicks.remove(id);
+                state.lastKnownChunks.remove(id);
                 state.totalDefeated++;
+                continue;
+            }
+            // Entity is not loaded. Was their last known chunk still loaded?
+            Long chunkKey = state.lastKnownChunks.get(id);
+            boolean chunkLoaded = false;
+            if (chunkKey != null) {
+                net.minecraft.world.level.ChunkPos cp = new net.minecraft.world.level.ChunkPos(chunkKey);
+                chunkLoaded = level.getChunkSource().hasChunk(cp.x, cp.z);
+            }
+            if (chunkLoaded) {
+                // Chunk is here, mob is not — dead by some other means.
+                iterator.remove();
+                state.missingTicks.remove(id);
+                state.lastKnownChunks.remove(id);
+                state.totalDefeated++;
+                continue;
+            }
+            // Genuinely unloaded — tick the grace timer.
+            int missing = state.missingTicks.getOrDefault(id, 0) + 20;
+            if (missing >= grace) {
+                iterator.remove();
+                state.missingTicks.remove(id);
+                state.lastKnownChunks.remove(id);
+                state.totalEscaped++;
+            } else {
+                state.missingTicks.put(id, missing);
             }
         }
     }
@@ -1379,8 +1535,10 @@ public final class RaidEvents {
         }
         if (spawned == 0) {
             state.ticksToNextSquad = RaidConfig.SPAWN_RETRY_SECONDS.get() * 20;
-            announce(server, anchor.teamKey(), Component.literal("No safe invasion entrance was found. Retrying in " +
-                    RaidConfig.SPAWN_RETRY_SECONDS.get() + " seconds.").withStyle(ChatFormatting.YELLOW), false);
+            // Retry chatter moved to the action bar — it fires often enough
+            // that it deserves a transient hint, not a chat line.
+            sendActionBar(server, anchor.teamKey(), Component.literal("Scouts blocked — next assault attempt in " +
+                    RaidConfig.SPAWN_RETRY_SECONDS.get() + "s").withStyle(ChatFormatting.YELLOW));
             return;
         }
 
@@ -1389,11 +1547,10 @@ public final class RaidEvents {
         state.squadsSpawned++;
         state.ticksToNextSquad = state.pendingWaveSpawns > 0 ?
                 RaidConfig.SQUAD_INTERVAL_SECONDS.get() * 20 : 0;
-        if (state.squadsSpawned > 1 || state.pendingWaveSpawns > 0) {
-            announce(server, anchor.teamKey(), Component.literal("Assault squad " + state.squadsSpawned +
-                    " entered the battlefield; " + state.pendingWaveSpawns + " reinforcements remain in the war camp.")
-                    .withStyle(ChatFormatting.GRAY), false);
-        }
+        // v2.13.0: per-squad chat announcements removed. The action bar shows
+        // the live count and refreshes every squad; opening the codex shows
+        // the same info in more detail. This used to flood chat with 3-4
+        // "Assault squad N entered the battlefield" lines per wave.
         sendActionBar(server, anchor.teamKey(), Component.literal("Wave " + state.wave + ": " +
                 state.raiders.size() + " deployed • " + state.pendingWaveSpawns + " reinforcing")
                 .withStyle(ChatFormatting.RED));
@@ -1561,6 +1718,21 @@ public final class RaidEvents {
         return level.noCollision(mob) ? p : null;
     }
 
+    /**
+     * v2.13.0 war-camp prefab.
+     *
+     * <p>Roughly a 20x20 fortified encampment: a spruce-fence palisade ring,
+     * four log watchtowers with banner tops at the corners, a central
+     * campfire, a forge (anvil + furnace + crafting table), a supply barrel,
+     * a command banner, and two multi-tent barracks behind the palisade.
+     * Two forward marker banners still flank the objective so defenders can
+     * see the intended breach axis.
+     *
+     * <p>Three positions are remembered on {@link RaidSavedData.RaidState}:
+     * {@code campfirePos}, {@code bannerPos}, {@code barrelPos}. Breaking
+     * any of these triggers a strategic effect — see
+     * {@link #onCampBlockBroken}.
+     */
     private static void buildWarCamp(ServerLevel level, RaidSavedData.DefensePoint point,
                                      RaidSavedData.RaidState state) {
         state.campBuildAttempted = true;
@@ -1568,46 +1740,79 @@ public final class RaidEvents {
         if (camp == null) return;
         state.campPos = camp;
 
-        placeCampBlock(level, state, surfacePosition(level, camp.getX(), camp.getZ()), Blocks.CAMPFIRE);
-        placeCampBlock(level, state, surfacePosition(level, camp.getX() - 2, camp.getZ()), Blocks.BARREL);
-        placeCampBlock(level, state, surfacePosition(level, camp.getX() + 2, camp.getZ()), Blocks.CRAFTING_TABLE);
-        placeCampBlock(level, state, surfacePosition(level, camp.getX(), camp.getZ() - 3), Blocks.RED_BANNER);
+        final int cx = camp.getX();
+        final int cz = camp.getZ();
+        final int r = 9;  // palisade ring "radius" (half-extent); actual footprint 19x19.
 
-        // A compact field-command pavilion makes the camp a real battlefield
-        // location rather than a few decorative markers.
-        int tentY = camp.getY();
-        for (int dx = -4; dx <= 4; dx++) {
-            for (int dz = 3; dz <= 7; dz++) {
-                placeCampBlock(level, state, new BlockPos(camp.getX() + dx, tentY,
-                        camp.getZ() + dz), Blocks.DARK_OAK_PLANKS);
+        // 1) Palisade ring — two-block-tall spruce fence with a gap on the
+        //    front side (facing the objective) so the army can march out.
+        double frontAngle = state.approachAngle; // points toward objective from camp
+        for (int dx = -r; dx <= r; dx++) {
+            for (int dz = -r; dz <= r; dz++) {
+                if (Math.abs(dx) != r && Math.abs(dz) != r) continue;
+                // Front-facing gap: skip a 3-block-wide slot roughly aligned
+                // with the approach vector so the palisade has an obvious
+                // sally-port instead of caging the raiders in.
+                double gateX = Math.cos(frontAngle) * r;
+                double gateZ = Math.sin(frontAngle) * r;
+                if (Math.hypot(dx - gateX, dz - gateZ) < 2.2D) continue;
+                BlockPos ground = surfacePosition(level, cx + dx, cz + dz);
+                placeCampBlock(level, state, ground, Blocks.SPRUCE_FENCE);
+                placeCampBlock(level, state, ground.above(), Blocks.SPRUCE_FENCE);
             }
-        }
-        for (int dx : new int[]{-4, 4}) {
-            for (int dz : new int[]{3, 7}) {
-                for (int dy = 1; dy <= 3; dy++) {
-                    placeCampBlock(level, state, new BlockPos(camp.getX() + dx, tentY + dy,
-                            camp.getZ() + dz), Blocks.SPRUCE_LOG);
-                }
-            }
-        }
-        for (int dx = -4; dx <= 4; dx++) {
-            for (int dz = 3; dz <= 7; dz++) {
-                placeCampBlock(level, state, new BlockPos(camp.getX() + dx, tentY + 4,
-                        camp.getZ() + dz), Blocks.RED_WOOL);
-            }
-        }
-        for (int dx = -4; dx <= 4; dx++) {
-            if (dx == 0 || dx == 1) continue;
-            for (int dy = 1; dy <= 3; dy++) {
-                placeCampBlock(level, state, new BlockPos(camp.getX() + dx, tentY + dy,
-                        camp.getZ() + 7), Blocks.RED_WOOL);
-            }
-        }
-        for (int offset = -7; offset <= 7; offset += 2) {
-            placeCampBlock(level, state, surfacePosition(level, camp.getX() + offset,
-                    camp.getZ() - 6), Blocks.SPRUCE_FENCE);
         }
 
+        // 2) Four corner watchtowers — log column with a banner on top.
+        int[][] corners = {{-r, -r}, {-r, r}, {r, -r}, {r, r}};
+        for (int[] c : corners) {
+            BlockPos base = surfacePosition(level, cx + c[0], cz + c[1]);
+            for (int dy = 0; dy < 4; dy++) {
+                placeCampBlock(level, state, base.above(dy), Blocks.SPRUCE_LOG);
+            }
+            placeCampBlock(level, state, base.above(4), Blocks.RED_BANNER);
+        }
+
+        // 3) Central campfire — the reinforcement heart. Remember its pos.
+        BlockPos campfire = surfacePosition(level, cx, cz);
+        placeCampBlock(level, state, campfire, Blocks.CAMPFIRE);
+        state.campfirePos = campfire;
+
+        // 4) Forge cluster — anvil, furnace, crafting table on the east side.
+        placeCampBlock(level, state, surfacePosition(level, cx + 3, cz), Blocks.ANVIL);
+        placeCampBlock(level, state, surfacePosition(level, cx + 3, cz + 1), Blocks.FURNACE);
+        placeCampBlock(level, state, surfacePosition(level, cx + 3, cz - 1), Blocks.CRAFTING_TABLE);
+
+        // 5) Supply barrel on the west side. Remember its pos.
+        BlockPos barrel = surfacePosition(level, cx - 3, cz);
+        placeCampBlock(level, state, barrel, Blocks.BARREL);
+        state.barrelPos = barrel;
+
+        // 6) Command banner on the front-center of the palisade interior,
+        //    facing the objective. Remember its pos.
+        int bannerDx = Mth.floor(Math.cos(frontAngle) * 4.0D);
+        int bannerDz = Mth.floor(Math.sin(frontAngle) * 4.0D);
+        BlockPos bannerBase = surfacePosition(level, cx + bannerDx, cz + bannerDz);
+        // Stone platform under the banner so it reads as a formal command
+        // post rather than a random stake in the ground.
+        placeCampBlock(level, state, bannerBase, Blocks.STONE_BRICKS);
+        placeCampBlock(level, state, bannerBase.above(), Blocks.RED_BANNER);
+        state.bannerPos = bannerBase.above();
+
+        // 7) Two multi-tent barracks behind the palisade (opposite the gate).
+        double rearAngle = frontAngle + Math.PI;
+        int rearDx = Mth.floor(Math.cos(rearAngle) * 5.0D);
+        int rearDz = Mth.floor(Math.sin(rearAngle) * 5.0D);
+        int perpX = Mth.floor(-Math.sin(rearAngle) * 3.0D);
+        int perpZ = Mth.floor(Math.cos(rearAngle) * 3.0D);
+        for (int tent = -1; tent <= 1; tent += 2) {
+            int tx = cx + rearDx + perpX * tent;
+            int tz = cz + rearDz + perpZ * tent;
+            buildTent(level, state, tx, tz);
+        }
+
+        // 8) Forward marker banners flanking the objective breach lane —
+        //    kept from the old prefab; helps defenders read the axis of
+        //    attack from a distance.
         Vec3 breach = invasionObjective(level, point, state);
         int bx = Mth.floor(breach.x);
         int bz = Mth.floor(breach.z);
@@ -1618,6 +1823,51 @@ public final class RaidEvents {
             BlockPos marker = surfacePosition(level, x, z);
             placeCampBlock(level, state, marker, Blocks.RED_WOOL);
             placeCampBlock(level, state, marker.above(), Blocks.RED_BANNER);
+        }
+    }
+
+    /**
+     * Places one dark-oak-and-wool tent centered on the given world column.
+     * The tent is 5 wide, 5 deep, and 4 tall with an open front. Called from
+     * {@link #buildWarCamp} to place the two barracks tents.
+     */
+    private static void buildTent(ServerLevel level, RaidSavedData.RaidState state, int cx, int cz) {
+        int floorY = surfacePosition(level, cx, cz).getY();
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dz = -2; dz <= 2; dz++) {
+                placeCampBlock(level, state, new BlockPos(cx + dx, floorY, cz + dz),
+                        Blocks.DARK_OAK_PLANKS);
+            }
+        }
+        for (int dx : new int[]{-2, 2}) {
+            for (int dz : new int[]{-2, 2}) {
+                for (int dy = 1; dy <= 3; dy++) {
+                    placeCampBlock(level, state, new BlockPos(cx + dx, floorY + dy, cz + dz),
+                            Blocks.SPRUCE_LOG);
+                }
+            }
+        }
+        // Canopy roof.
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dz = -2; dz <= 2; dz++) {
+                placeCampBlock(level, state, new BlockPos(cx + dx, floorY + 4, cz + dz),
+                        Blocks.RED_WOOL);
+            }
+        }
+        // Rear + side walls; leaves front (dz = -2) open.
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dy = 1; dy <= 3; dy++) {
+                placeCampBlock(level, state, new BlockPos(cx + dx, floorY + dy, cz + 2),
+                        Blocks.RED_WOOL);
+            }
+        }
+        for (int dz = -1; dz <= 1; dz++) {
+            for (int dy = 1; dy <= 3; dy++) {
+                placeCampBlock(level, state, new BlockPos(cx - 2, floorY + dy, cz + dz),
+                        Blocks.RED_WOOL);
+                placeCampBlock(level, state, new BlockPos(cx + 2, floorY + dy, cz + dz),
+                        Blocks.RED_WOOL);
+            }
         }
     }
 
@@ -1641,10 +1891,13 @@ public final class RaidEvents {
         if (!level.getWorldBorder().isWithinBounds(center) || Math.abs(center.getY() - anchor.getY()) > 48 ||
                 !level.getFluidState(center).isEmpty() || !level.getBlockState(center).canBeReplaced() ||
                 !level.getBlockState(center.below()).isFaceSturdy(level, center.below(), Direction.UP)) return false;
-        for (int dx : new int[]{-4, 4}) {
-            for (int dz : new int[]{-6, 7}) {
+        // v2.13.0 checks the corners of a wider footprint (±9 on each axis)
+        // to match the new palisade prefab. If terrain drops off by more
+        // than 3 blocks or spills into fluid at any corner, skip this site.
+        for (int dx : new int[]{-9, 9}) {
+            for (int dz : new int[]{-9, 9}) {
                 BlockPos sample = surfacePosition(level, center.getX() + dx, center.getZ() + dz);
-                if (Math.abs(sample.getY() - center.getY()) > 2 || !level.getFluidState(sample).isEmpty()) return false;
+                if (Math.abs(sample.getY() - center.getY()) > 3 || !level.getFluidState(sample).isEmpty()) return false;
             }
         }
         return true;
@@ -2057,8 +2310,8 @@ public final class RaidEvents {
         if (band > state.lastCaptureWarningBand && band < 4) {
             state.lastCaptureWarningBand = band;
             int percent = band * 25;
-            announce(server, anchor.teamKey(), Component.literal("Stronghold occupation: " + percent +
-                    "%. Push the invaders out of the inner defense ring!").withStyle(ChatFormatting.DARK_RED),
+            announce(server, anchor.teamKey(), Component.literal("Invaders hold " + percent +
+                    "% of the stronghold — push them out.").withStyle(ChatFormatting.DARK_RED),
                     band >= 3);
             sendActionBar(server, anchor.teamKey(), Component.literal("STRONGHOLD OCCUPATION: " + percent + "%")
                     .withStyle(band >= 3 ? ChatFormatting.RED : ChatFormatting.GOLD, ChatFormatting.BOLD));

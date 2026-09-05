@@ -16,7 +16,7 @@ public final class RaidSavedData extends SavedData {
     public static final String DATA_NAME = "factionraids_data";
     // v10 added WarJournal + Discovery (2.12.0 Know Your Enemy release).
     // Old saves load cleanly because both fields default to empty maps.
-    public static final int DATA_VERSION = 10;
+    public static final int DATA_VERSION = 11;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Map<String, Anchor> anchors = new HashMap<>();
@@ -368,6 +368,33 @@ public final class RaidSavedData extends SavedData {
         public int lastWarningSecond = Integer.MAX_VALUE;
         public final Set<UUID> raiders = new HashSet<>();
         public final Map<UUID, Integer> missingTicks = new HashMap<>();
+        /**
+         * Last-known chunk position (packed long) of each raider. Written every
+         * tick a raider is seen alive; read when the entity briefly disappears
+         * so we know whether the chunk they were in is currently loaded. If it
+         * is loaded and they're gone anyway, they died silently (count as
+         * defeated). If it's unloaded, the grace timer advances — that is the
+         * only case where a mob "escapes."
+         */
+        public final Map<UUID, Long> lastKnownChunks = new HashMap<>();
+        /**
+         * Position of the war camp's central campfire. In 2.13.0 destroying
+         * this block cancels any queued reinforcements and disables further
+         * squad spawns for the wave. Null on raids with no camp built yet.
+         */
+        public BlockPos campfirePos;
+        /**
+         * Position of the war camp's central banner. Destroying it declares
+         * the current wave's morale broken — remaining raiders scatter and
+         * the raid advances to the next wave (or ends if this was the last).
+         */
+        public BlockPos bannerPos;
+        /**
+         * Position of the war camp supply barrel. Destroying it drops a
+         * bonus stack of emeralds — rewards aggressive defenders who push
+         * up the hill instead of turtling.
+         */
+        public BlockPos barrelPos;
         public int reconcileTicks;
         public boolean performancePauseAnnounced;
         public boolean offlinePauseAnnounced;
@@ -401,6 +428,9 @@ public final class RaidSavedData extends SavedData {
             tag.putBoolean("Breached", breached);
             tag.putInt("BreachWarningBand", lastBreachWarningBand);
             if (campPos != null) tag.putLong("CampPosition", campPos.asLong());
+            if (campfirePos != null) tag.putLong("CampfirePos", campfirePos.asLong());
+            if (bannerPos != null) tag.putLong("BannerPos", bannerPos.asLong());
+            if (barrelPos != null) tag.putLong("BarrelPos", barrelPos.asLong());
             tag.putBoolean("CampBuildAttempted", campBuildAttempted);
             if (navalStagingPos != null) tag.putLong("NavalStagingPos", navalStagingPos.asLong());
             if (navalBeachPos != null) tag.putLong("NavalBeachPos", navalBeachPos.asLong());
@@ -482,6 +512,15 @@ public final class RaidSavedData extends SavedData {
             state.lastBreachWarningBand = tag.getInt("BreachWarningBand");
             state.campPos = tag.contains("CampPosition", Tag.TAG_LONG) ?
                     BlockPos.of(tag.getLong("CampPosition")) : null;
+            // v2.13.0 (DATA_VERSION 11) additions. Older saves omit these
+            // tags entirely — leave nulls in place; the runtime treats them
+            // as "no strategic camp blocks yet" and the next raid rebuilds.
+            state.campfirePos = tag.contains("CampfirePos", Tag.TAG_LONG) ?
+                    BlockPos.of(tag.getLong("CampfirePos")) : null;
+            state.bannerPos = tag.contains("BannerPos", Tag.TAG_LONG) ?
+                    BlockPos.of(tag.getLong("BannerPos")) : null;
+            state.barrelPos = tag.contains("BarrelPos", Tag.TAG_LONG) ?
+                    BlockPos.of(tag.getLong("BarrelPos")) : null;
             state.campBuildAttempted = tag.getBoolean("CampBuildAttempted");
             state.navalStagingPos = tag.contains("NavalStagingPos", Tag.TAG_LONG) ?
                     BlockPos.of(tag.getLong("NavalStagingPos")) : null;

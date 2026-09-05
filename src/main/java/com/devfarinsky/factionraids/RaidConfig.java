@@ -61,6 +61,8 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue USE_RECRUIT_INVADERS;
     public static final ForgeConfigSpec.BooleanValue BUILD_WAR_CAMPS;
     public static final ForgeConfigSpec.BooleanValue CLEANUP_WAR_CAMPS;
+    public static final ForgeConfigSpec.BooleanValue CAMP_DESTRUCTIBLE_STRUCTURES;
+    public static final ForgeConfigSpec.IntValue CAMP_BONUS_LOOT_EMERALDS;
     public static final ForgeConfigSpec.BooleanValue ENABLE_AMPHIBIOUS_RAIDS;
     public static final ForgeConfigSpec.IntValue NAVAL_STAGING_RADIUS;
     public static final ForgeConfigSpec.IntValue NAVAL_MIN_WATER_BODY;
@@ -155,8 +157,8 @@ public final class RaidConfig {
                 .defineInRange("defenseRadius", 160, 48, 512);
         ABANDON_DEFEAT_MINUTES = b.comment("Optional legacy abandonment defeat timer. Zero disables it so defeat requires actual stronghold occupation.")
                 .defineInRange("abandonDefeatMinutes", 0, 0, 30);
-        MISSING_ENTITY_GRACE_SECONDS = b.comment("Keep temporarily unloaded raid mobs tracked for this long before treating them as missing.")
-                .defineInRange("missingEntityGraceSeconds", 120, 20, 900);
+        MISSING_ENTITY_GRACE_SECONDS = b.comment("Keep temporarily unloaded raid mobs tracked for this long before treating them as missing. In 2.13.0 the timer only advances while the mob's chunk is unloaded — loaded chunks with a missing entity no longer count against grace.")
+                .defineInRange("missingEntityGraceSeconds", 600, 20, 3600);
         SPAWN_RETRY_SECONDS = b.comment("Delay before retrying a wave that could not find safe spawn positions.")
                 .defineInRange("spawnRetrySeconds", 20, 5, 120);
         MINIMUM_TPS_TO_SPAWN = b.comment("Do not create a new wave below this approximate server TPS when TPS protection is enabled. Lowered from 18.0 in 2.10.1 so healthy servers don't trigger on normal tick-time jitter.")
@@ -227,6 +229,10 @@ public final class RaidConfig {
                 .define("useVillagerRecruitsArmy", true);
         BUILD_WAR_CAMPS = b.comment("Build a small physical temporary war camp at the invasion staging point.")
                 .define("buildTemporaryWarCamps", true);
+        CAMP_DESTRUCTIBLE_STRUCTURES = b.comment("When true (default), destroying the war camp's campfire disables reinforcements, breaking the banner scatters the current wave, and breaking the supply barrel drops a stack of emeralds. Set false to keep the camp purely decorative.")
+                .define("campDestructibleStructures", true);
+        CAMP_BONUS_LOOT_EMERALDS = b.comment("Bonus emeralds dropped when the war camp supply barrel is destroyed by a defender.")
+                .defineInRange("campBonusLootEmeralds", 3, 0, 64);
         CLEANUP_WAR_CAMPS = b.comment("Remove untouched temporary camp blocks when the invasion ends. Player-modified blocks are never removed.")
                 .define("cleanupTemporaryWarCamps", true);
         ENABLE_AMPHIBIOUS_RAIDS = b.comment("Auto-detect water near the objective and stage part of each wave in boats when a large enough water body is found.")
