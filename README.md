@@ -5,7 +5,7 @@
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1-62B47A?logo=minecraft&logoColor=white)
 ![Forge](https://img.shields.io/badge/Forge-47.x-1E2A47)
 ![Java](https://img.shields.io/badge/Java-17-orange?logo=openjdk&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-blue)
+![License](https://img.shields.io/badge/License-GPL--3.0-blue)
 ![Server-friendly](https://img.shields.io/badge/Server--friendly-yes-brightgreen)
 
 Faction Raids is a **server-friendly PvE siege addon** for [Villager Recruits](https://www.curseforge.com/minecraft/mc-mods/recruits). Any player's bed or respawn anchor is automatically registered as a stronghold — no admin setup, no world regeneration, no custom blocks in your terrain. Then, on a rolling per-faction schedule, an enemy army marches on that home: builds a real war camp with tents and banners, forms up into squads with a declared *casus belli*, breaches your gates and doors, wades across rivers, sails in from the sea, raises ladders over your walls, and tries to occupy the heart of your base — while you and your Recruits soldiers try to break them at the perimeter.
@@ -31,7 +31,7 @@ Every siege ends with **guaranteed emerald and campaign-loot rewards** for the w
 | **Hard dependency** | [Villager Recruits 1.15.2+](https://www.curseforge.com/minecraft/mc-mods/recruits) |
 | **Optional integrations** | [Villager Workers](https://github.com/talhanation/workers), [Small Ships](https://github.com/talhanation/smallships), [Siege Weapons](https://github.com/talhanation/siegeweapons) |
 | **Side** | Both — install on server and every client |
-| **License** | MIT |
+| **License** | GPL-3.0-only (name and artwork reserved) |
 | **Source & issues** | [github.com/boostbar9/Faction-Raids](https://github.com/boostbar9/Faction-Raids) |
 
 ## What's in the box
@@ -342,7 +342,7 @@ and player builds remain intact after a properly completed or stopped siege.
 
 ## License and project
 
-Faction Raids is MIT licensed. Source and issue tracking:
+Faction Raids is licensed under GPL-3.0-only. The name "Faction Raids" and the project's logo, banner, gallery artwork, and "Warlord's Codex" branding are reserved and not covered by the GPL — see LICENSE.txt for the trademark clause. Community modpacks, review videos, and Let's Plays that reference the mod by name are considered nominative use and require no permission. Source and issue tracking:
 [boostbar9/Faction-Raids](https://github.com/boostbar9/Faction-Raids).
 
 Villager Recruits is a separate project by TalhaNation and retains its own license.
