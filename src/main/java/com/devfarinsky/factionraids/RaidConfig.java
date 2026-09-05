@@ -6,6 +6,9 @@ import java.util.Arrays;
 import java.util.List;
 
 public final class RaidConfig {
+    /** v2.15.0 raider label visibility mode. See RAIDER_LABEL_MODE. */
+    public enum LabelMode { OFF, PROXIMITY, ALWAYS }
+
     public static final ForgeConfigSpec SPEC;
 
     public static final ForgeConfigSpec.BooleanValue ENABLED;
@@ -26,6 +29,12 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue AGGRO_RADIUS;
     public static final ForgeConfigSpec.IntValue OFF_AXIS_DRIFT_LIMIT;
     public static final ForgeConfigSpec.BooleanValue BREACHERS_IGNORE_DEFENDERS;
+    // v2.15.0 "Clear Intent":
+    public static final ForgeConfigSpec.EnumValue<LabelMode> RAIDER_LABEL_MODE;
+    public static final ForgeConfigSpec.IntValue RAIDER_LABEL_RADIUS;
+    public static final ForgeConfigSpec.BooleanValue RAIDER_GLOW;
+    public static final ForgeConfigSpec.BooleanValue HUD_ENABLED;
+    public static final ForgeConfigSpec.BooleanValue OBJECTIVE_BEACON;
     public static final ForgeConfigSpec.IntValue ABANDON_DEFEAT_MINUTES;
     public static final ForgeConfigSpec.IntValue MISSING_ENTITY_GRACE_SECONDS;
     public static final ForgeConfigSpec.IntValue SPAWN_RETRY_SECONDS;
@@ -164,6 +173,17 @@ public final class RaidConfig {
                 .defineInRange("offAxisDriftLimit", 24, 8, 128);
         BREACHERS_IGNORE_DEFENDERS = b.comment("When true (default), breachers and the siege commander refuse to acquire defender targets and only path to the objective, so gate-breach progress is not interrupted by defender skirmishes. Melee raiders still engage defenders normally.")
                 .define("breachersIgnoreDefenders", true);
+        // v2.15.0 Clear Intent:
+        RAIDER_LABEL_MODE = b.comment("How raider role name tags (Breacher, Warcaster, Captain, Marksman, Siege Commander) are shown. OFF hides them entirely; PROXIMITY shows tags only to defenders within raiderLabelRadius blocks (default); ALWAYS shows all tags at all times (visually noisy on large raids).")
+                .defineEnum("raiderLabelMode", LabelMode.PROXIMITY);
+        RAIDER_LABEL_RADIUS = b.comment("When raiderLabelMode is PROXIMITY, tags become visible to defenders within this many blocks of the raider. Only used in PROXIMITY mode.")
+                .defineInRange("raiderLabelRadius", 24, 8, 128);
+        RAIDER_GLOW = b.comment("When true (default), raiders get a role-colored outline (via team scoreboard + glowing) that shows through walls. Uses the same visibility rule as raiderLabelMode.")
+                .define("raiderGlow", true);
+        HUD_ENABLED = b.comment("When true (default), defenders see a small top-center HUD widget during active raids showing current phase (Marching / Breaching / Occupying), objective name, distance to objective, and wave progress. Server-broadcast; each defender may still hide it client-side with F1.")
+                .define("hudEnabled", true);
+        OBJECTIVE_BEACON = b.comment("When true (default), a vertical particle column marks the raid objective block so defenders can see exactly where raiders are marching. Fades when the viewer is within 16 blocks of the objective.")
+                .define("objectiveBeacon", true);
         ABANDON_DEFEAT_MINUTES = b.comment("Optional legacy abandonment defeat timer. Zero disables it so defeat requires actual stronghold occupation.")
                 .defineInRange("abandonDefeatMinutes", 0, 0, 30);
         MISSING_ENTITY_GRACE_SECONDS = b.comment("Keep temporarily unloaded raid mobs tracked for this long before treating them as missing. In 2.13.0 the timer only advances while the mob's chunk is unloaded — loaded chunks with a missing entity no longer count against grace.")
