@@ -170,18 +170,53 @@ public final class RaidEvents {
     @SubscribeEvent
     public static void onLivingDeath(LivingDeathEvent event) {
         if (!(event.getEntity().level() instanceof ServerLevel level)) return;
-        String teamKey = event.getEntity().getPersistentData().getString(RAID_TEAM_TAG);
-        if (teamKey.isBlank()) return;
+        String victimTeamKey = event.getEntity().getPersistentData().getString(RAID_TEAM_TAG);
+
+        // Effort-bonus hook: if a raider killed a defender, reward the raid.
+        // Fires before the raider-death bookkeeping below because a raider
+        // dying to another raider (rare) should not credit itself.
+        if (victimTeamKey.isBlank() && RaidConfig.ENABLE_EFFORT_BONUS.get()) {
+            var killer = event.getSource().getEntity();
+            if (killer != null) {
+                String killerTeam = killer.getPersistentData().getString(RAID_TEAM_TAG);
+                if (!killerTeam.isBlank()) {
+                    RaidSavedData data0 = RaidSavedData.get(level.getServer());
+                    RaidSavedData.Anchor anchor0 = data0.anchors.get(killerTeam);
+                    if (anchor0 != null && isDefenderVictim(event.getEntity(), anchor0)) {
+                        com.devfarinsky.factionraids.effort.RaidEffortTracker
+                                .onDefenderKilled(killerTeam);
+                    }
+                }
+            }
+        }
+
+        if (victimTeamKey.isBlank()) return;
         RaidSavedData data = RaidSavedData.get(level.getServer());
-        RaidSavedData.RaidState state = data.raids.get(teamKey);
+        RaidSavedData.RaidState state = data.raids.get(victimTeamKey);
         if (state == null || !state.raiders.remove(event.getEntity().getUUID())) return;
         state.missingTicks.remove(event.getEntity().getUUID());
         state.totalDefeated++;
         if (event.getEntity().getUUID().equals(state.commanderUuid) && !state.commanderDefeated) {
-            RaidSavedData.Anchor anchor = data.anchors.get(teamKey);
+            RaidSavedData.Anchor anchor = data.anchors.get(victimTeamKey);
             if (anchor != null) markCommanderDefeated(level.getServer(), anchor, state);
         }
         data.setDirty();
+    }
+
+    /**
+     * Returns true if {@code victim} counts as a defender for the raid
+     * targeting {@code anchor}: an online team member, or an allied recruit
+     * owned by a team member.
+     */
+    private static boolean isDefenderVictim(net.minecraft.world.entity.LivingEntity victim,
+                                             RaidSavedData.Anchor anchor) {
+        if (victim instanceof ServerPlayer sp) {
+            return anchor.members().contains(sp.getUUID());
+        }
+        if (victim instanceof Mob mob) {
+            return RecruitsBridge.belongsTo(mob, anchor.teamKey(), anchor.members());
+        }
+        return false;
     }
 
     @SubscribeEvent
@@ -1043,6 +1078,14 @@ public final class RaidEvents {
             com.devfarinsky.factionraids.formations.FormationDirector.tick(
                     level, state, point.pos(), activeComposition.formation);
         }
+        // Rescue stragglers that stall on the way to the objective; drop the
+        // second-time offenders from the wave count so the raid can advance.
+        int dropped = com.devfarinsky.factionraids.effort.StragglerTracker.tick(level, state, point.pos());
+        if (dropped > 0) {
+            announce(server, teamKey, Component.literal(dropped + " straggler(s) lost to the terrain — the wave presses on.")
+                    .withStyle(ChatFormatting.GRAY), false);
+            data.setDirty();
+        }
         processPhysicalBreaching(level, point, state);
 
         if (updateCaptureProgress(server, anchor, point, state, level, members, recruits)) {
@@ -1710,6 +1753,9 @@ public final class RaidEvents {
                 target.getZ() + 0.5D, 14, 0.5D, 0.75D, 0.5D, 0.08D);
         sendActionBar(level.getServer(), raid.teamKey, Component.literal("DEFENSE BROKEN • " +
                 raid.breachedBlocks.size() + " block(s) queued for repair").withStyle(ChatFormatting.RED));
+        if (RaidConfig.ENABLE_EFFORT_BONUS.get()) {
+            com.devfarinsky.factionraids.effort.RaidEffortTracker.onBreachTick(raid.teamKey);
+        }
         if (firstPhysicalBreach || raid.breachedBlocks.size() % 5 == 0) {
             announce(level.getServer(), raid.teamKey, Component.literal("The attackers have broken through a defense at " +
                     formatPos(target) + ". It is queued for restoration after the siege.")
@@ -1884,6 +1930,13 @@ public final class RaidEvents {
                 state.breachTicks = Math.min(maximum, state.breachTicks + 20);
             } else state.breachTicks = Math.max(0,
                     state.breachTicks - RaidConfig.BREACH_DECAY_PER_SECOND.get() * 20);
+            // Effort bonus — stack on top of presence baseline. Drains a
+            // fixed slice per tick so kills/breaches feel additive but capped.
+            if (RaidConfig.ENABLE_EFFORT_BONUS.get()) {
+                int bonus = com.devfarinsky.factionraids.effort.RaidEffortTracker
+                        .consume(state.teamKey, 20);
+                if (bonus > 0) state.breachTicks = Math.min(maximum, state.breachTicks + bonus);
+            }
 
             int band = maximum <= 0 ? 0 : state.breachTicks * 4 / maximum;
             if (band > state.lastBreachWarningBand && band < 4) {
@@ -1916,6 +1969,12 @@ public final class RaidEvents {
         if (attackers > defenders && attackers > 0) state.captureTicks = Math.min(maximum, state.captureTicks + 20);
         else state.captureTicks = Math.max(0,
                 state.captureTicks - RaidConfig.CAPTURE_DECAY_PER_SECOND.get() * 20);
+        // Effort bonus — same accrual applied to capture progress.
+        if (RaidConfig.ENABLE_EFFORT_BONUS.get()) {
+            int captureBonus = com.devfarinsky.factionraids.effort.RaidEffortTracker
+                    .consume(state.teamKey, 20);
+            if (captureBonus > 0) state.captureTicks = Math.min(maximum, state.captureTicks + captureBonus);
+        }
 
         int band = maximum <= 0 ? 0 : state.captureTicks * 4 / maximum;
         if (band > state.lastCaptureWarningBand && band < 4) {
@@ -2012,6 +2071,8 @@ public final class RaidEvents {
         com.devfarinsky.factionraids.naval.BridgeBuilder.forget(teamKey);
         ACTIVE_COMPOSITIONS.remove(teamKey);
         com.devfarinsky.factionraids.formations.FormationDirector.forget(teamKey);
+        com.devfarinsky.factionraids.effort.RaidEffortTracker.forget(teamKey);
+        com.devfarinsky.factionraids.effort.StragglerTracker.forget(teamKey);
         RaidSavedData.RaidState state = data.raids.remove(teamKey);
         RaidSavedData.Anchor anchor = data.anchors.get(teamKey);
         if (state != null && anchor != null) {
