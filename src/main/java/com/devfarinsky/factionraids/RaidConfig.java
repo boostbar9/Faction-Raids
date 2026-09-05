@@ -77,6 +77,10 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue CAMP_BUILDER_MAX;
     public static final ForgeConfigSpec.IntValue CAMP_LUMBERJACK_MAX;
     public static final ForgeConfigSpec.IntValue CAMP_MAX_BUILD_SECONDS;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_NARRATIVE;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ALLOWED_RAIDER_FACTIONS;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ALLOWED_CASUS_BELLI;
+    public static final ForgeConfigSpec.BooleanValue NARRATIVE_IN_BOSS_BAR;
     public static final ForgeConfigSpec.BooleanValue ENABLE_GATE_BREACHING;
     public static final ForgeConfigSpec.IntValue WOODEN_BREACH_SECONDS;
     public static final ForgeConfigSpec.IntValue REINFORCED_BREACH_SECONDS;
@@ -248,6 +252,14 @@ public final class RaidConfig {
                 .defineInRange("campLumberjackMax", 2, 1, 8);
         CAMP_MAX_BUILD_SECONDS = b.comment("Safety cap on how long the camp construction phase may run before the raid advances anyway.")
                 .defineInRange("campMaxBuildSeconds", 180, 30, 900);
+        ENABLE_NARRATIVE = b.comment("Attach a themed raider faction and casus belli (reason for war) to every raid. When false, announcements use generic wording and no faction is stored.")
+                .define("enableRaiderNarrative", true);
+        ALLOWED_RAIDER_FACTIONS = b.comment("Which raider faction ids may be chosen. Leave empty to allow all built-ins. See RaiderFactionRegistry for ids.")
+                .defineListAllowEmpty("allowedRaiderFactions", List.of(), o -> o instanceof String);
+        ALLOWED_CASUS_BELLI = b.comment("Which casus belli ids may be chosen. Leave empty to allow all built-ins. See CasusBelliRegistry for ids.")
+                .defineListAllowEmpty("allowedCasusBelli", List.of(), o -> o instanceof String);
+        NARRATIVE_IN_BOSS_BAR = b.comment("Show the raider faction epithet on the boss bar. Disable to keep the generic \"Faction Invasion\" title.")
+                .define("narrativeInBossBar", true);
         ENABLE_GATE_BREACHING = b.comment("Allow tracked siege breachers to break doors, trapdoors, fence gates and fences blocking their advance.")
                 .define("enableRestorableGateBreaching", true);
         WOODEN_BREACH_SECONDS = b.comment("Approximate focused breach time for wooden defenses. Multiple nearby breachers accelerate it.")
