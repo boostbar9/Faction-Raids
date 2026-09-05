@@ -918,6 +918,16 @@ public final class RaidEvents {
                         " and will beach near " + formatPos(naval.beach()) + ".")
                         .withStyle(ChatFormatting.AQUA), false);
             }
+            // Wave-1 prefab siege engines: spawn immediately at the war camp so
+            // defenders can already see the pressure before the first squad marches.
+            int placed = com.devfarinsky.factionraids.siege.SiegeConstruction.spawnPrefabEngines(
+                    raidLevel, state, point.pos(), anchor.teamKey());
+            if (placed > 0) {
+                announce(server, anchor.teamKey(), Component.literal(
+                        placed + (placed == 1 ? " siege engine has been raised at the war camp."
+                                : " siege engines have been raised at the war camp."))
+                        .withStyle(ChatFormatting.GOLD), false);
+            }
         }
         data.raids.put(anchor.teamKey(), state);
         data.setDirty();
@@ -978,6 +988,26 @@ public final class RaidEvents {
             data.setDirty();
         }
 
+        // Siege upkeep: steer unmanned engines toward the objective, detect
+        // engine kills, and detonate any sappers that reached the wall.
+        int engineLosses = com.devfarinsky.factionraids.siege.SiegeDeployment.tick(
+                level, state, point.pos());
+        if (engineLosses > 0) {
+            announce(server, teamKey, Component.literal(
+                    (engineLosses == 1 ? "A siege engine" : engineLosses + " siege engines")
+                            + " has been destroyed.")
+                    .withStyle(ChatFormatting.GREEN), false);
+            data.setDirty();
+        }
+        int detonations = com.devfarinsky.factionraids.siege.SapperRunner.tick(
+                level, state, point.pos(), state.raiders);
+        if (detonations > 0) {
+            announce(server, teamKey, Component.literal(
+                    (detonations == 1 ? "A demolition charge" : detonations + " demolition charges")
+                            + " has breached the defenses.")
+                    .withStyle(ChatFormatting.RED), false);
+            data.setDirty();
+        }
         processPhysicalBreaching(level, point, state);
 
         if (updateCaptureProgress(server, anchor, point, state, level, members, recruits)) {
@@ -1113,6 +1143,17 @@ public final class RaidEvents {
 
         state.wave = nextWave;
         state.plannedWaveSize = wanted;
+        // Wave 2+: roll for an on-site siege engine build. Announcement is
+        // handled inside SiegeConstruction to keep the chatter focused there.
+        if (state.wave >= 2) {
+            boolean built = com.devfarinsky.factionraids.siege.SiegeConstruction
+                    .maybeStartLaterWaveBuild(level, state, point.pos(), anchor.teamKey());
+            if (built) {
+                announce(server, anchor.teamKey(), Component.literal(
+                        "Raider engineers are wheeling a new siege engine into position.")
+                        .withStyle(ChatFormatting.GOLD), false);
+            }
+        }
         state.waveStartingCount = 0;
         state.pendingWaveSpawns = wanted;
         state.squadsSpawned = 0;
@@ -1188,6 +1229,13 @@ public final class RaidEvents {
                         com.devfarinsky.factionraids.naval.NavalConvoy.enlist(
                                 anchor.teamKey(), boat, state.navalBeachPos);
                     }
+                }
+                // Roll for sapper promotion. Cheap, capped, non-leaders only
+                // so squad leaders keep their role.
+                if (!squadLeader
+                        && com.devfarinsky.factionraids.siege.SiegeConstruction.canPromoteSapper(state)
+                        && level.random.nextInt(100) < 15) {
+                    com.devfarinsky.factionraids.siege.SiegeConstruction.assignSapper(state, raider);
                 }
                 if (RaidConfig.SPAWN_ARRIVAL_EFFECTS.get()) {
                     level.sendParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE,
@@ -1903,6 +1951,7 @@ public final class RaidEvents {
             RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
             ServerLevel level = getLevel(server, point);
             if (level != null) {
+                com.devfarinsky.factionraids.siege.SiegeDeployment.cleanup(level, state);
                 for (UUID id : state.raiders) {
                     Entity entity = level.getEntity(id);
                     if (entity != null) entity.discard();

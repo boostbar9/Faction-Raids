@@ -207,6 +207,10 @@ public final class RaidSavedData extends SavedData {
         /** Landing beach the naval convoy steers toward. Null when no naval staging. */
         public BlockPos navalBeachPos;
         public final Map<Long, String> campBlocks = new LinkedHashMap<>();
+        /** UUID -> SiegeEngineType.name() for engines currently on the field. */
+        public final Map<UUID, String> siegeEngines = new LinkedHashMap<>();
+        /** How many sappers this raid has already dispatched (capped by config). */
+        public int sappersDispatched;
         public final Map<Long, CompoundTag> breachedBlocks = new LinkedHashMap<>();
         public final Map<Long, Integer> blockBreachProgress = new HashMap<>();
         public BlockPos currentBreachBlock;
@@ -253,6 +257,15 @@ public final class RaidSavedData extends SavedData {
             tag.putBoolean("CampBuildAttempted", campBuildAttempted);
             if (navalStagingPos != null) tag.putLong("NavalStagingPos", navalStagingPos.asLong());
             if (navalBeachPos != null) tag.putLong("NavalBeachPos", navalBeachPos.asLong());
+            tag.putInt("SappersDispatched", sappersDispatched);
+            ListTag siegeList = new ListTag();
+            siegeEngines.forEach((uuid, typeName) -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putUUID("UUID", uuid);
+                entry.putString("Type", typeName);
+                siegeList.add(entry);
+            });
+            tag.put("SiegeEngines", siegeList);
             ListTag camp = new ListTag();
             campBlocks.forEach((position, block) -> {
                 CompoundTag entry = new CompoundTag();
@@ -326,6 +339,14 @@ public final class RaidSavedData extends SavedData {
                     BlockPos.of(tag.getLong("NavalStagingPos")) : null;
             state.navalBeachPos = tag.contains("NavalBeachPos", Tag.TAG_LONG) ?
                     BlockPos.of(tag.getLong("NavalBeachPos")) : null;
+            state.sappersDispatched = tag.getInt("SappersDispatched");
+            ListTag siegeList = tag.getList("SiegeEngines", Tag.TAG_COMPOUND);
+            for (int i = 0; i < siegeList.size(); i++) {
+                CompoundTag entry = siegeList.getCompound(i);
+                if (entry.hasUUID("UUID")) {
+                    state.siegeEngines.put(entry.getUUID("UUID"), entry.getString("Type"));
+                }
+            }
             ListTag camp = tag.getList("CampBlocks", Tag.TAG_COMPOUND);
             for (int i = 0; i < camp.size(); i++) {
                 CompoundTag entry = camp.getCompound(i);
