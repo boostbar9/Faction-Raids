@@ -73,6 +73,10 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue PREFER_SMALL_SHIPS;
     public static final ForgeConfigSpec.BooleanValue SMALL_SHIPS_PREFER_LARGE;
     public static final ForgeConfigSpec.IntValue SHIP_CREW_MAX;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_CAMP_CONSTRUCTION;
+    public static final ForgeConfigSpec.IntValue CAMP_BUILDER_MAX;
+    public static final ForgeConfigSpec.IntValue CAMP_LUMBERJACK_MAX;
+    public static final ForgeConfigSpec.IntValue CAMP_MAX_BUILD_SECONDS;
     public static final ForgeConfigSpec.BooleanValue ENABLE_GATE_BREACHING;
     public static final ForgeConfigSpec.IntValue WOODEN_BREACH_SECONDS;
     public static final ForgeConfigSpec.IntValue REINFORCED_BREACH_SECONDS;
@@ -236,6 +240,14 @@ public final class RaidConfig {
                 .define("smallShipsPreferLarge", true);
         SHIP_CREW_MAX = b.comment("Maximum raiders that mount a single Small Ships vessel. Vanilla boats always cap at 2 regardless of this value.")
                 .defineInRange("shipCrewMax", 6, 1, 32);
+        ENABLE_CAMP_CONSTRUCTION = b.comment("Spawn real Villager Workers lumberjacks and builders to chop trees and construct the raider camp before the assault begins. Requires the Villager Workers mod. Silently skipped when Workers is absent.")
+                .define("enableWorkersCampConstruction", true);
+        CAMP_BUILDER_MAX = b.comment("Maximum number of builder workers spawned per raider camp.")
+                .defineInRange("campBuilderMax", 2, 1, 8);
+        CAMP_LUMBERJACK_MAX = b.comment("Maximum number of lumberjack workers spawned per raider camp.")
+                .defineInRange("campLumberjackMax", 2, 1, 8);
+        CAMP_MAX_BUILD_SECONDS = b.comment("Safety cap on how long the camp construction phase may run before the raid advances anyway.")
+                .defineInRange("campMaxBuildSeconds", 180, 30, 900);
         ENABLE_GATE_BREACHING = b.comment("Allow tracked siege breachers to break doors, trapdoors, fence gates and fences blocking their advance.")
                 .define("enableRestorableGateBreaching", true);
         WOODEN_BREACH_SECONDS = b.comment("Approximate focused breach time for wooden defenses. Multiple nearby breachers accelerate it.")

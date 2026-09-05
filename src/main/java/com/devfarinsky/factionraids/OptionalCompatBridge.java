@@ -163,6 +163,23 @@ public final class OptionalCompatBridge {
         return ModList.get().isLoaded(modId);
     }
 
+    /** Public loaded query for other bridges (e.g. WorkersBridge). */
+    public static boolean isLoaded(String modId) {
+        return loaded(modId);
+    }
+
+    /**
+     * Tags any Faction-Raids-spawned entity (workers, ships, siege weapons)
+     * so downstream systems recognise it as raider-owned. Unlike
+     * {@link #rememberCrewedAsset(Entity, UUID, String)} this does NOT gate
+     * on entity kind — callers own that check.
+     */
+    public static void tagAssetOwnership(Entity entity, String factionKey, UUID ownerUuid) {
+        if (entity == null || factionKey == null || ownerUuid == null) return;
+        entity.getPersistentData().putString(ASSET_FACTION_TAG, factionKey);
+        entity.getPersistentData().putUUID(ASSET_OWNER_TAG, ownerUuid);
+    }
+
     private static String status(String modId, boolean enabled) {
         if (!loaded(modId)) return "not installed";
         return enabled ? "active" : "disabled";
