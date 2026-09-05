@@ -2293,7 +2293,8 @@ public final class RaidEvents {
             return new DashboardSnapshot(teamDisplay(player), false, false, "No stronghold registered",
                     0, RaidConfig.WAVES.get(), 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0,
                     0, "No gate under attack", 0, "Sleep at your base",
-                    defaultEmeraldReward(), false);
+                    defaultEmeraldReward(), false,
+                    "", "", "", "", "", 0, "", "", 0, "No stronghold");
         }
         RaidSavedData.RaidState state = data.raids.get(key);
         RaidSavedData.DefensePoint point = state == null ? anchor.primaryPoint() :
@@ -2305,14 +2306,38 @@ public final class RaidEvents {
         if (state == null) {
             long seconds = Math.max(0L,
                     (anchor.nextRaidGameTime() - server.overworld().getGameTime()) / 20L);
+            int firstWaveTotal = Math.max(1, RaidConfig.BASE_ENEMIES_PER_WAVE.get());
+            com.devfarinsky.factionraids.waves.WaveComposition preview =
+                    com.devfarinsky.factionraids.waves.WaveComposer.compose(1, RaidConfig.WAVES.get(), firstWaveTotal);
+            int score = computeDefenseScore(recruits, compat, firstWaveTotal, 1);
             return new DashboardSnapshot(anchor.teamDisplay(), true, false,
                     point.dimension() + " • " + formatPos(point.pos()), 0, RaidConfig.WAVES.get(),
                     0, 0, 0, 0, false, 0, recruits, compat.workers(), compat.ships(), compat.siegeWeapons(),
                     assetScalingEnemies(compat), 0, "No gate under attack", 0,
-                    formatTime(seconds), defaultEmeraldReward(), true);
+                    formatTime(seconds), defaultEmeraldReward(), true,
+                    "", "", "", "", "", 0,
+                    preview.label.isEmpty() ? "Wave 1" : "Wave 1 — " + preview.label,
+                    formatRoleCounts(preview),
+                    score, defenseScoreLabel(score));
         }
         int occupation = state.captureTicks * 100 /
                 Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20);
+        int nextWaveNumber = Math.min(state.wave + 1, RaidConfig.WAVES.get());
+        com.devfarinsky.factionraids.waves.WaveComposition nextPreview =
+                com.devfarinsky.factionraids.waves.WaveComposer.compose(nextWaveNumber, RaidConfig.WAVES.get(),
+                        Math.max(1, RaidConfig.BASE_ENEMIES_PER_WAVE.get()));
+        String nextLabel = nextWaveNumber <= state.wave ? "Final wave in progress" :
+                "Wave " + nextWaveNumber + (nextPreview.label.isEmpty() ? "" : " — " + nextPreview.label);
+        String nextRoles = nextWaveNumber <= state.wave ? "" : formatRoleCounts(nextPreview);
+        int score = computeDefenseScore(recruits, compat, state.raiders.size() + state.pendingWaveSpawns,
+                state.wave);
+        String campDir = state.campPos == null ? "" : approachDirection(state.approachAngle);
+        int campDist = state.campPos == null ? 0 :
+                (int) Math.round(Math.sqrt(point.pos().distSqr(state.campPos)));
+        String facId = state.narrative != null ? state.narrative.factionId : "";
+        String cbId = state.narrative != null ? state.narrative.casusBelliId : "";
+        String opening = state.narrative != null && state.narrative.opening != null ? state.narrative.opening : "";
+        String chant = state.narrative != null && state.narrative.chant != null ? state.narrative.chant : "";
         return new DashboardSnapshot(anchor.teamDisplay(), true, true,
                 point.dimension() + " • " + formatPos(point.pos()) +
                         (state.campPos == null ? " • camp unavailable" : " • camp " + formatPos(state.campPos)),
@@ -2323,7 +2348,64 @@ public final class RaidEvents {
                 state.breachedBlocks.size(),
                 state.currentBreachBlock == null ? "No gate under attack" : formatPos(state.currentBreachBlock),
                 gateBreachPercent(state), "Siege active",
-                guaranteedEmeraldReward(state), state.rewardEligible);
+                guaranteedEmeraldReward(state), state.rewardEligible,
+                facId, cbId, opening, chant, campDir, campDist,
+                nextLabel, nextRoles, score, defenseScoreLabel(score));
+    }
+
+    /**
+     * Computes a rough "can I survive this wave?" score 0-100 comparing
+     * defensive strength (allied Recruits + workers + war assets bonus)
+     * against incoming attackers scaled by wave number. This is intentionally
+     * a heuristic — the goal is to give players actionable info like
+     * "call for backup" or "you're ready", not a precise combat simulation.
+     */
+    private static int computeDefenseScore(int alliedRecruits, OptionalCompatBridge.CompatSnapshot compat,
+                                           int incomingAttackers, int wave) {
+        // Defenders: Recruits count for full weight, workers half, ships/siege give a small bonus.
+        double defense = alliedRecruits + compat.workers() * 0.5D
+                + compat.ships() * 0.75D + compat.siegeWeapons() * 1.25D;
+        // Attackers scale by wave since later waves have higher-tier reserved slots.
+        double waveMultiplier = 1.0D + Math.max(0, wave - 1) * 0.12D;
+        double threat = Math.max(1.0D, incomingAttackers * waveMultiplier);
+        double ratio = defense / threat;
+        // Ratio of 1.0 == "even fight" ~= 60/100; 1.5+ = comfortable; 0.5 = badly outmatched.
+        int score = (int) Math.round(Mth.clamp(ratio * 60.0D, 0.0D, 100.0D));
+        return score;
+    }
+
+    private static String defenseScoreLabel(int score) {
+        if (score >= 85) return "Overwhelming";
+        if (score >= 70) return "Strong";
+        if (score >= 55) return "Even fight";
+        if (score >= 35) return "Outmatched";
+        return "Call for backup";
+    }
+
+    private static String formatRoleCounts(com.devfarinsky.factionraids.waves.WaveComposition comp) {
+        if (comp == null || comp.roleCounts.isEmpty()) return "Composition unknown";
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (var entry : comp.roleCounts.entrySet()) {
+            if (!first) sb.append(" • ");
+            first = false;
+            sb.append(entry.getValue()).append(" ").append(prettyRole(entry.getKey()));
+        }
+        return sb.toString();
+    }
+
+    private static String prettyRole(String role) {
+        if (role == null || role.isEmpty()) return "raider";
+        // "recruit_shieldman" -> "Shieldman"
+        String core = role.startsWith("recruit_") ? role.substring("recruit_".length()) : role;
+        StringBuilder out = new StringBuilder();
+        boolean upper = true;
+        for (char c : core.toCharArray()) {
+            if (c == '_') { out.append(' '); upper = true; continue; }
+            out.append(upper ? Character.toUpperCase(c) : c);
+            upper = false;
+        }
+        return out.toString();
     }
 
     private static int gateBreachPercent(RaidSavedData.RaidState state) {
@@ -2338,11 +2420,17 @@ public final class RaidEvents {
                              int recruits, int workers, int ships,
                              int siegeWeapons, int assetScalingEnemies, int breachedBlockCount,
                              String gateTarget, int gateBreachPercent, String cooldown,
-                             int emeraldReward, boolean rewardEligible) {
+                             int emeraldReward, boolean rewardEligible,
+                             // v2.11.0 additions for tabbed Codex UI:
+                             String factionId, String casusBelliId, String factionOpening,
+                             String factionChant, String campDirection, int campDistance,
+                             String nextWaveLabel, String nextWaveComposition,
+                             int defenseScore, String defenseScoreLabel) {
         static DashboardSnapshot unavailable() {
             return new DashboardSnapshot("Unavailable", false, false, "Server unavailable", 0, 0,
                     0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0,
-                    0, "Unavailable", 0, "Unavailable", 0, false);
+                    0, "Unavailable", 0, "Unavailable", 0, false,
+                    "", "", "", "", "", 0, "", "", 0, "Unknown");
         }
     }
 

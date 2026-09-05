@@ -15,7 +15,10 @@ import net.minecraftforge.network.simple.SimpleChannel;
 import java.util.function.Supplier;
 
 public final class RaidNetwork {
-    private static final String PROTOCOL = "2";
+    // v3 introduced in 2.11.0: added 10 Codex fields to DashboardSync.
+    // Bump whenever the wire format changes so mismatched builds refuse to connect
+    // instead of silently corrupting the dashboard payload.
+    private static final String PROTOCOL = "3";
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(FactionRaids.MOD_ID, "main"))
             .networkProtocolVersion(() -> PROTOCOL)
@@ -79,6 +82,17 @@ public final class RaidNetwork {
             buffer.writeUtf(s.cooldown());
             buffer.writeVarInt(s.emeraldReward());
             buffer.writeBoolean(s.rewardEligible());
+            // v2.11.0 Codex additions:
+            buffer.writeUtf(s.factionId());
+            buffer.writeUtf(s.casusBelliId());
+            buffer.writeUtf(s.factionOpening());
+            buffer.writeUtf(s.factionChant());
+            buffer.writeUtf(s.campDirection());
+            buffer.writeVarInt(s.campDistance());
+            buffer.writeUtf(s.nextWaveLabel());
+            buffer.writeUtf(s.nextWaveComposition());
+            buffer.writeVarInt(s.defenseScore());
+            buffer.writeUtf(s.defenseScoreLabel());
         }
 
         private static DashboardSync decode(FriendlyByteBuf buffer) {
@@ -88,7 +102,11 @@ public final class RaidNetwork {
                     buffer.readVarInt(), buffer.readVarInt(), buffer.readBoolean(), buffer.readVarInt(),
                     buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
                     buffer.readVarInt(), buffer.readVarInt(), buffer.readUtf(), buffer.readVarInt(),
-                    buffer.readUtf(), buffer.readVarInt(), buffer.readBoolean()));
+                    buffer.readUtf(), buffer.readVarInt(), buffer.readBoolean(),
+                    // v2.11.0 Codex additions:
+                    buffer.readUtf(), buffer.readUtf(), buffer.readUtf(), buffer.readUtf(),
+                    buffer.readUtf(), buffer.readVarInt(), buffer.readUtf(), buffer.readUtf(),
+                    buffer.readVarInt(), buffer.readUtf()));
         }
 
         private static void handle(DashboardSync packet, Supplier<NetworkEvent.Context> contextSupplier) {
