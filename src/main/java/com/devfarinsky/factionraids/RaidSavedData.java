@@ -230,6 +230,12 @@ public final class RaidSavedData extends SavedData {
         public int reconcileTicks;
         public boolean performancePauseAnnounced;
         public boolean offlinePauseAnnounced;
+        /**
+         * Themed narrative for this raid (who is attacking, why, and pre-rendered
+         * flavor strings). Null on raids loaded from pre-2.7 saves or when the
+         * narrative system is disabled in config — callers must fall back cleanly.
+         */
+        public com.devfarinsky.factionraids.narrative.RaidNarrative narrative;
 
         public RaidState(String teamKey, String defensePointName, int warningTicks) {
             this.teamKey = teamKey;
@@ -312,6 +318,7 @@ public final class RaidSavedData extends SavedData {
                 missing.add(entry);
             });
             tag.put("MissingEntities", missing);
+            if (narrative != null) tag.put("Narrative", narrative.save());
             return tag;
         }
 
@@ -386,6 +393,9 @@ public final class RaidSavedData extends SavedData {
                 // A 2.1 raid cannot reconstruct earlier casualties, but counting
                 // every currently tracked attacker keeps upgraded summaries sane.
                 state.totalSpawned = state.raiders.size();
+            }
+            if (tag.contains("Narrative", Tag.TAG_COMPOUND)) {
+                state.narrative = com.devfarinsky.factionraids.narrative.RaidNarrative.load(tag.getCompound("Narrative"));
             }
             ListTag missing = tag.getList("MissingEntities", Tag.TAG_COMPOUND);
             for (int i = 0; i < missing.size(); i++) {

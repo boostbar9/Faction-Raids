@@ -885,6 +885,12 @@ public final class RaidEvents {
         state.approachAngle = server.overworld().random.nextDouble() * Math.PI * 2.0D;
         state.startedGameTime = server.overworld().getGameTime();
         state.rewardEligible = rewardEligible;
+        // Pick who is attacking and why. Selection is guaranteed non-null even
+        // when the narrative system is disabled — fields on the returned
+        // record are just left blank, and the branded fallback below reads the
+        // opening line directly from the neutral narrative.
+        state.narrative = com.devfarinsky.factionraids.narrative.RaidNarrativeSelector.select(
+                server.overworld().random, anchor.teamDisplay(), point.name());
         ServerLevel raidLevel = getLevel(server, point);
         if (raidLevel != null && RaidConfig.BUILD_WAR_CAMPS.get()) buildWarCamp(raidLevel, point, state);
         // Amphibious detection: if a large enough open-water body sits within
@@ -925,14 +931,24 @@ public final class RaidEvents {
         }
         data.raids.put(anchor.teamKey(), state);
         data.setDirty();
-        announce(server, anchor.teamKey(), Component.literal("Enemy scouts have found " + anchor.teamDisplay() + " at '" + point.name() +
-                        "'! A war camp " + (state.campPos == null ? "is forming" : "has been raised at " + formatPos(state.campPos)) +
-                        " to the " + approachDirection(state.approachAngle) + ". The siege begins in " +
-                        formatTime(RaidConfig.WARNING_SECONDS.get()) + ". Rally your Recruits and defend the stronghold.")
-                        .withStyle(ChatFormatting.GOLD), true);
+        ChatFormatting accent = state.narrative != null && state.narrative.accent != null
+                ? state.narrative.accent : ChatFormatting.GOLD;
+        String opening = state.narrative != null && state.narrative.opening != null
+                ? state.narrative.opening
+                : "Enemy scouts have found " + anchor.teamDisplay() + " at '" + point.name() + "'";
+        String detail = " A war camp " + (state.campPos == null ? "is forming" : "has been raised at " + formatPos(state.campPos)) +
+                " to the " + approachDirection(state.approachAngle) + ". The siege begins in " +
+                formatTime(RaidConfig.WARNING_SECONDS.get()) + ". Rally your Recruits and defend the stronghold.";
+        announce(server, anchor.teamKey(), Component.literal(opening + detail).withStyle(accent), true);
+        if (state.narrative != null && state.narrative.chant != null) {
+            announce(server, anchor.teamKey(),
+                    Component.literal(state.narrative.chant).withStyle(ChatFormatting.ITALIC, accent), false);
+        }
+        String subtitle = state.narrative != null && state.narrative.factionEpithet != null
+                ? "The " + state.narrative.factionEpithet + " march from the " + approachDirection(state.approachAngle)
+                : "Enemy war camp sighted to the " + approachDirection(state.approachAngle);
         showTitle(server, anchor.teamKey(), Component.literal("SIEGE INCOMING").withStyle(ChatFormatting.DARK_RED),
-                Component.literal("Enemy war camp sighted to the " + approachDirection(state.approachAngle))
-                        .withStyle(ChatFormatting.GOLD));
+                Component.literal(subtitle).withStyle(accent));
         updateBossBar(server, anchor, state, false);
         return true;
     }
@@ -1987,6 +2003,12 @@ public final class RaidEvents {
                 (elapsedTicks > 0 ? "; duration " + formatTime(elapsedTicks / 20) : "") + ".";
         announce(server, teamKey, Component.literal(message + summary)
                 .withStyle(victory ? ChatFormatting.GREEN : ChatFormatting.DARK_RED), victory);
+        // On defender victory, close with the raider faction's parting taunt if
+        // one was rolled. Prefix with an em-dash to read as attribution.
+        if (victory && state != null && state.narrative != null && state.narrative.victoryTaunt != null) {
+            announce(server, teamKey, Component.literal("— " + state.narrative.victoryTaunt)
+                    .withStyle(ChatFormatting.ITALIC, state.narrative.accent), false);
+        }
         if (victory && reward && !eligibleVictory) {
             announce(server, teamKey, Component.literal("Practice siege complete. Manual test raids do not grant rewards by default.")
                     .withStyle(ChatFormatting.YELLOW), false);
@@ -2032,6 +2054,13 @@ public final class RaidEvents {
                         waveTitle(state.wave) + " • " + state.raiders.size() + " deployed" +
                                 (state.pendingWaveSpawns > 0 ? " + " + state.pendingWaveSpawns + " reinforcing" : "") +
                                 " • stronghold " + capturePercent + "% occupied";
+        // Prepend the raider epithet if narrative is enabled and available, so
+        // the boss bar reads e.g. "Ship-Wolves — Perimeter assault…" instead of
+        // the generic "Faction Invasion" everyone gets today.
+        if (RaidConfig.NARRATIVE_IN_BOSS_BAR.get() && state.narrative != null &&
+                state.narrative.factionEpithet != null) {
+            label = state.narrative.factionEpithet + " — " + label;
+        }
         bar.setName(Component.literal(label));
         bar.setColor(paused ? BossEvent.BossBarColor.WHITE : !state.breached ?
                 (breachPercent >= 75 ? BossEvent.BossBarColor.RED : BossEvent.BossBarColor.YELLOW) : capturePercent >= 75 ?
