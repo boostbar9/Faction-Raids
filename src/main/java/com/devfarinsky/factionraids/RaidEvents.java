@@ -1764,7 +1764,7 @@ public final class RaidEvents {
     private static void buildWarCamp(ServerLevel level, RaidSavedData.DefensePoint point,
                                      RaidSavedData.RaidState state) {
         state.campBuildAttempted = true;
-        BlockPos camp = findWarCampPosition(level, point.pos(), state.approachAngle);
+        BlockPos camp = findWarCampPosition(level, point.pos(), state.approachAngle, state);
         if (camp == null) return;
         state.campPos = camp;
 
@@ -1990,9 +1990,16 @@ public final class RaidEvents {
         }
     }
 
-    private static BlockPos findWarCampPosition(ServerLevel level, BlockPos anchor, double approachAngle) {
+    /**
+     * v2.16.1 - accepts the RaidState so the naval staging position can
+     * veto sites that would place the palisade on top of the boat spawn.
+     */
+    private static BlockPos findWarCampPosition(ServerLevel level, BlockPos anchor, double approachAngle,
+                                                 RaidSavedData.RaidState state) {
         int min = RaidConfig.MIN_SPAWN_DISTANCE.get();
         int max = Math.max(min, RaidConfig.MAX_SPAWN_DISTANCE.get());
+        BlockPos navalStaging = state == null ? null : state.navalStagingPos;
+        int navalGuardSq = CAMP_NAVAL_MIN_DISTANCE * CAMP_NAVAL_MIN_DISTANCE;
         for (int attempt = 0; attempt < 32; attempt++) {
             double angle = approachAngle + (level.random.nextDouble() - 0.5D) * 0.5D;
             int distance = Math.max(min, max - level.random.nextInt(Math.max(1, Math.min(16, max - min + 1))));
@@ -2001,25 +2008,60 @@ public final class RaidEvents {
             if (!level.hasChunk(x >> 4, z >> 4)) continue;
             BlockPos center = surfacePosition(level, x, z);
             if (!validCampSurface(level, center, anchor)) continue;
+            // v2.16.1 - keep the palisade clear of the boat spawn. The
+            // camp footprint is 19x19 (9 per side + gate); anything closer
+            // than 24 blocks would put boats inside the fence.
+            if (navalStaging != null) {
+                int ddx = center.getX() - navalStaging.getX();
+                int ddz = center.getZ() - navalStaging.getZ();
+                if (ddx * ddx + ddz * ddz < navalGuardSq) continue;
+            }
             return center;
         }
         return null;
     }
 
+    /**
+     * Horizontal buffer (blocks, squared distance) between the war camp
+     * center and the naval staging point. Palisade half-extent is 9 plus
+     * a two-block breathing gap, so 24 keeps the fence and boats clearly
+     * separate even on jittered spawns.
+     */
+    private static final int CAMP_NAVAL_MIN_DISTANCE = 24;
+
     private static boolean validCampSurface(ServerLevel level, BlockPos center, BlockPos anchor) {
         if (!level.getWorldBorder().isWithinBounds(center) || Math.abs(center.getY() - anchor.getY()) > 48 ||
-                !level.getFluidState(center).isEmpty() || !level.getBlockState(center).canBeReplaced() ||
-                !level.getBlockState(center.below()).isFaceSturdy(level, center.below(), Direction.UP)) return false;
+                !level.getBlockState(center).canBeReplaced()) return false;
+        // v2.16.1: the center block is *above* the ground. Water detection
+        // has to look at what the palisade will actually stand on, which
+        // is center.below(). Previously we only checked getFluidState(center)
+        // - always air over water because MOTION_BLOCKING_NO_LEAVES returns
+        // the block *above* the top water block - so camps happily spawned
+        // on the ocean.
+        if (isWaterOrLava(level, center) || isWaterOrLava(level, center.below())) return false;
+        if (!level.getBlockState(center.below()).isFaceSturdy(level, center.below(), Direction.UP)) return false;
         // v2.13.0 checks the corners of a wider footprint (±9 on each axis)
         // to match the new palisade prefab. If terrain drops off by more
         // than 3 blocks or spills into fluid at any corner, skip this site.
         for (int dx : new int[]{-9, 9}) {
             for (int dz : new int[]{-9, 9}) {
                 BlockPos sample = surfacePosition(level, center.getX() + dx, center.getZ() + dz);
-                if (Math.abs(sample.getY() - center.getY()) > 3 || !level.getFluidState(sample).isEmpty()) return false;
+                // Same fix at the corners: check sample AND the block below
+                // for water/lava, not just sample (which is always air).
+                if (Math.abs(sample.getY() - center.getY()) > 3) return false;
+                if (isWaterOrLava(level, sample) || isWaterOrLava(level, sample.below())) return false;
             }
         }
         return true;
+    }
+
+    /**
+     * v2.16.1 - true when the block at {@code pos} contains any fluid
+     * (water or lava). Used by camp validation so palisades never spawn
+     * with any part of their footprint sitting on liquid.
+     */
+    private static boolean isWaterOrLava(ServerLevel level, BlockPos pos) {
+        return !level.getFluidState(pos).isEmpty();
     }
 
     private static BlockPos surfacePosition(ServerLevel level, int x, int z) {
