@@ -35,6 +35,7 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue RAIDER_GLOW;
     public static final ForgeConfigSpec.BooleanValue HUD_ENABLED;
     public static final ForgeConfigSpec.BooleanValue OBJECTIVE_BEACON;
+    public static final ForgeConfigSpec.BooleanValue PHYSICAL_BREACHING;
     public static final ForgeConfigSpec.IntValue ABANDON_DEFEAT_MINUTES;
     public static final ForgeConfigSpec.IntValue MISSING_ENTITY_GRACE_SECONDS;
     public static final ForgeConfigSpec.IntValue SPAWN_RETRY_SECONDS;
@@ -184,6 +185,8 @@ public final class RaidConfig {
                 .define("hudEnabled", true);
         OBJECTIVE_BEACON = b.comment("When true (default), a vertical particle column marks the raid objective block so defenders can see exactly where raiders are marching. Fades when the viewer is within 16 blocks of the objective.")
                 .define("objectiveBeacon", true);
+        PHYSICAL_BREACHING = b.comment("When true (default), the top-contributing breacher for each attacked block is commanded to path directly to that block, face it, and swing its main hand each time breach progress is added. Makes gate-breaking visually legible instead of the block breaking while raiders idle nearby. Disable to restore the pre-2.16.0 behavior where breach progress is credited purely by proximity.")
+                .define("physicalBreaching", true);
         ABANDON_DEFEAT_MINUTES = b.comment("Optional legacy abandonment defeat timer. Zero disables it so defeat requires actual stronghold occupation.")
                 .defineInRange("abandonDefeatMinutes", 0, 0, 30);
         MISSING_ENTITY_GRACE_SECONDS = b.comment("Keep temporarily unloaded raid mobs tracked for this long before treating them as missing. In 2.13.0 the timer only advances while the mob's chunk is unloaded — loaded chunks with a missing entity no longer count against grace.")

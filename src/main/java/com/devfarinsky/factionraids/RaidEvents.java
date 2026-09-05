@@ -22,6 +22,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.BossEvent;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
@@ -2063,7 +2064,10 @@ public final class RaidEvents {
         }
 
         Vec3 objective = invasionObjective(level, point, state);
+        // v2.16.0: also remember which breachers picked each target so we
+        // can command them to actually walk up and swing at it below.
         Map<BlockPos, Integer> pressure = new HashMap<>();
+        Map<BlockPos, List<Mob>> contributors = new HashMap<>();
         int evaluatedBreachers = 0;
         for (UUID id : state.raiders) {
             Entity entity = level.getEntity(id);
@@ -2072,7 +2076,11 @@ public final class RaidEvents {
             if (!role.equals("breacher") && !role.equals("commander")) continue;
             if (++evaluatedBreachers > 8) break;
             BlockPos target = findNearbyBreachableBlock(level, mob, objective, point.pos(), state);
-            if (target != null) pressure.merge(target.immutable(), 1, Integer::sum);
+            if (target != null) {
+                BlockPos key = target.immutable();
+                pressure.merge(key, 1, Integer::sum);
+                contributors.computeIfAbsent(key, k -> new ArrayList<>()).add(mob);
+            }
         }
         if (pressure.isEmpty()) {
             if (previousTarget != null) level.destroyBlockProgress(breakerAnimationId(state), previousTarget, -1);
@@ -2085,6 +2093,7 @@ public final class RaidEvents {
                 .max(Map.Entry.comparingByValue()).orElse(null);
         if (focus == null) return;
         BlockPos target = focus.getKey();
+        List<Mob> targetContributors = contributors.getOrDefault(target, List.of());
         BlockState targetState = level.getBlockState(target);
         int required = breachWorkRequired(targetState);
         if (previousTarget != null && !previousTarget.equals(target)) {
@@ -2099,13 +2108,114 @@ public final class RaidEvents {
         level.destroyBlockProgress(breakerAnimationId(state), target,
                 Mth.clamp(progress * 10 / Math.max(1, required), 0, 9));
 
-        if (progress == 1 || progress % Math.max(2, required / 4) == 0) {
+        boolean swingTick = progress == 1 || progress % Math.max(2, required / 4) == 0;
+        if (swingTick) {
             level.playSound(null, target, SoundEvents.ZOMBIE_ATTACK_WOODEN_DOOR,
                     SoundSource.HOSTILE, 0.75F, 0.75F + level.random.nextFloat() * 0.25F);
             level.sendParticles(ParticleTypes.CRIT, target.getX() + 0.5D, target.getY() + 0.5D,
                     target.getZ() + 0.5D, 6, 0.35D, 0.35D, 0.35D, 0.05D);
         }
+        // v2.16.0: command the contributing breachers to actually walk up
+        // to the block and swing at it, so the visual matches the credit.
+        driveBreachersToTarget(level, targetContributors, target, swingTick);
         if (progress >= required) breachAndRemember(level, state, target);
+    }
+
+    /**
+     * v2.16.0 "Physical Breaching": make the credited breachers actually
+     * walk up to the target block, face it, and swing at it.
+     *
+     * <p>The block-breach system is server-side accounting - a raider in
+     * the 7x4x7 scan box around a door adds pressure to it. Before this
+     * pass, a raider could stand three blocks away doing nothing while
+     * the door visibly broke. That undermined player trust in the mechanic.
+     *
+     * <p>Behavior:
+     * <ul>
+     *   <li>No-op when the {@code PHYSICAL_BREACHING} config is off.</li>
+     *   <li>Sorts contributors by distance to the target and drives the
+     *       nearest two only - a whole squad piling onto one door pathfinds
+     *       badly and looks ridiculous. Other contributors still credit
+     *       pressure so the door breaks at the same speed.</li>
+     *   <li>Path target is the nearest air-space neighbor of the block
+     *       (so the raider stops <em>next</em> to the door, not inside it).</li>
+     *   <li>Every tick: force look-at so the head tracks the door.</li>
+     *   <li>On {@code swingTick}: fire {@link Mob#swing(InteractionHand)}
+     *       so the arm animation lines up with the door-hit sound.</li>
+     * </ul>
+     */
+    private static void driveBreachersToTarget(ServerLevel level, List<Mob> contributors,
+                                               BlockPos target, boolean swingTick) {
+        if (contributors.isEmpty()) return;
+        if (!RaidConfig.PHYSICAL_BREACHING.get()) return;
+
+        // Nearest two contributors only. A ravager can't fit next to a
+        // door anyway and squeezing 8 mobs into one 1x2 slot is worse
+        // than letting them idle.
+        contributors.sort((a, b) -> Double.compare(
+                a.distanceToSqr(target.getX() + 0.5, target.getY() + 0.5, target.getZ() + 0.5),
+                b.distanceToSqr(target.getX() + 0.5, target.getY() + 0.5, target.getZ() + 0.5)));
+        int drive = Math.min(2, contributors.size());
+
+        // Pick the best stand-next-to-the-block position: the horizontal
+        // neighbor closest to the leading breacher, that the raider can
+        // stand in without suffocating.
+        Mob leader = contributors.get(0);
+        BlockPos standPos = pickBreacherStandPos(level, target, leader);
+
+        for (int i = 0; i < drive; i++) {
+            Mob mob = contributors.get(i);
+            // Path directly to the door face at a modest sprint. 1.15 is
+            // brisk enough to catch up to a defender kiting through the
+            // gate but slow enough that a ravager doesn't overshoot.
+            if (standPos != null) {
+                double distSq = mob.distanceToSqr(standPos.getX() + 0.5,
+                        standPos.getY(), standPos.getZ() + 0.5);
+                // Only re-issue the nav command when we're not already
+                // adjacent - constant moveTo calls thrash the path grid.
+                if (distSq > 4.0D || mob.getNavigation().isDone()) {
+                    mob.getNavigation().moveTo(
+                            standPos.getX() + 0.5, standPos.getY(), standPos.getZ() + 0.5, 1.15D);
+                }
+            }
+            // Head tracks the target every tick so the mob "looks at"
+            // what it's hitting.
+            mob.getLookControl().setLookAt(
+                    target.getX() + 0.5, target.getY() + 0.5, target.getZ() + 0.5);
+            // Swing on the same cadence as the door-hit sound. Only the
+            // leading breacher swings so a whole crowd doesn't strobe.
+            if (swingTick && i == 0) {
+                mob.swing(InteractionHand.MAIN_HAND);
+            }
+        }
+    }
+
+    /**
+     * Pick a walkable neighbor position for the breacher to stand in
+     * while attacking the target block. Prefers the horizontal neighbor
+     * closest to the leader; falls back to any air-space neighbor with
+     * solid ground under it. Returns null when no reasonable slot exists
+     * (in that case the caller skips pathing but still swings in place).
+     */
+    private static BlockPos pickBreacherStandPos(ServerLevel level, BlockPos target, Mob leader) {
+        BlockPos best = null;
+        double bestDistSq = Double.MAX_VALUE;
+        BlockPos[] neighbors = {
+                target.north(), target.south(), target.east(), target.west()
+        };
+        for (BlockPos candidate : neighbors) {
+            // Feet air, head air, block below solid enough to stand on.
+            if (!level.getBlockState(candidate).isAir()) continue;
+            if (!level.getBlockState(candidate.above()).isAir()) continue;
+            if (!level.getBlockState(candidate.below()).isSolid()) continue;
+            double distSq = leader.distanceToSqr(
+                    candidate.getX() + 0.5, candidate.getY(), candidate.getZ() + 0.5);
+            if (distSq < bestDistSq) {
+                best = candidate.immutable();
+                bestDistSq = distSq;
+            }
+        }
+        return best;
     }
 
     private static int breakerAnimationId(RaidSavedData.RaidState state) {
