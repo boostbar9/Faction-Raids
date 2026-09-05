@@ -106,7 +106,11 @@ public final class BridgeBuilder {
                 sawWater = true;
                 continue;
             }
-            if (sawWater && !under.isAir() && under.getFluidState().isEmpty()) {
+            // Far shore: solid ground below, AND raider can actually stand here
+            // (feet block is non-solid / passable). Without the feet check we
+            // sometimes returned a shore tile whose feet-block was a wall face.
+            if (sawWater && !under.isAir() && under.getFluidState().isEmpty()
+                    && !feet.isCollisionShapeFullBlock(level, step)) {
                 return step; // far shore
             }
             if (!sawWater) return null; // no water in this direction

@@ -56,10 +56,20 @@ public final class WaveComposer {
         Formation formation;
         String label;
 
+        // Single-wave raids with a tiny `total` (== reserved slots) can push
+        // `available` to 0. In that case the reserved fast-path already covers
+        // every slot, so we just return an empty mix + a sensible default
+        // formation instead of doing negative-math below.
+        if (available <= 0) {
+            Formation defaultFormation = (wave <= 2) ? Formation.LINE : Formation.SQUARE;
+            return new WaveComposition(total, Map.of(), defaultFormation,
+                    wave >= totalWaves ? "Command assault" : "Reserve wave");
+        }
+
         if (wave == 1) {
             // Probing wave: mostly shieldmen with a handful of bowmen. LINE.
             int bowmen = Math.max(1, available / 4);
-            int shieldmen = available - bowmen;
+            int shieldmen = Math.max(0, available - bowmen);
             put(mix, "recruit_shieldman", shieldmen);
             put(mix, "bowman", bowmen);
             formation = Formation.LINE;

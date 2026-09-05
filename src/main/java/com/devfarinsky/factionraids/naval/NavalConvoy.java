@@ -71,9 +71,12 @@ public final class NavalConvoy {
                 it.remove();
                 continue;
             }
-            // If the passenger dismounted (either by choice, by beaching, or
-            // because the boat sank) we're done steering this boat.
-            if (boat.getPassengers().isEmpty() || !(boat.getFirstPassenger() instanceof Mob)) {
+            // If every mounted mob dismounted (either by choice, by beaching, or
+            // because the boat sank) we're done steering this boat. Small Ships
+            // warships can carry multiple passengers, and we only stop steering
+            // when NONE of them is a live Mob \u2014 checking only the first
+            // passenger would abandon the ship the moment the first crew died.
+            if (boat.getPassengers().isEmpty() || !hasLiveMobPassenger(boat)) {
                 it.remove();
                 continue;
             }
@@ -150,5 +153,18 @@ public final class NavalConvoy {
     @SuppressWarnings("unused")
     public static AABB approachBox(BlockPos beach, int radius) {
         return new AABB(beach).inflate(radius, 8, radius);
+    }
+
+    /**
+     * @return true if at least one passenger on the vessel is a live Mob.
+     * Vanilla oak boats have a single passenger, but Small Ships warships
+     * can crew multiple mobs and we should keep steering until every last
+     * crew member has fallen or dismounted.
+     */
+    private static boolean hasLiveMobPassenger(Entity vessel) {
+        for (Entity passenger : vessel.getPassengers()) {
+            if (passenger instanceof Mob mob && mob.isAlive()) return true;
+        }
+        return false;
     }
 }

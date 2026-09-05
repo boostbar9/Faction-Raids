@@ -6,6 +6,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.Vec3;
+import com.devfarinsky.factionraids.FactionLogger;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.registries.ForgeRegistries;
 
@@ -119,7 +120,11 @@ public final class SiegeIntegration {
             if (controller == null) return true;
             tryMountMethod.invoke(controller, vehicle);
             return true;
-        } catch (ReflectiveOperationException ignored) {
+        } catch (ReflectiveOperationException e) {
+            // Recruits API changed under us. Log at debug so server owners
+            // running with debug logs enabled can see why siege engineers
+            // stopped operating engines, without spamming production logs.
+            FactionLogger.LOG.debug("assignSiegeEngineer reflection failed: {}", e.toString());
             return false;
         }
     }
@@ -153,7 +158,8 @@ public final class SiegeIntegration {
                     "com.talhanation.recruits.entities.ai.controller.siegeengineer.SiegeWeaponCatapultController");
             tryMountMethod = controllerClass.getMethod("tryMount", Entity.class);
             reflectionInitialised = true;
-        } catch (ReflectiveOperationException ignored) {
+        } catch (ReflectiveOperationException e) {
+            FactionLogger.LOG.debug("SiegeIntegration reflection init failed: {}", e.toString());
             reflectionInitialised = false;
         }
         return reflectionInitialised;

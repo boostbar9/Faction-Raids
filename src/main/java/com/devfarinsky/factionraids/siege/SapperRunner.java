@@ -3,7 +3,6 @@ package com.devfarinsky.factionraids.siege;
 import com.devfarinsky.factionraids.RaidConfig;
 import com.devfarinsky.factionraids.RaidSavedData;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
@@ -67,7 +66,9 @@ public final class SapperRunner {
             if (mob.blockPosition().closerThan(objective, 4.5D)) {
                 detonate(level, mob.blockPosition());
                 mob.getPersistentData().remove(CHARGE_TAG);
-                state.totalSpawned = state.totalSpawned; // no-op, hint that state changed
+                // No setDirty needed: CHARGE_TAG is stored on the mob's own
+                // persistent NBT, which the entity's own save cycle already
+                // persists. The RaidState is not modified here.
                 detonations++;
             }
         }
@@ -126,8 +127,4 @@ public final class SapperRunner {
         if (from.getBoolean(CHARGE_TAG)) to.putBoolean(CHARGE_TAG, true);
     }
 
-    @SuppressWarnings("unused")
-    private static Direction dummyKeepImportsFromWarn() {
-        return Direction.NORTH;
-    }
 }
