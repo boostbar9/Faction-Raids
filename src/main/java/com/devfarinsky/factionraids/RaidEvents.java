@@ -1870,6 +1870,14 @@ public final class RaidEvents {
                                         List<ServerPlayer> members, List<Mob> recruits,
                                         RaidSavedData.DefensePoint point) {
         boolean glow = RaidConfig.GLOW_FINAL_ENEMIES.get() && state.raiders.size() <= 3;
+        Vec3 objective = invasionObjective(level, point, state);
+        double baseSpeed = RaidConfig.RAIDER_ADVANCE_SPEED.get();
+        // 2.10.1 aggression pass: raiders inside this range of the objective
+        // get a 30% speed burst so they push the last stretch instead of
+        // dawdling once the pathfinder detects walls or defenders. Squared
+        // for a cheap distance compare.
+        double burstRangeSq = 32.0 * 32.0;
+        double burstMultiplier = 1.30;
         for (UUID id : state.raiders) {
             Entity entity = level.getEntity(id);
             if (!(entity instanceof Mob mob) || !mob.isAlive()) continue;
@@ -1891,12 +1899,22 @@ public final class RaidEvents {
                     closestDistance = distance;
                 }
             }
-            if (closest != null && closestDistance <= (double) RaidConfig.DEFENSE_RADIUS.get() *
-                    RaidConfig.DEFENSE_RADIUS.get()) mob.setTarget(closest);
-            else {
-                Vec3 objective = invasionObjective(level, point, state);
-                mob.getNavigation().moveTo(objective.x, objective.y, objective.z,
-                        RaidConfig.RAIDER_ADVANCE_SPEED.get());
+            boolean acquired = closest != null && closestDistance <= (double) RaidConfig.DEFENSE_RADIUS.get() *
+                    RaidConfig.DEFENSE_RADIUS.get();
+            if (acquired) mob.setTarget(closest);
+
+            // 2.10.1 aggression pass: ALWAYS keep the objective nav goal alive.
+            // Pre-2.10.1 only set the objective when no target was acquired, so
+            // idle raiders that had a stale/dead target could just stand still
+            // after their pathfinder gave up (blocked by a wall, water, etc.).
+            // Refreshing every redirect tick keeps them pushing forward.
+            double distToObjectiveSq = mob.distanceToSqr(objective);
+            double speed = distToObjectiveSq < burstRangeSq ? baseSpeed * burstMultiplier : baseSpeed;
+            // Only re-issue when nav is idle or heading somewhere else; avoids
+            // spamming the pathfinder every tick when the raider is already
+            // actively engaged with a nearby defender.
+            if (!acquired || mob.getNavigation().isDone()) {
+                mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
             }
             if (glow) mob.addEffect(new MobEffectInstance(MobEffects.GLOWING, 40, 0, false, false));
         }
@@ -2450,10 +2468,37 @@ public final class RaidEvents {
                 RecruitsBridge.factionLeader(player).filter(player.getUUID()::equals).isPresent();
     }
 
+    /**
+     * Global rolling counter of how many consecutive checks TPS has been
+     * below the configured minimum. Reset to zero the moment TPS recovers.
+     * Server-wide (not per-raid) because TPS is a server-wide metric — all
+     * concurrent raids see the same value.
+     *
+     * <p>The 2.10.1 hotfix wraps the raw TPS-below-threshold check in this
+     * counter so a single 60-100 ms tick spike (routine on healthy servers
+     * during chunk loads or mob density peaks) no longer triggers the
+     * "next wave delayed" pause. The pause only fires after TPS has been
+     * below threshold for {@code minimumTpsSustainedTicks} consecutive
+     * calls.
+     */
+    private static int belowTpsConsecutiveTicks;
+
     private static boolean shouldPauseForPerformance(MinecraftServer server, RaidSavedData data) {
-        if (globalTrackedCount(data) >= RaidConfig.MAX_GLOBAL_RAIDERS.get()) return true;
-        if (!RaidConfig.PAUSE_SPAWNING_BELOW_TPS.get()) return false;
-        return approximateTps(server) < RaidConfig.MINIMUM_TPS_TO_SPAWN.get();
+        if (globalTrackedCount(data) >= RaidConfig.MAX_GLOBAL_RAIDERS.get()) {
+            // Global cap is a hard limit, not a jitter-prone metric — no debounce.
+            return true;
+        }
+        if (!RaidConfig.PAUSE_SPAWNING_BELOW_TPS.get()) {
+            belowTpsConsecutiveTicks = 0;
+            return false;
+        }
+        boolean belowNow = approximateTps(server) < RaidConfig.MINIMUM_TPS_TO_SPAWN.get();
+        if (!belowNow) {
+            belowTpsConsecutiveTicks = 0;
+            return false;
+        }
+        belowTpsConsecutiveTicks++;
+        return belowTpsConsecutiveTicks >= RaidConfig.MINIMUM_TPS_SUSTAINED_TICKS.get();
     }
 
     private static int globalTrackedCount(RaidSavedData data) {
