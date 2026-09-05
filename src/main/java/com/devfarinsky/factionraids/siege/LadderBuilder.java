@@ -5,7 +5,6 @@ import com.devfarinsky.factionraids.RaidConfig;
 import com.devfarinsky.factionraids.RaidSavedData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
@@ -144,7 +143,6 @@ public final class LadderBuilder {
 
     /** Walk the ray, block by block, until a wall column shows up. */
     private static WallScan scanForWall(ServerLevel level, Vec3 origin, Vec3 dir, Direction facing) {
-        BlockPos originPos = BlockPos.containing(origin);
         for (int step = 1; step <= MAX_SCAN_DISTANCE; step++) {
             Vec3 sample = origin.add(dir.scale(step));
             BlockPos front = BlockPos.containing(sample);

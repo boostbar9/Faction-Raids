@@ -1,5 +1,6 @@
 package com.devfarinsky.factionraids.compat;
 
+import com.devfarinsky.factionraids.FactionLogger;
 import com.devfarinsky.factionraids.OptionalCompatBridge;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -14,7 +15,9 @@ import net.minecraft.world.entity.MobSpawnType;
 
 import java.lang.reflect.Method;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Compile-time-free bridge to Villager Workers. Uses only registry lookups
@@ -48,6 +51,13 @@ public final class WorkersBridge {
     private static final ResourceLocation BUILDAREA_ID = new ResourceLocation("workers", "buildarea");
     private static final ResourceLocation LUMBERJACK_ID = new ResourceLocation("workers", "lumberjack");
     private static final ResourceLocation BUILDER_ID = new ResourceLocation("workers", "builder");
+
+    /**
+     * Method names we've already warned about for reflective failures. Prevents
+     * log spam when a Workers major-version bump removes a setter \u2014 we log
+     * once per method, not once per raid tick.
+     */
+    private static final Set<String> WARNED_METHODS = ConcurrentHashMap.newKeySet();
 
     private WorkersBridge() {}
 
@@ -181,9 +191,18 @@ public final class WorkersBridge {
         try {
             Method m = target.getClass().getMethod(name, sig);
             m.invoke(target, args);
-        } catch (ReflectiveOperationException ignored) {
-            // Silently skip missing setters — Workers' API is unstable across versions,
-            // and a missing setter should degrade gracefully rather than crash the raid.
+        } catch (ReflectiveOperationException e) {
+            // Workers' API is unstable across versions and a missing setter
+            // should degrade gracefully rather than crash the raid. But a
+            // silent skip means a whole build area can end up mis-configured
+            // with defaults \u2014 log the first failure per method so server
+            // owners have a diagnostic hook without log spam every tick.
+            String key = target.getClass().getName() + "#" + name;
+            if (WARNED_METHODS.add(key)) {
+                FactionLogger.LOG.debug(
+                        "WorkersBridge: reflective call {} failed ({}) \u2014 subsequent failures suppressed.",
+                        key, e.toString());
+            }
         }
     }
 

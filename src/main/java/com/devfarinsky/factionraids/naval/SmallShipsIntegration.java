@@ -85,7 +85,12 @@ public final class SmallShipsIntegration {
     private static EntityType<?> resolveType(String id) {
         try {
             ResourceLocation rl = ResourceLocation.tryParse(id);
-            return rl == null ? null : ForgeRegistries.ENTITY_TYPES.getValue(rl);
+            if (rl == null) return null;
+            // ForgeRegistries.getValue returns the registry's DEFAULT (PIG for
+            // entity types) when the key is not registered, so we MUST gate
+            // on containsKey to avoid silently spawning a pig as a warship.
+            if (!ForgeRegistries.ENTITY_TYPES.containsKey(rl)) return null;
+            return ForgeRegistries.ENTITY_TYPES.getValue(rl);
         } catch (Throwable ignored) {
             return null;
         }

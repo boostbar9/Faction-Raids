@@ -54,6 +54,11 @@ public final class SiegeDeployment {
             }
             SiegeEngineType type = SiegeEngineType.parse(entry.getValue());
             if (type == null || type.ranged()) continue;
+            // If an operator is aboard (e.g. a Recruit siege engineer or a
+            // player who took the wheel), don't shove the engine \u2014 we'd be
+            // fighting whoever is steering. Only auto-drift when the vehicle
+            // is genuinely unmanned.
+            if (!vehicle.getPassengers().isEmpty()) continue;
             // Non-ranged: nudge toward objective if we've stalled.
             if (vehicle.getDeltaMovement().lengthSqr() < 0.005D) {
                 Vec3 dir = new Vec3(objective.getX() - vehicle.getX(), 0,

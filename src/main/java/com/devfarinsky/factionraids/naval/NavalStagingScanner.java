@@ -117,7 +117,6 @@ public final class NavalStagingScanner {
      */
     private static BlockPos findBeach(ServerLevel level, BlockPos surface, BlockPos objective) {
         Vec3 dir = Vec3.atCenterOf(objective).subtract(Vec3.atCenterOf(surface)).normalize();
-        BlockPos cursor = surface;
         for (int step = 0; step < 32; step++) {
             int nx = surface.getX() + (int) Math.round(dir.x * step);
             int nz = surface.getZ() + (int) Math.round(dir.z * step);
@@ -130,7 +129,6 @@ public final class NavalStagingScanner {
             boolean standCleared = level.getBlockState(landing).isAir()
                     && level.getBlockState(landing.above()).isAir();
             if (landIsSolid && standCleared) return landing;
-            cursor = landing;
         }
         return null;
     }
