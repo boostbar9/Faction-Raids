@@ -2,6 +2,9 @@ package com.devfarinsky.factionraids;
 
 import net.minecraftforge.common.ForgeConfigSpec;
 
+import java.util.Arrays;
+import java.util.List;
+
 public final class RaidConfig {
     public static final ForgeConfigSpec SPEC;
 
@@ -60,6 +63,13 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue ENABLE_BRIDGE_BUILDING;
     public static final ForgeConfigSpec.IntValue MAX_BRIDGE_SPAN;
     public static final ForgeConfigSpec.IntValue MAX_BRIDGES_PER_RAID;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_SIEGE_ENGINES;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> FIRST_WAVE_ENGINES;
+    public static final ForgeConfigSpec.IntValue LATER_WAVE_ENGINE_CHANCE;
+    public static final ForgeConfigSpec.BooleanValue CLEANUP_SURVIVING_ENGINES;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_SAPPER;
+    public static final ForgeConfigSpec.IntValue SAPPER_MAX_PER_RAID;
+    public static final ForgeConfigSpec.BooleanValue SAPPER_MODE_VANILLA_TNT;
     public static final ForgeConfigSpec.BooleanValue ENABLE_GATE_BREACHING;
     public static final ForgeConfigSpec.IntValue WOODEN_BREACH_SECONDS;
     public static final ForgeConfigSpec.IntValue REINFORCED_BREACH_SECONDS;
@@ -200,6 +210,23 @@ public final class RaidConfig {
                 .defineInRange("maxBridgeSpan", 8, 2, 24);
         MAX_BRIDGES_PER_RAID = b.comment("Maximum bridge segments a single raid can build.")
                 .defineInRange("maxBridgesPerRaid", 4, 0, 32);
+        ENABLE_SIEGE_ENGINES = b.comment("Master toggle for siege engines (catapult, ballista, battering ram, siege tower). Requires the Siege Weapons mod to be installed; without it, only sappers spawn.")
+                .define("enableSiegeEngines", true);
+        FIRST_WAVE_ENGINES = b.comment("Engine types spawned prefab at the war camp when wave 1 kicks off. Valid values: CATAPULT, BALLISTA, BATTERING_RAM, SIEGE_TOWER.")
+                .defineListAllowEmpty("firstWaveEngines", Arrays.asList("BATTERING_RAM"),
+                        raw -> raw instanceof String s && (
+                                s.equalsIgnoreCase("CATAPULT") || s.equalsIgnoreCase("BALLISTA")
+                                        || s.equalsIgnoreCase("BATTERING_RAM") || s.equalsIgnoreCase("SIEGE_TOWER")));
+        LATER_WAVE_ENGINE_CHANCE = b.comment("Percent chance per wave >= 2 that an additional siege engine gets assembled on-site.")
+                .defineInRange("laterWaveEngineChancePercent", 30, 0, 100);
+        CLEANUP_SURVIVING_ENGINES = b.comment("When a raid ends, discard any siege engines still standing on the field. Turn off to leave them as rubble/loot for defenders.")
+                .define("cleanupSurvivingEngines", true);
+        ENABLE_SAPPER = b.comment("Master toggle for demolition-charge sappers. Works without the Siege Weapons mod.")
+                .define("enableSapper", true);
+        SAPPER_MAX_PER_RAID = b.comment("Maximum number of sappers a single raid can dispatch.")
+                .defineInRange("sapperMaxPerRaid", 3, 0, 32);
+        SAPPER_MODE_VANILLA_TNT = b.comment("When true, sappers plant real primed TNT that damages any block per vanilla explosion rules. When false (default), they trigger a cosmetic blast that only removes doors, fences, trapdoors, and iron bars in a small radius.")
+                .define("sapperUseVanillaTnt", false);
         ENABLE_GATE_BREACHING = b.comment("Allow tracked siege breachers to break doors, trapdoors, fence gates and fences blocking their advance.")
                 .define("enableRestorableGateBreaching", true);
         WOODEN_BREACH_SECONDS = b.comment("Approximate focused breach time for wooden defenses. Multiple nearby breachers accelerate it.")
