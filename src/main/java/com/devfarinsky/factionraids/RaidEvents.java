@@ -1216,19 +1216,18 @@ public final class RaidEvents {
                 state.raiders.add(raider.getUUID());
                 state.totalSpawned++;
                 if (asNaval) {
-                    // Wrap the raider in a boat and hand it off to the convoy
-                    // for beach-bound steering. If the boat fails to spawn we
-                    // still have a raider swimming, which is a valid fallback.
-                    net.minecraft.world.entity.vehicle.Boat boat =
-                            new net.minecraft.world.entity.vehicle.Boat(level,
-                                    raider.getX(), raider.getY() + 0.1, raider.getZ());
-                    boat.setVariant(net.minecraft.world.entity.vehicle.Boat.Type.OAK);
-                    boat.setYRot(raider.getYRot());
-                    if (level.addFreshEntity(boat)) {
-                        raider.startRiding(boat, true);
+                    // Hand the raider off to NavalFleet, which picks a Small
+                    // Ships warship when the mod is installed and falls back
+                    // to a vanilla oak boat otherwise. If the vessel fails to
+                    // spawn entirely, the raider is left swimming — valid
+                    // fallback rather than a hard error.
+                    com.devfarinsky.factionraids.naval.NavalFleet.spawn(level,
+                            raider.blockPosition()).ifPresent(vessel -> {
+                        vessel.setYRot(raider.getYRot());
+                        raider.startRiding(vessel, true);
                         com.devfarinsky.factionraids.naval.NavalConvoy.enlist(
-                                anchor.teamKey(), boat, state.navalBeachPos);
-                    }
+                                anchor.teamKey(), vessel, state.navalBeachPos);
+                    });
                 }
                 // Roll for sapper promotion. Cheap, capped, non-leaders only
                 // so squad leaders keep their role.

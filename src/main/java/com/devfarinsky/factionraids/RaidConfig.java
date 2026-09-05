@@ -70,6 +70,9 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue ENABLE_SAPPER;
     public static final ForgeConfigSpec.IntValue SAPPER_MAX_PER_RAID;
     public static final ForgeConfigSpec.BooleanValue SAPPER_MODE_VANILLA_TNT;
+    public static final ForgeConfigSpec.BooleanValue PREFER_SMALL_SHIPS;
+    public static final ForgeConfigSpec.BooleanValue SMALL_SHIPS_PREFER_LARGE;
+    public static final ForgeConfigSpec.IntValue SHIP_CREW_MAX;
     public static final ForgeConfigSpec.BooleanValue ENABLE_GATE_BREACHING;
     public static final ForgeConfigSpec.IntValue WOODEN_BREACH_SECONDS;
     public static final ForgeConfigSpec.IntValue REINFORCED_BREACH_SECONDS;
@@ -227,6 +230,12 @@ public final class RaidConfig {
                 .defineInRange("sapperMaxPerRaid", 3, 0, 32);
         SAPPER_MODE_VANILLA_TNT = b.comment("When true, sappers plant real primed TNT that damages any block per vanilla explosion rules. When false (default), they trigger a cosmetic blast that only removes doors, fences, trapdoors, and iron bars in a small radius.")
                 .define("sapperUseVanillaTnt", false);
+        PREFER_SMALL_SHIPS = b.comment("When true and the Small Ships mod is installed, raiders arrive in warships instead of vanilla boats. Falls back to vanilla boats when the mod is missing or the spawn fails.")
+                .define("preferSmallShips", true);
+        SMALL_SHIPS_PREFER_LARGE = b.comment("When true, prefer the largest available ship type (brigg) over the smaller cog. Ignored when Small Ships is not installed.")
+                .define("smallShipsPreferLarge", true);
+        SHIP_CREW_MAX = b.comment("Maximum raiders that mount a single Small Ships vessel. Vanilla boats always cap at 2 regardless of this value.")
+                .defineInRange("shipCrewMax", 6, 1, 32);
         ENABLE_GATE_BREACHING = b.comment("Allow tracked siege breachers to break doors, trapdoors, fence gates and fences blocking their advance.")
                 .define("enableRestorableGateBreaching", true);
         WOODEN_BREACH_SECONDS = b.comment("Approximate focused breach time for wooden defenses. Multiple nearby breachers accelerate it.")
