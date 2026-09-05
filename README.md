@@ -1,41 +1,57 @@
-# Faction Raids 2.7.0
+# Faction Raids
 
-Faction Raids is a synchronized Forge 1.20.1 addon that turns player homes into siege
-objectives. Hostile armies establish an approach front, deploy in marching squads, advance on a
-stronghold, fight the defending players and their Villager Recruits, and attempt to occupy the
-heart of the base under the command of a final-wave siege commander.
+**Cinematic, tactical faction sieges for Minecraft 1.20.1 Forge — turn any player's bed into a defensible stronghold, then hold it against a real army.**
 
-Version 2.2 added a complete presentation pass: cinematic siege titles, reinforcement and
-occupation action-bar updates, smoke at enemy arrival points, responsive boss-bar colors,
-cleaner command output and persistent after-action battle summaries.
+![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1-62B47A?logo=minecraft&logoColor=white)
+![Forge](https://img.shields.io/badge/Forge-47.x-1E2A47)
+![Java](https://img.shields.io/badge/Java-17-orange?logo=openjdk&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-blue)
+![Server-friendly](https://img.shields.io/badge/Server--friendly-yes-brightgreen)
 
-Version 2.3 adds a faction command dashboard and a guaranteed emerald treasury reward designed
-for Villager Recruits economies. Open it with `/factionraids` to see the stronghold, current siege,
-nearby allied Recruits, occupation pressure, cooldown and expected victory spoils in one place.
+Faction Raids is a **server-friendly PvE siege addon** for [Villager Recruits](https://www.curseforge.com/minecraft/mc-mods/recruits). Any player's bed or respawn anchor is automatically registered as a stronghold — no admin setup, no world regeneration, no custom blocks in your terrain. Then, on a rolling per-faction schedule, an enemy army marches on that home: builds a real war camp with tents and banners, forms up into squads with a declared *casus belli*, breaches your gates and doors, wades across rivers, sails in from the sea, raises ladders over your walls, and tries to occupy the heart of your base — while you and your Recruits soldiers try to break them at the perimeter.
 
-Version 2.4 adds optional, zero-hard-link integrations for Villager Workers, Small Ships and Siege
-Weapons. Workers are recognized as protected faction civilians, while crewed ships and siege
-engines appear as war assets and can add a small, capped amount of enemy scaling.
+Every siege ends with **guaranteed emerald and campaign-loot rewards** for the winning faction. Every block the enemy breaks is **automatically restored** when the battle ends. And every one of ~40 tunable systems — from wave size and cadence to formations, siege engines, ships, ladders, narrative themes and reward payouts — lives in one config file you can rebalance without a restart.
 
-Version 2.5 deepens the siege itself. New invasions must establish control of an outer perimeter
-before occupation of the stronghold heart can begin. Raiders rally at the approach-side breach
-point, defenders can push breach pressure back, and the boss bar, dashboard, titles and alerts all
-track the current siege stage. Ships and siege engines also remember the faction that last crewed
-them, so briefly dismounting no longer makes a legitimate war asset disappear from detection.
+## Why players love it
 
-Version 2.6 makes the invading army use Villager Recruits' own soldier classes by default, including
-shieldmen, bowmen, crossbowmen, captains, assassins and siege engineers. Every siege now attempts to
-raise a real temporary war camp on the approach side. Red-banner perimeter markers identify the exact
-breach objective, and breach pressure rises only while attackers outnumber defenders at that point.
+- **Zero admin setup.** Sleep in a bed, get a stronghold. Join a Recruits faction, share a raid schedule. Server operators don't have to create homes, territories, or claims for their players.
+- **Real armies, real tactics.** Enemies use hostile Villager Recruits classes — shieldmen, marksmen, crossbowmen, captains, assassins, siege engineers, and a named commander on the final wave — with real formations, real morale, and real specialist behavior.
+- **The battlefield fights back.** Attackers physically breach doors, gates, fences and iron bars. They build ladders when they can't path over walls. They drop bridges across water. Amphibious waves arrive by boat or Small Ships warship. Siege Weapons engines assemble on the field and are torn down after victory.
+- **A live tactical command screen.** Right-click the Warlord's Codex to open a custom dashboard: wave status, breach pressure, occupation timer, gate integrity, allied Recruits, war assets, reconstruction queue, guaranteed spoils — all synced live.
+- **Narrative, not noise.** Each raid has a themed raider faction and a declared reason for war, so no two sieges feel identical.
+- **Rewards worth defending for.** ~48 guaranteed emeralds per online faction member on a clean five-wave victory, plus a datapack-swappable loot roll.
+- **Restorable by design.** Never regenerates terrain. Never overwrites your rebuilds. Uninstall cleanly at any time.
 
-Version 2.7 replaces the chest inventory with a purpose-built live tactical interface. It also adds
-physical gate breaching: assault troops visibly crack and temporarily remove doors, trapdoors, fence
-gates, fences and iron bars that block their advance. Exact block states are persisted and restored
-when the siege ends. The war camp now includes a full field-command pavilion and palisade line.
+## At a glance
 
-No administrator setup is required. A player's bed or respawn anchor becomes a valid stronghold
-automatically. Players in the same Villager Recruits faction share one raid schedule, while any
-online faction member's home can be selected as the next target.
+| | |
+|---|---|
+| **Minecraft** | 1.20.1 (Forge 47.x) |
+| **Java** | 17 |
+| **Hard dependency** | [Villager Recruits 1.15.2+](https://www.curseforge.com/minecraft/mc-mods/recruits) |
+| **Optional integrations** | [Villager Workers](https://github.com/talhanation/workers), [Small Ships](https://github.com/talhanation/smallships), [Siege Weapons](https://github.com/talhanation/siegeweapons) |
+| **Side** | Both — install on server and every client |
+| **License** | MIT |
+| **Source & issues** | [github.com/boostbar9/Faction-Raids](https://github.com/boostbar9/Faction-Raids) |
+
+## What's in the box
+
+- Progressive multi-wave sieges with escalating composition and a final-wave commander
+- Themed raider factions with a declared *casus belli* per raid (Reavers, Warband, Marauders, and more)
+- Live tactical command screen (the Warlord's Codex item, given free on first login)
+- Physical war camp construction — pavilion, palisade, banners — using Villager Workers when installed
+- Amphibious raids: vanilla boats, or Small Ships warships when installed
+- Siege engines and sappers: battering rams, catapults, ballistae, siege towers when Siege Weapons is installed
+- Raider ladders for walls attackers can't path
+- Straggler tracking and effort-based capture — no more raids softlocked by one lost mob
+- Outer perimeter breach → inner-ring occupation, both reversible by defenders
+- Physical gate breaching with full block-state restoration after the battle
+- Shared "Raiders" faction — unhirable, team-safe, safe to leave running on public servers
+- Formation-aware wave deployment via the Villager Recruits formation API
+- Guaranteed emerald + configurable loot-table rewards for the winning faction
+- ~40 tunable settings in `factionraids-common.toml`, most of them hot-reloadable
+
+---
 
 ## Requirements
 

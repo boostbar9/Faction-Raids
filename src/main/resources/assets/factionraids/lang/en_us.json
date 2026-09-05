@@ -1,6 +1,6 @@
 {
-  "item.factionraids.guidebook": "Faction Raids Guidebook",
-  "item.factionraids.guidebook.tooltip.line1": "Right-click to open the raid dashboard",
-  "item.factionraids.guidebook.tooltip.line2": "Track waves, factions, and defense status",
+  "item.factionraids.guidebook": "Warlord's Codex",
+  "item.factionraids.guidebook.tooltip.line1": "Right-click to open your Faction Command",
+  "item.factionraids.guidebook.tooltip.line2": "Live siege intel, wave tracker, and defense controls",
   "itemGroup.factionraids": "Faction Raids"
 }
