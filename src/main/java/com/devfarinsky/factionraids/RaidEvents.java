@@ -1177,6 +1177,9 @@ public final class RaidEvents {
 
         reconcileTaggedMobs(level, point, state);
         updateTrackedMobs(level, state);
+        // v2.14.0: drain the deferred camp-build queue one structure at a
+        // time. Runs cheaply every tick and no-ops once the queue empties.
+        progressDeferredCampBuilds(level, state);
         List<Mob> recruits = alliedRecruits(level, point, anchor);
         if (RaidConfig.MOBILIZE_RECRUITS.get()) mobilizeRecruits(level, recruits, state);
         redirectRaiders(level, state, members, recruits, point);
@@ -1719,19 +1722,29 @@ public final class RaidEvents {
     }
 
     /**
-     * v2.13.0 war-camp prefab.
+     * v2.14.0 war-camp construction.
      *
-     * <p>Roughly a 20x20 fortified encampment: a spruce-fence palisade ring,
-     * four log watchtowers with banner tops at the corners, a central
-     * campfire, a forge (anvil + furnace + crafting table), a supply barrel,
-     * a command banner, and two multi-tent barracks behind the palisade.
-     * Two forward marker banners still flank the objective so defenders can
-     * see the intended breach axis.
+     * <p>Split into two phases:
+     * <ol>
+     *   <li><b>Core (instant, always runs).</b> Palisade, campfire, banner,
+     *       barrel, forward marker banners. Defenders need to see the camp
+     *       exists from tick one, and the strategic blocks (campfire /
+     *       banner / barrel) have to be present the moment the raid
+     *       starts so the destructible-camp mechanic works.</li>
+     *   <li><b>Decorative (progressive).</b> Watchtowers, forge cluster,
+     *       barracks tents. Queued into {@code state.deferredCampBuilds}
+     *       and drained one structure every few seconds by
+     *       {@link #progressDeferredCampBuilds(ServerLevel, RaidSavedData.RaidState)}
+     *       so the camp visibly grows over ~20-30 seconds. When Villager
+     *       Workers 2 is installed the existing {@code CampBuilder} +
+     *       {@code WorkersBridge} path already spawns Builders alongside;
+     *       they now have something to fill in around the core layout.</li>
+     * </ol>
      *
-     * <p>Three positions are remembered on {@link RaidSavedData.RaidState}:
-     * {@code campfirePos}, {@code bannerPos}, {@code barrelPos}. Breaking
-     * any of these triggers a strategic effect — see
-     * {@link #onCampBlockBroken}.
+     * <p>Three strategic positions are remembered on
+     * {@link RaidSavedData.RaidState}: {@code campfirePos},
+     * {@code bannerPos}, {@code barrelPos}. Breaking any of these triggers
+     * a strategic effect — see {@link #onCampBlockBroken}.
      */
     private static void buildWarCamp(ServerLevel level, RaidSavedData.DefensePoint point,
                                      RaidSavedData.RaidState state) {
@@ -1743,16 +1756,16 @@ public final class RaidEvents {
         final int cx = camp.getX();
         final int cz = camp.getZ();
         final int r = 9;  // palisade ring "radius" (half-extent); actual footprint 19x19.
+        final double frontAngle = state.approachAngle; // camp -> objective vector
 
-        // 1) Palisade ring — two-block-tall spruce fence with a gap on the
-        //    front side (facing the objective) so the army can march out.
-        double frontAngle = state.approachAngle; // points toward objective from camp
+        // -----------------------------------------------------------------
+        // PHASE 1: instant strategic core
+        // -----------------------------------------------------------------
+
+        // 1) Palisade ring with a front-facing sally gate.
         for (int dx = -r; dx <= r; dx++) {
             for (int dz = -r; dz <= r; dz++) {
                 if (Math.abs(dx) != r && Math.abs(dz) != r) continue;
-                // Front-facing gap: skip a 3-block-wide slot roughly aligned
-                // with the approach vector so the palisade has an obvious
-                // sally-port instead of caging the raiders in.
                 double gateX = Math.cos(frontAngle) * r;
                 double gateZ = Math.sin(frontAngle) * r;
                 if (Math.hypot(dx - gateX, dz - gateZ) < 2.2D) continue;
@@ -1762,57 +1775,25 @@ public final class RaidEvents {
             }
         }
 
-        // 2) Four corner watchtowers — log column with a banner on top.
-        int[][] corners = {{-r, -r}, {-r, r}, {r, -r}, {r, r}};
-        for (int[] c : corners) {
-            BlockPos base = surfacePosition(level, cx + c[0], cz + c[1]);
-            for (int dy = 0; dy < 4; dy++) {
-                placeCampBlock(level, state, base.above(dy), Blocks.SPRUCE_LOG);
-            }
-            placeCampBlock(level, state, base.above(4), Blocks.RED_BANNER);
-        }
-
-        // 3) Central campfire — the reinforcement heart. Remember its pos.
+        // 2) Central campfire — reinforcement heart.
         BlockPos campfire = surfacePosition(level, cx, cz);
         placeCampBlock(level, state, campfire, Blocks.CAMPFIRE);
         state.campfirePos = campfire;
 
-        // 4) Forge cluster — anvil, furnace, crafting table on the east side.
-        placeCampBlock(level, state, surfacePosition(level, cx + 3, cz), Blocks.ANVIL);
-        placeCampBlock(level, state, surfacePosition(level, cx + 3, cz + 1), Blocks.FURNACE);
-        placeCampBlock(level, state, surfacePosition(level, cx + 3, cz - 1), Blocks.CRAFTING_TABLE);
-
-        // 5) Supply barrel on the west side. Remember its pos.
+        // 3) Supply barrel.
         BlockPos barrel = surfacePosition(level, cx - 3, cz);
         placeCampBlock(level, state, barrel, Blocks.BARREL);
         state.barrelPos = barrel;
 
-        // 6) Command banner on the front-center of the palisade interior,
-        //    facing the objective. Remember its pos.
+        // 4) Command banner on a stone platform, facing the objective.
         int bannerDx = Mth.floor(Math.cos(frontAngle) * 4.0D);
         int bannerDz = Mth.floor(Math.sin(frontAngle) * 4.0D);
         BlockPos bannerBase = surfacePosition(level, cx + bannerDx, cz + bannerDz);
-        // Stone platform under the banner so it reads as a formal command
-        // post rather than a random stake in the ground.
         placeCampBlock(level, state, bannerBase, Blocks.STONE_BRICKS);
         placeCampBlock(level, state, bannerBase.above(), Blocks.RED_BANNER);
         state.bannerPos = bannerBase.above();
 
-        // 7) Two multi-tent barracks behind the palisade (opposite the gate).
-        double rearAngle = frontAngle + Math.PI;
-        int rearDx = Mth.floor(Math.cos(rearAngle) * 5.0D);
-        int rearDz = Mth.floor(Math.sin(rearAngle) * 5.0D);
-        int perpX = Mth.floor(-Math.sin(rearAngle) * 3.0D);
-        int perpZ = Mth.floor(Math.cos(rearAngle) * 3.0D);
-        for (int tent = -1; tent <= 1; tent += 2) {
-            int tx = cx + rearDx + perpX * tent;
-            int tz = cz + rearDz + perpZ * tent;
-            buildTent(level, state, tx, tz);
-        }
-
-        // 8) Forward marker banners flanking the objective breach lane —
-        //    kept from the old prefab; helps defenders read the axis of
-        //    attack from a distance.
+        // 5) Forward marker banners flanking the objective breach lane.
         Vec3 breach = invasionObjective(level, point, state);
         int bx = Mth.floor(breach.x);
         int bz = Mth.floor(breach.z);
@@ -1824,6 +1805,84 @@ public final class RaidEvents {
             placeCampBlock(level, state, marker, Blocks.RED_WOOL);
             placeCampBlock(level, state, marker.above(), Blocks.RED_BANNER);
         }
+
+        // -----------------------------------------------------------------
+        // PHASE 2: queue decorative structures for progressive build-out
+        // -----------------------------------------------------------------
+        state.deferredCampBuilds.clear();
+
+        // Four corner watchtowers (one queued build per corner).
+        int[][] corners = {{-r, -r}, {-r, r}, {r, -r}, {r, r}};
+        for (int[] c : corners) {
+            final int wx = cx + c[0];
+            final int wz = cz + c[1];
+            state.deferredCampBuilds.add(() -> buildWatchtower(level, state, wx, wz));
+        }
+
+        // Forge cluster (single queued build).
+        state.deferredCampBuilds.add(() -> buildForge(level, state, cx, cz));
+
+        // Two barracks tents (one queued build each).
+        double rearAngle = frontAngle + Math.PI;
+        int rearDx = Mth.floor(Math.cos(rearAngle) * 5.0D);
+        int rearDz = Mth.floor(Math.sin(rearAngle) * 5.0D);
+        int perpX = Mth.floor(-Math.sin(rearAngle) * 3.0D);
+        int perpZ = Mth.floor(Math.cos(rearAngle) * 3.0D);
+        for (int tent = -1; tent <= 1; tent += 2) {
+            final int tx = cx + rearDx + perpX * tent;
+            final int tz = cz + rearDz + perpZ * tent;
+            state.deferredCampBuilds.add(() -> buildTent(level, state, tx, tz));
+        }
+        // First deferred build fires after a short delay so the camp core
+        // has visibly "settled" before the next structure appears.
+        state.deferredCampCooldown = 40; // 2s
+    }
+
+    /**
+     * Drains one deferred camp structure per {@code DEFERRED_INTERVAL_TICKS}
+     * ticks. Called from the main raid tick loop while a raid is active.
+     * No-op when the queue is empty or the cooldown hasn't elapsed.
+     *
+     * <p>Rate is intentionally conservative (≈3s between structures) so a
+     * camp with 7 deferred builds visibly assembles over ~20s. When
+     * Villager Workers 2 is loaded, Builders spawned by CampBuilder are
+     * already present alongside and will animate around the placements.
+     */
+    private static final int DEFERRED_INTERVAL_TICKS = 60;
+    private static void progressDeferredCampBuilds(ServerLevel level, RaidSavedData.RaidState state) {
+        if (state.deferredCampBuilds.isEmpty()) return;
+        if (state.deferredCampCooldown > 0) {
+            state.deferredCampCooldown--;
+            return;
+        }
+        Runnable next = state.deferredCampBuilds.poll();
+        if (next != null) {
+            try {
+                next.run();
+            } catch (RuntimeException ex) {
+                FactionLogger.LOG.warn("Deferred camp build failed at raid {}: {}",
+                        state.teamKey, ex.getMessage());
+            }
+        }
+        state.deferredCampCooldown = DEFERRED_INTERVAL_TICKS;
+    }
+
+    /** One corner watchtower: 4-log column with a banner top. */
+    private static void buildWatchtower(ServerLevel level, RaidSavedData.RaidState state,
+                                        int cx, int cz) {
+        BlockPos base = surfacePosition(level, cx, cz);
+        for (int dy = 0; dy < 4; dy++) {
+            placeCampBlock(level, state, base.above(dy), Blocks.SPRUCE_LOG);
+        }
+        placeCampBlock(level, state, base.above(4), Blocks.RED_BANNER);
+    }
+
+    /** Forge cluster: anvil + furnace + crafting table on the east side. */
+    private static void buildForge(ServerLevel level, RaidSavedData.RaidState state,
+                                   int cx, int cz) {
+        placeCampBlock(level, state, surfacePosition(level, cx + 3, cz), Blocks.ANVIL);
+        placeCampBlock(level, state, surfacePosition(level, cx + 3, cz + 1), Blocks.FURNACE);
+        placeCampBlock(level, state, surfacePosition(level, cx + 3, cz - 1), Blocks.CRAFTING_TABLE);
     }
 
     /**
@@ -2136,6 +2195,31 @@ public final class RaidEvents {
         }
     }
 
+    /**
+     * v2.14.0 focused aggression pass.
+     *
+     * <p>Prior versions used {@code DEFENSE_RADIUS} (default 160) as the
+     * defender-acquire range, which meant raiders that spawned 100 blocks
+     * out would spot a defender inside the base, lock onto them, and let
+     * vanilla {@code MeleeAttackGoal} path them all the way in — which is
+     * why Devin was seeing raiders "running around inside the base"
+     * instead of pushing the objective.
+     *
+     * <p>New rules:
+     * <ul>
+     *   <li>Defender aggro is capped by {@code AGGRO_RADIUS} (default 40).
+     *       Farther defenders are ignored, not targeted.</li>
+     *   <li>Only defenders on the raider's objective-side hemisphere are
+     *       eligible — we don't chase somebody who is behind us.</li>
+     *   <li>Breachers and the commander skip defender acquisition
+     *       entirely when {@code BREACHERS_IGNORE_DEFENDERS} is on so gate
+     *       breach progress is uninterrupted.</li>
+     *   <li>If the raider has drifted more than
+     *       {@code OFF_AXIS_DRIFT_LIMIT} blocks perpendicular to the
+     *       invasion axis, the current target is dropped and the raider
+     *       is re-anchored to the objective.</li>
+     * </ul>
+     */
     private static void redirectRaiders(ServerLevel level, RaidSavedData.RaidState state,
                                         List<ServerPlayer> members, List<Mob> recruits,
                                         RaidSavedData.DefensePoint point) {
@@ -2144,50 +2228,117 @@ public final class RaidEvents {
         double baseSpeed = RaidConfig.RAIDER_ADVANCE_SPEED.get();
         // 2.10.1 aggression pass: raiders inside this range of the objective
         // get a 30% speed burst so they push the last stretch instead of
-        // dawdling once the pathfinder detects walls or defenders. Squared
-        // for a cheap distance compare.
+        // dawdling once the pathfinder detects walls or defenders.
         double burstRangeSq = 32.0 * 32.0;
         double burstMultiplier = 1.30;
+
+        // 2.14.0: reasoning aids for aggression rules.
+        double aggroRange = RaidConfig.AGGRO_RADIUS.get();
+        double aggroRangeSq = aggroRange * aggroRange;
+        double driftLimit = RaidConfig.OFF_AXIS_DRIFT_LIMIT.get();
+        double driftLimitSq = driftLimit * driftLimit;
+        boolean breachersIgnore = RaidConfig.BREACHERS_IGNORE_DEFENDERS.get();
+        // Camp position is our best estimate of the "back of the army"
+        // — anything closer to the camp than to the objective is behind us.
+        Vec3 campVec = state.campPos == null ? null : Vec3.atCenterOf(state.campPos);
+
         for (UUID id : state.raiders) {
             Entity entity = level.getEntity(id);
             if (!(entity instanceof Mob mob) || !mob.isAlive()) continue;
+
+            // Role-gated aggression: breachers and the commander skip the
+            // defender search entirely and only path to the objective.
+            String role = mob.getPersistentData().getString(RAID_ROLE_TAG);
+            boolean lockedOnObjective = breachersIgnore &&
+                    (role.equals("breacher") || role.equals("commander"));
+
             LivingEntity closest = null;
             double closestDistance = Double.MAX_VALUE;
-            for (ServerPlayer player : members) {
-                if (!player.isAlive() || player.level() != level || player.isSpectator()) continue;
-                double distance = mob.distanceToSqr(player);
-                if (distance < closestDistance) {
-                    closest = player;
-                    closestDistance = distance;
+            if (!lockedOnObjective) {
+                for (ServerPlayer player : members) {
+                    if (!player.isAlive() || player.level() != level || player.isSpectator()) continue;
+                    if (!eligibleTarget(mob, player, objective, campVec, aggroRangeSq)) continue;
+                    double distance = mob.distanceToSqr(player);
+                    if (distance < closestDistance) {
+                        closest = player;
+                        closestDistance = distance;
+                    }
+                }
+                for (Mob recruit : recruits) {
+                    if (!recruit.isAlive()) continue;
+                    if (!eligibleTarget(mob, recruit, objective, campVec, aggroRangeSq)) continue;
+                    double distance = mob.distanceToSqr(recruit);
+                    if (distance < closestDistance) {
+                        closest = recruit;
+                        closestDistance = distance;
+                    }
                 }
             }
-            for (Mob recruit : recruits) {
-                if (!recruit.isAlive()) continue;
-                double distance = mob.distanceToSqr(recruit);
-                if (distance < closestDistance) {
-                    closest = recruit;
-                    closestDistance = distance;
+            boolean acquired = closest != null;
+
+            // Off-axis drift check: if this raider is dragging a chase
+            // sideways deep off the invasion axis, drop the target and snap
+            // back to the objective.
+            if (campVec != null) {
+                double perpDistSq = perpendicularDistanceSq(mob.position(), campVec, objective);
+                if (perpDistSq > driftLimitSq) {
+                    mob.setTarget(null);
+                    acquired = false;
                 }
             }
-            boolean acquired = closest != null && closestDistance <= (double) RaidConfig.DEFENSE_RADIUS.get() *
-                    RaidConfig.DEFENSE_RADIUS.get();
+
             if (acquired) mob.setTarget(closest);
+            else if (lockedOnObjective) mob.setTarget(null);
 
             // 2.10.1 aggression pass: ALWAYS keep the objective nav goal alive.
-            // Pre-2.10.1 only set the objective when no target was acquired, so
-            // idle raiders that had a stale/dead target could just stand still
-            // after their pathfinder gave up (blocked by a wall, water, etc.).
-            // Refreshing every redirect tick keeps them pushing forward.
             double distToObjectiveSq = mob.distanceToSqr(objective);
             double speed = distToObjectiveSq < burstRangeSq ? baseSpeed * burstMultiplier : baseSpeed;
-            // Only re-issue when nav is idle or heading somewhere else; avoids
-            // spamming the pathfinder every tick when the raider is already
-            // actively engaged with a nearby defender.
             if (!acquired || mob.getNavigation().isDone()) {
                 mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
             }
             if (glow) mob.addEffect(new MobEffectInstance(MobEffects.GLOWING, 40, 0, false, false));
         }
+    }
+
+    /**
+     * Is {@code candidate} an eligible aggression target for {@code raider}?
+     * Requires the candidate be within {@code aggroRangeSq} AND on the
+     * objective-side hemisphere of the raider (closer to the objective than
+     * to the war camp). Camp reference is optional — without it we accept
+     * any in-range candidate.
+     */
+    private static boolean eligibleTarget(Mob raider, LivingEntity candidate,
+                                          Vec3 objective, Vec3 campVec, double aggroRangeSq) {
+        double distSq = raider.distanceToSqr(candidate);
+        if (distSq > aggroRangeSq) return false;
+        if (campVec == null) return true;
+        // Behind-us filter: reject candidates that are closer to the camp
+        // than to the objective. Uses Vec3 distanceToSqr for a stable check
+        // that ignores Y so cliffs and towers don't confuse it.
+        Vec3 cp = candidate.position();
+        double toObjective = cp.subtract(objective.x, cp.y, objective.z).horizontalDistanceSqr();
+        double toCamp = cp.subtract(campVec.x, cp.y, campVec.z).horizontalDistanceSqr();
+        return toObjective <= toCamp;
+    }
+
+    /**
+     * Squared perpendicular distance from {@code point} to the infinite line
+     * defined by {@code start} → {@code end}. Ignores Y — the invasion axis
+     * is treated as a horizontal line so vertical terrain doesn't create
+     * false drift. Returns 0 when start == end.
+     */
+    private static double perpendicularDistanceSq(Vec3 point, Vec3 start, Vec3 end) {
+        double ex = end.x - start.x;
+        double ez = end.z - start.z;
+        double lengthSq = ex * ex + ez * ez;
+        if (lengthSq <= 1.0E-6D) return 0.0D;
+        double px = point.x - start.x;
+        double pz = point.z - start.z;
+        // (px, pz) projected onto (ex, ez); the perpendicular component's
+        // length squared is |p|^2 - (p·e)^2 / |e|^2.
+        double dot = px * ex + pz * ez;
+        double lenSq = px * px + pz * pz;
+        return Math.max(0.0D, lenSq - (dot * dot) / lengthSq);
     }
 
     private static List<Mob> alliedRecruits(ServerLevel level, RaidSavedData.DefensePoint point,
