@@ -89,6 +89,8 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue ENABLE_WAVE_COMPOSITION;
     public static final ForgeConfigSpec.BooleanValue ENABLE_FORMATIONS;
     public static final ForgeConfigSpec.BooleanValue ANNOUNCE_WAVE_FORMATION;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_LADDER_BUILDING;
+    public static final ForgeConfigSpec.IntValue MAX_LADDERS_PER_RAID;
     public static final ForgeConfigSpec.BooleanValue ENABLE_GATE_BREACHING;
     public static final ForgeConfigSpec.IntValue WOODEN_BREACH_SECONDS;
     public static final ForgeConfigSpec.IntValue REINFORCED_BREACH_SECONDS;
@@ -284,6 +286,10 @@ public final class RaidConfig {
                 .define("enableRaiderFormations", true);
         ANNOUNCE_WAVE_FORMATION = b.comment("Include the wave's formation label (e.g. 'Shield line', 'Command assault') in the wave announcement.")
                 .define("announceWaveFormation", true);
+        ENABLE_LADDER_BUILDING = b.comment("Let stalled raider groups build temporary ladders on walls they can't path over. Ladders are removed with the camp cleanup and skip player-modified blocks.")
+                .define("enableLadderBuilding", true);
+        MAX_LADDERS_PER_RAID = b.comment("Maximum ladder columns a single raid can build. Each column is up to 7 blocks tall.")
+                .defineInRange("maxLaddersPerRaid", 6, 0, 32);
         ENABLE_GATE_BREACHING = b.comment("Allow tracked siege breachers to break doors, trapdoors, fence gates and fences blocking their advance.")
                 .define("enableRestorableGateBreaching", true);
         WOODEN_BREACH_SECONDS = b.comment("Approximate focused breach time for wooden defenses. Multiple nearby breachers accelerate it.")

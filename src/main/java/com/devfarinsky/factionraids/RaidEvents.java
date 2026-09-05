@@ -1084,6 +1084,13 @@ public final class RaidEvents {
         if (dropped > 0) {
             announce(server, teamKey, Component.literal(dropped + " straggler(s) lost to the terrain — the wave presses on.")
                     .withStyle(ChatFormatting.GRAY), false);
+        }
+        // When raiders stall against a wall, build a temporary ladder column.
+        // Rate-limited internally; ladders are tracked in campBlocks and
+        // cleaned up when the raid ends via the existing camp pipeline.
+        if (com.devfarinsky.factionraids.siege.LadderBuilder.tick(level, state, point.pos())) {
+            announce(server, teamKey, Component.literal("Raiders have raised a ladder to scale your defenses!")
+                    .withStyle(ChatFormatting.GOLD), false);
             data.setDirty();
         }
         processPhysicalBreaching(level, point, state);
@@ -2073,6 +2080,7 @@ public final class RaidEvents {
         com.devfarinsky.factionraids.formations.FormationDirector.forget(teamKey);
         com.devfarinsky.factionraids.effort.RaidEffortTracker.forget(teamKey);
         com.devfarinsky.factionraids.effort.StragglerTracker.forget(teamKey);
+        com.devfarinsky.factionraids.siege.LadderBuilder.forget(teamKey);
         RaidSavedData.RaidState state = data.raids.remove(teamKey);
         RaidSavedData.Anchor anchor = data.anchors.get(teamKey);
         if (state != null && anchor != null) {
