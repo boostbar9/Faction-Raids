@@ -2,6 +2,21 @@
 
 All notable changes to Faction Raids are documented here.
 
+## Unreleased — Refactor: Scalability Foundation
+
+No gameplay changes. Pure internal refactor to make future features easier and safer to add.
+
+- Added `ModConstants` for tick math, NBT tag keys, boss-bar defaults and the shared chat prefix.
+- Added `FactionLogger` (single SLF4J logger) and routed swallowed command failures through it.
+- Added `raid/RaidTags` to encapsulate the `FactionRaidsTeam` / `FactionRaidsRole` persistent-data access
+  that was previously duplicated in ~15 call sites.
+- Added `raid/RaidBossBars` to own the per-team `ServerBossEvent` registry.
+- Added `command/RaidCommands` and moved the entire `/factionraids` Brigadier tree out of `RaidEvents`.
+- Added `command/PlayerCommand.run(...)` to remove the repeated player-resolution try/catch that
+  appeared 16 times in `RaidEvents`.
+- Added `ARCHITECTURE.md` documenting the new package layout and the ordered plan for splitting
+  `RaidEvents` further without behavior changes.
+
 ## 2.7.0 - 2026-09-04
 
 - Replaced the six-row chest dashboard with a dedicated client-rendered tactical command screen.
