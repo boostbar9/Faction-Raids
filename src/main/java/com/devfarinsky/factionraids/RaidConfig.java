@@ -28,6 +28,7 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue SPAWN_RETRY_SECONDS;
     public static final ForgeConfigSpec.DoubleValue MINIMUM_TPS_TO_SPAWN;
     public static final ForgeConfigSpec.BooleanValue PAUSE_SPAWNING_BELOW_TPS;
+    public static final ForgeConfigSpec.IntValue MINIMUM_TPS_SUSTAINED_TICKS;
     public static final ForgeConfigSpec.BooleanValue PAUSE_WHEN_FACTION_OFFLINE;
     public static final ForgeConfigSpec.BooleanValue OWNER_ONLY_MANAGEMENT;
     public static final ForgeConfigSpec.BooleanValue GLOW_FINAL_ENEMIES;
@@ -158,10 +159,12 @@ public final class RaidConfig {
                 .defineInRange("missingEntityGraceSeconds", 120, 20, 900);
         SPAWN_RETRY_SECONDS = b.comment("Delay before retrying a wave that could not find safe spawn positions.")
                 .defineInRange("spawnRetrySeconds", 20, 5, 120);
-        MINIMUM_TPS_TO_SPAWN = b.comment("Do not create a new wave below this approximate server TPS when TPS protection is enabled.")
-                .defineInRange("minimumTpsToSpawn", 18.0, 10.0, 20.0);
-        PAUSE_SPAWNING_BELOW_TPS = b.comment("Delay new waves while server performance is below minimumTpsToSpawn.")
-                .define("pauseSpawningBelowTps", true);
+        MINIMUM_TPS_TO_SPAWN = b.comment("Do not create a new wave below this approximate server TPS when TPS protection is enabled. Lowered from 18.0 in 2.10.1 so healthy servers don't trigger on normal tick-time jitter.")
+                .defineInRange("minimumTpsToSpawn", 15.0, 5.0, 20.0);
+        PAUSE_SPAWNING_BELOW_TPS = b.comment("Delay new waves while server performance is below minimumTpsToSpawn. Default flipped to false in 2.10.1 — the MAX_ACTIVE_RAIDERS hard cap already prevents raid-caused overload, and this sensor produced too many false 'server is lagging' pauses on healthy servers. Server owners who genuinely see raid-related lag can turn this back on.")
+                .define("pauseSpawningBelowTps", false);
+        MINIMUM_TPS_SUSTAINED_TICKS = b.comment("Number of consecutive raid ticks (each ~1 second) TPS must stay below minimumTpsToSpawn before spawning pauses. Prevents brief tick-time spikes from triggering the pause. Only used when pauseSpawningBelowTps is on.")
+                .defineInRange("minimumTpsSustainedTicks", 5, 1, 60);
         PAUSE_WHEN_FACTION_OFFLINE = b.comment("Freeze active invasions while every member of the targeted faction is offline.")
                 .define("pauseWhenFactionOffline", true);
         OWNER_ONLY_MANAGEMENT = b.comment("Only the player who created an anchor, or an operator, may move it or manually start an invasion.")
