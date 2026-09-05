@@ -3,6 +3,7 @@ package com.devfarinsky.factionraids.client;
 import com.devfarinsky.factionraids.RaidEvents;
 import com.devfarinsky.factionraids.RaidNetwork;
 import com.devfarinsky.factionraids.client.codex.DefensePlaybook;
+import com.devfarinsky.factionraids.client.codex.FactionLore;
 import com.devfarinsky.factionraids.client.codex.UnitCodex;
 import com.devfarinsky.factionraids.narrative.RaiderFaction;
 import com.devfarinsky.factionraids.narrative.RaiderFactionRegistry;
@@ -73,12 +74,16 @@ public final class SiegeCommandScreen extends Screen {
         FACTIONS("Factions", BLUE),
         UNITS("Units", RED),
         DEFENSE("Defense", GREEN),
+        JOURNAL("Journal", 0xFFD0A05C),
         COMMANDS("Commands", 0xFFB08CE0);
 
         final String label;
         final int accent;
         Tab(String label, int accent) { this.label = label; this.accent = accent; }
     }
+
+    // Wave filter chip options for the Units tab. "all" is the default.
+    private static final String[] WAVE_FILTERS = {"all", "1+", "2+", "3+", "final"};
 
     private RaidEvents.DashboardSnapshot snapshot;
     private int left;
@@ -89,6 +94,10 @@ public final class SiegeCommandScreen extends Screen {
     // (which happens on server sync) so the player doesn't lose their place.
     private int selectedFactionIndex = 0;
     private int selectedUnitIndex = 0;
+    // Defense tab scroll offset in tip rows (2 tips per row).
+    private int defenseScrollRows = 0;
+    // Units tab wave filter index into WAVE_FILTERS.
+    private int unitFilterIndex = 0;
 
     public SiegeCommandScreen(RaidEvents.DashboardSnapshot snapshot) {
         super(Component.literal("Warlord's Codex"));
@@ -160,6 +169,30 @@ public final class SiegeCommandScreen extends Screen {
             initFactionSubnav(contentX, contentW);
         } else if (activeTab == Tab.UNITS) {
             initUnitSubnav(contentX, contentW);
+            initUnitFilterChips(contentX, contentW);
+        }
+    }
+
+    /**
+     * Renders the wave filter chip row above the Units tab detail pane so
+     * players can slice the codex by which wave a unit first appears in.
+     * The filter is a display-only convenience; it never hides units the
+     * player has already discovered.
+     */
+    private void initUnitFilterChips(int contentX, int contentW) {
+        int chipX = contentX + 148;
+        int chipY = top + HEADER_HEIGHT + 10;
+        int chipW = 44;
+        int chipH = 14;
+        int gap = 4;
+        for (int i = 0; i < WAVE_FILTERS.length; i++) {
+            final int idx = i;
+            String label = "Wave " + WAVE_FILTERS[i];
+            if (WAVE_FILTERS[i].equals("all")) label = "All";
+            if (WAVE_FILTERS[i].equals("final")) label = "Final";
+            addRenderableWidget(new TabButton(chipX + i * (chipW + gap), chipY, chipW, chipH,
+                    Component.literal(label), null, unitFilterIndex == i,
+                    () -> { unitFilterIndex = idx; clearWidgets(); init(); }, RED));
         }
     }
 
@@ -235,6 +268,7 @@ public final class SiegeCommandScreen extends Screen {
             case FACTIONS -> drawFactions(graphics, contentX, contentY, contentW, contentH);
             case UNITS -> drawUnits(graphics, contentX, contentY, contentW, contentH);
             case DEFENSE -> drawDefense(graphics, contentX, contentY, contentW, contentH);
+            case JOURNAL -> drawJournal(graphics, contentX, contentY, contentW, contentH);
             case COMMANDS -> drawCommands(graphics, contentX, contentY, contentW, contentH);
         }
     }
@@ -301,25 +335,36 @@ public final class SiegeCommandScreen extends Screen {
                             snapshot.reinforcing() + " incoming  \u2022  " + snapshot.defeated() + " defeated",
                     x + 96, botY + 22, MUTED, false);
 
+            // v2.12.0 threat breakdown — the whole point of Know Your Enemy.
+            // Shows exactly what unit types are on the field right now.
+            if (!snapshot.threatBreakdown().isEmpty()) {
+                graphics.drawString(font, "On field:", x + 10, botY + 34, MUTED, false);
+                graphics.drawString(font, trim(snapshot.threatBreakdown(), w - 60),
+                        x + 55, botY + 34, INK, false);
+            }
+
             int strategicProgress = snapshot.breached() ? snapshot.occupationPercent() : snapshot.breachPercent();
             String strategicLabel = snapshot.breached() ? "Occupation" : "Perimeter";
-            progressBar(graphics, x + 10, botY + 38, w - 100, strategicProgress,
+            progressBar(graphics, x + 10, botY + 48, w - 100, strategicProgress,
                     snapshot.breached() ? RED : GOLD);
             graphics.drawString(font, strategicLabel + " " + strategicProgress + "%",
-                    x + w - 90, botY + 37, MUTED, false);
+                    x + w - 90, botY + 47, MUTED, false);
 
             int gateColor = snapshot.gateBreachPercent() >= 75 ? RED : GOLD;
-            progressBar(graphics, x + 10, botY + 52, w - 100, snapshot.gateBreachPercent(), gateColor);
+            progressBar(graphics, x + 10, botY + 60, w - 100, snapshot.gateBreachPercent(), gateColor);
             graphics.drawString(font, "Gate " + snapshot.gateBreachPercent() + "%",
-                    x + w - 90, botY + 51, MUTED, false);
+                    x + w - 90, botY + 59, MUTED, false);
 
-            // Defense forecast row.
-            graphics.drawString(font, "Defense score:",
-                    x + 10, botY + 68, MUTED, false);
+            // Defense score + explainer stack.
             int scoreColor = snapshot.defenseScore() >= 55 ? GREEN :
                     snapshot.defenseScore() >= 35 ? GOLD : RED;
-            graphics.drawString(font, snapshot.defenseScore() + " / 100  \u2014  " + snapshot.defenseScoreLabel(),
-                    x + 88, botY + 68, scoreColor, false);
+            graphics.drawString(font, "Defense: " + snapshot.defenseScore() + " / 100 — " +
+                            snapshot.defenseScoreLabel(),
+                    x + 10, botY + 74, scoreColor, false);
+            if (!snapshot.defenseExplainer().isEmpty()) {
+                graphics.drawString(font, trim(snapshot.defenseExplainer(), w - 20),
+                        x + 10, botY + 86, SUBTLE, false);
+            }
         } else {
             card(graphics, x, botY, w, botH, "DEFENSE FORECAST", GREEN);
             graphics.drawString(font, "Nearby army:  " + snapshot.recruits() + " Recruits",
@@ -330,11 +375,15 @@ public final class SiegeCommandScreen extends Screen {
 
             int scoreColor = snapshot.defenseScore() >= 55 ? GREEN :
                     snapshot.defenseScore() >= 35 ? GOLD : RED;
-            graphics.drawString(font, "Estimated defense score:", x + 10, botY + 50, MUTED, false);
-            graphics.drawString(font, snapshot.defenseScore() + " / 100  \u2014  " + snapshot.defenseScoreLabel(),
-                    x + 138, botY + 50, scoreColor, false);
+            graphics.drawString(font, "Estimated defense: " + snapshot.defenseScore() + " / 100 — " +
+                            snapshot.defenseScoreLabel(),
+                    x + 10, botY + 50, scoreColor, false);
+            if (!snapshot.defenseExplainer().isEmpty()) {
+                graphics.drawString(font, trim(snapshot.defenseExplainer(), w - 20),
+                        x + 10, botY + 62, SUBTLE, false);
+            }
             graphics.drawString(font, "Reward eligible: " + (snapshot.rewardEligible() ? "yes" : "no"),
-                    x + 10, botY + 64, snapshot.rewardEligible() ? GOLD : MUTED, false);
+                    x + 10, botY + 76, snapshot.rewardEligible() ? GOLD : MUTED, false);
         }
     }
 
@@ -361,13 +410,23 @@ public final class SiegeCommandScreen extends Screen {
         graphics.drawString(font, "Pretexts:", detailX + 10, y + 50, MUTED, false);
         graphics.drawString(font, trim(tagLine, detailW - 30), detailX + 10, y + 62, INK, false);
 
-        // Faction lore blurbs — hand-authored per faction for flavor.
-        String[] lore = loreFor(f.id());
-        int loreY = y + 82;
-        for (String line : lore) {
-            graphics.drawString(font, trim(line, detailW - 30), detailX + 10, loreY, MUTED, false);
-            loreY += 12;
-            if (loreY > y + h - 30) break;
+        // Faction lore — v2.12.0 pulls from client-side FactionLore registry
+        // instead of a hardcoded switch, so datapack factions can register
+        // matching entries at client mod init without touching this file.
+        boolean discoveredFaction = isFactionDiscovered(f.id());
+        if (discoveredFaction) {
+            List<String> lore = FactionLore.get(f.id());
+            int loreY = y + 82;
+            for (String line : lore) {
+                graphics.drawString(font, trim(line, detailW - 30), detailX + 10, loreY, MUTED, false);
+                loreY += 12;
+                if (loreY > y + h - 30) break;
+            }
+        } else {
+            // Undiscovered — hide lore behind fog-of-war.
+            graphics.drawString(font, "UNKNOWN FACTION", detailX + 10, y + 82, MUTED, false);
+            graphics.drawString(font, "Survive a siege against them or kill", detailX + 10, y + 96, SUBTLE, false);
+            graphics.drawString(font, "one of their raiders to reveal.", detailX + 10, y + 108, SUBTLE, false);
         }
 
         // Attacker indicator.
@@ -380,33 +439,33 @@ public final class SiegeCommandScreen extends Screen {
         }
     }
 
-    private static String[] loreFor(String id) {
-        return switch (id) {
-            case "blackbay_reavers" -> new String[]{
-                    "Coastal raiders. They arrive by ship, favouring beach landings",
-                    "over overland marches. They will pillage chests before killing",
-                    "you. Rewards: skip a wave by scuttling their ships \u2014 the crew",
-                    "cannot swim in heavy armour."};
-            case "hollowfang_clan" -> new String[]{
-                    "Highland warband. They hold grudges over stolen ground and",
-                    "will return to the same stronghold repeatedly until the",
-                    "grudge is settled. Rewards: killing the Faction Commander",
-                    "grants extra emeralds if breach was avoided."};
-            case "emberchant_zealots" -> new String[]{
-                    "Ash-Prophets. They chant during assaults, and the chant is a",
-                    "combat buff for their side. Silence the priest units first.",
-                    "Rewards: their reliquary drops carry rare enchantment books."};
-            case "crownfall_exiles" -> new String[]{
-                    "Ruined nobility. They fight in banner formations and treat",
-                    "their captain as a monarch \u2014 kill the captain and morale",
-                    "shatters. Rewards: they drop coin more reliably than any",
-                    "other faction."};
-            case "wilds_marauders" -> new String[]{
-                    "Generic raider fallback \u2014 no specific culture, no specific",
-                    "grudge. They show up when no other faction fits the tags",
-                    "for the current pretext. Fight is straightforward, rewards",
-                    "are baseline."};
-            default -> new String[]{"No additional lore recorded.", "Faction added by a datapack or mod extension."};
+    private boolean isFactionDiscovered(String id) {
+        // The active attacker is always considered discovered so players can
+        // read up on who's currently at their gates.
+        if (id.equals(snapshot.factionId())) return true;
+        return snapshot.discoveredFactions().contains(id);
+    }
+
+    private boolean isUnitDiscovered(String id) {
+        return snapshot.discoveredUnits().contains(id);
+    }
+
+    /**
+     * Wave-filter predicate: whether {@code entry.availability()} matches the
+     * currently selected wave filter chip. Availability strings from
+     * {@link UnitCodex} look like "Wave 1+", "Wave 2+", "Final wave" — we do
+     * a substring check because the strings are hand-authored.
+     */
+    private boolean matchesWaveFilter(UnitCodex.Entry entry) {
+        String filter = WAVE_FILTERS[unitFilterIndex];
+        if ("all".equals(filter)) return true;
+        String a = entry.availability() == null ? "" : entry.availability().toLowerCase(java.util.Locale.ROOT);
+        return switch (filter) {
+            case "1+" -> a.contains("wave 1") || a.contains("all wave") || a.contains("any wave");
+            case "2+" -> a.contains("wave 2") || a.contains("wave 3") || a.contains("final") || a.contains("all wave");
+            case "3+" -> a.contains("wave 3") || a.contains("final") || a.contains("all wave");
+            case "final" -> a.contains("final");
+            default -> true;
         };
     }
 
@@ -420,16 +479,34 @@ public final class SiegeCommandScreen extends Screen {
         if (selectedUnitIndex >= UnitCodex.ENTRIES.size()) selectedUnitIndex = 0;
         UnitCodex.Entry e = UnitCodex.ENTRIES.get(selectedUnitIndex);
 
-        card(graphics, detailX, y, detailW, h, e.name().toUpperCase(), RED);
-        graphics.drawString(font, e.tagline(), detailX + 10, y + 22, INK, false);
-        graphics.drawString(font, trim(e.stats(), detailW - 20), detailX + 10, y + 38, GOLD, false);
+        // Filter chip strip is added as widgets in initUnitFilterChips; leave
+        // a small header row for it above the detail pane.
+        int titleY = y + 20;
+        boolean discovered = isUnitDiscovered(e.id());
+        boolean matchesFilter = matchesWaveFilter(e);
 
-        int lineY = y + 56;
+        card(graphics, detailX, titleY, detailW, h - 20,
+                discovered ? e.name().toUpperCase() : "???", RED);
+
+        if (!discovered) {
+            graphics.drawString(font, "Unknown unit type", detailX + 10, titleY + 22, MUTED, false);
+            graphics.drawString(font, "Kill one to add it to your codex.", detailX + 10, titleY + 36, SUBTLE, false);
+            graphics.drawString(font, "Appears: " + trim(e.availability(), detailW - 80),
+                    detailX + 10, titleY + h - 40, MUTED, false);
+            return;
+        }
+
+        // Discovered — render full page. Filter mismatch just gets a soft note
+        // so the entry is never fully hidden after it's been earned.
+        graphics.drawString(font, e.tagline(), detailX + 10, titleY + 22, INK, false);
+        graphics.drawString(font, trim(e.stats(), detailW - 20), detailX + 10, titleY + 38, GOLD, false);
+
+        int lineY = titleY + 56;
         lineY = drawLabelBody(graphics, detailX + 10, lineY, detailW - 20, "Behavior", e.behavior());
         lineY = drawLabelBody(graphics, detailX + 10, lineY + 4, detailW - 20, "Counter", e.counter());
         lineY = drawLabelBody(graphics, detailX + 10, lineY + 4, detailW - 20, "Drops", e.drops());
         graphics.drawString(font, "Appears: " + e.availability(),
-                detailX + 10, y + h - 18, MUTED, false);
+                detailX + 10, y + h - 18, matchesFilter ? MUTED : SUBTLE, false);
     }
 
     private int drawLabelBody(GuiGraphics graphics, int x, int y, int w, String label, String body) {
@@ -449,17 +526,28 @@ public final class SiegeCommandScreen extends Screen {
     // ---------------------------------------------------------------------
 
     private void drawDefense(GuiGraphics graphics, int x, int y, int w, int h) {
-        // Two-column layout of tip cards. Each card ~ half width, three tall.
+        // Two-column layout of tip cards, now with scrolling. Each card ~ half
+        // width, three rows tall per page. Mouse wheel or arrow keys advance
+        // {@code defenseScrollRows} to reveal more tips — v2.11.0 could only
+        // show 6 of 10 tips and the rest were unreachable.
         int colGap = 6;
         int cardW = (w - colGap) / 2;
         int cardH = 54;
         int rowGap = 4;
+        int rowsPerPage = 3;
+        int tipsPerRow = 2;
         List<DefensePlaybook.Tip> tips = DefensePlaybook.TIPS;
-        int visible = Math.min(tips.size(), 6); // 6 tips (2 cols x 3 rows) fit.
-        for (int i = 0; i < visible; i++) {
+        int totalRows = (tips.size() + tipsPerRow - 1) / tipsPerRow;
+        int maxScroll = Math.max(0, totalRows - rowsPerPage);
+        if (defenseScrollRows > maxScroll) defenseScrollRows = maxScroll;
+        int startTip = defenseScrollRows * tipsPerRow;
+        int endTip = Math.min(tips.size(), startTip + rowsPerPage * tipsPerRow);
+
+        for (int i = startTip; i < endTip; i++) {
             DefensePlaybook.Tip t = tips.get(i);
-            int col = i % 2;
-            int row = i / 2;
+            int rel = i - startTip;
+            int col = rel % tipsPerRow;
+            int row = rel / tipsPerRow;
             int cx = x + col * (cardW + colGap);
             int cy = y + row * (cardH + rowGap);
             card(graphics, cx, cy, cardW, cardH, t.tag().toUpperCase(), GREEN);
@@ -471,8 +559,63 @@ public final class SiegeCommandScreen extends Screen {
                 by += 10;
             }
         }
-        if (tips.size() > visible) {
-            String note = "+" + (tips.size() - visible) + " more tips — scroll planned for v2.12";
+
+        // Scroll indicator + hint (only when scrolling is possible).
+        if (maxScroll > 0) {
+            String hint = "Tips " + (startTip + 1) + "\u2013" + endTip + " of " + tips.size() +
+                    "  \u2022  scroll or \u2191/\u2193";
+            graphics.drawString(font, hint, x + 4, y + h - 12, SUBTLE, false);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // JOURNAL TAB — last N sieges (v2.12.0)
+    // ---------------------------------------------------------------------
+
+    /**
+     * War Journal renders the newest-first list of siege outcomes for this
+     * team. Each row is a compact card with faction, waves reached, outcome
+     * tag, and payout. This is the durable memory of "what has happened to
+     * us" and drives the discovery + fog-of-war reveal on Factions/Units.
+     */
+    private void drawJournal(GuiGraphics graphics, int x, int y, int w, int h) {
+        List<RaidEvents.JournalRow> rows = snapshot.warJournal();
+        if (rows.isEmpty()) {
+            card(graphics, x, y, w, h, "WAR JOURNAL", 0xFFD0A05C);
+            graphics.drawString(font, "No sieges recorded yet.", x + 10, y + 22, INK, false);
+            graphics.drawString(font, "Survive (or fall to) a siege and it will", x + 10, y + 36, MUTED, false);
+            graphics.drawString(font, "appear here \u2014 most recent first.", x + 10, y + 48, MUTED, false);
+            return;
+        }
+        int rowH = 32;
+        int gap = 3;
+        int visible = Math.min(rows.size(), (h - 10) / (rowH + gap));
+        for (int i = 0; i < visible; i++) {
+            RaidEvents.JournalRow r = rows.get(i);
+            int cy = y + i * (rowH + gap);
+            int outcomeColor = switch (r.outcome()) {
+                case "victory" -> GREEN;
+                case "victory_practice" -> GOLD;
+                case "defeat" -> RED;
+                default -> MUTED;
+            };
+            String outcomeLabel = switch (r.outcome()) {
+                case "victory" -> "VICTORY";
+                case "victory_practice" -> "PRACTICE WIN";
+                case "defeat" -> "DEFEAT";
+                default -> r.outcome().toUpperCase(java.util.Locale.ROOT);
+            };
+            card(graphics, x, cy, w, rowH, outcomeLabel, outcomeColor);
+            String title = (r.factionName() == null || r.factionName().isEmpty() ? "Unknown faction" : r.factionName())
+                    + "  \u2022  wave " + r.wavesReached() + "/" + r.totalWaves();
+            graphics.drawString(font, trim(title, w - 120), x + 10, cy + 20, INK, false);
+            String right = r.emeraldPayout() > 0 ? ("+" + r.emeraldPayout() + " emeralds") : "no reward";
+            graphics.drawString(font, right,
+                    x + w - 10 - font.width(right), cy + 20,
+                    r.emeraldPayout() > 0 ? GOLD : SUBTLE, false);
+        }
+        if (rows.size() > visible) {
+            String note = "+" + (rows.size() - visible) + " older entries (kept up to 10 total)";
             graphics.drawString(font, note, x + 4, y + h - 12, SUBTLE, false);
         }
     }
@@ -503,7 +646,7 @@ public final class SiegeCommandScreen extends Screen {
             lineY = dy + 4;
             if (lineY > y + h - 16) break;
         }
-        graphics.drawString(font, "Tip: replace the old Test Siege button with /factionraids start.",
+        graphics.drawString(font, "Tip: /factionraids start triggers the next siege immediately.",
                 x + 10, y + h - 12, SUBTLE, false);
     }
 
@@ -580,6 +723,40 @@ public final class SiegeCommandScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    /**
+     * Mouse wheel scroll for the Defense tab. Ignored on other tabs so the
+     * scroll wheel keeps behaving like a no-op there rather than surprising
+     * the player.
+     */
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (activeTab == Tab.DEFENSE) {
+            if (delta > 0 && defenseScrollRows > 0) {
+                defenseScrollRows--;
+                return true;
+            } else if (delta < 0) {
+                defenseScrollRows++;
+                return true;
+            }
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (activeTab == Tab.DEFENSE) {
+            // 265 = up, 264 = down (GLFW).
+            if (keyCode == 265 && defenseScrollRows > 0) {
+                defenseScrollRows--;
+                return true;
+            } else if (keyCode == 264) {
+                defenseScrollRows++;
+                return true;
+            }
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     // ---------------------------------------------------------------------

@@ -14,11 +14,25 @@ import java.util.*;
 
 public final class RaidSavedData extends SavedData {
     public static final String DATA_NAME = "factionraids_data";
-    public static final int DATA_VERSION = 9;
+    // v10 added WarJournal + Discovery (2.12.0 Know Your Enemy release).
+    // Old saves load cleanly because both fields default to empty maps.
+    public static final int DATA_VERSION = 10;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Map<String, Anchor> anchors = new HashMap<>();
     public final Map<String, RaidState> raids = new HashMap<>();
+    /**
+     * Per-team siege history. Bounded to {@link WarJournal#MAX_ENTRIES} entries;
+     * older sieges roll off the back. Written to when a raid ends (victory or
+     * defeat) in RaidEvents.
+     */
+    public final Map<String, WarJournal> journals = new HashMap<>();
+    /**
+     * Per-team discovery ledger tracking which factions and units the team has
+     * seen in a real siege. Drives the Codex fog-of-war: undiscovered entries
+     * render as silhouettes until the team encounters one for the first time.
+     */
+    public final Map<String, Discovery> discoveries = new HashMap<>();
 
     public static RaidSavedData get(MinecraftServer server) {
         return server.overworld().getDataStorage().computeIfAbsent(RaidSavedData::load, RaidSavedData::new, DATA_NAME);
@@ -36,6 +50,21 @@ public final class RaidSavedData extends SavedData {
             RaidState raid = RaidState.load(raidsTag.getCompound(i));
             data.raids.put(raid.teamKey, raid);
         }
+        // v10 additions — missing on older saves, so wrap in a version check.
+        if (root.contains("Journals", Tag.TAG_LIST)) {
+            ListTag journals = root.getList("Journals", Tag.TAG_COMPOUND);
+            for (int i = 0; i < journals.size(); i++) {
+                WarJournal journal = WarJournal.load(journals.getCompound(i));
+                data.journals.put(journal.teamKey, journal);
+            }
+        }
+        if (root.contains("Discoveries", Tag.TAG_LIST)) {
+            ListTag discoveries = root.getList("Discoveries", Tag.TAG_COMPOUND);
+            for (int i = 0; i < discoveries.size(); i++) {
+                Discovery discovery = Discovery.load(discoveries.getCompound(i));
+                data.discoveries.put(discovery.teamKey, discovery);
+            }
+        }
         return data;
     }
 
@@ -48,7 +77,119 @@ public final class RaidSavedData extends SavedData {
         ListTag raidsTag = new ListTag();
         raids.values().forEach(raid -> raidsTag.add(raid.save()));
         root.put("Raids", raidsTag);
+        ListTag journalsTag = new ListTag();
+        journals.values().forEach(j -> journalsTag.add(j.save()));
+        root.put("Journals", journalsTag);
+        ListTag discoveriesTag = new ListTag();
+        discoveries.values().forEach(d -> discoveriesTag.add(d.save()));
+        root.put("Discoveries", discoveriesTag);
         return root;
+    }
+
+    /**
+     * Bounded, chronological record of a team's recent sieges. Bounded because
+     * the journal is displayed in-book and unbounded growth would both bloat
+     * the network payload and make the UI unusable.
+     */
+    public static final class WarJournal {
+        public static final int MAX_ENTRIES = 10;
+        public final String teamKey;
+        // Newest first. Callers append via prepend + trim.
+        public final java.util.LinkedList<Entry> entries = new java.util.LinkedList<>();
+
+        public WarJournal(String teamKey) { this.teamKey = teamKey; }
+
+        public void record(Entry entry) {
+            entries.addFirst(entry);
+            while (entries.size() > MAX_ENTRIES) entries.removeLast();
+        }
+
+        public CompoundTag save() {
+            CompoundTag tag = new CompoundTag();
+            tag.putString("Team", teamKey);
+            ListTag list = new ListTag();
+            for (Entry e : entries) list.add(e.save());
+            tag.put("Entries", list);
+            return tag;
+        }
+
+        public static WarJournal load(CompoundTag tag) {
+            WarJournal j = new WarJournal(tag.getString("Team"));
+            ListTag list = tag.getList("Entries", Tag.TAG_COMPOUND);
+            for (int i = 0; i < list.size(); i++) j.entries.add(Entry.load(list.getCompound(i)));
+            return j;
+        }
+
+        /**
+         * One completed siege. {@code timestamp} is game-time ticks at the moment
+         * of recording; the client renders it as "3 days ago" using its own clock.
+         */
+        public record Entry(long timestamp, String factionId, String factionName,
+                            String casusBelliId, int wavesReached, int totalWaves,
+                            String outcome, int emeraldPayout) {
+            public CompoundTag save() {
+                CompoundTag t = new CompoundTag();
+                t.putLong("Ts", timestamp);
+                t.putString("FactionId", factionId == null ? "" : factionId);
+                t.putString("FactionName", factionName == null ? "" : factionName);
+                t.putString("CasusBelliId", casusBelliId == null ? "" : casusBelliId);
+                t.putInt("WavesReached", wavesReached);
+                t.putInt("TotalWaves", totalWaves);
+                t.putString("Outcome", outcome == null ? "unknown" : outcome);
+                t.putInt("Emeralds", emeraldPayout);
+                return t;
+            }
+
+            public static Entry load(CompoundTag t) {
+                return new Entry(t.getLong("Ts"), t.getString("FactionId"),
+                        t.getString("FactionName"), t.getString("CasusBelliId"),
+                        t.getInt("WavesReached"), t.getInt("TotalWaves"),
+                        t.getString("Outcome"), t.getInt("Emeralds"));
+            }
+        }
+    }
+
+    /**
+     * Per-team fog-of-war ledger. Sets of ids the team has actually encountered
+     * in combat. The client uses these to gate what's shown in the Codex's
+     * Factions and Units tabs, so a fresh team sees silhouettes rather than
+     * spoilers for content they have not yet fought.
+     */
+    public static final class Discovery {
+        public final String teamKey;
+        public final java.util.Set<String> factions = new java.util.LinkedHashSet<>();
+        public final java.util.Set<String> units = new java.util.LinkedHashSet<>();
+
+        public Discovery(String teamKey) { this.teamKey = teamKey; }
+
+        public boolean addFaction(String id) {
+            return id != null && !id.isEmpty() && factions.add(id);
+        }
+
+        public boolean addUnit(String id) {
+            return id != null && !id.isEmpty() && units.add(id);
+        }
+
+        public CompoundTag save() {
+            CompoundTag tag = new CompoundTag();
+            tag.putString("Team", teamKey);
+            ListTag f = new ListTag();
+            for (String s : factions) f.add(StringTag.valueOf(s));
+            tag.put("Factions", f);
+            ListTag u = new ListTag();
+            for (String s : units) u.add(StringTag.valueOf(s));
+            tag.put("Units", u);
+            return tag;
+        }
+
+        public static Discovery load(CompoundTag tag) {
+            Discovery d = new Discovery(tag.getString("Team"));
+            ListTag f = tag.getList("Factions", Tag.TAG_STRING);
+            for (int i = 0; i < f.size(); i++) d.factions.add(f.getString(i));
+            ListTag u = tag.getList("Units", Tag.TAG_STRING);
+            for (int i = 0; i < u.size(); i++) d.units.add(u.getString(i));
+            return d;
+        }
     }
 
     public record DefensePoint(String name, ResourceLocation dimension, BlockPos pos) {

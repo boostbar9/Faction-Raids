@@ -15,10 +15,11 @@ import net.minecraftforge.network.simple.SimpleChannel;
 import java.util.function.Supplier;
 
 public final class RaidNetwork {
-    // v3 introduced in 2.11.0: added 10 Codex fields to DashboardSync.
+    // v4 introduced in 2.12.0: added threat breakdown, defense explainer,
+    // discovered units/factions, and War Journal rows to DashboardSync.
     // Bump whenever the wire format changes so mismatched builds refuse to connect
     // instead of silently corrupting the dashboard payload.
-    private static final String PROTOCOL = "3";
+    private static final String PROTOCOL = "4";
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(FactionRaids.MOD_ID, "main"))
             .networkProtocolVersion(() -> PROTOCOL)
@@ -93,6 +94,24 @@ public final class RaidNetwork {
             buffer.writeUtf(s.nextWaveComposition());
             buffer.writeVarInt(s.defenseScore());
             buffer.writeUtf(s.defenseScoreLabel());
+            // v2.12.0 Know Your Enemy additions:
+            buffer.writeUtf(s.threatBreakdown());
+            buffer.writeUtf(s.defenseExplainer());
+            buffer.writeVarInt(s.discoveredUnits().size());
+            for (String u : s.discoveredUnits()) buffer.writeUtf(u);
+            buffer.writeVarInt(s.discoveredFactions().size());
+            for (String f : s.discoveredFactions()) buffer.writeUtf(f);
+            buffer.writeVarInt(s.warJournal().size());
+            for (RaidEvents.JournalRow row : s.warJournal()) {
+                buffer.writeLong(row.timestamp());
+                buffer.writeUtf(row.factionId());
+                buffer.writeUtf(row.factionName());
+                buffer.writeUtf(row.casusBelliId());
+                buffer.writeVarInt(row.wavesReached());
+                buffer.writeVarInt(row.totalWaves());
+                buffer.writeUtf(row.outcome());
+                buffer.writeVarInt(row.emeraldPayout());
+            }
         }
 
         private static DashboardSync decode(FriendlyByteBuf buffer) {
@@ -106,7 +125,32 @@ public final class RaidNetwork {
                     // v2.11.0 Codex additions:
                     buffer.readUtf(), buffer.readUtf(), buffer.readUtf(), buffer.readUtf(),
                     buffer.readUtf(), buffer.readVarInt(), buffer.readUtf(), buffer.readUtf(),
-                    buffer.readVarInt(), buffer.readUtf()));
+                    buffer.readVarInt(), buffer.readUtf(),
+                    // v2.12.0 Know Your Enemy additions:
+                    buffer.readUtf(), buffer.readUtf(),
+                    readStringList(buffer), readStringList(buffer),
+                    readJournalRows(buffer)));
+        }
+
+        private static java.util.List<String> readStringList(FriendlyByteBuf buffer) {
+            int n = buffer.readVarInt();
+            if (n <= 0) return java.util.List.of();
+            java.util.List<String> list = new java.util.ArrayList<>(n);
+            for (int i = 0; i < n; i++) list.add(buffer.readUtf());
+            return java.util.List.copyOf(list);
+        }
+
+        private static java.util.List<RaidEvents.JournalRow> readJournalRows(FriendlyByteBuf buffer) {
+            int n = buffer.readVarInt();
+            if (n <= 0) return java.util.List.of();
+            java.util.List<RaidEvents.JournalRow> rows = new java.util.ArrayList<>(n);
+            for (int i = 0; i < n; i++) {
+                rows.add(new RaidEvents.JournalRow(
+                        buffer.readLong(), buffer.readUtf(), buffer.readUtf(),
+                        buffer.readUtf(), buffer.readVarInt(), buffer.readVarInt(),
+                        buffer.readUtf(), buffer.readVarInt()));
+            }
+            return java.util.List.copyOf(rows);
         }
 
         private static void handle(DashboardSync packet, Supplier<NetworkEvent.Context> contextSupplier) {
