@@ -88,11 +88,11 @@ public final class RaidDashboardMenu extends ChestMenu {
 
         dashboard.setItem(REFRESH_HOME_SLOT, icon(Items.RED_BED, "Refresh Stronghold", ChatFormatting.AQUA,
                 List.of("Update the target from your current respawn point", "Click to refresh")));
-        dashboard.setItem(START_RAID_SLOT, icon(snapshot.active() ? Items.IRON_BARS : Items.TARGET,
-                snapshot.active() ? "Siege Already Active" : "Start Practice Siege",
-                snapshot.active() ? ChatFormatting.GRAY : ChatFormatting.RED,
-                snapshot.active() ? List.of("Defeat the current invasion first") :
-                        List.of("Starts a controlled test immediately", "Rewards disabled by default", "Click to begin")));
+        dashboard.setItem(START_RAID_SLOT, icon(Items.WRITABLE_BOOK,
+                "Use /factionraids start", ChatFormatting.GOLD,
+                List.of("The in-game Test Siege button was removed in v2.11.0",
+                        "Run /factionraids start in chat to trigger a siege now",
+                        "Available to every player at their own stronghold")));
         dashboard.setItem(HELP_SLOT, icon(Items.WRITABLE_BOOK, "Command Guide", ChatFormatting.YELLOW,
                 List.of("Print the essential command list in chat", "Click for help")));
         dashboard.setItem(CLOSE_SLOT, icon(Items.BARRIER, "Close Command Table", ChatFormatting.RED,
@@ -105,9 +105,9 @@ public final class RaidDashboardMenu extends ChestMenu {
     public void clicked(int slotId, int button, ClickType clickType, Player player) {
         if (slotId >= 0 && slotId < DASHBOARD_SIZE) {
             if (slotId == REFRESH_HOME_SLOT) RaidEvents.dashboardRefreshHome(serverPlayer);
-            else if (slotId == START_RAID_SLOT && !RaidEvents.dashboardSnapshot(serverPlayer).active()) {
-                RaidEvents.dashboardStart(serverPlayer);
-            } else if (slotId == HELP_SLOT) RaidEvents.dashboardHelp(serverPlayer);
+            // START_RAID_SLOT is intentionally no-op in v2.11.0 — the icon is a
+            // hint pointing players at /factionraids start. See slot init above.
+            else if (slotId == HELP_SLOT) RaidEvents.dashboardHelp(serverPlayer);
             else if (slotId == CLOSE_SLOT) {
                 serverPlayer.closeContainer();
                 return;
