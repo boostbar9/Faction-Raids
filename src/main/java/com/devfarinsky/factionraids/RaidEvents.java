@@ -238,6 +238,17 @@ public final class RaidEvents {
         sp.getPersistentData().put(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG, persistent);
     }
 
+    /**
+     * Ensure the shared "Raiders" faction exists as soon as the server is
+     * fully started. Idempotent — subsequent restarts skip the create path
+     * once the scoreboard team and Recruits faction manager entry exist.
+     */
+    @SubscribeEvent
+    public static void onServerStarted(net.minecraftforge.event.server.ServerStartedEvent event) {
+        RecruitsBridge.ensureRaidersFaction(event.getServer());
+    }
+
+
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
         RaidBossBars.shutdown();
@@ -1326,6 +1337,11 @@ public final class RaidEvents {
             boolean squadLeader = spawned == 0;
             if (squadLeader && raider instanceof Raider vanillaRaider) vanillaRaider.setPatrolLeader(true);
             RecruitsBridge.configureHostileRaidRecruit(raider);
+            // Assign to the shared "Raiders" faction so players can't hire
+            // this mob and it doesn't friendly-fire other raiders. Faction is
+            // created lazily on server-start; this call is a no-op if the
+            // scoreboard team hasn't been registered yet.
+            RecruitsBridge.assignToRaidersFaction(raider);
             raider.setPersistenceRequired();
             raider.getPersistentData().putString(RAID_TEAM_TAG, anchor.teamKey());
             if (level.addFreshEntity(raider)) {
