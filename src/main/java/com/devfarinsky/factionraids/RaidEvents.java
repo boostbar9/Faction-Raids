@@ -85,6 +85,13 @@ public final class RaidEvents {
      */
     static final java.util.Map<String, com.devfarinsky.factionraids.camp.CampBuilder.CampState>
             ACTIVE_CAMPS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Per-raid wave composition (progressive picker + formation choice).
+     * Populated by queueWave and consulted by createAttackerForWave and the
+     * FormationDirector tick. Cleared in finishRaid.
+     */
+    private static final Map<String, com.devfarinsky.factionraids.waves.WaveComposition> ACTIVE_COMPOSITIONS = new HashMap<>();
     private static int tickCounter;
 
     @SubscribeEvent
@@ -1029,6 +1036,13 @@ public final class RaidEvents {
                     .withStyle(ChatFormatting.RED), false);
             data.setDirty();
         }
+        // Formation cohesion: reapply the wave's shape periodically while
+        // raiders advance on the objective. Rate-limited internally.
+        com.devfarinsky.factionraids.waves.WaveComposition activeComposition = ACTIVE_COMPOSITIONS.get(teamKey);
+        if (activeComposition != null) {
+            com.devfarinsky.factionraids.formations.FormationDirector.tick(
+                    level, state, point.pos(), activeComposition.formation);
+        }
         processPhysicalBreaching(level, point, state);
 
         if (updateCaptureProgress(server, anchor, point, state, level, members, recruits)) {
@@ -1178,12 +1192,25 @@ public final class RaidEvents {
         state.waveStartingCount = 0;
         state.pendingWaveSpawns = wanted;
         state.squadsSpawned = 0;
+
+        // Build the progressive composition for this wave. This picks role
+        // counts (shieldmen/bowmen/captains/etc.) and a formation shape the
+        // FormationDirector will hold on advance.
+        com.devfarinsky.factionraids.waves.WaveComposition composition =
+                com.devfarinsky.factionraids.waves.WaveComposer.compose(nextWave, RaidConfig.WAVES.get(), wanted);
+        ACTIVE_COMPOSITIONS.put(anchor.teamKey(), composition);
         state.ticksToNextWave = 0;
         state.ticksToNextSquad = 0;
         state.lastWarningSecond = Integer.MAX_VALUE;
+        String formationSuffix = "";
+        if (RaidConfig.ANNOUNCE_WAVE_FORMATION.get() && composition != null &&
+                composition.formation != com.devfarinsky.factionraids.formations.Formation.NONE &&
+                !composition.label.isEmpty()) {
+            formationSuffix = " — " + composition.label;
+        }
         announce(server, anchor.teamKey(), Component.literal(waveTitle(state.wave) + " — wave " + state.wave + "/" +
                 RaidConfig.WAVES.get() + ": " + wanted + " invaders are advancing from the " +
-                approachDirection(state.approachAngle) +
+                approachDirection(state.approachAngle) + formationSuffix +
                 scoutingSummary(recruitScale, assetScale, recruits.size(), compat))
                 .withStyle(ChatFormatting.RED), true);
         if (state.wave >= RaidConfig.WAVES.get()) {
@@ -1215,7 +1242,7 @@ public final class RaidEvents {
         int spawned = 0;
         for (int i = 0; i < wanted; i++) {
             int waveIndex = state.waveStartingCount + spawned;
-            Mob raider = createAttackerForWave(level, state.wave, waveIndex);
+            Mob raider = createAttackerForWave(level, anchor.teamKey(), state.wave, waveIndex);
             if (raider == null) continue;
 
             boolean asNaval = i < navalShare;
@@ -1340,23 +1367,41 @@ public final class RaidEvents {
                 .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
     }
 
-    private static Mob createAttackerForWave(ServerLevel level, int wave, int index) {
+    private static Mob createAttackerForWave(ServerLevel level, String teamKey, int wave, int index) {
         if (!RaidConfig.USE_RECRUIT_INVADERS.get()) return createVanillaAttacker(level, wave, index);
         if (wave >= RaidConfig.WAVES.get() && index == 1) return EntityType.RAVAGER.create(level);
         if (RaidConfig.ENABLE_ILLUSIONERS.get() && wave >= 4 && index == 2) {
             return EntityType.ILLUSIONER.create(level);
         }
 
-        String recruitType;
-        if (wave >= RaidConfig.WAVES.get() && index == 0) recruitType = "patrol_leader";
-        else if (wave >= 4 && index % 9 == 1 && ForgeRegistries.ENTITY_TYPES.containsKey(
-                new ResourceLocation("recruits", "siege_engineer"))) recruitType = "siege_engineer";
-        else if (wave >= 4 && index % 8 == 3) recruitType = "assassin";
-        else if (wave >= 3 && index % 7 == 0) recruitType = "captain";
-        else if ((index + wave) % 4 == 0) recruitType = "recruit_shieldman";
-        else if ((index + wave) % 3 == 0) recruitType = "bowman";
-        else if ((index + wave) % 2 == 0) recruitType = "crossbowman";
-        else recruitType = "recruit";
+        String recruitType = null;
+        // Progressive composition overrides for indices > 0 (index 0 slots the commander in final wave).
+        if (!(wave >= RaidConfig.WAVES.get() && index == 0)) {
+            com.devfarinsky.factionraids.waves.WaveComposition comp = ACTIVE_COMPOSITIONS.get(teamKey);
+            if (comp != null && RaidConfig.ENABLE_WAVE_COMPOSITION.get()) {
+                // Account for reserved slots: subtract them so composition indexing
+                // starts from the first non-reserved slot.
+                int reserved = 0;
+                if (wave >= RaidConfig.WAVES.get() && RaidConfig.ENABLE_COMMANDER.get()) reserved += 1;
+                if (wave >= RaidConfig.WAVES.get()) reserved += 1; // ravager
+                if (wave >= 4 && RaidConfig.ENABLE_ILLUSIONERS.get()) reserved += 1;
+                int compIndex = index - reserved;
+                if (compIndex >= 0) recruitType = comp.roleAt(compIndex);
+            }
+        }
+
+        // Legacy fallback picker (still authoritative for commander slot and when composition is off/exhausted).
+        if (recruitType == null) {
+            if (wave >= RaidConfig.WAVES.get() && index == 0) recruitType = "patrol_leader";
+            else if (wave >= 4 && index % 9 == 1 && ForgeRegistries.ENTITY_TYPES.containsKey(
+                    new ResourceLocation("recruits", "siege_engineer"))) recruitType = "siege_engineer";
+            else if (wave >= 4 && index % 8 == 3) recruitType = "assassin";
+            else if (wave >= 3 && index % 7 == 0) recruitType = "captain";
+            else if ((index + wave) % 4 == 0) recruitType = "recruit_shieldman";
+            else if ((index + wave) % 3 == 0) recruitType = "bowman";
+            else if ((index + wave) % 2 == 0) recruitType = "crossbowman";
+            else recruitType = "recruit";
+        }
 
         EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("recruits", recruitType));
         Entity created = type == null ? null : type.create(level);
@@ -1965,6 +2010,8 @@ public final class RaidEvents {
                                    boolean victory, boolean reward, String message) {
         com.devfarinsky.factionraids.naval.NavalConvoy.forget(teamKey);
         com.devfarinsky.factionraids.naval.BridgeBuilder.forget(teamKey);
+        ACTIVE_COMPOSITIONS.remove(teamKey);
+        com.devfarinsky.factionraids.formations.FormationDirector.forget(teamKey);
         RaidSavedData.RaidState state = data.raids.remove(teamKey);
         RaidSavedData.Anchor anchor = data.anchors.get(teamKey);
         if (state != null && anchor != null) {

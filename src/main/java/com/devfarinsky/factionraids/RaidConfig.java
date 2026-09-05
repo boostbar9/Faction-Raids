@@ -81,6 +81,9 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ALLOWED_RAIDER_FACTIONS;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ALLOWED_CASUS_BELLI;
     public static final ForgeConfigSpec.BooleanValue NARRATIVE_IN_BOSS_BAR;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_WAVE_COMPOSITION;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_FORMATIONS;
+    public static final ForgeConfigSpec.BooleanValue ANNOUNCE_WAVE_FORMATION;
     public static final ForgeConfigSpec.BooleanValue ENABLE_GATE_BREACHING;
     public static final ForgeConfigSpec.IntValue WOODEN_BREACH_SECONDS;
     public static final ForgeConfigSpec.IntValue REINFORCED_BREACH_SECONDS;
@@ -260,6 +263,12 @@ public final class RaidConfig {
                 .defineListAllowEmpty("allowedCasusBelli", List.of(), o -> o instanceof String);
         NARRATIVE_IN_BOSS_BAR = b.comment("Show the raider faction epithet on the boss bar. Disable to keep the generic \"Faction Invasion\" title.")
                 .define("narrativeInBossBar", true);
+        ENABLE_WAVE_COMPOSITION = b.comment("Use progressive wave composition: early waves lean shieldman/bowman, later waves add captains, engineers and assassins. Disable to fall back to the classic index-based picker.")
+                .define("enableProgressiveWaveComposition", true);
+        ENABLE_FORMATIONS = b.comment("Command Recruits raiders into formations (line, square) while advancing on the objective. Requires the Villager Recruits mod's FormationUtils to be present.")
+                .define("enableRaiderFormations", true);
+        ANNOUNCE_WAVE_FORMATION = b.comment("Include the wave's formation label (e.g. 'Shield line', 'Command assault') in the wave announcement.")
+                .define("announceWaveFormation", true);
         ENABLE_GATE_BREACHING = b.comment("Allow tracked siege breachers to break doors, trapdoors, fence gates and fences blocking their advance.")
                 .define("enableRestorableGateBreaching", true);
         WOODEN_BREACH_SECONDS = b.comment("Approximate focused breach time for wooden defenses. Multiple nearby breachers accelerate it.")
