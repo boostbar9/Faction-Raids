@@ -219,6 +219,25 @@ public final class RaidEvents {
         return false;
     }
 
+    /**
+     * Give each player the Faction Raids guidebook once on first login.
+     * The gift is idempotent — marked with a player-NBT flag so it never
+     * duplicates on subsequent logins, dimension changes, or /kill respawns.
+     */
+    @SubscribeEvent
+    public static void onPlayerLoggedIn(net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
+        if (!RaidConfig.SPAWN_GUIDEBOOK_ON_JOIN.get()) return;
+        if (!(event.getEntity() instanceof ServerPlayer sp)) return;
+        net.minecraft.nbt.CompoundTag persistent = sp.getPersistentData()
+                .getCompound(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG);
+        if (persistent.getBoolean("FactionRaidsGuidebookGiven")) return;
+        net.minecraft.world.item.ItemStack book = new net.minecraft.world.item.ItemStack(
+                com.devfarinsky.factionraids.items.ModItems.GUIDEBOOK.get());
+        if (!sp.getInventory().add(book)) sp.drop(book, false);
+        persistent.putBoolean("FactionRaidsGuidebookGiven", true);
+        sp.getPersistentData().put(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG, persistent);
+    }
+
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
         RaidBossBars.shutdown();

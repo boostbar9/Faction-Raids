@@ -91,6 +91,7 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue ANNOUNCE_WAVE_FORMATION;
     public static final ForgeConfigSpec.BooleanValue ENABLE_LADDER_BUILDING;
     public static final ForgeConfigSpec.IntValue MAX_LADDERS_PER_RAID;
+    public static final ForgeConfigSpec.BooleanValue SPAWN_GUIDEBOOK_ON_JOIN;
     public static final ForgeConfigSpec.BooleanValue ENABLE_GATE_BREACHING;
     public static final ForgeConfigSpec.IntValue WOODEN_BREACH_SECONDS;
     public static final ForgeConfigSpec.IntValue REINFORCED_BREACH_SECONDS;
@@ -290,6 +291,8 @@ public final class RaidConfig {
                 .define("enableLadderBuilding", true);
         MAX_LADDERS_PER_RAID = b.comment("Maximum ladder columns a single raid can build. Each column is up to 7 blocks tall.")
                 .defineInRange("maxLaddersPerRaid", 6, 0, 32);
+        SPAWN_GUIDEBOOK_ON_JOIN = b.comment("Give each player a Faction Raids guidebook item on first login. Right-click the book to open the dashboard.")
+                .define("spawnGuidebookOnJoin", true);
         ENABLE_GATE_BREACHING = b.comment("Allow tracked siege breachers to break doors, trapdoors, fence gates and fences blocking their advance.")
                 .define("enableRestorableGateBreaching", true);
         WOODEN_BREACH_SECONDS = b.comment("Approximate focused breach time for wooden defenses. Multiple nearby breachers accelerate it.")
