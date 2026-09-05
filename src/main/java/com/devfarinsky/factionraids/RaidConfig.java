@@ -52,6 +52,14 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue USE_RECRUIT_INVADERS;
     public static final ForgeConfigSpec.BooleanValue BUILD_WAR_CAMPS;
     public static final ForgeConfigSpec.BooleanValue CLEANUP_WAR_CAMPS;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_AMPHIBIOUS_RAIDS;
+    public static final ForgeConfigSpec.IntValue NAVAL_STAGING_RADIUS;
+    public static final ForgeConfigSpec.IntValue NAVAL_MIN_WATER_BODY;
+    public static final ForgeConfigSpec.IntValue NAVAL_WAVE_SHARE_PERCENT;
+    public static final ForgeConfigSpec.IntValue NAVAL_BOAT_SPEED;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_BRIDGE_BUILDING;
+    public static final ForgeConfigSpec.IntValue MAX_BRIDGE_SPAN;
+    public static final ForgeConfigSpec.IntValue MAX_BRIDGES_PER_RAID;
     public static final ForgeConfigSpec.BooleanValue ENABLE_GATE_BREACHING;
     public static final ForgeConfigSpec.IntValue WOODEN_BREACH_SECONDS;
     public static final ForgeConfigSpec.IntValue REINFORCED_BREACH_SECONDS;
@@ -176,6 +184,22 @@ public final class RaidConfig {
                 .define("buildTemporaryWarCamps", true);
         CLEANUP_WAR_CAMPS = b.comment("Remove untouched temporary camp blocks when the invasion ends. Player-modified blocks are never removed.")
                 .define("cleanupTemporaryWarCamps", true);
+        ENABLE_AMPHIBIOUS_RAIDS = b.comment("Auto-detect water near the objective and stage part of each wave in boats when a large enough water body is found.")
+                .define("enableAmphibiousRaids", true);
+        NAVAL_STAGING_RADIUS = b.comment("How far from the objective to search for a naval staging point, in blocks.")
+                .defineInRange("navalStagingSearchRadius", 64, 16, 256);
+        NAVAL_MIN_WATER_BODY = b.comment("Minimum contiguous water blocks required to qualify as a naval staging point. Small puddles never trigger boat spawns.")
+                .defineInRange("navalMinimumWaterBody", 80, 20, 1000);
+        NAVAL_WAVE_SHARE_PERCENT = b.comment("Percentage of each wave that spawns in boats when a naval staging point is available. Remainder spawn on land as usual.")
+                .defineInRange("navalWaveSharePercent", 40, 0, 100);
+        NAVAL_BOAT_SPEED = b.comment("Steering speed for raider boats, as a percentage. 100 = one block per second in still water.")
+                .defineInRange("navalBoatSpeed", 10, 1, 100);
+        ENABLE_BRIDGE_BUILDING = b.comment("Let stalled raider groups drop a temporary planks bridge across narrow water spans they can't wade.")
+                .define("enableBridgeBuilding", true);
+        MAX_BRIDGE_SPAN = b.comment("Maximum water span (in blocks) the bridge builder will attempt to cross. Wider water is left for the naval convoy.")
+                .defineInRange("maxBridgeSpan", 8, 2, 24);
+        MAX_BRIDGES_PER_RAID = b.comment("Maximum bridge segments a single raid can build.")
+                .defineInRange("maxBridgesPerRaid", 4, 0, 32);
         ENABLE_GATE_BREACHING = b.comment("Allow tracked siege breachers to break doors, trapdoors, fence gates and fences blocking their advance.")
                 .define("enableRestorableGateBreaching", true);
         WOODEN_BREACH_SECONDS = b.comment("Approximate focused breach time for wooden defenses. Multiple nearby breachers accelerate it.")

@@ -202,6 +202,10 @@ public final class RaidSavedData extends SavedData {
         public int lastBreachWarningBand;
         public BlockPos campPos;
         public boolean campBuildAttempted;
+        /** Water-surface staging point when this raid has an amphibious component. Null otherwise. */
+        public BlockPos navalStagingPos;
+        /** Landing beach the naval convoy steers toward. Null when no naval staging. */
+        public BlockPos navalBeachPos;
         public final Map<Long, String> campBlocks = new LinkedHashMap<>();
         public final Map<Long, CompoundTag> breachedBlocks = new LinkedHashMap<>();
         public final Map<Long, Integer> blockBreachProgress = new HashMap<>();
@@ -247,6 +251,8 @@ public final class RaidSavedData extends SavedData {
             tag.putInt("BreachWarningBand", lastBreachWarningBand);
             if (campPos != null) tag.putLong("CampPosition", campPos.asLong());
             tag.putBoolean("CampBuildAttempted", campBuildAttempted);
+            if (navalStagingPos != null) tag.putLong("NavalStagingPos", navalStagingPos.asLong());
+            if (navalBeachPos != null) tag.putLong("NavalBeachPos", navalBeachPos.asLong());
             ListTag camp = new ListTag();
             campBlocks.forEach((position, block) -> {
                 CompoundTag entry = new CompoundTag();
@@ -316,6 +322,10 @@ public final class RaidSavedData extends SavedData {
             state.campPos = tag.contains("CampPosition", Tag.TAG_LONG) ?
                     BlockPos.of(tag.getLong("CampPosition")) : null;
             state.campBuildAttempted = tag.getBoolean("CampBuildAttempted");
+            state.navalStagingPos = tag.contains("NavalStagingPos", Tag.TAG_LONG) ?
+                    BlockPos.of(tag.getLong("NavalStagingPos")) : null;
+            state.navalBeachPos = tag.contains("NavalBeachPos", Tag.TAG_LONG) ?
+                    BlockPos.of(tag.getLong("NavalBeachPos")) : null;
             ListTag camp = tag.getList("CampBlocks", Tag.TAG_COMPOUND);
             for (int i = 0; i < camp.size(); i++) {
                 CompoundTag entry = camp.getCompound(i);
