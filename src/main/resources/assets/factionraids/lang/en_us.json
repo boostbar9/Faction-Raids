@@ -1,0 +1,6 @@
+{
+  "item.factionraids.guidebook": "Faction Raids Guidebook",
+  "item.factionraids.guidebook.tooltip.line1": "Right-click to open the raid dashboard",
+  "item.factionraids.guidebook.tooltip.line2": "Track waves, factions, and defense status",
+  "itemGroup.factionraids": "Faction Raids"
+}
