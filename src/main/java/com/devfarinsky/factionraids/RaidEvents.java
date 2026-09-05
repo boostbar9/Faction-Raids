@@ -1417,6 +1417,23 @@ public final class RaidEvents {
         else if (squadLeader) role = "captain";
         else role = "marksman";
         raider.getPersistentData().putString(RAID_ROLE_TAG, role);
+        // Mark this raider's unit id as discovered for the defending team.
+        // We use the codex id, which for commander is fixed and for everyone
+        // else is the entity type path (matches UnitCodex.Entry.id). This
+        // fires per spawn so a team that watches a wave form up learns the
+        // roster even before landing a hit — line-of-sight is enough.
+        try {
+            MinecraftServer server = raider.getServer();
+            if (server != null && state != null && state.teamKey != null) {
+                String codexId = codexIdFor(raider, role);
+                if (!codexId.isEmpty()) {
+                    markUnitDiscovered(RaidSavedData.get(server), state.teamKey, codexId);
+                }
+            }
+        } catch (Throwable ignored) {
+            // Discovery is a cosmetic dashboard feature — never let a bookkeeping
+            // failure break raider spawning.
+        }
 
         if ("breacher".equals(role)) {
             raider.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 20 * 60 * 60, 0, false, false));
@@ -2162,6 +2179,17 @@ public final class RaidEvents {
             if (emeralds > 0) winners.forEach(p -> giveEmeralds(p, emeralds));
             if (RaidConfig.VICTORY_LOOT_ENABLED.get()) winners.forEach(p -> giveVictoryLoot(server, p));
         }
+        // v2.12.0 Know Your Enemy — record this siege to the War Journal and
+        // mark the attacking faction as discovered. Unit discovery happens
+        // incrementally in RaidTickEvents (on damage/hit contact) so a team
+        // that fled the wall still learns "a Ravager showed up" as soon as
+        // they saw one, not only if they win.
+        if (state != null) {
+            recordWarJournal(server, data, teamKey, state, victory, eligibleVictory);
+            if (state.narrative != null) {
+                markFactionDiscovered(data, teamKey, state.narrative.factionId);
+            }
+        }
         ServerBossEvent bar = RaidBossBars.remove(teamKey);
         if (bar != null) bar.removeAllPlayers();
         long elapsedTicks = state == null || state.startedGameTime <= 0 ? 0 :
@@ -2294,7 +2322,9 @@ public final class RaidEvents {
                     0, RaidConfig.WAVES.get(), 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0,
                     0, "No gate under attack", 0, "Sleep at your base",
                     defaultEmeraldReward(), false,
-                    "", "", "", "", "", 0, "", "", 0, "No stronghold");
+                    "", "", "", "", "", 0, "", "", 0, "No stronghold",
+                    "", "", java.util.List.of(), java.util.List.of(),
+                    journalRowsFor(data, key));
         }
         RaidSavedData.RaidState state = data.raids.get(key);
         RaidSavedData.DefensePoint point = state == null ? anchor.primaryPoint() :
@@ -2310,6 +2340,7 @@ public final class RaidEvents {
             com.devfarinsky.factionraids.waves.WaveComposition preview =
                     com.devfarinsky.factionraids.waves.WaveComposer.compose(1, RaidConfig.WAVES.get(), firstWaveTotal);
             int score = computeDefenseScore(recruits, compat, firstWaveTotal, 1);
+            String explainer = buildDefenseExplainer(recruits, compat, firstWaveTotal, 1);
             return new DashboardSnapshot(anchor.teamDisplay(), true, false,
                     point.dimension() + " • " + formatPos(point.pos()), 0, RaidConfig.WAVES.get(),
                     0, 0, 0, 0, false, 0, recruits, compat.workers(), compat.ships(), compat.siegeWeapons(),
@@ -2318,7 +2349,10 @@ public final class RaidEvents {
                     "", "", "", "", "", 0,
                     preview.label.isEmpty() ? "Wave 1" : "Wave 1 — " + preview.label,
                     formatRoleCounts(preview),
-                    score, defenseScoreLabel(score));
+                    score, defenseScoreLabel(score),
+                    "", explainer,
+                    discoveredUnitsFor(data, key), discoveredFactionsFor(data, key),
+                    journalRowsFor(data, key));
         }
         int occupation = state.captureTicks * 100 /
                 Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20);
@@ -2338,6 +2372,9 @@ public final class RaidEvents {
         String cbId = state.narrative != null ? state.narrative.casusBelliId : "";
         String opening = state.narrative != null && state.narrative.opening != null ? state.narrative.opening : "";
         String chant = state.narrative != null && state.narrative.chant != null ? state.narrative.chant : "";
+        String threat = buildThreatBreakdown(level, state);
+        String explainer = buildDefenseExplainer(recruits, compat,
+                state.raiders.size() + state.pendingWaveSpawns, state.wave);
         return new DashboardSnapshot(anchor.teamDisplay(), true, true,
                 point.dimension() + " • " + formatPos(point.pos()) +
                         (state.campPos == null ? " • camp unavailable" : " • camp " + formatPos(state.campPos)),
@@ -2350,7 +2387,56 @@ public final class RaidEvents {
                 gateBreachPercent(state), "Siege active",
                 guaranteedEmeraldReward(state), state.rewardEligible,
                 facId, cbId, opening, chant, campDir, campDist,
-                nextLabel, nextRoles, score, defenseScoreLabel(score));
+                nextLabel, nextRoles, score, defenseScoreLabel(score),
+                threat, explainer,
+                discoveredUnitsFor(data, key), discoveredFactionsFor(data, key),
+                journalRowsFor(data, key));
+    }
+
+    /**
+     * Human-readable breakdown of the defense score numerator + denominator.
+     * Example: "Defense 5.5 (4 Recruits + 2 workers) vs 12 attackers x1.24 = 46/100".
+     * Rendered on the Overview tab so players can see why the score is what it
+     * is and what specifically to add to raise it.
+     */
+    private static String buildDefenseExplainer(int alliedRecruits,
+                                                OptionalCompatBridge.CompatSnapshot compat,
+                                                int incomingAttackers, int wave) {
+        double defense = alliedRecruits + compat.workers() * 0.5D
+                + compat.ships() * 0.75D + compat.siegeWeapons() * 1.25D;
+        double waveMultiplier = 1.0D + Math.max(0, wave - 1) * 0.12D;
+        double threat = Math.max(1.0D, incomingAttackers * waveMultiplier);
+        // Compose the pieces that actually contributed; skip zero terms so the
+        // string stays short and honest.
+        StringBuilder parts = new StringBuilder();
+        parts.append(alliedRecruits).append(" Recruits");
+        if (compat.workers() > 0) parts.append(" + ").append(compat.workers()).append(" Workers×0.5");
+        if (compat.ships() > 0) parts.append(" + ").append(compat.ships()).append(" ships×0.75");
+        if (compat.siegeWeapons() > 0) parts.append(" + ").append(compat.siegeWeapons()).append(" engines×1.25");
+        return String.format(java.util.Locale.ROOT,
+                "Defense %.1f (%s) vs %d attackers ×%.2f = threat %.1f",
+                defense, parts.toString(), incomingAttackers, waveMultiplier, threat);
+    }
+
+    private static java.util.List<String> discoveredUnitsFor(RaidSavedData data, String teamKey) {
+        RaidSavedData.Discovery d = data.discoveries.get(teamKey);
+        return d == null ? java.util.List.of() : java.util.List.copyOf(d.units);
+    }
+
+    private static java.util.List<String> discoveredFactionsFor(RaidSavedData data, String teamKey) {
+        RaidSavedData.Discovery d = data.discoveries.get(teamKey);
+        return d == null ? java.util.List.of() : java.util.List.copyOf(d.factions);
+    }
+
+    private static java.util.List<JournalRow> journalRowsFor(RaidSavedData data, String teamKey) {
+        RaidSavedData.WarJournal j = data.journals.get(teamKey);
+        if (j == null || j.entries.isEmpty()) return java.util.List.of();
+        java.util.List<JournalRow> rows = new java.util.ArrayList<>(j.entries.size());
+        for (RaidSavedData.WarJournal.Entry e : j.entries) {
+            rows.add(new JournalRow(e.timestamp(), e.factionId(), e.factionName(),
+                    e.casusBelliId(), e.wavesReached(), e.totalWaves(), e.outcome(), e.emeraldPayout()));
+        }
+        return rows;
     }
 
     /**
@@ -2394,6 +2480,156 @@ public final class RaidEvents {
         return sb.toString();
     }
 
+    /**
+     * Append a completed-siege entry to this team's War Journal. Called once
+     * from {@link #finishRaid} on victory or defeat. The journal is intentionally
+     * bounded ({@link RaidSavedData.WarJournal#MAX_ENTRIES}) so it stays cheap
+     * to serialize into the dashboard packet and cheap to render in-book.
+     */
+    private static void recordWarJournal(MinecraftServer server, RaidSavedData data, String teamKey,
+                                         RaidSavedData.RaidState state, boolean victory,
+                                         boolean eligibleVictory) {
+        RaidSavedData.WarJournal journal = data.journals.computeIfAbsent(teamKey,
+                RaidSavedData.WarJournal::new);
+        String factionId = state.narrative != null ? state.narrative.factionId : "";
+        String factionName = state.narrative != null ? state.narrative.factionName : "Unknown raiders";
+        String casusBelli = state.narrative != null ? state.narrative.casusBelliId : "";
+        int payout = eligibleVictory ? guaranteedEmeraldReward(state) : 0;
+        // Outcome is a short machine-readable tag so the client can style it
+        // (green vs. red vs. yellow) without brittle string matching.
+        String outcome = victory ? (eligibleVictory ? "victory" : "victory_practice") : "defeat";
+        journal.record(new RaidSavedData.WarJournal.Entry(
+                server.overworld().getGameTime(), factionId, factionName, casusBelli,
+                state.wave, RaidConfig.WAVES.get(), outcome, payout));
+        data.setDirty();
+    }
+
+    /**
+     * Mark a faction as discovered for a team. Cheap idempotent operation
+     * safe to call from any event handler. Returns true if newly discovered
+     * (currently unused, but reserved for a future "Faction discovered!"
+     * toast announcement).
+     */
+    private static boolean markFactionDiscovered(RaidSavedData data, String teamKey, String factionId) {
+        if (factionId == null || factionId.isEmpty()) return false;
+        RaidSavedData.Discovery d = data.discoveries.computeIfAbsent(teamKey, RaidSavedData.Discovery::new);
+        if (d.addFaction(factionId)) {
+            data.setDirty();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Mark a unit type as discovered for a team. Called from tick logic when
+     * a raider is spawned or damages/damaged by a team member. Idempotent.
+     */
+    static boolean markUnitDiscovered(RaidSavedData data, String teamKey, String unitId) {
+        if (unitId == null || unitId.isEmpty()) return false;
+        RaidSavedData.Discovery d = data.discoveries.computeIfAbsent(teamKey, RaidSavedData.Discovery::new);
+        if (d.addUnit(unitId)) {
+            data.setDirty();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Walks the live raider roster and returns a human-friendly breakdown
+     * of what is currently deployed — e.g. "4 Shieldman • 3 Bowman • 2 Captain".
+     *
+     * <p>Groups raiders by entity type first, then falls back to their
+     * assigned {@link ModConstants.Tags#RAID_ROLE} tag when the type is a
+     * generic vanilla monster. This is the exact data the client needs to
+     * tell a player "a Ravager is inbound" instead of just "12 deployed."
+     *
+     * <p>Entities that have unloaded (chunk boundary, world unload, or
+     * respawn edge cases) are silently skipped. The returned string caps
+     * at the top 6 groups + a "+N more" suffix so the client string stays
+     * short enough for the Overview panel.
+     */
+    private static String buildThreatBreakdown(ServerLevel level, RaidSavedData.RaidState state) {
+        if (level == null || state == null || state.raiders.isEmpty()) return "";
+        java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+        for (java.util.UUID id : state.raiders) {
+            Entity entity = level.getEntity(id);
+            if (!(entity instanceof Mob mob)) continue;
+            String label = threatLabelFor(mob);
+            counts.merge(label, 1, Integer::sum);
+        }
+        if (counts.isEmpty()) return "";
+        // Sort by count descending so the most numerous threat leads.
+        java.util.List<java.util.Map.Entry<String, Integer>> sorted = new java.util.ArrayList<>(counts.entrySet());
+        sorted.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
+        int cap = 6;
+        StringBuilder sb = new StringBuilder();
+        int rendered = 0;
+        int overflow = 0;
+        for (java.util.Map.Entry<String, Integer> e : sorted) {
+            if (rendered >= cap) { overflow += e.getValue(); continue; }
+            if (rendered > 0) sb.append(" • ");
+            sb.append(e.getValue()).append(" ").append(e.getKey());
+            rendered++;
+        }
+        if (overflow > 0) sb.append(" • +").append(overflow).append(" more");
+        return sb.toString();
+    }
+
+    /**
+     * Maps a live raider entity + role tag to the client-side
+     * {@code UnitCodex.Entry.id} that represents it. Returns "" when nothing
+     * matches (e.g. a random modded mob a config includes that has no codex
+     * page). Kept in sync with {@code client.codex.UnitCodex.ENTRIES}.
+     */
+    private static String codexIdFor(Mob raider, String role) {
+        if ("commander".equals(role)) return "commander";
+        ResourceLocation id = ForgeRegistries.ENTITY_TYPES.getKey(raider.getType());
+        if (id == null) return "";
+        return switch (id.toString()) {
+            case "minecraft:pillager" -> "bowman";
+            case "minecraft:vindicator" -> "shieldman";
+            case "minecraft:ravager" -> "ravager";
+            case "minecraft:illusioner", "minecraft:evoker" -> "illusioner";
+            case "recruits:recruit", "recruits:recruit_shieldman" -> "shieldman";
+            case "recruits:bowman" -> "bowman";
+            case "recruits:crossbowman" -> "crossbowman";
+            case "recruits:captain" -> "captain";
+            case "recruits:patrol_leader" -> "patrol_leader";
+            case "recruits:assassin" -> "assassin";
+            case "recruits:siege_engineer" -> "siege_engineer";
+            default -> "";
+        };
+    }
+
+    /**
+     * Turns one live raider into a short display name suitable for the
+     * Overview threat panel. Prefers the entity's own type name (Ravager,
+     * Illusioner) over the abstract combat role tag. For "recruits:*"
+     * modded entities we strip the namespace and prettify.
+     */
+    private static String threatLabelFor(Mob mob) {
+        ResourceLocation id = ForgeRegistries.ENTITY_TYPES.getKey(mob.getType());
+        if (id != null) {
+            String path = id.getPath();
+            // Commander boss: read from role tag; the entity is otherwise a
+            // generic Vindicator/Captain.
+            String role = mob.getPersistentData().getString(RAID_ROLE_TAG);
+            if ("commander".equals(role)) return "Commander";
+            // Well-known vanilla and modded raiders get hand-picked names.
+            return switch (id.toString()) {
+                case "minecraft:ravager" -> "Ravager";
+                case "minecraft:illusioner" -> "Illusioner";
+                case "minecraft:evoker" -> "Evoker";
+                case "minecraft:witch" -> "Witch";
+                case "minecraft:vindicator" -> "Vindicator";
+                case "minecraft:pillager" -> "Pillager";
+                default -> prettyRole(path);
+            };
+        }
+        String role = mob.getPersistentData().getString(RAID_ROLE_TAG);
+        return role.isEmpty() ? "Raider" : prettyRole(role);
+    }
+
     private static String prettyRole(String role) {
         if (role == null || role.isEmpty()) return "raider";
         // "recruit_shieldman" -> "Shieldman"
@@ -2425,14 +2661,36 @@ public final class RaidEvents {
                              String factionId, String casusBelliId, String factionOpening,
                              String factionChant, String campDirection, int campDistance,
                              String nextWaveLabel, String nextWaveComposition,
-                             int defenseScore, String defenseScoreLabel) {
+                             int defenseScore, String defenseScoreLabel,
+                             // v2.12.0 Know Your Enemy additions:
+                             /** "4 Shieldman • 3 Bowman • 2 Captain" — what is deployed right now. */
+                             String threatBreakdown,
+                             /** Defense score explainer: "Recruits 4 + Workers 1 + Assets 2 = 5.5 defense" */
+                             String defenseExplainer,
+                             /** Sorted list of unit codex ids discovered by this team. */
+                             java.util.List<String> discoveredUnits,
+                             /** Sorted list of faction ids discovered by this team. */
+                             java.util.List<String> discoveredFactions,
+                             /** Newest-first list of War Journal entries. */
+                             java.util.List<JournalRow> warJournal) {
         static DashboardSnapshot unavailable() {
             return new DashboardSnapshot("Unavailable", false, false, "Server unavailable", 0, 0,
                     0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0,
                     0, "Unavailable", 0, "Unavailable", 0, false,
-                    "", "", "", "", "", 0, "", "", 0, "Unknown");
+                    "", "", "", "", "", 0, "", "", 0, "Unknown",
+                    "", "", java.util.List.of(), java.util.List.of(), java.util.List.of());
         }
     }
+
+    /**
+     * Wire-friendly projection of {@link RaidSavedData.WarJournal.Entry}.
+     * The client renders this directly; kept as a compact record so encode/decode
+     * stays trivial and the dashboard packet size grows linearly with journal
+     * size, capped at {@link RaidSavedData.WarJournal#MAX_ENTRIES}.
+     */
+    public record JournalRow(long timestamp, String factionId, String factionName,
+                             String casusBelliId, int wavesReached, int totalWaves,
+                             String outcome, int emeraldPayout) {}
 
     private static List<ServerPlayer> onlineMembers(MinecraftServer server, String key) {
         List<ServerPlayer> result = new ArrayList<>();
