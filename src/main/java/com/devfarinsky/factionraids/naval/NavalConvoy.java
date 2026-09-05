@@ -5,7 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.vehicle.Boat;
+
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -18,7 +18,7 @@ import java.util.UUID;
 /**
  * Server-side steering for raider boats.
  *
- * Vanilla {@link Boat} is normally piloted by a {@code LocalPlayer}'s WASD
+ * Vanilla {@code Boat} is normally piloted by a {@code LocalPlayer}'s WASD
  * input. On the server, with a raider as passenger, the boat is inert. We
  * make up the difference by nudging its velocity toward the beach point each
  * tick until either the boat is destroyed or the passenger dismounts onto
@@ -49,8 +49,8 @@ public final class NavalConvoy {
      * Register a boat we just spawned with the convoy so it will be steered
      * toward {@code beach} on every subsequent {@link #tick} for this raid.
      */
-    public static void enlist(String teamKey, Boat boat, BlockPos beach) {
-        TARGETS.computeIfAbsent(teamKey, k -> new HashMap<>()).put(boat.getUUID(), beach);
+    public static void enlist(String teamKey, Entity vessel, BlockPos beach) {
+        TARGETS.computeIfAbsent(teamKey, k -> new HashMap<>()).put(vessel.getUUID(), beach);
     }
 
     /**
@@ -66,8 +66,8 @@ public final class NavalConvoy {
         Iterator<Map.Entry<UUID, BlockPos>> it = boats.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<UUID, BlockPos> entry = it.next();
-            Entity entity = level.getEntity(entry.getKey());
-            if (!(entity instanceof Boat boat) || !boat.isAlive() || boat.isRemoved()) {
+            Entity boat = level.getEntity(entry.getKey());
+            if (boat == null || !boat.isAlive() || boat.isRemoved()) {
                 it.remove();
                 continue;
             }
@@ -79,16 +79,23 @@ public final class NavalConvoy {
             }
             BlockPos beach = entry.getValue();
             Vec3 boatPos = boat.position();
+            // Vessels that carry multiple raiders (Small Ships warships) are
+            // treated identically to a vanilla boat here — same steering, same
+            // beach behavior. The rest of this loop is unchanged.
             double dx = (beach.getX() + 0.5) - boatPos.x;
             double dz = (beach.getZ() + 0.5) - boatPos.z;
             double distSq = dx * dx + dz * dz;
 
             // Beached: dismount the passenger onto land so ground AI kicks in.
             if (distSq < 4.0) {
-                Entity passenger = boat.getFirstPassenger();
-                if (passenger instanceof Mob mob) {
+                // Dismount every passenger so ground AI kicks in. A vanilla
+                // boat has 1 passenger, but Small Ships vessels can carry a
+                // full crew that all need to disembark.
+                for (Entity passenger : new java.util.ArrayList<>(boat.getPassengers())) {
                     passenger.stopRiding();
-                    mob.teleportTo(beach.getX() + 0.5, beach.getY(), beach.getZ() + 0.5);
+                    if (passenger instanceof Mob mob) {
+                        mob.teleportTo(beach.getX() + 0.5, beach.getY(), beach.getZ() + 0.5);
+                    }
                 }
                 boat.discard();
                 it.remove();
@@ -130,7 +137,7 @@ public final class NavalConvoy {
      * by defender-attribution code to properly credit "sank a raider boat".
      */
     public static boolean isRaiderBoat(String teamKey, Entity entity) {
-        if (!(entity instanceof Boat)) return false;
+        if (entity == null) return false;
         Map<UUID, BlockPos> boats = TARGETS.get(teamKey);
         return boats != null && boats.containsKey(entity.getUUID());
     }
