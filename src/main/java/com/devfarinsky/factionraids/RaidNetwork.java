@@ -112,6 +112,13 @@ public final class RaidNetwork {
                 buffer.writeUtf(row.outcome());
                 buffer.writeVarInt(row.emeraldPayout());
             }
+            // v2.28.0 GUI-honesty additions:
+            buffer.writeBoolean(s.claimLinked());
+            buffer.writeUtf(s.claimName());
+            buffer.writeBoolean(s.recruitsClaimsBridgeReady());
+            buffer.writeBoolean(s.workersBridgeReady());
+            buffer.writeBoolean(s.smallShipsBridgeReady());
+            buffer.writeBoolean(s.siegeWeaponsBridgeReady());
         }
 
         private static DashboardSync decode(FriendlyByteBuf buffer) {
@@ -129,7 +136,11 @@ public final class RaidNetwork {
                     // v2.12.0 Know Your Enemy additions:
                     buffer.readUtf(), buffer.readUtf(),
                     readStringList(buffer), readStringList(buffer),
-                    readJournalRows(buffer)));
+                    readJournalRows(buffer),
+                    // v2.28.0 GUI-honesty additions:
+                    buffer.readBoolean(), buffer.readUtf(),
+                    buffer.readBoolean(), buffer.readBoolean(),
+                    buffer.readBoolean(), buffer.readBoolean()));
         }
 
         private static java.util.List<String> readStringList(FriendlyByteBuf buffer) {

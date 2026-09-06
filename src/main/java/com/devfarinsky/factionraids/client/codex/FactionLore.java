@@ -27,34 +27,41 @@ public final class FactionLore {
     private static final Map<String, List<String>> LORE = new LinkedHashMap<>();
 
     static {
+        // v2.28.0 rewrite: pre-v2.28 lore promised faction-specific mechanics
+        // (drowning crews, chant auras, morale collapse) that no code path
+        // ever implemented. Each faction now describes real behavior only:
+        // approach direction, unit mix expectations, and tactics that work
+        // with the raid systems the mod actually ships.
         register("blackbay_reavers", List.of(
-                "Coastal raiders. They arrive by ship, favouring beach",
-                "landings over overland marches. They will pillage chests",
-                "before killing you.",
+                "Coastal raiders. Naval staging detection is more",
+                "likely to trigger against them \u2014 expect boat spawns",
+                "and beach landings when your stronghold is near open",
+                "water.",
                 "",
-                "Tactic: scuttle their ships \u2014 the crew cannot swim in",
-                "heavy armour and drown outside their landing beach."));
+                "Tactic: shore denial. A two-block wall in the beach",
+                "shallows turns their landing into a killing ground."));
         register("hollowfang_clan", List.of(
-                "Highland warband. They hold grudges over stolen ground",
-                "and will return to the same stronghold repeatedly until",
-                "the grudge is settled.",
+                "Highland warband. Aggressive melee mix with the",
+                "standard breacher push toward gates.",
                 "",
-                "Tactic: killing the Faction Commander grants extra",
-                "emeralds when breach was avoided \u2014 hold your walls."));
+                "Tactic: v2.28.0 bonus applies here \u2014 killing the",
+                "Faction Commander with your perimeter never breached",
+                "pays extra emeralds. Hold your walls."));
         register("emberchant_zealots", List.of(
-                "Ash-Prophets. They chant during assaults, and the chant",
-                "acts as a combat buff for their side. Their priests are",
-                "the source of the aura.",
+                "Ash-Prophets. Heavier illusioner presence on final",
+                "waves \u2014 warcaster role tag more common.",
                 "",
-                "Tactic: silence the priest units first. Their reliquary",
-                "drops carry rare enchantment books on victory."));
+                "Tactic: melee through illusioner clones (they die on",
+                "one hit) before they thin out your arrow supply. Only",
+                "the real illusioner takes damage."));
         register("crownfall_exiles", List.of(
-                "Ruined nobility. They fight in banner formations and",
-                "treat their captain as a monarch \u2014 kill the captain",
-                "and morale shatters across the entire wave.",
+                "Ruined nobility. Captain-heavy composition \u2014",
+                "more Captain-aura pulses per push than any other",
+                "faction.",
                 "",
-                "Tactic: they drop coin more reliably than any other",
-                "faction. Prioritize captured banners for extra loot."));
+                "Tactic: prioritize captains and patrol leaders on",
+                "sight. Cutting the aura source is a bigger DPS swing",
+                "against Crownfall than against any other faction."));
         register("wilds_marauders", List.of(
                 "Generic raider fallback \u2014 no specific culture, no",
                 "specific grudge. They show up when no other faction",

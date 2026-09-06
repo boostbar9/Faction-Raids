@@ -11,6 +11,15 @@ import java.util.List;
  * server disables specific units via config the codex still lists them; the
  * lore doesn't change based on config.
  *
+ * <p>v2.28.0 rewrite: every entry was audited against the actual role
+ * assignment code in {@code RaidEvents.assignRole()} and the spawn
+ * distribution in {@code RaidEvents.chooseRecruitType()}. Fictional
+ * behaviors (assassin "skips defenders", engineer "builds engines on the
+ * field", ravager "breaks unreinforced blocks", illusioner "casts
+ * blindness") were removed; the remaining copy describes only what the
+ * mod actually does today. The Captain aura is a real v2.28.0 mechanic
+ * (see {@code RaidEvents.applyCaptainAuraTick}).
+ *
  * <p>All content here is authored to be helpful in a real fight — the player
  * should be able to read one entry mid-siege and immediately know what to do
  * against the incoming unit. Keep prose tight; every line has to earn its slot.
@@ -41,45 +50,45 @@ public final class UnitCodex {
                     "Crossbow bolts, occasional emeralds. Rare crossbow drop.",
                     "Wave 2+"),
             new Entry("captain", "Recruit Captain",
-                    "Elite melee with a squad-buff aura.",
+                    "Elite melee that buffs nearby raiders.",
                     "Health: high  \u2022  Damage: high  \u2022  Range: melee",
-                    "Nearby raiders hit slightly harder and take slightly less damage.",
-                    "Kill captains first when you see them. Their aura evaporates on death.",
+                    "Every second, raiders within 8 blocks of a captain gain a short Strength I pulse. The aura ends the moment the captain dies.",
+                    "Kill captains first. Their aura is your biggest damage swing per kill \u2014 crossbow bolts from cover work well because captains push forward.",
                     "Iron gear, emeralds, occasional enchanted sword.",
                     "Wave 2+"),
             new Entry("assassin", "Assassin",
-                    "Fast infiltrator that ignores your walls.",
+                    "Fast melee breacher with light armor.",
                     "Health: low  \u2022  Damage: high  \u2022  Range: melee",
-                    "Sprints toward the objective; skips defenders where possible.",
-                    "Post a defender inside your stronghold, not just on the wall. Assassins are what kill unguarded respawn anchors.",
+                    "Tagged as a breacher \u2014 pushes hard toward the objective and swings at gates and doors on the way.",
+                    "Focus early with ranged fire before they close. Assassins hit hard but fold fast if you catch them in the open.",
                     "Occasional emeralds, rare enchanted weapon.",
                     "Wave 3+"),
             new Entry("siege_engineer", "Siege Engineer",
-                    "Builds and repairs siege engines mid-fight.",
-                    "Health: medium  \u2022  Damage: low  \u2022  Range: melee",
-                    "Turns raw wood into siege engines. Priority target if you want to prevent breach.",
-                    "Snipe from a distance. Do not let one reach a stalled siege engine.",
+                    "Breacher class from the Recruits mod. Ranged threat.",
+                    "Health: medium  \u2022  Damage: medium  \u2022  Range: melee + tools",
+                    "Tagged as a breacher \u2014 pushes gates and doors alongside dedicated breachers.",
+                    "Priority target behind the front line \u2014 taking one out slows the physical breach.",
                     "Iron ingots, occasional TNT, redstone.",
                     "Wave 3+"),
             new Entry("patrol_leader", "Patrol Leader",
-                    "Mid-tier officer. Coordinates flanks.",
+                    "Mid-tier officer. Tagged as a captain in-mod.",
                     "Health: high  \u2022  Damage: high  \u2022  Range: melee",
-                    "Redirects nearby squadmates to gaps in your defense.",
-                    "Treat like a mini-captain. Kill early to fragment the wave.",
+                    "Shares the captain role tag \u2014 also emits the Captain aura. Two patrol leaders in one push is a real damage spike.",
+                    "Treat like any captain: kill first, prevent the buff from stacking with a nearby captain.",
                     "Iron gear, emeralds.",
                     "Wave 3+"),
             new Entry("ravager", "Ravager Beast",
-                    "Wall-breaker. One per final wave.",
+                    "Vanilla ravager. Charges the front line. One per final wave.",
                     "Health: very high  \u2022  Damage: very high  \u2022  Range: melee + charge",
-                    "Charges through fences and breaks unreinforced blocks.",
-                    "Kite in circles \u2014 ravagers turn slowly. Use elevation, drop distance is fatal.",
+                    "Vanilla ravager behavior: tramples crops, breaks leaves, and stunlocks defenders it charges into. It does NOT break stone or fences \u2014 it just walks through the wave gate the raid opens.",
+                    "Kite in circles \u2014 ravagers turn slowly. Use elevation; a two-block ledge is enough to farm them safely.",
                     "Saddle (occasional), emeralds, hide.",
                     "Final wave"),
             new Entry("illusioner", "Illusioner",
-                    "Spawns duplicates that block your shots.",
+                    "Vanilla illusioner. Spawns visual duplicates.",
                     "Health: low  \u2022  Damage: medium  \u2022  Range: 8 blocks",
-                    "Blindness spell wastes your arrows on illusions.",
-                    "Rush them in melee \u2014 duplicates die to a single hit and the real illusioner is the one that bleeds.",
+                    "Vanilla illusioner behavior: fires arrows and periodically spawns four visual clones. The clones do not deal damage; the real one is the one that takes damage.",
+                    "Rush in melee \u2014 clones disappear on hit, the real illusioner is the one that bleeds. Tagged as a warcaster in the role labels.",
                     "Emeralds, occasional totem, rare enchanted book.",
                     "Wave 4+"),
             new Entry("commander", "Faction Commander",
