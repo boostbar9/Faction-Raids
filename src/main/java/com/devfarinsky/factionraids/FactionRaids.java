@@ -20,5 +20,9 @@ public final class FactionRaids {
         ModBannerPatterns.register(modBus);
         RaidNetwork.init();
         MinecraftForge.EVENT_BUS.register(RaidEvents.class);
+        // v2.30.0: install the Bridge Sieges listener. Bootstrap is deferred
+        // to ServerStartedEvent inside the bridge itself so Recruits'
+        // class-loading is complete before we probe for SiegeEvent.Start.
+        com.devfarinsky.factionraids.compat.RecruitsSiegeBridge.init();
     }
 }

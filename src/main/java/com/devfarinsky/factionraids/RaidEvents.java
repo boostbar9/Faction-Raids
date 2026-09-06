@@ -1198,6 +1198,86 @@ public final class RaidEvents {
         data.setDirty();
     }
 
+    /**
+     * v2.30.0 Bridge Sieges (Path A) public entry point.
+     *
+     * <p>Called by {@code RecruitsSiegeBridge} when Recruits fires
+     * {@code SiegeEvent.Start} on a claim whose owner faction id matches a
+     * Faction Raids anchor's teamKey. Spawns a raid using the anchor's own
+     * defense point closest to the claim center (falls back to any eligible
+     * point). Idempotent: returns {@code false} without side effects when</p>
+     * <ul>
+     *   <li>No anchor exists for the given team key (Recruits faction not
+     *       registered as a Faction Raids team).</li>
+     *   <li>The team already has an active raid (dedupe).</li>
+     *   <li>The server has reached its configured concurrent raid limit.</li>
+     *   <li>The team has no online members near any defense point (guards
+     *       against ambient sieges on empty claims triggering pointless raids).</li>
+     * </ul>
+     *
+     * <p>Called from an off-tick Forge event handler, so all mutation goes
+     * through the same {@code data.setDirty()}-guarded pipeline as the
+     * regular tick trigger. Runs synchronously on the server thread because
+     * Recruits fires SiegeEvent.Start on the server thread.</p>
+     *
+     * @param level        the world where the siege was declared
+     * @param teamKey      Recruits claim owner faction string id (matches anchor teamKey)
+     * @param claimCenter  the claim's center chunk (used to pick the closest defense point)
+     * @return {@code true} when a raid was actually scheduled
+     */
+    public static boolean tryTriggerRaidForTeam(net.minecraft.server.level.ServerLevel level,
+                                                String teamKey,
+                                                net.minecraft.world.level.ChunkPos claimCenter) {
+        if (level == null || teamKey == null || teamKey.isBlank()) return false;
+        MinecraftServer server = level.getServer();
+        if (server == null) return false;
+        RaidSavedData data = RaidSavedData.get(server);
+        // Dedupe: FR raid already in flight for this team.
+        if (data.raids.containsKey(teamKey)) return false;
+        RaidSavedData.Anchor anchor = data.anchors.get(teamKey);
+        // No matching FR anchor for this Recruits faction — nothing to raid.
+        if (anchor == null) return false;
+        // Online-members gate. An ambient siege on an empty claim shouldn't
+        // spawn a raid nobody will play.
+        List<ServerPlayer> members = onlineMembers(server, teamKey);
+        if (members.isEmpty()) return false;
+        // Pick the anchor defense point closest to the claim center. This
+        // usually places the raid right where the Recruits army already is.
+        RaidSavedData.DefensePoint point = pickPointNearClaimCenter(anchor, claimCenter);
+        if (point == null) {
+            // Fall back to normal auto-selection when the geometry pick fails.
+            point = selectAutomaticPoint(server, anchor, members);
+        }
+        if (point == null) return false;
+        boolean ok = beginRaid(server, data, anchor, point,
+                RaidConfig.MANUAL_RAIDS_GRANT_REWARDS.get());
+        if (ok) data.setDirty();
+        return ok;
+    }
+
+    /**
+     * Find the anchor's defense point whose block-position chunk is nearest
+     * to {@code claimCenter}. Returns null when the anchor has no defense
+     * points at all.
+     */
+    private static RaidSavedData.DefensePoint pickPointNearClaimCenter(RaidSavedData.Anchor anchor,
+                                                                        net.minecraft.world.level.ChunkPos claimCenter) {
+        if (anchor == null || claimCenter == null) return null;
+        RaidSavedData.DefensePoint best = null;
+        long bestSq = Long.MAX_VALUE;
+        for (RaidSavedData.DefensePoint p : anchor.defensePoints().values()) {
+            net.minecraft.world.level.ChunkPos pc = new net.minecraft.world.level.ChunkPos(p.pos());
+            long dx = pc.x - claimCenter.x;
+            long dz = pc.z - claimCenter.z;
+            long sq = dx * dx + dz * dz;
+            if (sq < bestSq) {
+                bestSq = sq;
+                best = p;
+            }
+        }
+        return best;
+    }
+
     private static boolean beginRaid(MinecraftServer server, RaidSavedData data, RaidSavedData.Anchor anchor,
                                      RaidSavedData.DefensePoint point, boolean rewardEligible) {
         if (data.raids.size() >= RaidConfig.MAX_CONCURRENT_RAIDS.get()) return false;
