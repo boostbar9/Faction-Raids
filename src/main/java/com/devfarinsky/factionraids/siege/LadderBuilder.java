@@ -75,11 +75,17 @@ public final class LadderBuilder {
         long now = level.getGameTime();
         Long last = LAST_ATTEMPT.get(state.teamKey);
         if (last != null && now - last < ATTEMPT_INTERVAL_TICKS) return false;
-        LAST_ATTEMPT.put(state.teamKey, now);
 
         Vec3 objVec = Vec3.atCenterOf(objective);
         int stuck = countStuckRaiders(level, state, objVec);
         if (stuck < MIN_STUCK_RAIDERS) return false;
+
+        // SG19 fix: only burn the attempt-interval clock once we've cleared
+        // the stuck-raider threshold. Prior code updated LAST_ATTEMPT before
+        // the stuck check, so ticks where no raiders were stuck still consumed
+        // the 20s cooldown -- delaying the ladder response by up to another
+        // full interval when raiders became stuck immediately afterward.
+        LAST_ATTEMPT.put(state.teamKey, now);
 
         Vec3 centroid = centroidOf(level, state);
         Vec3 rayDir = objVec.subtract(centroid).normalize();

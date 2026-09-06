@@ -1,5 +1,6 @@
 package com.devfarinsky.factionraids.siege;
 
+import com.devfarinsky.factionraids.ModConstants;
 import com.devfarinsky.factionraids.RaidConfig;
 import com.devfarinsky.factionraids.RaidSavedData;
 import net.minecraft.core.BlockPos;
@@ -98,9 +99,16 @@ public final class SiegeConstruction {
         if (vehicle.isEmpty()) return false;
         state.siegeEngines.put(vehicle.get().getUUID(), type.name());
         // Assign a siege engineer for ranged engines when Recruits is present.
+        // SG14 fix: also tag + register the engineer as a raid participant so
+        // raid-end cleanup, straggler tracking, and wave-completion accounting
+        // see them. Prior to this fix the engineer spawned outside the raid
+        // roster and persisted as a wandering hostile mob after raid end when
+        // both siegeweapons + recruits mods were installed.
         if (type.ranged() && SiegeIntegration.isSiegeEngineerAvailable()) {
             SiegeIntegration.spawnSiegeEngineer(level, deploy).ifPresent(engineer -> {
                 engineer.getPersistentData().putString(SiegeDeployment.TEAM_TAG, teamKey);
+                engineer.getPersistentData().putString(ModConstants.Tags.RAID_TEAM, teamKey);
+                state.raiders.add(engineer.getUUID());
                 SiegeIntegration.assignSiegeEngineer(engineer, vehicle.get());
             });
         }
