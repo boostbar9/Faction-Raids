@@ -28,6 +28,13 @@ public final class ModConstants {
         private Tags() {}
         public static final String RAID_TEAM = "FactionRaidsTeam";
         public static final String RAID_ROLE = "FactionRaidsRole";
+        /**
+         * v2.26.0 marker for pre-raid scouts. Scouts carry this tag AND the
+         * RAID_TEAM tag so friendly-fire logic still works, but the marker
+         * excludes them from raid bookkeeping (they are not counted as
+         * wave spawns and their deaths do not credit raid-effort).
+         */
+        public static final String SCOUT = "FactionRaidsScout";
     }
 
     /** Standard boss-bar color for an in-progress invasion. */

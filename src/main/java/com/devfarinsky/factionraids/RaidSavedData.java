@@ -33,6 +33,13 @@ public final class RaidSavedData extends SavedData {
      * render as silhouettes until the team encounters one for the first time.
      */
     public final Map<String, Discovery> discoveries = new HashMap<>();
+    /**
+     * v2.26.0 scheduled/live pre-raid scouting missions, keyed by anchor teamKey.
+     * One entry per anchor in cooldown, cleared when the raid starts, the
+     * mission expires, or the anchor is deleted. Actual scheduling and
+     * lifecycle live in {@link com.devfarinsky.factionraids.scout.ScoutManager}.
+     */
+    public final Map<String, com.devfarinsky.factionraids.scout.ScoutMission> scoutMissions = new HashMap<>();
 
     public static RaidSavedData get(MinecraftServer server) {
         return server.overworld().getDataStorage().computeIfAbsent(RaidSavedData::load, RaidSavedData::new, DATA_NAME);
@@ -65,6 +72,8 @@ public final class RaidSavedData extends SavedData {
                 data.discoveries.put(discovery.teamKey, discovery);
             }
         }
+        // v2.26.0: scout missions. Missing on pre-2.26 saves; treated as empty.
+        com.devfarinsky.factionraids.scout.ScoutManager.load(data, root);
         return data;
     }
 
@@ -83,6 +92,8 @@ public final class RaidSavedData extends SavedData {
         ListTag discoveriesTag = new ListTag();
         discoveries.values().forEach(d -> discoveriesTag.add(d.save()));
         root.put("Discoveries", discoveriesTag);
+        // v2.26.0: scout missions round-trip.
+        com.devfarinsky.factionraids.scout.ScoutManager.save(this, root);
         return root;
     }
 
