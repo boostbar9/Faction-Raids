@@ -50,6 +50,10 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue SCOUT_SPAWN_DISTANCE;
     public static final ForgeConfigSpec.IntValue SCOUT_OBSERVE_SECONDS;
     public static final ForgeConfigSpec.BooleanValue SCOUT_DROP_INTEL_LETTER;
+    // v2.27.0 Recruits Claims integration:
+    public static final ForgeConfigSpec.BooleanValue CLAIM_AWARE_ANCHORS;
+    public static final ForgeConfigSpec.BooleanValue USE_CLAIM_CENTER_AS_DEFENSE_POINT;
+    public static final ForgeConfigSpec.BooleanValue RESPECT_DEFENDER_CLAIMS;
     // v2.15.0 "Clear Intent":
     public static final ForgeConfigSpec.EnumValue<LabelMode> RAIDER_LABEL_MODE;
     public static final ForgeConfigSpec.IntValue RAIDER_LABEL_RADIUS;
@@ -232,6 +236,13 @@ public final class RaidConfig {
                 .defineInRange("scoutObserveSeconds", 45, 10, 180);
         SCOUT_DROP_INTEL_LETTER = b.comment("When true (default), a killed scout drops a written book naming the attacker faction, their epithet, opening line, and war chant. Rewards defenders who hunt down scouts with actionable pre-raid intel.")
                 .define("scoutDropIntelLetter", true);
+        // v2.27.0 Recruits Claims integration:
+        CLAIM_AWARE_ANCHORS = b.comment("Master toggle for v2.27.0 Recruits Claims integration. When true (default) AND Recruits is installed, Faction Raids reads claim data at raid time to make defense-point selection and war-camp placement claim-aware. Set false to force the pre-2.27 behavior even with Recruits present.")
+                .define("claimAwareAnchors", true);
+        USE_CLAIM_CENTER_AS_DEFENSE_POINT = b.comment("When true (default), an anchor whose defense points sit inside a friendly Recruits claim will have that claim's center used as the raid's defense point (instead of the player-configured point). Keeps raids focused on what the player actually built and claimed, rather than the anchor block itself. Requires claimAwareAnchors.")
+                .define("useClaimCenterAsDefensePoint", true);
+        RESPECT_DEFENDER_CLAIMS = b.comment("When true (default), war-camp placement skips any candidate origin whose chunk is inside the defender's own Recruits claim, so raiders never build fortifications inside your walls. Falls back to the pre-2.27 behavior if no valid claim-external spot is found after 32 attempts. Requires claimAwareAnchors.")
+                .define("respectDefenderClaims", true);
         // v2.15.0 Clear Intent:
         RAIDER_LABEL_MODE = b.comment("How raider role name tags (Breacher, Warcaster, Captain, Marksman, Siege Commander) are shown. OFF hides them entirely; PROXIMITY shows tags only to defenders within raiderLabelRadius blocks (default); ALWAYS shows all tags at all times (visually noisy on large raids).")
                 .defineEnum("raiderLabelMode", LabelMode.PROXIMITY);
