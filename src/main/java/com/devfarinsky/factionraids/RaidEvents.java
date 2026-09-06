@@ -1369,8 +1369,10 @@ public final class RaidEvents {
                 ? "The " + state.narrative.factionEpithet + " march from the " + approachDirection(state.approachAngle)
                 : "Enemy war camp sighted to the " + approachDirection(state.approachAngle);
         // v2.31.0: title cards use case-normal text. Weight comes from color, not caps.
+        // v2.32.0: siege start is a MAJOR beat — cinematic fade, ~3s hold.
         showTitle(server, anchor.teamKey(), Component.literal("Siege Incoming").withStyle(ChatFormatting.DARK_RED),
-                Component.literal(subtitle).withStyle(accent));
+                Component.literal(subtitle).withStyle(accent),
+                com.devfarinsky.factionraids.chat.ChatStyle.TitleWeight.MAJOR);
         updateBossBar(server, anchor, state, false);
         return true;
     }
@@ -1741,6 +1743,7 @@ public final class RaidEvents {
                 scoutingSummary(recruitScale, assetScale, recruits.size(), compat))
                 .withStyle(ChatFormatting.RED), true);
         if (state.wave >= RaidConfig.WAVES.get()) {
+            // v2.32.0: command assault reads as MAJOR (final wave, high stakes).
             showTitle(server, anchor.teamKey(), Component.literal("Command Assault")
                             .withStyle(ChatFormatting.DARK_RED),
                     Component.literal("Break the commander and hold the stronghold")
@@ -3295,10 +3298,13 @@ public final class RaidEvents {
                 state.lastCaptureWarningBand = 0;
                 announce(server, anchor.teamKey(), Component.literal("The perimeter has been breached. Invaders are pushing for the stronghold heart.")
                         .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD), true);
+                // v2.32.0: perimeter breach is MAJOR — the moment the raid
+                // shifts from defense to survival deserves a real title card.
                 showTitle(server, anchor.teamKey(), Component.literal("Perimeter Breached")
                                 .withStyle(ChatFormatting.DARK_RED),
                         Component.literal("Fall back and defend the stronghold heart")
-                                .withStyle(ChatFormatting.GOLD));
+                                .withStyle(ChatFormatting.GOLD),
+                        com.devfarinsky.factionraids.chat.ChatStyle.TitleWeight.MAJOR);
             }
             return false;
         }
@@ -3533,11 +3539,14 @@ public final class RaidEvents {
                         .withStyle(ChatFormatting.GOLD), false);
             }
         }
+        // v2.32.0: outcome is DEFINING — slow fade, long hold, slow fade out
+        // so the win or loss lands as a moment instead of a status ping.
         showTitle(server, teamKey,
                 Component.literal(victory ? "Siege Broken" : "Stronghold Fallen")
                         .withStyle(victory ? ChatFormatting.GREEN : ChatFormatting.DARK_RED),
                 Component.literal(victory ? "Your faction held the line" : "The invaders seized the objective")
-                        .withStyle(ChatFormatting.GOLD));
+                        .withStyle(ChatFormatting.GOLD),
+                com.devfarinsky.factionraids.chat.ChatStyle.TitleWeight.DEFINING);
         data.setDirty();
     }
 
@@ -3586,7 +3595,8 @@ public final class RaidEvents {
         double dx = objective.x - state.campPos.getX();
         double dz = objective.z - state.campPos.getZ();
         int meters = (int) Math.round(Math.sqrt(dx * dx + dz * dz));
-        return " • " + meters + "m";
+        // v2.32.0: middle-dot separator to match the v2.31 chat presentation.
+        return com.devfarinsky.factionraids.chat.ChatStyle.SEP + meters + "m";
     }
 
     private static void updateBossBar(MinecraftServer server, RaidSavedData.Anchor anchor,
@@ -3625,32 +3635,69 @@ public final class RaidEvents {
         // Front-line distance: how close the raiders' camp sits to the
         // objective. Fixed while the camp exists so it reads as a stable
         // "they're staging N blocks northeast" rather than jittering with
-        // whichever raider happens to be leading.
+        // whichever raider happens to be leading. Now includes the middle-
+        // dot separator via v2.32.0 style.
         String distanceHint = frontLineDistanceHint(server, anchor, state);
 
-        String label = paused ? phase + " — faction offline" : state.wave == 0 ?
-                phase + " to the " + approachDirection(state.approachAngle) +
-                        " (target: " + objectiveName + distanceHint + ")" :
-                !state.breached && RaidConfig.ENABLE_BREACH_PHASE.get() ?
-                        phase + ": " + objectiveName + distanceHint +
-                                " • " + state.raiders.size() + " deployed • breach " +
-                                breachPercent + "%" :
-                        phase + ": " + objectiveName + " " + capturePercent + "% held" +
-                                " • wave " + Math.max(1, state.wave) + "/" + totalWaves +
-                                " • " + state.raiders.size() + " deployed" +
-                                (state.pendingWaveSpawns > 0 ? " + " + state.pendingWaveSpawns + " reinforcing" : "");
-        // Prepend the raider epithet if narrative is enabled and available, so
-        // the boss bar reads e.g. "Ship-Wolves — Perimeter assault…" instead of
-        // the generic "Faction Invasion" everyone gets today.
-        if (RaidConfig.NARRATIVE_IN_BOSS_BAR.get() && state.narrative != null &&
-                state.narrative.factionEpithet != null) {
-            label = state.narrative.factionEpithet + " — " + label;
+        // v2.32.0 HUD polish: assemble the label out of structured chips so
+        // the whole bar reads on one visual rhythm (middle-dot separators)
+        // instead of jumping between hyphens, colons, and bullets. Chip
+        // order is stable across phases: [objective+distance] · [deployed]
+        // · [pressure]. Empty chips are dropped by the composer.
+        String epithet = (RaidConfig.NARRATIVE_IN_BOSS_BAR.get() && state.narrative != null
+                && state.narrative.factionEpithet != null) ? state.narrative.factionEpithet : null;
+        String label;
+        if (paused) {
+            label = com.devfarinsky.factionraids.chat.ChatStyle.bossbarLabel(epithet, phase, "faction offline");
+        } else if (state.wave == 0) {
+            // Rally phase: approach direction is the useful chip.
+            String target = objectiveName + distanceHint;
+            String direction = "from the " + approachDirection(state.approachAngle);
+            label = com.devfarinsky.factionraids.chat.ChatStyle.bossbarLabel(epithet, phase, direction, target);
+        } else if (!state.breached && RaidConfig.ENABLE_BREACH_PHASE.get()) {
+            String target = objectiveName + distanceHint;
+            String deployed = state.raiders.size() + " deployed";
+            String pressure = "breach " + breachPercent + "%";
+            label = com.devfarinsky.factionraids.chat.ChatStyle.bossbarLabel(epithet, phase, target, deployed, pressure);
+        } else {
+            String held = objectiveName + " " + capturePercent + "% held";
+            String waveChip = "wave " + Math.max(1, state.wave) + "/" + totalWaves;
+            String deployed = state.raiders.size() + " deployed"
+                    + (state.pendingWaveSpawns > 0 ? " + " + state.pendingWaveSpawns + " reinforcing" : "");
+            label = com.devfarinsky.factionraids.chat.ChatStyle.bossbarLabel(epithet, phase, held, waveChip, deployed);
         }
-        bar.setName(Component.literal(label));
-        bar.setColor(paused ? BossEvent.BossBarColor.WHITE : !state.breached ?
-                (breachPercent >= 75 ? BossEvent.BossBarColor.RED : BossEvent.BossBarColor.YELLOW) : capturePercent >= 75 ?
-                BossEvent.BossBarColor.PURPLE : state.wave == 0 ? BossEvent.BossBarColor.YELLOW :
-                BossEvent.BossBarColor.RED);
+
+        // Idempotency: only push a new name Component when the label text
+        // actually changed. Bossbar ticks at 20 Hz — skipping identical
+        // re-renders saves a per-player packet every tick.
+        String previous = bar.getName().getString();
+        if (!previous.equals(label)) bar.setName(Component.literal(label));
+
+        bar.setColor(computeBossBarColor(state, paused, breachPercent, capturePercent));
+    }
+
+    /**
+     * v2.32.0 HUD polish: flat table replacing the old nested ternary chain.
+     * Same behavior, but each case is inspectable and one line long. Color
+     * ramp:
+     *
+     * <pre>
+     *   paused            → WHITE
+     *   rally (wave 0)    → YELLOW  (staging, no pressure yet)
+     *   pre-breach, low   → YELLOW  (breach &lt; 75%)
+     *   pre-breach, high  → RED     (breach ≥ 75%)
+     *   breached, low     → RED     (occupation &lt; 75%)
+     *   breached, high    → PURPLE  (stronghold falling; distinct alarm color)
+     * </pre>
+     */
+    private static BossEvent.BossBarColor computeBossBarColor(RaidSavedData.RaidState state, boolean paused,
+                                                              int breachPercent, int capturePercent) {
+        if (paused) return BossEvent.BossBarColor.WHITE;
+        if (state.wave == 0) return BossEvent.BossBarColor.YELLOW;
+        if (!state.breached) {
+            return breachPercent >= 75 ? BossEvent.BossBarColor.RED : BossEvent.BossBarColor.YELLOW;
+        }
+        return capturePercent >= 75 ? BossEvent.BossBarColor.PURPLE : BossEvent.BossBarColor.RED;
     }
 
     /**
@@ -3693,10 +3740,25 @@ public final class RaidEvents {
                 .withStyle(ChatFormatting.DARK_GRAY).append(message);
     }
 
+    /**
+     * v2.32.0 HUD polish: two overloads. The legacy no-weight signature
+     * routes to {@link com.devfarinsky.factionraids.chat.ChatStyle.TitleWeight#MAJOR}
+     * so existing callsites keep working. New callsites should pass a
+     * weight to make the fade/hold timing match the event's importance:
+     * routine phase transitions feel punchy, defining moments (siege
+     * won or lost) linger.
+     */
     private static void showTitle(MinecraftServer server, String teamKey, Component title, Component subtitle) {
+        showTitle(server, teamKey, title, subtitle,
+                com.devfarinsky.factionraids.chat.ChatStyle.TitleWeight.MAJOR);
+    }
+
+    private static void showTitle(MinecraftServer server, String teamKey, Component title, Component subtitle,
+                                  com.devfarinsky.factionraids.chat.ChatStyle.TitleWeight weight) {
         if (!RaidConfig.SHOW_RAID_TITLES.get()) return;
         for (ServerPlayer player : onlineMembers(server, teamKey)) {
-            player.connection.send(new ClientboundSetTitlesAnimationPacket(10, 50, 15));
+            player.connection.send(new ClientboundSetTitlesAnimationPacket(
+                    weight.fadeInTicks, weight.holdTicks, weight.fadeOutTicks));
             player.connection.send(new ClientboundSetSubtitleTextPacket(subtitle));
             player.connection.send(new ClientboundSetTitleTextPacket(title));
         }
