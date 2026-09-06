@@ -44,6 +44,12 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue AVOID_HAZARDS;
     public static final ForgeConfigSpec.BooleanValue SHOUT_TO_ALLIES;
     public static final ForgeConfigSpec.IntValue SHOUT_RADIUS;
+    // v2.26.0 Pre-raid scouting phase:
+    public static final ForgeConfigSpec.BooleanValue SCOUTING_ENABLED;
+    public static final ForgeConfigSpec.IntValue SCOUT_PARTY_SIZE;
+    public static final ForgeConfigSpec.IntValue SCOUT_SPAWN_DISTANCE;
+    public static final ForgeConfigSpec.IntValue SCOUT_OBSERVE_SECONDS;
+    public static final ForgeConfigSpec.BooleanValue SCOUT_DROP_INTEL_LETTER;
     // v2.15.0 "Clear Intent":
     public static final ForgeConfigSpec.EnumValue<LabelMode> RAIDER_LABEL_MODE;
     public static final ForgeConfigSpec.IntValue RAIDER_LABEL_RADIUS;
@@ -215,6 +221,17 @@ public final class RaidConfig {
                 .define("shoutToAllies", true);
         SHOUT_RADIUS = b.comment("Radius (blocks) within which a hurt raider alerts allied raiders when shoutToAllies is enabled. Vanilla pillager alert radius is 8; we default higher because raid combat is more spread out.")
                 .defineInRange("shoutRadius", 16, 4, 64);
+        // v2.26.0 Scouting phase:
+        SCOUTING_ENABLED = b.comment("When true (default), a small scouting party of 1-3 raiders spawns during the middle third of each anchor's raid cooldown. Scouts walk to a lookout position near the anchor, observe briefly, then flee back and despawn. Killed scouts drop an intel letter (written book) naming the attacker faction and casus belli for the raid that will actually follow. Turns dead cooldown time into low-key anticipation without adding combat load.")
+                .define("scoutingEnabled", true);
+        SCOUT_PARTY_SIZE = b.comment("Maximum scouts per scouting party. Actual count is 1-N (rolled per mission). Small parties (1-2) feel like reconnaissance; larger parties (3+) feel like a strike group and undercut the observation fantasy.")
+                .defineInRange("scoutPartySize", 2, 1, 3);
+        SCOUT_SPAWN_DISTANCE = b.comment("Distance (blocks) from the defender anchor at which scouts spawn. Scouts pick a lookout position closer than this, walk to it, and observe. Too close and they arrive with the raid; too far and they never reach the lookout in time.")
+                .defineInRange("scoutSpawnDistance", 100, 60, 200);
+        SCOUT_OBSERVE_SECONDS = b.comment("Seconds a scout spends observing the anchor before fleeing home. Scouts also flee immediately if hurt or if a defender comes within 12 blocks during observation.")
+                .defineInRange("scoutObserveSeconds", 45, 10, 180);
+        SCOUT_DROP_INTEL_LETTER = b.comment("When true (default), a killed scout drops a written book naming the attacker faction, their epithet, opening line, and war chant. Rewards defenders who hunt down scouts with actionable pre-raid intel.")
+                .define("scoutDropIntelLetter", true);
         // v2.15.0 Clear Intent:
         RAIDER_LABEL_MODE = b.comment("How raider role name tags (Breacher, Warcaster, Captain, Marksman, Siege Commander) are shown. OFF hides them entirely; PROXIMITY shows tags only to defenders within raiderLabelRadius blocks (default); ALWAYS shows all tags at all times (visually noisy on large raids).")
                 .defineEnum("raiderLabelMode", LabelMode.PROXIMITY);

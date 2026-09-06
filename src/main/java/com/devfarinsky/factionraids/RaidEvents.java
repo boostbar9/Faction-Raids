@@ -146,6 +146,10 @@ public final class RaidEvents {
         }
         String teamKey = mob.getPersistentData().getString(RAID_TEAM_TAG);
         if (teamKey.isBlank()) return;
+        // v2.26.0 scouts carry RAID_TEAM_TAG for friendly-fire logic but are
+        // not part of any active raid. Skip raid bookkeeping so we do not
+        // discard them here and do not count them as wave spawns/kills.
+        if (mob.getPersistentData().getBoolean(ModConstants.Tags.SCOUT)) return;
         RaidSavedData data = RaidSavedData.get(level.getServer());
         RaidSavedData.RaidState state = data.raids.get(teamKey);
         if (state == null) {
@@ -204,10 +208,16 @@ public final class RaidEvents {
      */
     @SubscribeEvent
     public static void onRaiderHurt_ShoutToAllies(LivingHurtEvent event) {
-        if (!RaidConfig.SHOUT_TO_ALLIES.get()) return;
         if (!(event.getEntity() instanceof Mob victim)) return;
         String team = victim.getPersistentData().getString(RAID_TEAM_TAG);
         if (team.isBlank()) return;
+        // v2.26.0 scouts hurt -> flee, never alert. A scout that summoned a
+        // whole faction on hit would defeat the intel-hunt fantasy.
+        if (victim.getPersistentData().getBoolean(ModConstants.Tags.SCOUT)) {
+            com.devfarinsky.factionraids.scout.ScoutManager.onScoutHurt(victim);
+            return;
+        }
+        if (!RaidConfig.SHOUT_TO_ALLIES.get()) return;
         Entity attacker = event.getSource().getEntity();
         if (!(attacker instanceof LivingEntity livingAttacker)) return;
         // Never alert against another raider (friendly fire from vex/etc).
@@ -219,7 +229,10 @@ public final class RaidEvents {
                 m -> m != victim
                         && team.equals(m.getPersistentData().getString(RAID_TEAM_TAG))
                         && m.isAlive()
-                        && m.getTarget() == null)) {
+                        && m.getTarget() == null
+                        // Do not recruit scouts into ally shouting either;
+                        // they stay in observe/flee mode.
+                        && !m.getPersistentData().getBoolean(ModConstants.Tags.SCOUT))) {
             ally.setTarget(livingAttacker);
         }
     }
@@ -283,6 +296,14 @@ public final class RaidEvents {
 
         if (victimTeamKey.isBlank()) return;
         RaidSavedData data = RaidSavedData.get(level.getServer());
+        // v2.26.0 scout death: drop the intel letter and record the removal
+        // in the scout mission bookkeeping. Scouts are never in a raid so we
+        // return before the raid-state handling below.
+        if (event.getEntity() instanceof Mob scoutVictim
+                && scoutVictim.getPersistentData().getBoolean(ModConstants.Tags.SCOUT)) {
+            com.devfarinsky.factionraids.scout.ScoutManager.onScoutKilled(level.getServer(), data, scoutVictim);
+            return;
+        }
         RaidSavedData.RaidState state = data.raids.get(victimTeamKey);
         if (state == null || !state.raiders.remove(event.getEntity().getUUID())) return;
         state.missingTicks.remove(event.getEntity().getUUID());
@@ -1137,7 +1158,12 @@ public final class RaidEvents {
         if (RaidConfig.AUTOMATIC_RAIDS.get() && data.raids.size() < RaidConfig.MAX_CONCURRENT_RAIDS.get()) {
             for (RaidSavedData.Anchor anchor : new ArrayList<>(data.anchors.values())) {
                 if (data.raids.size() >= RaidConfig.MAX_CONCURRENT_RAIDS.get()) break;
-                if (data.raids.containsKey(anchor.teamKey()) || now < anchor.nextRaidGameTime()) continue;
+                if (data.raids.containsKey(anchor.teamKey()) || now < anchor.nextRaidGameTime()) {
+                    // Anchor is in cooldown: consider scheduling a scout mission.
+                    // maybeSchedule is idempotent and cheap when already scheduled.
+                    com.devfarinsky.factionraids.scout.ScoutManager.maybeSchedule(server, data, anchor);
+                    continue;
+                }
                 List<ServerPlayer> members = onlineMembers(server, anchor.teamKey());
                 if (members.isEmpty()) continue;
                 RaidSavedData.DefensePoint point = selectAutomaticPoint(server, anchor, members);
@@ -1145,6 +1171,10 @@ public final class RaidEvents {
                 beginRaid(server, data, anchor, point, true);
             }
         }
+        // v2.26.0: tick pending scout missions independently of raid processing.
+        // Runs even when AUTOMATIC_RAIDS is disabled so admins can /factionraids
+        // start manually while scouts remain a background flavor system.
+        com.devfarinsky.factionraids.scout.ScoutManager.tick(server, data);
 
         for (String teamKey : new ArrayList<>(data.raids.keySet())) processRaid(server, data, teamKey);
         data.setDirty();
@@ -1167,8 +1197,16 @@ public final class RaidEvents {
         // when the narrative system is disabled — fields on the returned
         // record are just left blank, and the branded fallback below reads the
         // opening line directly from the neutral narrative.
-        state.narrative = com.devfarinsky.factionraids.narrative.RaidNarrativeSelector.select(
-                server.overworld().random, anchor.teamDisplay(), point.name());
+        // v2.26.0 honor the promise made by the scout intel letter: if a
+        // scout mission was scheduled during this cooldown and previewed a
+        // narrative to defenders, reuse that narrative here so the raid
+        // matches the letter's contents. Falls back to a fresh selection
+        // if no scout mission ran or if scouting is disabled.
+        com.devfarinsky.factionraids.narrative.RaidNarrative previewed =
+                com.devfarinsky.factionraids.scout.ScoutManager.consumePreviewedNarrative(data, anchor.teamKey());
+        state.narrative = previewed != null ? previewed :
+                com.devfarinsky.factionraids.narrative.RaidNarrativeSelector.select(
+                        server.overworld().random, anchor.teamDisplay(), point.name());
         ServerLevel raidLevel = getLevel(server, point);
         if (raidLevel != null && RaidConfig.BUILD_WAR_CAMPS.get()) buildWarCamp(raidLevel, point, state);
         // Amphibious detection: if a large enough open-water body sits within
