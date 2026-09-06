@@ -52,6 +52,9 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue SCOUT_DROP_INTEL_LETTER;
     // v2.27.0 Recruits Claims integration:
     public static final ForgeConfigSpec.BooleanValue CLAIM_AWARE_ANCHORS;
+    // v2.30.0 Recruits Bridge Sieges: subscribe to SiegeEvent.Start and
+    // route it into our raid pipeline as an additional trigger source.
+    public static final ForgeConfigSpec.BooleanValue BRIDGE_SIEGES_ENABLED;
     public static final ForgeConfigSpec.BooleanValue USE_CLAIM_CENTER_AS_DEFENSE_POINT;
     public static final ForgeConfigSpec.BooleanValue RESPECT_DEFENDER_CLAIMS;
     // v2.15.0 "Clear Intent":
@@ -243,6 +246,8 @@ public final class RaidConfig {
                 .define("useClaimCenterAsDefensePoint", true);
         RESPECT_DEFENDER_CLAIMS = b.comment("When true (default), war-camp placement skips any candidate origin whose chunk is inside the defender's own Recruits claim, so raiders never build fortifications inside your walls. Falls back to the pre-2.27 behavior if no valid claim-external spot is found after 32 attempts. Requires claimAwareAnchors.")
                 .define("respectDefenderClaims", true);
+        BRIDGE_SIEGES_ENABLED = b.comment("v2.30.0: when true (default) AND Recruits is installed, subscribe to Recruits' SiegeEvent.Start. When another Recruits faction begins sieging a Recruits claim owned by a Faction Raids team, spawn a Faction Raids raid at the same location as the raiding army. The Recruits siege still runs its own timer/health system in parallel. Set false to keep raids purely on Faction Raids' own trigger schedule even with Recruits present.")
+                .define("bridgeSiegesEnabled", true);
         // v2.15.0 Clear Intent:
         RAIDER_LABEL_MODE = b.comment("How raider role name tags (Breacher, Warcaster, Captain, Marksman, Siege Commander) are shown. OFF hides them entirely; PROXIMITY shows tags only to defenders within raiderLabelRadius blocks (default); ALWAYS shows all tags at all times (visually noisy on large raids).")
                 .defineEnum("raiderLabelMode", LabelMode.PROXIMITY);
