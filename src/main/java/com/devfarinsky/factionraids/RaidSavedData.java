@@ -428,6 +428,20 @@ public final class RaidSavedData extends SavedData {
          */
         public com.devfarinsky.factionraids.narrative.RaidNarrative narrative;
 
+        /**
+         * Which of the five raiding factions is attacking this raid. Set once
+         * at raid start by {@code RaidEvents.pickFaction()} and persisted so
+         * banners, lore, and future territory logic stay consistent across a
+         * server restart. Null on raids loaded from pre-2.29.0 saves — callers
+         * must fall back to a safe default.
+         *
+         * <p>Valid values: {@code blackbay_reavers}, {@code hollowfang_clan},
+         * {@code emberchant_zealots}, {@code crownfall_exiles},
+         * {@code wilds_marauders}. These match the ids registered in
+         * {@code FactionLore}.</p>
+         */
+        public String factionId;
+
         public RaidState(String teamKey, String defensePointName, int warningTicks) {
             this.teamKey = teamKey;
             this.defensePointName = defensePointName;
@@ -453,6 +467,7 @@ public final class RaidSavedData extends SavedData {
             if (campPos != null) tag.putLong("CampPosition", campPos.asLong());
             if (campfirePos != null) tag.putLong("CampfirePos", campfirePos.asLong());
             if (bannerPos != null) tag.putLong("BannerPos", bannerPos.asLong());
+            if (factionId != null) tag.putString("FactionId", factionId);
             if (barrelPos != null) tag.putLong("BarrelPos", barrelPos.asLong());
             tag.putBoolean("CampBuildAttempted", campBuildAttempted);
             if (navalStagingPos != null) tag.putLong("NavalStagingPos", navalStagingPos.asLong());
@@ -557,6 +572,8 @@ public final class RaidSavedData extends SavedData {
                     BlockPos.of(tag.getLong("CampfirePos")) : null;
             state.bannerPos = tag.contains("BannerPos", Tag.TAG_LONG) ?
                     BlockPos.of(tag.getLong("BannerPos")) : null;
+            state.factionId = tag.contains("FactionId", Tag.TAG_STRING) ?
+                    tag.getString("FactionId") : null;
             state.barrelPos = tag.contains("BarrelPos", Tag.TAG_LONG) ?
                     BlockPos.of(tag.getLong("BarrelPos")) : null;
             state.campBuildAttempted = tag.getBoolean("CampBuildAttempted");

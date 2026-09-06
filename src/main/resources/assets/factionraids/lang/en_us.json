@@ -2,5 +2,25 @@
   "item.factionraids.guidebook": "Warlord's Codex",
   "item.factionraids.guidebook.tooltip.line1": "Right-click to open your Faction Command",
   "item.factionraids.guidebook.tooltip.line2": "Live siege intel, wave tracker, and defense controls",
-  "itemGroup.factionraids": "Faction Raids"
+  "itemGroup.factionraids": "Faction Raids",
+
+  "block.minecraft.banner.fr_bbw.black": "Blackbay Reavers",
+  "block.minecraft.banner.fr_bbw.white": "Blackbay Wave",
+  "block.minecraft.banner.fr_bbw.cyan": "Blackbay Tide",
+
+  "block.minecraft.banner.fr_hft.gray": "Hollowfang Clan",
+  "block.minecraft.banner.fr_hft.white": "Hollowfang Tusk",
+  "block.minecraft.banner.fr_hft.red": "Hollowfang War-Fang",
+
+  "block.minecraft.banner.fr_ecf.black": "Emberchant Zealots",
+  "block.minecraft.banner.fr_ecf.orange": "Emberchant Flame",
+  "block.minecraft.banner.fr_ecf.red": "Emberchant Pyre",
+
+  "block.minecraft.banner.fr_cfc.purple": "Crownfall Exiles",
+  "block.minecraft.banner.fr_cfc.yellow": "Crownfall Crown",
+  "block.minecraft.banner.fr_cfc.black": "Crownfall Mourning",
+
+  "block.minecraft.banner.fr_wcl.brown": "Wilds Marauders",
+  "block.minecraft.banner.fr_wcl.white": "Wilds Sigil",
+  "block.minecraft.banner.fr_wcl.green": "Wilds Ambush"
 }
