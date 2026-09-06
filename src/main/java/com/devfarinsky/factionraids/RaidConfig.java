@@ -38,6 +38,12 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue CONE_FALLBACK_ENABLED;
     public static final ForgeConfigSpec.IntValue CONE_FALLBACK_RADIUS;
     public static final ForgeConfigSpec.IntValue CONE_FALLBACK_VERTICAL;
+    // v2.25.0 Parkour + Hazard Avoidance + Shout-to-Allies:
+    public static final ForgeConfigSpec.BooleanValue PARKOUR_ENABLED;
+    public static final ForgeConfigSpec.IntValue PARKOUR_MAX_FORWARD;
+    public static final ForgeConfigSpec.BooleanValue AVOID_HAZARDS;
+    public static final ForgeConfigSpec.BooleanValue SHOUT_TO_ALLIES;
+    public static final ForgeConfigSpec.IntValue SHOUT_RADIUS;
     // v2.15.0 "Clear Intent":
     public static final ForgeConfigSpec.EnumValue<LabelMode> RAIDER_LABEL_MODE;
     public static final ForgeConfigSpec.IntValue RAIDER_LABEL_RADIUS;
@@ -198,6 +204,17 @@ public final class RaidConfig {
                 .defineInRange("coneFallbackRadius", 16, 4, 48);
         CONE_FALLBACK_VERTICAL = b.comment("Vertical tolerance (blocks) for the vanilla cone fallback. Vanilla uses 7. Higher values let raiders find reachable points on higher terrain around the objective.")
                 .defineInRange("coneFallbackVertical", 7, 1, 16);
+        // v2.25.0 Parkour + Hazards + Shout:
+        PARKOUR_ENABLED = b.comment("When true (default), raiders can leap 1-3 blocks forward when a solid obstacle blocks their path to the objective. Fixes raiders freezing at low walls, fences, and ledges without needing to break blocks or wait for stuck escalation. Adapted from Enhanced AI (LGPL-3.0) by Insane96.")
+                .define("parkourEnabled", true);
+        PARKOUR_MAX_FORWARD = b.comment("Maximum forward blocks a raider will probe when deciding whether to parkour-leap. Vanilla-safe range is 2-3; higher values let raiders leap over wider obstacles but can look unnatural.")
+                .defineInRange("parkourMaxForward", 3, 1, 5);
+        AVOID_HAZARDS = b.comment("When true (default), raiders actively avoid lava, fire, campfires, magma blocks, and their own sapper TNT when pathfinding. Eliminates the 'raider walks into lava' complaint without affecting balance. Uses the mob's built-in path-type malus system so it composes cleanly with vanilla navigation.")
+                .define("avoidHazards", true);
+        SHOUT_TO_ALLIES = b.comment("When true (default), a hurt raider alerts nearby raiders of the same faction within shoutRadius blocks, granting them the attacker as a target. Mirrors vanilla HurtByTargetGoal.setAlertOthers() but works across our full raider stack, not just at the objective. Ignores line-of-sight so defenders in cover can't hide from the whole wave.")
+                .define("shoutToAllies", true);
+        SHOUT_RADIUS = b.comment("Radius (blocks) within which a hurt raider alerts allied raiders when shoutToAllies is enabled. Vanilla pillager alert radius is 8; we default higher because raid combat is more spread out.")
+                .defineInRange("shoutRadius", 16, 4, 64);
         // v2.15.0 Clear Intent:
         RAIDER_LABEL_MODE = b.comment("How raider role name tags (Breacher, Warcaster, Captain, Marksman, Siege Commander) are shown. OFF hides them entirely; PROXIMITY shows tags only to defenders within raiderLabelRadius blocks (default); ALWAYS shows all tags at all times (visually noisy on large raids).")
                 .defineEnum("raiderLabelMode", LabelMode.PROXIMITY);
