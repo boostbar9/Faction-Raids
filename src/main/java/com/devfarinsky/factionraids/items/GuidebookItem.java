@@ -16,11 +16,13 @@ import net.minecraft.world.level.Level;
 import java.util.List;
 
 /**
- * Right-clickable guidebook that opens the Faction Raids dashboard for the
- * player. The dashboard is the existing 9x6 chest-style menu implemented in
- * {@link com.devfarinsky.factionraids.RaidDashboardMenu} \u2014 this item is
- * purely a client-friendly entry point so players don't need to type the
- * {@code /factionraids} command to reach it.
+ * Right-clickable guidebook that opens the Warlord's Codex \u2014 the tabbed
+ * client-side siege command screen ({@code SiegeCommandScreen}) introduced
+ * in v2.11.0. This item is purely a friendly entry point so players don't
+ * need to type {@code /factionraids menu} to reach it.
+ *
+ * <p>v2.28.0: the old chest-style {@code RaidDashboardMenu} was deleted;
+ * this javadoc previously referenced it in error.
  */
 public class GuidebookItem extends Item {
 

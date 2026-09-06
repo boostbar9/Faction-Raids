@@ -288,6 +288,16 @@ public final class SiegeCommandScreen extends Screen {
                 snapshot.registered() ? MUTED : RED, false);
         String coolLabel = snapshot.active() ? "War camp deployed" : "Next siege: " + snapshot.cooldown();
         graphics.drawString(font, coolLabel, x + 10, y + 46, MUTED, false);
+        // v2.28.0: claim-linked indicator when the defense point was picked
+        // from a Recruits claim (synthetic "claim:" name), so players can tell
+        // at a glance whether v2.27 claim-aware anchoring is in effect here.
+        if (snapshot.claimLinked()) {
+            String tag = snapshot.claimName().isEmpty()
+                    ? "Recruits claim linked"
+                    : "Claim: " + snapshot.claimName();
+            graphics.drawString(font, trim(tag, strongholdW - 20),
+                    x + 10, y + 56, GOLD, false);
+        }
 
         card(graphics, x + strongholdW + 8, y, defendersW, 62, "DEFENDERS", GREEN);
         int dx = x + strongholdW + 18;
@@ -385,6 +395,17 @@ public final class SiegeCommandScreen extends Screen {
             graphics.drawString(font, "Reward eligible: " + (snapshot.rewardEligible() ? "yes" : "no"),
                     x + 10, botY + 76, snapshot.rewardEligible() ? GOLD : MUTED, false);
         }
+        // v2.28.0: compat strip — tells the player which optional-mod bridges
+        // are actually loaded right now. Rendered at the bottom of Overview
+        // so the lore/promise ("linked with Small Ships / Siege Weapons")
+        // matches what the runtime can actually deliver on this world.
+        int stripY = y + h - 10;
+        String compat = "Compat: "
+                + "Recruits Claims " + (snapshot.recruitsClaimsBridgeReady() ? "on" : "off") + "  \u2022  "
+                + "Workers " + (snapshot.workersBridgeReady() ? "on" : "off") + "  \u2022  "
+                + "Small Ships " + (snapshot.smallShipsBridgeReady() ? "on" : "off") + "  \u2022  "
+                + "Siege Weapons " + (snapshot.siegeWeaponsBridgeReady() ? "on" : "off");
+        graphics.drawString(font, trim(compat, w - 12), x + 6, stripY, SUBTLE, false);
     }
 
     // ---------------------------------------------------------------------
@@ -624,15 +645,35 @@ public final class SiegeCommandScreen extends Screen {
     // COMMANDS TAB — /factionraids reference
     // ---------------------------------------------------------------------
 
+    /**
+     * Commands reference. v2.28.0 rewrite: entries are pulled from the
+     * actual registered command tree in {@link com.devfarinsky.factionraids.command.RaidCommands}
+     * instead of a hardcoded list \u2014 the pre-2.28 list invented
+     * {@code /reset} and {@code /config reload} which never existed, and
+     * omitted every anchor/territory/team command. Grouped so the tab
+     * doesn't turn into a wall of text.
+     */
     private void drawCommands(GuiGraphics graphics, int x, int y, int w, int h) {
         card(graphics, x, y, w, h, "COMMAND REFERENCE", 0xFFB08CE0);
         String[][] cmds = new String[][]{
-                {"/factionraids start", "Trigger this stronghold's next siege now (all players)."},
-                {"/factionraids home refresh", "Re-scan your bed/anchor as the stronghold objective."},
+                // -- Play --
+                {"/factionraids menu", "Open this Codex."},
+                {"/factionraids start", "Trigger your stronghold's next siege now."},
                 {"/factionraids status", "Print live siege status in chat."},
-                {"/factionraids stop", "Cancel the active siege (operators only)."},
-                {"/factionraids reset", "Wipe all raid state for this world (operators only)."},
-                {"/factionraids config reload", "Reload server config without a restart (operators only)."},
+                {"/factionraids help", "List every subcommand in chat."},
+                // -- Anchor --
+                {"/factionraids anchor set <team>", "Set your anchor at your current position."},
+                {"/factionraids anchor claim", "Claim ownership of the anchor at your position."},
+                {"/factionraids anchor remove", "Remove the anchor at your position."},
+                {"/factionraids home automatic <bool>", "Toggle auto-detecting bed/anchor as objective."},
+                {"/factionraids home refresh", "Re-scan your bed/anchor as the stronghold objective."},
+                // -- Team --
+                {"/factionraids member add|remove|list", "Manage your faction roster."},
+                {"/factionraids territory add|remove|list", "Track additional bases as defense points."},
+                // -- Admin --
+                {"/factionraids stop", "Cancel the active siege (ops only)."},
+                {"/factionraids admin list|stop|remove|repair", "Server-wide raid administration (ops only)."},
+                {"/factionraids debug", "Verbose diagnostic dump (ops only)."},
         };
         int lineY = y + 22;
         for (String[] pair : cmds) {
@@ -643,10 +684,10 @@ public final class SiegeCommandScreen extends Screen {
                 graphics.drawString(font, line, x + 20, dy, MUTED, false);
                 dy += 10;
             }
-            lineY = dy + 4;
+            lineY = dy + 3;
             if (lineY > y + h - 16) break;
         }
-        graphics.drawString(font, "Tip: /factionraids start triggers the next siege immediately.",
+        graphics.drawString(font, "All commands verified against the command tree on load.",
                 x + 10, y + h - 12, SUBTLE, false);
     }
 

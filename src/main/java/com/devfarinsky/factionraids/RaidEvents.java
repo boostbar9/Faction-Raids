@@ -361,6 +361,24 @@ public final class RaidEvents {
         // v2.15.0: register the role-colored glow teams so raiders can
         // join them at spawn without a per-spawn registry check.
         RaiderLabels.onServerStarted(event.getServer());
+        // v2.28.0: startup audit log. Emits the exact list of player-facing
+        // commands the server has just registered, plus the set of codex ids
+        // the raid system can generate. Server owners can eyeball this list
+        // against the wiki/README to catch drift; the Codex is baked into the
+        // client, so a mismatch means an update needs to be shipped.
+        FactionLogger.LOG.info("[FactionRaids] Registered player commands: {}",
+                "/factionraids [menu|anchor set|anchor claim|anchor remove|home automatic|" +
+                        "home refresh|territory add|territory remove|territory list|member add|" +
+                        "member remove|member list|start|status|help|debug*|stop*|admin list*|" +
+                        "admin stop*|admin remove*|admin repair*] (* = op-only)");
+        FactionLogger.LOG.info("[FactionRaids] Codex ids the raid system can emit: {}",
+                "[shieldman, bowman, crossbowman, captain, assassin, siege_engineer, patrol_leader, " +
+                        "ravager, illusioner, commander]");
+        FactionLogger.LOG.info("[FactionRaids] Optional-mod bridges: Recruits={} Workers={} SmallShips={} SiegeWeapons={}",
+                com.devfarinsky.factionraids.compat.RecruitsClaimsBridge.available(),
+                OptionalCompatBridge.isLoaded(OptionalCompatBridge.WORKERS),
+                OptionalCompatBridge.isLoaded(OptionalCompatBridge.SMALL_SHIPS),
+                OptionalCompatBridge.isLoaded(OptionalCompatBridge.SIEGE_WEAPONS));
     }
 
 
@@ -1309,6 +1327,13 @@ public final class RaidEvents {
 
         reconcileTaggedMobs(level, point, state);
         updateTrackedMobs(level, state);
+        // v2.28.0: Captain aura \u2014 the Unit Codex has always promised that
+        // Captains buff their squad. Now they actually do: any raider tagged
+        // role="captain" pulses Strength I to friendly raiders within 8
+        // blocks. Refreshed every server-tick pass (20 ticks) with a 60-tick
+        // effect so it never flickers between passes but decays if the
+        // captain dies.
+        tickCaptainAura(level, state);
         // v2.14.0: drain the deferred camp-build queue one structure at a
         // time. Runs cheaply every tick and no-ops once the queue empties.
         progressDeferredCampBuilds(level, state);
@@ -1511,6 +1536,43 @@ public final class RaidEvents {
                 state.totalEscaped++;
             } else {
                 state.missingTicks.put(id, missing);
+            }
+        }
+    }
+
+    /**
+     * v2.28.0: Real Captain aura. For every raider whose role tag equals
+     * {@code captain}, pulse Strength I to friendly raiders (raiders that
+     * share this raid's team key) within 8 blocks. Effect duration is 60
+     * ticks so it comfortably survives the 20-tick server-tick cadence but
+     * expires quickly if the captain dies or is separated.
+     *
+     * <p>The pulse is one-way (captain \u2192 nearby squadmates); the captain
+     * does not buff themselves, and captains do not stack (Strength I is
+     * already amplitude 0, so a second captain's application is idempotent).
+     * Ambient/visible flags are false so no particles fire on the raider
+     * models \u2014 the buff is a mechanical effect, not a visual one.
+     */
+    private static void tickCaptainAura(ServerLevel level, RaidSavedData.RaidState state) {
+        if (state.raiders.isEmpty()) return;
+        java.util.List<Mob> captains = new java.util.ArrayList<>();
+        for (UUID id : state.raiders) {
+            Entity e = level.getEntity(id);
+            if (!(e instanceof Mob mob) || !mob.isAlive()) continue;
+            String role = mob.getPersistentData().getString(RAID_ROLE_TAG);
+            if ("captain".equals(role)) captains.add(mob);
+        }
+        if (captains.isEmpty()) return;
+        // For each captain, scan the raider set once and buff anyone in range.
+        final double auraRadiusSq = 8.0 * 8.0;
+        for (Mob captain : captains) {
+            for (UUID id : state.raiders) {
+                if (captain.getUUID().equals(id)) continue;
+                Entity e = level.getEntity(id);
+                if (!(e instanceof Mob squadmate) || !squadmate.isAlive()) continue;
+                if (squadmate.distanceToSqr(captain) > auraRadiusSq) continue;
+                squadmate.addEffect(new MobEffectInstance(
+                        MobEffects.DAMAGE_BOOST, 60, 0, false, false));
             }
         }
     }
@@ -3237,12 +3299,28 @@ public final class RaidEvents {
             data.anchors.put(teamKey, anchor.withNextRaid(next));
         }
         boolean eligibleVictory = victory && reward && state != null && state.rewardEligible;
+        // v2.28.0: track the "no breach" bonus outside the block so the
+        // announcement branch below can mention it and the War Journal path
+        // can log the payout accurately.
+        int noBreachBonus = 0;
         if (eligibleVictory) {
             int experience = RaidConfig.VICTORY_EXPERIENCE.get();
             List<ServerPlayer> winners = onlineMembers(server, teamKey);
             if (experience > 0) winners.forEach(p -> p.giveExperiencePoints(experience));
             int emeralds = guaranteedEmeraldReward(state);
             if (emeralds > 0) winners.forEach(p -> giveEmeralds(p, emeralds));
+            // v2.28.0: no-breach Commander kill bonus. When the perimeter
+            // was never breached during the entire siege AND the defenders
+            // won (which by-definition means the Commander went down on the
+            // final wave), grant every online member a bonus emerald stack
+            // equal to half the base guaranteed reward, rounded up, with a
+            // floor of 1. This makes the Unit Codex's Commander tip and the
+            // Hollowfang lore promise true: shutout defense pays extra.
+            if (RaidConfig.ENABLE_BREACH_PHASE.get() && !state.breached) {
+                noBreachBonus = Math.max(1, (emeralds + 1) / 2);
+                final int bonus = noBreachBonus;
+                winners.forEach(p -> giveEmeralds(p, bonus));
+            }
             if (RaidConfig.VICTORY_LOOT_ENABLED.get()) winners.forEach(p -> giveVictoryLoot(server, p));
         }
         // v2.12.0 Know Your Enemy — record this siege to the War Journal and
@@ -3281,6 +3359,12 @@ public final class RaidEvents {
                     " guaranteed emeralds, " + RaidConfig.VICTORY_EXPERIENCE.get() +
                     " experience and bonus campaign loot for each online faction member.")
                     .withStyle(ChatFormatting.GREEN), false);
+            if (noBreachBonus > 0) {
+                announce(server, teamKey, Component.literal(
+                        "Perimeter held. No-breach bonus: +" + noBreachBonus +
+                                " emeralds per member.")
+                        .withStyle(ChatFormatting.GOLD), false);
+            }
         }
         showTitle(server, teamKey,
                 Component.literal(victory ? "SIEGE BROKEN" : "STRONGHOLD FALLEN")
@@ -3448,6 +3532,43 @@ public final class RaidEvents {
         help(player.createCommandSourceStack());
     }
 
+    /**
+     * v2.28.0: pack the optional-mod bridge availability + Recruits claim
+     * linkage into a tuple so the three dashboard-snapshot construction
+     * sites don't each duplicate the same reflection/lookup logic. The
+     * result feeds the Codex compat strip and the Overview claim indicator.
+     */
+    private record CodexCompatInfo(boolean claimLinked, String claimName,
+                                    boolean recruitsReady, boolean workersReady,
+                                    boolean shipsReady, boolean siegeReady) {}
+
+    private static CodexCompatInfo buildCodexCompatInfo(ServerLevel level, RaidSavedData.Anchor anchor,
+                                                        RaidSavedData.DefensePoint activePoint) {
+        boolean recruitsReady = com.devfarinsky.factionraids.compat.RecruitsClaimsBridge.available();
+        boolean workersReady = OptionalCompatBridge.isLoaded(OptionalCompatBridge.WORKERS);
+        boolean shipsReady = OptionalCompatBridge.isLoaded(OptionalCompatBridge.SMALL_SHIPS);
+        boolean siegeReady = OptionalCompatBridge.isLoaded(OptionalCompatBridge.SIEGE_WEAPONS);
+        boolean claimLinked = false;
+        String claimName = "";
+        if (recruitsReady && anchor != null && level != null) {
+            // A synthetic claim point produced by selectAutomaticPoint has a
+            // name prefixed with "claim:". If that's currently in use, we
+            // want to say so. Even if no raid is active, resolve the claim
+            // fresh so the pre-siege forecast can show the linkage too.
+            java.util.Optional<com.devfarinsky.factionraids.compat.RecruitsClaimsBridge.ClaimSnapshot> snap =
+                    com.devfarinsky.factionraids.compat.RecruitsClaimsBridge.resolveDefendingClaim(level, anchor);
+            if (snap.isPresent()) {
+                claimLinked = true;
+                claimName = snap.get().claimName() == null ? "" : snap.get().claimName();
+            } else if (activePoint != null && activePoint.name() != null && activePoint.name().startsWith("claim:")) {
+                // Point name says the raid was born under a claim even if the
+                // claim has since been resized past this specific point.
+                claimLinked = true;
+            }
+        }
+        return new CodexCompatInfo(claimLinked, claimName, recruitsReady, workersReady, shipsReady, siegeReady);
+    }
+
     static DashboardSnapshot dashboardSnapshot(ServerPlayer player) {
         MinecraftServer server = player.getServer();
         if (server == null) return DashboardSnapshot.unavailable();
@@ -3455,13 +3576,17 @@ public final class RaidEvents {
         String key = factionKeyForPlayer(data, player);
         RaidSavedData.Anchor anchor = data.anchors.get(key);
         if (anchor == null) {
+            CodexCompatInfo compatInfoNoAnchor = buildCodexCompatInfo(null, null, null);
             return new DashboardSnapshot(teamDisplay(player), false, false, "No stronghold registered",
                     0, RaidConfig.WAVES.get(), 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0,
                     0, "No gate under attack", 0, "Sleep at your base",
                     defaultEmeraldReward(), false,
                     "", "", "", "", "", 0, "", "", 0, "No stronghold",
                     "", "", java.util.List.of(), java.util.List.of(),
-                    journalRowsFor(data, key));
+                    journalRowsFor(data, key),
+                    compatInfoNoAnchor.claimLinked(), compatInfoNoAnchor.claimName(),
+                    compatInfoNoAnchor.recruitsReady(), compatInfoNoAnchor.workersReady(),
+                    compatInfoNoAnchor.shipsReady(), compatInfoNoAnchor.siegeReady());
         }
         RaidSavedData.RaidState state = data.raids.get(key);
         RaidSavedData.DefensePoint point = state == null ? anchor.primaryPoint() :
@@ -3478,6 +3603,7 @@ public final class RaidEvents {
                     com.devfarinsky.factionraids.waves.WaveComposer.compose(1, RaidConfig.WAVES.get(), firstWaveTotal);
             int score = computeDefenseScore(recruits, compat, firstWaveTotal, 1);
             String explainer = buildDefenseExplainer(recruits, compat, firstWaveTotal, 1);
+            CodexCompatInfo compatInfoIdle = buildCodexCompatInfo(level, anchor, point);
             return new DashboardSnapshot(anchor.teamDisplay(), true, false,
                     point.dimension() + " • " + formatPos(point.pos()), 0, RaidConfig.WAVES.get(),
                     0, 0, 0, 0, false, 0, recruits, compat.workers(), compat.ships(), compat.siegeWeapons(),
@@ -3489,7 +3615,10 @@ public final class RaidEvents {
                     score, defenseScoreLabel(score),
                     "", explainer,
                     discoveredUnitsFor(data, key), discoveredFactionsFor(data, key),
-                    journalRowsFor(data, key));
+                    journalRowsFor(data, key),
+                    compatInfoIdle.claimLinked(), compatInfoIdle.claimName(),
+                    compatInfoIdle.recruitsReady(), compatInfoIdle.workersReady(),
+                    compatInfoIdle.shipsReady(), compatInfoIdle.siegeReady());
         }
         int occupation = state.captureTicks * 100 /
                 Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20);
@@ -3512,6 +3641,7 @@ public final class RaidEvents {
         String threat = buildThreatBreakdown(level, state);
         String explainer = buildDefenseExplainer(recruits, compat,
                 state.raiders.size() + state.pendingWaveSpawns, state.wave);
+        CodexCompatInfo compatInfoActive = buildCodexCompatInfo(level, anchor, point);
         return new DashboardSnapshot(anchor.teamDisplay(), true, true,
                 point.dimension() + " • " + formatPos(point.pos()) +
                         (state.campPos == null ? " • camp unavailable" : " • camp " + formatPos(state.campPos)),
@@ -3527,7 +3657,10 @@ public final class RaidEvents {
                 nextLabel, nextRoles, score, defenseScoreLabel(score),
                 threat, explainer,
                 discoveredUnitsFor(data, key), discoveredFactionsFor(data, key),
-                journalRowsFor(data, key));
+                journalRowsFor(data, key),
+                compatInfoActive.claimLinked(), compatInfoActive.claimName(),
+                compatInfoActive.recruitsReady(), compatInfoActive.workersReady(),
+                compatInfoActive.shipsReady(), compatInfoActive.siegeReady());
     }
 
     /**
@@ -3753,6 +3886,9 @@ public final class RaidEvents {
             String role = mob.getPersistentData().getString(RAID_ROLE_TAG);
             if ("commander".equals(role)) return "Commander";
             // Well-known vanilla and modded raiders get hand-picked names.
+            // v2.28.0: Recruits entities added explicitly so the Threat
+            // Breakdown reads "Patrol Leader" instead of the raw registry
+            // path fallback — also collapses shieldman variants to one row.
             return switch (id.toString()) {
                 case "minecraft:ravager" -> "Ravager";
                 case "minecraft:illusioner" -> "Illusioner";
@@ -3760,6 +3896,13 @@ public final class RaidEvents {
                 case "minecraft:witch" -> "Witch";
                 case "minecraft:vindicator" -> "Vindicator";
                 case "minecraft:pillager" -> "Pillager";
+                case "recruits:recruit", "recruits:recruit_shieldman" -> "Shieldman";
+                case "recruits:bowman" -> "Bowman";
+                case "recruits:crossbowman" -> "Crossbowman";
+                case "recruits:captain" -> "Captain";
+                case "recruits:patrol_leader" -> "Patrol Leader";
+                case "recruits:assassin" -> "Assassin";
+                case "recruits:siege_engineer" -> "Siege Engineer";
                 default -> prettyRole(path);
             };
         }
@@ -3809,13 +3952,24 @@ public final class RaidEvents {
                              /** Sorted list of faction ids discovered by this team. */
                              java.util.List<String> discoveredFactions,
                              /** Newest-first list of War Journal entries. */
-                             java.util.List<JournalRow> warJournal) {
+                             java.util.List<JournalRow> warJournal,
+                             // v2.28.0 GUI-honesty additions:
+                             /** True when this anchor's defense point is a synthetic claim point (name starts with "claim:"). */
+                             boolean claimLinked,
+                             /** Human-readable name of the linked Recruits claim; empty when {@link #claimLinked} is false. */
+                             String claimName,
+                             /** Which optional-mod bridges are actually loaded and available right now. Rendered on the Codex compat strip. */
+                             boolean recruitsClaimsBridgeReady,
+                             boolean workersBridgeReady,
+                             boolean smallShipsBridgeReady,
+                             boolean siegeWeaponsBridgeReady) {
         static DashboardSnapshot unavailable() {
             return new DashboardSnapshot("Unavailable", false, false, "Server unavailable", 0, 0,
                     0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0,
                     0, "Unavailable", 0, "Unavailable", 0, false,
                     "", "", "", "", "", 0, "", "", 0, "Unknown",
-                    "", "", java.util.List.of(), java.util.List.of(), java.util.List.of());
+                    "", "", java.util.List.of(), java.util.List.of(), java.util.List.of(),
+                    false, "", false, false, false, false);
         }
     }
 
