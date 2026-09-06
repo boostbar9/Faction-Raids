@@ -49,6 +49,8 @@ import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.ai.util.DefaultRandomPos;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
@@ -2687,8 +2689,31 @@ public final class RaidEvents {
             // path had failed against a wall since the nav reports done and
             // never retries. Force-repath is cheap (once per second per
             // raider) and lets the pathfinder try a fresh route each tick.
+            //
+            // v2.24.0: when this raider has been marked stuck (escalation
+            // level >= 1) AND the cone fallback is enabled, do not retry the
+            // direct route to the objective (we already know it fails).
+            // Instead ask DefaultRandomPos.getPosTowards for a random
+            // reachable point in a narrow cone toward the objective, then
+            // widen to a full hemisphere if that fails. This mirrors
+            // Mojang's RaiderMoveThroughVillageGoal fallback: narrow cone
+            // (pi/10) at full radius, then wide cone (pi/2) at half radius.
+            // If both fail we give up this tick rather than spam a route we
+            // know is unreachable. Healthy raiders (no stuck entry) still
+            // path straight at the objective because that is faster when it
+            // works.
             if (!acquired && forceRepath) {
-                mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
+                Vec3 target = null;
+                if (RaidConfig.CONE_FALLBACK_ENABLED.get()
+                        && stuck != null && stuck.escalationLevel >= 1
+                        && mob instanceof PathfinderMob pmob) {
+                    target = coneFallbackTarget(pmob, objective);
+                }
+                if (target != null) {
+                    mob.getNavigation().moveTo(target.x, target.y, target.z, speed);
+                } else {
+                    mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
+                }
             } else if (!acquired || mob.getNavigation().isDone()) {
                 mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
             }
@@ -2734,6 +2759,42 @@ public final class RaidEvents {
      *       raiders would corrupt its accounting.</li>
      * </ul>
      */
+    /**
+     * v2.24.0 vanilla-style cone-widening fallback for stuck raiders.
+     *
+     * <p>Mirrors {@code Raider.RaiderMoveThroughVillageGoal.tick()} in
+     * vanilla Minecraft 1.20.1: when the direct path to the objective
+     * fails, ask {@code DefaultRandomPos.getPosTowards} for a random
+     * <em>reachable</em> point in a narrow cone (pi/10, ~18 degrees) toward
+     * the objective at full radius. If that returns null, widen the cone to
+     * a full hemisphere (pi/2, 90 degrees) at half the radius. The point of
+     * this cascade is to give the pathfinder a target it can actually route
+     * to, which unstalls raiders parked against an unreachable objective.
+     *
+     * <p>Returns {@code null} if no reachable target could be found at
+     * either search width. The caller falls back to the direct objective in
+     * that case rather than skipping the tick, so a raider whose nav layer
+     * happens to fail one search still gets pinged toward the objective.
+     *
+     * <p>Called only for raiders whose {@link StuckEntry#escalationLevel}
+     * is >= 1, so healthy raiders keep their fast direct path.
+     */
+    private static Vec3 coneFallbackTarget(PathfinderMob mob, Vec3 objective) {
+        int radius = RaidConfig.CONE_FALLBACK_RADIUS.get();
+        int vertical = RaidConfig.CONE_FALLBACK_VERTICAL.get();
+        // Narrow cone first: vanilla's ~18-degree attempt at full radius.
+        Vec3 narrow = DefaultRandomPos.getPosTowards(mob, radius, vertical,
+                objective, 0.3141592741012573);
+        if (narrow != null) return narrow;
+        // Widen to a 90-degree cone at half radius. Vanilla drops radius
+        // when widening because a wider cone at full radius tends to pick
+        // points behind terrain features that the narrow attempt already
+        // rejected. Half-radius keeps the retry local to the raider.
+        int wideRadius = Math.max(4, radius / 2);
+        return DefaultRandomPos.getPosTowards(mob, wideRadius, vertical,
+                objective, 1.5707963705062866);
+    }
+
     private static void updateStuckTracker(Mob mob, UUID id, double distToObjectiveSq,
                                            long gameTime, long ticksL1, long ticksL2) {
         StuckEntry entry = STUCK_TRACKER.get(id);
