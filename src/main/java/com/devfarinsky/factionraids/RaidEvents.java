@@ -95,6 +95,27 @@ public final class RaidEvents {
     private static final Map<String, com.devfarinsky.factionraids.waves.WaveComposition> ACTIVE_COMPOSITIONS = new HashMap<>();
     private static int tickCounter;
 
+    // v2.23.0 Press-the-Attack: per-raider stuck tracker. Keyed by raider UUID.
+    // Value carries the last observed distance-to-objective, the tick that
+    // distance was recorded, and how many escalations we have applied. Entries
+    // for dead raiders age out because redirectRaiders skips missing entities
+    // and finishRaid clears state. Concurrent map because multiple worlds may
+    // tick raids in parallel on some server setups.
+    static final java.util.Map<UUID, StuckEntry> STUCK_TRACKER =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    static final class StuckEntry {
+        double lastDistSq;
+        long lastProgressGameTime;
+        int escalationLevel; // 0 = fresh, 1 = jump+burst, 2 = wide-aggro + longer teleport-to-front
+
+        StuckEntry(double distSq, long gameTime) {
+            this.lastDistSq = distSq;
+            this.lastProgressGameTime = gameTime;
+            this.escalationLevel = 0;
+        }
+    }
+
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         RaidCommands.register(event.getDispatcher());
@@ -2574,9 +2595,25 @@ public final class RaidEvents {
         // — anything closer to the camp than to the objective is behind us.
         Vec3 campVec = state.campPos == null ? null : Vec3.atCenterOf(state.campPos);
 
+        // v2.23.0 Press-the-Attack config snapshot (avoid re-reading per raider):
+        boolean stuckEnabled = RaidConfig.STUCK_DETECTION_ENABLED.get();
+        int stuckSeconds = RaidConfig.STUCK_ESCALATION_SECONDS.get();
+        long stuckTicksL1 = stuckSeconds * 20L;
+        long stuckTicksL2 = stuckTicksL1 * 2L;
+        double innerMultiplier = RaidConfig.INNER_AGGRO_MULTIPLIER.get();
+        double innerRangeSq = (aggroRange * 1.5) * (aggroRange * 1.5); // "at the objective" band
+        double widenedAggroRangeSq = (aggroRange * innerMultiplier) * (aggroRange * innerMultiplier);
+        boolean forceRepath = RaidConfig.FORCE_REPATH_WHEN_IDLE.get();
+        long gameTime = level.getGameTime();
+
         for (UUID id : state.raiders) {
             Entity entity = level.getEntity(id);
-            if (!(entity instanceof Mob mob) || !mob.isAlive()) continue;
+            if (!(entity instanceof Mob mob) || !mob.isAlive()) {
+                if (stuckEnabled) STUCK_TRACKER.remove(id);
+                continue;
+            }
+
+            double distToObjectiveSq = mob.distanceToSqr(objective);
 
             // Role-gated aggression: breachers and the commander skip the
             // defender search entirely and only path to the objective.
@@ -2584,12 +2621,27 @@ public final class RaidEvents {
             boolean lockedOnObjective = breachersIgnore &&
                     (role.equals("breacher") || role.equals("commander"));
 
+            // v2.23.0: widened aggro cone when this raider is already at the
+            // objective. Fixes the "reached the base, no defender in the
+            // strict front cone, just standing there" case. The widened
+            // range is used for lookup only; the strict cone still governs
+            // outer-approach raiders. Also promoted when the stuck tracker
+            // reaches escalation level 2 for any raider.
+            StuckEntry stuck = stuckEnabled ? STUCK_TRACKER.get(id) : null;
+            boolean atObjective = distToObjectiveSq < innerRangeSq;
+            boolean wideAggro = atObjective || (stuck != null && stuck.escalationLevel >= 2);
+            double effectiveAggroRangeSq = wideAggro ? widenedAggroRangeSq : aggroRangeSq;
+
             LivingEntity closest = null;
             double closestDistance = Double.MAX_VALUE;
             if (!lockedOnObjective) {
                 for (ServerPlayer player : members) {
                     if (!player.isAlive() || player.level() != level || player.isSpectator()) continue;
-                    if (!eligibleTarget(mob, player, objective, campVec, aggroRangeSq)) continue;
+                    // Widened aggro also relaxes the behind-us filter: when a
+                    // raider is at the objective, chasing a defender "behind"
+                    // the objective ring is the correct behaviour.
+                    if (!eligibleTarget(mob, player, objective,
+                            wideAggro ? null : campVec, effectiveAggroRangeSq)) continue;
                     double distance = mob.distanceToSqr(player);
                     if (distance < closestDistance) {
                         closest = player;
@@ -2598,7 +2650,8 @@ public final class RaidEvents {
                 }
                 for (Mob recruit : recruits) {
                     if (!recruit.isAlive()) continue;
-                    if (!eligibleTarget(mob, recruit, objective, campVec, aggroRangeSq)) continue;
+                    if (!eligibleTarget(mob, recruit, objective,
+                            wideAggro ? null : campVec, effectiveAggroRangeSq)) continue;
                     double distance = mob.distanceToSqr(recruit);
                     if (distance < closestDistance) {
                         closest = recruit;
@@ -2610,8 +2663,9 @@ public final class RaidEvents {
 
             // Off-axis drift check: if this raider is dragging a chase
             // sideways deep off the invasion axis, drop the target and snap
-            // back to the objective.
-            if (campVec != null) {
+            // back to the objective. Skipped in wide-aggro mode because the
+            // point of wide-aggro is exactly to allow that lateral engagement.
+            if (campVec != null && !wideAggro) {
                 double perpDistSq = perpendicularDistanceSq(mob.position(), campVec, objective);
                 if (perpDistSq > driftLimitSq) {
                     mob.setTarget(null);
@@ -2623,12 +2677,91 @@ public final class RaidEvents {
             else if (lockedOnObjective) mob.setTarget(null);
 
             // 2.10.1 aggression pass: ALWAYS keep the objective nav goal alive.
-            double distToObjectiveSq = mob.distanceToSqr(objective);
             double speed = distToObjectiveSq < burstRangeSq ? baseSpeed * burstMultiplier : baseSpeed;
-            if (!acquired || mob.getNavigation().isDone()) {
+            // v2.23.0 stuck-escalation speed bump on top of the burst
+            // multiplier so escalated raiders visibly push harder.
+            if (stuck != null && stuck.escalationLevel >= 1) speed *= 1.15;
+
+            // v2.23.0: force re-path every redirect tick when the raider has
+            // no target. The old "only if isDone()" gate parked raiders whose
+            // path had failed against a wall since the nav reports done and
+            // never retries. Force-repath is cheap (once per second per
+            // raider) and lets the pathfinder try a fresh route each tick.
+            if (!acquired && forceRepath) {
+                mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
+            } else if (!acquired || mob.getNavigation().isDone()) {
                 mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
             }
+
+            // v2.23.0 stuck detection. We only care about raiders that are
+            // not currently melee-engaged (acquired == false) AND are more
+            // than a few blocks from the objective (already-there raiders
+            // aren't stuck, they've won). Progress is measured as a
+            // meaningful reduction in distanceToObjectiveSq over the window.
+            if (stuckEnabled && !acquired && distToObjectiveSq > 25.0) {
+                updateStuckTracker(mob, id, distToObjectiveSq, gameTime,
+                        stuckTicksL1, stuckTicksL2);
+            } else if (stuckEnabled) {
+                // Either engaged in melee, or we've reached the objective:
+                // clear stuck state so the next stall starts a fresh clock.
+                STUCK_TRACKER.remove(id);
+            }
+
             if (glow) mob.addEffect(new MobEffectInstance(MobEffects.GLOWING, 40, 0, false, false));
+        }
+    }
+
+    /**
+     * v2.23.0 Press-the-Attack: update the stuck tracker for one raider and
+     * apply escalations when the stall crosses each threshold.
+     *
+     * <p>Progress rule: if the raider has moved at least ~1 block closer to
+     * the objective since the last observation, we reset the timer. Anything
+     * less counts as stalled.
+     *
+     * <p>Escalations:
+     * <ul>
+     *   <li><b>Level 1</b> (stuckSeconds elapsed): force a jump input and
+     *       nudge the raider a fresh moveTo with a small speed bump. Handles
+     *       the case where the raider is one block below the target ledge.</li>
+     *   <li><b>Level 2</b> (2x stuckSeconds): the widened-aggro flag in the
+     *       main loop kicks in next tick because we set escalationLevel to 2
+     *       here; the raider will start looking for defenders in a wider,
+     *       hemisphere-agnostic radius. This is the terminal escalation:
+     *       we deliberately do not force the raider onto the physical
+     *       breach queue, because that subsystem selects its own targets
+     *       through role-gated pressure voting and injecting arbitrary
+     *       raiders would corrupt its accounting.</li>
+     * </ul>
+     */
+    private static void updateStuckTracker(Mob mob, UUID id, double distToObjectiveSq,
+                                           long gameTime, long ticksL1, long ticksL2) {
+        StuckEntry entry = STUCK_TRACKER.get(id);
+        if (entry == null) {
+            STUCK_TRACKER.put(id, new StuckEntry(distToObjectiveSq, gameTime));
+            return;
+        }
+        // Progress = meaningful drop in squared distance. 1 block ~ 1.0 in
+        // linear terms; in squared terms the delta scales with distance, so
+        // we use a fractional threshold: 4% closer counts as progress.
+        double progressThreshold = entry.lastDistSq * 0.96;
+        if (distToObjectiveSq < progressThreshold) {
+            entry.lastDistSq = distToObjectiveSq;
+            entry.lastProgressGameTime = gameTime;
+            entry.escalationLevel = 0;
+            return;
+        }
+        long stalledFor = gameTime - entry.lastProgressGameTime;
+
+        if (entry.escalationLevel < 1 && stalledFor >= ticksL1) {
+            // Level 1: jump + fresh path.
+            mob.getJumpControl().jump();
+            entry.escalationLevel = 1;
+        }
+        if (entry.escalationLevel < 2 && stalledFor >= ticksL2) {
+            // Level 2: main loop consults escalationLevel to widen aggro
+            // on the next tick. No direct action needed here.
+            entry.escalationLevel = 2;
         }
     }
 
@@ -2887,6 +3020,14 @@ public final class RaidEvents {
         com.devfarinsky.factionraids.effort.RaidEffortTracker.forget(teamKey);
         com.devfarinsky.factionraids.effort.StragglerTracker.forget(teamKey);
         com.devfarinsky.factionraids.siege.LadderBuilder.forget(teamKey);
+        // v2.23.0: drop per-raider stuck-tracker entries for this raid.
+        // The main loop removes single dead entries opportunistically, but
+        // a raid ending (admin-stopped, victory, defeat) drops them all at
+        // once so the map does not grow across many raids.
+        RaidSavedData.RaidState finishingState = data.raids.get(teamKey);
+        if (finishingState != null) {
+            for (UUID rid : finishingState.raiders) STUCK_TRACKER.remove(rid);
+        }
         // v2.19.0 RE1: drop the ACTIVE_CAMPS entry unconditionally, before
         // the level-guarded branch below. Prior code only removed the entry
         // when the raid's dimension was loaded, so an admin stop or dim

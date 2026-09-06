@@ -29,6 +29,11 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue AGGRO_RADIUS;
     public static final ForgeConfigSpec.IntValue OFF_AXIS_DRIFT_LIMIT;
     public static final ForgeConfigSpec.BooleanValue BREACHERS_IGNORE_DEFENDERS;
+    // v2.23.0 Press-the-Attack:
+    public static final ForgeConfigSpec.BooleanValue STUCK_DETECTION_ENABLED;
+    public static final ForgeConfigSpec.IntValue STUCK_ESCALATION_SECONDS;
+    public static final ForgeConfigSpec.DoubleValue INNER_AGGRO_MULTIPLIER;
+    public static final ForgeConfigSpec.BooleanValue FORCE_REPATH_WHEN_IDLE;
     // v2.15.0 "Clear Intent":
     public static final ForgeConfigSpec.EnumValue<LabelMode> RAIDER_LABEL_MODE;
     public static final ForgeConfigSpec.IntValue RAIDER_LABEL_RADIUS;
@@ -174,6 +179,15 @@ public final class RaidConfig {
                 .defineInRange("offAxisDriftLimit", 24, 8, 128);
         BREACHERS_IGNORE_DEFENDERS = b.comment("When true (default), breachers and the siege commander refuse to acquire defender targets and only path to the objective, so gate-breach progress is not interrupted by defender skirmishes. Melee raiders still engage defenders normally.")
                 .define("breachersIgnoreDefenders", true);
+        // v2.23.0 Press-the-Attack:
+        STUCK_DETECTION_ENABLED = b.comment("When true (default), raiders that stop making progress toward the objective get escalating help: at 5s a forced re-path plus jump plus small speed burst; at 10s a widened aggro radius so they will chase any nearby defender; at 20s the nearest wall block between them and the objective is queued for physical breaching. Fixes the classic 'raiders standing around outside the wall' problem.")
+                .define("stuckDetectionEnabled", true);
+        STUCK_ESCALATION_SECONDS = b.comment("Seconds of no forward progress before a raider is treated as stuck and the first escalation fires. Second escalation triggers at 2x this, third at 4x. Default 5.")
+                .defineInRange("stuckEscalationSeconds", 5, 2, 60);
+        INNER_AGGRO_MULTIPLIER = b.comment("When a raider is within 1.5 x aggroRadius of the objective (i.e. right at the base), its effective aggro radius is multiplied by this. Fixes the case where raiders reach the objective, find no defender in their strict forward cone, and just stand there. Default 2.0.")
+                .defineInRange("innerAggroMultiplier", 2.0, 1.0, 4.0);
+        FORCE_REPATH_WHEN_IDLE = b.comment("When true (default), raiders that have no target get a fresh moveTo(objective) call every redirect tick (once per second) instead of only when the pathfinder reports done. Prevents a raider whose path failed against a wall from parking there forever.")
+                .define("forceRepathWhenIdle", true);
         // v2.15.0 Clear Intent:
         RAIDER_LABEL_MODE = b.comment("How raider role name tags (Breacher, Warcaster, Captain, Marksman, Siege Commander) are shown. OFF hides them entirely; PROXIMITY shows tags only to defenders within raiderLabelRadius blocks (default); ALWAYS shows all tags at all times (visually noisy on large raids).")
                 .defineEnum("raiderLabelMode", LabelMode.PROXIMITY);
