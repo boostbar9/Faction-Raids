@@ -26,6 +26,12 @@ public final class OptionalCompatBridge {
     public static final String WORKERS = "workers";
     public static final String SMALL_SHIPS = "smallships";
     public static final String SIEGE_WEAPONS = "siegeweapons";
+    /**
+     * v2.27.0 Recruits Claims compat. We do NOT auto-tag Recruits entities as
+     * assets; the bridge reads Recruits' claim manager to shape our raids
+     * (defense-point selection, war-camp exclusion). See RecruitsClaimsBridge.
+     */
+    public static final String RECRUITS = "recruits";
     private static final String ASSET_FACTION_TAG = "FactionRaidsAssetFaction";
     private static final String ASSET_OWNER_TAG = "FactionRaidsAssetOwner";
     private static final Set<String> WORKER_ENTITY_PATHS = Set.of(

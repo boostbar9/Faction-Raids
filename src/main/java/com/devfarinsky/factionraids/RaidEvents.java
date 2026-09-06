@@ -1208,7 +1208,7 @@ public final class RaidEvents {
                 com.devfarinsky.factionraids.narrative.RaidNarrativeSelector.select(
                         server.overworld().random, anchor.teamDisplay(), point.name());
         ServerLevel raidLevel = getLevel(server, point);
-        if (raidLevel != null && RaidConfig.BUILD_WAR_CAMPS.get()) buildWarCamp(raidLevel, point, state);
+        if (raidLevel != null && RaidConfig.BUILD_WAR_CAMPS.get()) buildWarCamp(raidLevel, anchor, point, state);
         // Amphibious detection: if a large enough open-water body sits within
         // reach of the objective, mark a staging point and beach. Boat spawns
         // then run alongside land spawns for the rest of the raid.
@@ -1280,7 +1280,7 @@ public final class RaidEvents {
         // Upgrade active raids from older saves exactly once. Those raids did
         // not persist a physical camp, so build one when 2.6 first processes it.
         if (RaidConfig.BUILD_WAR_CAMPS.get() && !state.campBuildAttempted) {
-            buildWarCamp(level, point, state);
+            buildWarCamp(level, anchor, point, state);
         }
 
         List<ServerPlayer> members = onlineMembers(server, teamKey);
@@ -1889,10 +1889,11 @@ public final class RaidEvents {
      * {@code bannerPos}, {@code barrelPos}. Breaking any of these triggers
      * a strategic effect — see {@link #onCampBlockBroken}.
      */
-    private static void buildWarCamp(ServerLevel level, RaidSavedData.DefensePoint point,
+    private static void buildWarCamp(ServerLevel level, RaidSavedData.Anchor anchor,
+                                     RaidSavedData.DefensePoint point,
                                      RaidSavedData.RaidState state) {
         state.campBuildAttempted = true;
-        BlockPos camp = findWarCampPosition(level, point.pos(), state.approachAngle, state);
+        BlockPos camp = findWarCampPosition(level, anchor, point.pos(), state.approachAngle, state);
         if (camp == null) return;
         state.campPos = camp;
 
@@ -2189,18 +2190,34 @@ public final class RaidEvents {
      * v2.16.1 - accepts the RaidState so the naval staging position can
      * veto sites that would place the palisade on top of the boat spawn.
      */
-    private static BlockPos findWarCampPosition(ServerLevel level, BlockPos anchor, double approachAngle,
+    private static BlockPos findWarCampPosition(ServerLevel level, RaidSavedData.Anchor anchorRecord,
+                                                 BlockPos anchor, double approachAngle,
                                                  RaidSavedData.RaidState state) {
         int min = RaidConfig.MIN_SPAWN_DISTANCE.get();
         int max = Math.max(min, RaidConfig.MAX_SPAWN_DISTANCE.get());
         BlockPos navalStaging = state == null ? null : state.navalStagingPos;
         int navalGuardSq = CAMP_NAVAL_MIN_DISTANCE * CAMP_NAVAL_MIN_DISTANCE;
+        // v2.27.0: resolve the defender's Recruits claim once per camp
+        // search. When present + config on, reject candidate origins whose
+        // chunk lies inside the defender's claimed footprint so raiders
+        // don't build siege infrastructure inside the walls they're
+        // supposed to be breaching.
+        java.util.Set<net.minecraft.world.level.ChunkPos> excludedChunks = java.util.Collections.emptySet();
+        if (RaidConfig.CLAIM_AWARE_ANCHORS.get() && RaidConfig.RESPECT_DEFENDER_CLAIMS.get()
+                && anchorRecord != null
+                && com.devfarinsky.factionraids.compat.RecruitsClaimsBridge.available()) {
+            java.util.Optional<com.devfarinsky.factionraids.compat.RecruitsClaimsBridge.ClaimSnapshot> snap =
+                    com.devfarinsky.factionraids.compat.RecruitsClaimsBridge.resolveDefendingClaim(level, anchorRecord);
+            if (snap.isPresent()) excludedChunks = snap.get().chunks();
+        }
         for (int attempt = 0; attempt < 32; attempt++) {
             double angle = approachAngle + (level.random.nextDouble() - 0.5D) * 0.5D;
             int distance = Math.max(min, max - level.random.nextInt(Math.max(1, Math.min(16, max - min + 1))));
             int x = anchor.getX() + Mth.floor(Math.cos(angle) * distance);
             int z = anchor.getZ() + Mth.floor(Math.sin(angle) * distance);
             if (!level.hasChunk(x >> 4, z >> 4)) continue;
+            if (!excludedChunks.isEmpty()
+                    && excludedChunks.contains(new net.minecraft.world.level.ChunkPos(x >> 4, z >> 4))) continue;
             BlockPos center = surfacePosition(level, x, z);
             if (!validCampSurface(level, center, anchor)) continue;
             // v2.16.1 - keep the palisade clear of the boat spawn. The
@@ -4046,6 +4063,20 @@ public final class RaidEvents {
     private static RaidSavedData.DefensePoint selectAutomaticPoint(MinecraftServer server,
                                                                     RaidSavedData.Anchor anchor,
                                                                     List<ServerPlayer> members) {
+        // v2.27.0: claim-center pass. If Recruits is loaded and the anchor
+        // sits inside a friendly claim, prefer the claim's center as the
+        // defense point. Keeps raids attacking what the player actually
+        // built and claimed instead of the anchor block itself. Only used
+        // when the defender-near check passes (or is disabled).
+        if (RaidConfig.CLAIM_AWARE_ANCHORS.get()
+                && RaidConfig.USE_CLAIM_CENTER_AS_DEFENSE_POINT.get()
+                && com.devfarinsky.factionraids.compat.RecruitsClaimsBridge.available()) {
+            RaidSavedData.DefensePoint claimPoint = synthesizeClaimDefensePoint(server, anchor);
+            if (claimPoint != null
+                    && (!RaidConfig.REQUIRE_PLAYER_NEAR_ANCHOR.get() || hasDefenderNear(server, claimPoint, members))) {
+                return claimPoint;
+            }
+        }
         if (anchor.automaticHome()) {
             List<RaidSavedData.DefensePoint> playerHomes = new ArrayList<>();
             for (ServerPlayer member : members) {
@@ -4067,6 +4098,34 @@ public final class RaidEvents {
         }
         if (eligible.isEmpty()) return null;
         return eligible.get(server.overworld().random.nextInt(eligible.size()));
+    }
+
+    /**
+     * v2.27.0: builds a synthetic {@link RaidSavedData.DefensePoint} anchored
+     * at the center of the defender's Recruits claim, if one covers any of
+     * the anchor's stored defense points. Claim center is a {@link ChunkPos};
+     * we resolve it to the surface Y at the chunk's center block for a
+     * usable raid target. Returns null when Recruits is absent, no friendly
+     * claim overlaps, or the overworld is unavailable.
+     */
+    private static RaidSavedData.DefensePoint synthesizeClaimDefensePoint(MinecraftServer server,
+                                                                          RaidSavedData.Anchor anchor) {
+        ServerLevel overworld = server.overworld();
+        if (overworld == null) return null;
+        java.util.Optional<com.devfarinsky.factionraids.compat.RecruitsClaimsBridge.ClaimSnapshot> snap =
+                com.devfarinsky.factionraids.compat.RecruitsClaimsBridge.resolveDefendingClaim(overworld, anchor);
+        if (snap.isEmpty()) return null;
+        com.devfarinsky.factionraids.compat.RecruitsClaimsBridge.ClaimSnapshot claim = snap.get();
+        if (claim.center() == null) return null;
+        int cx = claim.center().getMiddleBlockX();
+        int cz = claim.center().getMiddleBlockZ();
+        BlockPos surface = overworld.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                new BlockPos(cx, 0, cz));
+        // Use a stable claim-scoped point name so the raid state and any
+        // logs consistently reference "claim:<uuid>" rather than a random
+        // synthetic id per raid.
+        String pointName = "claim:" + claim.claimId().toString().substring(0, 8);
+        return new RaidSavedData.DefensePoint(pointName, overworld.dimension().location(), surface);
     }
 
     private static RaidSavedData.DefensePoint closestDefensePoint(MinecraftServer server,
