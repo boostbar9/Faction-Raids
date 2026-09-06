@@ -34,6 +34,10 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue STUCK_ESCALATION_SECONDS;
     public static final ForgeConfigSpec.DoubleValue INNER_AGGRO_MULTIPLIER;
     public static final ForgeConfigSpec.BooleanValue FORCE_REPATH_WHEN_IDLE;
+    // v2.24.0 vanilla-style cone-widening fallback:
+    public static final ForgeConfigSpec.BooleanValue CONE_FALLBACK_ENABLED;
+    public static final ForgeConfigSpec.IntValue CONE_FALLBACK_RADIUS;
+    public static final ForgeConfigSpec.IntValue CONE_FALLBACK_VERTICAL;
     // v2.15.0 "Clear Intent":
     public static final ForgeConfigSpec.EnumValue<LabelMode> RAIDER_LABEL_MODE;
     public static final ForgeConfigSpec.IntValue RAIDER_LABEL_RADIUS;
@@ -188,6 +192,12 @@ public final class RaidConfig {
                 .defineInRange("innerAggroMultiplier", 2.0, 1.0, 4.0);
         FORCE_REPATH_WHEN_IDLE = b.comment("When true (default), raiders that have no target get a fresh moveTo(objective) call every redirect tick (once per second) instead of only when the pathfinder reports done. Prevents a raider whose path failed against a wall from parking there forever.")
                 .define("forceRepathWhenIdle", true);
+        CONE_FALLBACK_ENABLED = b.comment("When true (default), an idle stuck raider whose direct path to the objective is failing will try a vanilla-style random reachable point in a narrow cone toward the objective, then widen to a 90-degree cone if that also fails. Matches Mojang's RaiderMoveThroughVillageGoal fallback. Only applies to raiders at stuck escalation level 1 or higher, so healthy raiders keep pushing straight at the objective.")
+                .define("coneFallbackEnabled", true);
+        CONE_FALLBACK_RADIUS = b.comment("Horizontal search radius (blocks) for the vanilla cone fallback. Vanilla uses 16 for the narrow attempt and 8 for the wide attempt; we use this value for the narrow attempt and half of it for the wide attempt.")
+                .defineInRange("coneFallbackRadius", 16, 4, 48);
+        CONE_FALLBACK_VERTICAL = b.comment("Vertical tolerance (blocks) for the vanilla cone fallback. Vanilla uses 7. Higher values let raiders find reachable points on higher terrain around the objective.")
+                .defineInRange("coneFallbackVertical", 7, 1, 16);
         // v2.15.0 Clear Intent:
         RAIDER_LABEL_MODE = b.comment("How raider role name tags (Breacher, Warcaster, Captain, Marksman, Siege Commander) are shown. OFF hides them entirely; PROXIMITY shows tags only to defenders within raiderLabelRadius blocks (default); ALWAYS shows all tags at all times (visually noisy on large raids).")
                 .defineEnum("raiderLabelMode", LabelMode.PROXIMITY);
