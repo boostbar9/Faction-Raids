@@ -1368,7 +1368,8 @@ public final class RaidEvents {
         String subtitle = state.narrative != null && state.narrative.factionEpithet != null
                 ? "The " + state.narrative.factionEpithet + " march from the " + approachDirection(state.approachAngle)
                 : "Enemy war camp sighted to the " + approachDirection(state.approachAngle);
-        showTitle(server, anchor.teamKey(), Component.literal("SIEGE INCOMING").withStyle(ChatFormatting.DARK_RED),
+        // v2.31.0: title cards use case-normal text. Weight comes from color, not caps.
+        showTitle(server, anchor.teamKey(), Component.literal("Siege Incoming").withStyle(ChatFormatting.DARK_RED),
                 Component.literal(subtitle).withStyle(accent));
         updateBossBar(server, anchor, state, false);
         return true;
@@ -1480,7 +1481,8 @@ public final class RaidEvents {
         // Rate-limited internally; ladders are tracked in campBlocks and
         // cleaned up when the raid ends via the existing camp pipeline.
         if (com.devfarinsky.factionraids.siege.LadderBuilder.tick(level, state, point.pos())) {
-            announce(server, teamKey, Component.literal("Raiders have raised a ladder to scale your defenses!")
+            // v2.31.0: no exclamation. Urgency comes from color, not punctuation.
+            announce(server, teamKey, Component.literal("Raiders have raised a ladder to scale your defenses.")
                     .withStyle(ChatFormatting.GOLD), false);
             data.setDirty();
         }
@@ -1537,7 +1539,7 @@ public final class RaidEvents {
             int seconds = Math.max(0, (state.ticksToNextWave + 19) / 20);
             if (shouldWarn(seconds) && seconds < state.lastWarningSecond) {
                 state.lastWarningSecond = seconds;
-                announce(server, teamKey, Component.literal("Enemy wave arrives in " + seconds + " seconds!")
+                announce(server, teamKey, Component.literal("Enemy wave arrives in " + seconds + " seconds.")
                         .withStyle(ChatFormatting.GOLD), seconds == 10);
             }
             if (state.ticksToNextWave <= 0) {
@@ -1739,7 +1741,7 @@ public final class RaidEvents {
                 scoutingSummary(recruitScale, assetScale, recruits.size(), compat))
                 .withStyle(ChatFormatting.RED), true);
         if (state.wave >= RaidConfig.WAVES.get()) {
-            showTitle(server, anchor.teamKey(), Component.literal("COMMAND ASSAULT")
+            showTitle(server, anchor.teamKey(), Component.literal("Command Assault")
                             .withStyle(ChatFormatting.DARK_RED),
                     Component.literal("Break the commander and hold the stronghold")
                             .withStyle(ChatFormatting.GOLD));
@@ -1913,10 +1915,11 @@ public final class RaidEvents {
         } else state.captureTicks = Math.max(0, state.captureTicks - 30 * 20);
         String pressure = !state.breached && RaidConfig.ENABLE_BREACH_PHASE.get() ?
                 "breach pressure" : "occupation";
-        announce(server, anchor.teamKey(), Component.literal("The siege commander has fallen! Enemy " +
+        announce(server, anchor.teamKey(), Component.literal("The siege commander has fallen. Enemy " +
                         pressure + " lost 30 seconds of progress.")
                 .withStyle(ChatFormatting.GREEN), true);
-        sendActionBar(server, anchor.teamKey(), Component.literal("COMMANDER DEFEATED • " +
+        // v2.31.0: action bar uses sentence case + middle-dot separator.
+        sendActionBar(server, anchor.teamKey(), Component.literal("Commander down \u00b7 " +
                         (state.breached ? "Occupation" : "Breach") + " pushed back")
                 .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
     }
@@ -2809,7 +2812,7 @@ public final class RaidEvents {
                 SoundSource.HOSTILE, 1.1F, 0.8F);
         level.sendParticles(ParticleTypes.POOF, target.getX() + 0.5D, target.getY() + 0.5D,
                 target.getZ() + 0.5D, 14, 0.5D, 0.75D, 0.5D, 0.08D);
-        sendActionBar(level.getServer(), raid.teamKey, Component.literal("DEFENSE BROKEN • " +
+        sendActionBar(level.getServer(), raid.teamKey, Component.literal("Defense broken \u00b7 " +
                 raid.breachedBlocks.size() + " block(s) queued for repair").withStyle(ChatFormatting.RED));
         if (RaidConfig.ENABLE_EFFORT_BONUS.get()) {
             com.devfarinsky.factionraids.effort.RaidEffortTracker.onBreachTick(raid.teamKey);
@@ -3283,15 +3286,16 @@ public final class RaidEvents {
                 int percent = band * 25;
                 announce(server, anchor.teamKey(), Component.literal("Perimeter breach pressure: " + percent +
                         "%. Hold the outer defensive line!").withStyle(ChatFormatting.GOLD), band >= 3);
-                sendActionBar(server, anchor.teamKey(), Component.literal("PERIMETER BREACH: " + percent + "%")
-                        .withStyle(band >= 3 ? ChatFormatting.RED : ChatFormatting.GOLD, ChatFormatting.BOLD));
+                // v2.31.0: chip format "Perimeter \u00b7 75%" instead of shouted percent line.
+                sendActionBar(server, anchor.teamKey(), Component.literal("Perimeter \u00b7 " + percent + "%")
+                        .withStyle(com.devfarinsky.factionraids.chat.ChatStyle.pressureColor(percent), ChatFormatting.BOLD));
             }
             if (state.breachTicks >= maximum) {
                 state.breached = true;
                 state.lastCaptureWarningBand = 0;
-                announce(server, anchor.teamKey(), Component.literal("The perimeter has been breached! Invaders are pushing for the stronghold heart.")
+                announce(server, anchor.teamKey(), Component.literal("The perimeter has been breached. Invaders are pushing for the stronghold heart.")
                         .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD), true);
-                showTitle(server, anchor.teamKey(), Component.literal("PERIMETER BREACHED")
+                showTitle(server, anchor.teamKey(), Component.literal("Perimeter Breached")
                                 .withStyle(ChatFormatting.DARK_RED),
                         Component.literal("Fall back and defend the stronghold heart")
                                 .withStyle(ChatFormatting.GOLD));
@@ -3322,8 +3326,8 @@ public final class RaidEvents {
             announce(server, anchor.teamKey(), Component.literal("Invaders hold " + percent +
                     "% of the stronghold — push them out.").withStyle(ChatFormatting.DARK_RED),
                     band >= 3);
-            sendActionBar(server, anchor.teamKey(), Component.literal("STRONGHOLD OCCUPATION: " + percent + "%")
-                    .withStyle(band >= 3 ? ChatFormatting.RED : ChatFormatting.GOLD, ChatFormatting.BOLD));
+            sendActionBar(server, anchor.teamKey(), Component.literal("Stronghold \u00b7 " + percent + "% held")
+                    .withStyle(com.devfarinsky.factionraids.chat.ChatStyle.pressureColor(percent), ChatFormatting.BOLD));
         }
         return state.captureTicks >= maximum;
     }
@@ -3530,7 +3534,7 @@ public final class RaidEvents {
             }
         }
         showTitle(server, teamKey,
-                Component.literal(victory ? "SIEGE BROKEN" : "STRONGHOLD FALLEN")
+                Component.literal(victory ? "Siege Broken" : "Stronghold Fallen")
                         .withStyle(victory ? ChatFormatting.GREEN : ChatFormatting.DARK_RED),
                 Component.literal(victory ? "Your faction held the line" : "The invaders seized the objective")
                         .withStyle(ChatFormatting.GOLD));
@@ -3649,13 +3653,44 @@ public final class RaidEvents {
                 BossEvent.BossBarColor.RED);
     }
 
+    /**
+     * v2.31.0 Chat Presentation Overhaul: the {@code [Faction Raids]}
+     * bracket prefix is gone. Team-scoped chat now leads with the diamond
+     * glyph; cross-server broadcasts lead with crossed swords in broadcast
+     * color so they visually part from personal tactical chat.
+     *
+     * <p>Callers pass an already-styled {@link Component}. To keep every
+     * legacy callsite working without churn, we detect the leading glyph;
+     * if the component doesn't start with one we prepend the team diamond
+     * as a graceful fallback. Text hygiene (strip exclamation marks, kill
+     * ALL CAPS) is enforced up at the callsites through
+     * {@link com.devfarinsky.factionraids.chat.ChatStyle}, so this funnel
+     * stays a thin dispatcher.</p>
+     */
     private static void announce(MinecraftServer server, String teamKey, Component message, boolean horn) {
-        Component branded = MESSAGE_PREFIX.copy().append(message);
+        Component styled = ensureGlyph(message);
         if (RaidConfig.ANNOUNCE_GLOBALLY.get()) {
-            server.getPlayerList().broadcastSystemMessage(branded, false);
-        } else onlineMembers(server, teamKey).forEach(p -> p.sendSystemMessage(branded));
+            server.getPlayerList().broadcastSystemMessage(styled, false);
+        } else onlineMembers(server, teamKey).forEach(p -> p.sendSystemMessage(styled));
         if (horn) onlineMembers(server, teamKey).forEach(p ->
                 p.playNotifySound(SoundEvents.RAID_HORN.value(), SoundSource.HOSTILE, 1.0F, 1.0F));
+    }
+
+    /**
+     * If a caller hands us a raw {@link Component} that does not already
+     * start with one of the v2.31.0 glyphs, prepend the team diamond so
+     * the presentation contract holds. This keeps the visual style
+     * consistent even for callsites that predate the {@code ChatStyle}
+     * refactor.
+     */
+    private static Component ensureGlyph(Component message) {
+        String plain = message.getString();
+        if (plain.startsWith(com.devfarinsky.factionraids.chat.ChatStyle.GLYPH_TEAM)
+                || plain.startsWith(com.devfarinsky.factionraids.chat.ChatStyle.GLYPH_CROSS)) {
+            return message;
+        }
+        return Component.literal(com.devfarinsky.factionraids.chat.ChatStyle.GLYPH_TEAM)
+                .withStyle(ChatFormatting.DARK_GRAY).append(message);
     }
 
     private static void showTitle(MinecraftServer server, String teamKey, Component title, Component subtitle) {
