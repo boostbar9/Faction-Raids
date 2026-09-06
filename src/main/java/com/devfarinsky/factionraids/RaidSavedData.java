@@ -501,6 +501,21 @@ public final class RaidSavedData extends SavedData {
                 missing.add(entry);
             });
             tag.put("MissingEntities", missing);
+            // v2.20.0 SD1: persist lastKnownChunks so updateTrackedMobs can
+            // still distinguish "chunk loaded, mob gone (defeated)" from
+            // "chunk unloaded (grace timer, may escape)" after a mid-raid
+            // restart. Without this, every previously-tracked raider whose
+            // entity is missing at load time falls into the escape branch
+            // and inflates totalEscaped / deflates totalDefeated in the
+            // wave summary and war journal entry.
+            ListTag chunks = new ListTag();
+            lastKnownChunks.forEach((id, chunkKey) -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putUUID("Id", id);
+                entry.putLong("Chunk", chunkKey);
+                chunks.add(entry);
+            });
+            tag.put("LastKnownChunks", chunks);
             if (narrative != null) tag.put("Narrative", narrative.save());
             return tag;
         }
@@ -593,6 +608,17 @@ public final class RaidSavedData extends SavedData {
             for (int i = 0; i < missing.size(); i++) {
                 CompoundTag entry = missing.getCompound(i);
                 if (entry.hasUUID("Id")) state.missingTicks.put(entry.getUUID("Id"), entry.getInt("Ticks"));
+            }
+            // v2.20.0 SD1: hydrate lastKnownChunks. Older saves (pre-2.20)
+            // omit this tag entirely; leave the map empty and let the next
+            // tick repopulate from live mobs. That fallback still degrades
+            // the accuracy of the very first wave summary after an upgrade
+            // save loads, but it's a one-time cost, and every subsequent
+            // restart writes and reads it correctly.
+            ListTag chunks = tag.getList("LastKnownChunks", Tag.TAG_COMPOUND);
+            for (int i = 0; i < chunks.size(); i++) {
+                CompoundTag entry = chunks.getCompound(i);
+                if (entry.hasUUID("Id")) state.lastKnownChunks.put(entry.getUUID("Id"), entry.getLong("Chunk"));
             }
             return state;
         }
