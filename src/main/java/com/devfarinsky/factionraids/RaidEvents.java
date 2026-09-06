@@ -2422,7 +2422,18 @@ public final class RaidEvents {
         }
         affected.removeIf(position -> raid.breachedBlocks.containsKey(position.asLong()));
         int capacity = RaidConfig.MAX_RESTORABLE_BLOCKS.get() - raid.breachedBlocks.size();
-        if (affected.isEmpty() || affected.size() > capacity) return;
+        if (affected.isEmpty() || affected.size() > capacity) {
+            // v2.19.0 RE2: drop the target's progress entry when we bail on
+            // capacity. Otherwise progress stays >= required and this method
+            // re-enters and re-bails every tick, livelocking breachers on a
+            // door that will never break. Clearing progress lets the breacher
+            // pick a different block on the next tick.
+            raid.blockBreachProgress.remove(target.asLong());
+            raid.currentBreachBlock = null;
+            raid.currentBreachRequired = 0;
+            level.destroyBlockProgress(breakerAnimationId(raid), target, -1);
+            return;
+        }
 
         for (BlockPos position : affected) {
             BlockState state = level.getBlockState(position);
@@ -2876,6 +2887,13 @@ public final class RaidEvents {
         com.devfarinsky.factionraids.effort.RaidEffortTracker.forget(teamKey);
         com.devfarinsky.factionraids.effort.StragglerTracker.forget(teamKey);
         com.devfarinsky.factionraids.siege.LadderBuilder.forget(teamKey);
+        // v2.19.0 RE1: drop the ACTIVE_CAMPS entry unconditionally, before
+        // the level-guarded branch below. Prior code only removed the entry
+        // when the raid's dimension was loaded, so an admin stop or dim
+        // removal that finished a raid with level == null leaked a
+        // CampBuilder.CampState per raid, keyed by team, until server restart.
+        com.devfarinsky.factionraids.camp.CampBuilder.CampState leakedCamp =
+                ACTIVE_CAMPS.remove(teamKey);
         RaidSavedData.RaidState state = data.raids.remove(teamKey);
         RaidSavedData.Anchor anchor = data.anchors.get(teamKey);
         if (state != null && anchor != null) {
@@ -2889,8 +2907,7 @@ public final class RaidEvents {
                 }
                 restoreBreachedBlocks(level, state);
                 cleanupWarCamp(level, state);
-                com.devfarinsky.factionraids.camp.CampBuilder.CampState camp = ACTIVE_CAMPS.remove(teamKey);
-                if (camp != null) camp.cleanup(level);
+                if (leakedCamp != null) leakedCamp.cleanup(level);
             }
             long next = server.overworld().getGameTime() + randomCooldownTicks(server.overworld().random);
             data.anchors.put(teamKey, anchor.withNextRaid(next));
