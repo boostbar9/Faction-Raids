@@ -1211,6 +1211,13 @@ public final class RaidEvents {
         state.approachAngle = server.overworld().random.nextDouble() * Math.PI * 2.0D;
         state.startedGameTime = server.overworld().getGameTime();
         state.rewardEligible = rewardEligible;
+        // v2.29.0: assign one of the five raiding factions to this raid.
+        // Persisted so banners planted in the camp and any future faction-
+        // specific behavior remain consistent across server restarts. All
+        // downstream callers must tolerate a null factionId on pre-2.29.0
+        // save states via FactionBanners.FactionId.byIdOrDefault(...).
+        state.factionId = com.devfarinsky.factionraids.items.FactionBanners
+                .pickRandom(server.overworld()).id;
         // Pick who is attacking and why. Selection is guaranteed non-null even
         // when the narrative system is disabled — fields on the returned
         // record are just left blank, and the branded fallback below reads the
@@ -2030,14 +2037,26 @@ public final class RaidEvents {
         state.barrelPos = barrel;
 
         // 4) Command banner on a stone platform, facing the objective.
+        // v2.29.0: replaces the plain RED_BANNER with a faction-colored
+        // banner carrying the faction's registered sigil pattern. The base
+        // color comes from the Block (e.g. BLACK_BANNER); the sigil is added
+        // via NBT on the placed BlockEntity in placeFactionBanner().
+        com.devfarinsky.factionraids.items.FactionBanners.FactionId faction =
+                com.devfarinsky.factionraids.items.FactionBanners.FactionId.byIdOrDefault(state.factionId);
+        net.minecraft.world.level.block.Block bannerBlock =
+                com.devfarinsky.factionraids.items.FactionBanners.standingBlockFor(faction);
         int bannerDx = Mth.floor(Math.cos(frontAngle) * 4.0D);
         int bannerDz = Mth.floor(Math.sin(frontAngle) * 4.0D);
         BlockPos bannerBase = surfacePosition(level, cx + bannerDx, cz + bannerDz);
         placeCampBlock(level, state, bannerBase, Blocks.STONE_BRICKS);
-        placeCampBlock(level, state, bannerBase.above(), Blocks.RED_BANNER);
+        placeFactionBanner(level, state, bannerBase.above(), bannerBlock, faction);
         state.bannerPos = bannerBase.above();
 
         // 5) Forward marker banners flanking the objective breach lane.
+        //     Same faction as the command banner. Uses a plinth of the base
+        //     dye color's wool so the banner reads as one continuous marker.
+        net.minecraft.world.level.block.Block plinth =
+                woolMatching(faction.baseColor);
         Vec3 breach = invasionObjective(level, point, state);
         int bx = Mth.floor(breach.x);
         int bz = Mth.floor(breach.z);
@@ -2046,8 +2065,8 @@ public final class RaidEvents {
             int x = bx + Mth.floor(Math.cos(perpendicular) * 4.0D * side);
             int z = bz + Mth.floor(Math.sin(perpendicular) * 4.0D * side);
             BlockPos marker = surfacePosition(level, x, z);
-            placeCampBlock(level, state, marker, Blocks.RED_WOOL);
-            placeCampBlock(level, state, marker.above(), Blocks.RED_BANNER);
+            placeCampBlock(level, state, marker, plinth);
+            placeFactionBanner(level, state, marker.above(), bannerBlock, faction);
         }
 
         // -----------------------------------------------------------------
@@ -2372,6 +2391,55 @@ public final class RaidEvents {
         if (!level.setBlock(pos, block.defaultBlockState(), 3)) return;
         ResourceLocation id = ForgeRegistries.BLOCKS.getKey(block);
         if (id != null) state.campBlocks.put(pos.asLong(), id.toString());
+    }
+
+    /**
+     * v2.29.0: place a faction-colored standing banner with a single pattern
+     * layer (the faction sigil). Uses {@link #placeCampBlock} so the banner
+     * still participates in the temporary-camp cleanup pipeline, then
+     * post-processes the freshly placed BannerBlockEntity to attach the
+     * pattern NBT.
+     *
+     * <p>If the block placement was rejected (occupied space, out of world
+     * border, etc.) the BE lookup returns null and we exit cleanly. The
+     * fallback in that case is: no sigil, plain colored banner — acceptable.</p>
+     */
+    private static void placeFactionBanner(ServerLevel level,
+                                           RaidSavedData.RaidState state,
+                                           BlockPos pos,
+                                           Block bannerBlock,
+                                           com.devfarinsky.factionraids.items.FactionBanners.FactionId faction) {
+        placeCampBlock(level, state, pos, bannerBlock);
+        net.minecraft.world.level.block.entity.BlockEntity be = level.getBlockEntity(pos);
+        if (be instanceof net.minecraft.world.level.block.entity.BannerBlockEntity) {
+            net.minecraft.nbt.CompoundTag beTag = new net.minecraft.nbt.CompoundTag();
+            com.devfarinsky.factionraids.items.FactionBanners.applyToBlockEntityTag(beTag, faction);
+            // load(...) is how vanilla banners re-read their Patterns list from NBT.
+            be.load(beTag);
+            be.setChanged();
+        }
+    }
+
+    /** Returns the vanilla wool Block matching the given dye color. */
+    private static Block woolMatching(net.minecraft.world.item.DyeColor color) {
+        return switch (color) {
+            case WHITE -> Blocks.WHITE_WOOL;
+            case ORANGE -> Blocks.ORANGE_WOOL;
+            case MAGENTA -> Blocks.MAGENTA_WOOL;
+            case LIGHT_BLUE -> Blocks.LIGHT_BLUE_WOOL;
+            case YELLOW -> Blocks.YELLOW_WOOL;
+            case LIME -> Blocks.LIME_WOOL;
+            case PINK -> Blocks.PINK_WOOL;
+            case GRAY -> Blocks.GRAY_WOOL;
+            case LIGHT_GRAY -> Blocks.LIGHT_GRAY_WOOL;
+            case CYAN -> Blocks.CYAN_WOOL;
+            case PURPLE -> Blocks.PURPLE_WOOL;
+            case BLUE -> Blocks.BLUE_WOOL;
+            case BROWN -> Blocks.BROWN_WOOL;
+            case GREEN -> Blocks.GREEN_WOOL;
+            case RED -> Blocks.RED_WOOL;
+            case BLACK -> Blocks.BLACK_WOOL;
+        };
     }
 
     private static void cleanupWarCamp(ServerLevel level, RaidSavedData.RaidState state) {
@@ -3322,6 +3390,21 @@ public final class RaidEvents {
                 winners.forEach(p -> giveEmeralds(p, bonus));
             }
             if (RaidConfig.VICTORY_LOOT_ENABLED.get()) winners.forEach(p -> giveVictoryLoot(server, p));
+            // v2.29.0: drop the defeated faction's banner as a trophy for
+            // each winner. Uses ItemHandlerHelper so a full inventory spills
+            // to the world instead of eating the drop. Skipped silently if
+            // the state lacks a factionId (pre-2.29.0 in-flight save). This
+            // is the ONLY loot path that references state.factionId directly
+            // — all rendering code goes through FactionBanners helpers.
+            if (state.factionId != null) {
+                com.devfarinsky.factionraids.items.FactionBanners.FactionId trophy =
+                        com.devfarinsky.factionraids.items.FactionBanners.FactionId.byIdOrDefault(state.factionId);
+                winners.forEach(p -> {
+                    net.minecraft.world.item.ItemStack banner =
+                            com.devfarinsky.factionraids.items.FactionBanners.itemStackFor(trophy);
+                    net.minecraftforge.items.ItemHandlerHelper.giveItemToPlayer(p, banner);
+                });
+            }
         }
         // v2.12.0 Know Your Enemy — record this siege to the War Journal and
         // mark the attacking faction as discovered. Unit discovery happens
