@@ -1831,8 +1831,11 @@ public final class RaidEvents {
             state.ticksToNextSquad = RaidConfig.SPAWN_RETRY_SECONDS.get() * 20;
             // Retry chatter moved to the action bar — it fires often enough
             // that it deserves a transient hint, not a chat line.
-            sendActionBar(server, anchor.teamKey(), Component.literal("Scouts blocked — next assault attempt in " +
-                    RaidConfig.SPAWN_RETRY_SECONDS.get() + "s").withStyle(ChatFormatting.YELLOW));
+            // v2.33.0: middle-dot separator + shared factory for consistent rhythm.
+            sendActionBar(server, anchor.teamKey(),
+                    com.devfarinsky.factionraids.chat.ChatStyle.actionBar(
+                            "Scouts blocked", com.devfarinsky.factionraids.chat.ChatStyle.NOTE,
+                            "retry in " + RaidConfig.SPAWN_RETRY_SECONDS.get() + "s"));
             return;
         }
 
@@ -1845,9 +1848,14 @@ public final class RaidEvents {
         // the live count and refreshes every squad; opening the codex shows
         // the same info in more detail. This used to flood chat with 3-4
         // "Assault squad N entered the battlefield" lines per wave.
-        sendActionBar(server, anchor.teamKey(), Component.literal("Wave " + state.wave + ": " +
-                state.raiders.size() + " deployed • " + state.pendingWaveSpawns + " reinforcing")
-                .withStyle(ChatFormatting.RED));
+        // v2.33.0: unified chip factory + '+N reinforcing' chip that only
+        // renders when there's actual reinforcement pending.
+        String reinforcingChip = state.pendingWaveSpawns > 0
+                ? "+" + state.pendingWaveSpawns + " reinforcing" : null;
+        sendActionBar(server, anchor.teamKey(),
+                com.devfarinsky.factionraids.chat.ChatStyle.actionBar(
+                        "Wave " + state.wave, com.devfarinsky.factionraids.chat.ChatStyle.ALERT,
+                        state.raiders.size() + " deployed", reinforcingChip));
         data.setDirty();
     }
 
@@ -1922,9 +1930,11 @@ public final class RaidEvents {
                         pressure + " lost 30 seconds of progress.")
                 .withStyle(ChatFormatting.GREEN), true);
         // v2.31.0: action bar uses sentence case + middle-dot separator.
-        sendActionBar(server, anchor.teamKey(), Component.literal("Commander down \u00b7 " +
-                        (state.breached ? "Occupation" : "Breach") + " pushed back")
-                .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
+        // v2.33.0: routed through ChatStyle.actionBar for consistent styling.
+        sendActionBar(server, anchor.teamKey(),
+                com.devfarinsky.factionraids.chat.ChatStyle.actionBar(
+                        "Commander down", com.devfarinsky.factionraids.chat.ChatStyle.GOOD,
+                        (state.breached ? "occupation" : "breach") + " pushed back"));
     }
 
     private static Mob createAttackerForWave(ServerLevel level, String teamKey, int wave, int index) {
@@ -2815,8 +2825,13 @@ public final class RaidEvents {
                 SoundSource.HOSTILE, 1.1F, 0.8F);
         level.sendParticles(ParticleTypes.POOF, target.getX() + 0.5D, target.getY() + 0.5D,
                 target.getZ() + 0.5D, 14, 0.5D, 0.75D, 0.5D, 0.08D);
-        sendActionBar(level.getServer(), raid.teamKey, Component.literal("Defense broken \u00b7 " +
-                raid.breachedBlocks.size() + " block(s) queued for repair").withStyle(ChatFormatting.RED));
+        // v2.33.0: unified chip factory. Uses ALERT color — defense being
+        // broken is a critical event that should read at the same visual
+        // weight as the perimeter/stronghold pressure chips.
+        sendActionBar(level.getServer(), raid.teamKey,
+                com.devfarinsky.factionraids.chat.ChatStyle.actionBar(
+                        "Defense broken", com.devfarinsky.factionraids.chat.ChatStyle.ALERT,
+                        raid.breachedBlocks.size() + (raid.breachedBlocks.size() == 1 ? " block queued for repair" : " blocks queued for repair")));
         if (RaidConfig.ENABLE_EFFORT_BONUS.get()) {
             com.devfarinsky.factionraids.effort.RaidEffortTracker.onBreachTick(raid.teamKey);
         }
@@ -3290,8 +3305,11 @@ public final class RaidEvents {
                 announce(server, anchor.teamKey(), Component.literal("Perimeter breach pressure: " + percent +
                         "%. Hold the outer defensive line!").withStyle(ChatFormatting.GOLD), band >= 3);
                 // v2.31.0: chip format "Perimeter \u00b7 75%" instead of shouted percent line.
-                sendActionBar(server, anchor.teamKey(), Component.literal("Perimeter \u00b7 " + percent + "%")
-                        .withStyle(com.devfarinsky.factionraids.chat.ChatStyle.pressureColor(percent), ChatFormatting.BOLD));
+                // v2.33.0: routed through the shared actionBar factory.
+                sendActionBar(server, anchor.teamKey(),
+                        com.devfarinsky.factionraids.chat.ChatStyle.actionBar(
+                                "Perimeter", com.devfarinsky.factionraids.chat.ChatStyle.pressureColor(percent),
+                                percent + "%"));
             }
             if (state.breachTicks >= maximum) {
                 state.breached = true;
@@ -3332,8 +3350,10 @@ public final class RaidEvents {
             announce(server, anchor.teamKey(), Component.literal("Invaders hold " + percent +
                     "% of the stronghold — push them out.").withStyle(ChatFormatting.DARK_RED),
                     band >= 3);
-            sendActionBar(server, anchor.teamKey(), Component.literal("Stronghold \u00b7 " + percent + "% held")
-                    .withStyle(com.devfarinsky.factionraids.chat.ChatStyle.pressureColor(percent), ChatFormatting.BOLD));
+            sendActionBar(server, anchor.teamKey(),
+                    com.devfarinsky.factionraids.chat.ChatStyle.actionBar(
+                            "Stronghold", com.devfarinsky.factionraids.chat.ChatStyle.pressureColor(percent),
+                            percent + "% held"));
         }
         return state.captureTicks >= maximum;
     }

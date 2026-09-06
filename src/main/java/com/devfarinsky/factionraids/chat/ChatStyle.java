@@ -242,6 +242,26 @@ public final class ChatStyle {
     // ---- Bossbar label composer (v2.32.0) ---------------------------------
 
     /**
+     * v2.33.0: compose an action bar line from a headline label and one or
+     * more middle-dot separated chips. Reads with the same rhythm as the
+     * bossbar label composer so both HUDs feel like one family.
+     *
+     * <p>Example: {@code actionBar("Wave 3", ChatStyle.ALERT, "12 deployed",
+     * "+4 reinforcing")} renders {@code Wave 3 · 12 deployed · +4
+     * reinforcing} in the given color with bold weight.</p>
+     */
+    public static MutableComponent actionBar(String headline, ChatFormatting color, String... chips) {
+        StringBuilder out = new StringBuilder(scrub(headline));
+        if (chips != null) {
+            for (String c : chips) {
+                if (c == null || c.isEmpty()) continue;
+                out.append(SEP).append(scrub(c));
+            }
+        }
+        return Component.literal(out.toString()).withStyle(color, ChatFormatting.BOLD);
+    }
+
+    /**
      * Compose a bossbar label out of structured segments with typographic
      * hierarchy: leading epithet (if any), phase name, then value chips
      * separated by middle-dots. Reads far cleaner than the old
