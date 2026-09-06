@@ -63,6 +63,8 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.EntityMountEvent;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
+import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraft.world.level.pathfinder.BlockPathTypes;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -154,7 +156,72 @@ public final class RaidEvents {
         state.raiders.add(mob.getUUID());
         if (RaidConfig.PAUSE_WHEN_FACTION_OFFLINE.get() &&
                 onlineMembers(level.getServer(), teamKey).isEmpty()) mob.setNoAi(true);
+        // v2.25.0: attach raider-side AI upgrades once per raider. These
+        // are cheap no-ops when the config keys are off, so we always
+        // attach and let the goals themselves gate on the config value.
+        attachRaiderAI(mob);
         data.setDirty();
+    }
+
+    /**
+     * v2.25.0 raider AI hookup. Called from onEntityJoin after the raider's
+     * RAID_TEAM_TAG has been confirmed set. Safe to call multiple times per
+     * mob because the parkour goal is added at a unique priority slot and
+     * setPathfindingMalus is idempotent.
+     */
+    private static void attachRaiderAI(Mob mob) {
+        // Parkour: leap short obstacles. Only meaningful for PathfinderMobs
+        // because the goal drives horizontal-nudge + vertical impulse. Non
+        // PathfinderMob raiders (e.g. vex) fall through unchanged.
+        if (mob instanceof PathfinderMob) {
+            // Priority 2 keeps parkour just below vanilla melee/attack goals
+            // (0-1) so it never overrides an in-progress attack, but above
+            // wander/look goals (5+) so it fires when the raider is idled
+            // by an obstacle.
+            mob.goalSelector.addGoal(2, new RaiderParkourGoal(mob));
+        }
+        // Hazard avoidance: raise pathfinding cost for lethal blocks so
+        // vanilla path search routes around them. -1 malus means "never
+        // step on"; positive values are additive cost. We use +8 (high
+        // but not infinite) so a raider forced through fire will still
+        // take it, but any alternative route is preferred.
+        if (RaidConfig.AVOID_HAZARDS.get()) {
+            mob.setPathfindingMalus(BlockPathTypes.DAMAGE_FIRE, 16.0f);
+            mob.setPathfindingMalus(BlockPathTypes.DANGER_FIRE, 16.0f);
+            mob.setPathfindingMalus(BlockPathTypes.LAVA, -1.0f);
+            mob.setPathfindingMalus(BlockPathTypes.DAMAGE_OTHER, 16.0f);
+            mob.setPathfindingMalus(BlockPathTypes.DANGER_OTHER, 16.0f);
+        }
+    }
+
+    /**
+     * v2.25.0 shout-to-allies. When a raider is hurt by a defender, alert
+     * every allied raider (same RAID_TEAM_TAG) within shoutRadius blocks
+     * and give them the attacker as a target if they don't already have
+     * one. Ignores line of sight so defenders in cover can't hide from
+     * the whole wave. Fires once per hurt event; the natural game rate
+     * limits ally-alert cascades to reasonable frequencies.
+     */
+    @SubscribeEvent
+    public static void onRaiderHurt_ShoutToAllies(LivingHurtEvent event) {
+        if (!RaidConfig.SHOUT_TO_ALLIES.get()) return;
+        if (!(event.getEntity() instanceof Mob victim)) return;
+        String team = victim.getPersistentData().getString(RAID_TEAM_TAG);
+        if (team.isBlank()) return;
+        Entity attacker = event.getSource().getEntity();
+        if (!(attacker instanceof LivingEntity livingAttacker)) return;
+        // Never alert against another raider (friendly fire from vex/etc).
+        if (attacker.getPersistentData().getString(RAID_TEAM_TAG).equals(team)) return;
+        if (!(victim.level() instanceof ServerLevel level)) return;
+        int radius = RaidConfig.SHOUT_RADIUS.get();
+        for (Mob ally : level.getEntitiesOfClass(Mob.class,
+                victim.getBoundingBox().inflate(radius),
+                m -> m != victim
+                        && team.equals(m.getPersistentData().getString(RAID_TEAM_TAG))
+                        && m.isAlive()
+                        && m.getTarget() == null)) {
+            ally.setTarget(livingAttacker);
+        }
     }
 
     @SubscribeEvent
