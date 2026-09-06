@@ -203,4 +203,67 @@ public final class ChatStyle {
         String lower = w.toLowerCase(java.util.Locale.ROOT);
         return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
     }
+
+    // ---- Title cards (v2.32.0) --------------------------------------------
+
+    /**
+     * Event weight for a title card. Controls fade/hold timings so a routine
+     * beat feels punchy but a stronghold-fallen moment lingers. Timings are
+     * in server ticks (20 = one second) and were tuned by hand:
+     *
+     * <ul>
+     *   <li>{@link #ROUTINE}: fast in, short hold, fast out. Used for phase
+     *       transitions where the player mostly needs a nudge.</li>
+     *   <li>{@link #MAJOR}: standard cinematic beat. Perimeter breached,
+     *       command assault, siege incoming.</li>
+     *   <li>{@link #DEFINING}: victory or defeat. Slow fade-in, long hold,
+     *       slow fade-out so the outcome reads as a moment, not a ping.</li>
+     * </ul>
+     */
+    public enum TitleWeight {
+        /** 8 tick fade-in, 30 tick hold, 12 tick fade-out (~2.5s total). */
+        ROUTINE(8, 30, 12),
+        /** 15 tick fade-in, 60 tick hold, 20 tick fade-out (~4.75s total). */
+        MAJOR(15, 60, 20),
+        /** 25 tick fade-in, 100 tick hold, 40 tick fade-out (~8.25s total). */
+        DEFINING(25, 100, 40);
+
+        public final int fadeInTicks;
+        public final int holdTicks;
+        public final int fadeOutTicks;
+
+        TitleWeight(int fadeInTicks, int holdTicks, int fadeOutTicks) {
+            this.fadeInTicks = fadeInTicks;
+            this.holdTicks = holdTicks;
+            this.fadeOutTicks = fadeOutTicks;
+        }
+    }
+
+    // ---- Bossbar label composer (v2.32.0) ---------------------------------
+
+    /**
+     * Compose a bossbar label out of structured segments with typographic
+     * hierarchy: leading epithet (if any), phase name, then value chips
+     * separated by middle-dots. Reads far cleaner than the old
+     * concatenated string with mixed separators.
+     *
+     * <p>Example output: {@code Ship-Wolves · Breach · stronghold 47m ·
+     * 12 deployed · breach 25%}. All segments are joined by the same
+     * middle-dot separator so the label has a single visual rhythm
+     * instead of jumping between hyphens, colons, and bullets.</p>
+     */
+    public static String bossbarLabel(String epithet, String phase, String... chips) {
+        StringBuilder out = new StringBuilder();
+        if (epithet != null && !epithet.isEmpty()) {
+            out.append(epithet).append(SEP);
+        }
+        out.append(phase);
+        if (chips != null) {
+            for (String c : chips) {
+                if (c == null || c.isEmpty()) continue;
+                out.append(SEP).append(c);
+            }
+        }
+        return out.toString();
+    }
 }
