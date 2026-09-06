@@ -43,9 +43,19 @@ public final class ModConstants {
     /** Standard boss-bar overlay style. */
     public static final BossEvent.BossBarOverlay BOSS_BAR_OVERLAY = BossEvent.BossBarOverlay.PROGRESS;
 
-    /** Chat message prefix reused by every player-facing announcement. */
-    public static final Component MESSAGE_PREFIX = Component.literal("[Faction Raids] ")
-            .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD);
+    /**
+     * Chat message prefix reused by dashboard command responses (status,
+     * territory list, help). Runtime raid announcements route through
+     * {@link com.devfarinsky.factionraids.chat.ChatStyle} and do NOT use
+     * this prefix.
+     *
+     * <p>v2.31.0 Chat Presentation Overhaul: the bracket prefix
+     * {@code [Faction Raids]} was replaced with a faint diamond glyph so
+     * command output visually matches raid announcements without shouting
+     * the mod name on every line.</p>
+     */
+    public static final Component MESSAGE_PREFIX = Component.literal("\u25c6 ")
+            .withStyle(ChatFormatting.DARK_GRAY);
 
     /** Convert seconds to server ticks. */
     public static int secondsToTicks(int seconds) {
