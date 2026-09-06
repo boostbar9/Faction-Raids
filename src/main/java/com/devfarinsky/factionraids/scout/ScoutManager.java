@@ -270,31 +270,86 @@ public final class ScoutManager {
     private static ItemStack buildIntelLetter(ScoutMission m) {
         ItemStack book = new ItemStack(Items.WRITTEN_BOOK);
         CompoundTag tag = book.getOrCreateTag();
-        tag.putString("title", "Scout's Report");
-        tag.putString("author", m.previewedNarrative != null && m.previewedNarrative.factionName != null
-                ? m.previewedNarrative.factionName : "Unknown Scout");
+        // v2.33.0: intel letter presentation overhaul. Cleaner title, better
+        // author fallback, typographic quotes on the war chant, and a
+        // dedicated second page for the casus belli when one is known.
+        tag.putString("title", "Scout's Intel");
+        String author = (m.previewedNarrative != null && m.previewedNarrative.factionName != null
+                && !m.previewedNarrative.factionName.isBlank())
+                ? m.previewedNarrative.factionName
+                : "An anonymous scout";
+        tag.putString("author", author);
         ListTag pages = new ListTag();
-        StringBuilder page1 = new StringBuilder();
-        if (m.previewedNarrative != null) {
-            page1.append("From the ").append(nullSafe(m.previewedNarrative.factionName)).append(",\n");
-            if (m.previewedNarrative.factionEpithet != null && !m.previewedNarrative.factionEpithet.isBlank()) {
-                page1.append("the ").append(m.previewedNarrative.factionEpithet).append(".\n\n");
-            } else {
-                page1.append("\n");
-            }
-            page1.append(nullSafe(m.previewedNarrative.opening)).append("\n\n");
-            if (m.previewedNarrative.chant != null && !m.previewedNarrative.chant.isBlank()) {
-                page1.append("Their war chant: \n\"")
-                        .append(m.previewedNarrative.chant).append("\"");
-            }
-        } else {
-            page1.append("An unknown raider force approaches. Details are illegible.");
-        }
-        pages.add(net.minecraft.nbt.StringTag.valueOf(
-                "{\"text\":\"" + escapeJson(page1.toString()) + "\"}"));
+        addPage(pages, buildPage1(m));
+        String page2 = buildPage2(m);
+        if (page2 != null && !page2.isBlank()) addPage(pages, page2);
         tag.put("pages", pages);
         tag.putInt("generation", 1);
         return book;
+    }
+
+    /**
+     * First page: identity + opening + war chant. Prose flow, no template seams.
+     */
+    private static String buildPage1(ScoutMission m) {
+        if (m.previewedNarrative == null) {
+            return "An unknown raider force approaches.\n\nThe rest of this letter is illegible.";
+        }
+        StringBuilder p = new StringBuilder();
+        String name = nullSafe(m.previewedNarrative.factionName);
+        String epithet = m.previewedNarrative.factionEpithet;
+        if (epithet != null && !epithet.isBlank()) {
+            p.append("The ").append(name).append(" march.\n");
+            p.append("They call themselves ").append(epithet).append(".\n\n");
+        } else {
+            p.append("The ").append(name).append(" march.\n\n");
+        }
+        String opening = m.previewedNarrative.opening;
+        if (opening != null && !opening.isBlank()) {
+            p.append(opening).append("\n\n");
+        }
+        String chant = m.previewedNarrative.chant;
+        if (chant != null && !chant.isBlank()) {
+            // Use typographic quotes for the chant so it reads as speech,
+            // not source code. \u201c and \u201d are curly double quotes.
+            p.append("Their chant:\n\u201c").append(chant).append("\u201d");
+        }
+        return p.toString();
+    }
+
+    /**
+     * Second page: why they're marching. Derived from the casus belli id
+     * so defenders learn the pretext. Returns null when there's nothing
+     * meaningful to show (unknown narrative or missing casus belli).
+     */
+    private static String buildPage2(ScoutMission m) {
+        if (m.previewedNarrative == null) return null;
+        String cbId = m.previewedNarrative.casusBelliId;
+        if (cbId == null || cbId.isBlank()) return null;
+        return "They march under the banner of\n\u201c" + humanizeCasusBelli(cbId) + ".\u201d\n\n"
+                + "Prepare accordingly.";
+    }
+
+    /**
+     * Turns a casus belli id like {@code raider_plunder} or {@code holy_war}
+     * into a display phrase like {@code Raider Plunder} or {@code Holy War}.
+     * Kept local so we don't reach across packages just to title-case a string.
+     */
+    private static String humanizeCasusBelli(String id) {
+        String[] parts = id.replace('-', '_').split("_");
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (parts[i].isEmpty()) continue;
+            if (out.length() > 0) out.append(' ');
+            out.append(Character.toUpperCase(parts[i].charAt(0)));
+            if (parts[i].length() > 1) out.append(parts[i].substring(1).toLowerCase());
+        }
+        return out.length() == 0 ? "war" : out.toString();
+    }
+
+    private static void addPage(ListTag pages, String text) {
+        pages.add(net.minecraft.nbt.StringTag.valueOf(
+                "{\"text\":\"" + escapeJson(text) + "\"}"));
     }
 
     // -------- Cleanup helpers ------------------------------------------
