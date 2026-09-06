@@ -133,8 +133,13 @@ public final class WorkersBridge {
         invokeVoid(entity, "setWidth", new Class<?>[]{int.class}, new Object[]{width});
         invokeVoid(entity, "setDepth", new Class<?>[]{int.class}, new Object[]{depth});
         invokeVoid(entity, "setHeight", new Class<?>[]{int.class}, new Object[]{height});
-        invokeVoid(entity, "setPlayerUUID", new Class<?>[]{Optional.class},
-                new Object[]{Optional.of(owner)});
+        // Workers 2.0.3: AbstractWorkAreaEntity#setPlayerUUID takes a raw UUID
+        // (not Optional<UUID>). Passing Optional.class silently failed reflection
+        // lookup, leaving PLAYER_UUID at Optional.empty() -- then getPlayerUUID()
+        // returned null on save and CompoundTag.putUUID crashed with NPE.
+        // See PR notes: this is the fix for the LumberArea save crash reported
+        // by players on modpacks that bundle Talhanation's Villager Workers.
+        invokeVoid(entity, "setPlayerUUID", new Class<?>[]{UUID.class}, new Object[]{owner});
         invokeVoid(entity, "setPlayerName", new Class<?>[]{String.class}, new Object[]{teamKey});
         invokeVoid(entity, "setTeamStringID", new Class<?>[]{String.class}, new Object[]{teamKey});
         if (!level.addFreshEntity(entity)) return Optional.empty();
