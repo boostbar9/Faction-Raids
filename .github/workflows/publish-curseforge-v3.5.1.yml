@@ -1,0 +1,97 @@
+name: Publish tested 3.5.1 to CurseForge
+
+# One-time publication of the exact artifact validated in PR #55.
+on:
+  push:
+    branches: [publish/curseforge-v3.5.1]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v3.5.1
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34163136986
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Verify exact release bytes and metadata
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import zipfile
+
+          jar = Path('dist/siegeoverhaul-3.5.1.jar')
+          expected = '62db1d4efa8b3523c96db7d558134cc3c40918d60c4831fc40dc7243aa048e6a'
+          actual = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert actual == expected, f'Unexpected JAR checksum: {actual}'
+          with zipfile.ZipFile(jar) as contents:
+              metadata = contents.read('META-INF/mods.toml').decode()
+              assert 'modId="siegeoverhaul"' in metadata
+              assert 'version="3.5.1"' in metadata
+          print(f'Verified {jar.name}: {actual}')
+          PY
+
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-3.5.1.jar
+          name: The Siege Overhaul v3.5.1 - Objective recovery and camp sabotage fixes
+          version: v3.5.1
+          version-type: release
+          changelog: |
+            ## The Siege Overhaul 3.5.1
+
+            Clearer siege objectives and more reliable wave endings.
+
+            - Enemy effort bonuses only advance breach/occupation while attackers outnumber defenders inside the active objective.
+            - Clearing or matching enemy presence correctly reverses pressure. With decay disabled in config, progress holds.
+            - HUD, periodic action bar and Codex show local attacker/defender counts and capture/recovery status.
+            - Banner sabotage retires the current wave without kill credit. Retreated raiders remain excluded after chunk reloads and server restarts.
+            - Pre-raid scouts no longer get counted as wave enemies during reconciliation.
+            - Opening reports identify the marked point and explain camp sabotage. Campfire cancellation applies to the current wave; later waves still attack.
+            - Canceled block breaks no longer trigger camp sabotage.
+
+            Minecraft 1.20.1, Forge, Java 17. Requires Villager Recruits 1.15.2 or newer. Villager Workers 2, Small Ships and Siege Weapons remain optional. Replace the old JAR on the server and every client; versions must match.
+
+            Validation: Java 17 build and all 33 regression tests passed. No interactive Minecraft playtest or visual GUI verification performed.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          dependencies: |
+            recruits(required)
+            workers(optional)
+            smallships(optional)
+            siegeweapons(optional)
+          fail-mode: fail
+
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          result = {'version': '3.5.1', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 3.5.1: {result['url']}\n")
+          PY
