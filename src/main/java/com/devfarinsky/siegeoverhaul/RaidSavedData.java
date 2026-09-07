@@ -25,7 +25,7 @@ public final class RaidSavedData extends SavedData {
     // v12 added pendingSpoils + raidNotifyOptOut (3.2.0 multiplayer polish).
     // v13 added persistent camp construction jobs and crew (3.4.0).
     // Old saves load cleanly because all new fields default to empty collections.
-    public static final int DATA_VERSION = 14;
+    public static final int DATA_VERSION = 15;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Map<String, Anchor> anchors = new HashMap<>();
@@ -537,6 +537,7 @@ public final class RaidSavedData extends SavedData {
         /** Ordered decorative block jobs; placed through the normal camp restoration ledger. */
         public final Map<Long, String> pendingCampBlocks = new LinkedHashMap<>();
         public final Set<UUID> campWorkers = new LinkedHashSet<>();
+        public CompoundTag nativeCamp = new CompoundTag();
         public boolean campUsesWorkers;
         public int campBuildTicks;
         /** Only true while collecting the initial camp plan; never saved. */
@@ -640,6 +641,7 @@ public final class RaidSavedData extends SavedData {
                 crew.add(worker);
             });
             tag.put(ModConstants.Tags.CAMP_CREW, crew);
+            tag.put(ModConstants.Tags.NATIVE_CAMP, nativeCamp.copy());
             tag.putBoolean(ModConstants.Tags.CAMP_USES_WORKERS, campUsesWorkers);
             tag.putInt(ModConstants.Tags.CAMP_BUILD_TICKS, campBuildTicks);
             ListTag breached = new ListTag();
@@ -773,6 +775,7 @@ public final class RaidSavedData extends SavedData {
                 CompoundTag worker = crew.getCompound(i);
                 if (worker.hasUUID("UUID")) state.campWorkers.add(worker.getUUID("UUID"));
             }
+            state.nativeCamp = tag.getCompound(ModConstants.Tags.NATIVE_CAMP).copy();
             state.campUsesWorkers = tag.getBoolean(ModConstants.Tags.CAMP_USES_WORKERS);
             state.campBuildTicks = Math.max(0, tag.getInt(ModConstants.Tags.CAMP_BUILD_TICKS));
             ListTag breached = tag.getList("BreachedBlocks", Tag.TAG_COMPOUND);

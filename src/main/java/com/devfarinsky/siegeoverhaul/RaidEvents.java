@@ -125,9 +125,29 @@ public final class RaidEvents {
         tick(event.getServer());
     }
 
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onCampWorkerTick(net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent event) {
+        if (!(event.getEntity() instanceof Mob mob) || !(mob.level() instanceof ServerLevel level)) return;
+        String team = mob.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM);
+        if (team.isBlank()) return;
+        RaidSavedData.RaidState raid = RaidSavedData.get(level.getServer()).raids.get(team);
+        if (raid != null && com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.active(raid)
+                && !com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.safeToTick(level, raid)) event.setCanceled(true);
+    }
+
     @SubscribeEvent
     public static void onEntityJoin(EntityJoinLevelEvent event) {
-        if (!(event.getLevel() instanceof ServerLevel level) || !(event.getEntity() instanceof Mob mob)) return;
+        if (!(event.getLevel() instanceof ServerLevel level)) return;
+        String areaTeam = event.getEntity().getPersistentData().getString(ModConstants.Tags.CAMP_AREA_TEAM);
+        if (!areaTeam.isBlank()) {
+            if (event.loadedFromDisk() && !com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.reloadArea(
+                    level, event.getEntity(), RaidSavedData.get(level.getServer()).raids.get(areaTeam))) {
+                event.getEntity().discard();
+                event.setCanceled(true);
+            }
+            return;
+        }
+        if (!(event.getEntity() instanceof Mob mob)) return;
         String campTeam = mob.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM);
         if (!campTeam.isBlank()) {
             if (event.loadedFromDisk()) {
@@ -137,6 +157,15 @@ public final class RaidEvents {
                     event.setCanceled(true);
                 } else {
                     RecruitsBridge.assignToRaidersFaction(mob);
+                    if (com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.active(campRaid)) {
+                        try {
+                            com.devfarinsky.siegeoverhaul.compat.WorkersBridge.enableNative(mob,
+                                    campRaid.nativeCamp.getUUID(ModConstants.Tags.CAMP_OWNER), false);
+                        } catch (ReflectiveOperationException | RuntimeException ex) {
+                            mob.discard();
+                            event.setCanceled(true);
+                        }
+                    }
                 }
             }
             return; // Camp crew never count as wave enemies or receive soldier AI.
@@ -1757,7 +1786,7 @@ public final class RaidEvents {
         com.devfarinsky.siegeoverhaul.waves.WaveComposition activeComposition = ACTIVE_COMPOSITIONS.get(teamKey);
         if (activeComposition != null) {
             com.devfarinsky.siegeoverhaul.formations.FormationDirector.tick(
-                    level, state, point.pos(), activeComposition.formation);
+                    level, state, BlockPos.containing(invasionObjective(level, point, state)), activeComposition.formation);
         }
         // Rescue stragglers that stall on the way to the objective; drop the
         // second-time offenders from the wave count so the raid can advance.
@@ -3393,6 +3422,15 @@ public final class RaidEvents {
             if (acquired) mob.setTarget(closest);
             else if (lockedOnObjective) mob.setTarget(null);
 
+            // Native formations and direct navigation must never issue competing orders.
+            boolean marching = com.devfarinsky.siegeoverhaul.formations.FormationDirector.shouldMarch(
+                    mob, BlockPos.containing(objective));
+            if (!marching) com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
+            if (mob.isPassenger() || (marching && mob.getPersistentData().getBoolean(ModConstants.Tags.FORMATION_MARCH))) {
+                STUCK_TRACKER.remove(id);
+                continue;
+            }
+
             // 2.10.1 aggression pass: ALWAYS keep the objective nav goal alive.
             double speed = distToObjectiveSq < burstRangeSq ? baseSpeed * burstMultiplier : baseSpeed;
             // v2.23.0 stuck-escalation speed bump on top of the burst
@@ -3429,7 +3467,7 @@ public final class RaidEvents {
                 } else {
                     mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
                 }
-            } else if (!acquired || mob.getNavigation().isDone()) {
+            } else if (!acquired && mob.getNavigation().isDone()) {
                 mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
             }
 
@@ -3833,8 +3871,8 @@ public final class RaidEvents {
                     if (entity != null) entity.discard();
                 }
                 restoreBreachedBlocks(level, state);
-                cleanupWarCamp(level, state);
                 com.devfarinsky.siegeoverhaul.camp.CampBuilder.cleanup(level, state);
+                cleanupWarCamp(level, state);
             }
             long next = server.overworld().getGameTime() + randomCooldownTicks(server.overworld().random);
             data.anchors.put(teamKey, anchor.withNextRaid(next));
