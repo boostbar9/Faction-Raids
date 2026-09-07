@@ -114,21 +114,36 @@ public final class NavalStagingScanner {
      * Walk from the staging point toward the objective one block at a time; the
      * first solid, non-water block whose top is walkable is the beach. Returns
      * null if we run out of search distance without finding shore.
+     *
+     * The beach Y must be near the staging water surface (+/- 4 blocks) so
+     * raiders disembark onto actual shoreline rather than onto a cliff top or
+     * tree canopy 100 blocks above the water. Without this clamp,
+     * {@link Heightmap.Types#MOTION_BLOCKING_NO_LEAVES} returns the topmost
+     * solid surface for the column, which can be a hilltop far above sea
+     * level; the boat then steers toward XZ coordinates but its dismount
+     * teleport puts crews high in the air where they die on impact.
      */
     private static BlockPos findBeach(ServerLevel level, BlockPos surface, BlockPos objective) {
         Vec3 dir = Vec3.atCenterOf(objective).subtract(Vec3.atCenterOf(surface)).normalize();
+        int waterY = surface.getY();
         for (int step = 0; step < 32; step++) {
             int nx = surface.getX() + (int) Math.round(dir.x * step);
             int nz = surface.getZ() + (int) Math.round(dir.z * step);
-            int ny = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, nx, nz);
-            BlockPos landing = new BlockPos(nx, ny, nz);
-            BlockState below = level.getBlockState(landing.below());
-            boolean landIsSolid = !below.isAir()
-                    && below.getFluidState().isEmpty()
-                    && below.getBlock() != Blocks.WATER;
-            boolean standCleared = level.getBlockState(landing).isAir()
-                    && level.getBlockState(landing.above()).isAir();
-            if (landIsSolid && standCleared) return landing;
+            // Scan a narrow vertical band around water level (water Y-2 .. Y+4)
+            // for the first solid block whose top is a clear walkable air cell.
+            // This picks a shoreline block a boat can actually beach onto and
+            // rejects cliff tops or forest canopies that MOTION_BLOCKING_NO_LEAVES
+            // would otherwise return for that column.
+            for (int y = waterY + 4; y >= waterY - 2; y--) {
+                BlockPos landing = new BlockPos(nx, y, nz);
+                BlockState below = level.getBlockState(landing.below());
+                boolean landIsSolid = !below.isAir()
+                        && below.getFluidState().isEmpty()
+                        && below.getBlock() != Blocks.WATER;
+                boolean standCleared = level.getBlockState(landing).isAir()
+                        && level.getBlockState(landing.above()).isAir();
+                if (landIsSolid && standCleared) return landing;
+            }
         }
         return null;
     }
