@@ -46,6 +46,9 @@ public final class ModConstants {
         // hides the wire name behind a stable API surface.
         public static final String RAID_TEAM = "FactionRaidsTeam";
         public static final String RETREATED_RAIDERS = "RetreatedRaiders";
+        public static final String NAVAL_DISPOSABLE = "SiegeOverhaulNavalDisposable";
+        public static final String NAVAL_TEAM = "SiegeOverhaulNavalTeam";
+        public static final String NAVAL_BEACH = "SiegeOverhaulNavalBeach";
         public static final String RAID_ROLE = "FactionRaidsRole";
         /**
          * v2.26.0 marker for pre-raid scouts. Scouts carry this tag AND the
