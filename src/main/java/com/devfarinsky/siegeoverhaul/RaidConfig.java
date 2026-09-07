@@ -57,6 +57,14 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue BRIDGE_SIEGES_ENABLED;
     public static final ForgeConfigSpec.BooleanValue USE_CLAIM_CENTER_AS_DEFENSE_POINT;
     public static final ForgeConfigSpec.BooleanValue RESPECT_DEFENDER_CLAIMS;
+    // v3.3.0 Cross-mod claim compatibility (FTB Chunks + Open Parties and Claims):
+    public static final ForgeConfigSpec.BooleanValue RESPECT_FOREIGN_CLAIMS;
+    // v3.3.0 Difficulty / mob compat scaling (Apotheosis, Serene Seasons, etc.):
+    public static final ForgeConfigSpec.DoubleValue RAIDER_HEALTH_MULTIPLIER;
+    public static final ForgeConfigSpec.DoubleValue RAIDER_DAMAGE_MULTIPLIER;
+    public static final ForgeConfigSpec.DoubleValue RAIDER_XP_MULTIPLIER;
+    // v3.3.0 Civilian mob allowlist (MCA + Alex's Mobs villagers/friendly NPCs):
+    public static final ForgeConfigSpec.ConfigValue<java.util.List<? extends String>> CIVILIAN_MOB_ALLOWLIST;
     // v2.15.0 "Clear Intent":
     public static final ForgeConfigSpec.EnumValue<LabelMode> RAIDER_LABEL_MODE;
     public static final ForgeConfigSpec.IntValue RAIDER_LABEL_RADIUS;
@@ -253,6 +261,26 @@ public final class RaidConfig {
                 .define("useClaimCenterAsDefensePoint", true);
         RESPECT_DEFENDER_CLAIMS = b.comment("When true (default), war-camp placement skips any candidate origin whose chunk is inside the defender's own Recruits claim, so raiders never build fortifications inside your walls. Falls back to the pre-2.27 behavior if no valid claim-external spot is found after 32 attempts. Requires claimAwareAnchors.")
                 .define("respectDefenderClaims", true);
+        // v3.3.0 cross-mod claim compatibility
+        RESPECT_FOREIGN_CLAIMS = b.comment("v3.3.0: when true (default), war-camp placement AND raider block-breaching skip chunks claimed by ANOTHER player/team via FTB Chunks or Open Parties and Claims. Raiders still attack the target defender's own claim normally - this only protects innocent neighbors' bases from collateral damage. No-op if neither claim mod is installed.")
+                .define("respectForeignClaims", true);
+        // v3.3.0 difficulty scaling multipliers - applied at raider spawn.
+        // Users with Apotheosis/Serene Seasons can rebalance without
+        // touching the wave-count config.
+        RAIDER_HEALTH_MULTIPLIER = b.comment("v3.3.0: multiplier applied to raider max health at spawn. Useful when running Apotheosis or heavy difficulty mods where vanilla mob HP is already inflated. 1.0 = vanilla wave HP.")
+                .defineInRange("raiderHealthMultiplier", 1.0D, 0.25D, 8.0D);
+        RAIDER_DAMAGE_MULTIPLIER = b.comment("v3.3.0: multiplier applied to raider attack damage at spawn via an attribute modifier. 1.0 = vanilla wave damage. Combined with raiderHealthMultiplier lets modpacks scale raids up or down independently of Minecraft difficulty.")
+                .defineInRange("raiderDamageMultiplier", 1.0D, 0.25D, 8.0D);
+        RAIDER_XP_MULTIPLIER = b.comment("v3.3.0: multiplier applied to XP drops from raiders. Some mob-XP mods stack multiplicatively; drop this below 1.0 to keep raid XP in line with the rest of the modpack.")
+                .defineInRange("raiderXpMultiplier", 1.0D, 0.0D, 8.0D);
+        // v3.3.0 civilian-mob allowlist - protects modded villagers, MCA
+        // NPCs, Alex's Mobs friendly creatures, etc. from being targeted
+        // by raiders. Use full registry IDs.
+        CIVILIAN_MOB_ALLOWLIST = b.comment("v3.3.0: entity IDs (mod:id) whose mobs are treated as civilians and never targeted by raiders. Extends the built-in villager/iron-golem protection. Example: [\"mca:male_villager\", \"mca:female_villager\", \"alexsmobs:cockroach\"]. Uses namespaced entity IDs.")
+                .defineListAllowEmpty(
+                        java.util.List.of("civilianMobAllowlist"),
+                        () -> java.util.List.of("mca:male_villager", "mca:female_villager"),
+                        o -> o instanceof String);
         BRIDGE_SIEGES_ENABLED = b.comment("v2.30.0: when true (default) AND Recruits is installed, subscribe to Recruits' SiegeEvent.Start. When another Recruits faction begins sieging a Recruits claim owned by a Faction Raids team, spawn a Faction Raids raid at the same location as the raiding army. The Recruits siege still runs its own timer/health system in parallel. Set false to keep raids purely on Faction Raids' own trigger schedule even with Recruits present.")
                 .define("bridgeSiegesEnabled", true);
         // v2.15.0 Clear Intent:

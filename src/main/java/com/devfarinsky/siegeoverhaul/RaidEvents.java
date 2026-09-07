@@ -66,6 +66,7 @@ import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraft.world.level.pathfinder.BlockPathTypes;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.event.entity.living.LivingExperienceDropEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -274,15 +275,44 @@ public final class RaidEvents {
         }
         boolean protectedVanillaCivilian = RaidConfig.PROTECT_VILLAGERS.get() &&
                 (event.getEntity() instanceof AbstractVillager || event.getEntity() instanceof IronGolem);
+        // v3.3.0: extend civilian protection to modded villagers/NPCs
+        // (MCA, Alex's Mobs, etc.) via config allowlist. Cheap string
+        // match on the entity type id.
+        boolean protectedModdedCivilian = false;
+        if (!protectedVanillaCivilian) {
+            java.util.List<? extends String> allowlist = RaidConfig.CIVILIAN_MOB_ALLOWLIST.get();
+            if (allowlist != null && !allowlist.isEmpty()) {
+                ResourceLocation typeKey = ForgeRegistries.ENTITY_TYPES.getKey(event.getEntity().getType());
+                if (typeKey != null) {
+                    String id = typeKey.toString();
+                    for (String entry : allowlist) {
+                        if (id.equals(entry)) { protectedModdedCivilian = true; break; }
+                    }
+                }
+            }
+        }
         String defendedFaction = mob.getPersistentData().getString(RAID_TEAM_TAG);
         RaidSavedData.Anchor anchor = event.getEntity().level() instanceof ServerLevel level ?
                 RaidSavedData.get(level.getServer()).anchors.get(defendedFaction) : null;
         boolean protectedWorker = RaidConfig.PROTECT_WORKERS.get() && anchor != null &&
                 OptionalCompatBridge.workerBelongsToFaction(event.getEntity(), defendedFaction,
                         anchor.members());
-        if (protectedVanillaCivilian || protectedWorker) {
+        if (protectedVanillaCivilian || protectedModdedCivilian || protectedWorker) {
             event.setCanceled(true);
             mob.setTarget(null);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onLivingExperienceDrop(LivingExperienceDropEvent event) {
+        // v3.3.0: scale XP for raiders that carry the per-spawn multiplier
+        // tag. Non-raiders and unmarked raiders (multiplier == 1.0) are
+        // untouched, so this composes cleanly with mob-XP mods that also
+        // hook this event.
+        double mult = event.getEntity().getPersistentData().getDouble("SiegeOverhaulXpMult");
+        if (mult > 0.0D && Math.abs(mult - 1.0D) > 1e-6) {
+            int scaled = (int) Math.round(event.getDroppedExperience() * mult);
+            event.setDroppedExperience(Math.max(0, scaled));
         }
     }
 
@@ -606,6 +636,21 @@ public final class RaidEvents {
     public static int claimSpoilsCmd(CommandSourceStack s) { return claimSpoils(s); }
     public static int notifyOnCmd(CommandSourceStack s) { return setRaidNotify(s, true); }
     public static int notifyOffCmd(CommandSourceStack s) { return setRaidNotify(s, false); }
+    public static int compatDiagCmd(CommandSourceStack s) {
+        // v3.3.0: single-line status for the three claim providers plus the
+        // difficulty and civilian-allowlist settings, so users can verify
+        // their config is being read correctly.
+        String claims = com.devfarinsky.siegeoverhaul.compat.ClaimBridge.diagnosticStatus();
+        String scaling = String.format("HP x%.2f | DMG x%.2f | XP x%.2f",
+                RaidConfig.RAIDER_HEALTH_MULTIPLIER.get(),
+                RaidConfig.RAIDER_DAMAGE_MULTIPLIER.get(),
+                RaidConfig.RAIDER_XP_MULTIPLIER.get());
+        int allowlist = RaidConfig.CIVILIAN_MOB_ALLOWLIST.get().size();
+        s.sendSuccess(() -> Component.literal("[SiegeOverhaul] Claim providers: " + claims
+                + " | Scaling: " + scaling
+                + " | Civilian allowlist entries: " + allowlist).withStyle(ChatFormatting.GRAY), false);
+        return 1;
+    }
     public static int adminListCmd(CommandSourceStack s) { return adminList(s); }
     public static int adminStopCmd(CommandSourceStack s, String k) { return adminStop(s, k); }
     public static int adminRemoveCmd(CommandSourceStack s, String k) { return adminRemove(s, k); }
@@ -2180,6 +2225,46 @@ public final class RaidEvents {
             // fill handled inside CommanderBossBar.tick during the raid loop.
             com.devfarinsky.siegeoverhaul.raid.CommanderBossBar.onCommanderSpawn(state.teamKey, raider);
         }
+        // v3.3.0: apply user-configurable difficulty multipliers on top of
+        // role-based tuning. Health scales the base attribute + refills to
+        // full; damage adds an ATTRIBUTE_MODIFIER; XP is stored on
+        // persistent data because Mob.setXpReward is protected.
+        applyDifficultyScaling(raider);
+    }
+
+    /**
+     * v3.3.0: raider difficulty scaling for modpack authors. Reads three
+     * multiplier configs and applies them to a freshly assigned raider.
+     * Health scales the base value (so refill uses new max); damage stacks
+     * a persistent ATTRIBUTE modifier so it composes with vanilla or mod
+     * damage tables; XP multiplier rides on persistent data and gets
+     * applied when the mob dies (see onRaiderDeath).
+     */
+    private static void applyDifficultyScaling(Mob raider) {
+        try {
+            double hp = RaidConfig.RAIDER_HEALTH_MULTIPLIER.get();
+            if (Math.abs(hp - 1.0D) > 1e-6) {
+                var health = raider.getAttribute(Attributes.MAX_HEALTH);
+                if (health != null) {
+                    health.setBaseValue(health.getBaseValue() * hp);
+                    raider.setHealth(raider.getMaxHealth());
+                }
+            }
+            double dmg = RaidConfig.RAIDER_DAMAGE_MULTIPLIER.get();
+            if (Math.abs(dmg - 1.0D) > 1e-6) {
+                var damage = raider.getAttribute(Attributes.ATTACK_DAMAGE);
+                if (damage != null) {
+                    damage.setBaseValue(damage.getBaseValue() * dmg);
+                }
+            }
+            double xp = RaidConfig.RAIDER_XP_MULTIPLIER.get();
+            if (Math.abs(xp - 1.0D) > 1e-6) {
+                raider.getPersistentData().putDouble("SiegeOverhaulXpMult", xp);
+            }
+        } catch (Throwable t) {
+            // Never let a config-scaling glitch abort a wave spawn.
+            FactionLogger.LOG.debug("[SiegeOverhaul] Difficulty scaling skipped: {}", t.toString());
+        }
     }
 
     private static void markCommanderDefeated(MinecraftServer server, RaidSavedData.Anchor anchor,
@@ -2645,13 +2730,25 @@ public final class RaidEvents {
         // chunk lies inside the defender's claimed footprint so raiders
         // don't build siege infrastructure inside the walls they're
         // supposed to be breaching.
-        java.util.Set<net.minecraft.world.level.ChunkPos> excludedChunks = java.util.Collections.emptySet();
+        java.util.Set<net.minecraft.world.level.ChunkPos> excludedChunks = new java.util.HashSet<>();
         if (RaidConfig.CLAIM_AWARE_ANCHORS.get() && RaidConfig.RESPECT_DEFENDER_CLAIMS.get()
                 && anchorRecord != null
                 && com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.available()) {
             java.util.Optional<com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.ClaimSnapshot> snap =
                     com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.resolveDefendingClaim(level, anchorRecord);
-            if (snap.isPresent()) excludedChunks = snap.get().chunks();
+            if (snap.isPresent()) excludedChunks.addAll(snap.get().chunks());
+        }
+        // v3.3.0: also exclude chunks claimed by ANOTHER player/team via FTB
+        // Chunks or Open Parties and Claims. This keeps raider camps from
+        // spawning on innocent neighbors' land when the defender doesn't
+        // own the surrounding territory. Search radius derived from
+        // max spawn distance divided by 16 (chunk size), padded by 4 for
+        // camp footprint plus safety margin.
+        if (RaidConfig.RESPECT_FOREIGN_CLAIMS.get() && anchorRecord != null
+                && com.devfarinsky.siegeoverhaul.compat.ClaimBridge.anyProviderAvailable()) {
+            int radiusChunks = Math.max(4, (RaidConfig.MAX_SPAWN_DISTANCE.get() >> 4) + 4);
+            excludedChunks.addAll(com.devfarinsky.siegeoverhaul.compat.ClaimBridge
+                    .collectClaimedChunks(level, anchor, radiusChunks, anchorRecord));
         }
         for (int attempt = 0; attempt < 32; attempt++) {
             double angle = approachAngle + (level.random.nextDouble() - 0.5D) * 0.5D;
@@ -3055,11 +3152,26 @@ public final class RaidEvents {
         double maximumDistanceSq = (double) RaidConfig.DEFENSE_RADIUS.get() * RaidConfig.DEFENSE_RADIUS.get();
         BlockPos best = null;
         double bestScore = Double.MAX_VALUE;
+        // v3.3.0: resolve the defender anchor once so ClaimBridge can skip
+        // blocks that sit in foreign claimed chunks. Cheap because the
+        // per-chunk answer is cached in ClaimBridge behind a small map.
+        RaidSavedData data = RaidSavedData.get(level.getServer());
+        RaidSavedData.Anchor anchor = data.anchors.get(state.teamKey);
+        boolean respectForeignClaims = RaidConfig.RESPECT_FOREIGN_CLAIMS.get()
+                && com.devfarinsky.siegeoverhaul.compat.ClaimBridge.anyProviderAvailable();
         for (BlockPos candidate : BlockPos.betweenClosed(origin.offset(-3, -1, -3), origin.offset(3, 2, 3))) {
             if (candidate.distSqr(stronghold) > maximumDistanceSq ||
                     state.campBlocks.containsKey(candidate.asLong())) continue;
             BlockState blockState = level.getBlockState(candidate);
             if (!isBreachableDefense(blockState)) continue;
+            // v3.3.0: refuse to break blocks in another player's claim. This
+            // stops raiders from smashing through a neighbor's fortress on
+            // their way to the defender - the whole point of the neighbor
+            // having a claim is protection.
+            if (respectForeignClaims
+                    && com.devfarinsky.siegeoverhaul.compat.ClaimBridge.isForeignClaim(level, candidate, anchor)) {
+                continue;
+            }
             double mobDistance = candidate.distSqr(origin);
             double objectiveDistance = Vec3.atCenterOf(candidate).distanceToSqr(objective);
             double score = mobDistance * 4.0D + objectiveDistance * 0.02D;

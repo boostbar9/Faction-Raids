@@ -91,6 +91,8 @@ public final class RaidCommands {
                                 .executes(ctx -> RaidEvents.notifyOnCmd(ctx.getSource())))
                         .then(Commands.literal("off")
                                 .executes(ctx -> RaidEvents.notifyOffCmd(ctx.getSource()))))
+                .then(Commands.literal("compat")
+                        .executes(ctx -> RaidEvents.compatDiagCmd(ctx.getSource())))
                 .then(Commands.literal("stop").requires(s -> s.hasPermission(2))
                         .executes(ctx -> RaidEvents.stopOwnRaidCmd(ctx.getSource())))
                 .then(Commands.literal("admin").requires(s -> s.hasPermission(2))
