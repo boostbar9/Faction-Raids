@@ -156,9 +156,9 @@ The compatibility bridge uses entity registry namespaces plus vanilla faction te
 passengers and public ownership information. It never imports optional-mod classes, so removing an
 optional companion mod cannot make Faction Raids fail to load.
 
-- **Villager Workers:** nearby allied Workers are displayed as civilians in the command dashboard.
-  Invaders spawned by Faction Raids clear Workers as attack targets and cannot damage them. Workers
-  do not count as soldiers or artificially hold the capture ring.
+- **[Villager Workers 2](https://www.curseforge.com/minecraft/mc-mods/workers):** optional integration for Minecraft 1.20.1; Villager Recruits remains the required dependency. Nearby allied Workers appear as civilians in the command dashboard and retain their normal jobs and inventories. When worker protection is enabled, siege invaders cannot damage the defending faction's workers.
+  Raider-owned builders assemble the actual war camp's towers, forge and tents block by block. They use the siege's construction supplies and restoration ledger, without borrowing player workers, inventory or work areas. Killing the builders interrupts unfinished construction; assault waves continue independently. Construction progress and crew cleanup survive server restarts.
+  Camp lumberjacks are no longer spawned: native tree cutting could not guarantee terrain restoration. Without Workers, decorative construction runs automatically. Configure `enableWorkersCompat`, `enableWorkersCampConstruction`, `campBuilderMax` and `campMaxBuildSeconds` in the server config.
 - **Small Ships:** boarding a ship records the crew member's current faction. It remains a recognized
   naval asset after the crew dismounts and can be captured by a different faction boarding it.
   Faction Raids does not steer or damage ships directly.

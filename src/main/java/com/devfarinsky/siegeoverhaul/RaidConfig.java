@@ -425,13 +425,13 @@ public final class RaidConfig {
                 .define("smallShipsPreferLarge", true);
         SHIP_CREW_MAX = b.comment("Maximum raiders that mount a single Small Ships vessel. Vanilla boats always cap at 2 regardless of this value.")
                 .defineInRange("shipCrewMax", 6, 1, 32);
-        ENABLE_CAMP_CONSTRUCTION = b.comment("Spawn real Villager Workers lumberjacks and builders to chop trees and construct the raider camp before the assault begins. Requires the Villager Workers mod. Silently skipped when Workers is absent.")
+        ENABLE_CAMP_CONSTRUCTION = b.comment("Use Villager Workers 2 builders to assemble war-camp decorations block by block during the siege. Builders use raider ownership and never use player supplies or work areas. Requires enableWorkersCompat; without Workers, camps build automatically.")
                 .define("enableWorkersCampConstruction", true);
         CAMP_BUILDER_MAX = b.comment("Maximum number of builder workers spawned per raider camp.")
                 .defineInRange("campBuilderMax", 2, 1, 8);
-        CAMP_LUMBERJACK_MAX = b.comment("Maximum number of lumberjack workers spawned per raider camp.")
+        CAMP_LUMBERJACK_MAX = b.comment("Legacy compatibility setting; camp lumberjacks are no longer spawned because native tree cutting bypasses siege restoration.")
                 .defineInRange("campLumberjackMax", 2, 1, 8);
-        CAMP_MAX_BUILD_SECONDS = b.comment("Safety cap on how long the camp construction phase may run before the raid advances anyway.")
+        CAMP_MAX_BUILD_SECONDS = b.comment("Maximum loaded construction time in seconds. Unfinished decorative jobs are abandoned at the limit; assault waves do not wait for construction.")
                 .defineInRange("campMaxBuildSeconds", 180, 30, 900);
         ENABLE_NARRATIVE = b.comment("Attach a themed raider faction and casus belli (reason for war) to every raid. When false, announcements use generic wording and no faction is stored.")
                 .define("enableRaiderNarrative", true);

@@ -52,6 +52,11 @@ public final class ModConstants {
          * excludes them from raid bookkeeping (they are not counted as
          * wave spawns and their deaths do not credit raid-effort).
          */
+        public static final String CAMP_WORKER_TEAM = "SiegeOverhaulCampWorkerTeam";
+        public static final String CAMP_JOBS = "CampConstructionJobs";
+        public static final String CAMP_CREW = "CampConstructionCrew";
+        public static final String CAMP_USES_WORKERS = "CampUsesWorkers";
+        public static final String CAMP_BUILD_TICKS = "CampBuildTicks";
         public static final String SCOUT = "FactionRaidsScout";
     }
 

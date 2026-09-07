@@ -3,184 +3,127 @@ package com.devfarinsky.siegeoverhaul.camp;
 import com.devfarinsky.siegeoverhaul.FactionLogger;
 import com.devfarinsky.siegeoverhaul.ModConstants;
 import com.devfarinsky.siegeoverhaul.RaidConfig;
+import com.devfarinsky.siegeoverhaul.RaidSavedData.RaidState;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
-/**
- * Orchestrates the camp construction phase of a raid.
- *
- * <p>Lifecycle:
- * <ol>
- *     <li>{@link #startCamp(ServerLevel, BlockPos, double, int, UUID, String)}
- *         picks a site via {@link CampSite}, spawns a {@link WorkersBridge}
- *         LumberArea + BuildArea(s) + one Lumberjack per two placements
- *         + one Builder per placement, all owned by the raider faction.</li>
- *     <li>{@link CampState#tick(ServerLevel)} polls the work areas each
- *         tick and updates {@link CampState#phase} → {@link Phase#IN_PROGRESS}
- *         → {@link Phase#COMPLETE}.</li>
- *     <li>{@link CampState#cleanup(ServerLevel)} removes spawned workers and
- *         work-area entities when the raid ends. Placed blocks stay standing
- *         so defenders can loot/dismantle them.</li>
- * </ol>
- *
- * <p>When Workers is not installed, {@link #startCamp} returns an empty
- * {@link Optional} — callers should treat this as "camp phase skipped, jump
- * straight to the assault." No crash, no fallback prefab (that's future
- * work if we ever want a Workers-free build to still get a visible camp).
- */
+/** Builder-assisted construction at the real war camp, using the siege's restoration ledger. */
 public final class CampBuilder {
-
+    private static final int BLOCKS_PER_BUILDER = 4;
     private CampBuilder() {}
 
-    /** Phase state exposed to the siege lifecycle. */
-    public enum Phase {
-        /** Site chosen and workers spawned but nothing built yet. */
-        SPAWNED,
-        /** Workers are actively building. */
-        IN_PROGRESS,
-        /** All work areas report done — advance to next siege phase. */
-        COMPLETE,
-        /** Something failed — cleanup and skip to assault. */
-        FAILED
+    public static void startCamp(ServerLevel level, RaidState raid) {
+        if (raid.campPos == null || raid.pendingCampBlocks.isEmpty()
+                || !RaidConfig.ENABLE_CAMP_CONSTRUCTION.get() || !WorkersBridge.available()) return;
+        for (int i = 0; i < RaidConfig.CAMP_BUILDER_MAX.get(); i++) {
+            BlockPos spawn = standingPosition(level, raid.campPos.offset(7 + i, 0, 0), raid.campPos.getY(), Vec3.atCenterOf(raid.campPos));
+            if (spawn == null) continue;
+            WorkersBridge.spawnBuilder(level, spawn, raid.teamKey).ifPresent(worker -> raid.campWorkers.add(worker.getUUID()));
+        }
+        raid.campUsesWorkers = !raid.campWorkers.isEmpty();
     }
 
-    /**
-     * Attempts to start a camp for the given raid. Returns empty when
-     * Workers is missing, no camp site can be chosen, or the target is in
-     * an unsupported dimension (the End).
-     */
-    public static Optional<CampState> startCamp(ServerLevel level, BlockPos targetAnchor,
-                                                 double approachAngle, int factionSize,
-                                                 UUID raiderOwner, String raiderTeamKey) {
-        if (!RaidConfig.ENABLE_CAMP_CONSTRUCTION.get()) {
-            FactionLogger.LOG.debug("Camp construction disabled by config; skipping.");
-            return Optional.empty();
+    /** Called once per periodic siege pass. All pending jobs and crew IDs survive world saves. */
+    public static void tick(ServerLevel level, RaidState raid, BiConsumer<BlockPos, Block> place) {
+        if (raid.pendingCampBlocks.isEmpty()) return;
+        // Do not force-load the camp, or time out while its chunk is unloaded.
+        BlockPos first = BlockPos.of(raid.pendingCampBlocks.keySet().iterator().next());
+        if (!level.hasChunkAt(first)) return;
+        if (advanceTimeout(raid)) return;
+        if (!raid.campUsesWorkers || !WorkersBridge.available() || !RaidConfig.ENABLE_CAMP_CONSTRUCTION.get()) {
+            if (raid.campUsesWorkers) cleanup(level, raid);
+            placeNearby(raid, null, 12, place);
+            return;
         }
-        if (!WorkersBridge.available()) {
-            FactionLogger.LOG.debug("Workers mod absent; skipping camp construction phase.");
-            return Optional.empty();
+        for (UUID id : raid.campWorkers) {
+            if (raid.pendingCampBlocks.isEmpty()) break;
+            Entity entity = level.getEntity(id);
+            if (!(entity instanceof Mob worker) || !worker.isAlive()) continue;
+            BlockPos target = BlockPos.of(raid.pendingCampBlocks.keySet().iterator().next());
+            BlockPos stand = standingPosition(level, target, raid.campPos.getY(), worker.position());
+            if (stand == null || !WorkersBridge.moveBuilder(worker, stand)) continue;
+            worker.getLookControl().setLookAt(target.getX() + 0.5, target.getY() + 0.5, target.getZ() + 0.5);
+            int placed = placeNearby(raid, worker.position(), BLOCKS_PER_BUILDER, place);
+            if (placed > 0) worker.swing(InteractionHand.MAIN_HAND);
         }
-        if (!CampSite.canHostCamp(level)) {
-            FactionLogger.LOG.debug("Dimension {} cannot host a raider camp.", level.dimension().location());
-            return Optional.empty();
-        }
-
-        CampBlueprint blueprint = CampBlueprintRegistry.chooseFor(factionSize);
-        Optional<BlockPos> center = CampSite.choose(level, targetAnchor, approachAngle, blueprint.size());
-        if (center.isEmpty()) {
-            FactionLogger.LOG.info("No suitable camp site found near {}; skipping camp phase.", targetAnchor);
-            return Optional.empty();
-        }
-
-        BlockPos campCenter = center.get();
-        List<Entity> spawned = new ArrayList<>();
-        List<Entity> workAreas = new ArrayList<>();
-
-        // 1. Lumber area for tree-cutting around the camp
-        WorkersBridge.spawnLumberArea(level, campCenter,
-                        blueprint.lumberRadius() * 2 + 1,
-                        blueprint.lumberRadius() * 2 + 1,
-                        blueprint.lumberHeight(),
-                        raiderOwner, raiderTeamKey)
-                .ifPresent(entity -> { spawned.add(entity); workAreas.add(entity); });
-
-        // 2. One BuildArea per placement
-        for (CampBlueprint.Placement placement : blueprint.placements()) {
-            BlockPos anchor = placement.anchorAt(campCenter);
-            WorkersBridge.spawnBuildArea(level, anchor, placement.facing(),
-                            placement.structureNbt(), raiderOwner, raiderTeamKey)
-                    .ifPresent(entity -> { spawned.add(entity); workAreas.add(entity); });
-        }
-
-        // 3. Workers to do the work. Sized to the placement count so bigger
-        //    camps get more hands. Lumberjacks scale slower — trees regrow slow.
-        int placementCount = Math.max(1, blueprint.placements().size());
-        int builderCount = Math.min(RaidConfig.CAMP_BUILDER_MAX.get(), placementCount);
-        int lumberjackCount = Math.min(RaidConfig.CAMP_LUMBERJACK_MAX.get(),
-                Math.max(1, placementCount / 2));
-
-        for (int i = 0; i < builderCount; i++) {
-            WorkersBridge.spawnBuilder(level, campCenter, raiderOwner, raiderTeamKey)
-                    .ifPresent(spawned::add);
-        }
-        for (int i = 0; i < lumberjackCount; i++) {
-            WorkersBridge.spawnLumberjack(level, campCenter, raiderOwner, raiderTeamKey)
-                    .ifPresent(spawned::add);
-        }
-
-        if (spawned.isEmpty()) {
-            FactionLogger.LOG.info("Camp phase spawned no entities at {}; skipping.", campCenter);
-            return Optional.empty();
-        }
-
-        FactionLogger.LOG.info("Raider camp started at {} for faction {} — {} entities, {} work areas.",
-                campCenter, raiderTeamKey, spawned.size(), workAreas.size());
-        return Optional.of(new CampState(campCenter, blueprint.id(), spawned, workAreas));
     }
 
-    /** Live state for one raider camp. Owned by the raid, ticked from the siege lifecycle. */
-    public static final class CampState {
-        public final BlockPos center;
-        public final String blueprintId;
-        public final List<Entity> spawnedEntities;
-        public final List<Entity> workAreas;
-        public Phase phase = Phase.SPAWNED;
-        private int ticksSinceStart;
+    static boolean advanceTimeout(RaidState raid) {
+        raid.campBuildTicks += ModConstants.TICK_INTERVAL;
+        if (raid.campBuildTicks < ModConstants.secondsToTicks(RaidConfig.CAMP_MAX_BUILD_SECONDS.get())) return false;
+        FactionLogger.LOG.info("Camp construction for {} stopped after {}s; siege continues normally",
+                raid.teamKey, RaidConfig.CAMP_MAX_BUILD_SECONDS.get());
+        raid.pendingCampBlocks.clear();
+        return true;
+    }
 
-        CampState(BlockPos center, String blueprintId, List<Entity> spawnedEntities, List<Entity> workAreas) {
-            this.center = center;
-            this.blueprintId = blueprintId;
-            this.spawnedEntities = spawnedEntities;
-            this.workAreas = workAreas;
+    /** Preserve placement order (supports before roofs); never build remotely from a missing/dead crew. */
+    static int placeNearby(RaidState raid, Vec3 worker, int budget, BiConsumer<BlockPos, Block> place) {
+        int count = 0;
+        var iterator = raid.pendingCampBlocks.entrySet().iterator();
+        while (iterator.hasNext() && count < budget) {
+            Map.Entry<Long, String> job = iterator.next();
+            BlockPos pos = BlockPos.of(job.getKey());
+            if (worker != null && !withinReach(worker, pos)) break;
+            ResourceLocation key = ResourceLocation.tryParse(job.getValue());
+            Block block = key == null ? null : ForgeRegistries.BLOCKS.getValue(key);
+            if (block != null) place.accept(pos, block);
+            iterator.remove();
+            count++;
         }
+        return count;
+    }
 
-        /** Called once per periodic siege pass; returns true on completion or timeout. */
-        public boolean tick(ServerLevel level) {
-            ticksSinceStart += ModConstants.TICK_INTERVAL;
-            if (phase == Phase.SPAWNED && ticksSinceStart >= ModConstants.TICKS_PER_SECOND) {
-                phase = Phase.IN_PROGRESS;
-            }
-            if (phase == Phase.IN_PROGRESS) {
-                boolean allDone = !workAreas.isEmpty() &&
-                        workAreas.stream().allMatch(WorkersBridge::isWorkAreaDone);
-                if (allDone) {
-                    phase = Phase.COMPLETE;
-                    return true;
-                }
-                // Safety valve: if builders are stuck (no completion within
-                // MAX_BUILD_TICKS) fail cleanly so the raid still progresses.
-                int maxTicks = ModConstants.secondsToTicks(RaidConfig.CAMP_MAX_BUILD_SECONDS.get());
-                if (ticksSinceStart >= maxTicks) {
-                    FactionLogger.LOG.info("Camp {} timed out after {}s; advancing raid.",
-                            blueprintId, RaidConfig.CAMP_MAX_BUILD_SECONDS.get());
-                    phase = Phase.FAILED;
-                    return true;
-                }
-            }
-            return false;
-        }
+    static boolean withinReach(Vec3 worker, BlockPos pos) {
+        double dx = worker.x - (pos.getX() + 0.5), dz = worker.z - (pos.getZ() + 0.5);
+        return dx * dx + dz * dz <= 16 && Math.abs(worker.y - pos.getY()) <= 5;
+    }
 
-        /**
-         * Remove the workers and work-area entities so the camp stops being
-         * "active" when the raid ends. Placed blocks (tents, banners) are
-         * left behind — that's part of the "raiders were here" feel.
-         */
-        public void cleanup(ServerLevel level) {
-            for (Entity entity : spawnedEntities) {
-                if (entity != null && entity.isAlive() && entity.level() == level) {
-                    entity.discard();
+    /** Find ground beside the job; do not send workers onto a roof or through the camp wall. */
+    private static BlockPos standingPosition(ServerLevel level, BlockPos target, int groundY, Vec3 from) {
+        BlockPos best = null;
+        double bestDistance = Double.MAX_VALUE;
+        for (int radius = 1; radius <= 3; radius++) {
+            for (Direction direction : Direction.Plane.HORIZONTAL) {
+                for (int dy = -3; dy <= 3; dy++) {
+                    BlockPos feet = new BlockPos(target.getX(), groundY + dy, target.getZ()).relative(direction, radius);
+                    if (level.hasChunkAt(feet) && level.getWorldBorder().isWithinBounds(feet)
+                            && level.getBlockState(feet.below()).isFaceSturdy(level, feet.below(), Direction.UP)
+                            && level.getBlockState(feet).isAir() && level.getBlockState(feet.above()).isAir()) {
+                        double distance = from.distanceToSqr(Vec3.atBottomCenterOf(feet));
+                        if (distance < bestDistance) {
+                            best = feet;
+                            bestDistance = distance;
+                        }
+                    }
                 }
             }
-            spawnedEntities.clear();
-            workAreas.clear();
         }
+        return best;
+    }
+
+    public static void cleanup(ServerLevel level, RaidState raid) {
+        for (UUID id : new ArrayList<>(raid.campWorkers)) {
+            Entity entity = level.getEntity(id);
+            if (entity != null) entity.discard();
+        }
+        raid.campWorkers.clear();
+        raid.campUsesWorkers = false;
+        // Unloaded crew are removed by EntityJoinLevelEvent when their saved UUID
+        // is no longer attached to an active raid. Player workers have no crew tag.
     }
 }

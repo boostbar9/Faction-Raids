@@ -84,15 +84,6 @@ public final class RaidEvents {
     private static final String RAID_ROLE_TAG = ModConstants.Tags.RAID_ROLE;
 
     /**
-     * Runtime handles for in-progress camp construction, keyed by team key.
-     * NOT persisted — camps are ephemeral to the raid and get rebuilt on
-     * every raid start; on server restart mid-raid the entities remain but
-     * the phase advances immediately since we lost the tracking handle.
-     */
-    static final java.util.Map<String, com.devfarinsky.siegeoverhaul.camp.CampBuilder.CampState>
-            ACTIVE_CAMPS = new java.util.concurrent.ConcurrentHashMap<>();
-
-    /**
      * Per-raid wave composition (progressive picker + formation choice).
      * Populated by queueWave and consulted by createAttackerForWave and the
      * FormationDirector tick. Cleared in finishRaid.
@@ -137,6 +128,19 @@ public final class RaidEvents {
     @SubscribeEvent
     public static void onEntityJoin(EntityJoinLevelEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level) || !(event.getEntity() instanceof Mob mob)) return;
+        String campTeam = mob.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM);
+        if (!campTeam.isBlank()) {
+            if (event.loadedFromDisk()) {
+                RaidSavedData.RaidState campRaid = RaidSavedData.get(level.getServer()).raids.get(campTeam);
+                if (campRaid == null || !campRaid.campWorkers.contains(mob.getUUID())) {
+                    mob.discard();
+                    event.setCanceled(true);
+                } else {
+                    RecruitsBridge.assignToRaidersFaction(mob);
+                }
+            }
+            return; // Camp crew never count as wave enemies or receive soldier AI.
+        }
         if (mob instanceof Vex vex && !mob.getPersistentData().contains(RAID_TEAM_TAG)) {
             Mob owner = vex.getOwner();
             if (owner != null && owner.getPersistentData().contains(RAID_TEAM_TAG)) {
@@ -1593,17 +1597,7 @@ public final class RaidEvents {
                                 : " siege engines have been raised at the war camp."))
                         .withStyle(ChatFormatting.GOLD), false);
             }
-            // Real Workers-driven camp construction phase. Runs in parallel
-            // to the prefab camp for now; the prefab guarantees a visible camp
-            // presence, while the Workers phase makes it feel alive when the
-            // Workers mod is installed. A future PR removes the prefab once the
-            // Workers path is proven at scale.
-            final RaidSavedData.Anchor anchorForCamp = anchor;
-            com.devfarinsky.siegeoverhaul.camp.CampBuilder.startCamp(
-                            raidLevel, point.pos(), state.approachAngle,
-                            Math.max(1, anchorForCamp.members().size()),
-                            anchorForCamp.ownerUuid(), anchorForCamp.teamKey())
-                    .ifPresent(cs -> ACTIVE_CAMPS.put(anchorForCamp.teamKey(), cs));
+            com.devfarinsky.siegeoverhaul.camp.CampBuilder.startCamp(raidLevel, state);
         }
         data.raids.put(anchor.teamKey(), state);
         data.setDirty();
@@ -1704,17 +1698,6 @@ public final class RaidEvents {
             announce(server, teamKey, Component.literal("The paused invasion has resumed.").withStyle(ChatFormatting.YELLOW), false);
         }
 
-        // Tick the Workers-driven camp construction phase if one is active
-        // for this raid. Phase completion just logs today; the follow-up PR
-        // wires this into the wave-scheduling code so the assault only starts
-        // once the camp is up.
-        com.devfarinsky.siegeoverhaul.camp.CampBuilder.CampState camp = ACTIVE_CAMPS.get(teamKey);
-        if (camp != null && camp.tick(level)) {
-            com.devfarinsky.siegeoverhaul.FactionLogger.LOG.info(
-                    "Camp phase for {} reached {} — assault may proceed.",
-                    teamKey, camp.phase);
-        }
-
         reconcileTaggedMobs(level, point, state);
         updateTrackedMobs(level, state);
         // v2.28.0: Captain aura \u2014 the Unit Codex has always promised that
@@ -1724,9 +1707,11 @@ public final class RaidEvents {
         // effect so it never flickers between passes but decays if the
         // captain dies.
         tickCaptainAura(level, state);
-        // v2.14.0: drain the deferred camp-build queue one structure at a
-        // time. Runs cheaply every tick and no-ops once the queue empties.
-        progressDeferredCampBuilds(level, state);
+        // Camp progress is persisted even when no wave or breach changed this pass.
+        if (!state.pendingCampBlocks.isEmpty()) {
+            progressDeferredCampBuilds(level, state);
+            data.setDirty();
+        }
         // v2.15.0: render an objective marker column so defenders see
         // exactly where the raiders are marching. Rate-limited inside.
         broadcastObjectiveBeacon(level, point, state);
@@ -2396,7 +2381,7 @@ public final class RaidEvents {
      *       banner / barrel) have to be present the moment the raid
      *       starts so the destructible-camp mechanic works.</li>
      *   <li><b>Decorative (progressive).</b> Watchtowers, forge cluster,
-     *       barracks tents. Queued into {@code state.deferredCampBuilds}
+     *       barracks tents. Queued into {@code state.pendingCampBlocks}
      *       and drained one structure every few seconds by
      *       {@link #progressDeferredCampBuilds(ServerLevel, RaidSavedData.RaidState)}
      *       so the camp visibly grows over ~20-30 seconds. When Villager
@@ -2524,64 +2509,43 @@ public final class RaidEvents {
         // -----------------------------------------------------------------
         // PHASE 2: queue decorative structures for progressive build-out
         // -----------------------------------------------------------------
-        state.deferredCampBuilds.clear();
+        state.pendingCampBlocks.clear();
+        state.planningCamp = true;
+        try {
 
-        // Four corner watchtowers (one queued build per corner). All four
-        // share the palisade's plane Y so they line up as a coherent camp
-        // silhouette even when the ground slopes gently across the footprint.
-        int[][] corners = {{-r, -r}, {-r, r}, {r, -r}, {r, r}};
-        for (int[] c : corners) {
-            final int wx = cx + c[0];
-            final int wz = cz + c[1];
-            state.deferredCampBuilds.add(() -> buildWatchtower(level, state, wx, wz, cy));
+            // Four corner watchtowers (one queued build per corner). All four
+            // share the palisade's plane Y so they line up as a coherent camp
+            // silhouette even when the ground slopes gently across the footprint.
+            int[][] corners = {{-r, -r}, {-r, r}, {r, -r}, {r, r}};
+            for (int[] c : corners) {
+                final int wx = cx + c[0];
+                final int wz = cz + c[1];
+                buildWatchtower(level, state, wx, wz, cy);
+            }
+
+            // Forge cluster (single queued build).
+            buildForge(level, state, cx, cz, cy);
+
+            // Two barracks tents (one queued build each).
+            double rearAngle = frontAngle + Math.PI;
+            int rearDx = Mth.floor(Math.cos(rearAngle) * 5.0D);
+            int rearDz = Mth.floor(Math.sin(rearAngle) * 5.0D);
+            int perpX = Mth.floor(-Math.sin(rearAngle) * 3.0D);
+            int perpZ = Mth.floor(Math.cos(rearAngle) * 3.0D);
+            for (int tent = -1; tent <= 1; tent += 2) {
+                final int tx = cx + rearDx + perpX * tent;
+                final int tz = cz + rearDz + perpZ * tent;
+                buildTent(level, state, tx, tz, cy);
+            }
+        } finally {
+            state.planningCamp = false;
         }
-
-        // Forge cluster (single queued build).
-        state.deferredCampBuilds.add(() -> buildForge(level, state, cx, cz, cy));
-
-        // Two barracks tents (one queued build each).
-        double rearAngle = frontAngle + Math.PI;
-        int rearDx = Mth.floor(Math.cos(rearAngle) * 5.0D);
-        int rearDz = Mth.floor(Math.sin(rearAngle) * 5.0D);
-        int perpX = Mth.floor(-Math.sin(rearAngle) * 3.0D);
-        int perpZ = Mth.floor(Math.cos(rearAngle) * 3.0D);
-        for (int tent = -1; tent <= 1; tent += 2) {
-            final int tx = cx + rearDx + perpX * tent;
-            final int tz = cz + rearDz + perpZ * tent;
-            state.deferredCampBuilds.add(() -> buildTent(level, state, tx, tz, cy));
-        }
-        // First deferred build fires after a short delay so the camp core
-        // has visibly "settled" before the next structure appears.
-        state.deferredCampCooldown = 40; // 2s
     }
 
-    /**
-     * Drains one deferred camp structure per {@code DEFERRED_INTERVAL_TICKS}
-     * ticks. Called from the main raid tick loop while a raid is active.
-     * No-op when the queue is empty or the cooldown hasn't elapsed.
-     *
-     * <p>Rate is intentionally conservative (≈3s between structures) so a
-     * camp with 7 deferred builds visibly assembles over ~20s. When
-     * Villager Workers 2 is loaded, Builders spawned by CampBuilder are
-     * already present alongside and will animate around the placements.
-     */
-    private static final int DEFERRED_INTERVAL_TICKS = 60;
+    /** Build a bounded number of decorative blocks each periodic pass. */
     private static void progressDeferredCampBuilds(ServerLevel level, RaidSavedData.RaidState state) {
-        if (state.deferredCampBuilds.isEmpty()) return;
-        if (state.deferredCampCooldown > 0) {
-            state.deferredCampCooldown--;
-            return;
-        }
-        Runnable next = state.deferredCampBuilds.poll();
-        if (next != null) {
-            try {
-                next.run();
-            } catch (RuntimeException ex) {
-                FactionLogger.LOG.warn("Deferred camp build failed at raid {}: {}",
-                        state.teamKey, ex.getMessage());
-            }
-        }
-        state.deferredCampCooldown = DEFERRED_INTERVAL_TICKS;
+        com.devfarinsky.siegeoverhaul.camp.CampBuilder.tick(level, state,
+                (pos, block) -> placeCampBlock(level, state, pos, block));
     }
 
     /**
@@ -2850,8 +2814,15 @@ public final class RaidEvents {
 
     private static void placeCampBlock(ServerLevel level, RaidSavedData.RaidState state,
                                        BlockPos pos, Block block) {
-        if (!level.getWorldBorder().isWithinBounds(pos) || !level.getFluidState(pos).isEmpty() ||
-                !level.getBlockState(pos).canBeReplaced()) return;
+        if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)
+                || !level.getFluidState(pos).isEmpty() || !level.getBlockState(pos).canBeReplaced()) return;
+        if (state.planningCamp) {
+            ResourceLocation id = ForgeRegistries.BLOCKS.getKey(block);
+            if (id != null) state.pendingCampBlocks.putIfAbsent(pos.asLong(), id.toString());
+            return;
+        }
+        // Never wall in a player, worker, or another living entity during construction.
+        if (!level.getEntitiesOfClass(LivingEntity.class, new AABB(pos), LivingEntity::isAlive).isEmpty()) return;
         // v3.1.0: snapshot the ORIGINAL block before we overwrite it so
         // cleanup can restore the terrain (grass, dirt, gravel, whatever) instead
         // of leaving air holes. canBeReplaced() is true for air and short grass, so
@@ -3838,13 +3809,6 @@ public final class RaidEvents {
         if (finishingState != null) {
             for (UUID rid : finishingState.raiders) STUCK_TRACKER.remove(rid);
         }
-        // v2.19.0 RE1: drop the ACTIVE_CAMPS entry unconditionally, before
-        // the level-guarded branch below. Prior code only removed the entry
-        // when the raid's dimension was loaded, so an admin stop or dim
-        // removal that finished a raid with level == null leaked a
-        // CampBuilder.CampState per raid, keyed by team, until server restart.
-        com.devfarinsky.siegeoverhaul.camp.CampBuilder.CampState leakedCamp =
-                ACTIVE_CAMPS.remove(teamKey);
         RaidSavedData.RaidState state = data.raids.remove(teamKey);
         RaidSavedData.Anchor anchor = data.anchors.get(teamKey);
         if (state != null && anchor != null) {
@@ -3858,7 +3822,7 @@ public final class RaidEvents {
                 }
                 restoreBreachedBlocks(level, state);
                 cleanupWarCamp(level, state);
-                if (leakedCamp != null) leakedCamp.cleanup(level);
+                com.devfarinsky.siegeoverhaul.camp.CampBuilder.cleanup(level, state);
             }
             long next = server.overworld().getGameTime() + randomCooldownTicks(server.overworld().random);
             data.anchors.put(teamKey, anchor.withNextRaid(next));
