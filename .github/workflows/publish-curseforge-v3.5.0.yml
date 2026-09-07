@@ -1,0 +1,96 @@
+name: Publish tested 3.5.0 to CurseForge
+
+# One-time publication of the exact artifact validated in PR #54.
+on:
+  push:
+    branches: [publish/curseforge-v3.5.0]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v3.5.0
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34146855286
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Verify exact release bytes and metadata
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import zipfile
+
+          jar = Path('dist/siegeoverhaul-3.5.0.jar')
+          expected = '1141eb691d0274a93358b45df1159313df308f300868cee244f6ed3a01e43cb5'
+          actual = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert actual == expected, f'Unexpected JAR checksum: {actual}'
+          with zipfile.ZipFile(jar) as contents:
+              metadata = contents.read('META-INF/mods.toml').decode()
+              assert 'modId="siegeoverhaul"' in metadata
+              assert 'version="3.5.0"' in metadata
+          print(f'Verified {jar.name}: {actual}')
+          PY
+
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-3.5.0.jar
+          name: The Siege Overhaul v3.5.0 - Gentle camp terrain leveling
+          version: v3.5.0
+          version-type: release
+          changelog: |
+            ## The Siege Overhaul 3.5.0
+
+            Camps now gently level their ground before construction.
+
+            - Level the camp interior with cuts and fills capped at three blocks.
+            - Blend the camp edge into surrounding ground over three blocks, rejecting sharp height transitions.
+            - Validate the entire site before earthworks. Reject water, containers, non-soil foundations, blocked building space, excluded claims, unloaded chunks and excessive excavation.
+            - Save every terrain change in the camp restoration ledger; restore ground before vegetation when the siege ends.
+            - Preserve different player replacement blocks, and handle natural dirt/grass changes during cleanup.
+            - New levelCampTerrain setting defaults on and requires cleanupTemporaryWarCamps. Existing camps are unchanged.
+
+            Minecraft 1.20.1, Forge, Java 17. Requires Villager Recruits 1.15.2 or newer. Villager Workers 2 is optional. Replace the old JAR on the server and every client; versions must match.
+
+            Validation: Java 17 build and all 28 regression tests passed. No interactive Minecraft playtest performed. Ordinary player-placed dirt and grass cannot be distinguished from natural soil.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          dependencies: |
+            recruits(required)
+            workers(optional)
+            smallships(optional)
+            siegeweapons(optional)
+          fail-mode: fail
+
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          result = {'version': '3.5.0', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 3.5.0: {result['url']}\n")
+          PY
