@@ -136,9 +136,16 @@ public final class BridgeBuilder {
             boolean placeable = existing.isAir()
                     || existing.getFluidState().getType() == Fluids.WATER;
             if (!placeable) continue;
+            // v3.1.0: snapshot the original block before we overwrite it so
+            // camp cleanup can restore the water tile back to water instead of
+            // leaving a floating oak-plank bridge in the ocean. Only bother
+            // capturing when non-air (water gets a Name tag and round-trips fine).
+            net.minecraft.nbt.CompoundTag original = existing.isAir()
+                    ? new net.minecraft.nbt.CompoundTag()
+                    : com.devfarinsky.siegeoverhaul.siege.BlockRestoration.serializeState(level, p, existing);
             level.setBlockAndUpdate(p, BRIDGE_BLOCK.defaultBlockState());
             ResourceLocation id = BuiltInRegistries.BLOCK.getKey(BRIDGE_BLOCK);
-            state.campBlocks.put(p.asLong(), id.toString());
+            state.recordCampBlock(p.asLong(), id.toString(), original);
             steps++;
         }
         return steps;

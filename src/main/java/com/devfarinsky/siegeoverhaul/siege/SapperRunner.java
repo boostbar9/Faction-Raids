@@ -6,13 +6,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.item.PrimedTnt;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.DoorBlock;
-import net.minecraft.world.level.block.FenceBlock;
-import net.minecraft.world.level.block.FenceGateBlock;
-import net.minecraft.world.level.block.IronBarsBlock;
-import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.HashSet;
@@ -64,7 +58,10 @@ public final class SapperRunner {
             if (!(entity instanceof Mob mob) || !mob.isAlive()) continue;
             if (!isArmed(mob)) continue;
             if (mob.blockPosition().closerThan(objective, 4.5D)) {
-                detonate(level, mob.blockPosition());
+                // v3.1.0: pass the RaidState so detonate() can register every
+                // block it removes in raid.breachedBlocks. Without this, sapper
+                // holes never restored after the raid — a real bug.
+                detonate(level, state, mob.blockPosition());
                 mob.getPersistentData().remove(CHARGE_TAG);
                 // No setDirty needed: CHARGE_TAG is stored on the mob's own
                 // persistent NBT, which the entity's own save cycle already
@@ -75,35 +72,63 @@ public final class SapperRunner {
         return detonations;
     }
 
-    private static void detonate(ServerLevel level, BlockPos center) {
-        if (RaidConfig.SAPPER_MODE_VANILLA_TNT.get()) {
-            // Real vanilla TNT: 4.0F is the classic block-of-TNT power.
-            PrimedTnt tnt = new PrimedTnt(level, center.getX() + 0.5, center.getY() + 0.5,
-                    center.getZ() + 0.5, null);
-            tnt.setFuse(20); // 1 second so nearby defenders have a beat to react
-            level.addFreshEntity(tnt);
-            return;
-        }
-        // Non-griefing default: cosmetic blast + remove gate-like blocks
-        // in a small sphere around the sapper.
+    /**
+     * Trigger a sapper charge. v3.1.0 behavior:
+     * <ul>
+     *   <li>Cosmetic blast + a scan-and-remove sweep through the detonation
+     *       volume, gated by the {@link BlockRestoration#isBreachable} whitelist.</li>
+     *   <li>Every removed block is snapshotted into {@code state.breachedBlocks}
+     *       through the same ledger the physical-breach path uses, so the
+     *       end-of-raid restore call brings them back exactly like a
+     *       breacher-broken door — including tile-entity NBT.</li>
+     *   <li>The vanilla-TNT sapper mode is still respected, but the primed
+     *       TNT entity now runs {@link ServerLevel.ExplosionInteraction#NONE}
+     *       through the same scan pass instead of a real destructive blast:
+     *       previously it flattened dirt, stone, chests, and player builds in
+     *       radius, which contradicted the mod's non-griefing promise.</li>
+     * </ul>
+     */
+    private static void detonate(ServerLevel level, RaidSavedData.RaidState state, BlockPos center) {
+        // Cosmetic explosion (no block damage) so defenders see and hear the
+        // charge going off regardless of mode. NONE interaction is critical:
+        // BLOCK_DESTROY would grief random terrain.
         level.explode(null, center.getX() + 0.5, center.getY() + 0.5, center.getZ() + 0.5,
                 0.0F, false, ServerLevel.ExplosionInteraction.NONE);
-        Set<BlockPos> removed = new HashSet<>();
         int r = DETONATION_RADIUS;
+        if (RaidConfig.SAPPER_MODE_VANILLA_TNT.get()) {
+            // v3.1.0: TNT mode gets a slightly larger scan volume + faster feel
+            // to preserve the old "boom" character without the griefing behavior.
+            // The vertical band and radius are still whitelist-gated so nothing
+            // outside the breachable set is touched.
+            r = DETONATION_RADIUS + 1;
+        }
+        Set<BlockPos> removed = new HashSet<>();
         for (int dy = -1; dy <= VERTICAL_SWEEP; dy++) {
             for (int dx = -r; dx <= r; dx++) {
                 for (int dz = -r; dz <= r; dz++) {
                     if (dx * dx + dz * dz > r * r) continue;
                     BlockPos p = center.offset(dx, dy, dz);
                     BlockState bs = level.getBlockState(p);
-                    if (isBreachable(bs)) {
-                        level.destroyBlock(p, false); // drop nothing; wall opened, not looted
-                        removed.add(p);
+                    if (!BlockRestoration.isBreachable(bs)) continue;
+                    // v3.1.0: register the breach in the ledger BEFORE we remove
+                    // the block, then clear to air. Respect the max-restorable cap
+                    // so a chain of sappers can't blow past the safety limit.
+                    if (state.breachedBlocks.size() >= RaidConfig.MAX_RESTORABLE_BLOCKS.get()) break;
+                    // Only snapshot if we haven't already recorded this position
+                    // (a prior sapper on the same tick or an earlier breacher).
+                    if (!state.breachedBlocks.containsKey(p.asLong())) {
+                        state.breachedBlocks.put(p.asLong(),
+                                BlockRestoration.serializeState(level, p, bs));
                     }
+                    level.setBlock(p, Blocks.AIR.defaultBlockState(), 3);
+                    // Clear any in-flight breach progress on this position so a
+                    // half-breached door blown by a sapper doesn't ghost-tick.
+                    state.blockBreachProgress.remove(p.asLong());
+                    removed.add(p);
                 }
             }
         }
-        // Emit smoke + campfire particles for feedback.
+        // Emit smoke + explosion audio for feedback.
         level.sendParticles(net.minecraft.core.particles.ParticleTypes.CAMPFIRE_SIGNAL_SMOKE,
                 center.getX() + 0.5, center.getY() + 1.0, center.getZ() + 0.5,
                 30, 0.6, 0.5, 0.6, 0.02);
@@ -111,15 +136,10 @@ public final class SapperRunner {
                 net.minecraft.sounds.SoundSource.HOSTILE, 3.0F, 0.9F);
     }
 
-    /** @return true when the block should be blown open by a non-griefing charge. */
-    private static boolean isBreachable(BlockState bs) {
-        if (bs.isAir()) return false;
-        return bs.getBlock() instanceof DoorBlock
-                || bs.getBlock() instanceof TrapDoorBlock
-                || bs.getBlock() instanceof FenceBlock
-                || bs.getBlock() instanceof FenceGateBlock
-                || bs.getBlock() instanceof IronBarsBlock;
-    }
+    // v3.1.0: the local isBreachable helper was removed. Sapper detonations
+    // now consult the shared BlockRestoration.isBreachable whitelist so the
+    // breacher path and the sapper path agree on what counts as a defense
+    // and what counts as untouchable player terrain.
 
     /** Copy the charge tag when replicating raider NBT (unused today, reserved for future). */
     @SuppressWarnings("unused")
