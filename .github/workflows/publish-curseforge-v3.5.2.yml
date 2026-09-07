@@ -1,0 +1,96 @@
+name: Publish tested 3.5.2 to CurseForge
+
+# One-time publication of the exact artifact validated in PR #56.
+on:
+  push:
+    branches: [publish/curseforge-v3.5.2]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v3.5.2
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34163883831
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Verify exact release bytes and metadata
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import zipfile
+
+          jar = Path('dist/siegeoverhaul-3.5.2.jar')
+          expected = '1dc6636488cbf99ae87b3b7993c69d2a01d8a078366e3aa3bc6dfaf83be7d29d'
+          actual = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert actual == expected, f'Unexpected JAR checksum: {actual}'
+          with zipfile.ZipFile(jar) as contents:
+              metadata = contents.read('META-INF/mods.toml').decode()
+              assert 'modId="siegeoverhaul"' in metadata
+              assert 'version="3.5.2"' in metadata
+          print(f'Verified {jar.name}: {actual}')
+          PY
+
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-3.5.2.jar
+          name: The Siege Overhaul v3.5.2 - Raider boat landing fixes
+          version: v3.5.2
+          version-type: release
+          changelog: |
+            ## The Siege Overhaul 3.5.2
+
+            Raiders leave their boats on safe nearby ground and resume attacking the siege objective.
+
+            - Fix the twenty-second stalled-boat timer and detect boats wedged in water, using actual approach progress.
+            - Account for ship width and nested Small Ships seats when disembarking raiders.
+            - Check dry supported ground, collision space, loaded chunks and world borders; spread crew across landing positions.
+            - Clear Recruits mounting orders and direct ground navigation toward the active raid objective.
+            - Recover convoy tracking after server/chunk reloads, including legacy boats without claiming their ownership.
+            - Do not eject players or unrelated passengers. If no safe nearby landing exists, keep the crew aboard and retry instead of teleporting blindly.
+
+            Minecraft 1.20.1, Forge, Java 17. Requires Villager Recruits 1.15.2 or newer. Villager Workers 2, Small Ships and Siege Weapons remain optional. Replace the old JAR on the server and every client; versions must match.
+
+            Validation: Java 17 build and all 41 regression tests passed. No interactive Minecraft or Small Ships playtest performed.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          dependencies: |
+            recruits(required)
+            workers(optional)
+            smallships(optional)
+            siegeweapons(optional)
+          fail-mode: fail
+
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          result = {'version': '3.5.2', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 3.5.2: {result['url']}\n")
+          PY
