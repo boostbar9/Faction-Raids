@@ -1,0 +1,96 @@
+name: Publish tested 3.3.2 to CurseForge
+
+# One-time publication of the exact artifact validated in PR #52.
+on:
+  push:
+    branches: [publish/curseforge-v3.3.2]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v3.3.2
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34093248509
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Verify exact release bytes and metadata
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import zipfile
+
+          jar = Path('dist/siegeoverhaul-3.3.2.jar')
+          expected = 'a035e1d91afbd11ac0d78017f19afedf39e31c5635390dde3378321dc52760a0'
+          actual = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert actual == expected, f'Unexpected JAR checksum: {actual}'
+          with zipfile.ZipFile(jar) as contents:
+              metadata = contents.read('META-INF/mods.toml').decode()
+              assert 'modId="siegeoverhaul"' in metadata
+              assert 'version="3.3.2"' in metadata
+          print(f'Verified {jar.name}: {actual}')
+          PY
+
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-3.3.2.jar
+          name: The Siege Overhaul v3.3.2 - Siege crash and restoration fixes
+          version: v3.3.2
+          version-type: release
+          changelog: |
+            ## The Siege Overhaul 3.3.2
+
+            Fixes the server crash caused by a Recruits 1.15.2 siege engineer's incompatible navigation cast. If a raider fails spawn initialization, it is discarded before entering the world and replaced with a fully initialized pillager so the siege can continue.
+
+            - Fixed ballista operator attachment through the Recruits siege-controller API.
+            - Sappers now snapshot the entire breach before removing blocks, preserving both door halves at blast boundaries and restoration limits.
+            - Repeated camp placements preserve the original terrain snapshot. Terrain beneath destroyed camp blocks is restored after the raid.
+            - Camp construction timeouts now use the configured number of seconds correctly.
+            - Breaking a block in another dimension no longer triggers camp sabotage at matching coordinates.
+            - Raiders that remain stuck after rescue are retired correctly. Soldiers holding objectives, fighting visible defenders, or riding vehicles are excluded from rescue.
+
+            Minecraft 1.20.1, Forge, Java 17. Requires Villager Recruits 1.15.2 or newer. Replace the old mod JAR on the server and every client; versions must match. No save migration is required for this update.
+
+            Validation: Java 17 build and all 11 regression tests passed. Full gameplay with every modpack combination has not been tested.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          dependencies: |
+            recruits(required)
+            workers(optional)
+            smallships(optional)
+            siegeweapons(optional)
+          fail-mode: fail
+
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          result = {'version': '3.3.2', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 3.3.2: {result['url']}\n")
+          PY
