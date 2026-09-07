@@ -465,7 +465,7 @@ public final class RaidConfig {
                 .defineInRange("victoryEmeraldsPerWave", 4, 0, 64);
         COMMANDER_EMERALD_BONUS = b.comment("Additional guaranteed emeralds when the faction defeats the siege commander.")
                 .defineInRange("commanderEmeraldBonus", 12, 0, 256);
-        MANUAL_RAIDS_GRANT_REWARDS = b.comment("Allow raids started with /siegeoverhaul start or the dashboard test button to grant rewards. Disabled to prevent farming by default.")
+        MANUAL_RAIDS_GRANT_REWARDS = b.comment("Allow raids started manually with /siegeoverhaul start to grant rewards. Disabled by default to prevent reward farming.")
                 .define("manualRaidsGrantRewards", false);
         b.pop();
 
