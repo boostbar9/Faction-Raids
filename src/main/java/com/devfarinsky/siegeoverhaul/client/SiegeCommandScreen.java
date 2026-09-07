@@ -372,8 +372,8 @@ public final class SiegeCommandScreen extends Screen {
                             snapshot.defenseScoreLabel(),
                     x + 10, botY + 74, scoreColor, false);
             if (!snapshot.defenseExplainer().isEmpty()) {
-                graphics.drawString(font, trim(snapshot.defenseExplainer(), w - 20),
-                        x + 10, botY + 86, SUBTLE, false);
+                graphics.drawString(font, trim(snapshot.cooldown(), w - 20),
+                        x + 10, botY + 86, INK, false);
             }
         } else {
             card(graphics, x, botY, w, botH, "DEFENSE FORECAST", GREEN);

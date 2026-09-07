@@ -354,3 +354,9 @@ Villager Recruits is a separate project by TalhaNation and retains its own licen
 New camps can level soil by up to three blocks, with a three-block transition into the surrounding ground. The full site must have dry soil, clear building space and walkable height transitions; unsuitable sites are skipped. Water, containers, stone foundations, timber and excluded claims are rejected. Every cut and fill is saved for restoration when the siege ends.
 
 `levelCampTerrain` enables this behavior by default and requires camp cleanup to remain enabled. Existing camps are unchanged. As with normal camp restoration, different player replacement blocks are preserved. Minecraft does not identify who originally placed ordinary dirt or grass, so those blocks cannot be distinguished from natural soil.
+
+### Reading and countering siege pressure
+
+The HUD and Codex show how many attackers and defenders are inside the active objective and whether it is capturing or recovering. Match or outnumber the attackers to reverse pressure; enemy kill/breach bonuses only accelerate progress while the enemy controls that point. With decay configured to zero, defended progress holds instead of recovering.
+
+Once a wave starts, destroying the campfire cancels that wave's remaining reinforcements, destroying the command banner forces that wave to retreat without kill credit, and breaking the supply barrel gives emeralds. Later waves still attack. Opening reports identify the marked point and explain these choices.

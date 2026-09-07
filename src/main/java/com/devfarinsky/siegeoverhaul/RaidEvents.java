@@ -162,6 +162,10 @@ public final class RaidEvents {
             mob.discard();
             return;
         }
+        if (com.devfarinsky.siegeoverhaul.camp.CampSabotage.discardRetreated(mob, state)) {
+            event.setCanceled(true);
+            return;
+        }
         state.raiders.add(mob.getUUID());
         if (RaidConfig.PAUSE_WHEN_FACTION_OFFLINE.get() &&
                 onlineMembers(level.getServer(), teamKey).isEmpty()) mob.setNoAi(true);
@@ -518,7 +522,7 @@ public final class RaidEvents {
      */
     @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.LOWEST)
     public static void onCampBlockBroken(net.minecraftforge.event.level.BlockEvent.BreakEvent event) {
-        if (!RaidConfig.CAMP_DESTRUCTIBLE_STRUCTURES.get()) return;
+        if (event.isCanceled() || !RaidConfig.CAMP_DESTRUCTIBLE_STRUCTURES.get()) return;
         if (!(event.getLevel() instanceof ServerLevel level)) return;
         RaidSavedData data = RaidSavedData.get(level.getServer());
         BlockPos pos = event.getPos();
@@ -558,7 +562,7 @@ public final class RaidEvents {
         // change bubbles up multiple events.
         state.campfirePos = null;
         announce(level.getServer(), state.teamKey, Component.literal(
-                "The war camp campfire is extinguished — no reinforcements will march.")
+                "Campfire destroyed: remaining reinforcements for this wave are stopped. Later waves still attack.")
                 .withStyle(ChatFormatting.GREEN), true);
     }
 
@@ -569,27 +573,9 @@ public final class RaidEvents {
      * and let the tick loop clean up naturally.
      */
     private static void handleBannerBroken(ServerLevel level, RaidSavedData.RaidState state) {
-        // Force-remove currently deployed raiders from the tracked set.
-        // They still exist in the world but no longer count — defenders
-        // can mop up. The wave-clear bookkeeping runs next tick.
-        for (UUID id : new ArrayList<>(state.raiders)) {
-            Entity entity = level.getEntity(id);
-            if (entity instanceof Mob mob && mob.isAlive()) {
-                // Small "scatter" push: apply a slight upward + outward
-                // impulse so it visually reads as "morale broken."
-                mob.setDeltaMovement(mob.getDeltaMovement().add(
-                        (level.random.nextDouble() - 0.5D) * 0.6D,
-                        0.3D,
-                        (level.random.nextDouble() - 0.5D) * 0.6D));
-            }
-        }
-        state.raiders.clear();
-        state.missingTicks.clear();
-        state.lastKnownChunks.clear();
-        state.pendingWaveSpawns = 0;
-        state.bannerPos = null;
+        com.devfarinsky.siegeoverhaul.camp.CampSabotage.retreatWave(level, state);
         announce(level.getServer(), state.teamKey, Component.literal(
-                "The command banner falls — the current wave's morale breaks and its raiders scatter.")
+                "Banner destroyed: the current wave retreats. Later waves still attack.")
                 .withStyle(ChatFormatting.GREEN), true);
     }
 
@@ -1610,6 +1596,15 @@ public final class RaidEvents {
                 " to the " + approachDirection(state.approachAngle) + ". The siege begins in " +
                 formatTime(RaidConfig.WARNING_SECONDS.get()) + ". Rally your Recruits and defend the stronghold.";
         announce(server, anchor.teamKey(), Component.literal(opening + detail).withStyle(accent), true);
+        Vec3 markedPoint = raidLevel == null ? Vec3.atCenterOf(point.pos()) : invasionObjective(raidLevel, point, state);
+        announce(server, anchor.teamKey(), Component.literal("Defend the marked point at " +
+                formatPos(BlockPos.containing(markedPoint)) + ". Match or outnumber attackers inside the ring to reverse pressure.")
+                .withStyle(ChatFormatting.AQUA), false);
+        if (state.campPos != null && RaidConfig.CAMP_DESTRUCTIBLE_STRUCTURES.get()) {
+            announce(server, anchor.teamKey(), Component.literal(
+                    "After the first wave starts, raid their camp: campfire stops current-wave reinforcements; banner forces that wave to retreat; supply barrel gives emeralds.")
+                    .withStyle(ChatFormatting.GOLD), false);
+        }
         if (state.narrative != null && state.narrative.chant != null) {
             announce(server, anchor.teamKey(),
                     Component.literal(state.narrative.chant).withStyle(ChatFormatting.ITALIC, accent), false);
@@ -1972,6 +1967,8 @@ public final class RaidEvents {
         AABB area = new AABB(point.pos()).inflate(radius, 128.0, radius);
         for (Mob mob : level.getEntitiesOfClass(Mob.class, area,
                 m -> state.teamKey.equals(m.getPersistentData().getString(RAID_TEAM_TAG)))) {
+            if (mob.getPersistentData().getBoolean(ModConstants.Tags.SCOUT)) continue;
+            if (com.devfarinsky.siegeoverhaul.camp.CampSabotage.discardRetreated(mob, state)) continue;
             if (mob.isAlive()) {
                 state.raiders.add(mob.getUUID());
                 state.missingTicks.remove(mob.getUUID());
@@ -3649,17 +3646,12 @@ public final class RaidEvents {
             int attackers = attackersInside(level, state, breachObjective, breachRadiusSq);
             int defenders = defendersInside(level, members, recruits, breachObjective, breachRadiusSq);
             int maximum = RaidConfig.BREACH_TIME_SECONDS.get() * 20;
-            if (attackers > defenders && attackers > 0) {
-                state.breachTicks = Math.min(maximum, state.breachTicks + 20);
-            } else state.breachTicks = Math.max(0,
-                    state.breachTicks - RaidConfig.BREACH_DECAY_PER_SECOND.get() * 20);
-            // Effort bonus — stack on top of presence baseline. Drains a
-            // fixed slice per tick so kills/breaches feel additive but capped.
-            if (RaidConfig.ENABLE_EFFORT_BONUS.get()) {
-                int bonus = com.devfarinsky.siegeoverhaul.effort.RaidEffortTracker
-                        .consume(state.teamKey, 20);
-                if (bonus > 0) state.breachTicks = Math.min(maximum, state.breachTicks + bonus);
-            }
+            int bonus = RaidConfig.ENABLE_EFFORT_BONUS.get()
+                    ? com.devfarinsky.siegeoverhaul.effort.RaidEffortTracker.consume(state.teamKey, ModConstants.TICK_INTERVAL) : 0;
+            int decay = RaidConfig.BREACH_DECAY_PER_SECOND.get() * ModConstants.TICKS_PER_SECOND;
+            state.breachTicks = com.devfarinsky.siegeoverhaul.raid.ObjectivePressure.advance(
+                    state.breachTicks, maximum, attackers, defenders, decay, bonus);
+            updateObjectiveFeedback(server, level, state, "Perimeter", attackers, defenders, state.breachTicks, decay);
 
             int band = maximum <= 0 ? 0 : state.breachTicks * 4 / maximum;
             if (band > state.lastBreachWarningBand && band < 4) {
@@ -3696,15 +3688,12 @@ public final class RaidEvents {
         int defenders = defendersInside(level, members, recruits, center, radiusSq);
 
         int maximum = RaidConfig.CAPTURE_TIME_SECONDS.get() * 20;
-        if (attackers > defenders && attackers > 0) state.captureTicks = Math.min(maximum, state.captureTicks + 20);
-        else state.captureTicks = Math.max(0,
-                state.captureTicks - RaidConfig.CAPTURE_DECAY_PER_SECOND.get() * 20);
-        // Effort bonus — same accrual applied to capture progress.
-        if (RaidConfig.ENABLE_EFFORT_BONUS.get()) {
-            int captureBonus = com.devfarinsky.siegeoverhaul.effort.RaidEffortTracker
-                    .consume(state.teamKey, 20);
-            if (captureBonus > 0) state.captureTicks = Math.min(maximum, state.captureTicks + captureBonus);
-        }
+        int bonus = RaidConfig.ENABLE_EFFORT_BONUS.get()
+                ? com.devfarinsky.siegeoverhaul.effort.RaidEffortTracker.consume(state.teamKey, ModConstants.TICK_INTERVAL) : 0;
+        int decay = RaidConfig.CAPTURE_DECAY_PER_SECOND.get() * ModConstants.TICKS_PER_SECOND;
+        state.captureTicks = com.devfarinsky.siegeoverhaul.raid.ObjectivePressure.advance(
+                state.captureTicks, maximum, attackers, defenders, decay, bonus);
+        updateObjectiveFeedback(server, level, state, "Stronghold", attackers, defenders, state.captureTicks, decay);
 
         int band = maximum <= 0 ? 0 : state.captureTicks * 4 / maximum;
         if (band > state.lastCaptureWarningBand && band < 4) {
@@ -3719,6 +3708,22 @@ public final class RaidEvents {
                             percent + "% held"));
         }
         return state.captureTicks >= maximum;
+    }
+
+    private static String compactObjectiveStatus(RaidSavedData.RaidState state) {
+        return state.objectiveStatus.replace(" attackers / ", " vs ").replace(" defenders in ring", "");
+    }
+
+    private static void updateObjectiveFeedback(MinecraftServer server, ServerLevel level,
+                                                 RaidSavedData.RaidState state, String phase,
+                                                 int attackers, int defenders, int progress, int decay) {
+        state.objectiveStatus = com.devfarinsky.siegeoverhaul.raid.ObjectivePressure.status(
+                attackers, defenders, progress, decay);
+        if (level.getGameTime() % ModConstants.secondsToTicks(5) == 0) {
+            sendActionBar(server, state.teamKey, Component.literal(phase + ": " + state.objectiveStatus)
+                    .withStyle(com.devfarinsky.siegeoverhaul.raid.ObjectivePressure.enemyControls(attackers, defenders)
+                            ? ChatFormatting.RED : ChatFormatting.GREEN));
+        }
     }
 
     private static int attackersInside(ServerLevel level, RaidSavedData.RaidState state,
@@ -4048,10 +4053,10 @@ public final class RaidEvents {
         } else if (!state.breached && RaidConfig.ENABLE_BREACH_PHASE.get()) {
             String target = objectiveName + distanceHint;
             String deployed = state.raiders.size() + " deployed";
-            String pressure = "breach " + breachPercent + "%";
+            String pressure = "breach " + breachPercent + "% | " + compactObjectiveStatus(state);
             label = com.devfarinsky.siegeoverhaul.chat.ChatStyle.bossbarLabel(epithet, phase, target, deployed, pressure);
         } else {
-            String held = objectiveName + " " + capturePercent + "% held";
+            String held = objectiveName + " " + capturePercent + "% | " + compactObjectiveStatus(state);
             String waveChip = "wave " + Math.max(1, state.wave) + "/" + totalWaves;
             String deployed = state.raiders.size() + " deployed"
                     + (state.pendingWaveSpawns > 0 ? " + " + state.pendingWaveSpawns + " reinforcing" : "");
@@ -4302,7 +4307,7 @@ public final class RaidEvents {
                 recruits, compat.workers(), compat.ships(), compat.siegeWeapons(), assetScalingEnemies(compat),
                 state.breachedBlocks.size(),
                 state.currentBreachBlock == null ? "No gate under attack" : formatPos(state.currentBreachBlock),
-                gateBreachPercent(state), "Siege active",
+                gateBreachPercent(state), state.objectiveStatus,
                 guaranteedEmeraldReward(state), state.rewardEligible,
                 facId, cbId, opening, chant, campDir, campDist,
                 nextLabel, nextRoles, score, defenseScoreLabel(score),

@@ -25,7 +25,7 @@ public final class RaidSavedData extends SavedData {
     // v12 added pendingSpoils + raidNotifyOptOut (3.2.0 multiplayer polish).
     // v13 added persistent camp construction jobs and crew (3.4.0).
     // Old saves load cleanly because all new fields default to empty collections.
-    public static final int DATA_VERSION = 13;
+    public static final int DATA_VERSION = 14;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Map<String, Anchor> anchors = new HashMap<>();
@@ -442,6 +442,8 @@ public final class RaidSavedData extends SavedData {
         public int ticksToNextSquad;
         public int squadsSpawned;
         public int captureTicks;
+        /** Recomputed each siege pass; no save or network format change needed. */
+        public transient String objectiveStatus = "Awaiting attackers";
         public int breachTicks;
         public boolean breached;
         public int lastBreachWarningBand;
@@ -503,6 +505,7 @@ public final class RaidSavedData extends SavedData {
         public boolean rewardEligible = true;
         public int lastWarningSecond = Integer.MAX_VALUE;
         public final Set<UUID> raiders = new HashSet<>();
+        public final Set<UUID> retreatedRaiders = new HashSet<>();
         public final Map<UUID, Integer> missingTicks = new HashMap<>();
         /**
          * Last-known chunk position (packed long) of each raider. Written every
@@ -669,6 +672,9 @@ public final class RaidSavedData extends SavedData {
             ListTag ids = new ListTag();
             raiders.forEach(id -> ids.add(StringTag.valueOf(id.toString())));
             tag.put("Raiders", ids);
+            ListTag retreated = new ListTag();
+            retreatedRaiders.forEach(id -> retreated.add(StringTag.valueOf(id.toString())));
+            tag.put(ModConstants.Tags.RETREATED_RAIDERS, retreated);
             ListTag missing = new ListTag();
             missingTicks.forEach((id, ticks) -> {
                 CompoundTag entry = new CompoundTag();
@@ -799,6 +805,12 @@ public final class RaidSavedData extends SavedData {
                     state.raiders.add(UUID.fromString(ids.getString(i)));
                 } catch (IllegalArgumentException ignored) {}
             }
+            ListTag retreated = tag.getList(ModConstants.Tags.RETREATED_RAIDERS, Tag.TAG_STRING);
+            for (int i = 0; i < retreated.size(); i++) {
+                try { state.retreatedRaiders.add(UUID.fromString(retreated.getString(i))); }
+                catch (IllegalArgumentException ignored) { }
+            }
+            state.raiders.removeAll(state.retreatedRaiders);
             if (!tag.contains("TotalSpawned", Tag.TAG_INT)) {
                 // A 2.1 raid cannot reconstruct earlier casualties, but counting
                 // every currently tracked attacker keeps upgraded summaries sane.
