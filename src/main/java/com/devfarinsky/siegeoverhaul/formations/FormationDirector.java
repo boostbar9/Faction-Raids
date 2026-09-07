@@ -67,7 +67,7 @@ public final class FormationDirector {
 
         // Advance vector = normalized centroid -> objective. Waypoint sits
         // WAYPOINT_LEAD blocks ahead of the centroid, on the same vector.
-        Vec3 direction = objVec.subtract(centroid);
+        Vec3 direction = objVec.subtract(centroid).multiply(1, 0, 1);
         double len = direction.length();
         Vec3 forward = len < 1.0E-3 ? new Vec3(1, 0, 0) : direction.scale(1.0D / len);
         Vec3 waypoint = centroid.add(forward.scale(Math.min(WAYPOINT_LEAD, len - 1.0D)));

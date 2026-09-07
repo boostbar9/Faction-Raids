@@ -125,14 +125,15 @@ public final class RaidEvents {
         tick(event.getServer());
     }
 
-    @SubscribeEvent(priority = EventPriority.LOWEST)
+    @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.LOWEST)
     public static void onCampWorkerTick(net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent event) {
         if (!(event.getEntity() instanceof Mob mob) || !(mob.level() instanceof ServerLevel level)) return;
         String team = mob.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM);
         if (team.isBlank()) return;
         RaidSavedData.RaidState raid = RaidSavedData.get(level.getServer()).raids.get(team);
         if (raid != null && com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.active(raid)
-                && !com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.safeToTick(level, raid)) event.setCanceled(true);
+                && ((RaidConfig.PAUSE_WHEN_FACTION_OFFLINE.get() && onlineMembers(level.getServer(), team).isEmpty())
+                || !com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.safeToTick(level, raid))) event.setCanceled(true);
     }
 
     @SubscribeEvent
@@ -194,6 +195,11 @@ public final class RaidEvents {
         if (com.devfarinsky.siegeoverhaul.camp.CampSabotage.discardRetreated(mob, state)) {
             event.setCanceled(true);
             return;
+        }
+        if (event.loadedFromDisk()) {
+            // Old saves can contain an unmarked native hold order from before marching ownership was tracked.
+            mob.getPersistentData().putBoolean(ModConstants.Tags.FORMATION_MARCH, true);
+            com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
         }
         state.raiders.add(mob.getUUID());
         if (RaidConfig.PAUSE_WHEN_FACTION_OFFLINE.get() &&
@@ -1784,10 +1790,15 @@ public final class RaidEvents {
         // Formation cohesion: reapply the wave's shape periodically while
         // raiders advance on the objective. Rate-limited internally.
         com.devfarinsky.siegeoverhaul.waves.WaveComposition activeComposition = ACTIVE_COMPOSITIONS.get(teamKey);
-        if (activeComposition != null) {
-            com.devfarinsky.siegeoverhaul.formations.FormationDirector.tick(
-                    level, state, BlockPos.containing(invasionObjective(level, point, state)), activeComposition.formation);
+        com.devfarinsky.siegeoverhaul.formations.Formation currentFormation;
+        try {
+            currentFormation = activeComposition != null ? activeComposition.formation
+                    : com.devfarinsky.siegeoverhaul.formations.Formation.valueOf(state.waveFormation);
+        } catch (IllegalArgumentException ex) {
+            currentFormation = com.devfarinsky.siegeoverhaul.formations.Formation.LINE;
         }
+        com.devfarinsky.siegeoverhaul.formations.FormationDirector.tick(
+                level, state, BlockPos.containing(invasionObjective(level, point, state)), currentFormation);
         // Rescue stragglers that stall on the way to the objective; drop the
         // second-time offenders from the wave count so the raid can advance.
         // v2.13.0: stragglers now dropped silently — the action bar already
@@ -2051,6 +2062,7 @@ public final class RaidEvents {
         com.devfarinsky.siegeoverhaul.waves.WaveComposition composition =
                 com.devfarinsky.siegeoverhaul.waves.WaveComposer.compose(nextWave, RaidConfig.WAVES.get(), wanted);
         ACTIVE_COMPOSITIONS.put(anchor.teamKey(), composition);
+        state.waveFormation = composition == null ? "NONE" : composition.formation.name();
         state.ticksToNextWave = 0;
         state.ticksToNextSquad = 0;
         state.lastWarningSecond = Integer.MAX_VALUE;

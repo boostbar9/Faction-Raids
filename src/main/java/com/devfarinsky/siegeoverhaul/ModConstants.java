@@ -56,6 +56,7 @@ public final class ModConstants {
          * excludes them from raid bookkeeping (they are not counted as
          * wave spawns and their deaths do not credit raid-effort).
          */
+        public static final String WAVE_FORMATION = "WaveFormation";
         public static final String FORMATION_MARCH = "SiegeFormationMarch";
         public static final String NATIVE_CAMP = "NativeCampConstruction";
         public static final String CAMP_AREA_TEAM = "SiegeCampAreaTeam";

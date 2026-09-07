@@ -47,7 +47,52 @@ class NativeCampConstructionTest extends MinecraftTestSupport {
         assertTrue(NativeCampConstruction.safeCell(Blocks.RED_WOOL.defaultBlockState(), "minecraft:red_wool"));
         assertFalse(NativeCampConstruction.safeCell(Blocks.CHEST.defaultBlockState(), "minecraft:red_wool"));
         assertFalse(NativeCampConstruction.safeCell(Blocks.STONE.defaultBlockState(), "minecraft:red_wool"));
+        assertFalse(NativeCampConstruction.safeCell(Blocks.FURNACE.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.LIT, true), "minecraft:furnace"));
         assertFalse(NativeCampConstruction.safeCell(Blocks.WATER.defaultBlockState(), "minecraft:red_wool"));
+    }
+
+    @Test
+    void replacementStopsNativeCrewBeforeTheirAiCanMineIt() {
+        var level = org.mockito.Mockito.mock(net.minecraft.server.level.ServerLevel.class);
+        var server = org.mockito.Mockito.mock(net.minecraft.server.MinecraftServer.class);
+        var worker = org.mockito.Mockito.mock(net.minecraft.world.entity.Mob.class);
+        var barrel = org.mockito.Mockito.mock(net.minecraft.world.level.block.entity.BlockEntity.class);
+        RaidSavedData data = new RaidSavedData();
+        RaidSavedData.RaidState raid = new RaidSavedData.RaidState("team:test", "home", 0);
+        UUID owner = UUID.randomUUID(), workerId = UUID.randomUUID();
+        raid.nativeCamp.putUUID(CAMP_OWNER, owner);
+        raid.nativeCamp.putLong(CAMP_SUPPLY_POS, BlockPos.ZERO.asLong());
+        raid.pendingCampBlocks.put(new BlockPos(2, 0, 0).asLong(), "minecraft:red_wool");
+        raid.campWorkers.add(workerId);
+        raid.campUsesWorkers = true;
+        data.raids.put(raid.teamKey, raid);
+        CompoundTag supplyData = new CompoundTag();
+        supplyData.putUUID(CAMP_SUPPLY_OWNER, owner);
+        CompoundTag workerData = new CompoundTag();
+        workerData.putString(CAMP_WORKER_TEAM, raid.teamKey);
+        org.mockito.Mockito.when(level.getServer()).thenReturn(server);
+        org.mockito.Mockito.when(level.hasChunkAt(org.mockito.ArgumentMatchers.any())).thenReturn(true);
+        org.mockito.Mockito.when(level.getBlockEntity(BlockPos.ZERO)).thenReturn(barrel);
+        org.mockito.Mockito.when(barrel.getPersistentData()).thenReturn(supplyData);
+        org.mockito.Mockito.when(level.getEntity(workerId)).thenReturn(worker);
+        org.mockito.Mockito.when(worker.level()).thenReturn(level);
+        org.mockito.Mockito.when(worker.getPersistentData()).thenReturn(workerData);
+        org.mockito.Mockito.when(level.getBlockState(new BlockPos(2, 0, 0))).thenReturn(Blocks.CHEST.defaultBlockState());
+        com.devfarinsky.siegeoverhaul.RaidConfig.PAUSE_WHEN_FACTION_OFFLINE.set(false);
+        try (var saves = org.mockito.Mockito.mockStatic(RaidSavedData.class);
+             var bridge = org.mockito.Mockito.mockStatic(com.devfarinsky.siegeoverhaul.compat.WorkersBridge.class)) {
+            saves.when(() -> RaidSavedData.get(server)).thenReturn(data);
+            bridge.when(com.devfarinsky.siegeoverhaul.compat.WorkersBridge::available).thenReturn(true);
+            var event = new net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent(worker);
+            com.devfarinsky.siegeoverhaul.RaidEvents.onCampWorkerTick(event);
+            assertTrue(event.isCanceled());
+            assertTrue(raid.pendingCampBlocks.isEmpty());
+            assertFalse(NativeCampConstruction.active(raid));
+            org.mockito.Mockito.verify(worker).discard();
+            org.mockito.Mockito.verify(level, org.mockito.Mockito.never()).setBlock(
+                    org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
+        }
     }
 
     @Test

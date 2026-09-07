@@ -198,7 +198,8 @@ public final class NativeCampConstruction {
     }
 
     static boolean safeCell(BlockState current, String planned) {
-        return current.isAir() || planned.equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(current.getBlock())));
+        return current.isAir() || (planned.equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(current.getBlock())))
+                && current.equals(current.getBlock().defaultBlockState()));
     }
 
     public static void tick(ServerLevel level, RaidSavedData.RaidState raid) {
