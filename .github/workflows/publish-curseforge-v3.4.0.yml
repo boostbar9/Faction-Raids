@@ -1,0 +1,97 @@
+name: Publish tested 3.4.0 to CurseForge
+
+# One-time publication of the exact artifact validated in PR #53.
+on:
+  push:
+    branches: [publish/curseforge-v3.4.0]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v3.4.0
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34144167861
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Verify exact release bytes and metadata
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import zipfile
+
+          jar = Path('dist/siegeoverhaul-3.4.0.jar')
+          expected = '336fbe3396568edb8fc8684354ea711f2fa8e8a829d35bd273c64c2507f83fd4'
+          actual = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert actual == expected, f'Unexpected JAR checksum: {actual}'
+          with zipfile.ZipFile(jar) as contents:
+              metadata = contents.read('META-INF/mods.toml').decode()
+              assert 'modId="siegeoverhaul"' in metadata
+              assert 'version="3.4.0"' in metadata
+          print(f'Verified {jar.name}: {actual}')
+          PY
+
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-3.4.0.jar
+          name: The Siege Overhaul v3.4.0 - Villager Workers 2 integration
+          version: v3.4.0
+          version-type: release
+          changelog: |
+            ## The Siege Overhaul 3.4.0
+
+            Villager Workers 2 builders now construct the actual siege camp block by block.
+
+            - Raider-owned builders approach construction jobs and swing while building towers, the forge and tents.
+            - Camp builders leave player workers, work areas and supplies alone and do not count as assault-wave enemies.
+            - Construction jobs, elapsed time and crew tracking survive server restarts.
+            - Dead, missing or fleeing builders cannot build remotely. Stalled decoration jobs expire without delaying assault waves.
+            - Construction uses the existing terrain snapshot and restoration system and skips occupied spaces.
+            - Removed native camp lumberjacks because their tree cutting bypassed terrain restoration.
+            - Camps still build automatically when Workers is absent or compatibility is disabled.
+
+            Minecraft 1.20.1, Forge, Java 17. Requires Villager Recruits 1.15.2 or newer. Villager Workers 2 is optional. Replace the old JAR on the server and every client; versions must match. New construction behavior applies to new sieges; previously spawned legacy workers are not migrated.
+
+            Validation: Java 17 build and all 19 regression tests passed. Interactive gameplay and builder pathfinding with the target modpack have not been playtested.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          dependencies: |
+            recruits(required)
+            workers(optional)
+            smallships(optional)
+            siegeweapons(optional)
+          fail-mode: fail
+
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          result = {'version': '3.4.0', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 3.4.0: {result['url']}\n")
+          PY
