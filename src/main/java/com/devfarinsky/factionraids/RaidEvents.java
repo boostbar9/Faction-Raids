@@ -386,6 +386,7 @@ public final class RaidEvents {
     public static void onServerStopping(ServerStoppingEvent event) {
         RaidBossBars.shutdown();
         com.devfarinsky.factionraids.raid.CommanderBossBar.shutdown();
+        com.devfarinsky.factionraids.raid.ClaimWaypoints.shutdown();
     }
 
     /**
@@ -1431,6 +1432,10 @@ public final class RaidEvents {
         // v2.15.0: render an objective marker column so defenders see
         // exactly where the raiders are marching. Rate-limited inside.
         broadcastObjectiveBeacon(level, point, state);
+        // v2.35.0: surface the defending team's Recruits claim boundary.
+        // Defenders within range see a particle fence along exposed edges;
+        // far viewers see corner columns. No-op without Recruits.
+        com.devfarinsky.factionraids.raid.ClaimWaypoints.tick(level, anchor, members);
         List<Mob> recruits = alliedRecruits(level, point, anchor);
         if (RaidConfig.MOBILIZE_RECRUITS.get()) mobilizeRecruits(level, recruits, state);
         redirectRaiders(level, state, members, recruits, point);
@@ -3543,6 +3548,9 @@ public final class RaidEvents {
         // v2.34.0: raid ended without the Commander dying (defeat, disband,
         // reload) - tear down the Commander boss bar too so the HUD is clean.
         com.devfarinsky.factionraids.raid.CommanderBossBar.remove(teamKey);
+        // v2.35.0: drop the cached claim geometry so the next raid on this
+        // team recomputes against whatever Recruits reports fresh.
+        com.devfarinsky.factionraids.raid.ClaimWaypoints.invalidate(teamKey);
         long elapsedTicks = state == null || state.startedGameTime <= 0 ? 0 :
                 Math.max(0, server.overworld().getGameTime() - state.startedGameTime);
         String summary = state == null ? "" : " Defeated: " + state.totalDefeated +
