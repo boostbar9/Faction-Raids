@@ -117,6 +117,7 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue USE_RECRUIT_INVADERS;
     public static final ForgeConfigSpec.BooleanValue BUILD_WAR_CAMPS;
     public static final ForgeConfigSpec.BooleanValue CLEANUP_WAR_CAMPS;
+    public static final ForgeConfigSpec.BooleanValue LEVEL_CAMP_TERRAIN;
     public static final ForgeConfigSpec.BooleanValue CAMP_DESTRUCTIBLE_STRUCTURES;
     public static final ForgeConfigSpec.IntValue CAMP_BONUS_LOOT_EMERALDS;
     public static final ForgeConfigSpec.BooleanValue ENABLE_AMPHIBIOUS_RAIDS;
@@ -378,6 +379,8 @@ public final class RaidConfig {
                 .defineInRange("breachObjectiveRadius", 10, 4, 24);
         USE_RECRUIT_INVADERS = b.comment("Use Villager Recruits soldiers as the core enemy army, retaining a few vanilla special units.")
                 .define("useVillagerRecruitsArmy", true);
+        LEVEL_CAMP_TERRAIN = b.comment("Gently level camp soil by up to three blocks, with a three-block blended edge. Reject water, structures, steep sites and excluded claims. Requires cleanupWarCamps so all earthworks can be restored.")
+                .define("levelCampTerrain", true);
         BUILD_WAR_CAMPS = b.comment("Build a small physical temporary war camp at the invasion staging point.")
                 .define("buildTemporaryWarCamps", true);
         CAMP_DESTRUCTIBLE_STRUCTURES = b.comment("When true (default), destroying the war camp's campfire disables reinforcements, breaking the banner scatters the current wave, and breaking the supply barrel drops a stack of emeralds. Set false to keep the camp purely decorative.")

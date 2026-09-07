@@ -348,3 +348,9 @@ Faction Raids is licensed under GPL-3.0-only. The name "Faction Raids" and the p
 [boostbar9/Faction-Raids](https://github.com/boostbar9/Faction-Raids).
 
 Villager Recruits is a separate project by TalhaNation and retains its own license.
+
+### Gentle camp leveling
+
+New camps can level soil by up to three blocks, with a three-block transition into the surrounding ground. The full site must have dry soil, clear building space and walkable height transitions; unsuitable sites are skipped. Water, containers, stone foundations, timber and excluded claims are rejected. Every cut and fill is saved for restoration when the siege ends.
+
+`levelCampTerrain` enables this behavior by default and requires camp cleanup to remain enabled. Existing camps are unchanged. As with normal camp restoration, different player replacement blocks are preserved. Minecraft does not identify who originally placed ordinary dirt or grass, so those blocks cannot be distinguished from natural soil.

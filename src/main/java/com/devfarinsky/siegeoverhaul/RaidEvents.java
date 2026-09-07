@@ -2737,6 +2737,12 @@ public final class RaidEvents {
                 int ddz = center.getZ() - navalStaging.getZ();
                 if (ddx * ddx + ddz * ddz < navalGuardSq) continue;
             }
+            if (RaidConfig.LEVEL_CAMP_TERRAIN.get() && RaidConfig.CLEANUP_WAR_CAMPS.get()) {
+                var terrain = com.devfarinsky.siegeoverhaul.camp.CampTerrain.plan(level, center,
+                        pos -> excludedChunks.contains(new net.minecraft.world.level.ChunkPos(pos)));
+                if (terrain.isEmpty()) continue;
+                if (!com.devfarinsky.siegeoverhaul.camp.CampTerrain.apply(level, state, terrain.get())) continue;
+            }
             return center;
         }
         return null;
@@ -2894,6 +2900,7 @@ public final class RaidEvents {
                 BlockPos.of(right.getKey()).getY(), BlockPos.of(left.getKey()).getY()));
         int restoredTerrain = 0;
         int orphanedPlayerBlocks = 0;
+        Map<BlockPos, CompoundTag> originals = new HashMap<>();
         for (Map.Entry<Long, CompoundTag> entry : placed) {
             BlockPos pos = BlockPos.of(entry.getKey());
             CompoundTag record = entry.getValue();
@@ -2902,23 +2909,20 @@ public final class RaidEvents {
             ResourceLocation current = ForgeRegistries.BLOCKS.getKey(currentState.getBlock());
             // An empty space is safe to repair too: a destroyed camp block must
             // not lose the terrain it replaced. Preserve occupied replacements.
-            if (!currentState.isAir() && (current == null || !current.toString().equals(placedId))) {
+            if (!com.devfarinsky.siegeoverhaul.camp.CampTerrain.matchesPlaced(currentState, placedId)) {
                 orphanedPlayerBlocks++;
                 continue;
             }
-            // v3.1.0: restore the original block (grass/dirt/log/etc.) when we
-            // have one, otherwise clear to air. The Original tag is empty when
-            // the camp was placed over air.
+            // Remove the complete camp top-down, then restore supports before vegetation.
+            level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
             CompoundTag original = record.getCompound("Original");
-            if (original.isEmpty() || !original.contains("Name")) {
-                level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
-            } else {
-                // Clear to air first so BlockRestoration.applyTo's non-air guard
-                // doesn't refuse the placement (our own placed block is still there).
-                level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
-                if (com.devfarinsky.siegeoverhaul.siege.BlockRestoration.applyTo(level, pos, original)) {
-                    restoredTerrain++;
-                }
+            if (!original.isEmpty() && original.contains("Name")) originals.put(pos, original);
+        }
+        List<BlockPos> restoreOrder = new ArrayList<>(originals.keySet());
+        restoreOrder.sort(Comparator.comparingInt(BlockPos::getY));
+        for (BlockPos pos : restoreOrder) {
+            if (com.devfarinsky.siegeoverhaul.siege.BlockRestoration.applyTo(level, pos, originals.get(pos))) {
+                restoredTerrain++;
             }
         }
         state.campBlocks.clear();
