@@ -23,8 +23,9 @@ public final class RaidSavedData extends SavedData {
     // v10 added WarJournal + Discovery (2.12.0 Know Your Enemy release).
     // v11 added scout missions (2.26.0).
     // v12 added pendingSpoils + raidNotifyOptOut (3.2.0 multiplayer polish).
+    // v13 added persistent camp construction jobs and crew (3.4.0).
     // Old saves load cleanly because all new fields default to empty collections.
-    public static final int DATA_VERSION = 12;
+    public static final int DATA_VERSION = 13;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Map<String, Anchor> anchors = new HashMap<>();
@@ -530,18 +531,13 @@ public final class RaidSavedData extends SavedData {
          * up the hill instead of turtling.
          */
         public BlockPos barrelPos;
-        /**
-         * Non-persisted, per-raid schedule of camp structures still waiting
-         * to be placed by the progressive builder. Populated when the
-         * strategic camp core is placed; drained one-per-N-ticks by the
-         * main tick loop so the camp feels like it is being constructed
-         * over time. When Villager Workers 2 is present we hand each entry
-         * to a Builder via BuildArea NBT instead of placing it directly.
-         * Rebuilt from scratch on server restart mid-raid.
-         */
-        public final transient java.util.Deque<Runnable> deferredCampBuilds = new java.util.ArrayDeque<>();
-        /** Ticks remaining until the next deferred camp structure is placed. */
-        public transient int deferredCampCooldown;
+        /** Ordered decorative block jobs; placed through the normal camp restoration ledger. */
+        public final Map<Long, String> pendingCampBlocks = new LinkedHashMap<>();
+        public final Set<UUID> campWorkers = new LinkedHashSet<>();
+        public boolean campUsesWorkers;
+        public int campBuildTicks;
+        /** Only true while collecting the initial camp plan; never saved. */
+        public transient boolean planningCamp;
         /**
          * v3.2.0 — damage dealt to raiders by NON-faction defenders during
          * this siege. Keyed by player UUID; value is total half-hearts of
@@ -626,6 +622,23 @@ public final class RaidSavedData extends SavedData {
                 camp.add(entry);
             });
             tag.put("CampBlocks", camp);
+            ListTag jobs = new ListTag();
+            pendingCampBlocks.forEach((position, block) -> {
+                CompoundTag job = new CompoundTag();
+                job.putLong("Position", position);
+                job.putString("Block", block);
+                jobs.add(job);
+            });
+            tag.put(ModConstants.Tags.CAMP_JOBS, jobs);
+            ListTag crew = new ListTag();
+            campWorkers.forEach(uuid -> {
+                CompoundTag worker = new CompoundTag();
+                worker.putUUID("UUID", uuid);
+                crew.add(worker);
+            });
+            tag.put(ModConstants.Tags.CAMP_CREW, crew);
+            tag.putBoolean(ModConstants.Tags.CAMP_USES_WORKERS, campUsesWorkers);
+            tag.putInt(ModConstants.Tags.CAMP_BUILD_TICKS, campBuildTicks);
             ListTag breached = new ListTag();
             breachedBlocks.forEach((position, blockState) -> {
                 CompoundTag entry = new CompoundTag();
@@ -744,6 +757,18 @@ public final class RaidSavedData extends SavedData {
                 }
                 state.campBlocks.put(entry.getLong("Position"), record);
             }
+            ListTag jobs = tag.getList(ModConstants.Tags.CAMP_JOBS, Tag.TAG_COMPOUND);
+            for (int i = 0; i < jobs.size(); i++) {
+                CompoundTag job = jobs.getCompound(i);
+                state.pendingCampBlocks.put(job.getLong("Position"), job.getString("Block"));
+            }
+            ListTag crew = tag.getList(ModConstants.Tags.CAMP_CREW, Tag.TAG_COMPOUND);
+            for (int i = 0; i < crew.size(); i++) {
+                CompoundTag worker = crew.getCompound(i);
+                if (worker.hasUUID("UUID")) state.campWorkers.add(worker.getUUID("UUID"));
+            }
+            state.campUsesWorkers = tag.getBoolean(ModConstants.Tags.CAMP_USES_WORKERS);
+            state.campBuildTicks = Math.max(0, tag.getInt(ModConstants.Tags.CAMP_BUILD_TICKS));
             ListTag breached = tag.getList("BreachedBlocks", Tag.TAG_COMPOUND);
             for (int i = 0; i < breached.size(); i++) {
                 CompoundTag entry = breached.getCompound(i);
