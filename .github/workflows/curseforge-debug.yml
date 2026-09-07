@@ -79,8 +79,9 @@ jobs:
           cat /tmp/metadata.json
           echo ""
           echo "=== POST /api/projects/1364352/upload-file ==="
+          METADATA=$(cat /tmp/metadata.json)
           curl -sS -w "\nHTTP:%{http_code}\n" -X POST \
             -H "X-Api-Token: $CF_TOKEN" \
-            -F "metadata=<@/tmp/metadata.json" \
+            -F "metadata=$METADATA" \
             -F "file=@$JAR" \
             "https://minecraft.curseforge.com/api/projects/1364352/upload-file"
