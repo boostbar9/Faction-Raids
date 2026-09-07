@@ -6,6 +6,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
 import java.util.Comparator;
@@ -124,7 +125,7 @@ public final class SapperRunner {
             }
         }
         affected.stream().sorted(Comparator.comparingInt((BlockPos pos) -> pos.getY()).reversed()).forEach(pos -> {
-            level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL | Block.UPDATE_SUPPRESS_DROPS);
             state.blockBreachProgress.remove(pos.asLong());
         });
     }

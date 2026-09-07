@@ -1782,7 +1782,8 @@ public final class RaidEvents {
         // v2.13.0: stragglers now dropped silently — the action bar already
         // shows the live deployed/reinforcing counts, so a fresh chat line
         // every time one raider gets stuck was pure noise.
-        com.devfarinsky.siegeoverhaul.effort.StragglerTracker.tick(level, state, point.pos());
+        com.devfarinsky.siegeoverhaul.effort.StragglerTracker.tick(level, state,
+                BlockPos.containing(invasionObjective(level, point, state)));
         // When raiders stall against a wall, build a temporary ladder column.
         // Rate-limited internally; ladders are tracked in campBlocks and
         // cleaned up when the raid ends via the existing camp pipeline.
@@ -3223,7 +3224,7 @@ public final class RaidEvents {
         affected.sort((left, right) -> Integer.compare(right.getY(), left.getY()));
         for (BlockPos position : affected) {
             if (raid.breachedBlocks.containsKey(position.asLong())) {
-                level.setBlock(position, Blocks.AIR.defaultBlockState(), 3);
+                level.setBlock(position, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL | Block.UPDATE_SUPPRESS_DROPS);
                 raid.blockBreachProgress.remove(position.asLong());
             }
         }

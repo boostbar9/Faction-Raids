@@ -104,6 +104,19 @@ public final class StragglerTracker {
                 teamSet.remove(id);
                 continue;
             }
+            // Holding the active objective, fighting a visible defender, and
+            // operating/riding a vehicle are useful stationary states. Never
+            // teleport or retire those mobs as if they were lost en route.
+            int objectiveRadius = !RaidConfig.ENABLE_BREACH_PHASE.get() || state.breached
+                    ? RaidConfig.CAPTURE_RADIUS.get() : RaidConfig.BREACH_OBJECTIVE_RADIUS.get();
+            var target = mob.getTarget();
+            if (mob.distanceToSqr(objVec) <= (double) objectiveRadius * objectiveRadius
+                    || mob.isPassenger()
+                    || (target != null && target.isAlive() && mob.getSensing().hasLineOfSight(target))) {
+                TRACKS.remove(id);
+                teamSet.remove(id);
+                continue;
+            }
             // v2.18.0: compare real block distances, not squared. Old code
             // stored distSq and compared delta against EPSILON*EPSILON,
             // which made the threshold effectively vanish for raiders far

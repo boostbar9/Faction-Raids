@@ -19,8 +19,10 @@ All notable changes to Faction Raids are documented here.
   after protection handlers have had an opportunity to cancel them.
 - Discard raiders that remain stuck after rescue so entity reconciliation cannot add
   them back into the wave. Count them as escaped and clear their tracking records.
+  Keep raiders holding the current breach/capture objective, fighting visible defenders,
+  or riding vehicles out of straggler rescue.
 - Add regression coverage for spawn failure isolation, door snapshots, camp timeouts,
-  and repeated camp placements; run the checks in the existing Java 17 build.
+  repeated camp placements, and straggler retirement; run the checks in the Java 17 build.
 
 ## Unreleased — Refactor: Scalability Foundation
 
