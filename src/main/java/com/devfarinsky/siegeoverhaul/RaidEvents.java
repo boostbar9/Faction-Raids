@@ -2778,7 +2778,9 @@ public final class RaidEvents {
         final int r = 9;
         for (int dx = -r; dx <= r; dx += 3) {
             for (int dz = -r; dz <= r; dz += 3) {
-                BlockPos sample = surfacePosition(level, center.getX() + dx, center.getZ() + dz);
+                BlockPos column = center.offset(dx, 0, dz);
+                if (!level.hasChunkAt(column)) return false;
+                BlockPos sample = surfacePosition(level, column.getX(), column.getZ());
                 if (Math.abs(sample.getY() - center.getY()) > 3) return false;
                 // Check the sample (always air, being top-of-column) AND the
                 // block just below, which is what a fence or a tent floor
@@ -2906,7 +2908,6 @@ public final class RaidEvents {
             CompoundTag record = entry.getValue();
             String placedId = record.getString("Placed");
             BlockState currentState = level.getBlockState(pos);
-            ResourceLocation current = ForgeRegistries.BLOCKS.getKey(currentState.getBlock());
             // An empty space is safe to repair too: a destroyed camp block must
             // not lose the terrain it replaced. Preserve occupied replacements.
             if (!com.devfarinsky.siegeoverhaul.camp.CampTerrain.matchesPlaced(currentState, placedId)) {

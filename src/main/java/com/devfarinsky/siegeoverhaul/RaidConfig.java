@@ -379,7 +379,7 @@ public final class RaidConfig {
                 .defineInRange("breachObjectiveRadius", 10, 4, 24);
         USE_RECRUIT_INVADERS = b.comment("Use Villager Recruits soldiers as the core enemy army, retaining a few vanilla special units.")
                 .define("useVillagerRecruitsArmy", true);
-        LEVEL_CAMP_TERRAIN = b.comment("Gently level camp soil by up to three blocks, with a three-block blended edge. Reject water, structures, steep sites and excluded claims. Requires cleanupWarCamps so all earthworks can be restored.")
+        LEVEL_CAMP_TERRAIN = b.comment("Gently level camp soil by up to three blocks, with a three-block blended edge. Reject water, structures, steep sites and excluded claims. Requires cleanupTemporaryWarCamps so all earthworks can be restored.")
                 .define("levelCampTerrain", true);
         BUILD_WAR_CAMPS = b.comment("Build a small physical temporary war camp at the invasion staging point.")
                 .define("buildTemporaryWarCamps", true);
