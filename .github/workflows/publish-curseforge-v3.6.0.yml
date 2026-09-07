@@ -1,0 +1,99 @@
+name: Publish tested 3.6.0 to CurseForge
+
+# One-time publication of the exact artifact validated in PR #57.
+on:
+  push:
+    branches: [publish/curseforge-v3.6.0]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v3.6.0
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34169927355
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Verify exact release bytes and metadata
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import zipfile
+
+          jar = Path('dist/siegeoverhaul-3.6.0.jar')
+          expected = '7ee87b73bfb5c363b59ea6fd04f9934f8cc64e62cf5a90599b657634700d45fa'
+          actual = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert actual == expected, f'Unexpected JAR checksum: {actual}'
+          with zipfile.ZipFile(jar) as contents:
+              metadata = contents.read('META-INF/mods.toml').decode()
+              assert 'modId="siegeoverhaul"' in metadata
+              assert 'version="3.6.0"' in metadata
+          print(f'Verified {jar.name}: {actual}')
+          PY
+
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-3.6.0.jar
+          name: The Siege Overhaul v3.6.0 - Supplied builders and smoother marching
+          version: v3.6.0
+          version-type: release
+          changelog: |
+            ## The Siege Overhaul 3.6.0
+
+            Enemy builders use native Workers 2 construction jobs with supplies provided by the camp.
+
+            - Create private native build and storage areas, stocked once with the materials Workers 2 calculates for the camp blueprint.
+            - Give builders tools and food. They retrieve and consume building supplies through Workers 2.
+            - Pause native construction at night and during offline siege pauses. Save ownership and jobs without duplicating materials.
+            - Record the full construction footprint before building. Stop native work before it can mine player replacements.
+            - Fix competing formation and objective movement orders; release marching orders for combat and exclude boat passengers.
+            - Preserve formation selection across restarts and clear stale hold-position orders on reload.
+            - Replace straggler teleports with walking retries, recognize movement around obstacles, and retire only prolonged stationary stalls.
+
+            Essential camp defenses appear immediately and waves do not wait for decorative construction. Native camp jobs require temporary-camp cleanup to be enabled.
+
+            Minecraft 1.20.1, Forge, Java 17. Requires Villager Recruits 1.15.2 or newer. Villager Workers 2, Small Ships and Siege Weapons remain optional. Replace the old JAR on the server and every client; versions must match.
+
+            Validation: Java 17 build and all 48 regression tests passed. No interactive Minecraft/modpack playtest performed.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          dependencies: |
+            recruits(required)
+            workers(optional)
+            smallships(optional)
+            siegeweapons(optional)
+          fail-mode: fail
+
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          result = {'version': '3.6.0', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 3.6.0: {result['url']}\n")
+          PY
