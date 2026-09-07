@@ -25,8 +25,11 @@ class StragglerTrackerTest extends MinecraftTestSupport {
         raid.missingTicks.put(id, 0);
         raid.lastKnownChunks.put(id, 0L);
         when(level.getEntity(id)).thenReturn(mob);
-        when(level.getGameTime()).thenReturn(0L, 300L, 600L);
+        when(level.getGameTime()).thenReturn(0L, 300L, 600L, 900L, 1200L);
         when(mob.isAlive()).thenReturn(true);
+        when(mob.position()).thenReturn(new Vec3(100, 0, 0));
+        when(mob.getPersistentData()).thenReturn(new net.minecraft.nbt.CompoundTag());
+        when(mob.getNavigation()).thenReturn(mock(net.minecraft.world.entity.ai.navigation.PathNavigation.class));
         when(mob.distanceToSqr(any(Vec3.class))).thenReturn(distanceSquared);
     }
 
@@ -40,12 +43,25 @@ class StragglerTrackerTest extends MinecraftTestSupport {
         stationaryRaider(10000.0);
         assertEquals(0, StragglerTracker.tick(level, raid, BlockPos.ZERO));
         assertEquals(0, StragglerTracker.tick(level, raid, BlockPos.ZERO));
+        assertEquals(0, StragglerTracker.tick(level, raid, BlockPos.ZERO));
+        assertEquals(0, StragglerTracker.tick(level, raid, BlockPos.ZERO));
         assertEquals(1, StragglerTracker.tick(level, raid, BlockPos.ZERO));
         verify(mob).discard();
+        verify(mob, never()).teleportTo(anyDouble(), anyDouble(), anyDouble());
         assertFalse(raid.raiders.contains(id));
         assertFalse(raid.missingTicks.containsKey(id));
         assertFalse(raid.lastKnownChunks.containsKey(id));
         assertEquals(1, raid.totalEscaped);
+    }
+
+    @Test
+    void lateralMovementAroundWallsIsProgress() {
+        stationaryRaider(10000.0);
+        when(mob.position()).thenReturn(new Vec3(100, 0, 0), new Vec3(100, 0, 5),
+                new Vec3(100, 0, 10), new Vec3(100, 0, 15), new Vec3(100, 0, 20));
+        for (int i = 0; i < 5; i++) assertEquals(0, StragglerTracker.tick(level, raid, BlockPos.ZERO));
+        verify(mob, never()).discard();
+        verify(mob, never()).teleportTo(anyDouble(), anyDouble(), anyDouble());
     }
 
     @Test

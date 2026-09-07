@@ -13,22 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Per-raid ticker that keeps raiders in the formation their
- * {@link com.devfarinsky.siegeoverhaul.waves.WaveComposition} asked for.
- *
- * <p>Recruits' formation methods place recruits at fixed positions each call.
- * If we called every tick the recruits would freeze in place, so
- * {@code FormationDirector} rate-limits reapplication to one call per
- * {@link #REAPPLY_TICKS} ticks. That's slow enough to let the pathfinder
- * actually move between calls, and fast enough that the formation reforms
- * as members die or fall behind.
- *
- * <p>Target selection uses the raid's approach angle: raiders form up at an
- * intermediate waypoint short of the objective, then advance as a bloc.
- * Once close enough, the formation dissolves (returned as
- * {@link Formation#NONE}) so raiders can freely close and attack.
- */
+/** Issues native walking orders; combat and objective navigation release them explicitly. */
 public final class FormationDirector {
 
     /** Minimum ticks between formation reapplication per raid. 4 seconds. */
@@ -66,6 +51,9 @@ public final class FormationDirector {
         if (last != null && now - last < REAPPLY_TICKS) return false;
 
         List<Mob> raiders = collectLiveRaiders(level, state);
+        raiders.removeIf(mob -> !shouldMarch(mob, objective));
+        // Stable input order keeps surviving soldiers in their existing slots.
+        raiders.sort(java.util.Comparator.comparing(Mob::getUUID));
         if (raiders.isEmpty()) return false;
 
         Vec3 centroid = centroidOf(raiders);
@@ -79,7 +67,7 @@ public final class FormationDirector {
 
         // Advance vector = normalized centroid -> objective. Waypoint sits
         // WAYPOINT_LEAD blocks ahead of the centroid, on the same vector.
-        Vec3 direction = objVec.subtract(centroid);
+        Vec3 direction = objVec.subtract(centroid).multiply(1, 0, 1);
         double len = direction.length();
         Vec3 forward = len < 1.0E-3 ? new Vec3(1, 0, 0) : direction.scale(1.0D / len);
         Vec3 waypoint = centroid.add(forward.scale(Math.min(WAYPOINT_LEAD, len - 1.0D)));
@@ -87,6 +75,12 @@ public final class FormationDirector {
         boolean dispatched = RecruitsFormationBridge.apply(formation, forward, waypoint, raiders, false);
         LAST_APPLIED.put(state.teamKey, now);
         return dispatched;
+    }
+
+    public static boolean shouldMarch(Mob mob, BlockPos objective) {
+        return RaidConfig.ENABLE_FORMATIONS.get() && !mob.isPassenger()
+                && (mob.getTarget() == null || !mob.getTarget().isAlive())
+                && mob.distanceToSqr(Vec3.atCenterOf(objective)) > DISSOLVE_DISTANCE * DISSOLVE_DISTANCE;
     }
 
     /** Forget a raid — call when the raid ends so the map stays bounded. */

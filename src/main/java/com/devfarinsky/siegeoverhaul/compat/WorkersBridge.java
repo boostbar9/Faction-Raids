@@ -88,6 +88,59 @@ public final class WorkersBridge {
         }
     }
 
+    /** Configure native work ownership after assigning the raider combat faction. */
+    public static void enableNative(Mob worker, java.util.UUID owner, boolean equip) throws ReflectiveOperationException {
+        call(worker, "setOwnerUUID", Optional.class, Optional.of(owner));
+        call(worker, "setFollowState", int.class, 0);
+        if (equip) {
+            net.minecraft.world.SimpleContainer inventory = (net.minecraft.world.SimpleContainer)
+                    worker.getClass().getMethod("getInventory").invoke(worker);
+            inventory.addItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_PICKAXE));
+            inventory.addItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_AXE));
+            inventory.addItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SHOVEL));
+            inventory.addItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 16));
+        }
+    }
+
+    /** Work areas remain unregistered until their ownership and blueprint are complete. */
+    public static Entity createArea(ServerLevel level, String type, BlockPos origin, java.util.UUID owner,
+                                    int width, int depth, int height) throws ReflectiveOperationException {
+        EntityType<?> entityType = level.registryAccess().registryOrThrow(Registries.ENTITY_TYPE)
+                .getOptional(new ResourceLocation("workers", type)).orElseThrow();
+        Entity area = entityType.create(level);
+        if (area == null) throw new IllegalStateException("Workers area could not be created");
+        // getOriginPos() delegates to Entity.getOnPos(), i.e. floor(y - 0.2).
+        area.moveTo(origin.getX() + 0.5, origin.getY() + 1.0, origin.getZ() + 0.5, 0, 0);
+        call(area, "setPlayerUUID", java.util.UUID.class, owner);
+        call(area, "setPlayerName", String.class, "Siege camp");
+        call(area, "setTeamStringID", String.class, RecruitsBridge.RAIDERS_FACTION_ID);
+        call(area, "setTeamAccess", boolean.class, false);
+        call(area, "setFacing", net.minecraft.core.Direction.class, net.minecraft.core.Direction.SOUTH);
+        call(area, "setWidthSize", int.class, width);
+        call(area, "setDepthSize", int.class, depth);
+        call(area, "setHeightSize", int.class, height);
+        if (type.equals("storagearea")) call(area, "setStorageTypes", int.class, 1 << 2);
+        return area;
+    }
+
+    public static void startBlueprint(Entity area, net.minecraft.nbt.CompoundTag blueprint) throws ReflectiveOperationException {
+        call(area, "setStructureNBT", net.minecraft.nbt.CompoundTag.class, blueprint);
+        call(area, "setFreeArea", boolean.class, false);
+        call(area, "setStartBuild", boolean.class, false);
+    }
+
+    public static java.util.List<net.minecraft.world.item.ItemStack> materials(Entity area) throws ReflectiveOperationException {
+        Object result = area.getClass().getMethod("getRequiredMaterials").invoke(area);
+        if (!(result instanceof java.util.List<?> list)) throw new IllegalStateException("Missing material list");
+        java.util.List<net.minecraft.world.item.ItemStack> stacks = new java.util.ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof net.minecraft.world.item.ItemStack stack) || stack.isEmpty())
+                throw new IllegalStateException("Unsupported camp material");
+            stacks.add(stack.copy());
+        }
+        return stacks;
+    }
+
     private static void call(Object target, String name, Class<?> type, Object value)
             throws ReflectiveOperationException {
         target.getClass().getMethod(name, type).invoke(target, value);

@@ -69,10 +69,25 @@ public final class RecruitsFormationBridge {
                 }
                 default -> { return false; }
             }
+            for (Object recruit : recruitList) ((Mob) recruit).getPersistentData().putBoolean(
+                    com.devfarinsky.siegeoverhaul.ModConstants.Tags.FORMATION_MARCH, true);
             return true;
         } catch (ReflectiveOperationException | RuntimeException e) {
             FactionLogger.LOG.debug("Formation dispatch failed for {}: {}", formation, e.toString());
             return false;
+        }
+    }
+
+    /** Release the hold-position order before combat or independent navigation takes over. */
+    public static void release(Mob mob) {
+        if (!mob.getPersistentData().getBoolean(com.devfarinsky.siegeoverhaul.ModConstants.Tags.FORMATION_MARCH)) return;
+        try {
+            mob.getClass().getMethod("setFollowState", int.class).invoke(mob, 0);
+            mob.getClass().getField("isInFormation").setBoolean(mob, false);
+            mob.getClass().getField("holdFormation").setBoolean(mob, false);
+            mob.getPersistentData().remove(com.devfarinsky.siegeoverhaul.ModConstants.Tags.FORMATION_MARCH);
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            FactionLogger.LOG.debug("Could not release formation order", ex);
         }
     }
 

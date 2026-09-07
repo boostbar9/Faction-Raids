@@ -35,11 +35,13 @@ public final class CampBuilder {
             WorkersBridge.spawnBuilder(level, spawn, raid.teamKey).ifPresent(worker -> raid.campWorkers.add(worker.getUUID()));
         }
         raid.campUsesWorkers = !raid.campWorkers.isEmpty();
+        if (raid.campUsesWorkers) NativeCampConstruction.start(level, raid);
     }
 
     /** Called once per periodic siege pass. All pending jobs and crew IDs survive world saves. */
     public static void tick(ServerLevel level, RaidState raid, BiConsumer<BlockPos, Block> place) {
         if (raid.pendingCampBlocks.isEmpty()) return;
+        if (NativeCampConstruction.active(raid)) { NativeCampConstruction.tick(level, raid); return; }
         // Do not force-load the camp, or time out while its chunk is unloaded.
         BlockPos first = BlockPos.of(raid.pendingCampBlocks.keySet().iterator().next());
         if (!level.hasChunkAt(first)) return;
@@ -117,6 +119,7 @@ public final class CampBuilder {
     }
 
     public static void cleanup(ServerLevel level, RaidState raid) {
+        NativeCampConstruction.cleanupAreas(level, raid);
         for (UUID id : new ArrayList<>(raid.campWorkers)) {
             Entity entity = level.getEntity(id);
             if (entity != null) entity.discard();

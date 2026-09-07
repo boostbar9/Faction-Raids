@@ -56,6 +56,15 @@ public final class ModConstants {
          * excludes them from raid bookkeeping (they are not counted as
          * wave spawns and their deaths do not credit raid-effort).
          */
+        public static final String WAVE_FORMATION = "WaveFormation";
+        public static final String FORMATION_MARCH = "SiegeFormationMarch";
+        public static final String NATIVE_CAMP = "NativeCampConstruction";
+        public static final String CAMP_AREA_TEAM = "SiegeCampAreaTeam";
+        public static final String CAMP_SUPPLY_OWNER = "SiegeSupplyOwner";
+        public static final String CAMP_OWNER = "Owner";
+        public static final String CAMP_BUILD_AREA = "BuildArea";
+        public static final String CAMP_STORAGE_AREA = "StorageArea";
+        public static final String CAMP_SUPPLY_POS = "SupplyPos";
         public static final String CAMP_WORKER_TEAM = "SiegeOverhaulCampWorkerTeam";
         public static final String CAMP_JOBS = "CampConstructionJobs";
         public static final String CAMP_CREW = "CampConstructionCrew";
