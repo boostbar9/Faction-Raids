@@ -2,6 +2,28 @@
 
 All notable changes to Faction Raids are documented here.
 
+## 3.3.2 - 2026-09-07
+
+- Prevent a failed enemy spawn initializer from crashing the server tick. In particular,
+  Recruits 1.15.2 siege engineers can cast their custom navigator to an incompatible
+  vanilla class. Discard failed mobs before registration and initialize a fresh pillager
+  at the same position, preserving wave progress without retaining partial entities.
+- Fix ballista controller attachment using the shared Recruits siege-controller API.
+- Snapshot a sapper's entire breach before changing any blocks. Preserve both halves of
+  doors, including doors at the blast boundary, and respect the restoration cap atomically.
+- Preserve the first terrain snapshot when a temporary camp block is placed repeatedly;
+  restore the terrain beneath camp blocks that defenders already destroyed.
+- Apply camp-construction timeouts in game ticks instead of counting each one-second
+  lifecycle pass as a single tick (previously a 180-second limit lasted about an hour).
+- Check the siege dimension before applying camp sabotage effects, and process breaks
+  after protection handlers have had an opportunity to cancel them.
+- Discard raiders that remain stuck after rescue so entity reconciliation cannot add
+  them back into the wave. Count them as escaped and clear their tracking records.
+  Keep raiders holding the current breach/capture objective, fighting visible defenders,
+  or riding vehicles out of straggler rescue.
+- Add regression coverage for spawn failure isolation, door snapshots, camp timeouts,
+  repeated camp placements, and straggler retirement; run the checks in the Java 17 build.
+
 ## Unreleased — Refactor: Scalability Foundation
 
 No gameplay changes. Pure internal refactor to make future features easier and safer to add.

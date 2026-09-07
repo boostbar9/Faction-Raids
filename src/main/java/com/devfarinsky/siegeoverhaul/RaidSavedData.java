@@ -472,13 +472,15 @@ public final class RaidSavedData extends SavedData {
          * restore the terrain). Pass an empty CompoundTag for {@code originalState}
          * when the original space was air — the cleanup path treats empty as air.
          *
-         * <p>Overwrites any prior entry at the same position, which matches the
-         * pre-3.1.0 behavior (later placements win).</p>
+         * <p>Repeated placements update the expected camp block but preserve the
+         * first terrain snapshot, including its block-entity contents.</p>
          */
         public void recordCampBlock(long posKey, String placedBlockId, CompoundTag originalState) {
             CompoundTag record = new CompoundTag();
             record.putString("Placed", placedBlockId);
-            record.put("Original", originalState == null ? new CompoundTag() : originalState.copy());
+            CompoundTag previous = campBlocks.get(posKey);
+            CompoundTag original = previous == null ? originalState : previous.getCompound("Original");
+            record.put("Original", original == null ? new CompoundTag() : original.copy());
             campBlocks.put(posKey, record);
         }
         /** UUID -> SiegeEngineType.name() for engines currently on the field. */

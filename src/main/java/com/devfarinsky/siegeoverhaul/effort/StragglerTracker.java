@@ -33,8 +33,8 @@ import java.util.UUID;
  * distance to objective must decrease by at least {@link #PROGRESS_EPSILON}
  * blocks between samples, otherwise a strike lands. First strike -> teleport
  * near the raider centroid, one block toward the objective. Second strike
- * -> remove from {@code state.raiders} so the wave can advance without
- * them. The entity keeps living and can still fight.
+ * -> discard without loot and remove from {@code state.raiders} so the wave
+ * can advance. Leaving a tagged mob alive would let reconciliation re-add it.
  *
  * <p>v2.18.0 audit fixes:
  * <ul>
@@ -104,6 +104,19 @@ public final class StragglerTracker {
                 teamSet.remove(id);
                 continue;
             }
+            // Holding the active objective, fighting a visible defender, and
+            // operating/riding a vehicle are useful stationary states. Never
+            // teleport or retire those mobs as if they were lost en route.
+            int objectiveRadius = !RaidConfig.ENABLE_BREACH_PHASE.get() || state.breached
+                    ? RaidConfig.CAPTURE_RADIUS.get() : RaidConfig.BREACH_OBJECTIVE_RADIUS.get();
+            var target = mob.getTarget();
+            if (mob.distanceToSqr(objVec) <= (double) objectiveRadius * objectiveRadius
+                    || mob.isPassenger()
+                    || (target != null && target.isAlive() && mob.getSensing().hasLineOfSight(target))) {
+                TRACKS.remove(id);
+                teamSet.remove(id);
+                continue;
+            }
             // v2.18.0: compare real block distances, not squared. Old code
             // stored distSq and compared delta against EPSILON*EPSILON,
             // which made the threshold effectively vanish for raiders far
@@ -131,7 +144,11 @@ public final class StragglerTracker {
             } else if (track[1] >= 2) {
                 FactionLogger.LOG.debug("Dropping stuck raider {} from wave for team {}",
                         id, state.teamKey);
+                mob.discard();
                 it.remove();
+                state.missingTicks.remove(id);
+                state.lastKnownChunks.remove(id);
+                state.totalEscaped++;
                 TRACKS.remove(id);
                 teamSet.remove(id);
                 dropped++;

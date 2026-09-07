@@ -6,10 +6,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
 
-import java.util.HashSet;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
 
@@ -63,9 +64,8 @@ public final class SapperRunner {
                 // holes never restored after the raid — a real bug.
                 detonate(level, state, mob.blockPosition());
                 mob.getPersistentData().remove(CHARGE_TAG);
-                // No setDirty needed: CHARGE_TAG is stored on the mob's own
-                // persistent NBT, which the entity's own save cycle already
-                // persists. The RaidState is not modified here.
+                // The caller marks RaidSavedData dirty after this siege pass;
+                // both the breach ledger and the mob's own tag are persisted.
                 detonations++;
             }
         }
@@ -102,38 +102,32 @@ public final class SapperRunner {
             // outside the breachable set is touched.
             r = DETONATION_RADIUS + 1;
         }
-        Set<BlockPos> removed = new HashSet<>();
-        for (int dy = -1; dy <= VERTICAL_SWEEP; dy++) {
-            for (int dx = -r; dx <= r; dx++) {
-                for (int dz = -r; dz <= r; dz++) {
-                    if (dx * dx + dz * dz > r * r) continue;
-                    BlockPos p = center.offset(dx, dy, dz);
-                    BlockState bs = level.getBlockState(p);
-                    if (!BlockRestoration.isBreachable(bs)) continue;
-                    // v3.1.0: register the breach in the ledger BEFORE we remove
-                    // the block, then clear to air. Respect the max-restorable cap
-                    // so a chain of sappers can't blow past the safety limit.
-                    if (state.breachedBlocks.size() >= RaidConfig.MAX_RESTORABLE_BLOCKS.get()) break;
-                    // Only snapshot if we haven't already recorded this position
-                    // (a prior sapper on the same tick or an earlier breacher).
-                    if (!state.breachedBlocks.containsKey(p.asLong())) {
-                        state.breachedBlocks.put(p.asLong(),
-                                BlockRestoration.serializeState(level, p, bs));
-                    }
-                    level.setBlock(p, Blocks.AIR.defaultBlockState(), 3);
-                    // Clear any in-flight breach progress on this position so a
-                    // half-breached door blown by a sapper doesn't ghost-tick.
-                    state.blockBreachProgress.remove(p.asLong());
-                    removed.add(p);
-                }
-            }
-        }
+        breachBlocks(level, state, center, r);
         // Emit smoke + explosion audio for feedback.
         level.sendParticles(net.minecraft.core.particles.ParticleTypes.CAMPFIRE_SIGNAL_SMOKE,
                 center.getX() + 0.5, center.getY() + 1.0, center.getZ() + 0.5,
                 30, 0.6, 0.5, 0.6, 0.02);
         level.playSound(null, center, net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE,
                 net.minecraft.sounds.SoundSource.HOSTILE, 3.0F, 0.9F);
+    }
+
+    /** Record the whole blast volume before triggering any block updates. */
+    static void breachBlocks(ServerLevel level, RaidSavedData.RaidState state, BlockPos center, int r) {
+        Set<BlockPos> affected = new LinkedHashSet<>();
+        for (int dy = -1; dy <= VERTICAL_SWEEP; dy++) {
+            for (int dx = -r; dx <= r; dx++) {
+                for (int dz = -r; dz <= r; dz++) {
+                    if (dx * dx + dz * dz > r * r) continue;
+                    BlockPos p = center.offset(dx, dy, dz);
+                    affected.addAll(BlockRestoration.snapshotBreach(level, state.breachedBlocks,
+                            p, RaidConfig.MAX_RESTORABLE_BLOCKS.get()));
+                }
+            }
+        }
+        affected.stream().sorted(Comparator.comparingInt((BlockPos pos) -> pos.getY()).reversed()).forEach(pos -> {
+            level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL | Block.UPDATE_SUPPRESS_DROPS);
+            state.blockBreachProgress.remove(pos.asLong());
+        });
     }
 
     // v3.1.0: the local isBreachable helper was removed. Sapper detonations

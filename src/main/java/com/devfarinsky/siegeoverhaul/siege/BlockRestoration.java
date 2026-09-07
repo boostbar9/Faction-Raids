@@ -15,9 +15,14 @@ import net.minecraft.world.level.block.WallBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraftforge.registries.ForgeRegistries;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * v3.1.0: shared block snapshot/restoration utility.
@@ -60,6 +65,34 @@ public final class BlockRestoration {
     private static final String BLOCK_ENTITY_KEY = "BlockEntity";
 
     private BlockRestoration() {}
+
+    /**
+     * Snapshot a breachable block and its matching door half as one operation.
+     * No world mutations occur here: callers must record their entire removal
+     * batch before neighbor updates can erase another block. Refuse a whole
+     * door if the ledger cannot hold both halves, even at a scan boundary.
+     */
+    public static List<BlockPos> snapshotBreach(ServerLevel level, Map<Long, CompoundTag> ledger,
+                                               BlockPos target, int maxBlocks) {
+        BlockState initial = level.getBlockState(target);
+        if (!isBreachable(initial)) return List.of();
+        List<BlockPos> affected = new ArrayList<>();
+        affected.add(target.immutable());
+        if (initial.getBlock() instanceof DoorBlock) {
+            DoubleBlockHalf half = initial.getValue(DoorBlock.HALF);
+            BlockPos otherPos = half == DoubleBlockHalf.LOWER ? target.above() : target.below();
+            BlockState other = level.getBlockState(otherPos);
+            if (other.is(initial.getBlock()) && other.getValue(DoorBlock.HALF) != half) {
+                affected.add(otherPos.immutable());
+            }
+        }
+        long newEntries = affected.stream().filter(pos -> !ledger.containsKey(pos.asLong())).count();
+        if (newEntries > Math.max(0, maxBlocks - ledger.size())) return List.of();
+        for (BlockPos pos : affected) {
+            if (!ledger.containsKey(pos.asLong())) ledger.put(pos.asLong(), serialize(level, pos));
+        }
+        return affected;
+    }
 
     /**
      * Serialize the block at {@code pos} into a self-describing tag suitable

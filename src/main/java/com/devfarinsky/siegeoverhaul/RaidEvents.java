@@ -512,7 +512,7 @@ public final class RaidEvents {
      * The event itself is not cancelled — breaking still succeeds and the
      * block's normal drops still apply. We just react to the break.
      */
-    @SubscribeEvent
+    @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.LOWEST)
     public static void onCampBlockBroken(net.minecraftforge.event.level.BlockEvent.BreakEvent event) {
         if (!RaidConfig.CAMP_DESTRUCTIBLE_STRUCTURES.get()) return;
         if (!(event.getLevel() instanceof ServerLevel level)) return;
@@ -520,6 +520,9 @@ public final class RaidEvents {
         BlockPos pos = event.getPos();
         for (RaidSavedData.RaidState state : data.raids.values()) {
             if (state.wave <= 0) continue;
+            RaidSavedData.Anchor anchor = data.anchors.get(state.teamKey);
+            RaidSavedData.DefensePoint point = anchor == null ? null : anchor.point(state.defensePointName);
+            if (point == null || !point.dimension().equals(level.dimension().location())) continue;
             if (pos.equals(state.campfirePos)) {
                 handleCampfireBroken(level, state);
                 data.setDirty();
@@ -1779,7 +1782,8 @@ public final class RaidEvents {
         // v2.13.0: stragglers now dropped silently — the action bar already
         // shows the live deployed/reinforcing counts, so a fresh chat line
         // every time one raider gets stuck was pure noise.
-        com.devfarinsky.siegeoverhaul.effort.StragglerTracker.tick(level, state, point.pos());
+        com.devfarinsky.siegeoverhaul.effort.StragglerTracker.tick(level, state,
+                BlockPos.containing(invasionObjective(level, point, state)));
         // When raiders stall against a wall, build a temporary ladder column.
         // Rate-limited internally; ladders are tracked in campBlocks and
         // cleaned up when the raid ends via the existing camp pipeline.
@@ -2078,18 +2082,19 @@ public final class RaidEvents {
         int spawned = 0;
         for (int i = 0; i < wanted; i++) {
             int waveIndex = state.waveStartingCount + spawned;
-            Mob raider = createAttackerForWave(level, anchor.teamKey(), state.wave, waveIndex);
-            if (raider == null) continue;
+            Mob candidate = createAttackerForWave(level, anchor.teamKey(), state.wave, waveIndex);
+            if (candidate == null) continue;
 
             boolean asNaval = i < navalShare;
             BlockPos spawn = asNaval
                     ? state.navalStagingPos
-                    : findSpawnPosition(level, point.pos(), level.random, raider,
+                    : findSpawnPosition(level, point.pos(), level.random, candidate,
                             state.approachAngle, state.campPos);
             if (spawn == null) continue;
-            raider.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5,
+            candidate.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5,
                     level.random.nextFloat() * 360.0F, 0.0F);
-            raider.finalizeSpawn(level, level.getCurrentDifficultyAt(spawn), MobSpawnType.EVENT, null, null);
+            Mob raider = RaidMobSpawner.initializeOrFallback(level, candidate);
+            if (raider == null) continue;
             boolean squadLeader = spawned == 0;
             if (squadLeader && raider instanceof Raider vanillaRaider) vanillaRaider.setPatrolLeader(true);
             RecruitsBridge.configureHostileRaidRecruit(raider);
@@ -2922,11 +2927,11 @@ public final class RaidEvents {
             BlockPos pos = BlockPos.of(entry.getKey());
             CompoundTag record = entry.getValue();
             String placedId = record.getString("Placed");
-            ResourceLocation current = ForgeRegistries.BLOCKS.getKey(level.getBlockState(pos).getBlock());
-            // v3.1.0: if the block that's there now is NOT the block we placed,
-            // a player either broke it or replaced it. Do NOT overwrite their
-            // build — skip the entry and let it drop from the ledger below.
-            if (current == null || !current.toString().equals(placedId)) {
+            BlockState currentState = level.getBlockState(pos);
+            ResourceLocation current = ForgeRegistries.BLOCKS.getKey(currentState.getBlock());
+            // An empty space is safe to repair too: a destroyed camp block must
+            // not lose the terrain it replaced. Preserve occupied replacements.
+            if (!currentState.isAir() && (current == null || !current.toString().equals(placedId))) {
                 orphanedPlayerBlocks++;
                 continue;
             }
@@ -3200,17 +3205,10 @@ public final class RaidEvents {
 
     private static void breachAndRemember(ServerLevel level, RaidSavedData.RaidState raid, BlockPos target) {
         boolean firstPhysicalBreach = raid.breachedBlocks.isEmpty();
-        List<BlockPos> affected = new ArrayList<>();
-        affected.add(target.immutable());
-        BlockState initial = level.getBlockState(target);
-        if (initial.getBlock() instanceof DoorBlock) {
-            for (BlockPos adjacent : List.of(target.above(), target.below())) {
-                if (level.getBlockState(adjacent).getBlock() == initial.getBlock()) affected.add(adjacent.immutable());
-            }
-        }
-        affected.removeIf(position -> raid.breachedBlocks.containsKey(position.asLong()));
-        int capacity = RaidConfig.MAX_RESTORABLE_BLOCKS.get() - raid.breachedBlocks.size();
-        if (affected.isEmpty() || affected.size() > capacity) {
+        List<BlockPos> affected = new ArrayList<>(
+                com.devfarinsky.siegeoverhaul.siege.BlockRestoration.snapshotBreach(
+                        level, raid.breachedBlocks, target, RaidConfig.MAX_RESTORABLE_BLOCKS.get()));
+        if (affected.isEmpty()) {
             // v2.19.0 RE2: drop the target's progress entry when we bail on
             // capacity. Otherwise progress stays >= required and this method
             // re-enters and re-bails every tick, livelocking breachers on a
@@ -3223,20 +3221,10 @@ public final class RaidEvents {
             return;
         }
 
-        for (BlockPos position : affected) {
-            BlockState state = level.getBlockState(position);
-            if (!isBreachableDefense(state)) continue;
-            // v3.1.0: capture tile-entity NBT alongside the state so chest
-            // contents, sign text, banner patterns, and lectern books survive
-            // the breach/repair cycle. serializeState pulls the BE from the
-            // current world position; call it before the AIR overwrite below.
-            raid.breachedBlocks.put(position.asLong(),
-                    com.devfarinsky.siegeoverhaul.siege.BlockRestoration.serializeState(level, position, state));
-        }
         affected.sort((left, right) -> Integer.compare(right.getY(), left.getY()));
         for (BlockPos position : affected) {
             if (raid.breachedBlocks.containsKey(position.asLong())) {
-                level.setBlock(position, Blocks.AIR.defaultBlockState(), 3);
+                level.setBlock(position, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL | Block.UPDATE_SUPPRESS_DROPS);
                 raid.blockBreachProgress.remove(position.asLong());
             }
         }
