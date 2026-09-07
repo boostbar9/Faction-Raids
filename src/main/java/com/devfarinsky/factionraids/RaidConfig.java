@@ -61,6 +61,9 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.EnumValue<LabelMode> RAIDER_LABEL_MODE;
     public static final ForgeConfigSpec.IntValue RAIDER_LABEL_RADIUS;
     public static final ForgeConfigSpec.BooleanValue RAIDER_GLOW;
+    // v2.34.0 Commander boss bar:
+    public static final ForgeConfigSpec.BooleanValue COMMANDER_BOSSBAR_ENABLED;
+    public static final ForgeConfigSpec.IntValue COMMANDER_BOSSBAR_RADIUS;
     public static final ForgeConfigSpec.BooleanValue HUD_ENABLED;
     public static final ForgeConfigSpec.BooleanValue OBJECTIVE_BEACON;
     public static final ForgeConfigSpec.BooleanValue PHYSICAL_BREACHING;
@@ -255,6 +258,10 @@ public final class RaidConfig {
                 .defineInRange("raiderLabelRadius", 24, 8, 128);
         RAIDER_GLOW = b.comment("When true (default), raiders get a role-colored outline (via team scoreboard + glowing) that shows through walls. Uses the same visibility rule as raiderLabelMode.")
                 .define("raiderGlow", true);
+        COMMANDER_BOSSBAR_ENABLED = b.comment("v2.34.0: when true (default), show a small vanilla boss bar for the Siege Commander that only appears when a defender is within commanderBossbarRadius blocks. Fills with the Commander's HP and turns red at low health. Set false to keep the Commander boss-bar-free (defenders read health from the nameplate distance/glow only).")
+                .define("commanderBossbarEnabled", true);
+        COMMANDER_BOSSBAR_RADIUS = b.comment("Radius (in blocks) at which the Commander boss bar becomes visible to a defender. Smaller values keep the HUD quiet until you actually engage the boss; larger values make it a standing raid-wide indicator.")
+                .defineInRange("commanderBossbarRadius", 24, 8, 128);
         HUD_ENABLED = b.comment("When true (default), defenders see a small top-center HUD widget during active raids showing current phase (Marching / Breaching / Occupying), objective name, distance to objective, and wave progress. Server-broadcast; each defender may still hide it client-side with F1.")
                 .define("hudEnabled", true);
         OBJECTIVE_BEACON = b.comment("When true (default), a vertical particle column marks the raid objective block so defenders can see exactly where raiders are marching. Fades when the viewer is within 16 blocks of the objective.")

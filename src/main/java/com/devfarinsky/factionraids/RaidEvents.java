@@ -385,6 +385,7 @@ public final class RaidEvents {
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
         RaidBossBars.shutdown();
+        com.devfarinsky.factionraids.raid.CommanderBossBar.shutdown();
     }
 
     /**
@@ -1593,6 +1594,11 @@ public final class RaidEvents {
                 state.missingTicks.remove(id);
                 // v2.15.0: refresh role label + glow visibility.
                 RaiderLabels.tick(mob);
+                // v2.34.0: if this raider is the Commander, refresh the boss
+                // bar's HP fill / color / viewer set. Cheap early-out inside.
+                if (id.equals(state.commanderUuid) && !state.commanderDefeated) {
+                    com.devfarinsky.factionraids.raid.CommanderBossBar.tick(state.teamKey, mob);
+                }
                 continue;
             }
             if (entity != null) {
@@ -1908,19 +1914,24 @@ public final class RaidEvents {
             }
             raider.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 20 * 60 * 60, 0, false, false));
             // v2.15.0: RaiderLabels.applyRole already set the styled name.
-            // Skip forcing visibility so PROXIMITY / OFF modes still apply.
+            // v2.34.0: don't rewrite the name here; the label factory owns
+            // Commander presentation. Only force visibility for ALWAYS mode.
             if (RaidConfig.RAIDER_LABEL_MODE.get() == RaidConfig.LabelMode.ALWAYS) {
-                raider.setCustomName(Component.literal("Siege Commander").withStyle(ChatFormatting.DARK_RED));
                 raider.setCustomNameVisible(true);
             }
             state.commanderUuid = raider.getUUID();
             state.commanderDefeated = false;
+            // v2.34.0: attach the per-Commander boss bar. Proximity + HP
+            // fill handled inside CommanderBossBar.tick during the raid loop.
+            com.devfarinsky.factionraids.raid.CommanderBossBar.onCommanderSpawn(state.teamKey, raider);
         }
     }
 
     private static void markCommanderDefeated(MinecraftServer server, RaidSavedData.Anchor anchor,
                                               RaidSavedData.RaidState state) {
         state.commanderDefeated = true;
+        // v2.34.0: tear down the Commander boss bar the moment the boss dies.
+        com.devfarinsky.factionraids.raid.CommanderBossBar.onCommanderDefeated(anchor.teamKey());
         if (!state.breached && RaidConfig.ENABLE_BREACH_PHASE.get()) {
             state.breachTicks = Math.max(0, state.breachTicks - 30 * 20);
         } else state.captureTicks = Math.max(0, state.captureTicks - 30 * 20);
@@ -3529,6 +3540,9 @@ public final class RaidEvents {
         }
         ServerBossEvent bar = RaidBossBars.remove(teamKey);
         if (bar != null) bar.removeAllPlayers();
+        // v2.34.0: raid ended without the Commander dying (defeat, disband,
+        // reload) - tear down the Commander boss bar too so the HUD is clean.
+        com.devfarinsky.factionraids.raid.CommanderBossBar.remove(teamKey);
         long elapsedTicks = state == null || state.startedGameTime <= 0 ? 0 :
                 Math.max(0, server.overworld().getGameTime() - state.startedGameTime);
         String summary = state == null ? "" : " Defeated: " + state.totalDefeated +
