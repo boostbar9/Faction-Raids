@@ -364,7 +364,37 @@ public final class RaidSavedData extends SavedData {
         public BlockPos navalStagingPos;
         /** Landing beach the naval convoy steers toward. Null when no naval staging. */
         public BlockPos navalBeachPos;
-        public final Map<Long, String> campBlocks = new LinkedHashMap<>();
+        /**
+         * Camp block ledger. Key: packed BlockPos. Value: CompoundTag holding two entries:
+         * <ul>
+         *   <li>{@code Placed}: the ResourceLocation string of the block the mod put down.
+         *       Used at cleanup to verify a player has not replaced the placed block since we set it.</li>
+         *   <li>{@code Original}: serialized BlockState (Name + Properties) of what was there
+         *       BEFORE the mod overwrote it, or an empty tag when the original was air.
+         *       Used at cleanup to restore the terrain (v3.1.0+).</li>
+         * </ul>
+         *
+         * <p>Pre-v3.1.0 saves stored a plain block-id String at this key; the load path
+         * migrates those entries to the tag form with an empty Original (treat as air).</p>
+         */
+        public final Map<Long, CompoundTag> campBlocks = new LinkedHashMap<>();
+
+        /**
+         * v3.1.0: single writer for the camp-block ledger. Callers must supply both
+         * the placed-block id (so cleanup can verify no player has replaced it) and
+         * the serialized original BlockState of what was there before (so cleanup can
+         * restore the terrain). Pass an empty CompoundTag for {@code originalState}
+         * when the original space was air — the cleanup path treats empty as air.
+         *
+         * <p>Overwrites any prior entry at the same position, which matches the
+         * pre-3.1.0 behavior (later placements win).</p>
+         */
+        public void recordCampBlock(long posKey, String placedBlockId, CompoundTag originalState) {
+            CompoundTag record = new CompoundTag();
+            record.putString("Placed", placedBlockId);
+            record.put("Original", originalState == null ? new CompoundTag() : originalState.copy());
+            campBlocks.put(posKey, record);
+        }
         /** UUID -> SiegeEngineType.name() for engines currently on the field. */
         public final Map<UUID, String> siegeEngines = new LinkedHashMap<>();
         /** How many sappers this raid has already dispatched (capped by config). */
@@ -488,10 +518,15 @@ public final class RaidSavedData extends SavedData {
             });
             tag.put("SiegeEngines", siegeList);
             ListTag camp = new ListTag();
-            campBlocks.forEach((position, block) -> {
+            campBlocks.forEach((position, record) -> {
                 CompoundTag entry = new CompoundTag();
                 entry.putLong("Position", position);
-                entry.putString("Block", block);
+                // v3.1.0: keep the legacy "Block" flat string in place for downgrade
+                // compatibility (a pre-3.1 mod loading a 3.1-saved world will still
+                // find its expected placed-id key), and add the richer Record tag
+                // with both placed id and original state.
+                entry.putString("Block", record.getString("Placed"));
+                entry.put("Record", record.copy());
                 camp.add(entry);
             });
             tag.put("CampBlocks", camp);
@@ -598,7 +633,20 @@ public final class RaidSavedData extends SavedData {
             ListTag camp = tag.getList("CampBlocks", Tag.TAG_COMPOUND);
             for (int i = 0; i < camp.size(); i++) {
                 CompoundTag entry = camp.getCompound(i);
-                state.campBlocks.put(entry.getLong("Position"), entry.getString("Block"));
+                CompoundTag record;
+                if (entry.contains("Record", Tag.TAG_COMPOUND)) {
+                    // v3.1.0+ format: pull the full record tag.
+                    record = entry.getCompound("Record").copy();
+                } else {
+                    // Legacy pre-v3.1.0 format: only the placed-block string is stored.
+                    // Migrate to the new record shape with an empty Original tag; the
+                    // cleanup path will treat empty-Original entries as air-was-here and
+                    // simply delete the placed block without attempting to restore.
+                    record = new CompoundTag();
+                    record.putString("Placed", entry.getString("Block"));
+                    record.put("Original", new CompoundTag());
+                }
+                state.campBlocks.put(entry.getLong("Position"), record);
             }
             ListTag breached = tag.getList("BreachedBlocks", Tag.TAG_COMPOUND);
             for (int i = 0; i < breached.size(); i++) {

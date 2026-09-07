@@ -188,10 +188,14 @@ public final class LadderBuilder {
             BlockPos pos = scan.baseFront.above(y);
             if (!level.getBlockState(pos).isAir()) continue;
             if (!ladder.canSurvive(level, pos)) continue;
+            // v3.1.0: snapshot original (usually air here, since the loop
+            // already checked isAir a few lines up, but grabbing it defensively
+            // means the record shape stays uniform across all camp-block writers).
+            net.minecraft.nbt.CompoundTag original = new net.minecraft.nbt.CompoundTag();
             level.setBlock(pos, ladder, 3);
             // Track for cleanup via the existing camp-block pipeline.
             ResourceLocation id = ForgeRegistries.BLOCKS.getKey(Blocks.LADDER);
-            if (id != null) state.campBlocks.put(pos.asLong(), id.toString());
+            if (id != null) state.recordCampBlock(pos.asLong(), id.toString(), original);
             placed++;
         }
         return placed;

@@ -2523,9 +2523,17 @@ public final class RaidEvents {
                                        BlockPos pos, Block block) {
         if (!level.getWorldBorder().isWithinBounds(pos) || !level.getFluidState(pos).isEmpty() ||
                 !level.getBlockState(pos).canBeReplaced()) return;
+        // v3.1.0: snapshot the ORIGINAL block before we overwrite it so
+        // cleanup can restore the terrain (grass, dirt, gravel, whatever) instead
+        // of leaving air holes. canBeReplaced() is true for air and short grass, so
+        // this tag will be empty (air) most of the time — which is exactly what
+        // the restore path expects.
+        BlockState originalState = level.getBlockState(pos);
+        CompoundTag original = originalState.isAir() ? new CompoundTag()
+                : com.devfarinsky.siegeoverhaul.siege.BlockRestoration.serializeState(level, pos, originalState);
         if (!level.setBlock(pos, block.defaultBlockState(), 3)) return;
         ResourceLocation id = ForgeRegistries.BLOCKS.getKey(block);
-        if (id != null) state.campBlocks.put(pos.asLong(), id.toString());
+        if (id != null) state.recordCampBlock(pos.asLong(), id.toString(), original);
     }
 
     /**
@@ -2581,17 +2589,46 @@ public final class RaidEvents {
         if (!RaidConfig.CLEANUP_WAR_CAMPS.get()) return;
         // Remove banners and canopy before their supports so neighbor updates
         // cannot pop temporary camp blocks into collectible item drops.
-        List<Map.Entry<Long, String>> placed = new ArrayList<>(state.campBlocks.entrySet());
+        List<Map.Entry<Long, CompoundTag>> placed = new ArrayList<>(state.campBlocks.entrySet());
         placed.sort((left, right) -> Integer.compare(
                 BlockPos.of(right.getKey()).getY(), BlockPos.of(left.getKey()).getY()));
-        for (Map.Entry<Long, String> entry : placed) {
+        int restoredTerrain = 0;
+        int orphanedPlayerBlocks = 0;
+        for (Map.Entry<Long, CompoundTag> entry : placed) {
             BlockPos pos = BlockPos.of(entry.getKey());
+            CompoundTag record = entry.getValue();
+            String placedId = record.getString("Placed");
             ResourceLocation current = ForgeRegistries.BLOCKS.getKey(level.getBlockState(pos).getBlock());
-            if (current != null && current.toString().equals(entry.getValue())) {
+            // v3.1.0: if the block that's there now is NOT the block we placed,
+            // a player either broke it or replaced it. Do NOT overwrite their
+            // build — skip the entry and let it drop from the ledger below.
+            if (current == null || !current.toString().equals(placedId)) {
+                orphanedPlayerBlocks++;
+                continue;
+            }
+            // v3.1.0: restore the original block (grass/dirt/log/etc.) when we
+            // have one, otherwise clear to air. The Original tag is empty when
+            // the camp was placed over air.
+            CompoundTag original = record.getCompound("Original");
+            if (original.isEmpty() || !original.contains("Name")) {
                 level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+            } else {
+                // Clear to air first so BlockRestoration.applyTo's non-air guard
+                // doesn't refuse the placement (our own placed block is still there).
+                level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+                if (com.devfarinsky.siegeoverhaul.siege.BlockRestoration.applyTo(level, pos, original)) {
+                    restoredTerrain++;
+                }
             }
         }
         state.campBlocks.clear();
+        if (orphanedPlayerBlocks > 0 && RaidConfig.ENABLE_EFFORT_BONUS.get()) {
+            // Log-only; no chat spam. Players noticed player-owned blocks were
+            // preserved because their build is still standing.
+            System.out.println("[SiegeOverhaul] Camp cleanup preserved " + orphanedPlayerBlocks +
+                    " player-replaced position(s) for team " + state.teamKey +
+                    " (restored terrain at " + restoredTerrain + " positions).");
+        }
     }
 
     private static void processPhysicalBreaching(ServerLevel level, RaidSavedData.DefensePoint point,
@@ -2808,15 +2845,17 @@ public final class RaidEvents {
     }
 
     private static boolean isBreachableDefense(BlockState state) {
-        Block block = state.getBlock();
-        if (state.hasProperty(BlockStateProperties.OPEN) && state.getValue(BlockStateProperties.OPEN)) return false;
-        return block instanceof DoorBlock || block instanceof FenceGateBlock ||
-                block instanceof TrapDoorBlock || block instanceof FenceBlock || block == Blocks.IRON_BARS;
+        // v3.1.0: delegate to the single-source-of-truth whitelist. Walls
+        // (cobblestone, stone brick, etc.) are now breachable so a walled-off
+        // gate isn't a permanent shield.
+        return com.devfarinsky.siegeoverhaul.siege.BlockRestoration.isBreachable(state);
     }
 
     private static int breachWorkRequired(BlockState state) {
-        boolean reinforced = state.getBlock() == Blocks.IRON_DOOR || state.getBlock() == Blocks.IRON_TRAPDOOR ||
-                state.getBlock() == Blocks.IRON_BARS;
+        // v3.1.0: reinforced tier now includes walls in addition to the
+        // v2.x iron door/trapdoor/bars. Delegates to BlockRestoration so the
+        // reinforced classification stays consistent across paths.
+        boolean reinforced = com.devfarinsky.siegeoverhaul.siege.BlockRestoration.isReinforced(state);
         return reinforced ? RaidConfig.REINFORCED_BREACH_SECONDS.get() : RaidConfig.WOODEN_BREACH_SECONDS.get();
     }
 
@@ -2848,7 +2887,12 @@ public final class RaidEvents {
         for (BlockPos position : affected) {
             BlockState state = level.getBlockState(position);
             if (!isBreachableDefense(state)) continue;
-            raid.breachedBlocks.put(position.asLong(), serializeBlockState(state));
+            // v3.1.0: capture tile-entity NBT alongside the state so chest
+            // contents, sign text, banner patterns, and lectern books survive
+            // the breach/repair cycle. serializeState pulls the BE from the
+            // current world position; call it before the AIR overwrite below.
+            raid.breachedBlocks.put(position.asLong(),
+                    com.devfarinsky.siegeoverhaul.siege.BlockRestoration.serializeState(level, position, state));
         }
         affected.sort((left, right) -> Integer.compare(right.getY(), left.getY()));
         for (BlockPos position : affected) {
@@ -2881,57 +2925,34 @@ public final class RaidEvents {
         }
     }
 
-    private static CompoundTag serializeBlockState(BlockState state) {
-        CompoundTag tag = new CompoundTag();
-        ResourceLocation id = ForgeRegistries.BLOCKS.getKey(state.getBlock());
-        if (id == null) return tag;
-        tag.putString("Name", id.toString());
-        CompoundTag properties = new CompoundTag();
-        for (Property<?> property : state.getProperties()) {
-            properties.putString(property.getName(), propertyValueName(state, property));
-        }
-        tag.put("Properties", properties);
-        return tag;
-    }
-
-    private static <T extends Comparable<T>> String propertyValueName(BlockState state, Property<T> property) {
-        return property.getName(state.getValue(property));
-    }
-
-    private static BlockState deserializeBlockState(CompoundTag tag) {
-        ResourceLocation id = ResourceLocation.tryParse(tag.getString("Name"));
-        Block block = id == null ? null : ForgeRegistries.BLOCKS.getValue(id);
-        if (block == null || block == Blocks.AIR) return Blocks.AIR.defaultBlockState();
-        BlockState state = block.defaultBlockState();
-        CompoundTag properties = tag.getCompound("Properties");
-        for (Property<?> property : state.getProperties()) {
-            if (properties.contains(property.getName())) {
-                state = applySerializedProperty(state, property, properties.getString(property.getName()));
-            }
-        }
-        return state;
-    }
-
-    private static <T extends Comparable<T>> BlockState applySerializedProperty(BlockState state,
-                                                                                 Property<T> property,
-                                                                                 String value) {
-        return property.getValue(value).map(parsed -> state.setValue(property, parsed)).orElse(state);
-    }
+    // v3.1.0: serializeBlockState/deserializeBlockState/applySerializedProperty/
+    // propertyValueName were moved to BlockRestoration so the siege engine,
+    // sapper runner, and camp cleanup can all round-trip block state (with
+    // tile-entity NBT) through the same code path. See BlockRestoration.serializeState
+    // and BlockRestoration.applyTo.
 
     private static void restoreBreachedBlocks(ServerLevel level, RaidSavedData.RaidState raid) {
         if (!RaidConfig.RESTORE_BREACHED_BLOCKS.get()) return;
         List<Map.Entry<Long, CompoundTag>> blocks = new ArrayList<>(raid.breachedBlocks.entrySet());
+        // Sort low Y first so multi-block structures (doors: bottom, then top)
+        // stack from the ground up and the top half doesn't spawn onto air.
         blocks.sort(Comparator.comparingInt(entry -> BlockPos.of(entry.getKey()).getY()));
         int restoredCount = 0;
         int preservedCount = 0;
         for (Map.Entry<Long, CompoundTag> entry : blocks) {
             BlockPos position = BlockPos.of(entry.getKey());
             if (!level.getBlockState(position).isAir()) {
+                // v3.1.0 unchanged: a player rebuilt in the gap during the raid.
+                // Do not overwrite their block.
                 preservedCount++;
                 continue;
             }
-            BlockState restored = deserializeBlockState(entry.getValue());
-            if (!restored.isAir() && level.setBlock(position, restored, 3)) restoredCount++;
+            // v3.1.0: applyTo restores block state AND tile-entity NBT so a
+            // breached chest comes back with its contents, a sign with its text,
+            // a banner with its patterns.
+            if (com.devfarinsky.siegeoverhaul.siege.BlockRestoration.applyTo(level, position, entry.getValue())) {
+                restoredCount++;
+            }
         }
         raid.breachedBlocks.clear();
         raid.blockBreachProgress.clear();
