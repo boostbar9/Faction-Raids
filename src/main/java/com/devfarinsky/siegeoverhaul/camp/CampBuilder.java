@@ -1,6 +1,7 @@
 package com.devfarinsky.siegeoverhaul.camp;
 
 import com.devfarinsky.siegeoverhaul.FactionLogger;
+import com.devfarinsky.siegeoverhaul.ModConstants;
 import com.devfarinsky.siegeoverhaul.RaidConfig;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import net.minecraft.core.BlockPos;
@@ -141,10 +142,10 @@ public final class CampBuilder {
             this.workAreas = workAreas;
         }
 
-        /** Called from the siege tick — returns true when we transition to COMPLETE. */
+        /** Called once per periodic siege pass; returns true on completion or timeout. */
         public boolean tick(ServerLevel level) {
-            ticksSinceStart++;
-            if (phase == Phase.SPAWNED && ticksSinceStart > 20) {
+            ticksSinceStart += ModConstants.TICK_INTERVAL;
+            if (phase == Phase.SPAWNED && ticksSinceStart >= ModConstants.TICKS_PER_SECOND) {
                 phase = Phase.IN_PROGRESS;
             }
             if (phase == Phase.IN_PROGRESS) {
@@ -156,8 +157,8 @@ public final class CampBuilder {
                 }
                 // Safety valve: if builders are stuck (no completion within
                 // MAX_BUILD_TICKS) fail cleanly so the raid still progresses.
-                int maxTicks = RaidConfig.CAMP_MAX_BUILD_SECONDS.get() * 20;
-                if (ticksSinceStart > maxTicks) {
+                int maxTicks = ModConstants.secondsToTicks(RaidConfig.CAMP_MAX_BUILD_SECONDS.get());
+                if (ticksSinceStart >= maxTicks) {
                     FactionLogger.LOG.info("Camp {} timed out after {}s; advancing raid.",
                             blueprintId, RaidConfig.CAMP_MAX_BUILD_SECONDS.get());
                     phase = Phase.FAILED;
