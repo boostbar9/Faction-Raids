@@ -223,6 +223,21 @@ public final class RaidEvents {
         // Never alert against another raider (friendly fire from vex/etc).
         if (attacker.getPersistentData().getString(RAID_TEAM_TAG).equals(team)) return;
         if (!(victim.level() instanceof ServerLevel level)) return;
+        // v3.2.0: record ally-defender damage contribution. When a player who
+        // is NOT a member of the raided faction hits a raider, credit their
+        // damage to that raid so the victory-payout step can share emeralds
+        // with them proportional to their contribution.
+        if (attacker instanceof ServerPlayer attackingPlayer) {
+            RaidSavedData data = RaidSavedData.get(level.getServer());
+            RaidSavedData.RaidState state = data.raids.get(team);
+            if (state != null) {
+                RaidSavedData.Anchor victimAnchor = data.anchors.get(team);
+                boolean isMember = victimAnchor != null && victimAnchor.members().contains(attackingPlayer.getUUID());
+                if (!isMember) {
+                    state.allyDefenderDamage.merge(attackingPlayer.getUUID(), event.getAmount(), Float::sum);
+                }
+            }
+        }
         int radius = RaidConfig.SHOUT_RADIUS.get();
         for (Mob ally : level.getEntitiesOfClass(Mob.class,
                 victim.getBoundingBox().inflate(radius),
@@ -338,16 +353,54 @@ public final class RaidEvents {
      */
     @SubscribeEvent
     public static void onPlayerLoggedIn(net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
-        if (!RaidConfig.SPAWN_GUIDEBOOK_ON_JOIN.get()) return;
         if (!(event.getEntity() instanceof ServerPlayer sp)) return;
+        // First-login guidebook gift (unchanged behavior).
+        if (RaidConfig.SPAWN_GUIDEBOOK_ON_JOIN.get()) {
+            net.minecraft.nbt.CompoundTag persistent = sp.getPersistentData()
+                    .getCompound(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG);
+            if (!persistent.getBoolean("FactionRaidsGuidebookGiven")) {
+                net.minecraft.world.item.ItemStack book = new net.minecraft.world.item.ItemStack(
+                        com.devfarinsky.siegeoverhaul.items.ModItems.GUIDEBOOK.get());
+                if (!sp.getInventory().add(book)) sp.drop(book, false);
+                persistent.putBoolean("FactionRaidsGuidebookGiven", true);
+                sp.getPersistentData().put(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG, persistent);
+            }
+        }
+        // v3.2.0: notify player of any spoils queued while they were offline.
+        try {
+            RaidSavedData data = RaidSavedData.get(sp.server);
+            java.util.List<RaidSavedData.UnclaimedSpoils> queued = data.pendingSpoils.get(sp.getUUID());
+            if (queued != null && !queued.isEmpty()) {
+                int count = queued.size();
+                sp.sendSystemMessage(Component.literal("You have " + count + " unclaimed siege reward" +
+                        (count == 1 ? "" : "s") + ". Run ")
+                        .withStyle(ChatFormatting.GOLD)
+                        .append(Component.literal("/siegeoverhaul claim").withStyle(ChatFormatting.AQUA))
+                        .append(Component.literal(" to collect.").withStyle(ChatFormatting.GOLD)));
+            }
+        } catch (Exception ignored) {}
+    }
+
+    /**
+     * v3.2.0 — re-give the Warlord's Codex on respawn if the player died
+     * with it in their inventory and keepInventory is off. Idempotent: the
+     * check confirms they no longer have one before granting.
+     */
+    @SubscribeEvent
+    public static void onPlayerRespawn(net.minecraftforge.event.entity.player.PlayerEvent.PlayerRespawnEvent event) {
+        if (!RaidConfig.SPAWN_GUIDEBOOK_ON_JOIN.get()) return;
+        if (event.isEndConquered()) return; // returning from End portal, not a death respawn
+        if (!(event.getEntity() instanceof ServerPlayer sp)) return;
+        net.minecraft.world.item.Item book = com.devfarinsky.siegeoverhaul.items.ModItems.GUIDEBOOK.get();
+        // Only re-grant if they've been given one before AND no longer have it.
         net.minecraft.nbt.CompoundTag persistent = sp.getPersistentData()
                 .getCompound(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG);
-        if (persistent.getBoolean("FactionRaidsGuidebookGiven")) return;
-        net.minecraft.world.item.ItemStack book = new net.minecraft.world.item.ItemStack(
-                com.devfarinsky.siegeoverhaul.items.ModItems.GUIDEBOOK.get());
-        if (!sp.getInventory().add(book)) sp.drop(book, false);
-        persistent.putBoolean("FactionRaidsGuidebookGiven", true);
-        sp.getPersistentData().put(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG, persistent);
+        if (!persistent.getBoolean("FactionRaidsGuidebookGiven")) return;
+        if (playerHasGuidebook(sp, book)) return;
+        net.minecraft.world.item.ItemStack stack = new net.minecraft.world.item.ItemStack(book);
+        if (!sp.getInventory().add(stack)) sp.drop(stack, false);
+        sp.sendSystemMessage(Component.literal("Your Warlord's Codex has been returned.")
+                .withStyle(ChatFormatting.GOLD));
     }
 
     /**
@@ -549,6 +602,10 @@ public final class RaidEvents {
     public static int statusCmd(CommandSourceStack s) { return status(s); }
     public static int debugCmd(CommandSourceStack s) { return debug(s); }
     public static int helpCmd(CommandSourceStack s) { return help(s); }
+    public static int bookCmd(CommandSourceStack s) { return giveGuidebook(s); }
+    public static int claimSpoilsCmd(CommandSourceStack s) { return claimSpoils(s); }
+    public static int notifyOnCmd(CommandSourceStack s) { return setRaidNotify(s, true); }
+    public static int notifyOffCmd(CommandSourceStack s) { return setRaidNotify(s, false); }
     public static int adminListCmd(CommandSourceStack s) { return adminList(s); }
     public static int adminStopCmd(CommandSourceStack s, String k) { return adminStop(s, k); }
     public static int adminRemoveCmd(CommandSourceStack s, String k) { return adminRemove(s, k); }
@@ -1080,7 +1137,132 @@ public final class RaidEvents {
                 .append(Component.literal(" — list every defended location")), false);
         source.sendSuccess(() -> Component.literal("/siegeoverhaul debug").withStyle(ChatFormatting.AQUA)
                 .append(Component.literal(" — show faction integration and performance details")), false);
+        source.sendSuccess(() -> Component.literal("/siegeoverhaul book").withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(" — get a Warlord's Codex if you lost yours")), false);
+        source.sendSuccess(() -> Component.literal("/siegeoverhaul claim").withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(" — claim rewards from sieges you missed")), false);
+        source.sendSuccess(() -> Component.literal("/siegeoverhaul notify on|off").withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(" — hear about other factions' sieges on this server")), false);
         return 1;
+    }
+
+    /**
+     * v3.2.0 — /siegeoverhaul book. Rate-limited helper that gives the
+     * caller a Warlord's Codex if they don't already have one in their
+     * inventory or ender chest. Fixes the losing-the-book problem on
+     * multiplayer servers where non-op players had no recovery path.
+     */
+    private static final java.util.Map<java.util.UUID, Long> BOOK_COOLDOWN = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long BOOK_COOLDOWN_TICKS = 1200L; // 60 seconds
+
+    private static int giveGuidebook(CommandSourceStack source) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            net.minecraft.world.item.Item book = com.devfarinsky.siegeoverhaul.items.ModItems.GUIDEBOOK.get();
+            if (playerHasGuidebook(player, book)) {
+                source.sendFailure(Component.literal("You already have a Warlord's Codex."));
+                return 0;
+            }
+            long now = source.getServer().overworld().getGameTime();
+            Long last = BOOK_COOLDOWN.get(player.getUUID());
+            if (last != null && now - last < BOOK_COOLDOWN_TICKS) {
+                long remain = Math.max(1L, (BOOK_COOLDOWN_TICKS - (now - last)) / 20L);
+                source.sendFailure(Component.literal("Wait " + remain + "s before requesting another."));
+                return 0;
+            }
+            net.minecraft.world.item.ItemStack stack = new net.minecraft.world.item.ItemStack(book);
+            if (!player.getInventory().add(stack)) player.drop(stack, false);
+            BOOK_COOLDOWN.put(player.getUUID(), now);
+            source.sendSuccess(() -> Component.literal("A Warlord's Codex materializes in your inventory.")
+                    .withStyle(ChatFormatting.GREEN), false);
+            return 1;
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+            source.sendFailure(Component.literal("Only a player can request a Codex."));
+            return 0;
+        }
+    }
+
+    private static boolean playerHasGuidebook(ServerPlayer player, net.minecraft.world.item.Item book) {
+        for (net.minecraft.world.item.ItemStack s : player.getInventory().items) {
+            if (!s.isEmpty() && s.getItem() == book) return true;
+        }
+        for (net.minecraft.world.item.ItemStack s : player.getInventory().offhand) {
+            if (!s.isEmpty() && s.getItem() == book) return true;
+        }
+        for (int i = 0; i < player.getEnderChestInventory().getContainerSize(); i++) {
+            net.minecraft.world.item.ItemStack s = player.getEnderChestInventory().getItem(i);
+            if (!s.isEmpty() && s.getItem() == book) return true;
+        }
+        return false;
+    }
+
+    /**
+     * v3.2.0 — /siegeoverhaul claim. Grants any spoils queued for the caller
+     * while they were offline during a victorious siege.
+     */
+    private static int claimSpoils(CommandSourceStack source) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            RaidSavedData data = RaidSavedData.get(source.getServer());
+            java.util.List<RaidSavedData.UnclaimedSpoils> queued = data.pendingSpoils.remove(player.getUUID());
+            if (queued == null || queued.isEmpty()) {
+                source.sendFailure(Component.literal("No unclaimed spoils."));
+                return 0;
+            }
+            int totalEmeralds = 0;
+            int totalXp = 0;
+            int lootRolls = 0;
+            int trophies = 0;
+            for (RaidSavedData.UnclaimedSpoils spoils : queued) {
+                if (spoils.emeralds() > 0) { giveEmeralds(player, spoils.emeralds()); totalEmeralds += spoils.emeralds(); }
+                if (spoils.experience() > 0) { player.giveExperiencePoints(spoils.experience()); totalXp += spoils.experience(); }
+                if (spoils.lootRoll()) { giveVictoryLoot(source.getServer(), player); lootRolls++; }
+                if (spoils.factionId() != null && !spoils.factionId().isEmpty()) {
+                    com.devfarinsky.siegeoverhaul.items.FactionBanners.FactionId trophy =
+                            com.devfarinsky.siegeoverhaul.items.FactionBanners.FactionId.byIdOrDefault(spoils.factionId());
+                    net.minecraft.world.item.ItemStack banner =
+                            com.devfarinsky.siegeoverhaul.items.FactionBanners.itemStackFor(trophy);
+                    net.minecraftforge.items.ItemHandlerHelper.giveItemToPlayer(player, banner);
+                    trophies++;
+                }
+            }
+            data.setDirty();
+            int emeraldsFinal = totalEmeralds;
+            int xpFinal = totalXp;
+            int lootFinal = lootRolls;
+            int trophyFinal = trophies;
+            int sieges = queued.size();
+            source.sendSuccess(() -> Component.literal("Claimed spoils from " + sieges + " siege" +
+                    (sieges == 1 ? "" : "s") + ": " + emeraldsFinal + " emeralds, " +
+                    xpFinal + " XP, " + lootFinal + " loot roll" + (lootFinal == 1 ? "" : "s") +
+                    ", " + trophyFinal + " trophy banner" + (trophyFinal == 1 ? "" : "s") + ".")
+                    .withStyle(ChatFormatting.GREEN), false);
+            return sieges;
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+            source.sendFailure(Component.literal("Only a player can claim spoils."));
+            return 0;
+        }
+    }
+
+    /**
+     * v3.2.0 — /siegeoverhaul notify on|off. Sets whether the caller sees
+     * server-wide chat notifications when other factions' sieges begin.
+     */
+    private static int setRaidNotify(CommandSourceStack source, boolean enabled) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            RaidSavedData data = RaidSavedData.get(source.getServer());
+            if (enabled) data.raidNotifyOptOut.remove(player.getUUID());
+            else data.raidNotifyOptOut.add(player.getUUID());
+            data.setDirty();
+            source.sendSuccess(() -> Component.literal(enabled ?
+                    "Server-wide raid alerts: ON." : "Server-wide raid alerts: OFF.")
+                    .withStyle(ChatFormatting.GREEN), false);
+            return 1;
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+            source.sendFailure(Component.literal("Only a player can change notification preferences."));
+            return 0;
+        }
     }
 
     private static int debug(CommandSourceStack source) {
@@ -1399,7 +1581,52 @@ public final class RaidEvents {
                 Component.literal(subtitle).withStyle(accent),
                 com.devfarinsky.siegeoverhaul.chat.ChatStyle.TitleWeight.MAJOR);
         updateBossBar(server, anchor, state, false);
+        // v3.2.0: server-wide raid start broadcast. Sends a single chat line to
+        // every online player who is NOT a member of the raided faction and has
+        // NOT opted out. Members already got the narrative announce() above.
+        broadcastRaidStart(server, data, anchor, state);
         return true;
+    }
+
+    /**
+     * v3.2.0 — send a server-wide chat notice when a siege begins. Skips the
+     * raided faction's own members (they already got the full narrative) and
+     * anyone in the {@code raidNotifyOptOut} set. The message names the target
+     * faction and the attacking faction so recipients can decide whether to
+     * ride out and help defend.
+     */
+    private static void broadcastRaidStart(MinecraftServer server, RaidSavedData data,
+                                           RaidSavedData.Anchor anchor, RaidSavedData.RaidState state) {
+        if (anchor == null || state == null) return;
+        String attackerLabel = "Raiders";
+        if (state.narrative != null && state.narrative.factionName != null && !state.narrative.factionName.isEmpty()) {
+            attackerLabel = state.narrative.factionName;
+        } else if (state.factionId != null && !state.factionId.isEmpty()) {
+            attackerLabel = humanizeFactionId(state.factionId);
+        }
+        String defenderLabel = anchor.teamDisplay() == null ? anchor.teamKey() : anchor.teamDisplay();
+        Component line = Component.literal("[Siege] ").withStyle(ChatFormatting.DARK_RED)
+                .append(Component.literal(attackerLabel + " are attacking " + defenderLabel + ".")
+                        .withStyle(ChatFormatting.GOLD))
+                .append(Component.literal(" (" + "/siegeoverhaul notify off" + " to silence)")
+                        .withStyle(ChatFormatting.GRAY));
+        Set<UUID> members = anchor.members();
+        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+            if (members.contains(p.getUUID())) continue;
+            if (data.raidNotifyOptOut.contains(p.getUUID())) continue;
+            p.sendSystemMessage(line);
+        }
+    }
+
+    private static String humanizeFactionId(String id) {
+        StringBuilder sb = new StringBuilder();
+        for (String part : id.split("_")) {
+            if (part.isEmpty()) continue;
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(Character.toUpperCase(part.charAt(0)));
+            if (part.length() > 1) sb.append(part.substring(1));
+        }
+        return sb.toString();
     }
 
     private static void processRaid(MinecraftServer server, RaidSavedData data, String teamKey) {
@@ -3575,6 +3802,15 @@ public final class RaidEvents {
                     net.minecraftforge.items.ItemHandlerHelper.giveItemToPlayer(p, banner);
                 });
             }
+            // v3.2.0: queue equivalent spoils for OFFLINE members so absence
+            // during the siege doesn't erase their share. They collect via
+            // /siegeoverhaul claim after logging in. Also v3.2.0: pay a
+            // partial share of guaranteed emeralds to non-faction defenders
+            // ("ally defenders") who dealt damage to attackers during this
+            // siege — encourages helping neighbors and cross-faction play.
+            queueOfflineSpoils(server, data, anchor, teamKey, state, emeralds, noBreachBonus, experience,
+                    RaidConfig.VICTORY_LOOT_ENABLED.get(), winners);
+            payAllyDefenders(server, data, anchor, teamKey, state, emeralds);
         }
         // v2.12.0 Know Your Enemy — record this siege to the War Journal and
         // mark the attacking faction as discovered. Unit discovery happens
@@ -4688,6 +4924,73 @@ public final class RaidEvents {
             giveOrDrop(player, new ItemStack(Items.EMERALD, count));
             remaining -= count;
         }
+    }
+
+    /**
+     * v3.2.0 — queue matching victory spoils for members who were offline
+     * when their faction won a siege. Absent members are those in the
+     * anchor's roster but NOT in the online winners list at reward time.
+     * Each queued entry represents one full victory share: guaranteed
+     * emeralds + no-breach bonus (if any) + XP + one loot roll (if enabled)
+     * + trophy banner (if factionId known). Drained by /siegeoverhaul claim.
+     */
+    private static void queueOfflineSpoils(MinecraftServer server, RaidSavedData data,
+                                            RaidSavedData.Anchor anchor, String teamKey,
+                                            RaidSavedData.RaidState state, int emeralds,
+                                            int noBreachBonus, int experience, boolean lootRoll,
+                                            List<ServerPlayer> winners) {
+        if (anchor == null) return;
+        java.util.Set<UUID> onlineUuids = new java.util.HashSet<>();
+        winners.forEach(p -> onlineUuids.add(p.getUUID()));
+        int totalEmeralds = emeralds + noBreachBonus;
+        long now = System.currentTimeMillis();
+        String factionId = state == null ? "" : (state.factionId == null ? "" : state.factionId);
+        String teamDisplay = anchor.teamDisplay() == null ? teamKey : anchor.teamDisplay();
+        int queued = 0;
+        for (UUID memberUuid : anchor.members()) {
+            if (onlineUuids.contains(memberUuid)) continue;
+            RaidSavedData.UnclaimedSpoils spoils = new RaidSavedData.UnclaimedSpoils(
+                    factionId, totalEmeralds, Math.max(0, experience), lootRoll, now, teamDisplay);
+            data.pendingSpoils.computeIfAbsent(memberUuid, k -> new ArrayList<>()).add(spoils);
+            queued++;
+        }
+        if (queued > 0) data.setDirty();
+    }
+
+    /**
+     * v3.2.0 — partial-share payout to non-faction defenders who dealt
+     * damage during the siege. Splits a pool equal to 25% of the base
+     * guaranteed emerald reward proportionally by damage contribution, with
+     * a per-player floor of 1 emerald when they contributed at all. Online
+     * ally defenders receive their share immediately with a chat message;
+     * offline ally defenders get their share queued as UnclaimedSpoils.
+     */
+    private static void payAllyDefenders(MinecraftServer server, RaidSavedData data,
+                                         RaidSavedData.Anchor anchor, String teamKey,
+                                         RaidSavedData.RaidState state, int baseEmeralds) {
+        if (state == null || state.allyDefenderDamage.isEmpty() || baseEmeralds <= 0) return;
+        int pool = Math.max(1, baseEmeralds / 4);
+        float totalDamage = 0f;
+        for (float d : state.allyDefenderDamage.values()) totalDamage += Math.max(0f, d);
+        if (totalDamage <= 0f) return;
+        String teamDisplay = anchor == null || anchor.teamDisplay() == null ? teamKey : anchor.teamDisplay();
+        long now = System.currentTimeMillis();
+        for (Map.Entry<UUID, Float> entry : state.allyDefenderDamage.entrySet()) {
+            float dmg = Math.max(0f, entry.getValue());
+            if (dmg <= 0f) continue;
+            int share = Math.max(1, Math.round(pool * (dmg / totalDamage)));
+            ServerPlayer online = server.getPlayerList().getPlayer(entry.getKey());
+            if (online != null) {
+                giveEmeralds(online, share);
+                online.sendSystemMessage(Component.literal("Ally defense reward: " + share + " emeralds for helping defend " + teamDisplay + ".")
+                        .withStyle(ChatFormatting.GREEN));
+            } else {
+                RaidSavedData.UnclaimedSpoils spoils = new RaidSavedData.UnclaimedSpoils(
+                        "", share, 0, false, now, teamDisplay + " (ally defense)");
+                data.pendingSpoils.computeIfAbsent(entry.getKey(), k -> new ArrayList<>()).add(spoils);
+            }
+        }
+        data.setDirty();
     }
 
     private static void giveOrDrop(ServerPlayer player, ItemStack stack) {

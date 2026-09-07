@@ -21,8 +21,10 @@ public final class RaidSavedData extends SavedData {
     public static final String DATA_NAME = "siegeoverhaul_data";
     public static final String LEGACY_DATA_NAME = "factionraids_data";
     // v10 added WarJournal + Discovery (2.12.0 Know Your Enemy release).
-    // Old saves load cleanly because both fields default to empty maps.
-    public static final int DATA_VERSION = 11;
+    // v11 added scout missions (2.26.0).
+    // v12 added pendingSpoils + raidNotifyOptOut (3.2.0 multiplayer polish).
+    // Old saves load cleanly because all new fields default to empty collections.
+    public static final int DATA_VERSION = 12;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Map<String, Anchor> anchors = new HashMap<>();
@@ -46,6 +48,19 @@ public final class RaidSavedData extends SavedData {
      * lifecycle live in {@link com.devfarinsky.siegeoverhaul.scout.ScoutManager}.
      */
     public final Map<String, com.devfarinsky.siegeoverhaul.scout.ScoutMission> scoutMissions = new HashMap<>();
+    /**
+     * v3.2.0 — per-player unclaimed spoils queue. A member who was offline
+     * when their faction won a siege ends up with an entry here; on next login
+     * they get a chat prompt to run {@code /siegeoverhaul claim}, which drains
+     * this list and gives them the rewards.
+     */
+    public final Map<UUID, List<UnclaimedSpoils>> pendingSpoils = new HashMap<>();
+    /**
+     * v3.2.0 — players who have opted out of server-wide raid start
+     * announcements via {@code /siegeoverhaul notify off}. Absent = opted in
+     * (the default).
+     */
+    public final Set<UUID> raidNotifyOptOut = new HashSet<>();
 
     public static RaidSavedData get(MinecraftServer server) {
         return server.overworld().getDataStorage().computeIfAbsent(RaidSavedData::load, RaidSavedData::new, DATA_NAME);
@@ -80,6 +95,22 @@ public final class RaidSavedData extends SavedData {
         }
         // v2.26.0: scout missions. Missing on pre-2.26 saves; treated as empty.
         com.devfarinsky.siegeoverhaul.scout.ScoutManager.load(data, root);
+        // v3.2.0: pendingSpoils + raidNotifyOptOut. Missing on pre-3.2 saves; treated as empty.
+        if (root.contains("PendingSpoils", Tag.TAG_LIST)) {
+            ListTag ps = root.getList("PendingSpoils", Tag.TAG_COMPOUND);
+            for (int i = 0; i < ps.size(); i++) {
+                CompoundTag entry = ps.getCompound(i);
+                UUID uuid = entry.getUUID("Player");
+                ListTag spoilsList = entry.getList("Spoils", Tag.TAG_COMPOUND);
+                List<UnclaimedSpoils> list = new ArrayList<>();
+                for (int j = 0; j < spoilsList.size(); j++) list.add(UnclaimedSpoils.load(spoilsList.getCompound(j)));
+                if (!list.isEmpty()) data.pendingSpoils.put(uuid, list);
+            }
+        }
+        if (root.contains("RaidNotifyOptOut", Tag.TAG_LIST)) {
+            ListTag opt = root.getList("RaidNotifyOptOut", Tag.TAG_COMPOUND);
+            for (int i = 0; i < opt.size(); i++) data.raidNotifyOptOut.add(opt.getCompound(i).getUUID("Player"));
+        }
         return data;
     }
 
@@ -100,7 +131,62 @@ public final class RaidSavedData extends SavedData {
         root.put("Discoveries", discoveriesTag);
         // v2.26.0: scout missions round-trip.
         com.devfarinsky.siegeoverhaul.scout.ScoutManager.save(this, root);
+        // v3.2.0: pending spoils queue + notify opt-outs.
+        ListTag ps = new ListTag();
+        pendingSpoils.forEach((uuid, list) -> {
+            if (list == null || list.isEmpty()) return;
+            CompoundTag entry = new CompoundTag();
+            entry.putUUID("Player", uuid);
+            ListTag spoilsList = new ListTag();
+            for (UnclaimedSpoils s : list) spoilsList.add(s.save());
+            entry.put("Spoils", spoilsList);
+            ps.add(entry);
+        });
+        root.put("PendingSpoils", ps);
+        ListTag opt = new ListTag();
+        raidNotifyOptOut.forEach(uuid -> {
+            CompoundTag entry = new CompoundTag();
+            entry.putUUID("Player", uuid);
+            opt.add(entry);
+        });
+        root.put("RaidNotifyOptOut", opt);
         return root;
+    }
+
+    /**
+     * v3.2.0 — a single per-player queued reward from a siege the player
+     * missed by being offline. Recorded when the raid ends victorious;
+     * drained when the player runs {@code /siegeoverhaul claim}.
+     *
+     * @param factionId the defeated faction id, used to grant a trophy banner. Empty for none.
+     * @param emeralds  guaranteed emeralds owed.
+     * @param experience  XP owed.
+     * @param lootRoll  true when a victory loot table roll is owed.
+     * @param timestamp  epoch millis when queued (for age display).
+     * @param teamDisplay  human-readable team name for the login message.
+     */
+    public record UnclaimedSpoils(String factionId, int emeralds, int experience,
+                                  boolean lootRoll, long timestamp, String teamDisplay) {
+        public CompoundTag save() {
+            CompoundTag t = new CompoundTag();
+            t.putString("FactionId", factionId == null ? "" : factionId);
+            t.putInt("Emeralds", emeralds);
+            t.putInt("Experience", experience);
+            t.putBoolean("LootRoll", lootRoll);
+            t.putLong("Timestamp", timestamp);
+            t.putString("TeamDisplay", teamDisplay == null ? "" : teamDisplay);
+            return t;
+        }
+
+        public static UnclaimedSpoils load(CompoundTag t) {
+            return new UnclaimedSpoils(
+                    t.getString("FactionId"),
+                    t.getInt("Emeralds"),
+                    t.getInt("Experience"),
+                    t.getBoolean("LootRoll"),
+                    t.getLong("Timestamp"),
+                    t.getString("TeamDisplay"));
+        }
     }
 
     /**
@@ -454,6 +540,14 @@ public final class RaidSavedData extends SavedData {
         public final transient java.util.Deque<Runnable> deferredCampBuilds = new java.util.ArrayDeque<>();
         /** Ticks remaining until the next deferred camp structure is placed. */
         public transient int deferredCampCooldown;
+        /**
+         * v3.2.0 — damage dealt to raiders by NON-faction defenders during
+         * this siege. Keyed by player UUID; value is total half-hearts of
+         * damage. Non-persistent (transient) because the payout runs at raid
+         * end — if the server restarts mid-raid, the contribution is lost,
+         * which we accept for now to avoid save-format churn.
+         */
+        public final transient Map<UUID, Float> allyDefenderDamage = new HashMap<>();
         public int reconcileTicks;
         public boolean performancePauseAnnounced;
         public boolean offlinePauseAnnounced;
