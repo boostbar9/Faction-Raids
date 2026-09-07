@@ -3710,6 +3710,10 @@ public final class RaidEvents {
         return state.captureTicks >= maximum;
     }
 
+    private static String compactObjectiveStatus(RaidSavedData.RaidState state) {
+        return state.objectiveStatus.replace(" attackers / ", " vs ").replace(" defenders in ring", "");
+    }
+
     private static void updateObjectiveFeedback(MinecraftServer server, ServerLevel level,
                                                  RaidSavedData.RaidState state, String phase,
                                                  int attackers, int defenders, int progress, int decay) {
@@ -4049,10 +4053,10 @@ public final class RaidEvents {
         } else if (!state.breached && RaidConfig.ENABLE_BREACH_PHASE.get()) {
             String target = objectiveName + distanceHint;
             String deployed = state.raiders.size() + " deployed";
-            String pressure = "breach " + breachPercent + "% | " + state.objectiveStatus;
+            String pressure = "breach " + breachPercent + "% | " + compactObjectiveStatus(state);
             label = com.devfarinsky.siegeoverhaul.chat.ChatStyle.bossbarLabel(epithet, phase, target, deployed, pressure);
         } else {
-            String held = objectiveName + " " + capturePercent + "% | " + state.objectiveStatus;
+            String held = objectiveName + " " + capturePercent + "% | " + compactObjectiveStatus(state);
             String waveChip = "wave " + Math.max(1, state.wave) + "/" + totalWaves;
             String deployed = state.raiders.size() + " deployed"
                     + (state.pendingWaveSpawns > 0 ? " + " + state.pendingWaveSpawns + " reinforcing" : "");
