@@ -156,6 +156,25 @@ public final class RaiderLabels {
     }
 
     /**
+     * v2.34.0: apply the standard "{Faction} Scout" name tag to a scout
+     * mob. Uses ChatFormatting.GRAY so scouts read visually distinct from
+     * combat raiders (which use role colors). Never made visible here —
+     * proximity reveal is handled by the label mode system if the scout
+     * is also tagged with a role, otherwise the label is discoverable
+     * only through the player's crosshair name popup.
+     *
+     * <p>Falls back to "Unknown Scout" when the faction name is null or
+     * blank, matching the historical behavior at the callsite.
+     */
+    public static void applyScoutLabel(Mob scout, String factionName) {
+        if (scout == null) return;
+        String name = (factionName == null || factionName.isBlank())
+                ? "Unknown Scout" : factionName + " Scout";
+        scout.setCustomName(Component.literal(name).withStyle(ChatFormatting.GRAY));
+        scout.setCustomNameVisible(false);
+    }
+
+    /**
      * Register one scoreboard team per role if not already present. Teams
      * carry the role's color and are used by the vanilla glow renderer to
      * tint the outline - a defender doesn't need any client-side asset,

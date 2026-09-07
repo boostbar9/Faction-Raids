@@ -204,12 +204,11 @@ public final class ScoutManager {
             // Mark for our friendly-fire logic AND our scout-exclusion logic.
             scout.getPersistentData().putString(ModConstants.Tags.RAID_TEAM, anchor.teamKey());
             scout.getPersistentData().putBoolean(ModConstants.Tags.SCOUT, true);
-            // Custom name so defenders instantly know what they're looking at.
-            String factionName = m.previewedNarrative != null && m.previewedNarrative.factionName != null
-                    ? m.previewedNarrative.factionName : "Unknown";
-            scout.setCustomName(Component.literal(factionName + " Scout")
-                    .withStyle(ChatFormatting.GRAY));
-            scout.setCustomNameVisible(false); // reveal only on proximity via v2.15 label system if desired
+            // v2.34.0: route through RaiderLabels so the label style stays
+            // in one place and hygiene fixes (color, casing, fallback text)
+            // don't need to be repeated at every custom-name callsite.
+            String factionName = m.previewedNarrative != null ? m.previewedNarrative.factionName : null;
+            com.devfarinsky.factionraids.RaiderLabels.applyScoutLabel(scout, factionName);
             if (level.addFreshEntity(scout)) {
                 m.scoutUuids.add(scout.getUUID());
             }
