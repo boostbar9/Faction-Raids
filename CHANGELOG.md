@@ -2,6 +2,11 @@
 
 All notable changes to Faction Raids are documented here.
 
+## 3.6.1 - 2026-09-07
+
+- Clear stale formation markers for vanilla auxiliary enemies after reload, so their direct movement is never suppressed by an unavailable Recruits formation API.
+- Includes the supplied native Workers camp construction and movement fixes from 3.6.0.
+
 ## 3.6.0 - 2026-09-07
 
 - Workers 2 enemy builders receive native build areas, private supply storage stocked once from the blueprint's actual material list, tools, and food. Construction pauses at night without using its timeout budget.

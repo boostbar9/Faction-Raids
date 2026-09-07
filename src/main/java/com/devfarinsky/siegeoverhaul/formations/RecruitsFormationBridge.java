@@ -81,6 +81,13 @@ public final class RecruitsFormationBridge {
     /** Release the hold-position order before combat or independent navigation takes over. */
     public static void release(Mob mob) {
         if (!mob.getPersistentData().getBoolean(com.devfarinsky.siegeoverhaul.ModConstants.Tags.FORMATION_MARCH)) return;
+        // Vanilla auxiliaries have no native formation API. A legacy-load cleanup
+        // marker must not make their objective navigator believe a formation owns it.
+        ensureInitialized();
+        if (recruitEntityClass == null || !recruitEntityClass.isInstance(mob)) {
+            mob.getPersistentData().remove(com.devfarinsky.siegeoverhaul.ModConstants.Tags.FORMATION_MARCH);
+            return;
+        }
         try {
             mob.getClass().getMethod("setFollowState", int.class).invoke(mob, 0);
             mob.getClass().getField("isInFormation").setBoolean(mob, false);
