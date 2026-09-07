@@ -10,6 +10,16 @@ import static org.mockito.Mockito.*;
 
 class FormationDirectorTest extends MinecraftTestSupport {
     @Test
+    void auxiliaryWithoutRecruitApiCannotKeepPhantomMarchOrder() {
+        Mob auxiliary = mock(Mob.class);
+        var data = new net.minecraft.nbt.CompoundTag();
+        data.putBoolean(com.devfarinsky.siegeoverhaul.ModConstants.Tags.FORMATION_MARCH, true);
+        when(auxiliary.getPersistentData()).thenReturn(data);
+        RecruitsFormationBridge.release(auxiliary);
+        assertFalse(data.contains(com.devfarinsky.siegeoverhaul.ModConstants.Tags.FORMATION_MARCH));
+    }
+
+    @Test
     void fightingSoldiersAndPassengersDoNotReceiveMarchingOrders() {
         Mob soldier = mock(Mob.class), defender = mock(Mob.class);
         when(soldier.distanceToSqr(any(Vec3.class))).thenReturn(1600.0);
