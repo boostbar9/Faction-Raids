@@ -114,7 +114,7 @@ class CampTerrainTest extends MinecraftTestSupport {
         heights.put("1:0", 65);
         heights.put("-1:0", 63);
         var plan = CampTerrain.plan(level, center, p -> false).orElseThrow();
-        when(level.setBlock(eq(new BlockPos(-1,63,0)), eq(Blocks.DIRT.defaultBlockState()), anyInt())).thenReturn(false);
+        doReturn(false).when(level).setBlock(eq(new BlockPos(-1,63,0)), eq(Blocks.DIRT.defaultBlockState()), anyInt());
         assertFalse(CampTerrain.apply(level, raid, plan));
         assertTrue(state(new BlockPos(1,64,0)).is(Blocks.GRASS_BLOCK));
         assertTrue(state(new BlockPos(-1,63,0)).isAir());
