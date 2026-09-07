@@ -361,6 +361,11 @@ public final class RaidEvents {
         // v2.15.0: register the role-colored glow teams so raiders can
         // join them at spawn without a per-spawn registry check.
         RaiderLabels.onServerStarted(event.getServer());
+        // v2.36.0: rebrand pre-work. Emits the one-time deprecation banner
+        // and inventories every legacy persistence surface on this server
+        // so v3.0.0's migration reader has ground-truth audit data to work
+        // from. Read-only -- mutates nothing.
+        com.devfarinsky.factionraids.rebrand.RebrandProbe.run(event.getServer());
         // v2.28.0: startup audit log. Emits the exact list of player-facing
         // commands the server has just registered, plus the set of codex ids
         // the raid system can generate. Server owners can eyeball this list
@@ -387,6 +392,10 @@ public final class RaidEvents {
         RaidBossBars.shutdown();
         com.devfarinsky.factionraids.raid.CommanderBossBar.shutdown();
         com.devfarinsky.factionraids.raid.ClaimWaypoints.shutdown();
+        // v2.36.0: reset the probe latch so an integrated-server restart
+        // within the same JVM (single-player world reload) re-emits the
+        // banner.
+        com.devfarinsky.factionraids.rebrand.RebrandProbe.reset();
     }
 
     /**
