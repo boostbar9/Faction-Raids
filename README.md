@@ -1,6 +1,8 @@
-# Faction Raids
+# The Siege Overhaul
 
 **Cinematic, tactical faction sieges for Minecraft 1.20.1 Forge — turn any player's bed into a defensible stronghold, then hold it against a real army.**
+
+> **Renamed in v3.0.0.** This mod was previously published as **Faction Raids**. The repo URL, the CurseForge/Modrinth project pages, and the mod id have all moved to **The Siege Overhaul**. Existing worlds are auto-migrated on first launch — your saved raid schedules, faction rosters, and defense-point registrations carry over unchanged. Details in the v3.0.0 release notes.
 
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1-62B47A?logo=minecraft&logoColor=white)
 ![Forge](https://img.shields.io/badge/Forge-47.x-1E2A47)
@@ -8,7 +10,7 @@
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue)
 ![Server-friendly](https://img.shields.io/badge/Server--friendly-yes-brightgreen)
 
-Faction Raids is a **server-friendly PvE siege addon** for [Villager Recruits](https://www.curseforge.com/minecraft/mc-mods/recruits). Any player's bed or respawn anchor is automatically registered as a stronghold — no admin setup, no world regeneration, no custom blocks in your terrain. Then, on a rolling per-faction schedule, an enemy army marches on that home: builds a real war camp with tents and banners, forms up into squads with a declared *casus belli*, breaches your gates and doors, wades across rivers, sails in from the sea, raises ladders over your walls, and tries to occupy the heart of your base — while you and your Recruits soldiers try to break them at the perimeter.
+The Siege Overhaul (formerly **Faction Raids**) is a **server-friendly PvE siege addon** for [Villager Recruits](https://www.curseforge.com/minecraft/mc-mods/recruits). Any player's bed or respawn anchor is automatically registered as a stronghold — no admin setup, no world regeneration, no custom blocks in your terrain. Then, on a rolling per-faction schedule, an enemy army marches on that home: builds a real war camp with tents and banners, forms up into squads with a declared *casus belli*, breaches your gates and doors, wades across rivers, sails in from the sea, raises ladders over your walls, and tries to occupy the heart of your base — while you and your Recruits soldiers try to break them at the perimeter.
 
 Every siege ends with **guaranteed emerald and campaign-loot rewards** for the winning faction. Every block the enemy breaks is **automatically restored** when the battle ends. And every one of ~40 tunable systems — from wave size and cadence to formations, siege engines, ships, ladders, narrative themes and reward payouts — lives in one config file you can rebalance without a restart.
 
