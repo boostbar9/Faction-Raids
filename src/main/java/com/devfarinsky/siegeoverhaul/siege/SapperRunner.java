@@ -7,6 +7,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.block.Blocks;
+
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -122,7 +123,7 @@ public final class SapperRunner {
                 }
             }
         }
-        affected.stream().sorted(Comparator.comparingInt(BlockPos::getY).reversed()).forEach(pos -> {
+        affected.stream().sorted(Comparator.comparingInt((BlockPos pos) -> pos.getY()).reversed()).forEach(pos -> {
             level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
             state.blockBreachProgress.remove(pos.asLong());
         });
