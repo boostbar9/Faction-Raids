@@ -133,6 +133,17 @@ public final class RecruitsBridge {
         }
     }
 
+    /** Cancel native mounting orders after a naval landing and resume the existing raid combat mode. */
+    public static void resumeRaidOnFoot(Mob recruit) {
+        configureHostileRaidRecruit(recruit);
+        if (recruitClass == null || !recruitClass.isInstance(recruit)) return;
+        try {
+            recruitClass.getMethod("setShouldMount", boolean.class).invoke(recruit, false);
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            FactionLogger.LOG.debug("Could not clear a landed Recruit's mount order", ex);
+        }
+    }
+
     /**
      * Register the shared "Raiders" faction with the Recruits faction manager
      * and the vanilla scoreboard. Idempotent — safe to call every server

@@ -360,3 +360,7 @@ New camps can level soil by up to three blocks, with a three-block transition in
 The HUD and Codex show how many attackers and defenders are inside the active objective and whether it is capturing or recovering. Match or outnumber the attackers to reverse pressure; enemy kill/breach bonuses only accelerate progress while the enemy controls that point. With decay configured to zero, defended progress holds instead of recovering.
 
 Once a wave starts, destroying the campfire cancels that wave's remaining reinforcements, destroying the command banner forces that wave to retreat without kill credit, and breaking the supply barrel gives emeralds. Later waves still attack. Opening reports identify the marked point and explain these choices.
+
+### Raider landings
+
+Raider crews leave boats near their landing point, or after twenty seconds without meaningful progress if safe land is nearby. The landing checks dry, supported, unobstructed positions and spreads the crew out before directing them toward the siege objective. Small Ships passengers in nested seat entities are included. If no safe nearby ground exists, the vessel retains its crew and keeps trying; players and unrelated passengers are left alone. Convoy tracking recovers after world/chunk reloads, including older raider boats whose ownership cannot be assumed.

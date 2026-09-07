@@ -1722,7 +1722,9 @@ public final class RaidEvents {
         // let stalled ground raiders drop planks over narrow water spans.
         // Both are no-ops when the raid has no naval staging or the bridge/
         // convoy has nothing to do.
-        com.devfarinsky.siegeoverhaul.naval.NavalConvoy.tick(teamKey, level);
+        com.devfarinsky.siegeoverhaul.naval.NavalConvoy.recover(level, state);
+        com.devfarinsky.siegeoverhaul.naval.NavalConvoy.tick(teamKey, level,
+                BlockPos.containing(invasionObjective(level, point, state)));
         if (com.devfarinsky.siegeoverhaul.naval.BridgeBuilder.tick(level, state, point.pos())) {
             announce(server, teamKey, Component.literal(
                     "Raiders have laid a bridge to bypass your defenses.")
