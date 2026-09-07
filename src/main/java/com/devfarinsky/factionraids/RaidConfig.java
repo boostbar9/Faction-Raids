@@ -64,6 +64,10 @@ public final class RaidConfig {
     // v2.34.0 Commander boss bar:
     public static final ForgeConfigSpec.BooleanValue COMMANDER_BOSSBAR_ENABLED;
     public static final ForgeConfigSpec.IntValue COMMANDER_BOSSBAR_RADIUS;
+    // v2.35.0 Claim waypoints:
+    public static final ForgeConfigSpec.BooleanValue CLAIM_WAYPOINTS_ENABLED;
+    public static final ForgeConfigSpec.IntValue CLAIM_WAYPOINTS_NEAR_RADIUS;
+    public static final ForgeConfigSpec.IntValue CLAIM_WAYPOINTS_SAMPLE_PITCH;
     public static final ForgeConfigSpec.BooleanValue HUD_ENABLED;
     public static final ForgeConfigSpec.BooleanValue OBJECTIVE_BEACON;
     public static final ForgeConfigSpec.BooleanValue PHYSICAL_BREACHING;
@@ -262,6 +266,12 @@ public final class RaidConfig {
                 .define("commanderBossbarEnabled", true);
         COMMANDER_BOSSBAR_RADIUS = b.comment("Radius (in blocks) at which the Commander boss bar becomes visible to a defender. Smaller values keep the HUD quiet until you actually engage the boss; larger values make it a standing raid-wide indicator.")
                 .defineInRange("commanderBossbarRadius", 24, 8, 128);
+        CLAIM_WAYPOINTS_ENABLED = b.comment("v2.35.0: when true (default) AND Recruits is installed, surface the defending team's Recruits claim boundary during raids. Defenders within claimWaypointsNearRadius blocks see a particle fence along the exposed claim edges; defenders further out see vertical particle columns at the four corners of the claim. Attackers never see the boundary. No-op if Recruits is absent or the anchor has no matching claim.")
+                .define("claimWaypointsEnabled", true);
+        CLAIM_WAYPOINTS_NEAR_RADIUS = b.comment("Distance (in blocks) at which a defender switches from the far-view corner columns to the near-view edge fence. Larger values mean more particles rendered per defender; smaller values keep the near-view tight to where you're actually fighting.")
+                .defineInRange("claimWaypointsNearRadius", 48, 16, 256);
+        CLAIM_WAYPOINTS_SAMPLE_PITCH = b.comment("Spacing (in blocks) between sampled particles along the claim edge fence. Lower values give a denser line but ship more packets per raid tick; 4 is a legible default (~4 particles per 16-block chunk edge).")
+                .defineInRange("claimWaypointsSamplePitch", 4, 1, 16);
         HUD_ENABLED = b.comment("When true (default), defenders see a small top-center HUD widget during active raids showing current phase (Marching / Breaching / Occupying), objective name, distance to objective, and wave progress. Server-broadcast; each defender may still hide it client-side with F1.")
                 .define("hudEnabled", true);
         OBJECTIVE_BEACON = b.comment("When true (default), a vertical particle column marks the raid objective block so defenders can see exactly where raiders are marching. Fades when the viewer is within 16 blocks of the objective.")
