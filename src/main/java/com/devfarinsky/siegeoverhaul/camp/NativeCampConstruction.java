@@ -94,7 +94,10 @@ public final class NativeCampConstruction {
             if (build != null) build.discard();
             if (storage != null) storage.discard();
             // Never retry provisioning after a reload or partial failure: supplies are finite.
-            CampBuilder.cleanup(level, raid);
+            cleanupAreas(level, raid);
+            for (UUID id : raid.campWorkers) {
+                if (level.getEntity(id) instanceof Mob worker) WorkersBridge.parkBuilder(worker);
+            }
             if (supply != null && level.getBlockEntity(supply) instanceof Container container
                     && level.getBlockEntity(supply).getPersistentData().hasUUID(CAMP_SUPPLY_OWNER)) {
                 container.clearContent();
@@ -212,7 +215,14 @@ public final class NativeCampConstruction {
     }
 
     public static void stop(ServerLevel level, RaidSavedData.RaidState raid) {
-        CampBuilder.cleanup(level, raid);
+        for (UUID id : new ArrayList<>(raid.campWorkers)) {
+            Entity entity = level.getEntity(id);
+            if (entity instanceof Mob worker && !WorkersBridge.parkBuilder(worker)) {
+                worker.discard();
+                raid.campWorkers.remove(id);
+            }
+        }
+        cleanupAreas(level, raid);
         raid.pendingCampBlocks.clear();
         RaidSavedData.get(level.getServer()).setDirty();
     }

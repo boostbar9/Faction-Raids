@@ -92,7 +92,25 @@ public final class SiegeIntegration {
         Entity vehicle = et.get().create(level);
         if (vehicle == null) return Optional.empty();
         vehicle.moveTo(pos.x, pos.y, pos.z, yaw, 0F);
-        if (!level.addFreshEntity(vehicle)) return Optional.empty();
+        {
+            var box = vehicle.getBoundingBox();
+            for (var corner : java.util.List.of(net.minecraft.core.BlockPos.containing(box.minX, pos.y, box.minZ),
+                    net.minecraft.core.BlockPos.containing(box.maxX, pos.y, box.maxZ),
+                    net.minecraft.core.BlockPos.containing(box.minX, pos.y, box.maxZ),
+                    net.minecraft.core.BlockPos.containing(box.maxX, pos.y, box.minZ))) {
+                if (!level.hasChunkAt(corner) || !level.getWorldBorder().isWithinBounds(corner)
+                        || !level.getFluidState(corner).isEmpty()
+                        || !level.getBlockState(corner.below()).isFaceSturdy(level, corner.below(), net.minecraft.core.Direction.UP)) {
+                    vehicle.discard();
+                    return Optional.empty();
+                }
+            }
+            if (!level.noCollision(vehicle) || !level.getEntities(vehicle, box).isEmpty()) {
+                vehicle.discard();
+                return Optional.empty();
+            }
+        }
+        if (!level.addFreshEntity(vehicle)) { vehicle.discard(); return Optional.empty(); }
         return Optional.of(vehicle);
     }
 
@@ -135,16 +153,41 @@ public final class SiegeIntegration {
      * before the engineer is mounted.
      * @return the spawned mob, or empty on failure.
      */
-    public static Optional<Mob> spawnSiegeEngineer(ServerLevel level, Vec3 pos) {
+    public static Optional<Mob> spawnSiegeEngineer(ServerLevel level, Vec3 pos, String team, Entity vehicle, SiegeEngineType type) {
         if (!isRecruitsPresent()) return Optional.empty();
         if (!ForgeRegistries.ENTITY_TYPES.containsKey(SIEGE_ENGINEER_ID)) return Optional.empty();
         EntityType<?> et = ForgeRegistries.ENTITY_TYPES.getValue(SIEGE_ENGINEER_ID);
         if (et == null) return Optional.empty();
         Entity entity = et.create(level);
         if (!(entity instanceof Mob mob)) return Optional.empty();
-        mob.moveTo(pos.x, pos.y, pos.z, 0F, 0F);
-        if (!level.addFreshEntity(mob)) return Optional.empty();
-        return Optional.of(mob);
+        try {
+            mob.moveTo(pos.x, pos.y, pos.z, vehicle.getYRot(), 0F);
+            mob.finalizeSpawn(level, level.getCurrentDifficultyAt(net.minecraft.core.BlockPos.containing(pos)),
+                    net.minecraft.world.entity.MobSpawnType.EVENT, null, null);
+            com.devfarinsky.siegeoverhaul.RecruitsBridge.configureHostileRaidRecruit(mob);
+            com.devfarinsky.siegeoverhaul.RecruitsBridge.assignToRaidersFaction(mob);
+            mob.setPersistenceRequired();
+            mob.setCanPickUpLoot(false);
+            mob.getPersistentData().putString(SiegeDeployment.TEAM_TAG, team);
+            mob.getPersistentData().putString(com.devfarinsky.siegeoverhaul.ModConstants.Tags.RAID_TEAM, team);
+            mob.getClass().getMethod("setListen", boolean.class).invoke(mob, false);
+            mob.getClass().getMethod("setFollowState", int.class).invoke(mob, 0);
+            net.minecraft.world.SimpleContainer inventory = (net.minecraft.world.SimpleContainer)
+                    mob.getClass().getMethod("getInventory").invoke(mob);
+            var ammunition = type == SiegeEngineType.BALLISTA ? ForgeRegistries.ITEMS.getValue(
+                    new ResourceLocation("siegeweapons", "ballista_projectile_item")) : net.minecraft.world.item.Items.COBBLESTONE;
+            if (ammunition == null || ammunition == net.minecraft.world.item.Items.AIR) throw new IllegalStateException("Missing siege ammunition");
+            inventory.addItem(new net.minecraft.world.item.ItemStack(ammunition, 64));
+            inventory.addItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 16));
+            if (!assignSiegeEngineer(mob, vehicle) || !level.addFreshEntity(mob)) {
+                mob.stopRiding(); mob.discard(); return Optional.empty();
+            }
+            return Optional.of(mob);
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            mob.stopRiding(); mob.discard();
+            FactionLogger.LOG.warn("Could not initialize a supplied siege operator for {}", team, ex);
+            return Optional.empty();
+        }
     }
 
     private static boolean initReflection() {

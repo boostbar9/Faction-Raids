@@ -407,8 +407,8 @@ public final class RaidConfig {
                 .defineInRange("maxBridgesPerRaid", 4, 0, 32);
         ENABLE_SIEGE_ENGINES = b.comment("Master toggle for siege engines (catapult, ballista, battering ram, siege tower). Requires the Siege Weapons mod to be installed; without it, only sappers spawn.")
                 .define("enableSiegeEngines", true);
-        FIRST_WAVE_ENGINES = b.comment("Engine types spawned prefab at the war camp when wave 1 kicks off. Valid values: CATAPULT, BALLISTA, BATTERING_RAM, SIEGE_TOWER.")
-                .defineListAllowEmpty("firstWaveEngines", Arrays.asList("BATTERING_RAM"),
+        FIRST_WAVE_ENGINES = b.comment("Engine types spawned prefab at the war camp when wave 1 kicks off. Native operators support CATAPULT and BALLISTA. Legacy BATTERING_RAM and SIEGE_TOWER selections deploy a supplied ballista.")
+                .defineListAllowEmpty("firstWaveEngines", Arrays.asList("BALLISTA"),
                         raw -> raw instanceof String s && (
                                 s.equalsIgnoreCase("CATAPULT") || s.equalsIgnoreCase("BALLISTA")
                                         || s.equalsIgnoreCase("BATTERING_RAM") || s.equalsIgnoreCase("SIEGE_TOWER")));

@@ -102,6 +102,23 @@ public final class WorkersBridge {
         }
     }
 
+    /** Keep the camp crew visible after its job finishes without leaving native jobs running. */
+    public static boolean parkBuilder(Mob worker) {
+        try {
+            Object needed = worker.getClass().getField("neededItems").get(worker);
+            if (needed instanceof java.util.List<?> list) list.clear();
+            worker.getClass().getField("forcedDeposit").setBoolean(worker, false);
+            worker.getClass().getField("currentBuildArea").set(worker, null);
+            call(worker, "setHoldPos", Vec3.class, worker.position());
+            call(worker, "setFollowState", int.class, 3);
+            worker.getNavigation().stop();
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            warn("park", ex);
+            return false;
+        }
+    }
+
     /** Work areas remain unregistered until their ownership and blueprint are complete. */
     public static Entity createArea(ServerLevel level, String type, BlockPos origin, java.util.UUID owner,
                                     int width, int depth, int height) throws ReflectiveOperationException {

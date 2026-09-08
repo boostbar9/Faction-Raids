@@ -31,7 +31,7 @@ Every siege ends with **guaranteed emerald and campaign-loot rewards** for the w
 | **Minecraft** | 1.20.1 (Forge 47.x) |
 | **Java** | 17 |
 | **Hard dependency** | [Villager Recruits 1.15.2+](https://www.curseforge.com/minecraft/mc-mods/recruits) |
-| **Optional integrations** | [Villager Workers](https://github.com/talhanation/workers), [Small Ships](https://github.com/talhanation/smallships), [Siege Weapons](https://github.com/talhanation/siegeweapons) |
+| **Required companion mods** | [Villager Workers](https://github.com/talhanation/workers), [Small Ships](https://github.com/talhanation/smallships), [Siege Weapons](https://github.com/talhanation/siegeweapons) |
 | **Side** | Both — install on server and every client |
 | **License** | GPL-3.0-only (name and artwork reserved) |
 | **Source & issues** | [github.com/boostbar9/Faction-Raids](https://github.com/boostbar9/Faction-Raids) |
@@ -156,7 +156,7 @@ The compatibility bridge uses entity registry namespaces plus vanilla faction te
 passengers and public ownership information. It never imports optional-mod classes, so removing an
 optional companion mod cannot make Faction Raids fail to load.
 
-- **[Villager Workers 2](https://www.curseforge.com/minecraft/mc-mods/workers):** optional integration for Minecraft 1.20.1; Villager Recruits remains the required dependency. Nearby allied Workers appear as civilians in the command dashboard and retain their normal jobs and inventories. When worker protection is enabled, siege invaders cannot damage the defending faction's workers.
+- **[Villager Workers 2](https://www.curseforge.com/minecraft/mc-mods/workers):** required companion mod for Minecraft 1.20.1 (Workers 2.0.3 or newer). Nearby allied Workers appear as civilians in the command dashboard and retain their normal jobs and inventories. When worker protection is enabled, siege invaders cannot damage the defending faction's workers.
   Raider-owned builders use Workers 2's native construction jobs for the camp towers, forge and tents. Each camp gets private storage stocked once with the blueprint's required materials; builders also receive tools and food. They collect and consume supplies through Workers 2, pause at night, and resume from saved jobs without duplicating materials. Killing the builders or destroying their supplies interrupts unfinished construction; assault waves continue independently. Native construction requires temporary-camp cleanup to be enabled. A player replacement inside the blueprint stops construction to protect that block.
   Camp lumberjacks are no longer spawned: native tree cutting could not guarantee terrain restoration. Without Workers, decorative construction runs automatically. Configure `enableWorkersCompat`, `enableWorkersCampConstruction`, `campBuilderMax` and `campMaxBuildSeconds` in the server config.
 - **Small Ships:** boarding a ship records the crew member's current faction. It remains a recognized
@@ -364,3 +364,11 @@ Once a wave starts, destroying the campfire cancels that wave's remaining reinfo
 ### Raider landings
 
 Raider crews leave boats near their landing point, or after twenty seconds without meaningful progress if safe land is nearby. The landing checks dry, supported, unobstructed positions and spreads the crew out before directing them toward the siege objective. Small Ships passengers in nested seat entities are included. If no safe nearby ground exists, the vessel retains its crew and keeps trying; players and unrelated passengers are left alone. Convoy tracking recovers after world/chunk reloads, including older raider boats whose ownership cannot be assumed.
+
+### Required mods in 3.7.0
+
+Install Villager Recruits 1.15.2+, Villager Workers 2.0.3+, Small Ships, and Siege Weapons on the server and every client. CurseForge release dependency relations mark all four as required.
+
+Camp crews remain visible after construction finishes. The camp announcement includes coordinates, builder count and engine count; failed site searches are reported explicitly. The site search checks a wider ring while preserving terrain and claim restrictions.
+
+Automatic equipment uses supplied native Recruits operators for ballistas and catapults. Legacy ram/tower choices deploy a ballista because native Recruits controllers do not drive those engines. Operators arrive after the warning period and receive finite ammunition and food; killed operators are not replaced. Raider catapult cobble shots retain direct damage but have terrain explosion damage disabled to preserve the restoration guarantee.

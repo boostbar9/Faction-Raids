@@ -2,6 +2,15 @@
 
 All notable changes to Faction Raids are documented here.
 
+## 3.7.0 - 2026-09-08
+
+- Require Recruits, Workers 2, Small Ships and Siege Weapons in Forge metadata and CurseForge release relations.
+- Keep builders at camp after construction finishes; retain the crew if native setup falls back to scripted building.
+- Expand safe camp searches and announce camp coordinates, crew/equipment counts, or the absence of a safe site.
+- Deploy ranged engines outside the palisade in collision-checked slots. Legacy unmanned ram/tower choices use ballistas with native operators.
+- Initialize hostile siege operators, provide ammunition and food, mount native controllers after the warning period, and avoid replacing killed operators.
+- Preserve unloaded engine cleanup identities and prevent raider catapult shots from causing untracked terrain explosions.
+
 ## 3.6.1 - 2026-09-07
 
 - Clear stale formation markers for vanilla auxiliary enemies after reload, so their direct movement is never suppressed by an unavailable Recruits formation API.

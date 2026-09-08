@@ -139,6 +139,26 @@ public final class RaidEvents {
     @SubscribeEvent
     public static void onEntityJoin(EntityJoinLevelEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level)) return;
+        Entity joining = event.getEntity();
+        if (joining instanceof net.minecraft.world.entity.projectile.Projectile projectile
+                && projectile.getOwner() instanceof Mob owner
+                && !owner.getPersistentData().getString(com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.TEAM_TAG).isBlank()) {
+            ResourceLocation kind = ForgeRegistries.ENTITY_TYPES.getKey(joining.getType());
+            if (kind != null && kind.toString().equals("siegeweapons:catapult_projectile")) {
+                try {
+                    // Native cobble explosions otherwise destroy arbitrary blocks outside the restoration ledger.
+                    joining.getClass().getMethod("setAreaDamage", double.class).invoke(joining, 0.0D);
+                } catch (ReflectiveOperationException | RuntimeException ex) {
+                    joining.discard(); event.setCanceled(true); return;
+                }
+            }
+        }
+        String engineTeam = joining.getPersistentData().getString(com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.TEAM_TAG);
+        if (!(joining instanceof Mob) && !engineTeam.isBlank() && event.loadedFromDisk()
+                && RaidConfig.CLEANUP_SURVIVING_ENGINES.get()
+                && !RaidSavedData.get(level.getServer()).raids.containsKey(engineTeam)) {
+            joining.discard(); event.setCanceled(true); return;
+        }
         String areaTeam = event.getEntity().getPersistentData().getString(ModConstants.Tags.CAMP_AREA_TEAM);
         if (!areaTeam.isBlank()) {
             if (event.loadedFromDisk() && !com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.reloadArea(
@@ -166,6 +186,8 @@ public final class RaidEvents {
                             mob.discard();
                             event.setCanceled(true);
                         }
+                    } else if (!com.devfarinsky.siegeoverhaul.compat.WorkersBridge.parkBuilder(mob)) {
+                        mob.discard(); event.setCanceled(true);
                     }
                 }
             }
@@ -1619,6 +1641,12 @@ public final class RaidEvents {
                         .withStyle(ChatFormatting.GOLD), false);
             }
             com.devfarinsky.siegeoverhaul.camp.CampBuilder.startCamp(raidLevel, state);
+            if (state.campPos != null) announce(server, anchor.teamKey(), Component.literal(
+                    "Enemy camp at " + formatPos(state.campPos) + ": " + state.campWorkers.size()
+                            + " builders and " + placed + " siege engines.").withStyle(ChatFormatting.GOLD), false);
+            else if (RaidConfig.BUILD_WAR_CAMPS.get()) announce(server, anchor.teamKey(), Component.literal(
+                    "No safe camp site was found. This siege will proceed without camp builders or equipment.")
+                    .withStyle(ChatFormatting.GRAY), false);
         }
         data.raids.put(anchor.teamKey(), state);
         data.setDirty();
@@ -2455,7 +2483,7 @@ public final class RaidEvents {
         // inside the footprint is within +/-3 of this Y.
         final int cy = camp.getY();
         final int r = 9;  // palisade ring "radius" (half-extent); actual footprint 19x19.
-        final double frontAngle = state.approachAngle; // camp -> objective vector
+        final double frontAngle = Math.atan2(point.pos().getZ() - cz, point.pos().getX() - cx);
 
         // -----------------------------------------------------------------
         // PHASE 1: instant strategic core
@@ -2759,8 +2787,10 @@ public final class RaidEvents {
             excludedChunks.addAll(com.devfarinsky.siegeoverhaul.compat.ClaimBridge
                     .collectClaimedChunks(level, anchor, radiusChunks, anchorRecord));
         }
-        for (int attempt = 0; attempt < 32; attempt++) {
-            double angle = approachAngle + (level.random.nextDouble() - 0.5D) * 0.5D;
+        for (int attempt = 0; attempt < 128; attempt++) {
+            // First prefer the invasion approach, then search the surrounding ring for clear terrain.
+            double angle = approachAngle + (attempt < 32 ? (level.random.nextDouble() - 0.5D) * 0.5D
+                    : (attempt - 32) * 2.399963229728653);
             int distance = Math.max(min, max - level.random.nextInt(Math.max(1, Math.min(16, max - min + 1))));
             int x = anchor.getX() + Mth.floor(Math.cos(angle) * distance);
             int z = anchor.getZ() + Mth.floor(Math.sin(angle) * distance);
