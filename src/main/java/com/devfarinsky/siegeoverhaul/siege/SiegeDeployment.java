@@ -23,13 +23,7 @@ public final class SiegeDeployment {
 
     private SiegeDeployment() {}
 
-    /**
-     * Called every raid tick from {@code RaidEvents.processRaid}. Iterates
-     * registered engines, drops any whose entity vanished, and applies a
-     * gentle steering vector to non-ranged engines that lost their driver.
-     * @return number of engines removed from the registry this tick
-     * (destroyed by defenders, despawned, or removed by the level).
-     */
+    /** Provision each loaded ranged engine at most once after preparation; keep unloaded identities for cleanup. */
     public static int tick(ServerLevel level, RaidSavedData.RaidState state, BlockPos objective) {
         if (state.siegeEngines == null || state.siegeEngines.isEmpty()) return 0;
         int removed = 0;

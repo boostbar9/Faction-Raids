@@ -12,10 +12,15 @@ public final class CoreOffers {
         return roll < 80 ? 0 : roll < 90 ? 1 : 2;
     }
     public static boolean refresh(CompoundTag stock, long now, RandomSource random) {
-        if (stock.getIntArray("Offers").length == 3 && now < stock.getLong("RefreshAt")) return false;
+        int[] existing = stock.getIntArray("Offers");
+        boolean valid = existing.length == 3 && java.util.Arrays.stream(existing).allMatch(role -> role >= 0 && role < 3);
+        if (valid && now < stock.getLong("RefreshAt")) return false;
         stock.putIntArray("Offers", new int[]{role(random.nextInt(100)), role(random.nextInt(100)), role(random.nextInt(100))});
         stock.putInt("Sold", 0);
-        stock.putLong("RefreshAt", now + ROTATION_TICKS);
+        long previous = stock.getLong("RefreshAt");
+        long next = previous > 0 && previous <= now
+                ? previous + ((now - previous) / ROTATION_TICKS + 1) * ROTATION_TICKS : now + ROTATION_TICKS;
+        stock.putLong("RefreshAt", next);
         return true;
     }
 }

@@ -48,7 +48,7 @@ public final class SiegeCore {
         RaidSavedData.Anchor old = data.anchors.get(key);
         long next = old == null ? player.server.overworld().getGameTime() + RaidConfig.MIN_COOLDOWN_MINUTES.get() * 1200L : old.nextRaidGameTime();
         var point = new RaidSavedData.DefensePoint("siege_core", Level.OVERWORLD.location(), pos.immutable());
-        data.anchors.put(key, new RaidSavedData.Anchor(key, player.getTeam().getDisplayName().getString(),
+        data.anchors.put(key, new RaidSavedData.Anchor(key, (player.getTeam() instanceof net.minecraft.world.scores.PlayerTeam team ? team.getDisplayName().getString() : player.getTeam().getName()),
                 RecruitsBridge.factionLeader(player).orElse(player.getUUID()), Set.of(player.getUUID()), false, false,
                 Map.of(point.name(), point), next));
         data.setDirty();

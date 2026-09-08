@@ -755,39 +755,7 @@ public final class RaidEvents {
     }
 
     private static int enableAutomaticHome(CommandSourceStack source) {
-        try {
-            ServerPlayer player = source.getPlayerOrException();
-            if (respawnPoint(source.getServer(), player) == null) {
-                source.sendFailure(Component.literal("Set a bed or respawn anchor before enabling an automatic stronghold."));
-                return 0;
-            }
-            RaidSavedData data = RaidSavedData.get(source.getServer());
-            String key = factionKeyForPlayer(data, player);
-            RaidSavedData.Anchor anchor = data.anchors.get(key);
-            if (anchor == null) {
-                syncAutomaticHome(source.getServer(), data, player, true);
-                anchor = data.anchors.get(teamKey(player));
-            } else if (!canManage(player, anchor)) {
-                source.sendFailure(Component.literal("Only the faction leader, home owner, or an operator can change the stronghold."));
-                return 0;
-            } else {
-                data.anchors.put(key, anchor.withAutomaticHome(true));
-                syncAutomaticHome(source.getServer(), data, player, true);
-            }
-            data.setDirty();
-            RaidSavedData.Anchor result = data.anchors.get(teamKey(player));
-            RaidSavedData.DefensePoint home = result == null ? null : result.primaryPoint();
-            if (home == null) {
-                source.sendFailure(Component.literal("The automatic stronghold could not be created."));
-                return 0;
-            }
-            source.sendSuccess(() -> Component.literal("Automatic stronghold enabled at " + formatPos(home.pos()) +
-                    ". It follows the faction leader's respawn point.").withStyle(ChatFormatting.GREEN), false);
-            return 1;
-        } catch (Exception e) {
-            source.sendFailure(Component.literal("Only a player can enable an automatic stronghold."));
-            return 0;
-        }
+        return refreshAutomaticHome(source);
     }
 
     private static int refreshAutomaticHome(CommandSourceStack source) {
@@ -797,7 +765,7 @@ public final class RaidEvents {
             if (point == null) { source.sendFailure(Component.literal("Place a Siege Core in your faction's Recruits claim first.")); return 0; }
             source.sendSuccess(() -> Component.literal("Siege Core at " + formatPos(point.pos()) + ". Beds do not move this objective."), false);
             return 1;
-        } catch (CommandSyntaxException ex) { source.sendFailure(Component.literal("Only players can inspect their core.")); return 0; }
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException ex) { source.sendFailure(Component.literal("Only players can inspect their core.")); return 0; }
     }
 
     private static int claimLegacyAnchor(CommandSourceStack source) {
@@ -1729,6 +1697,11 @@ public final class RaidEvents {
         return state.preparationTicks > third * 2 ? "Establishing camp" : state.preparationTicks > third ? "Fortifying camp" : "Mustering army";
     }
 
+    private static int musterInterval(RaidSavedData.RaidState state, int duration) {
+        int squads = Math.max(1, (state.plannedWaveSize + RaidConfig.SQUAD_SIZE.get() - 1) / RaidConfig.SQUAD_SIZE.get());
+        return Math.max(100, duration / squads);
+    }
+
     private static void processPreparation(MinecraftServer server, ServerLevel level, RaidSavedData data,
             RaidSavedData.Anchor anchor, RaidSavedData.DefensePoint point, RaidSavedData.RaidState state,
             List<ServerPlayer> members, List<Mob> recruits) {
@@ -1741,15 +1714,25 @@ public final class RaidEvents {
         int third = Math.max(1, state.preparationTotalTicks / 3);
         if (state.preparationTicks <= third * 2 && !state.pendingFortifications.isEmpty()
                 && state.pendingCampBlocks.isEmpty()) {
-            state.pendingCampBlocks.putAll(state.pendingFortifications);
+            // Towers or defenders may occupy some wall cells by this point. Never replace them,
+            // and do not let one occupied corner reject the entire native builder blueprint.
+            for (var job : state.pendingFortifications.entrySet()) {
+                BlockPos cell = BlockPos.of(job.getKey());
+                if (level.hasChunkAt(cell) && level.getBlockState(cell).canBeReplaced()
+                        && level.getBlockEntity(cell) == null && level.getFluidState(cell).isEmpty())
+                    state.pendingCampBlocks.put(job.getKey(), job.getValue());
+            }
             state.pendingFortifications.clear();
             state.campBuildTicks = 0;
             com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.start(level, state);
         }
         if (state.preparationTicks <= third && !shouldPauseForPerformance(server, data)) {
-            if (state.wave == 0) queueWave(server, level, data, anchor, point, state, members, recruits);
-            else if (state.pendingWaveSpawns > 0 && (state.ticksToNextSquad -= 20) <= 0) {
+            if (state.wave == 0) {
+                queueWave(server, level, data, anchor, point, state, members, recruits);
+                state.ticksToNextSquad = musterInterval(state, third);
+            } else if (state.pendingWaveSpawns > 0 && (state.ticksToNextSquad -= 20) <= 0) {
                 spawnNextSquad(server, level, data, anchor, point, state);
+                state.ticksToNextSquad = musterInterval(state, third);
             }
             // Stage small groups throughout muster, rather than materializing the army at the horn.
             if (state.pendingWaveSpawns > 0) state.ticksToNextSquad = Math.max(state.ticksToNextSquad, 20);
