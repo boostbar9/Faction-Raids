@@ -419,7 +419,7 @@ public final class RaidConfig {
                         raw -> raw instanceof String s && (
                                 s.equalsIgnoreCase("CATAPULT") || s.equalsIgnoreCase("BALLISTA")
                                         || s.equalsIgnoreCase("BATTERING_RAM") || s.equalsIgnoreCase("SIEGE_TOWER")));
-        LATER_WAVE_ENGINE_CHANCE = b.comment("Percent chance per wave >= 2 that an additional siege engine gets assembled on-site.")
+        LATER_WAVE_ENGINE_CHANCE = b.comment("Legacy setting retained for config compatibility. Every assault wave now requests one supplied engine crew; this chance no longer gates wave support.")
                 .defineInRange("laterWaveEngineChancePercent", 30, 0, 100);
         CLEANUP_SURVIVING_ENGINES = b.comment("When a raid ends, discard any siege engines still standing on the field. Turn off to leave them as rubble/loot for defenders.")
                 .define("cleanupSurvivingEngines", true);

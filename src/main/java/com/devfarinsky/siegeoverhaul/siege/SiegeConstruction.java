@@ -17,11 +17,8 @@ import java.util.Optional;
  *
  * <p>Wave 1 uses the <b>prefab</b> path: engines listed in
  * {@link RaidConfig#FIRST_WAVE_ENGINES} spawn fully assembled next to the
- * war camp, oriented toward the objective. On subsequent waves the
- * <b>combo</b> path fires: a per-wave roll (see
- * {@link RaidConfig#LATER_WAVE_ENGINE_CHANCE}) can start an on-site build
- * that ticks toward completion, so defenders see the engine assembled in
- * real time rather than teleported in.</p>
+ * war camp, oriented toward the objective. Each assault wave then receives a supplied native operator and, if needed,
+ * a new ranged engine. Failed placement is retried without rerolling a chance.</p>
  *
  * <p>All entity operations are gated by {@link SiegeIntegration}: when the
  * Siege Weapons mod is not installed, engine construction becomes a no-op
@@ -58,28 +55,13 @@ public final class SiegeConstruction {
         return placed;
     }
 
-    /**
-     * Called at the top of each wave after wave 1. Rolls
-     * {@link RaidConfig#LATER_WAVE_ENGINE_CHANCE} to decide whether to
-     * begin an on-site build. Currently a placeholder that spawns the
-     * engine directly rather than animating construction — the interpolated
-     * build-timer is intentionally deferred to a follow-up PR to keep
-     * this one focused on getting engines onto the battlefield.
-     */
-    public static boolean maybeStartLaterWaveBuild(ServerLevel level, RaidSavedData.RaidState state,
-                                                    BlockPos objective, String teamKey) {
-        if (!RaidConfig.ENABLE_SIEGE_ENGINES.get()) return false;
-        if (state.campPos == null || state.siegeEngines.size() >= 4) return false;
-        if (!SiegeIntegration.isSiegeWeaponsPresent()) return false;
-        int chance = RaidConfig.LATER_WAVE_ENGINE_CHANCE.get();
-        if (chance <= 0) return false;
-        if (level.random.nextInt(100) >= chance) return false;
-        // Pick a random engine type that requires Siege Weapons.
-        SiegeEngineType[] options = new SiegeEngineType[]{
-                SiegeEngineType.BATTERING_RAM, SiegeEngineType.CATAPULT,
-                SiegeEngineType.BALLISTA, SiegeEngineType.SIEGE_TOWER};
-        SiegeEngineType pick = options[level.random.nextInt(options.length)];
-        return deployEngine(level, state, objective, teamKey, pick);
+    /** One dedicated ranged engine per wave; retries are controlled by SiegeDeployment. */
+    public static boolean deployWaveEngine(ServerLevel level, RaidSavedData.RaidState state, BlockPos objective) {
+        if (!RaidConfig.ENABLE_SIEGE_ENGINES.get() || state.campPos == null || !SiegeIntegration.isSiegeWeaponsPresent()) return false;
+        // Bounded by configured wave count plus up to three extra camp prefabs, not a four-wave lifetime limit.
+        if (state.siegeEngines.size() >= Math.max(4, RaidConfig.WAVES.get() + 3)) return false;
+        return deployEngine(level, state, objective, state.teamKey,
+                state.wave % 2 == 0 ? SiegeEngineType.CATAPULT : SiegeEngineType.BALLISTA);
     }
 
     /**
@@ -109,6 +91,7 @@ public final class SiegeConstruction {
                 Optional<Entity> vehicle = SiegeIntegration.spawnSiegeVehicle(level, type, new Vec3(x + 0.5, y, z + 0.5), yaw);
                 if (vehicle.isEmpty()) continue;
                 vehicle.get().getPersistentData().putString(SiegeDeployment.TEAM_TAG, teamKey);
+                vehicle.get().getPersistentData().putInt("SiegeSupportWave", state.wave);
                 state.siegeEngines.put(vehicle.get().getUUID(), type.name());
                 return true;
             }

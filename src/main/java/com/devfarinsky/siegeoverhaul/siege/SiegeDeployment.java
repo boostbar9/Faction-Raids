@@ -22,9 +22,37 @@ public final class SiegeDeployment {
     public static final String OPERATOR_ATTEMPTS = "SiegeOperatorAttempts";
 
     private SiegeDeployment() {}
+    public static boolean needsWaveSupport(RaidSavedData.RaidState state) {
+        return RaidConfig.ENABLE_SIEGE_ENGINES.get() && state.campPos != null
+                && state.wave > 0 && state.lastSiegeSupportWave < state.wave;
+    }
+    private static boolean capacity(ServerLevel level, RaidSavedData.RaidState state) {
+        if (state.raiders.size() + state.campGuards.size() >= RaidConfig.MAX_ACTIVE_RAIDERS.get()) return false;
+        RaidSavedData data = RaidSavedData.get(level.getServer());
+        return data.raids.values().stream().mapToInt(r -> r.raiders.size() + r.campGuards.size()).sum()
+                < RaidConfig.MAX_GLOBAL_RAIDERS.get();
+    }
+    private static void ensureEngine(ServerLevel level, RaidSavedData.RaidState state, BlockPos objective) {
+        if (!needsWaveSupport(state) || state.preparationTicks > 0 || !capacity(level, state)) return;
+        for (UUID id : state.siegeEngines.keySet()) {
+            Entity engine = level.getEntity(id);
+            if (engine == null) continue;
+            if (!engine.isAlive() || engine.isRemoved()) continue;
+            int wave = engine.getPersistentData().getInt("SiegeSupportWave");
+            if (wave == state.wave) return;
+            // Adopt camp prefabs and current pre-upgrade equipment without duplicating a crew.
+            if (wave == 0 && !(engine.getPersistentData().getBoolean(OPERATOR_ASSIGNED) && engine.getPassengers().isEmpty())) { engine.getPersistentData().putInt("SiegeSupportWave", state.wave); return; }
+        }
+        if (level.getGameTime() % 100 != 0) return;
+        if (!SiegeConstruction.deployWaveEngine(level, state, objective)) {
+            if (level.getGameTime() % 600 == 0)
+                com.devfarinsky.siegeoverhaul.FactionLogger.LOG.warn("Wave {} siege support waiting for a clear equipment slot at camp {}", state.wave, state.campPos);
+        } else RaidSavedData.get(level.getServer()).setDirty();
+    }
 
     /** Provision each loaded ranged engine at most once after preparation; keep unloaded identities for cleanup. */
     public static int tick(ServerLevel level, RaidSavedData.RaidState state, BlockPos objective) {
+        ensureEngine(level, state, objective);
         if (state.siegeEngines == null || state.siegeEngines.isEmpty()) return 0;
         int removed = 0;
         Iterator<Map.Entry<UUID, String>> it = state.siegeEngines.entrySet().iterator();
@@ -40,20 +68,35 @@ public final class SiegeDeployment {
             }
             SiegeEngineType type = SiegeEngineType.parse(entry.getValue());
             if (type == null || !type.ranged() || state.wave <= 0 || state.preparationTicks > 0) continue;
-            if (!vehicle.getPassengers().isEmpty() || vehicle.getPersistentData().getBoolean(OPERATOR_ASSIGNED)) continue;
+            if (!vehicle.getPassengers().isEmpty()) {
+                for (Entity passenger : vehicle.getPassengers()) if (passenger instanceof net.minecraft.world.entity.Mob operator
+                        && state.teamKey.equals(operator.getPersistentData().getString(TEAM_TAG))) {
+                    com.devfarinsky.siegeoverhaul.camp.CampLoading.keep(level, vehicle.blockPosition());
+                    SiegeIntegration.advanceEngineer(operator, objective);
+                    if (vehicle.getPersistentData().getInt("SiegeSupportWave") == state.wave && state.lastSiegeSupportWave < state.wave) {
+                        state.lastSiegeSupportWave = state.wave;
+                        RaidSavedData.get(level.getServer()).setDirty();
+                    }
+                }
+                continue;
+            }
+            if (vehicle.getPersistentData().getBoolean(OPERATOR_ASSIGNED)) continue;
             // Provision once, after the warning period. A killed operator is never replaced.
-            if (state.raiders.size() + state.campGuards.size() >= RaidConfig.MAX_ACTIVE_RAIDERS.get()) continue;
+            if (!capacity(level, state)) continue;
             long now = level.getGameTime();
             if (vehicle.getPersistentData().contains("SiegeOperatorLastAttempt")
                     && now - vehicle.getPersistentData().getLong("SiegeOperatorLastAttempt") < 100) continue;
             vehicle.getPersistentData().putLong("SiegeOperatorLastAttempt", now);
             int attempts = vehicle.getPersistentData().getInt(OPERATOR_ATTEMPTS);
-            if (attempts >= 3) continue;
+            // Failed initialization may recover after terrain/entity changes. Retry without duplicating successful crews.
             vehicle.getPersistentData().putInt(OPERATOR_ATTEMPTS, attempts + 1);
             SiegeIntegration.spawnSiegeEngineer(level, vehicle.position(), state.teamKey, vehicle, type).ifPresent(operator -> {
                 state.raiders.add(operator.getUUID());
                 state.totalSpawned++;
                 vehicle.getPersistentData().putBoolean(OPERATOR_ASSIGNED, true);
+                state.lastSiegeSupportWave = Math.max(state.lastSiegeSupportWave, vehicle.getPersistentData().getInt("SiegeSupportWave"));
+                SiegeIntegration.advanceEngineer(operator, objective);
+                com.devfarinsky.siegeoverhaul.FactionLogger.LOG.info("Wave {} deployed {} with supplied Siege Engineer for {}", state.wave, type, state.teamKey);
                 RaidSavedData.get(level.getServer()).setDirty();
             });
         }
