@@ -25,7 +25,7 @@ public final class RaidSavedData extends SavedData {
     // v12 added pendingSpoils + raidNotifyOptOut (3.2.0 multiplayer polish).
     // v13 added persistent camp construction jobs and crew (3.4.0).
     // Old saves load cleanly because all new fields default to empty collections.
-    public static final int DATA_VERSION = 19;
+    public static final int DATA_VERSION = 20;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Set<UUID> campClaimLeases = new HashSet<>();
@@ -515,6 +515,7 @@ public final class RaidSavedData extends SavedData {
         public final Map<UUID, String> siegeEngines = new LinkedHashMap<>();
         /** How many sappers this raid has already dispatched (capped by config). */
         public int sappersDispatched;
+        public int lastSiegeSupportWave;
         public final Map<Long, CompoundTag> breachedBlocks = new LinkedHashMap<>();
         public final Map<Long, Integer> blockBreachProgress = new HashMap<>();
         public BlockPos currentBreachBlock;
@@ -647,6 +648,7 @@ public final class RaidSavedData extends SavedData {
             if (navalStagingPos != null) tag.putLong("NavalStagingPos", navalStagingPos.asLong());
             if (navalBeachPos != null) tag.putLong("NavalBeachPos", navalBeachPos.asLong());
             tag.putInt("SappersDispatched", sappersDispatched);
+            tag.putInt("LastSiegeSupportWave", lastSiegeSupportWave);
             ListTag siegeList = new ListTag();
             siegeEngines.forEach((uuid, typeName) -> {
                 CompoundTag entry = new CompoundTag();
@@ -800,6 +802,7 @@ public final class RaidSavedData extends SavedData {
             state.navalBeachPos = tag.contains("NavalBeachPos", Tag.TAG_LONG) ?
                     BlockPos.of(tag.getLong("NavalBeachPos")) : null;
             state.sappersDispatched = tag.getInt("SappersDispatched");
+            state.lastSiegeSupportWave = tag.getInt("LastSiegeSupportWave");
             ListTag siegeList = tag.getList("SiegeEngines", Tag.TAG_COMPOUND);
             for (int i = 0; i < siegeList.size(); i++) {
                 CompoundTag entry = siegeList.getCompound(i);

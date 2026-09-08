@@ -52,6 +52,65 @@ class SiegeDeploymentTest extends MinecraftTestSupport {
         }
     }
     @Test
+    void everyWaveRequestsSupportAndCompletedSupportSurvivesReload() {
+        var raid = new RaidSavedData.RaidState("team:test", "siege_core", 0);
+        raid.campPos = BlockPos.ZERO;
+        for (int wave = 1; wave <= 5; wave++) {
+            raid.wave = wave;
+            assertTrue(SiegeDeployment.needsWaveSupport(raid));
+            raid.lastSiegeSupportWave = wave;
+            raid = RaidSavedData.RaidState.load(raid.save());
+            assertFalse(SiegeDeployment.needsWaveSupport(raid));
+        }
+    }
+    @Test
+    void supportRetriesExistingUncrewedEngineRatherThanSpawningDuplicates() {
+        var level = mock(ServerLevel.class);
+        var engine = mock(Entity.class);
+        var raid = new RaidSavedData.RaidState("team:test", "siege_core", 0);
+        raid.campPos = BlockPos.ZERO; raid.wave = 2;
+        UUID id = UUID.randomUUID(); raid.siegeEngines.put(id, "BALLISTA");
+        var tag = new CompoundTag(); tag.putInt("SiegeSupportWave",2);
+        when(engine.getPersistentData()).thenReturn(tag);
+        when(engine.getPassengers()).thenReturn(java.util.List.of());
+        when(engine.isAlive()).thenReturn(true);
+        when(engine.position()).thenReturn(Vec3.ZERO);
+        when(level.getEntity(id)).thenReturn(engine);
+        when(level.getGameTime()).thenReturn(100L,200L,300L);
+        try (var construction = mockStatic(SiegeConstruction.class); var integration = mockStatic(SiegeIntegration.class);
+                var saves = mockStatic(RaidSavedData.class)) {
+            saves.when(() -> RaidSavedData.get(null)).thenReturn(new RaidSavedData());
+            integration.when(() -> SiegeIntegration.spawnSiegeEngineer(level, Vec3.ZERO, raid.teamKey, engine, SiegeEngineType.BALLISTA)).thenReturn(Optional.empty());
+            SiegeDeployment.tick(level, raid, BlockPos.ZERO);
+            SiegeDeployment.tick(level, raid, BlockPos.ZERO);
+            construction.verifyNoInteractions();
+            assertEquals(1, raid.siegeEngines.size());
+            assertEquals(0, raid.lastSiegeSupportWave);
+        }
+    }
+    @Test
+    void operatorProvisioningRespectsGlobalPopulationCap() {
+        var level = mock(ServerLevel.class);
+        var engine = mock(Entity.class);
+        var raid = new RaidSavedData.RaidState("team:test", "siege_core", 0);
+        raid.wave = 1;
+        UUID id = UUID.randomUUID(); raid.siegeEngines.put(id,"BALLISTA");
+        when(level.getEntity(id)).thenReturn(engine);
+        when(engine.isAlive()).thenReturn(true);
+        when(engine.getPersistentData()).thenReturn(new CompoundTag());
+        when(engine.getPassengers()).thenReturn(java.util.List.of());
+        var saved = new RaidSavedData();
+        var other = new RaidSavedData.RaidState("team:other", "siege_core",0);
+        for (int i=0;i<com.devfarinsky.siegeoverhaul.RaidConfig.MAX_GLOBAL_RAIDERS.get();i++) other.raiders.add(UUID.randomUUID());
+        saved.raids.put(other.teamKey,other);
+        try (var integration = mockStatic(SiegeIntegration.class); var saves = mockStatic(RaidSavedData.class)) {
+            saves.when(() -> RaidSavedData.get(null)).thenReturn(saved);
+            SiegeDeployment.tick(level,raid,BlockPos.ZERO);
+            integration.verifyNoInteractions();
+            assertEquals(0,raid.totalSpawned);
+        }
+    }
+    @Test
     void legacyUnmannedChoicesUseAnEngineWithANativeController() {
         assertEquals(SiegeEngineType.BALLISTA, SiegeConstruction.automaticType(SiegeEngineType.BATTERING_RAM));
         assertEquals(SiegeEngineType.BALLISTA, SiegeConstruction.automaticType(SiegeEngineType.SIEGE_TOWER));

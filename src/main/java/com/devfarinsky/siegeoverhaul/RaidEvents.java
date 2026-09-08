@@ -2196,17 +2196,6 @@ public final class RaidEvents {
 
         state.wave = nextWave;
         state.plannedWaveSize = wanted;
-        // Wave 2+: roll for an on-site siege engine build. Announcement is
-        // handled inside SiegeConstruction to keep the chatter focused there.
-        if (state.wave >= 2) {
-            boolean built = com.devfarinsky.siegeoverhaul.siege.SiegeConstruction
-                    .maybeStartLaterWaveBuild(level, state, point.pos(), anchor.teamKey());
-            if (built) {
-                announce(server, anchor.teamKey(), Component.literal(
-                        "Raider engineers are wheeling a new siege engine into position.")
-                        .withStyle(ChatFormatting.GOLD), false);
-            }
-        }
         state.waveStartingCount = 0;
         state.pendingWaveSpawns = wanted;
         state.squadsSpawned = 0;
@@ -2248,6 +2237,11 @@ public final class RaidEvents {
         int perSquad = RaidConfig.STAGED_SQUADS.get() ? RaidConfig.SQUAD_SIZE.get() : state.pendingWaveSpawns;
         int factionCapacity = Math.max(0, RaidConfig.MAX_ACTIVE_RAIDERS.get() - state.raiders.size() - state.campGuards.size());
         int globalCapacity = Math.max(0, RaidConfig.MAX_GLOBAL_RAIDERS.get() - globalTrackedCount(data));
+        // Keep room for this wave's engineer instead of filling every slot with infantry first.
+        if (com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.needsWaveSupport(state)) {
+            factionCapacity = Math.max(0, factionCapacity - 1);
+            globalCapacity = Math.max(0, globalCapacity - 1);
+        }
         int wanted = Math.min(state.pendingWaveSpawns, Math.min(perSquad, Math.min(factionCapacity, globalCapacity)));
         if (wanted <= 0) {
             state.ticksToNextSquad = RaidConfig.SPAWN_RETRY_SECONDS.get() * 20;

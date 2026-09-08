@@ -71,7 +71,7 @@ New sieges have **12 minutes of preparation** by default, configurable with `sie
 
 - **Establishment — 4 minutes:** builders construct the camp structures using private work areas and supplied materials.
 - **Fortification — 4 minutes:** builders receive a second blueprint for the timber palisade. The gate remains open toward your core.
-- **Muster — 4 minutes:** the first wave gathers at camp in a native Recruits formation before marching. Defenders can engage them early.
+- **Muster — 4 minutes:** the first wave gathers at camp using normal walking before marching. Defenders can engage them early.
 
 The preparation clock pauses when the faction is offline if offline pausing is enabled, and when the camp chunk is unloaded. Builders still follow Workers' daytime work rules and configured construction limits, so interrupted construction can leave an unfinished camp. No safe camp site means a siege without camp structures or equipment; a message explains this.
 
@@ -92,3 +92,9 @@ Override `data/siegeoverhaul/loot_tables/gameplay/invasion_victory.json` with a 
 [Source and issues](https://github.com/boostbar9/Faction-Raids) · GPL-3.0-only · Author: boostbar9
 
 Built on Villager Recruits, Villager Workers, Small Ships and Siege Weapons by Talhanation.
+
+### Army movement and artillery (4.3.1)
+
+Raiders travel normally outside your faction's Recruits claims. Formations apply only inside your territory and release for combat, obstacles, ladder climbing and the final core approach. Siege ladders have a dedicated approach/climb/exit task; only intact rungs with a clear wall-top exit are used.
+
+Each assault wave requests one supplied ranged engine with a native Siege Engineer (ballista or catapult), replacing the old chance roll. Blocked placements retry and infantry leaves room for the operator. Native faction/global caps still apply; an unsafe camp emplacement can delay deployment. Engineers drive using native movement orders with temporary nearby chunk loading. Defeated crews do not respawn in the same wave.

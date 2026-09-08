@@ -1,9 +1,11 @@
-## 4.3.1 — Wall climbing and faster approach
+## 4.3.1 — Wall climbing, faster approach and wave artillery
 
 - Raiders travel normally outside the defending faction's native Recruits claims. Formation orders only apply inside that territory, and release for combat, obstacles, climbing and the final capture approach.
 - Remove rigid camp muster formations; troops gather near camp using normal walking orders.
 - Assign raiders to tracked siege ladders: walk to the foot, climb physical rungs, then step onto a clear wall top. No teleporting. Limit each column to three assigned soldiers at a time.
 - Climbing owns movement so objective redirects, formations, parkour and straggler retries do not interrupt it. Broken, blocked or timed-out routes return control to normal AI.
+- Each assault wave requests a supplied ranged engine and native Siege Engineer, replacing the old 30% chance. Reserve an operator slot, retry blocked deployments, preserve completed wave support across saves, and retain faction/global entity caps.
+- Mounted engineers receive native advance destinations and temporary chunk-loading tickets so they can drive out of camp. Defeated crews are not replaced within the same wave.
 - Reject over-height ladder columns and blocked wall-top exits. Existing intact siege ladders are rediscovered from saved block records.
 
 ## 4.3.0 — Core command desk
