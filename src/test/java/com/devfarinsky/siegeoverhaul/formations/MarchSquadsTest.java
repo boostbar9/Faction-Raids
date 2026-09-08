@@ -24,7 +24,7 @@ class MarchSquadsTest extends MinecraftTestSupport {
         assertTrue(squads.values().stream().allMatch(g->g.size()<=6));
     }
     private static Mob unit(int id,double x) {
-        Mob mob=mock(Mob.class);when(mob.getUUID()).thenReturn(new UUID(0,id));when(mob.getType()).thenReturn(EntityType.ZOMBIE);
+        Mob mob=mock(Mob.class);when(mob.getUUID()).thenReturn(new UUID(0,id));doReturn(EntityType.ZOMBIE).when(mob).getType();
         when(mob.position()).thenReturn(new Vec3(x,64,0));when(mob.getPersistentData()).thenReturn(new CompoundTag());return mob;
     }
 }
