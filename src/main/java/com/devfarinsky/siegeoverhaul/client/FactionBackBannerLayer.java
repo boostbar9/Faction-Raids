@@ -32,8 +32,8 @@ public final class FactionBackBannerLayer<T extends LivingEntity,M extends Entit
         for(var type:ForgeRegistries.ENTITY_TYPES.getValues()) {
             var id=ForgeRegistries.ENTITY_TYPES.getKey(type);
             if(id==null || !id.getNamespace().equals("recruits")) continue;
-            var renderer=event.getRenderer((EntityType)type);
-            if(renderer instanceof LivingEntityRenderer living && attached.add(living))
+            LivingEntityRenderer living=event.getRenderer((EntityType)type);
+            if(living != null && attached.add(living))
                 living.addLayer(new FactionBackBannerLayer(living));
         }
     }
