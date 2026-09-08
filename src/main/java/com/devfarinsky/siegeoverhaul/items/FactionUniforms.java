@@ -49,6 +49,7 @@ public final class FactionUniforms {
         try {
             Object inventory=mob.getClass().getMethod("getInventory").invoke(mob);
             if(!(inventory instanceof SimpleContainer container) || container.getContainerSize()<4) return;
+            RecruitsBridge.assignToRaidersFaction(mob); // Repair legacy role-glow teams that broke native diplomacy.
             EquipmentSlot[] slots={EquipmentSlot.HEAD,EquipmentSlot.CHEST,EquipmentSlot.LEGS,EquipmentSlot.FEET};
             for(int i=0;i<slots.length;i++) {
                 ItemStack stack=armor(faction,role,slots[i]);

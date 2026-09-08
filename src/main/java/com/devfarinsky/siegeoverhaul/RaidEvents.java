@@ -646,6 +646,11 @@ public final class RaidEvents {
      * and let the tick loop clean up naturally.
      */
     private static void handleBannerBroken(ServerLevel level, RaidSavedData.RaidState state) {
+        if (state.coreCaptured) {
+            state.bannerPos = null;
+            announce(level.getServer(),state.teamKey,Component.literal("Enemy banner destroyed. Reclaim the territory by holding your core.").withStyle(ChatFormatting.GREEN),false);
+            return;
+        }
         com.devfarinsky.siegeoverhaul.camp.CampSabotage.retreatWave(level, state);
         announce(level.getServer(), state.teamKey, Component.literal(
                 "Banner destroyed: the current wave retreats. Later waves still attack.")
@@ -2075,6 +2080,8 @@ public final class RaidEvents {
                 state.totalDefeated++;
                 continue;
             }
+            // Occupiers retain their identity across unloaded chunks until recapture.
+            if (state.coreCaptured) continue;
             // Genuinely unloaded — tick the grace timer.
             int missing = state.missingTicks.getOrDefault(id, 0) + 20;
             if (missing >= grace) {

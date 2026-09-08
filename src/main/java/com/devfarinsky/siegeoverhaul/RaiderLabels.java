@@ -94,7 +94,7 @@ public final class RaiderLabels {
         // outline (applied per-tick) inherits the team color. We do this
         // even in PROXIMITY mode - team membership is cheap and lets the
         // effect become visible the moment the raider enters range.
-        if (RaidConfig.RAIDER_GLOW.get() && raider.level() instanceof ServerLevel serverLevel) {
+        if (RaidConfig.RAIDER_GLOW.get() && !RecruitsBridge.isRecruitSoldier(raider) && raider.level() instanceof ServerLevel serverLevel) {
             Scoreboard scoreboard = serverLevel.getScoreboard();
             ensureTeams(scoreboard);
             PlayerTeam team = scoreboard.getPlayerTeam(TEAM_PREFIX + role);

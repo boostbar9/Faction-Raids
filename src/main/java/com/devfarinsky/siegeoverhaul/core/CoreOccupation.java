@@ -31,7 +31,9 @@ public final class CoreOccupation {
         int radius=RaidConfig.CORE_CAPTURE_RADIUS.get();
         for (Mob mob:level.getEntitiesOfClass(Mob.class,new AABB(pos).inflate(radius,3,radius),
                 m -> m.isAlive() && !m.isPassenger() && inRing(m.position(),pos))) {
-            if (RecruitsBridge.belongsTo(mob,"team:"+RecruitsBridge.RAIDERS_FACTION_ID,Set.of())) enemies++;
+            if (RecruitsBridge.isRecruitSoldier(mob) && (key.equals(mob.getPersistentData().getString(ModConstants.Tags.RAID_TEAM))
+                    || key.equals(mob.getPersistentData().getString(com.devfarinsky.siegeoverhaul.camp.CampGuards.TEAM_TAG))
+                    || RecruitsBridge.belongsTo(mob,"team:"+RecruitsBridge.RAIDERS_FACTION_ID,Set.of()))) enemies++;
             else if (RecruitsBridge.belongsTo(mob,key,members)) defenders++;
         }
         return new int[]{enemies,defenders};
