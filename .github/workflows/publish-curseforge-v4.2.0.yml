@@ -1,0 +1,85 @@
+name: Publish tested 4.2.0 beta to CurseForge
+on:
+  push:
+    branches: [publish/curseforge-v4.2.0]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: curseforge-1364352-v4.2.0
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34180140968
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Verify tested bytes and metadata
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          jar = Path('dist/siegeoverhaul-4.2.0.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == '98bcfc16257d58f56890fb47df3cc24ab2821dedf0e4be5620b7858bee21f04f'
+          with zipfile.ZipFile(jar) as z:
+              data = tomllib.loads(z.read('META-INF/mods.toml').decode())
+          assert data['mods'][0]['modId'] == 'siegeoverhaul'
+          assert data['mods'][0]['version'] == '4.2.0'
+          dependencies = {x['modId']: x for x in data['dependencies']['siegeoverhaul']}
+          for mod in ['recruits', 'workers', 'smallships', 'siegeweapons']:
+              assert dependencies[mod]['mandatory'], mod
+          print('Verified', jar.name, digest)
+          CHECK
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.2.0.jar
+          name: The Siege Overhaul v4.2.0 beta - Faction Uniforms and Core Conquest
+          version: v4.2.0
+          version-type: beta
+          changelog: |
+            ## 4.2.0 beta - Faction Uniforms and Core Conquest
+
+            Enemy uniforms identify faction and rank. Chest/leg trims: Blackbay lapis, Hollowfang quartz, Emberchant redstone, Crownfall amethyst, Wilds emerald. Helmet/boot trims: copper soldiers, iron guards, gold captains, diamond commanders. Commanders wear diamond, Wilds rank-and-file dyed leather, others iron. Torso-mounted cosmetic banners display faction sigils while helmets and weapons stay equipped. Existing tracked troops upgrade once; armor is not replenished. Player-owned units retain their gear.
+
+            Core sieges no longer use the perimeter capture timer. Enemies must outnumber survival/adventure players and faction recruits within 10 horizontal and 3 vertical blocks for 120 seconds by default. Ties and empty rings pause progress; opposing superiority reverses it. Larger armies, kills and block breaches do not accelerate the timer. Mounted units, creative players and spectators do not count.
+
+            Capturing the core transfers its entire native Recruits claim to the Raiders. Other claims are unaffected. Surviving enemies occupy the core without receiving more waves. Players or their recruits must outnumber enemies there for 120 seconds to reclaim the same territory. Recapture works with offline recruits and survives restart/admin raid stops. Occupied cores cannot move or hire soldiers. Recapture ends the siege and restores tracked terrain; early recapture does not award full-wave victory loot.
+
+            Configure coreCaptureRadius, captureTimeSeconds and coreRecaptureSeconds. Existing captureTimeSeconds settings are respected. Suppress the competing native whole-claim siege timer for core claims; preserve native map, permissions and persistence. Honor canceled claim updates and admin claims. Repair role-glow teams that previously displaced native Raider allegiance. New camps/uniforms now match the announced faction.
+
+            Minecraft 1.20.1 Forge, Java 17. REQUIRED on server and every client: Villager Recruits 1.15.2+, Villager Workers 2 2.0.3+, Small Ships and Siege Weapons. Matching Siege Overhaul 4.2.0 clients are required (network protocol 7).
+
+            Validation: clean Java 17 build and 73 regression tests. No interactive Minecraft playtest; banner positioning and the full native-mod conquest loop remain beta.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          dependencies: |
+            recruits(required)
+            workers(required)
+            smallships(required)
+            siegeweapons(required)
+          fail-mode: fail
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os
+          result = {'version': '4.2.0', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 4.2.0 beta: {result['url']}\n")
+          RECEIPT
