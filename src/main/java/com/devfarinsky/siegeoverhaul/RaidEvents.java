@@ -1739,6 +1739,10 @@ public final class RaidEvents {
         }
         if (state.campPos != null && state.preparationTicks % 100 == 0)
             com.devfarinsky.siegeoverhaul.camp.CampGuards.muster(level,state);
+        if(state.preparationTicks<=20 && state.campPos!=null && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
+            state.objectiveStatus=com.devfarinsky.siegeoverhaul.camp.WarGate.status(level,state);
+            updateBossBar(server,anchor,state,false);data.setDirty();return;
+        }
         state.preparationTicks = Math.max(0, state.preparationTicks - 20);
         state.ticksToNextWave = state.preparationTicks;
         state.objectiveStatus = preparationLabel(state);
@@ -1853,6 +1857,15 @@ public final class RaidEvents {
         com.devfarinsky.siegeoverhaul.camp.WarGate.tick(level,state,point.pos());
         if(state.warGateWaitTicks>=20*60*30 && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
             finishRaid(server,data,teamKey,false,false,"The enemy could not establish its War Gate. The siege has withdrawn without rewards.");
+            return;
+        }
+        if(state.preparationTicks<=20 && state.campPos!=null && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
+            state.reinforcementStallTicks+=20;
+            state.objectiveStatus=com.devfarinsky.siegeoverhaul.camp.WarGate.status(level,state);
+            if(state.reinforcementStallTicks%600==0)announce(server,teamKey,Component.literal(state.objectiveStatus+". Assault delayed."),false);
+        }
+        if(state.reinforcementStallTicks>=20*180) {
+            finishRaid(server,data,teamKey,false,false,"Enemy reinforcements could not deploy. The siege withdrew; camp and breached blocks are being restored. No victory rewards.");
             return;
         }
         com.devfarinsky.siegeoverhaul.camp.CampDevelopment.tick(level,state);
@@ -2166,6 +2179,10 @@ public final class RaidEvents {
                                   RaidSavedData.Anchor anchor, RaidSavedData.DefensePoint point,
                                   RaidSavedData.RaidState state, List<ServerPlayer> members,
                                   List<Mob> recruits) {
+        if(state.campPos!=null && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
+            state.objectiveStatus=com.devfarinsky.siegeoverhaul.camp.WarGate.status(level,state);
+            state.ticksToNextWave=100;return;
+        }
         int nextWave = state.wave + 1;
         int playerCount = Math.max(1, members.size());
         int recruitScale = 0;
@@ -2224,7 +2241,7 @@ public final class RaidEvents {
                                        RaidSavedData.Anchor anchor, RaidSavedData.DefensePoint point,
                                        RaidSavedData.RaidState state) {
         if(state.campPos!=null && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
-            state.objectiveStatus="Reinforcements waiting for the builders to complete the War Gate";
+            state.objectiveStatus=com.devfarinsky.siegeoverhaul.camp.WarGate.status(level,state);
             state.ticksToNextSquad=100;return;
         }
         int perSquad = RaidConfig.STAGED_SQUADS.get() ? RaidConfig.SQUAD_SIZE.get() : state.pendingWaveSpawns;
@@ -2309,6 +2326,7 @@ public final class RaidEvents {
             }
         }
         if (spawned == 0) {
+            if(state.preparationTicks<=0)state.reinforcementStallTicks+=RaidConfig.SPAWN_RETRY_SECONDS.get()*20;
             state.ticksToNextSquad = RaidConfig.SPAWN_RETRY_SECONDS.get() * 20;
             // Retry chatter moved to the action bar — it fires often enough
             // that it deserves a transient hint, not a chat line.
@@ -2320,6 +2338,7 @@ public final class RaidEvents {
             return;
         }
 
+        state.reinforcementStallTicks=0;
         state.waveStartingCount += spawned;
         state.pendingWaveSpawns -= spawned;
         state.squadsSpawned++;

@@ -14,6 +14,16 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class SiegeDeploymentTest extends MinecraftTestSupport {
+    @Test void noEngineerOnlyWaveWhileGateOrInfantryIsMissing() {
+        ServerLevel level=mock(ServerLevel.class);var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        raid.campPos=BlockPos.ZERO;raid.wave=1;
+        try(var gate=mockStatic(com.devfarinsky.siegeoverhaul.camp.WarGate.class);var construction=mockStatic(SiegeConstruction.class);var integration=mockStatic(SiegeIntegration.class)) {
+            SiegeDeployment.tick(level,raid,BlockPos.ZERO);
+            gate.when(()->com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,raid)).thenReturn(true);
+            SiegeDeployment.tick(level,raid,BlockPos.ZERO);
+            construction.verifyNoInteractions();integration.verifyNoInteractions();assertEquals(0,raid.totalSpawned);
+        }
+    }
     @Test
     void unloadedEngineKeepsItsCleanupIdentity() {
         var raid = new RaidSavedData.RaidState("team:test", "home", 0);
@@ -68,7 +78,7 @@ class SiegeDeploymentTest extends MinecraftTestSupport {
         var level = mock(ServerLevel.class);
         var engine = mock(Entity.class);
         var raid = new RaidSavedData.RaidState("team:test", "siege_core", 0);
-        raid.campPos = BlockPos.ZERO; raid.wave = 2;
+        raid.campPos = BlockPos.ZERO; raid.wave = 2; raid.waveStartingCount=4;
         UUID id = UUID.randomUUID(); raid.siegeEngines.put(id, "BALLISTA");
         var tag = new CompoundTag(); tag.putInt("SiegeSupportWave",2);
         when(engine.getPersistentData()).thenReturn(tag);
@@ -77,9 +87,10 @@ class SiegeDeploymentTest extends MinecraftTestSupport {
         when(engine.position()).thenReturn(Vec3.ZERO);
         when(level.getEntity(id)).thenReturn(engine);
         when(level.getGameTime()).thenReturn(100L,200L,300L);
-        try (var construction = mockStatic(SiegeConstruction.class); var integration = mockStatic(SiegeIntegration.class);
+        try (var gate=mockStatic(com.devfarinsky.siegeoverhaul.camp.WarGate.class); var construction = mockStatic(SiegeConstruction.class); var integration = mockStatic(SiegeIntegration.class);
                 var saves = mockStatic(RaidSavedData.class)) {
             saves.when(() -> RaidSavedData.get(null)).thenReturn(new RaidSavedData());
+            gate.when(()->com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,raid)).thenReturn(true);
             integration.when(() -> SiegeIntegration.spawnSiegeEngineer(level, Vec3.ZERO, raid.teamKey, engine, SiegeEngineType.BALLISTA)).thenReturn(Optional.empty());
             SiegeDeployment.tick(level, raid, BlockPos.ZERO);
             SiegeDeployment.tick(level, raid, BlockPos.ZERO);

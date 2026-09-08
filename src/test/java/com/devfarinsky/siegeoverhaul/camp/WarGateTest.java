@@ -13,6 +13,19 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 class WarGateTest extends MinecraftTestSupport {
+    @Test void blockedFrontSiteFallsBackToAnotherSideAndWaitSurvivesSave() {
+        ServerLevel level=mock(ServerLevel.class);
+        when(level.hasChunkAt(any())).thenReturn(true);
+        when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(64);
+        when(level.getBlockState(any())).thenReturn(Blocks.AIR.defaultBlockState());
+        when(level.getFluidState(any())).thenAnswer(a->((BlockPos)a.getArgument(0)).getX()>18
+                ?net.minecraft.world.level.material.Fluids.WATER.defaultFluidState():net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState());
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);raid.campPos=new BlockPos(8,64,8);
+        assertTrue(WarGate.plan(level,raid,new BlockPos(100,64,8)));
+        assertTrue(WarGate.center(raid).getZ()>raid.campPos.getZ());
+        raid.reinforcementStallTicks=1400;
+        assertEquals(1400,RaidSavedData.RaidState.load(raid.save()).reinforcementStallTicks);
+    }
     @Test void everyOrientationHasSupportedSpawnPadAndOpenArch() {
         BlockPos c=new BlockPos(8,64,8);
         for(Direction front:Direction.Plane.HORIZONTAL) {

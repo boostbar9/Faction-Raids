@@ -37,8 +37,9 @@ public final class WarGate {
     public static boolean plan(ServerLevel level,RaidSavedData.RaidState raid,BlockPos objective) {
         if(!raid.warGate.isEmpty() || raid.campPos==null)return false;
         Vec3 d=Vec3.atCenterOf(objective).subtract(Vec3.atCenterOf(raid.campPos));
-        Direction front=Math.abs(d.x)>=Math.abs(d.z)?(d.x>=0?Direction.EAST:Direction.WEST):(d.z>=0?Direction.SOUTH:Direction.NORTH);
-        for(int distance:new int[]{14,17}) {
+        Direction preferred=Math.abs(d.x)>=Math.abs(d.z)?(d.x>=0?Direction.EAST:Direction.WEST):(d.z>=0?Direction.SOUTH:Direction.NORTH);
+        for(Direction front:new Direction[]{preferred,preferred.getClockWise(),preferred.getCounterClockWise(),preferred.getOpposite()})
+        for(int distance:new int[]{14,17,20,24}) {
             BlockPos c=raid.campPos.relative(front,distance);int y=Integer.MIN_VALUE;
             boolean valid=true;
             for(int x=-3;x<=3;x++)for(int z=-2;z<=2;z++) {
@@ -46,16 +47,20 @@ public final class WarGate {
                 if(!level.hasChunkAt(p)) { valid=false;continue; }
                 y=Math.max(y,level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,p.getX(),p.getZ()));
             }
-            if(!valid || Math.abs(y-raid.campPos.getY())>2)continue;
+            if(!valid || Math.abs(y-raid.campPos.getY())>6)continue;
             c=new BlockPos(c.getX(),y,c.getZ());var plan=blueprint(c,front);
             for(int x=-3;x<=3;x++)for(int z=-2;z<=2;z++) {
                 BlockPos p=c.relative(front.getClockWise(),x).relative(front,z);
                 int floor=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,p.getX(),p.getZ());
-                if(y-floor>2 || !level.getFluidState(p.atY(floor-1)).isEmpty())valid=false;
+                if(y-floor>3 || !level.getFluidState(p.atY(floor-1)).isEmpty())valid=false;
                 for(int sy=floor;sy<y;sy++)plan.put(p.atY(sy).asLong(),"minecraft:polished_blackstone_bricks");
                 for(int sy=y;sy<=y+7;sy++)if(!com.devfarinsky.siegeoverhaul.camp.CampVegetation.replaceable(level.getBlockState(p.atY(sy))) || !level.getFluidState(p.atY(sy)).isEmpty())valid=false;
             }
             if(!valid || raid.pendingCampBlocks.size()+plan.size()>512)continue;
+            var combined=new HashSet<Long>(raid.pendingCampBlocks.keySet());combined.addAll(plan.keySet());
+            int minX=Integer.MAX_VALUE,minZ=minX,maxX=Integer.MIN_VALUE,maxZ=maxX;
+            for(long key:combined){BlockPos p=BlockPos.of(key);minX=Math.min(minX,p.getX());minZ=Math.min(minZ,p.getZ());maxX=Math.max(maxX,p.getX());maxZ=Math.max(maxZ,p.getZ());}
+            if(maxX-minX>=32 || maxZ-minZ>=32)continue;
             CompoundTag tag=new CompoundTag(),cells=new CompoundTag();plan.forEach((p,id)->cells.putString(Long.toString(p),id));
             tag.putLong("Center",c.asLong());tag.putInt("Facing",front.get2DDataValue());tag.put("Blocks",cells);raid.warGate=tag;
             // Foundations must be first in the native job sequence.
@@ -91,6 +96,7 @@ public final class WarGate {
                 && com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level,raid) && plan(level,raid,objective)) {
             NativeCampConstruction.start(level,raid);RaidSavedData.get(level.getServer()).setDirty();
         }
+        if(!raid.warGate.isEmpty())CampLoading.keep(level,center(raid));
         if(!ready(level,raid)) {
             raid.warGateWaitTicks=Math.min(20*60*30,raid.warGateWaitTicks+20);
             return;
@@ -102,6 +108,15 @@ public final class WarGate {
             level.sendParticles(ParticleTypes.PORTAL,c.getX()+.5+side.getStepX()*Math.cos(angle)*1.1,c.getY()+3+Math.sin(angle)*1.8,
                     c.getZ()+.5+side.getStepZ()*Math.cos(angle)*1.1,2,.08,.08,.08,.05);
         }
+    }
+    public static String status(ServerLevel level,RaidSavedData.RaidState raid) {
+        if(raid.warGate.isEmpty())return "Finding a clear War Gate site";
+        var cells=raid.warGate.getCompound("Blocks");int missing=0;
+        for(String key:cells.getAllKeys()) {
+            BlockPos p=BlockPos.of(Long.parseLong(key));
+            if(!level.hasChunkAt(p) || !cells.getString(key).equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(level.getBlockState(p).getBlock()))))missing++;
+        }
+        return "War Gate: "+missing+" blocks unfinished"+(raid.constructionPauseReason.isEmpty()?"":" — "+raid.constructionPauseReason);
     }
     private static boolean protectedAt(ServerLevel level,BlockPos p) {
         for(var raid:RaidSavedData.get(level.getServer()).raids.values()) {
@@ -126,6 +141,7 @@ public final class WarGate {
     }
     /** Unconditional gate cleanup, even when ordinary camp cleanup is disabled. */
     public static void cleanup(ServerLevel level,RaidSavedData.RaidState raid) {
+        if(!raid.warGate.isEmpty())CampLoading.release(level,center(raid));
         var cells=raid.warGate.getCompound("Blocks");var keys=new ArrayList<>(cells.getAllKeys());
         keys.sort(Comparator.comparingInt((String k)->BlockPos.of(Long.parseLong(k)).getY()).reversed());
         for(String key:keys) {
