@@ -1726,7 +1726,7 @@ public final class RaidEvents {
             state.campBuildTicks = 0;
             com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.start(level, state);
         }
-        if (state.preparationTicks <= third && !shouldPauseForPerformance(server, data)) {
+        if (state.campPos != null && state.preparationTicks <= third && !shouldPauseForPerformance(server, data)) {
             if (state.wave == 0) {
                 queueWave(server, level, data, anchor, point, state, members, recruits);
                 state.ticksToNextSquad = musterInterval(state, third);

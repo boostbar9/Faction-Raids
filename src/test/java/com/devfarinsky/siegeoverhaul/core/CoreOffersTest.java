@@ -28,6 +28,12 @@ class CoreOffersTest extends MinecraftTestSupport {
         assertEquals(0, saved.getInt("Sold"));
         assertEquals(36100, saved.getLong("RefreshAt"));
     }
+    @Test void closedMenusDoNotShiftTheRotationSchedule() {
+        CompoundTag stock = new CompoundTag();
+        CoreOffers.refresh(stock, 100, RandomSource.create(7));
+        assertTrue(CoreOffers.refresh(stock, 20000, RandomSource.create(9)));
+        assertEquals(36100, stock.getLong("RefreshAt"));
+    }
     @Test void preparationAndFortificationJobsSurviveRestart() {
         var raid = new RaidSavedData.RaidState("team:test", "siege_core", 0);
         raid.preparationTotalTicks = 14400;

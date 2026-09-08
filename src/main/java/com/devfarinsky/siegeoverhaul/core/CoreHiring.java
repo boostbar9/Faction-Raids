@@ -12,7 +12,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 
 /** Uses native costs, currency, hiring events, ownership, faction and unit-limit checks. */
 public final class CoreHiring {
-    public static final String[] IDS = {"recruit", "shieldman", "bowman"};
+    public static final String[] IDS = {"recruit", "recruit_shieldman", "bowman"};
     public static final String[] NAMES = {"Recruit", "Shieldman", "Archer"};
     private static final String[] COSTS = {"RecruitCost", "ShieldmanCost", "BowmanCost"};
     private CoreHiring() {}
@@ -29,7 +29,7 @@ public final class CoreHiring {
         Mob mob = null;
         try {
             var type = ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("recruits", IDS[role]));
-            if (type == null || !(type.create(player.serverLevel()) instanceof Mob recruit)) return false;
+            if (type == null || !(type.create(player.serverLevel()) instanceof Mob recruit)) throw new IllegalStateException("Missing recruit type: " + IDS[role]);
             mob = recruit;
             boolean found = false;
             for (int radius = 2; radius <= 4 && !found; radius++) {

@@ -2,7 +2,9 @@
 
 Enemy armies establish a foothold, build a fortified camp, assemble their troops, and attack your faction's **Siege Core**.
 
-## Minecraft 1.20.1 Forge — version 4.0.0
+## Minecraft 1.20.1 Forge — version 4.0.0 beta
+
+Build and automated regression checks validate this update. The new gameplay has not yet had an interactive Minecraft playtest.
 
 **Required on the server and every client:** [Villager Recruits](https://www.curseforge.com/minecraft/mc-mods/recruits) 1.15.2+, [Villager Workers 2](https://www.curseforge.com/minecraft/mc-mods/workers) 2.0.3+, [Small Ships](https://www.curseforge.com/minecraft/mc-mods/small-ships), and [Siege Weapons](https://www.curseforge.com/minecraft/mc-mods/siege-weapons). Forge 47.x and Java 17. Match Siege Overhaul versions on all clients and the server.
 
