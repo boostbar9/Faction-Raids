@@ -48,10 +48,10 @@ import java.util.UUID;
  */
 public final class LadderBuilder {
 
-    public static final int ATTEMPT_INTERVAL_TICKS = 20 * 20; // 20 s
-    public static final int MIN_STUCK_RAIDERS = 3;
+    public static final int ATTEMPT_INTERVAL_TICKS = 5 * 20; // 5 s
+    public static final int MIN_STUCK_RAIDERS = 1;
     public static final int MAX_SCAN_DISTANCE = 24;           // blocks
-    public static final int MAX_WALL_HEIGHT = 6;              // blocks
+    public static final int MAX_WALL_HEIGHT = 12;              // blocks
     public static final int MIN_WALL_HEIGHT = 2;              // blocks
 
     private static final Map<String, Long> LAST_ATTEMPT = new HashMap<>();
@@ -69,33 +69,37 @@ public final class LadderBuilder {
                                 BlockPos objective) {
         if (!RaidConfig.ENABLE_LADDER_BUILDING.get()) return false;
         if (state == null || state.raiders.isEmpty() || objective == null) return false;
-        if (LADDERS_PLACED.getOrDefault(state.teamKey, 0)
-                >= RaidConfig.MAX_LADDERS_PER_RAID.get()) return false;
+        long columns=state.campBlocks.entrySet().stream().filter(e -> "minecraft:ladder".equals(e.getValue().getString("Placed")))
+                .filter(e -> !state.campBlocks.containsKey(BlockPos.of(e.getKey()).below().asLong())
+                        || !"minecraft:ladder".equals(state.campBlocks.get(BlockPos.of(e.getKey()).below().asLong()).getString("Placed"))).count();
+        if(columns>=RaidConfig.MAX_LADDERS_PER_RAID.get())return false;
 
         long now = level.getGameTime();
         Long last = LAST_ATTEMPT.get(state.teamKey);
         if (last != null && now - last < ATTEMPT_INTERVAL_TICKS) return false;
 
-        Vec3 objVec = Vec3.atCenterOf(objective);
-        int stuck = countStuckRaiders(level, state, objVec);
-        if (stuck < MIN_STUCK_RAIDERS) return false;
-
-        // SG19 fix: only burn the attempt-interval clock once we've cleared
-        // the stuck-raider threshold. Prior code updated LAST_ATTEMPT before
-        // the stuck check, so ticks where no raiders were stuck still consumed
-        // the 20s cooldown -- delaying the ladder response by up to another
-        // full interval when raiders became stuck immediately afterward.
-        LAST_ATTEMPT.put(state.teamKey, now);
-
-        Vec3 centroid = centroidOf(level, state);
-        Vec3 rayDir = objVec.subtract(centroid).normalize();
-        Direction facing = horizontalFacing(rayDir);
-
-        WallScan scan = scanForWall(level, centroid, rayDir, facing);
-        if (scan == null) {
-            FactionLogger.LOG.debug("No wall to ladder for raid {}", state.teamKey);
-            return false;
+        WallScan scan=null;
+        int checked=0;
+        for(UUID id:state.raiders) {
+            if(!(level.getEntity(id) instanceof Mob mob) || !mob.isAlive() || mob.isPassenger() || !mob.onGround()
+                    || RaiderLadderGoal.assigned(mob))continue;
+            if(!mob.horizontalCollision && !mob.getNavigation().isDone())continue;
+            if(++checked>8)break;
+            Vec3 direction=Vec3.atCenterOf(objective).subtract(mob.position()).multiply(1,0,1).normalize();
+            if(direction.lengthSqr()<.01)continue;
+            Direction facing=horizontalFacing(direction);
+            for(int side:new int[]{0,-1,1,-2,2}) {
+                Vec3 start=mob.position().add(-direction.z*side,0,direction.x*side);
+                WallScan candidate=scanForWall(level,start,direction,facing);
+                if(candidate!=null && com.devfarinsky.siegeoverhaul.core.SiegeCore.claimed(level,candidate.wallBase,state.teamKey)) {
+                    var path=mob.getNavigation().createPath(candidate.baseFront,0);
+                    if(path!=null && path.canReach()) { scan=candidate;break; }
+                }
+            }
+            if(scan!=null)break;
         }
+        LAST_ATTEMPT.put(state.teamKey,now);
+        if(scan==null)return false;
 
         int placed = placeLadderColumn(level, state, scan);
         if (placed > 0) {
@@ -153,7 +157,9 @@ public final class LadderBuilder {
             Vec3 sample = origin.add(dir.scale(step));
             BlockPos front = BlockPos.containing(sample);
             BlockPos wallBase = front.relative(facing);
-            if (!isSolid(level, wallBase)) continue;
+            if (!level.hasChunkAt(front) || !level.hasChunkAt(wallBase)
+                    || !level.getBlockState(front.below()).isFaceSturdy(level,front.below(),Direction.UP)
+                    || !level.getFluidState(front).isEmpty() || !isSolid(level, wallBase)) continue;
             // Measure wall height at this column.
             int height = 0;
             for (int y = 0; y < MAX_WALL_HEIGHT + 1; y++) {

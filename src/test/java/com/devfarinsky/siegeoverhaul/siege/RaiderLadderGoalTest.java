@@ -47,8 +47,13 @@ class RaiderLadderGoalTest extends MinecraftTestSupport {
         when(level.hasChunkAt(any())).thenReturn(false);
         assertNull(RaiderLadderGoal.readRoute(level,base));
     }
+    @Test void supportsTallFortressWalls() {
+        var level=wall(Direction.WEST,12);
+        var route=RaiderLadderGoal.readRoute(level,base);
+        assertNotNull(route);assertEquals(base.west().above(12),route.exit());
+    }
     @Test void rejectsColumnsTallerThanSupportedAndNonBaseRungs() {
-        var level = wall(Direction.SOUTH,7);
+        var level = wall(Direction.SOUTH,LadderBuilder.MAX_WALL_HEIGHT+1);
         assertNull(RaiderLadderGoal.readRoute(level,base));
         assertNull(RaiderLadderGoal.readRoute(level,base.above()));
     }

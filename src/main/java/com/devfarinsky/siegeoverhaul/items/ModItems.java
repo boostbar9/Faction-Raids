@@ -29,6 +29,9 @@ public final class ModItems {
 
     public static final RegistryObject<Item> SIEGE_CORE = ITEMS.register("siege_core", com.devfarinsky.siegeoverhaul.core.CoreBlocks.CoreItem::new);
 
+    public static final RegistryObject<Item> SETTLEMENT_BAG=ITEMS.register("settlement_bag",()->new StarterBagItem(true));
+    public static final RegistryObject<Item> SURVIVAL_BAG=ITEMS.register("survival_bag",()->new StarterBagItem(false));
+
     private ModItems() {}
 
     public static void register(IEventBus modBus) {
@@ -40,6 +43,7 @@ public final class ModItems {
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(GUIDEBOOK.get());
             event.accept(SIEGE_CORE.get());
+            event.accept(SETTLEMENT_BAG.get());event.accept(SURVIVAL_BAG.get());
         }
     }
 }

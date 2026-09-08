@@ -1,3 +1,11 @@
+## 4.6.0 beta
+
+- First login now grants two distinct starter bags instead of loose core/book gifts. Existing players receive the bags once on their next login as an upgrade grant.
+- Faction bag: Codex, Siege Core, loom, two banners, three dye colors, and configured hiring currency covering faction creation, a first claim, two shieldmen and two archers plus a buffer (192 emeralds with native defaults).
+- Survival/building bag: iron tools and armor, shield, food, bed, water bucket, workstations, torches, 1,024 stone bricks, 128 stairs, 128 slabs, timber, glass and storage. Unpacking fills available inventory space; remaining supplies stay in the bag, including in Creative mode.
+- Ladders scan from locally blocked troops, check reachable approaches and defender claim ownership, respond every five seconds and support walls up to twelve blocks. Added a short physical crest movement to help troops step off the top rung. Ladder limits survive reloads.
+- Breachers skip climbing/mounted units, target forward foot/head-height obstacles instead of digging below themselves, and prioritize headroom above a partially opened breach. All existing restoration and claim protection checks remain.
+
 ## 4.5.0 beta
 
 - Expanded progressive waves to all twelve native Recruits combat types, including recruits, scouts, horsemen, nomads and assassin leaders. Civilian messengers and nobles remain outside combat waves. Very small/custom sieges may not have room for every type.

@@ -459,26 +459,7 @@ public final class RaidEvents {
     @SubscribeEvent
     public static void onPlayerLoggedIn(net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer sp)) return;
-        net.minecraft.nbt.CompoundTag gift = sp.getPersistentData().getCompound(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG);
-        if (!gift.getBoolean("SiegeCoreGiven")) {
-            var coreItem = new net.minecraft.world.item.ItemStack(com.devfarinsky.siegeoverhaul.items.ModItems.SIEGE_CORE.get());
-            if (!sp.getInventory().add(coreItem)) sp.drop(coreItem, false);
-            gift.putBoolean("SiegeCoreGiven", true);
-            sp.getPersistentData().put(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG, gift);
-            sp.sendSystemMessage(Component.literal("Place your Siege Core in your faction's Recruits claim. It becomes the siege objective and offers recruits every 15 minutes."));
-        }
-        // First-login guidebook gift (unchanged behavior).
-        if (RaidConfig.SPAWN_GUIDEBOOK_ON_JOIN.get()) {
-            net.minecraft.nbt.CompoundTag persistent = sp.getPersistentData()
-                    .getCompound(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG);
-            if (!persistent.getBoolean("FactionRaidsGuidebookGiven")) {
-                net.minecraft.world.item.ItemStack book = new net.minecraft.world.item.ItemStack(
-                        com.devfarinsky.siegeoverhaul.items.ModItems.GUIDEBOOK.get());
-                if (!sp.getInventory().add(book)) sp.drop(book, false);
-                persistent.putBoolean("FactionRaidsGuidebookGiven", true);
-                sp.getPersistentData().put(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG, persistent);
-            }
-        }
+        com.devfarinsky.siegeoverhaul.items.StarterBagItem.giveOnce(sp);
         // v3.2.0: notify player of any spoils queued while they were offline.
         try {
             RaidSavedData data = RaidSavedData.get(sp.server);
@@ -3166,7 +3147,8 @@ public final class RaidEvents {
         int evaluatedBreachers = 0;
         for (UUID id : state.raiders) {
             Entity entity = level.getEntity(id);
-            if (!(entity instanceof Mob mob) || !mob.isAlive()) continue;
+            if (!(entity instanceof Mob mob) || !mob.isAlive() || mob.isPassenger()
+                    || com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)) continue;
             String role = mob.getPersistentData().getString(RAID_ROLE_TAG);
             if (!role.equals("breacher") && !role.equals("commander")) continue;
             if (++evaluatedBreachers > 8) break;
@@ -3351,9 +3333,13 @@ public final class RaidEvents {
         RaidSavedData.Anchor anchor = data.anchors.get(state.teamKey);
         boolean respectForeignClaims = RaidConfig.RESPECT_FOREIGN_CLAIMS.get()
                 && com.devfarinsky.siegeoverhaul.compat.ClaimBridge.anyProviderAvailable();
-        for (BlockPos candidate : BlockPos.betweenClosed(origin.offset(-3, -1, -3), origin.offset(3, 2, 3))) {
+        for (BlockPos candidate : BlockPos.betweenClosed(origin.offset(-3, 0, -3), origin.offset(3, 1, 3))) {
             if (candidate.distSqr(stronghold) > maximumDistanceSq ||
                     state.campBlocks.containsKey(candidate.asLong())) continue;
+            if(!level.hasChunkAt(candidate))continue;
+            Vec3 toward=objective.subtract(mob.position()).multiply(1,0,1);
+            Vec3 offset=Vec3.atCenterOf(candidate).subtract(mob.position()).multiply(1,0,1);
+            if(offset.dot(toward)<=0 || offset.lengthSqr()>9)continue;
             BlockState blockState = level.getBlockState(candidate);
             if (!isBreachableDefense(blockState)) continue;
             // v3.3.0: refuse to break blocks in another player's claim. This
@@ -3366,7 +3352,9 @@ public final class RaidEvents {
             }
             double mobDistance = candidate.distSqr(origin);
             double objectiveDistance = Vec3.atCenterOf(candidate).distanceToSqr(objective);
-            double score = mobDistance * 4.0D + objectiveDistance * 0.02D;
+            double score = mobDistance * 4.0D + objectiveDistance * 0.02D
+                    + (candidate.getY()==origin.getY()+1 && level.getBlockState(candidate.below()).isAir()?-20:0)
+                    + (state.blockBreachProgress.containsKey(candidate.asLong())?-8:0);
             if (score < bestScore) {
                 best = candidate.immutable();
                 bestScore = score;

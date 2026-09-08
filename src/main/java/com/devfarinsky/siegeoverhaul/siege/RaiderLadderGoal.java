@@ -18,7 +18,7 @@ public final class RaiderLadderGoal extends Goal {
     private final Mob mob;
     private Route route;
     private long deadline, retryAfter;
-    private int ticks;
+    private int ticks, crestTicks;
     public record Route(BlockPos base, Direction intoWall, int height) {
         public BlockPos exit() { return base.relative(intoWall).above(height); }
     }
@@ -84,9 +84,11 @@ public final class RaiderLadderGoal extends Goal {
                 best = route; nearest = distance;
             }
             if (best == null) continue;
+            var approach=mob.getNavigation().createPath(best.base(),0);
+            if(approach==null || !approach.canReach())continue;
             if (goal == null) { goal = new RaiderLadderGoal(mob); mob.goalSelector.addGoal(0, goal); }
             users.merge(best, 1, Integer::sum);
-            goal.route = best; goal.deadline = level.getGameTime() + 400; goal.ticks = 0;
+            goal.route = best; goal.deadline = level.getGameTime() + 400; goal.ticks = 0; goal.crestTicks=0;
             RecruitsFormationBridge.release(mob);
         }
     }
@@ -116,11 +118,17 @@ public final class RaiderLadderGoal extends Goal {
         if (mob.getY() >= exit.y && mob.position().distanceToSqr(exit) < .16) { stop(); return; }
         if (mob.onClimbable() && mob.blockPosition().getX() == route.base().getX()
                 && mob.blockPosition().getZ() == route.base().getZ()) {
+            crestTicks=12;
             mob.getNavigation().stop();
             // Upward movement only while touching climbable blocks. Collision still governs movement.
             Vec3 into = Vec3.atLowerCornerOf(route.intoWall().getNormal()).scale(.12);
             mob.setDeltaMovement(into.x, .2, into.z);
             mob.getMoveControl().setWantedPosition(exit.x, exit.y, exit.z, 1.0);
+        } else if (crestTicks>0 && mob.getY()>=exit.y-.3 && mob.getY()<exit.y+.35) {
+            crestTicks--;
+            Vec3 toward=exit.subtract(mob.position()).multiply(1,0,1).normalize().scale(.16);
+            mob.setDeltaMovement(toward.x,.12,toward.z);
+            mob.getMoveControl().setWantedPosition(exit.x,exit.y+.1,exit.z,1.0);
         } else if (mob.getY() >= exit.y - .1) {
             mob.getMoveControl().setWantedPosition(exit.x, exit.y, exit.z, 1.0);
         } else if (mob.position().multiply(1,0,1).distanceToSqr(base.multiply(1,0,1)) < 1.0) {
