@@ -2626,22 +2626,8 @@ public final class RaidEvents {
         placeFactionBanner(level, state, bannerBase.above(), bannerBlock, faction);
         state.bannerPos = bannerBase.above();
 
-        // 5) Forward marker banners flanking the objective breach lane.
-        //     Same faction as the command banner. Uses a plinth of the base
-        //     dye color's wool so the banner reads as one continuous marker.
-        net.minecraft.world.level.block.Block plinth =
-                woolMatching(faction.baseColor);
-        Vec3 breach = invasionObjective(level, point, state);
-        int bx = Mth.floor(breach.x);
-        int bz = Mth.floor(breach.z);
-        double perpendicular = state.approachAngle + Math.PI / 2.0D;
-        for (int side : new int[]{-1, 1}) {
-            int x = bx + Mth.floor(Math.cos(perpendicular) * 4.0D * side);
-            int z = bz + Mth.floor(Math.sin(perpendicular) * 4.0D * side);
-            BlockPos marker = surfacePosition(level, x, z);
-            placeCampBlock(level, state, marker, plinth);
-            placeFactionBanner(level, state, marker.above(), bannerBlock, faction);
-        }
+        // Physical banners belong to the enemy camp only. The defender's objective
+        // uses the existing particle beacon; never plant decorations on its roof.
 
         // -----------------------------------------------------------------
         // PHASE 2: queue decorative structures for progressive build-out
@@ -3007,7 +2993,9 @@ public final class RaidEvents {
                                            BlockPos pos,
                                            Block bannerBlock,
                                            com.devfarinsky.siegeoverhaul.items.FactionBanners.FactionId faction) {
+        if (!com.devfarinsky.siegeoverhaul.camp.CampBannerPlacement.canPlace(level, state, pos)) return;
         placeCampBlock(level, state, pos, bannerBlock);
+        if (!level.getBlockState(pos).is(bannerBlock) || !state.campBlocks.containsKey(pos.asLong())) return;
         net.minecraft.world.level.block.entity.BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof net.minecraft.world.level.block.entity.BannerBlockEntity) {
             net.minecraft.nbt.CompoundTag beTag = new net.minecraft.nbt.CompoundTag();
