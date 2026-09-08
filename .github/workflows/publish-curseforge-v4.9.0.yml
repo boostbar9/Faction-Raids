@@ -1,0 +1,87 @@
+name: Publish tested 4.9.0 beta to CurseForge
+on:
+  push:
+    branches: [publish/curseforge-v4.9.0]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: curseforge-1364352-v4.9.0
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34200527101
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Verify tested bytes and metadata
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          jar = Path('dist/siegeoverhaul-4.9.0.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == '05b4a14675b977a79aa0a099a9bf06c9bd90e0ed00ff187793438a5d97f76ec3'
+          with zipfile.ZipFile(jar) as z:
+              data = tomllib.loads(z.read('META-INF/mods.toml').decode())
+          assert data['mods'][0]['modId'] == 'siegeoverhaul'
+          assert data['mods'][0]['version'] == '4.9.0'
+          dependencies = {x['modId']: x for x in data['dependencies']['siegeoverhaul']}
+          for mod in ['recruits', 'workers', 'smallships', 'siegeweapons']:
+              assert dependencies[mod]['mandatory'], mod
+          print('Verified', jar.name, digest)
+          CHECK
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.9.0.jar
+          name: The Siege Overhaul v4.9.0 beta - Hero Magic and Emerald Loot Boxes
+          version: v4.9.0
+          version-type: beta
+          changelog: |
+            ## 4.9.0 beta
+            
+            - Four hero identities use existing native combat and movement: Kael Bloodthorn, Branna Dawnwarden, Sylva Stormbow, Orin Frostbinder.
+            - Bloodthorn: every third melee hit heals one heart, or grants a short absorption shield at full health, with a two-second cooldown.
+            - Dawnwarden: shields one owner-verified ally below 30% health for five seconds, with a 30-second hero and recipient cooldown.
+            - Stormbow: every fourth projectile hit chains four damage to up to two visible siege enemies, with a three-second cooldown and no recursive chains.
+            - Frostbinder: projectile hits slow up to three visible siege enemies for three seconds, with a ten-second cooldown and per-target protection against repeated freezing.
+            - Existing saved heroes gain the new role abilities without replenishing equipment. Signature descriptions appear on the hiring card and in wrapped tooltips.
+            - New Loot boxes tab: Field Supplies (32 emeralds), Veteran Armory (64), Royal Treasury (128). Every box grants one reward from an explicit 50/30/15/5 pool, including enchanted equipment or useful supplies.
+            - Exact reward pools and odds are shown before buying. Two-click confirmation, server-side permission/payment validation, per-player purchase cooldown and inventory capacity checks before rolling. No dropped rewards, no paid rerolls.
+            - Network protocol 10: update server and every client together.
+            
+            REQUIRED on server and every client: Villager Recruits 1.15.2+, Villager Workers 2 2.0.3+, Small Ships and Siege Weapons. Minecraft 1.20.1 Forge, Java 17. Match Siege Overhaul versions.
+            
+            Validation: Java 17 clean build and 136 regression tests passed. No interactive Minecraft playtest; published as beta.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          dependencies: |
+            recruits(required)
+            workers(required)
+            smallships(required)
+            siegeweapons(required)
+          fail-mode: fail
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os
+          result = {'version': '4.9.0', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 4.9.0 beta: {result['url']}\n")
+          RECEIPT
