@@ -1,0 +1,83 @@
+name: Publish tested 4.4.0 beta to CurseForge
+on:
+  push:
+    branches: [publish/curseforge-v4.4.0]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: curseforge-1364352-v4.4.0
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34187127243
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Verify tested bytes and metadata
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          jar = Path('dist/siegeoverhaul-4.4.0.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == '1e984cd6e8c1923ac4e9ec35463c3500a3b7ed245368704b6cfff9ed54baeb65'
+          with zipfile.ZipFile(jar) as z:
+              data = tomllib.loads(z.read('META-INF/mods.toml').decode())
+          assert data['mods'][0]['modId'] == 'siegeoverhaul'
+          assert data['mods'][0]['version'] == '4.4.0'
+          dependencies = {x['modId']: x for x in data['dependencies']['siegeoverhaul']}
+          for mod in ['recruits', 'workers', 'smallships', 'siegeweapons']:
+              assert dependencies[mod]['mandatory'], mod
+          print('Verified', jar.name, digest)
+          CHECK
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.4.0.jar
+          name: The Siege Overhaul v4.4.0 beta - Heroes and Living Camps
+          version: v4.4.0
+          version-type: beta
+          changelog: |
+            ## 4.4.0 beta
+            
+            - Separate native enemy factions give camp and captured claims distinct map colors. Core capture renames territory; recapture restores its original name.
+            - Dedicated camp guards use aggressive native hold orders at gate and rear flank posts; their assignments survive reloads.
+            - Builders receive three sequential, finite native blueprint extensions after initial fortifications: timber shelters with distinct roofs. Jobs wait for safe, clear terrain and living builders.
+            - New Hire a Hero tab: one level-10 featured recruit with diamond armor, 60 minimum health, and a melee damage bonus. Vanguard/Bulwark/Ranger/Arbalist offer odds: 40/30/20/10 percent. Price is 12 times native cost, minimum 256 configured currency.
+            - Hero stock shares the 15-minute faction rotation; exact offers and prices are visible before hiring. Existing two recruit and one worker slots are retained.
+            - Refreshed responsive cards, gradients and a brief reveal highlight. Network protocol 9 requires matching server/client versions.
+            - Native Workers blueprint reference: https://www.curseforge.com/minecraft/mc-mods/workers
+
+            Validation: Java 17 clean build and all 91 regression tests passed. No interactive Minecraft playtest; beta release. Install matching versions on server and every client.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          dependencies: |
+            recruits(required)
+            workers(required)
+            smallships(required)
+            siegeweapons(required)
+          fail-mode: fail
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os
+          result = {'version': '4.4.0', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 4.4.0 beta: {result['url']}\n")
+          RECEIPT
