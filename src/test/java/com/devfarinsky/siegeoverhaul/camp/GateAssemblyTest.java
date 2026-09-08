@@ -44,7 +44,7 @@ class GateAssemblyTest extends MinecraftTestSupport {
         assertFalse(raid.warGate.getBoolean("Assembled493"));assertTrue(raid.campBlocks.isEmpty());
     }
     @Test void rejectedPlacementRollsBackWithoutCompletingGateOrRemovingJobs() {
-        when(level.setBlock(eq(center),any(),anyInt())).thenReturn(false);
+        doReturn(false).when(level).setBlock(eq(center),any(),anyInt());
         assertFalse(GateAssembly.install(level,raid));assertFalse(raid.warGate.getBoolean("Assembled493"));
         assertFalse(raid.pendingCampBlocks.isEmpty());assertTrue(raid.campBlocks.isEmpty());
         assertTrue(world.values().stream().allMatch(BlockState::isAir));
