@@ -41,7 +41,7 @@ public final class CampBuilder {
 
     /** Called once per periodic siege pass. All pending jobs and crew IDs survive world saves. */
     public static void tick(ServerLevel level, RaidState raid, BiConsumer<BlockPos, Block> place) {
-        if (raid.pendingCampBlocks.isEmpty()) return;
+        if (raid.pendingCampBlocks.isEmpty() || !com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level, raid)) return;
         if (NativeCampConstruction.active(raid)) { NativeCampConstruction.tick(level, raid); return; }
         // Do not force-load the camp, or time out while its chunk is unloaded.
         BlockPos first = BlockPos.of(raid.pendingCampBlocks.keySet().iterator().next());

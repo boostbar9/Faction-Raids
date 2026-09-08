@@ -53,7 +53,7 @@ class NativeCampConstructionTest extends MinecraftTestSupport {
     }
 
     @Test
-    void replacementStopsNativeCrewBeforeTheirAiCanMineIt() {
+    void temporaryObstructionsPauseAndResumeTheSameNativeJobs() {
         var level = org.mockito.Mockito.mock(net.minecraft.server.level.ServerLevel.class);
         var server = org.mockito.Mockito.mock(net.minecraft.server.MinecraftServer.class);
         var worker = org.mockito.Mockito.mock(net.minecraft.world.entity.Mob.class);
@@ -88,11 +88,27 @@ class NativeCampConstructionTest extends MinecraftTestSupport {
             var event = new net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent(worker);
             com.devfarinsky.siegeoverhaul.RaidEvents.onCampWorkerTick(event);
             assertTrue(event.isCanceled());
-            assertTrue(raid.pendingCampBlocks.isEmpty());
-            assertFalse(NativeCampConstruction.active(raid));
+            assertFalse(raid.pendingCampBlocks.isEmpty());
+            assertTrue(NativeCampConstruction.active(raid));
             org.mockito.Mockito.verify(worker, org.mockito.Mockito.never()).discard();
             assertTrue(raid.campWorkers.contains(workerId));
-            bridge.verify(() -> com.devfarinsky.siegeoverhaul.compat.WorkersBridge.parkBuilder(worker));
+            bridge.verify(() -> com.devfarinsky.siegeoverhaul.compat.WorkersBridge.parkBuilder(worker), org.mockito.Mockito.never());
+            org.mockito.Mockito.when(level.getBlockState(new BlockPos(2, 0, 0))).thenReturn(Blocks.AIR.defaultBlockState());
+            org.mockito.Mockito.when(level.getFluidState(new BlockPos(2, 0, 0))).thenReturn(net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState());
+            net.minecraft.server.level.ServerPlayer player = org.mockito.Mockito.mock(net.minecraft.server.level.ServerPlayer.class);
+            org.mockito.Mockito.when(player.isAlive()).thenReturn(true);
+            org.mockito.Mockito.when(player.getBoundingBox()).thenReturn(new net.minecraft.world.phys.AABB(new BlockPos(2,0,0)));
+            org.mockito.Mockito.when(level.players()).thenReturn(java.util.List.of(player));
+            assertFalse(NativeCampConstruction.safeToTick(level, raid));
+            assertTrue(NativeCampConstruction.active(raid));
+            org.mockito.Mockito.when(level.players()).thenReturn(java.util.List.of());
+            assertTrue(NativeCampConstruction.safeToTick(level, raid));
+            assertFalse(raid.pendingCampBlocks.isEmpty());
+            org.mockito.Mockito.when(level.isDay()).thenReturn(true);
+            raid.campBuildTicks = com.devfarinsky.siegeoverhaul.RaidConfig.CAMP_MAX_BUILD_SECONDS.get()*20-20;
+            NativeCampConstruction.tick(level, raid);
+            assertTrue(NativeCampConstruction.active(raid));
+            assertFalse(raid.pendingCampBlocks.isEmpty());
             org.mockito.Mockito.verify(level, org.mockito.Mockito.never()).setBlock(
                     org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
         }

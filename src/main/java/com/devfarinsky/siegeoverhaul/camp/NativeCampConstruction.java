@@ -32,6 +32,7 @@ public final class NativeCampConstruction {
     }
 
     public static boolean start(ServerLevel level, RaidSavedData.RaidState raid) {
+        if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level, raid)) return false;
         if (raid.campWorkers.isEmpty() || raid.pendingCampBlocks.isEmpty()
                 || raid.pendingCampBlocks.size() > 512 || !RaidConfig.CLEANUP_WAR_CAMPS.get()) return false;
         Entity build = null, storage = null;
@@ -81,6 +82,9 @@ public final class NativeCampConstruction {
             state.putUUID(CAMP_STORAGE_AREA, storage.getUUID());
             state.putLong(CAMP_SUPPLY_POS, supply.asLong());
             raid.nativeCamp = state;
+            raid.campCompletedBlocks = 0;
+            raid.campBuildTicks = 0;
+            raid.constructionPauseReason = "";
             for (Entity area : List.of(build, storage)) {
                 area.getPersistentData().putString(CAMP_AREA_TEAM, raid.teamKey);
                 if (!level.addFreshEntity(area)) throw new IllegalStateException("Work area registration rejected");
@@ -173,6 +177,7 @@ public final class NativeCampConstruction {
 
     /** Called immediately before EACH worker AI tick, including between periodic raid passes. */
     public static boolean safeToTick(ServerLevel level, RaidSavedData.RaidState raid) {
+        if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level, raid)) return pause(raid, "Camp claim lost or unavailable");
         if (!RaidConfig.ENABLED.get() || !RaidConfig.ENABLE_CAMP_CONSTRUCTION.get() || !WorkersBridge.available()) return false;
         BlockPos supply = BlockPos.of(raid.nativeCamp.getLong(CAMP_SUPPLY_POS));
         if (!level.hasChunkAt(supply)) return false;
@@ -187,17 +192,27 @@ public final class NativeCampConstruction {
             if (!level.hasChunkAt(p)) return false;
             BlockState current = level.getBlockState(p);
             if (!safeCell(current, job.getValue()) || !level.getFluidState(p).isEmpty()) {
-                stop(level, raid);
-                return false;
+                return pause(raid, "Blueprint blocked at " + p.toShortString());
             }
             // Do not let native builders enclose a player who entered the blueprint.
             if (current.isAir() && level.players().stream().anyMatch(player -> player.isAlive()
                     && !player.isSpectator() && player.getBoundingBox().intersects(new AABB(p)))) {
-                stop(level, raid);
-                return false;
+                return pause(raid, "Player inside blueprint");
             }
         }
+        if (!raid.constructionPauseReason.isEmpty()) {
+            FactionLogger.LOG.info("Camp builders for {} resumed", raid.teamKey);
+            raid.constructionPauseReason = "";
+        }
         return true;
+    }
+
+    private static boolean pause(RaidSavedData.RaidState raid, String reason) {
+        if (!reason.equals(raid.constructionPauseReason)) {
+            FactionLogger.LOG.info("Camp builders for {} paused: {}", raid.teamKey, reason);
+            raid.constructionPauseReason = reason;
+        }
+        return false;
     }
 
     static boolean safeCell(BlockState current, String planned) {
@@ -207,11 +222,20 @@ public final class NativeCampConstruction {
 
     public static void tick(ServerLevel level, RaidSavedData.RaidState raid) {
         if (!safeToTick(level, raid)) return;
-        boolean complete = raid.pendingCampBlocks.entrySet().stream().allMatch(job ->
-                !level.getBlockState(BlockPos.of(job.getKey())).isAir());
-        if (complete) { stop(level, raid); return; }
-        // Workers 2 sleeps at night. Night and unloaded chunks do not burn the construction budget.
-        if (level.isDay() && CampBuilder.advanceTimeout(raid)) stop(level, raid);
+        int completed = (int) raid.pendingCampBlocks.keySet().stream().filter(key -> !level.getBlockState(BlockPos.of(key)).isAir()).count();
+        if (completed == raid.pendingCampBlocks.size()) {
+            FactionLogger.LOG.info("Camp builders for {} completed {} planned cells", raid.teamKey, completed);
+            stop(level, raid); return;
+        }
+        if (completed > raid.campCompletedBlocks) raid.campBuildTicks = 0;
+        raid.campCompletedBlocks = completed;
+        // Native jobs remain valid until completed, sabotaged, or the siege ends. Do not destroy
+        // their supplies/work orders just because a builder spent time walking or gathering.
+        if (level.isDay()) {
+            raid.campBuildTicks = Math.min(Integer.MAX_VALUE - 20, raid.campBuildTicks) + 20;
+            if (raid.campBuildTicks == RaidConfig.CAMP_MAX_BUILD_SECONDS.get() * 20)
+                FactionLogger.LOG.info("Camp builders for {} have made no progress for {}s; retaining native jobs and finite supplies", raid.teamKey, RaidConfig.CAMP_MAX_BUILD_SECONDS.get());
+        }
     }
 
     public static void stop(ServerLevel level, RaidSavedData.RaidState raid) {

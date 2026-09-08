@@ -437,7 +437,7 @@ public final class RaidConfig {
                 .defineInRange("campBuilderMax", 2, 1, 8);
         CAMP_LUMBERJACK_MAX = b.comment("Legacy compatibility setting; camp lumberjacks are no longer spawned because native tree cutting bypasses siege restoration.")
                 .defineInRange("campLumberjackMax", 2, 1, 8);
-        CAMP_MAX_BUILD_SECONDS = b.comment("Maximum loaded construction time in seconds. Unfinished decorative jobs are abandoned at the limit; assault waves do not wait for construction.")
+        CAMP_MAX_BUILD_SECONDS = b.comment("Seconds without progress before logging a native builder warning; native jobs remain available. Also bounds fallback scripted construction.")
                 .defineInRange("campMaxBuildSeconds", 180, 30, 900);
         ENABLE_NARRATIVE = b.comment("Attach a themed raider faction and casus belli (reason for war) to every raid. When false, announcements use generic wording and no faction is stored.")
                 .define("enableRaiderNarrative", true);

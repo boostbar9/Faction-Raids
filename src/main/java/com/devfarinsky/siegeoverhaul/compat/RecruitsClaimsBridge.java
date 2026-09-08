@@ -155,7 +155,7 @@ public final class RecruitsClaimsBridge {
         if (teamKey == null || teamKey.isBlank()) return Optional.empty();
         for (RaidSavedData.DefensePoint point : anchor.defensePoints().values()) {
             Optional<ClaimSnapshot> snap = getClaimAt(level, point.pos());
-            if (snap.isPresent() && teamKey.equals(snap.get().ownerFactionStringId())) {
+            if (snap.isPresent() && (teamKey.startsWith("team:") ? teamKey.substring(5) : teamKey).equals(snap.get().ownerFactionStringId())) {
                 return snap;
             }
         }
@@ -166,7 +166,7 @@ public final class RecruitsClaimsBridge {
     public static boolean isChunkOwnedBy(ServerLevel level, ChunkPos chunk, String factionStringId) {
         if (factionStringId == null || factionStringId.isBlank()) return false;
         return getClaimAt(level, chunk)
-                .map(s -> factionStringId.equals(s.ownerFactionStringId()))
+                .map(s -> (factionStringId.startsWith("team:") ? factionStringId.substring(5) : factionStringId).equals(s.ownerFactionStringId()))
                 .orElse(false);
     }
 

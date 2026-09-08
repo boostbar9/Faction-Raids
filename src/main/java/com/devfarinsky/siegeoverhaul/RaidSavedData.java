@@ -25,9 +25,10 @@ public final class RaidSavedData extends SavedData {
     // v12 added pendingSpoils + raidNotifyOptOut (3.2.0 multiplayer polish).
     // v13 added persistent camp construction jobs and crew (3.4.0).
     // Old saves load cleanly because all new fields default to empty collections.
-    public static final int DATA_VERSION = 16;
+    public static final int DATA_VERSION = 17;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
+    public final Set<UUID> campClaimLeases = new HashSet<>();
     public final Map<String, CompoundTag> siegeCores = new HashMap<>();
     public final Map<String, Anchor> anchors = new HashMap<>();
     public final Map<String, RaidState> raids = new HashMap<>();
@@ -70,6 +71,8 @@ public final class RaidSavedData extends SavedData {
 
     public static RaidSavedData load(CompoundTag root) {
         RaidSavedData data = new RaidSavedData();
+        ListTag leases = root.getList("CampClaimLeases", Tag.TAG_COMPOUND);
+        for (int i=0;i<leases.size();i++) if (leases.getCompound(i).hasUUID("Id")) data.campClaimLeases.add(leases.getCompound(i).getUUID("Id"));
         CompoundTag cores = root.getCompound("SiegeCores");
         for (String key : cores.getAllKeys()) data.siegeCores.put(key, cores.getCompound(key).copy());
         ListTag anchorsTag = root.getList("Anchors", Tag.TAG_COMPOUND);
@@ -121,6 +124,9 @@ public final class RaidSavedData extends SavedData {
     @Override
     public CompoundTag save(CompoundTag root) {
         root.putInt("DataVersion", DATA_VERSION);
+        ListTag leases = new ListTag();
+        campClaimLeases.forEach(id -> { CompoundTag entry = new CompoundTag(); entry.putUUID("Id", id); leases.add(entry); });
+        root.put("CampClaimLeases", leases);
         CompoundTag cores = new CompoundTag();
         siegeCores.forEach((key, value) -> cores.put(key, value.copy()));
         root.put("SiegeCores", cores);
@@ -457,6 +463,11 @@ public final class RaidSavedData extends SavedData {
         public boolean breached;
         public int lastBreachWarningBand;
         public BlockPos campPos;
+        public UUID campClaimId;
+        public boolean campGuardsStarted;
+        public final Set<UUID> campGuards = new HashSet<>();
+        public int campCompletedBlocks;
+        public transient String constructionPauseReason = "";
         public boolean campBuildAttempted;
         /** Water-surface staging point when this raid has an amphibious component. Null otherwise. */
         public BlockPos navalStagingPos;
@@ -594,6 +605,12 @@ public final class RaidSavedData extends SavedData {
             CompoundTag tag = new CompoundTag();
             tag.putString("Team", teamKey);
             tag.putString("DefensePoint", defensePointName);
+            if (campClaimId != null) tag.putUUID("CampClaimId", campClaimId);
+            tag.putBoolean("CampGuardsStarted", campGuardsStarted);
+            tag.putInt("CampCompletedBlocks", campCompletedBlocks);
+            ListTag guards = new ListTag();
+            campGuards.forEach(id -> { CompoundTag entry = new CompoundTag(); entry.putUUID("Id",id); guards.add(entry); });
+            tag.put("CampGuards", guards);
             tag.putInt("Wave", wave);
             tag.putInt("NextWave", ticksToNextWave);
             tag.putInt("PreparationTicks", preparationTicks);
@@ -725,6 +742,11 @@ public final class RaidSavedData extends SavedData {
             if (point.isBlank()) point = HOME_POINT;
             RaidState state = new RaidState(tag.getString("Team"), point, tag.getInt("NextWave"));
             state.wave = tag.getInt("Wave");
+            state.campClaimId = tag.hasUUID("CampClaimId") ? tag.getUUID("CampClaimId") : null;
+            state.campGuardsStarted = tag.getBoolean("CampGuardsStarted");
+            state.campCompletedBlocks = tag.getInt("CampCompletedBlocks");
+            ListTag guards = tag.getList("CampGuards", Tag.TAG_COMPOUND);
+            for (int i=0;i<guards.size();i++) if (guards.getCompound(i).hasUUID("Id")) state.campGuards.add(guards.getCompound(i).getUUID("Id"));
             state.preparationTotalTicks = Math.max(0, tag.getInt("PreparationTotal"));
             state.preparationTicks = Math.max(0, Math.min(state.preparationTotalTicks, tag.getInt("PreparationTicks")));
             CompoundTag forts = tag.getCompound("FortificationJobs");
