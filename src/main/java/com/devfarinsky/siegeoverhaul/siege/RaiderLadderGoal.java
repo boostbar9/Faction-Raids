@@ -19,6 +19,7 @@ public final class RaiderLadderGoal extends Goal {
     private Route route;
     private long deadline, retryAfter;
     private int ticks, crestTicks;
+    private BlockPos landing;
     public record Route(BlockPos base, Direction intoWall, int height) {
         public BlockPos exit() { return base.relative(intoWall).above(height); }
     }
@@ -88,10 +89,35 @@ public final class RaiderLadderGoal extends Goal {
             if(approach==null || !approach.canReach())continue;
             if (goal == null) { goal = new RaiderLadderGoal(mob); mob.goalSelector.addGoal(0, goal); }
             users.merge(best, 1, Integer::sum);
-            goal.route = best; goal.deadline = level.getGameTime() + 400; goal.ticks = 0; goal.crestTicks=0;
+            goal.route = best; goal.deadline = level.getGameTime() + 400; goal.ticks = 0; goal.crestTicks=0; goal.landing=null;
             RecruitsFormationBridge.release(mob);
         }
     }
+    /** Continue beyond the outside wall lip to supported ground on the inside.
+     * Cross at most eight blocks and drop at most six; normal fall damage applies. */
+    static BlockPos findLanding(ServerLevel level,Route route) {
+        BlockPos exit=route.exit();
+        for(int forward=1;forward<=8;forward++) {
+            BlockPos top=exit.relative(route.intoWall(),forward);
+            if(!level.hasChunkAt(top) || !level.getBlockState(top).isAir() || !level.getBlockState(top.above()).isAir())return null;
+            // A level, solid wall-top cell is a crossing surface, not the inside landing.
+            if(level.getBlockState(top.below()).isFaceSturdy(level,top.below(),Direction.UP))continue;
+            for(int down=1;down<=6;down++) {
+                BlockPos feet=top.below(down);
+                if(!level.hasChunkAt(feet) || !level.getFluidState(feet).isEmpty())break;
+                var floor=level.getBlockState(feet.below());
+                if(!level.getBlockState(feet).isAir())break;
+                if(floor.isFaceSturdy(level,feet.below(),Direction.UP)) {
+                    if(!level.getBlockState(feet.above()).isAir() || floor.is(Blocks.MAGMA_BLOCK)
+                            || floor.is(Blocks.CAMPFIRE) || floor.is(Blocks.SOUL_CAMPFIRE) || floor.is(Blocks.CACTUS))return null;
+                    return feet;
+                }
+            }
+            return null; // Do not walk over an unverified deep drop searching for another landing.
+        }
+        return null;
+    }
+
     @Override public boolean canUse() { return valid(); }
     @Override public boolean canContinueToUse() { return valid(); }
     private boolean valid() {
@@ -107,6 +133,7 @@ public final class RaiderLadderGoal extends Goal {
     @Override public void start() { mob.getNavigation().stop(); }
     @Override public void stop() {
         route = null;
+        landing = null;
         retryAfter = mob.level().getGameTime() + 100;
         mob.getNavigation().stop();
     }
@@ -115,7 +142,19 @@ public final class RaiderLadderGoal extends Goal {
         ticks++;
         Vec3 base = Vec3.atBottomCenterOf(route.base());
         Vec3 exit = Vec3.atBottomCenterOf(route.exit());
-        if (mob.getY() >= exit.y && mob.position().distanceToSqr(exit) < .16) { stop(); return; }
+        if (landing != null) {
+            Vec3 destination=Vec3.atBottomCenterOf(landing);
+            if(mob.onGround() && mob.position().distanceToSqr(destination)<1) { stop();return; }
+            // Walk across the wall and let normal gravity/fall damage handle descent.
+            mob.getNavigation().stop();
+            mob.getMoveControl().setWantedPosition(destination.x,destination.y,destination.z,1.0);
+            return;
+        }
+        if (mob.getY() >= exit.y && mob.position().distanceToSqr(exit) < .64) {
+            landing=findLanding((ServerLevel)mob.level(),route);
+            if(landing==null) { stop();return; }
+            return;
+        }
         if (mob.onClimbable() && mob.blockPosition().getX() == route.base().getX()
                 && mob.blockPosition().getZ() == route.base().getZ()) {
             crestTicks=12;

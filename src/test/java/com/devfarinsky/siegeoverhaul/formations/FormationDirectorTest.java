@@ -23,6 +23,7 @@ class FormationDirectorTest extends MinecraftTestSupport {
     void formationsRequireDefendingFactionTerritory() {
         var level = mock(net.minecraft.server.level.ServerLevel.class);
         Mob soldier = mock(Mob.class);
+        when(soldier.getPersistentData()).thenReturn(new net.minecraft.nbt.CompoundTag());
         when(soldier.blockPosition()).thenReturn(new BlockPos(100,64,100));
         when(soldier.distanceToSqr(any(Vec3.class))).thenReturn(1600.0);
         try (var claims = mockStatic(com.devfarinsky.siegeoverhaul.core.SiegeCore.class)) {

@@ -83,6 +83,7 @@ public final class FormationDirector {
 
     public static boolean shouldMarch(ServerLevel level, String defendingTeam, Mob mob, BlockPos objective) {
         return shouldMarch(mob, objective)
+                && !com.devfarinsky.siegeoverhaul.raid.FlankRoutes.active(mob,level.getGameTime())
                 && com.devfarinsky.siegeoverhaul.core.SiegeCore.claimed(level, mob.blockPosition(), defendingTeam);
     }
 

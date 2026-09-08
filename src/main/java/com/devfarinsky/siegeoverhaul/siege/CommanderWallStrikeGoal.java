@@ -52,7 +52,7 @@ public final class CommanderWallStrikeGoal extends Goal {
         return hit.getType()==HitResult.Type.BLOCK && hit.getBlockPos().equals(pos);
     }
     @Override public boolean canUse() {
-        if(!(mob.level() instanceof ServerLevel level) || !allowed(level))return false;
+        if(!(mob.level() instanceof ServerLevel level) || !allowed(level) || RaiderLadderGoal.assigned(mob))return false;
         long now=level.getGameTime(),next=mob.getPersistentData().getLong("SiegeBossNextStrike");
         if(next>now && next<=now+COOLDOWN)return false;
         if(mob.tickCount%10!=0)return false;
