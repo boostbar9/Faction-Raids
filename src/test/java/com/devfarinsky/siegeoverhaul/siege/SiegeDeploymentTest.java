@@ -14,6 +14,27 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class SiegeDeploymentTest extends MinecraftTestSupport {
+    private static void completedGate(ServerLevel level,RaidSavedData.RaidState raid) {
+        BlockPos center=new BlockPos(8,64,8);
+        var plan=com.devfarinsky.siegeoverhaul.camp.WarGate.blueprint(center,net.minecraft.core.Direction.NORTH);
+        var cells=new CompoundTag();plan.forEach((pos,id)->cells.putString(Long.toString(pos),id));
+        raid.warGate.putLong("Center",center.asLong());raid.warGate.put("Blocks",cells);
+        when(level.hasChunkAt(any())).thenReturn(true);
+        when(level.getBlockState(any())).thenAnswer(a->{
+            String id=plan.get(((BlockPos)a.getArgument(0)).asLong());
+            return id==null?net.minecraft.world.level.block.Blocks.AIR.defaultBlockState():net.minecraftforge.registries.ForgeRegistries.BLOCKS.getValue(new net.minecraft.resources.ResourceLocation(id)).defaultBlockState();
+        });
+    }
+    @Test void noEngineerOnlyWaveWhileGateOrInfantryIsMissing() {
+        ServerLevel level=mock(ServerLevel.class);var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        raid.campPos=BlockPos.ZERO;raid.wave=1;
+        try(var construction=mockStatic(SiegeConstruction.class);var integration=mockStatic(SiegeIntegration.class)) {
+            SiegeDeployment.tick(level,raid,BlockPos.ZERO);
+            completedGate(level,raid);
+            SiegeDeployment.tick(level,raid,BlockPos.ZERO);
+            construction.verifyNoInteractions();integration.verifyNoInteractions();assertEquals(0,raid.totalSpawned);
+        }
+    }
     @Test
     void unloadedEngineKeepsItsCleanupIdentity() {
         var raid = new RaidSavedData.RaidState("team:test", "home", 0);
@@ -68,7 +89,7 @@ class SiegeDeploymentTest extends MinecraftTestSupport {
         var level = mock(ServerLevel.class);
         var engine = mock(Entity.class);
         var raid = new RaidSavedData.RaidState("team:test", "siege_core", 0);
-        raid.campPos = BlockPos.ZERO; raid.wave = 2;
+        raid.campPos = BlockPos.ZERO; raid.wave = 2; raid.waveStartingCount=4;
         UUID id = UUID.randomUUID(); raid.siegeEngines.put(id, "BALLISTA");
         var tag = new CompoundTag(); tag.putInt("SiegeSupportWave",2);
         when(engine.getPersistentData()).thenReturn(tag);
@@ -77,9 +98,10 @@ class SiegeDeploymentTest extends MinecraftTestSupport {
         when(engine.position()).thenReturn(Vec3.ZERO);
         when(level.getEntity(id)).thenReturn(engine);
         when(level.getGameTime()).thenReturn(100L,200L,300L);
-        try (var construction = mockStatic(SiegeConstruction.class); var integration = mockStatic(SiegeIntegration.class);
+        try ( var construction = mockStatic(SiegeConstruction.class); var integration = mockStatic(SiegeIntegration.class);
                 var saves = mockStatic(RaidSavedData.class)) {
             saves.when(() -> RaidSavedData.get(null)).thenReturn(new RaidSavedData());
+            completedGate(level,raid);
             integration.when(() -> SiegeIntegration.spawnSiegeEngineer(level, Vec3.ZERO, raid.teamKey, engine, SiegeEngineType.BALLISTA)).thenReturn(Optional.empty());
             SiegeDeployment.tick(level, raid, BlockPos.ZERO);
             SiegeDeployment.tick(level, raid, BlockPos.ZERO);

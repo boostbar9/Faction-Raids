@@ -13,7 +13,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 /** Uses native costs, currency, hiring events, ownership, faction and unit-limit checks. */
 public final class CoreHiring {
     public static final String[] IDS = {"recruit", "recruit_shieldman", "bowman", "crossbowman", "farmer", "lumberjack", "miner", "builder", "cook", "courier"};
-    public static final String[] NAMES = {"Recruit", "Shieldman", "Archer", "Crossbowman", "Farmer", "Lumberjack", "Miner", "Builder", "Cook", "Courier", "Vanguard Hero", "Bulwark Hero", "Ranger Hero", "Arbalist Hero"};
+    public static final String[] NAMES = {"Recruit", "Shieldman", "Archer", "Crossbowman", "Farmer", "Lumberjack", "Miner", "Builder", "Cook", "Courier", "Kael the Vanguard", "Branna the Bulwark", "Sylva the Ranger", "Orin the Arbalist"};
     private static final String[] COSTS = {"RecruitCost", "ShieldmanCost", "BowmanCost", "CrossbowmanCost", "FarmerCost", "LumberjackCost", "MinerCost", "BuilderCost", "CookCost", "CourierCost"};
     private CoreHiring() {}
     private static Object config(String name) throws ReflectiveOperationException {
@@ -57,16 +57,9 @@ public final class CoreHiring {
         if(attack!=null) attack.setBaseValue(attack.getBaseValue()+4);
         Object inventory=recruit.getClass().getMethod("getInventory").invoke(recruit);
         if(!(inventory instanceof net.minecraft.world.SimpleContainer container)) throw new IllegalStateException("Hero inventory missing");
-        Item[] armor={Items.DIAMOND_HELMET,Items.DIAMOND_CHESTPLATE,Items.DIAMOND_LEGGINGS,Items.DIAMOND_BOOTS};
-        EquipmentSlot[] slots={EquipmentSlot.HEAD,EquipmentSlot.CHEST,EquipmentSlot.LEGS,EquipmentSlot.FEET};
-        for(int i=0;i<4;i++) {
-            ItemStack stack=new ItemStack(armor[i]);
-            var trim=new net.minecraft.nbt.CompoundTag(); trim.putString("material","minecraft:gold"); trim.putString("pattern","minecraft:spire");
-            stack.getOrCreateTag().put("Trim",trim); container.setItem(i,stack); recruit.setItemSlot(slots[i],stack);
-        }
+        HeroTraits.equip(recruit,role,container);
         container.addItem(new ItemStack(Items.BREAD,32));
         if(role>=12) container.addItem(new ItemStack(Items.ARROW,64));
-        recruit.setCustomName(net.minecraft.network.chat.Component.literal(NAMES[role]));
         recruit.getPersistentData().putBoolean("SiegeHiredHero",true);
     }
     public static boolean hire(ServerPlayer player, BlockPos core, int role) {

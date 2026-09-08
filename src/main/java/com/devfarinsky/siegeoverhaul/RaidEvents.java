@@ -250,6 +250,8 @@ public final class RaidEvents {
      * setPathfindingMalus is idempotent.
      */
     private static void attachRaiderAI(Mob mob) {
+        mob.getPersistentData().remove(com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal.CHARGING);
+        mob.goalSelector.addGoal(0,new com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal(mob));
         // Parkour: leap short obstacles. Only meaningful for PathfinderMobs
         // because the goal drives horizontal-nudge + vertical impulse. Non
         // PathfinderMob raiders (e.g. vex) fall through unchanged.
@@ -1716,7 +1718,7 @@ public final class RaidEvents {
             // and do not let one occupied corner reject the entire native builder blueprint.
             for (var job : state.pendingFortifications.entrySet()) {
                 BlockPos cell = BlockPos.of(job.getKey());
-                if (level.hasChunkAt(cell) && level.getBlockState(cell).canBeReplaced()
+                if (level.hasChunkAt(cell) && com.devfarinsky.siegeoverhaul.camp.CampVegetation.replaceable(level.getBlockState(cell))
                         && level.getBlockEntity(cell) == null && level.getFluidState(cell).isEmpty())
                     state.pendingCampBlocks.put(job.getKey(), job.getValue());
             }
@@ -1737,6 +1739,10 @@ public final class RaidEvents {
         }
         if (state.campPos != null && state.preparationTicks % 100 == 0)
             com.devfarinsky.siegeoverhaul.camp.CampGuards.muster(level,state);
+        if(state.preparationTicks<=20 && state.campPos!=null && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
+            state.objectiveStatus=com.devfarinsky.siegeoverhaul.camp.WarGate.status(level,state);
+            updateBossBar(server,anchor,state,false);data.setDirty();return;
+        }
         state.preparationTicks = Math.max(0, state.preparationTicks - 20);
         state.ticksToNextWave = state.preparationTicks;
         state.objectiveStatus = preparationLabel(state);
@@ -1851,6 +1857,15 @@ public final class RaidEvents {
         com.devfarinsky.siegeoverhaul.camp.WarGate.tick(level,state,point.pos());
         if(state.warGateWaitTicks>=20*60*30 && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
             finishRaid(server,data,teamKey,false,false,"The enemy could not establish its War Gate. The siege has withdrawn without rewards.");
+            return;
+        }
+        if(state.preparationTicks<=20 && state.campPos!=null && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
+            state.reinforcementStallTicks+=20;
+            state.objectiveStatus=com.devfarinsky.siegeoverhaul.camp.WarGate.status(level,state);
+            if(state.reinforcementStallTicks%600==0)announce(server,teamKey,Component.literal(state.objectiveStatus+". Assault delayed."),false);
+        }
+        if(state.reinforcementStallTicks>=20*180) {
+            finishRaid(server,data,teamKey,false,false,"Enemy reinforcements could not deploy. The siege withdrew; camp and breached blocks are being restored. No victory rewards.");
             return;
         }
         com.devfarinsky.siegeoverhaul.camp.CampDevelopment.tick(level,state);
@@ -2164,6 +2179,10 @@ public final class RaidEvents {
                                   RaidSavedData.Anchor anchor, RaidSavedData.DefensePoint point,
                                   RaidSavedData.RaidState state, List<ServerPlayer> members,
                                   List<Mob> recruits) {
+        if(state.campPos!=null && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
+            state.objectiveStatus=com.devfarinsky.siegeoverhaul.camp.WarGate.status(level,state);
+            state.ticksToNextWave=100;return;
+        }
         int nextWave = state.wave + 1;
         int playerCount = Math.max(1, members.size());
         int recruitScale = 0;
@@ -2222,7 +2241,7 @@ public final class RaidEvents {
                                        RaidSavedData.Anchor anchor, RaidSavedData.DefensePoint point,
                                        RaidSavedData.RaidState state) {
         if(state.campPos!=null && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
-            state.objectiveStatus="Reinforcements waiting for the builders to complete the War Gate";
+            state.objectiveStatus=com.devfarinsky.siegeoverhaul.camp.WarGate.status(level,state);
             state.ticksToNextSquad=100;return;
         }
         int perSquad = RaidConfig.STAGED_SQUADS.get() ? RaidConfig.SQUAD_SIZE.get() : state.pendingWaveSpawns;
@@ -2307,6 +2326,7 @@ public final class RaidEvents {
             }
         }
         if (spawned == 0) {
+            if(state.preparationTicks<=0)state.reinforcementStallTicks+=RaidConfig.SPAWN_RETRY_SECONDS.get()*20;
             state.ticksToNextSquad = RaidConfig.SPAWN_RETRY_SECONDS.get() * 20;
             // Retry chatter moved to the action bar — it fires often enough
             // that it deserves a transient hint, not a chat line.
@@ -2318,6 +2338,7 @@ public final class RaidEvents {
             return;
         }
 
+        state.reinforcementStallTicks=0;
         state.waveStartingCount += spawned;
         state.pendingWaveSpawns -= spawned;
         state.squadsSpawned++;
@@ -2384,6 +2405,7 @@ public final class RaidEvents {
         } else if ("captain".equals(role)) {
             raider.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 20 * 60 * 60, 0, false, false));
         } else if (commander) {
+            com.devfarinsky.siegeoverhaul.raid.CommanderTraits.equip(raider,state.factionId);
             var health = raider.getAttribute(Attributes.MAX_HEALTH);
             if (health != null) {
                 health.setBaseValue(health.getBaseValue() * RaidConfig.COMMANDER_HEALTH_MULTIPLIER.get());
@@ -2958,7 +2980,7 @@ public final class RaidEvents {
 
     private static boolean validCampSurface(ServerLevel level, BlockPos center, BlockPos anchor) {
         if (!level.getWorldBorder().isWithinBounds(center) || Math.abs(center.getY() - anchor.getY()) > 48 ||
-                !level.getBlockState(center).canBeReplaced()) return false;
+                !com.devfarinsky.siegeoverhaul.camp.CampVegetation.replaceable(level.getBlockState(center))) return false;
         // v2.16.1: the center block is *above* the ground. Water detection
         // has to look at what the palisade will actually stand on, which
         // is center.below(). Previously we only checked getFluidState(center)
@@ -3023,7 +3045,7 @@ public final class RaidEvents {
     private static void placeCampBlock(ServerLevel level, RaidSavedData.RaidState state,
                                        BlockPos pos, Block block) {
         if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)
-                || !level.getFluidState(pos).isEmpty() || !level.getBlockState(pos).canBeReplaced()) return;
+                || !level.getFluidState(pos).isEmpty() || !com.devfarinsky.siegeoverhaul.camp.CampVegetation.replaceable(level.getBlockState(pos))) return;
         if (state.planningCamp) {
             ResourceLocation id = ForgeRegistries.BLOCKS.getKey(block);
             if (id != null) state.pendingCampBlocks.putIfAbsent(pos.asLong(), id.toString());
@@ -3036,6 +3058,8 @@ public final class RaidEvents {
         // of leaving air holes. canBeReplaced() is true for air and short grass, so
         // this tag will be empty (air) most of the time — which is exactly what
         // the restore path expects.
+        if(com.devfarinsky.siegeoverhaul.camp.CampVegetation.plant(level.getBlockState(pos))
+                && !com.devfarinsky.siegeoverhaul.camp.CampVegetation.clear(level,state,pos))return;
         BlockState originalState = level.getBlockState(pos);
         CompoundTag original = originalState.isAir() ? new CompoundTag()
                 : com.devfarinsky.siegeoverhaul.siege.BlockRestoration.serializeState(level, pos, originalState);
@@ -3159,6 +3183,7 @@ public final class RaidEvents {
             Entity entity = level.getEntity(id);
             if (!(entity instanceof Mob mob) || !mob.isAlive() || mob.isPassenger()
                     || com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)) continue;
+            if(mob.getPersistentData().getBoolean(com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal.CHARGING))continue;
             String role = mob.getPersistentData().getString(RAID_ROLE_TAG);
             if (!role.equals("breacher") && !role.equals("commander")) continue;
             if (++evaluatedBreachers > 8) break;

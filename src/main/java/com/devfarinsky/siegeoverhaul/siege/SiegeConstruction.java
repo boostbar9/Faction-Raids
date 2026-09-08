@@ -84,6 +84,10 @@ public final class SiegeConstruction {
         for (int distance : new int[]{14, 18, 22}) {
             for (int offset : new int[]{0, 5, -5, 10, -10}) {
                 Vec3 candidate = camp.add(forward.scale(distance)).add(side.scale(offset));
+                if(!state.warGate.isEmpty()) {
+                    BlockPos gate=com.devfarinsky.siegeoverhaul.camp.WarGate.center(state);
+                    if(Math.abs(candidate.x-(gate.getX()+.5))<8 && Math.abs(candidate.z-(gate.getZ()+.5))<8)continue;
+                }
                 int x = (int) Math.floor(candidate.x), z = (int) Math.floor(candidate.z);
                 if (!level.hasChunk(x >> 4, z >> 4)) continue;
                 int y = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);

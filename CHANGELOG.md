@@ -1,3 +1,16 @@
+## 4.7.0 beta
+
+- Fix engineer-only waves when the War Gate has no buildable site: search all four sides, prioritize the gate over camp upgrades, retain its ticking chunks, keep artillery off its pad, delay the assault/support until infantry can deploy, report missing gate blocks, and withdraw without rewards after three active minutes of blocked deployment.
+
+- Fix builders stalling on flowers and connected fence/wall/stair states. Clear only small plants within camp jobs, snapshot both tall-plant halves, and preserve native finite supplies and solid-obstruction pauses.
+
+- Fix enemy hiring: native aggro API no longer disables ownership initialization; reject enemy interaction and native hire events, including guards/workers and saved units.
+- Four hero identities with distinct armor trims, named enchanted weapons and role abilities: Vanguard speed burst, Bulwark protection rally, Ranger evasive speed, Arbalist slowing shot. Abilities have 20–25 second cooldowns. Existing heroes gain role abilities; new hires receive the new equipment.
+- Commanders carry a Siegebreaker axe and faction shield. Their three-second wall strike breaks one common building block in melee range, requires sight and defender-owned land, respects mob griefing/restoration caps, and interrupts on damage or displacement. Ten-second recovery after every attempt. One Last Stand rally at half health buffs up to six nearby troops for five seconds.
+- Camp guards receive at least 50 health, +2 melee damage and knockback resistance once; existing health percentage is preserved. No respawning or equipment refills.
+- Enemy shields carry faction colors and sigils, preserving durability and enchantments; archers retain their ranged loadouts.
+- Reduce survival/building bag to 256 stone bricks, 32 stairs, 32 slabs, 64 planks, 16 panes, two chests, 32 food total, 32 torches and 16 coal. Faction setup funding and iron gear remain. Previously unpacked or partially opened supplies are preserved.
+
 ## 4.6.0 beta
 
 - Builders construct a protected War Gate: blackstone landing pad, obsidian arch, crying-obsidian accents, amethyst pylons and a rotating portal effect. Land reinforcements use checked pad positions instead of camp roofs. Two guards defend the gate; it removes itself and restores its footprint when the siege ends.

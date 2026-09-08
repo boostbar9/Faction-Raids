@@ -52,6 +52,8 @@ public final class SiegeDeployment {
 
     /** Provision each loaded ranged engine at most once after preparation; keep unloaded identities for cleanup. */
     public static int tick(ServerLevel level, RaidSavedData.RaidState state, BlockPos objective) {
+        // Infantry must be able to deploy before support can form an active wave on its own.
+        if(state.campPos!=null && (!com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state) || state.waveStartingCount<=0))return 0;
         ensureEngine(level, state, objective);
         if (state.siegeEngines == null || state.siegeEngines.isEmpty()) return 0;
         int removed = 0;

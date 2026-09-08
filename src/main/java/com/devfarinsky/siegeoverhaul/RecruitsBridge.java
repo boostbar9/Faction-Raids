@@ -98,7 +98,7 @@ public final class RecruitsBridge {
         }
     }
 
-    private static Optional<UUID> ownerUuid(Entity entity) {
+    public static Optional<UUID> ownerUuid(Entity entity) {
         initializeOwnerReflection();
         if (recruitClass == null || getOwnerUuid == null || !recruitClass.isInstance(entity)) {
             return Optional.empty();
@@ -204,7 +204,7 @@ public final class RecruitsBridge {
      *   - Adds it to the raiders scoreboard team (Recruits treats scoreboard
      *     team as ground truth for "same faction").
      *   - Sets its owner-UUID to the raider-leader sentinel + isOwned=true so
-     *     {@code AbstractRecruitEntity#canBeHired} short-circuits and the
+     *     the native owned-unit interaction short-circuits and the
      *     hire GUI never opens on right-click.
      * Safe to call on any Mob; silently no-ops for non-raiders.
      */
@@ -263,7 +263,7 @@ public final class RecruitsBridge {
         try {
             recruitClass = Class.forName(ABSTRACT_RECRUIT);
             getOwnerUuid = recruitClass.getMethod("getOwnerUUID");
-            setCombatState = recruitClass.getMethod("setState", int.class);
+            setCombatState = recruitClass.getMethod("setAggroState", int.class);
             setOwnerUuidMethod = recruitClass.getMethod("setOwnerUUID", Optional.class);
             setIsOwnedMethod = recruitClass.getMethod("setIsOwned", boolean.class);
         } catch (ReflectiveOperationException | LinkageError ignored) {

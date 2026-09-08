@@ -7,6 +7,15 @@ import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 class FactionUniformsTest extends MinecraftTestSupport {
+    @Test void shieldHeraldryPreservesDurabilityAndEnchantments() {
+        var shield=new net.minecraft.world.item.ItemStack(Items.SHIELD);shield.setDamageValue(97);
+        shield.enchant(net.minecraft.world.item.enchantment.Enchantments.UNBREAKING,2);
+        for(var faction:FactionBanners.FactionId.values()) {
+            FactionUniforms.decorateShield(shield,faction.id);
+            assertEquals(faction.baseColor.getId(),shield.getTag().getCompound("BlockEntityTag").getInt("Base"));
+            assertEquals(97,shield.getDamageValue());assertTrue(shield.isEnchanted());
+        }
+    }
     @Test void allFactionsHaveDistinctChestColorsAndAllRanksDistinctHelmetColors() {
         Set<String> colors=new HashSet<>();
         for(var faction:FactionBanners.FactionId.values()) {

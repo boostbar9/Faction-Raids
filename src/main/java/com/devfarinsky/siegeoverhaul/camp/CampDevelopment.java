@@ -13,7 +13,7 @@ import java.util.*;
 public final class CampDevelopment {
     private CampDevelopment() {}
     public static void tick(ServerLevel level,RaidSavedData.RaidState raid) {
-        if(raid.campPos==null || raid.campClaimId==null || raid.campUpgradeStage>=3 || raid.coreCaptured
+        if(!WarGate.ready(level,raid) || raid.campPos==null || raid.campClaimId==null || raid.campUpgradeStage>=3 || raid.coreCaptured
                 || !RaidConfig.ENABLE_CAMP_CONSTRUCTION.get() || !RaidConfig.CLEANUP_WAR_CAMPS.get()
                 || !raid.pendingCampBlocks.isEmpty() || !raid.pendingFortifications.isEmpty()
                 || NativeCampConstruction.active(raid) || !CampClaims.owns(level,raid)) return;
