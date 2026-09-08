@@ -47,7 +47,7 @@ public final class CoreOccupation {
         // Persist identity before handing off to native listeners; a failed transfer never marks occupation.
         core.putUUID("OccupiedClaim",claim.claimId());
         core.putString("OriginalClaimName",claim.claimName());
-        core.putString("OccupyingFaction",raid.factionId);
+        core.putString("OccupyingFaction",com.devfarinsky.siegeoverhaul.items.FactionBanners.FactionId.byIdOrDefault(raid.factionId).id);
         data.setDirty();
         if(!CoreClaimTransfer.transfer(level,claim.claimId(),raid.teamKey.substring(5),RaiderFactions.id(raid.factionId),RaiderFactions.name(raid.factionId)+" Occupied Territory")) return false;
         core.putBoolean("Occupied",true); core.putInt("RecaptureTicks",0);
