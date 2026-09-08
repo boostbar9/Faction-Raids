@@ -162,8 +162,7 @@ public final class SiegeIntegration {
         if (!(entity instanceof Mob mob)) return Optional.empty();
         try {
             mob.moveTo(pos.x, pos.y, pos.z, vehicle.getYRot(), 0F);
-            mob.finalizeSpawn(level, level.getCurrentDifficultyAt(net.minecraft.core.BlockPos.containing(pos)),
-                    net.minecraft.world.entity.MobSpawnType.EVENT, null, null);
+            com.devfarinsky.siegeoverhaul.compat.EngineerSpawnCompatibility.initialize(level, mob);
             com.devfarinsky.siegeoverhaul.RecruitsBridge.configureHostileRaidRecruit(mob);
             com.devfarinsky.siegeoverhaul.RecruitsBridge.assignToRaidersFaction(mob);
             mob.setPersistenceRequired();

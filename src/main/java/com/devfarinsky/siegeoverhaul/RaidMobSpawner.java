@@ -11,13 +11,7 @@ import java.util.function.Supplier;
 public final class RaidMobSpawner {
     private RaidMobSpawner() {}
 
-    /**
-     * Recruits 1.15.2 siege engineers can throw a ClassCastException here because
-     * RecruitPathNavigation no longer extends GroundPathNavigation. Do not keep
-     * the half-initialized engineer or retry its initializer: its superclass has
-     * already applied attribute modifiers. Replace it with a fresh vanilla raider.
-     * The caller registers only the returned, fully initialized mob.
-     */
+    /** Adapt the known native engineer cast before initialization; unrelated failures use a fresh fallback. */
     public static Mob initializeOrFallback(ServerLevel level, Mob candidate) {
         return initializeOrFallback(level, candidate, () -> EntityType.PILLAGER.create(level));
     }
@@ -40,8 +34,7 @@ public final class RaidMobSpawner {
 
     private static boolean initialize(ServerLevel level, Mob mob) {
         try {
-            mob.finalizeSpawn(level, level.getCurrentDifficultyAt(mob.blockPosition()),
-                    MobSpawnType.EVENT, null, null);
+            com.devfarinsky.siegeoverhaul.compat.EngineerSpawnCompatibility.initialize(level, mob);
             return true;
         } catch (RuntimeException failure) {
             FactionLogger.LOG.warn("Raid mob {} failed spawn initialization; discarding it before registration",
