@@ -284,7 +284,7 @@ public final class SiegeCommandScreen extends Screen {
         card(graphics, x, y, strongholdW, 62, "STRONGHOLD", BLUE);
         graphics.drawString(font, trim(snapshot.stronghold(), strongholdW - 20), x + 10, y + 22, INK, false);
         graphics.drawString(font, snapshot.registered() ? "Target synchronized" :
-                "Sleep at the base, then refresh", x + 10, y + 34,
+                "Place a core inside your faction claim", x + 10, y + 34,
                 snapshot.registered() ? MUTED : RED, false);
         String coolLabel = snapshot.active() ? "War camp deployed" : "Next siege: " + snapshot.cooldown();
         graphics.drawString(font, coolLabel, x + 10, y + 46, MUTED, false);
@@ -665,8 +665,8 @@ public final class SiegeCommandScreen extends Screen {
                 {"/siegeoverhaul anchor set <team>", "Set your anchor at your current position."},
                 {"/siegeoverhaul anchor claim", "Claim ownership of the anchor at your position."},
                 {"/siegeoverhaul anchor remove", "Remove the anchor at your position."},
-                {"/siegeoverhaul home automatic <bool>", "Toggle auto-detecting bed/anchor as objective."},
-                {"/siegeoverhaul home refresh", "Re-scan your bed/anchor as the stronghold objective."},
+                {"/siegeoverhaul home automatic <bool>", "Check the placed faction core."},
+                {"/siegeoverhaul home refresh", "Check your faction Siege Core."},
                 // -- Team --
                 {"/siegeoverhaul member add|remove|list", "Manage your faction roster."},
                 {"/siegeoverhaul territory add|remove|list", "Track additional bases as defense points."},

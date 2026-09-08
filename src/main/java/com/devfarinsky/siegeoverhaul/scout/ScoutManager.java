@@ -92,6 +92,7 @@ public final class ScoutManager {
      */
     public static void maybeSchedule(MinecraftServer server, RaidSavedData data, RaidSavedData.Anchor anchor) {
         if (!RaidConfig.SCOUTING_ENABLED.get()) return;
+        if (com.devfarinsky.siegeoverhaul.core.SiegeCore.point(server, anchor.teamKey()) == null) return;
         if (data.raids.containsKey(anchor.teamKey())) return; // active raid — no scouts
         if (data.scoutMissions.containsKey(anchor.teamKey())) return; // already scheduled
         long now = server.overworld().getGameTime();
@@ -131,7 +132,7 @@ public final class ScoutManager {
             ScoutMission m = it.next();
             RaidSavedData.Anchor anchor = data.anchors.get(m.teamKey);
             // Anchor deleted mid-cooldown -> drop mission and any live scouts.
-            if (anchor == null) {
+            if (anchor == null || com.devfarinsky.siegeoverhaul.core.SiegeCore.point(server, m.teamKey) == null) {
                 despawnLiveScouts(server, m);
                 it.remove();
                 data.setDirty();
@@ -167,7 +168,9 @@ public final class ScoutManager {
 
     private static void spawnScouts(MinecraftServer server, RaidSavedData.Anchor anchor, ScoutMission m) {
         ServerLevel level = server.overworld();
-        BlockPos anchorPos = anchor.primaryPoint().pos();
+        var core = com.devfarinsky.siegeoverhaul.core.SiegeCore.point(server, anchor.teamKey());
+        if (core == null) return;
+        BlockPos anchorPos = core.pos();
         int distance = RaidConfig.SCOUT_SPAWN_DISTANCE.get();
         int count = 1 + level.random.nextInt(RaidConfig.SCOUT_PARTY_SIZE.get());
         double approachAngle = level.random.nextDouble() * Math.PI * 2.0;

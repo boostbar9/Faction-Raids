@@ -27,6 +27,8 @@ public final class ModItems {
     public static final RegistryObject<Item> GUIDEBOOK = ITEMS.register("guidebook",
             () -> new GuidebookItem(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
 
+    public static final RegistryObject<Item> SIEGE_CORE = ITEMS.register("siege_core", com.devfarinsky.siegeoverhaul.core.CoreBlocks.CoreItem::new);
+
     private ModItems() {}
 
     public static void register(IEventBus modBus) {
@@ -37,6 +39,7 @@ public final class ModItems {
     public static void addCreativeTab(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(GUIDEBOOK.get());
+            event.accept(SIEGE_CORE.get());
         }
     }
 }

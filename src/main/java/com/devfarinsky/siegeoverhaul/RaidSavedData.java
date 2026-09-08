@@ -25,9 +25,10 @@ public final class RaidSavedData extends SavedData {
     // v12 added pendingSpoils + raidNotifyOptOut (3.2.0 multiplayer polish).
     // v13 added persistent camp construction jobs and crew (3.4.0).
     // Old saves load cleanly because all new fields default to empty collections.
-    public static final int DATA_VERSION = 15;
+    public static final int DATA_VERSION = 16;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
+    public final Map<String, CompoundTag> siegeCores = new HashMap<>();
     public final Map<String, Anchor> anchors = new HashMap<>();
     public final Map<String, RaidState> raids = new HashMap<>();
     /**
@@ -69,6 +70,8 @@ public final class RaidSavedData extends SavedData {
 
     public static RaidSavedData load(CompoundTag root) {
         RaidSavedData data = new RaidSavedData();
+        CompoundTag cores = root.getCompound("SiegeCores");
+        for (String key : cores.getAllKeys()) data.siegeCores.put(key, cores.getCompound(key).copy());
         ListTag anchorsTag = root.getList("Anchors", Tag.TAG_COMPOUND);
         for (int i = 0; i < anchorsTag.size(); i++) {
             Anchor anchor = Anchor.load(anchorsTag.getCompound(i));
@@ -118,6 +121,9 @@ public final class RaidSavedData extends SavedData {
     @Override
     public CompoundTag save(CompoundTag root) {
         root.putInt("DataVersion", DATA_VERSION);
+        CompoundTag cores = new CompoundTag();
+        siegeCores.forEach((key, value) -> cores.put(key, value.copy()));
+        root.put("SiegeCores", cores);
         ListTag anchorsTag = new ListTag();
         anchors.values().forEach(anchor -> anchorsTag.add(anchor.save()));
         root.put("Anchors", anchorsTag);
@@ -435,6 +441,9 @@ public final class RaidSavedData extends SavedData {
         public String defensePointName;
         public int wave;
         public int ticksToNextWave;
+        public int preparationTicks;
+        public int preparationTotalTicks;
+        public final Map<Long, String> pendingFortifications = new LinkedHashMap<>();
         public int abandonedTicks;
         public int waveStartingCount;
         public int plannedWaveSize;
@@ -587,6 +596,11 @@ public final class RaidSavedData extends SavedData {
             tag.putString("DefensePoint", defensePointName);
             tag.putInt("Wave", wave);
             tag.putInt("NextWave", ticksToNextWave);
+            tag.putInt("PreparationTicks", preparationTicks);
+            tag.putInt("PreparationTotal", preparationTotalTicks);
+            CompoundTag forts = new CompoundTag();
+            pendingFortifications.forEach((pos, block) -> forts.putString(Long.toString(pos), block));
+            tag.put("FortificationJobs", forts);
             tag.putInt("Abandoned", abandonedTicks);
             tag.putInt("WaveStartingCount", waveStartingCount);
             tag.putInt("PlannedWaveSize", plannedWaveSize);
@@ -711,6 +725,13 @@ public final class RaidSavedData extends SavedData {
             if (point.isBlank()) point = HOME_POINT;
             RaidState state = new RaidState(tag.getString("Team"), point, tag.getInt("NextWave"));
             state.wave = tag.getInt("Wave");
+            state.preparationTotalTicks = Math.max(0, tag.getInt("PreparationTotal"));
+            state.preparationTicks = Math.max(0, Math.min(state.preparationTotalTicks, tag.getInt("PreparationTicks")));
+            CompoundTag forts = tag.getCompound("FortificationJobs");
+            for (String key : forts.getAllKeys()) {
+                try { state.pendingFortifications.put(Long.parseLong(key), forts.getString(key)); }
+                catch (NumberFormatException ignored) { }
+            }
             state.abandonedTicks = tag.getInt("Abandoned");
             state.waveStartingCount = tag.getInt("WaveStartingCount");
             state.plannedWaveSize = tag.contains("PlannedWaveSize", Tag.TAG_INT) ?

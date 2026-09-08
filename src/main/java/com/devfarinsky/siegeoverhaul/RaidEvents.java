@@ -139,6 +139,26 @@ public final class RaidEvents {
     @SubscribeEvent
     public static void onEntityJoin(EntityJoinLevelEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level)) return;
+        Entity joining = event.getEntity();
+        if (joining instanceof net.minecraft.world.entity.projectile.Projectile projectile
+                && projectile.getOwner() instanceof Mob owner
+                && !owner.getPersistentData().getString(com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.TEAM_TAG).isBlank()) {
+            ResourceLocation kind = ForgeRegistries.ENTITY_TYPES.getKey(joining.getType());
+            if (kind != null && kind.toString().equals("siegeweapons:catapult_projectile")) {
+                try {
+                    // Native cobble explosions otherwise destroy arbitrary blocks outside the restoration ledger.
+                    joining.getClass().getMethod("setAreaDamage", double.class).invoke(joining, 0.0D);
+                } catch (ReflectiveOperationException | RuntimeException ex) {
+                    joining.discard(); event.setCanceled(true); return;
+                }
+            }
+        }
+        String engineTeam = joining.getPersistentData().getString(com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.TEAM_TAG);
+        if (!(joining instanceof Mob) && !engineTeam.isBlank() && event.loadedFromDisk()
+                && RaidConfig.CLEANUP_SURVIVING_ENGINES.get()
+                && !RaidSavedData.get(level.getServer()).raids.containsKey(engineTeam)) {
+            joining.discard(); event.setCanceled(true); return;
+        }
         String areaTeam = event.getEntity().getPersistentData().getString(ModConstants.Tags.CAMP_AREA_TEAM);
         if (!areaTeam.isBlank()) {
             if (event.loadedFromDisk() && !com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.reloadArea(
@@ -166,6 +186,8 @@ public final class RaidEvents {
                             mob.discard();
                             event.setCanceled(true);
                         }
+                    } else if (!com.devfarinsky.siegeoverhaul.compat.WorkersBridge.parkBuilder(mob)) {
+                        mob.discard(); event.setCanceled(true);
                     }
                 }
             }
@@ -427,6 +449,14 @@ public final class RaidEvents {
     @SubscribeEvent
     public static void onPlayerLoggedIn(net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer sp)) return;
+        net.minecraft.nbt.CompoundTag gift = sp.getPersistentData().getCompound(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG);
+        if (!gift.getBoolean("SiegeCoreGiven")) {
+            var coreItem = new net.minecraft.world.item.ItemStack(com.devfarinsky.siegeoverhaul.items.ModItems.SIEGE_CORE.get());
+            if (!sp.getInventory().add(coreItem)) sp.drop(coreItem, false);
+            gift.putBoolean("SiegeCoreGiven", true);
+            sp.getPersistentData().put(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG, gift);
+            sp.sendSystemMessage(Component.literal("Place your Siege Core in your faction's Recruits claim. It becomes the siege objective and offers recruits every 15 minutes."));
+        }
         // First-login guidebook gift (unchanged behavior).
         if (RaidConfig.SPAWN_GUIDEBOOK_ON_JOIN.get()) {
             net.minecraft.nbt.CompoundTag persistent = sp.getPersistentData()
@@ -725,68 +755,17 @@ public final class RaidEvents {
     }
 
     private static int enableAutomaticHome(CommandSourceStack source) {
-        try {
-            ServerPlayer player = source.getPlayerOrException();
-            if (respawnPoint(source.getServer(), player) == null) {
-                source.sendFailure(Component.literal("Set a bed or respawn anchor before enabling an automatic stronghold."));
-                return 0;
-            }
-            RaidSavedData data = RaidSavedData.get(source.getServer());
-            String key = factionKeyForPlayer(data, player);
-            RaidSavedData.Anchor anchor = data.anchors.get(key);
-            if (anchor == null) {
-                syncAutomaticHome(source.getServer(), data, player, true);
-                anchor = data.anchors.get(teamKey(player));
-            } else if (!canManage(player, anchor)) {
-                source.sendFailure(Component.literal("Only the faction leader, home owner, or an operator can change the stronghold."));
-                return 0;
-            } else {
-                data.anchors.put(key, anchor.withAutomaticHome(true));
-                syncAutomaticHome(source.getServer(), data, player, true);
-            }
-            data.setDirty();
-            RaidSavedData.Anchor result = data.anchors.get(teamKey(player));
-            RaidSavedData.DefensePoint home = result == null ? null : result.primaryPoint();
-            if (home == null) {
-                source.sendFailure(Component.literal("The automatic stronghold could not be created."));
-                return 0;
-            }
-            source.sendSuccess(() -> Component.literal("Automatic stronghold enabled at " + formatPos(home.pos()) +
-                    ". It follows the faction leader's respawn point.").withStyle(ChatFormatting.GREEN), false);
-            return 1;
-        } catch (Exception e) {
-            source.sendFailure(Component.literal("Only a player can enable an automatic stronghold."));
-            return 0;
-        }
+        return refreshAutomaticHome(source);
     }
 
     private static int refreshAutomaticHome(CommandSourceStack source) {
         try {
             ServerPlayer player = source.getPlayerOrException();
-            if (respawnPoint(source.getServer(), player) == null) {
-                source.sendFailure(Component.literal("Set a bed or respawn anchor before refreshing the stronghold."));
-                return 0;
-            }
-            RaidSavedData data = RaidSavedData.get(source.getServer());
-            RaidSavedData.Anchor current = data.anchors.get(factionKeyForPlayer(data, player));
-            if (current != null && !canManage(player, current)) {
-                source.sendFailure(Component.literal("Only the faction leader, home owner, or an operator can refresh the stronghold."));
-                return 0;
-            }
-            syncAutomaticHome(source.getServer(), data, player, true);
-            RaidSavedData.Anchor anchor = data.anchors.get(teamKey(player));
-            if (anchor == null) {
-                source.sendFailure(Component.literal("The automatic stronghold could not be refreshed."));
-                return 0;
-            }
-            RaidSavedData.DefensePoint home = anchor.primaryPoint();
-            source.sendSuccess(() -> Component.literal("Stronghold refreshed from respawn point: " +
-                    home.dimension() + " at " + formatPos(home.pos())).withStyle(ChatFormatting.GREEN), false);
+            var point = com.devfarinsky.siegeoverhaul.core.SiegeCore.point(source.getServer(), teamKey(player));
+            if (point == null) { source.sendFailure(Component.literal("Place a Siege Core in your faction's Recruits claim first.")); return 0; }
+            source.sendSuccess(() -> Component.literal("Siege Core at " + formatPos(point.pos()) + ". Beds do not move this objective."), false);
             return 1;
-        } catch (Exception e) {
-            source.sendFailure(Component.literal("Only a player can refresh an automatic stronghold."));
-            return 0;
-        }
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException ex) { source.sendFailure(Component.literal("Only players can inspect their core.")); return 0; }
     }
 
     private static int claimLegacyAnchor(CommandSourceStack source) {
@@ -1081,7 +1060,7 @@ public final class RaidEvents {
                         closestDefensePoint(source.getServer(), anchor, player);
             }
             if (point == null) {
-                source.sendFailure(Component.literal("Set a bed or respawn anchor before starting an invasion, or enable allowWorldSpawnFallback in the config."));
+                source.sendFailure(Component.literal("Place a Siege Core in your faction's Recruits claim before starting an invasion."));
                 return 0;
             }
             if (!hasDefenderNear(source.getServer(), point, onlineMembers(source.getServer(), key))) {
@@ -1127,7 +1106,7 @@ public final class RaidEvents {
             if (anchor == null) {
                 source.sendSuccess(() -> MESSAGE_PREFIX.copy().append(Component.literal("No stronghold registered")
                         .withStyle(ChatFormatting.YELLOW)), false);
-                source.sendSuccess(() -> Component.literal("Sleep in a bed or use a respawn anchor near your base, then run /siegeoverhaul home refresh."), false);
+                source.sendSuccess(() -> Component.literal("Place a Siege Core in your faction's Recruits claim."), false);
                 return 1;
             }
             RaidSavedData.RaidState state = data.raids.get(key);
@@ -1205,7 +1184,7 @@ public final class RaidEvents {
         source.sendSuccess(() -> Component.literal("/siegeoverhaul start").withStyle(ChatFormatting.AQUA)
                 .append(Component.literal(" — begin a controlled siege test")), false);
         source.sendSuccess(() -> Component.literal("/siegeoverhaul home refresh").withStyle(ChatFormatting.AQUA)
-                .append(Component.literal(" — update the automatic stronghold from your respawn point")), false);
+                .append(Component.literal(" — check your faction Siege Core")), false);
         source.sendSuccess(() -> Component.literal("/siegeoverhaul territory list").withStyle(ChatFormatting.AQUA)
                 .append(Component.literal(" — list every defended location")), false);
         source.sendSuccess(() -> Component.literal("/siegeoverhaul debug").withStyle(ChatFormatting.AQUA)
@@ -1450,7 +1429,7 @@ public final class RaidEvents {
                 syncAutomaticHome(server, data, player, false);
             }
         }
-        refreshIdleAnchorIdentities(server, data);
+        // Core ownership follows the placing faction, not an individual changing teams.
         long now = server.overworld().getGameTime();
 
         if (RaidConfig.AUTOMATIC_RAIDS.get() && data.raids.size() < RaidConfig.MAX_CONCURRENT_RAIDS.get()) {
@@ -1561,6 +1540,9 @@ public final class RaidEvents {
     private static boolean beginRaid(MinecraftServer server, RaidSavedData data, RaidSavedData.Anchor anchor,
                                      RaidSavedData.DefensePoint point, boolean rewardEligible) {
         if (data.raids.size() >= RaidConfig.MAX_CONCURRENT_RAIDS.get()) return false;
+        RaidSavedData.DefensePoint core = com.devfarinsky.siegeoverhaul.core.SiegeCore.point(server, anchor.teamKey());
+        if (core == null) return false;
+        point = core;
         // Persist the selected player's respawn target for the full siege. This
         // allows a faction with several bases to be attacked at any member's
         // home without requiring one registered point per player.
@@ -1568,6 +1550,9 @@ public final class RaidEvents {
         data.anchors.put(anchor.teamKey(), anchor);
         RaidSavedData.RaidState state = new RaidSavedData.RaidState(anchor.teamKey(), point.name(),
                 RaidConfig.WARNING_SECONDS.get() * 20);
+        state.preparationTotalTicks = RaidConfig.PREPARATION_MINUTES.get() * 1200;
+        state.preparationTicks = state.preparationTotalTicks;
+        state.ticksToNextWave = state.preparationTicks;
         state.approachAngle = server.overworld().random.nextDouble() * Math.PI * 2.0D;
         state.startedGameTime = server.overworld().getGameTime();
         state.rewardEligible = rewardEligible;
@@ -1619,6 +1604,12 @@ public final class RaidEvents {
                         .withStyle(ChatFormatting.GOLD), false);
             }
             com.devfarinsky.siegeoverhaul.camp.CampBuilder.startCamp(raidLevel, state);
+            if (state.campPos != null) announce(server, anchor.teamKey(), Component.literal(
+                    "Enemy camp at " + formatPos(state.campPos) + ": " + state.campWorkers.size()
+                            + " builders and " + placed + " siege engines.").withStyle(ChatFormatting.GOLD), false);
+            else if (RaidConfig.BUILD_WAR_CAMPS.get()) announce(server, anchor.teamKey(), Component.literal(
+                    "No safe camp site was found. This siege will proceed without camp builders or equipment.")
+                    .withStyle(ChatFormatting.GRAY), false);
         }
         data.raids.put(anchor.teamKey(), state);
         data.setDirty();
@@ -1629,7 +1620,7 @@ public final class RaidEvents {
                 : "Enemy scouts have found " + anchor.teamDisplay() + " at '" + point.name() + "'";
         String detail = " A war camp " + (state.campPos == null ? "is forming" : "has been raised at " + formatPos(state.campPos)) +
                 " to the " + approachDirection(state.approachAngle) + ". The siege begins in " +
-                formatTime(RaidConfig.WARNING_SECONDS.get()) + ". Rally your Recruits and defend the stronghold.";
+                formatTime(state.preparationTicks / 20) + ". Disrupt their preparations or rally your Recruits at the Siege Core.";
         announce(server, anchor.teamKey(), Component.literal(opening + detail).withStyle(accent), true);
         Vec3 markedPoint = raidLevel == null ? Vec3.atCenterOf(point.pos()) : invasionObjective(raidLevel, point, state);
         announce(server, anchor.teamKey(), Component.literal("Defend the marked point at " +
@@ -1701,6 +1692,78 @@ public final class RaidEvents {
         return sb.toString();
     }
 
+    private static String preparationLabel(RaidSavedData.RaidState state) {
+        int third = Math.max(1, state.preparationTotalTicks / 3);
+        return state.preparationTicks > third * 2 ? "Establishing camp" : state.preparationTicks > third ? "Fortifying camp" : "Mustering army";
+    }
+
+    private static int musterInterval(RaidSavedData.RaidState state, int duration) {
+        int squads = Math.max(1, (state.plannedWaveSize + RaidConfig.SQUAD_SIZE.get() - 1) / RaidConfig.SQUAD_SIZE.get());
+        return Math.max(100, duration / squads);
+    }
+
+    private static void processPreparation(MinecraftServer server, ServerLevel level, RaidSavedData data,
+            RaidSavedData.Anchor anchor, RaidSavedData.DefensePoint point, RaidSavedData.RaidState state,
+            List<ServerPlayer> members, List<Mob> recruits) {
+        if (state.campPos != null && !level.hasChunkAt(state.campPos)) {
+            state.objectiveStatus = "Preparation paused: camp unloaded";
+            updateBossBar(server, anchor, state, false);
+            return;
+        }
+        String before = preparationLabel(state);
+        int third = Math.max(1, state.preparationTotalTicks / 3);
+        if (state.preparationTicks <= third * 2 && !state.pendingFortifications.isEmpty()
+                && state.pendingCampBlocks.isEmpty()) {
+            // Towers or defenders may occupy some wall cells by this point. Never replace them,
+            // and do not let one occupied corner reject the entire native builder blueprint.
+            for (var job : state.pendingFortifications.entrySet()) {
+                BlockPos cell = BlockPos.of(job.getKey());
+                if (level.hasChunkAt(cell) && level.getBlockState(cell).canBeReplaced()
+                        && level.getBlockEntity(cell) == null && level.getFluidState(cell).isEmpty())
+                    state.pendingCampBlocks.put(job.getKey(), job.getValue());
+            }
+            state.pendingFortifications.clear();
+            state.campBuildTicks = 0;
+            com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.start(level, state);
+        }
+        if (state.campPos != null && state.preparationTicks <= third && !shouldPauseForPerformance(server, data)) {
+            if (state.wave == 0) {
+                queueWave(server, level, data, anchor, point, state, members, recruits);
+                state.ticksToNextSquad = musterInterval(state, third);
+            } else if (state.pendingWaveSpawns > 0 && (state.ticksToNextSquad -= 20) <= 0) {
+                spawnNextSquad(server, level, data, anchor, point, state);
+                state.ticksToNextSquad = musterInterval(state, third);
+            }
+            // Stage small groups throughout muster, rather than materializing the army at the horn.
+            if (state.pendingWaveSpawns > 0) state.ticksToNextSquad = Math.max(state.ticksToNextSquad, 20);
+        }
+        if (state.campPos != null && state.preparationTicks % 100 == 0) {
+            List<Mob> ready = new ArrayList<>();
+            for (UUID id : state.raiders) if (level.getEntity(id) instanceof Mob mob && !mob.isPassenger()) {
+                // Camp defenders can fight attackers, but do not receive orders to march at the core.
+                if (mob.getTarget() == null) ready.add(mob);
+            }
+            ready.sort(java.util.Comparator.comparing(m -> m.getUUID().toString()));
+            com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.apply(
+                    com.devfarinsky.siegeoverhaul.formations.Formation.SQUARE,
+                    new Vec3(Math.cos(state.approachAngle), 0, Math.sin(state.approachAngle)),
+                    Vec3.atBottomCenterOf(state.campPos.offset(0, 0, 4)), ready, true);
+        }
+        state.preparationTicks = Math.max(0, state.preparationTicks - 20);
+        state.ticksToNextWave = state.preparationTicks;
+        state.objectiveStatus = preparationLabel(state);
+        if (state.preparationTicks == 0) {
+            for (UUID id : state.raiders) if (level.getEntity(id) instanceof Mob mob)
+                com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
+            if (state.wave == 0) state.ticksToNextWave = 20;
+            announce(server, anchor.teamKey(), Component.literal("The enemy army is leaving camp. Defend your Siege Core!").withStyle(ChatFormatting.RED), true);
+        } else if (!before.equals(preparationLabel(state))) {
+            announce(server, anchor.teamKey(), Component.literal(preparationLabel(state) + ". Assault in " + (state.preparationTicks + 1199) / 1200 + " minutes.").withStyle(ChatFormatting.GOLD), false);
+        }
+        updateBossBar(server, anchor, state, false);
+        data.setDirty();
+    }
+
     private static void processRaid(MinecraftServer server, RaidSavedData data, String teamKey) {
         RaidSavedData.Anchor anchor = data.anchors.get(teamKey);
         RaidSavedData.RaidState state = data.raids.get(teamKey);
@@ -1708,6 +1771,14 @@ public final class RaidEvents {
         RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
         ServerLevel level = getLevel(server, point);
         if (level == null) return;
+
+        if ("siege_core".equals(state.defensePointName)) {
+            if (!level.hasChunkAt(point.pos())) { setRaidMobsFrozen(level, state, true); return; }
+            if (com.devfarinsky.siegeoverhaul.core.SiegeCore.point(server, teamKey) == null) {
+                finishRaid(server, data, teamKey, false, false, "The Siege Core or its faction claim was lost. The siege has ended without rewards.");
+                return;
+            }
+        }
 
         // Upgrade active raids from older saves exactly once. Those raids did
         // not persist a physical camp, so build one when 2.6 first processes it.
@@ -1750,6 +1821,10 @@ public final class RaidEvents {
         // far viewers see corner columns. No-op without Recruits.
         com.devfarinsky.siegeoverhaul.raid.ClaimWaypoints.tick(level, anchor, members);
         List<Mob> recruits = alliedRecruits(level, point, anchor);
+        if (state.preparationTicks > 0) {
+            processPreparation(server, level, data, anchor, point, state, members, recruits);
+            return;
+        }
         if (RaidConfig.MOBILIZE_RECRUITS.get()) mobilizeRecruits(level, recruits, state);
         redirectRaiders(level, state, members, recruits, point);
 
@@ -2073,11 +2148,11 @@ public final class RaidEvents {
             formationSuffix = " — " + composition.label;
         }
         announce(server, anchor.teamKey(), Component.literal(waveTitle(state.wave) + " — wave " + state.wave + "/" +
-                RaidConfig.WAVES.get() + ": " + wanted + " invaders are advancing from the " +
+                RaidConfig.WAVES.get() + ": " + wanted + (state.preparationTicks > 0 ? " invaders are assembling at camp to the " : " invaders are advancing from the ") +
                 approachDirection(state.approachAngle) + formationSuffix +
                 scoutingSummary(recruitScale, assetScale, recruits.size(), compat))
                 .withStyle(ChatFormatting.RED), true);
-        if (state.wave >= RaidConfig.WAVES.get()) {
+        if (state.preparationTicks <= 0 && state.wave >= RaidConfig.WAVES.get()) {
             // v2.32.0: command assault reads as MAJOR (final wave, high stakes).
             showTitle(server, anchor.teamKey(), Component.literal("Command Assault")
                             .withStyle(ChatFormatting.DARK_RED),
@@ -2101,7 +2176,7 @@ public final class RaidEvents {
 
         // Naval share: when a staging point is available, route a percentage of
         // this squad into boats. The rest still spawn on land as usual.
-        boolean amphibious = state.navalStagingPos != null && state.navalBeachPos != null;
+        boolean amphibious = state.preparationTicks <= 0 && state.navalStagingPos != null && state.navalBeachPos != null;
         int navalShare = amphibious ? (wanted * RaidConfig.NAVAL_WAVE_SHARE_PERCENT.get() + 50) / 100 : 0;
 
         int spawned = 0;
@@ -2455,7 +2530,7 @@ public final class RaidEvents {
         // inside the footprint is within +/-3 of this Y.
         final int cy = camp.getY();
         final int r = 9;  // palisade ring "radius" (half-extent); actual footprint 19x19.
-        final double frontAngle = state.approachAngle; // camp -> objective vector
+        final double frontAngle = Math.atan2(point.pos().getZ() - cz, point.pos().getX() - cx);
 
         // -----------------------------------------------------------------
         // PHASE 1: instant strategic core
@@ -2498,8 +2573,13 @@ public final class RaidEvents {
                         : (dz == gateWallCoord && Math.abs(dx - gateCenterAlong) <= gateHalfWidth);
                 if (isGate) continue;
                 BlockPos ground = surfacePosition(level, cx + dx, cz + dz);
-                placeCampBlock(level, state, ground, Blocks.SPRUCE_FENCE);
-                placeCampBlock(level, state, ground.above(), Blocks.SPRUCE_FENCE);
+                if (state.preparationTicks > 0) {
+                    state.pendingFortifications.put(ground.asLong(), "minecraft:spruce_log");
+                    state.pendingFortifications.put(ground.above().asLong(), "minecraft:spruce_log");
+                } else {
+                    placeCampBlock(level, state, ground, Blocks.SPRUCE_FENCE);
+                    placeCampBlock(level, state, ground.above(), Blocks.SPRUCE_FENCE);
+                }
             }
         }
 
@@ -2759,8 +2839,10 @@ public final class RaidEvents {
             excludedChunks.addAll(com.devfarinsky.siegeoverhaul.compat.ClaimBridge
                     .collectClaimedChunks(level, anchor, radiusChunks, anchorRecord));
         }
-        for (int attempt = 0; attempt < 32; attempt++) {
-            double angle = approachAngle + (level.random.nextDouble() - 0.5D) * 0.5D;
+        for (int attempt = 0; attempt < 128; attempt++) {
+            // First prefer the invasion approach, then search the surrounding ring for clear terrain.
+            double angle = approachAngle + (attempt < 32 ? (level.random.nextDouble() - 0.5D) * 0.5D
+                    : (attempt - 32) * 2.399963229728653);
             int distance = Math.max(min, max - level.random.nextInt(Math.max(1, Math.min(16, max - min + 1))));
             int x = anchor.getX() + Mth.floor(Math.cos(angle) * distance);
             int z = anchor.getZ() + Mth.floor(Math.sin(angle) * distance);
@@ -3803,6 +3885,7 @@ public final class RaidEvents {
 
     private static Vec3 invasionObjective(ServerLevel level, RaidSavedData.DefensePoint point,
                                           RaidSavedData.RaidState state) {
+        if ("siege_core".equals(point.name())) return Vec3.atCenterOf(point.pos());
         if (!RaidConfig.ENABLE_BREACH_PHASE.get() || state.breached) return Vec3.atCenterOf(point.pos());
         return invasionBreachObjective(level, point, state);
     }
@@ -4014,6 +4097,7 @@ public final class RaidEvents {
      * occupation (standing on the stronghold to capture).
      */
     private static String raidPhaseLabel(RaidSavedData.RaidState state, boolean paused) {
+        if (!paused && state.preparationTicks > 0) return preparationLabel(state) + " • " + (state.preparationTicks + 1199) / 1200 + "m until assault";
         if (paused) return "Paused";
         if (state.wave == 0) return "Rally";
         if (!state.breached && RaidConfig.ENABLE_BREACH_PHASE.get()) return "Breach";
@@ -4097,7 +4181,7 @@ public final class RaidEvents {
         String label;
         if (paused) {
             label = com.devfarinsky.siegeoverhaul.chat.ChatStyle.bossbarLabel(epithet, phase, "faction offline");
-        } else if (state.wave == 0) {
+        } else if (state.preparationTicks > 0 || state.wave == 0) {
             // Rally phase: approach direction is the useful chip.
             String target = objectiveName + distanceHint;
             String direction = "from the " + approachDirection(state.approachAngle);
@@ -4287,7 +4371,7 @@ public final class RaidEvents {
             CodexCompatInfo compatInfoNoAnchor = buildCodexCompatInfo(null, null, null);
             return new DashboardSnapshot(teamDisplay(player), false, false, "No stronghold registered",
                     0, RaidConfig.WAVES.get(), 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0,
-                    0, "No gate under attack", 0, "Sleep at your base",
+                    0, "No gate under attack", 0, "Place a Siege Core in your faction claim",
                     defaultEmeraldReward(), false,
                     "", "", "", "", "", 0, "", "", 0, "No stronghold",
                     "", "", java.util.List.of(), java.util.List.of(),
@@ -4708,61 +4792,7 @@ public final class RaidEvents {
 
     private static void syncAutomaticHome(MinecraftServer server, RaidSavedData data,
                                           ServerPlayer observedPlayer, boolean force) {
-        String key = teamKey(observedPlayer);
-        RaidSavedData.Anchor anchor = data.anchors.get(key);
-
-        if (anchor == null) {
-            String oldKey = associatedAnchorKeyForPlayer(data, observedPlayer.getUUID());
-            if (oldKey != null && !oldKey.equals(key) && !data.raids.containsKey(oldKey)) {
-                RaidSavedData.Anchor old = data.anchors.remove(oldKey);
-                if (old != null) {
-                    anchor = old.withIdentity(key, teamDisplay(observedPlayer));
-                    data.anchors.put(key, anchor);
-                }
-            }
-        }
-
-        UUID leaderId = RecruitsBridge.factionLeader(observedPlayer)
-                .orElse(anchor != null && !RaidSavedData.UNKNOWN_OWNER.equals(anchor.ownerUuid()) ?
-                        anchor.ownerUuid() : observedPlayer.getUUID());
-        ServerPlayer homePlayer = server.getPlayerList().getPlayer(leaderId);
-
-        if (anchor == null) {
-            // If a faction leader is offline during first discovery, the first
-            // online member establishes a usable temporary home. It is corrected
-            // automatically the next time the leader joins.
-            if (homePlayer == null) homePlayer = observedPlayer;
-            RaidSavedData.DefensePoint home = respawnPoint(server, homePlayer);
-            if (home == null) return;
-            Set<UUID> members = seedRoster(server, observedPlayer);
-            members.add(leaderId);
-            Map<String, RaidSavedData.DefensePoint> points = new LinkedHashMap<>();
-            points.put(RaidSavedData.HOME_POINT, home);
-            long next = server.overworld().getGameTime() + randomCooldownTicks(server.overworld().random);
-            RaidSavedData.Anchor created = new RaidSavedData.Anchor(key, teamDisplay(observedPlayer), leaderId,
-                    members, false, true, points, next);
-            data.anchors.put(key, created);
-            data.setDirty();
-            return;
-        }
-
-        Set<UUID> members = new LinkedHashSet<>(anchor.members());
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (teamKey(player).equals(key)) members.add(player.getUUID());
-        }
-        members.add(leaderId);
-        RaidSavedData.Anchor updated = anchor.withOwner(leaderId).withRoster(members, false)
-                .withIdentity(key, teamDisplay(observedPlayer));
-
-        if ((force || updated.automaticHome() && RaidConfig.FOLLOW_RESPAWN_POINT.get()) &&
-                homePlayer != null && !data.raids.containsKey(key)) {
-            RaidSavedData.DefensePoint home = respawnPoint(server, homePlayer);
-            if (home != null) updated = updated.withPoint(home).withAutomaticHome(true);
-        }
-        if (!updated.equals(anchor)) {
-            data.anchors.put(key, updated);
-            data.setDirty();
-        }
+        // New invasions require a placed Siege Core. Beds no longer create or move targets.
     }
 
     private static RaidSavedData.DefensePoint respawnPoint(MinecraftServer server, ServerPlayer player) {
@@ -4925,41 +4955,8 @@ public final class RaidEvents {
     private static RaidSavedData.DefensePoint selectAutomaticPoint(MinecraftServer server,
                                                                     RaidSavedData.Anchor anchor,
                                                                     List<ServerPlayer> members) {
-        // v2.27.0: claim-center pass. If Recruits is loaded and the anchor
-        // sits inside a friendly claim, prefer the claim's center as the
-        // defense point. Keeps raids attacking what the player actually
-        // built and claimed instead of the anchor block itself. Only used
-        // when the defender-near check passes (or is disabled).
-        if (RaidConfig.CLAIM_AWARE_ANCHORS.get()
-                && RaidConfig.USE_CLAIM_CENTER_AS_DEFENSE_POINT.get()
-                && com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.available()) {
-            RaidSavedData.DefensePoint claimPoint = synthesizeClaimDefensePoint(server, anchor);
-            if (claimPoint != null
-                    && (!RaidConfig.REQUIRE_PLAYER_NEAR_ANCHOR.get() || hasDefenderNear(server, claimPoint, members))) {
-                return claimPoint;
-            }
-        }
-        if (anchor.automaticHome()) {
-            List<RaidSavedData.DefensePoint> playerHomes = new ArrayList<>();
-            for (ServerPlayer member : members) {
-                RaidSavedData.DefensePoint home = respawnPoint(server, member);
-                if (home == null) continue;
-                if (!RaidConfig.REQUIRE_PLAYER_NEAR_ANCHOR.get() || hasDefenderNear(server, home, members)) {
-                    playerHomes.add(home);
-                }
-            }
-            if (!playerHomes.isEmpty()) {
-                return playerHomes.get(server.overworld().random.nextInt(playerHomes.size()));
-            }
-        }
-        List<RaidSavedData.DefensePoint> eligible = new ArrayList<>();
-        for (RaidSavedData.DefensePoint point : anchor.defensePoints().values()) {
-            if (!RaidConfig.REQUIRE_PLAYER_NEAR_ANCHOR.get() || hasDefenderNear(server, point, members)) {
-                eligible.add(point);
-            }
-        }
-        if (eligible.isEmpty()) return null;
-        return eligible.get(server.overworld().random.nextInt(eligible.size()));
+        RaidSavedData.DefensePoint core = com.devfarinsky.siegeoverhaul.core.SiegeCore.point(server, anchor.teamKey());
+        return core != null && (!RaidConfig.REQUIRE_PLAYER_NEAR_ANCHOR.get() || hasDefenderNear(server, core, members)) ? core : null;
     }
 
     /**

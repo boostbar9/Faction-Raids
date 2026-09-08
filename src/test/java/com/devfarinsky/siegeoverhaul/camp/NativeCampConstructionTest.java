@@ -84,12 +84,15 @@ class NativeCampConstructionTest extends MinecraftTestSupport {
              var bridge = org.mockito.Mockito.mockStatic(com.devfarinsky.siegeoverhaul.compat.WorkersBridge.class)) {
             saves.when(() -> RaidSavedData.get(server)).thenReturn(data);
             bridge.when(com.devfarinsky.siegeoverhaul.compat.WorkersBridge::available).thenReturn(true);
+            bridge.when(() -> com.devfarinsky.siegeoverhaul.compat.WorkersBridge.parkBuilder(worker)).thenReturn(true);
             var event = new net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent(worker);
             com.devfarinsky.siegeoverhaul.RaidEvents.onCampWorkerTick(event);
             assertTrue(event.isCanceled());
             assertTrue(raid.pendingCampBlocks.isEmpty());
             assertFalse(NativeCampConstruction.active(raid));
-            org.mockito.Mockito.verify(worker).discard();
+            org.mockito.Mockito.verify(worker, org.mockito.Mockito.never()).discard();
+            assertTrue(raid.campWorkers.contains(workerId));
+            bridge.verify(() -> com.devfarinsky.siegeoverhaul.compat.WorkersBridge.parkBuilder(worker));
             org.mockito.Mockito.verify(level, org.mockito.Mockito.never()).setBlock(
                     org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
         }

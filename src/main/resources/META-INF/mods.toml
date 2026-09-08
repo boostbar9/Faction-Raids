@@ -76,21 +76,21 @@ description='''${mod_description}'''
 
 [[dependencies.${mod_id}]]
     modId="workers"
-    mandatory=false
-    versionRange="[0,)"
+    mandatory=true
+    versionRange="[2.0.3,)"
     ordering="AFTER"
     side="BOTH"
 
 [[dependencies.${mod_id}]]
     modId="smallships"
-    mandatory=false
+    mandatory=true
     versionRange="[0,)"
     ordering="AFTER"
     side="BOTH"
 
 [[dependencies.${mod_id}]]
     modId="siegeweapons"
-    mandatory=false
+    mandatory=true
     versionRange="[0,)"
     ordering="AFTER"
     side="BOTH"

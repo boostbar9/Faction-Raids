@@ -11,35 +11,19 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Ticks alive siege engines forward — steering unmanned rams / towers
- * toward the objective, purging entries whose entity has been destroyed,
- * and cleaning up survivors at raid end.
- *
- * <p>Ranged engines (catapult, ballista) do not need help here because
- * their operating {@code SiegeEngineerEntity} pathfinds and fires on its
- * own once mounted (see
- * {@code com.talhanation.recruits.entities.ai.controller.siegeengineer.SiegeWeaponCatapultController}).
- * Non-ranged engines get a light nudge toward the objective every tick
- * so an unmanned ram or tower still drifts into position.</p>
- */
+/** Deploys supplied native operators after warmup and retains engine identities through chunk unloads. */
 public final class SiegeDeployment {
 
     /** Persistent-data key that ties an operator to a specific raid. */
     public static final String TEAM_TAG = "FactionRaidsSiegeTeam";
 
-    /** How hard to nudge non-ranged engines per tick, in blocks/sec. */
-    private static final double DRIFT_SPEED = 0.05D;
+    /** Provisioning survives saves so defeated crews cannot respawn. */
+    public static final String OPERATOR_ASSIGNED = "SiegeOperatorAssigned";
+    public static final String OPERATOR_ATTEMPTS = "SiegeOperatorAttempts";
 
     private SiegeDeployment() {}
 
-    /**
-     * Called every raid tick from {@code RaidEvents.processRaid}. Iterates
-     * registered engines, drops any whose entity vanished, and applies a
-     * gentle steering vector to non-ranged engines that lost their driver.
-     * @return number of engines removed from the registry this tick
-     * (destroyed by defenders, despawned, or removed by the level).
-     */
+    /** Provision each loaded ranged engine at most once after preparation; keep unloaded identities for cleanup. */
     public static int tick(ServerLevel level, RaidSavedData.RaidState state, BlockPos objective) {
         if (state.siegeEngines == null || state.siegeEngines.isEmpty()) return 0;
         int removed = 0;
@@ -47,27 +31,31 @@ public final class SiegeDeployment {
         while (it.hasNext()) {
             Map.Entry<UUID, String> entry = it.next();
             Entity vehicle = level.getEntity(entry.getKey());
-            if (vehicle == null || !vehicle.isAlive() || vehicle.isRemoved()) {
+            // Missing entities may simply be in unloaded chunks; keep their cleanup identity.
+            if (vehicle == null) continue;
+            if (!vehicle.isAlive() || vehicle.isRemoved()) {
                 it.remove();
                 removed++;
                 continue;
             }
             SiegeEngineType type = SiegeEngineType.parse(entry.getValue());
-            if (type == null || type.ranged()) continue;
-            // If an operator is aboard (e.g. a Recruit siege engineer or a
-            // player who took the wheel), don't shove the engine \u2014 we'd be
-            // fighting whoever is steering. Only auto-drift when the vehicle
-            // is genuinely unmanned.
-            if (!vehicle.getPassengers().isEmpty()) continue;
-            // Non-ranged: nudge toward objective if we've stalled.
-            if (vehicle.getDeltaMovement().lengthSqr() < 0.005D) {
-                Vec3 dir = new Vec3(objective.getX() - vehicle.getX(), 0,
-                        objective.getZ() - vehicle.getZ()).normalize();
-                if (!(Double.isNaN(dir.x) || Double.isNaN(dir.z))) {
-                    vehicle.setDeltaMovement(vehicle.getDeltaMovement().add(dir.scale(DRIFT_SPEED)));
-                    vehicle.hurtMarked = true;
-                }
-            }
+            if (type == null || !type.ranged() || state.wave <= 0 || state.preparationTicks > 0) continue;
+            if (!vehicle.getPassengers().isEmpty() || vehicle.getPersistentData().getBoolean(OPERATOR_ASSIGNED)) continue;
+            // Provision once, after the warning period. A killed operator is never replaced.
+            if (state.raiders.size() >= RaidConfig.MAX_ACTIVE_RAIDERS.get()) continue;
+            long now = level.getGameTime();
+            if (vehicle.getPersistentData().contains("SiegeOperatorLastAttempt")
+                    && now - vehicle.getPersistentData().getLong("SiegeOperatorLastAttempt") < 100) continue;
+            vehicle.getPersistentData().putLong("SiegeOperatorLastAttempt", now);
+            int attempts = vehicle.getPersistentData().getInt(OPERATOR_ATTEMPTS);
+            if (attempts >= 3) continue;
+            vehicle.getPersistentData().putInt(OPERATOR_ATTEMPTS, attempts + 1);
+            SiegeIntegration.spawnSiegeEngineer(level, vehicle.position(), state.teamKey, vehicle, type).ifPresent(operator -> {
+                state.raiders.add(operator.getUUID());
+                state.totalSpawned++;
+                vehicle.getPersistentData().putBoolean(OPERATOR_ASSIGNED, true);
+                RaidSavedData.get(level.getServer()).setDirty();
+            });
         }
         return removed;
     }

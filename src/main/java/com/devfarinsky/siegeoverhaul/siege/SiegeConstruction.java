@@ -50,6 +50,7 @@ public final class SiegeConstruction {
         int placed = 0;
         List<? extends String> configured = RaidConfig.FIRST_WAVE_ENGINES.get();
         for (String raw : configured) {
+            if (state.siegeEngines.size() >= 4) break;
             SiegeEngineType type = SiegeEngineType.parse(raw);
             if (type == null || !type.requiresSiegeWeapons()) continue;
             if (deployEngine(level, state, objective, teamKey, type)) placed++;
@@ -68,7 +69,7 @@ public final class SiegeConstruction {
     public static boolean maybeStartLaterWaveBuild(ServerLevel level, RaidSavedData.RaidState state,
                                                     BlockPos objective, String teamKey) {
         if (!RaidConfig.ENABLE_SIEGE_ENGINES.get()) return false;
-        if (state.campPos == null) return false;
+        if (state.campPos == null || state.siegeEngines.size() >= 4) return false;
         if (!SiegeIntegration.isSiegeWeaponsPresent()) return false;
         int chance = RaidConfig.LATER_WAVE_ENGINE_CHANCE.get();
         if (chance <= 0) return false;
@@ -93,26 +94,32 @@ public final class SiegeConstruction {
         Vec3 camp = new Vec3(state.campPos.getX() + 0.5, state.campPos.getY(), state.campPos.getZ() + 0.5);
         Vec3 dir = target.subtract(camp).normalize();
         if (Double.isNaN(dir.x) || Double.isNaN(dir.z)) dir = new Vec3(1.0, 0.0, 0.0);
-        Vec3 deploy = camp.add(dir.scale(DEPLOY_OFFSET));
+        type = automaticType(type);
         float yaw = (float) (Math.toDegrees(Math.atan2(-dir.x, dir.z)));
-        Optional<Entity> vehicle = SiegeIntegration.spawnSiegeVehicle(level, type, deploy, yaw);
-        if (vehicle.isEmpty()) return false;
-        state.siegeEngines.put(vehicle.get().getUUID(), type.name());
-        // Assign a siege engineer for ranged engines when Recruits is present.
-        // SG14 fix: also tag + register the engineer as a raid participant so
-        // raid-end cleanup, straggler tracking, and wave-completion accounting
-        // see them. Prior to this fix the engineer spawned outside the raid
-        // roster and persisted as a wandering hostile mob after raid end when
-        // both siegeweapons + recruits mods were installed.
-        if (type.ranged() && SiegeIntegration.isSiegeEngineerAvailable()) {
-            SiegeIntegration.spawnSiegeEngineer(level, deploy).ifPresent(engineer -> {
-                engineer.getPersistentData().putString(SiegeDeployment.TEAM_TAG, teamKey);
-                engineer.getPersistentData().putString(ModConstants.Tags.RAID_TEAM, teamKey);
-                state.raiders.add(engineer.getUUID());
-                SiegeIntegration.assignSiegeEngineer(engineer, vehicle.get());
-            });
+        // Artillery needs a clear firing lane outside the palisade, with separate slots.
+        Vec3 forward = new Vec3(dir.x, 0, dir.z).normalize();
+        Vec3 side = new Vec3(-forward.z, 0, forward.x);
+        for (int distance : new int[]{14, 18, 22}) {
+            for (int offset : new int[]{0, 5, -5, 10, -10}) {
+                Vec3 candidate = camp.add(forward.scale(distance)).add(side.scale(offset));
+                int x = (int) Math.floor(candidate.x), z = (int) Math.floor(candidate.z);
+                if (!level.hasChunk(x >> 4, z >> 4)) continue;
+                int y = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+                if (Math.abs(y - camp.y) > 3) continue;
+                Optional<Entity> vehicle = SiegeIntegration.spawnSiegeVehicle(level, type, new Vec3(x + 0.5, y, z + 0.5), yaw);
+                if (vehicle.isEmpty()) continue;
+                vehicle.get().getPersistentData().putString(SiegeDeployment.TEAM_TAG, teamKey);
+                state.siegeEngines.put(vehicle.get().getUUID(), type.name());
+                return true;
+            }
         }
-        return true;
+        com.devfarinsky.siegeoverhaul.FactionLogger.LOG.warn("No clear siege engine slot for {} at {}", teamKey, state.campPos);
+        return false;
+    }
+
+    /** Native Recruits operators support ranged engines; legacy unmanned choices get a working ballista. */
+    static SiegeEngineType automaticType(SiegeEngineType type) {
+        return type.ranged() ? type : SiegeEngineType.BALLISTA;
     }
 
     /**

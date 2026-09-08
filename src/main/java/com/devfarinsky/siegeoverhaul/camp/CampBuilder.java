@@ -27,7 +27,7 @@ public final class CampBuilder {
     private CampBuilder() {}
 
     public static void startCamp(ServerLevel level, RaidState raid) {
-        if (raid.campPos == null || raid.pendingCampBlocks.isEmpty()
+        if (raid.campPos == null
                 || !RaidConfig.ENABLE_CAMP_CONSTRUCTION.get() || !WorkersBridge.available()) return;
         for (int i = 0; i < RaidConfig.CAMP_BUILDER_MAX.get(); i++) {
             BlockPos spawn = standingPosition(level, raid.campPos.offset(7 + i, 0, 0), raid.campPos.getY(), Vec3.atCenterOf(raid.campPos));
@@ -36,6 +36,7 @@ public final class CampBuilder {
         }
         raid.campUsesWorkers = !raid.campWorkers.isEmpty();
         if (raid.campUsesWorkers) NativeCampConstruction.start(level, raid);
+        if (raid.campWorkers.isEmpty()) FactionLogger.LOG.warn("No camp builders could be placed for {} at {}", raid.teamKey, raid.campPos);
     }
 
     /** Called once per periodic siege pass. All pending jobs and crew IDs survive world saves. */

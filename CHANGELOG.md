@@ -1,6 +1,25 @@
+## 4.0.0 — Siege Core and extended preparation
+
+- Require a player-placed core in the faction's native Recruits Overworld claim for new sieges; beds no longer set targets. Existing active raids retain their saved target.
+- Add a free first-login core, recovery recipe, occupation objective and protected placement during active sieges.
+- Add three shared hire offers per faction: 80% recruit, 10% shieldman, 10% archer per slot, rotating every 15 server-runtime minutes. Use native prices, currency, hiring events and unit limits.
+- Persist stock independently of core placement so replacements and server restarts do not reroll or restock it.
+- Add a configurable 12-minute establishment, fortification and army muster period. Use a separate supplied Workers blueprint for the palisade; hold the first assault wave at camp before release.
+- Include the builder visibility, supplied native siege operators and all-four-required dependency changes below.
+- Fix siege operator retry timing for server ticks that do not align with multiples of 100.
+
 # Changelog
 
 All notable changes to Faction Raids are documented here.
+
+## 3.7.0 - 2026-09-08
+
+- Require Recruits, Workers 2, Small Ships and Siege Weapons in Forge metadata and CurseForge release relations.
+- Keep builders at camp after construction finishes; retain the crew if native setup falls back to scripted building.
+- Expand safe camp searches and announce camp coordinates, crew/equipment counts, or the absence of a safe site.
+- Deploy ranged engines outside the palisade in collision-checked slots. Legacy unmanned ram/tower choices use ballistas with native operators.
+- Initialize hostile siege operators, provide ammunition and food, mount native controllers after the warning period, and avoid replacing killed operators.
+- Preserve unloaded engine cleanup identities and prevent raider catapult shots from causing untracked terrain explosions.
 
 ## 3.6.1 - 2026-09-07
 

@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "siegeoverhaul:block/siege_core"
+    }
+  }
+}
