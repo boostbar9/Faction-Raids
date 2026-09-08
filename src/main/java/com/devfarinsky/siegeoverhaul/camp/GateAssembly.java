@@ -13,7 +13,7 @@ import java.util.*;
 public final class GateAssembly {
     private GateAssembly() {}
     public static boolean install(ServerLevel level, RaidSavedData.RaidState raid) {
-        if (raid.warGate.isEmpty()) return false;
+        if (raid.warGate.isEmpty() || !raid.warGate.contains("Center", net.minecraft.nbt.Tag.TAG_LONG)) return false;
         if (raid.warGate.getBoolean("Assembled493")) return true;
         var cells = raid.warGate.getCompound("Blocks");
         if (cells.isEmpty()) return false;
@@ -27,11 +27,12 @@ public final class GateAssembly {
             keys.add(Long.toString(center.relative(front.getClockWise(),x).relative(front,z).above(y).asLong()));
         List<CampTerrain.Change> changes = new ArrayList<>();
         for (String key : keys) {
-            BlockPos pos = BlockPos.of(Long.parseLong(key));
+            BlockPos pos = WarGate.savedPosition(key);
+            if (pos == null) return false;
             if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)
                     || pos.getY()<level.getMinBuildHeight() || pos.getY()>=level.getMaxBuildHeight()) return false;
             var current = level.getBlockState(pos);
-            var block = cells.contains(key) ? ForgeRegistries.BLOCKS.getValue(new ResourceLocation(cells.getString(key))) : Blocks.AIR;
+            var block = cells.contains(key) ? WarGate.savedBlock(cells, key) : Blocks.AIR;
             if (block == null) return false;
             var target = block.defaultBlockState();
             if (current.equals(target)) continue;
@@ -57,6 +58,7 @@ public final class GateAssembly {
         // Active legacy work areas keep their original bounds until their queue is rescanned.
         if (!NativeCampConstruction.active(raid)) cells.getAllKeys().forEach(key -> raid.pendingCampBlocks.remove(Long.parseLong(key)));
         cells.getAllKeys().forEach(key -> raid.pendingFortifications.remove(Long.parseLong(key)));
+        RaidSavedData.get(level.getServer()).setDirty();
         return true;
     }
 }

@@ -21,6 +21,16 @@ import java.util.*;
 @Mod.EventBusSubscriber(modid=SiegeOverhaul.MOD_ID)
 public final class WarGate {
     private WarGate() {}
+    /** Untrusted saved coordinates must never escape into tick/event handlers as exceptions. */
+    static BlockPos savedPosition(String key) {
+        try { return BlockPos.of(Long.parseLong(key)); }
+        catch (NumberFormatException ex) { return null; }
+    }
+    static net.minecraft.world.level.block.Block savedBlock(CompoundTag cells, String key) {
+        if (!cells.contains(key, net.minecraft.nbt.Tag.TAG_STRING)) return null;
+        ResourceLocation id = ResourceLocation.tryParse(cells.getString(key));
+        return id != null && ForgeRegistries.BLOCKS.containsKey(id) ? ForgeRegistries.BLOCKS.getValue(id) : null;
+    }
     public static BlockPos center(RaidSavedData.RaidState raid) { return BlockPos.of(raid.warGate.getLong("Center")); }
     public static Direction facing(RaidSavedData.RaidState raid) { return Direction.from2DDataValue(raid.warGate.getInt("Facing")); }
     public static Map<Long,String> blueprint(BlockPos center,Direction front) {
@@ -67,23 +77,30 @@ public final class WarGate {
             if(road.isEmpty())continue;
             plan.putAll(road.get().blocks());
             if(plan.size()>512)continue;
+            var previousGate=raid.warGate;
+            var previousJobs=new LinkedHashMap<>(raid.pendingCampBlocks);
+            var previousFortifications=new LinkedHashMap<>(raid.pendingFortifications);
             CompoundTag tag=new CompoundTag(),cells=new CompoundTag();plan.forEach((p,id)->cells.putString(Long.toString(p),id));
             tag.putLong("Center",c.asLong());tag.putInt("Facing",front.get2DDataValue());tag.put("Blocks",cells);raid.warGate=tag;
             // Foundations must be first in the native job sequence.
             var jobs=new LinkedHashMap<Long,String>();plan.entrySet().stream().sorted(Comparator.comparingInt(e->BlockPos.of(e.getKey()).getY())).forEach(e->jobs.put(e.getKey(),e.getValue()));
             jobs.putAll(raid.pendingCampBlocks);raid.pendingCampBlocks.clear();raid.pendingCampBlocks.putAll(jobs);
             CampRoad.record(raid,road.get());
-            GateAssembly.install(level,raid);
-            return true;
+            if (GateAssembly.install(level,raid)) return true;
+            // Rejected terrain/placement is a rejected candidate, not a permanent gate.
+            // CampTerrain has rolled back world changes; restore both job queues too.
+            raid.warGate=previousGate;
+            raid.pendingCampBlocks.clear();raid.pendingCampBlocks.putAll(previousJobs);
+            raid.pendingFortifications.clear();raid.pendingFortifications.putAll(previousFortifications);
         }
         return false;
     }
     public static boolean ready(ServerLevel level,RaidSavedData.RaidState raid) {
-        if(raid.warGate.isEmpty() || raid.warGate.getBoolean("RoadPending"))return false;
+        if(!raid.warGate.contains("Center",net.minecraft.nbt.Tag.TAG_LONG) || raid.warGate.getBoolean("RoadPending"))return false;
         var cells=raid.warGate.getCompound("Blocks");
         for(String key:cells.getAllKeys()) {
-            BlockPos p=BlockPos.of(Long.parseLong(key));
-            if(!level.hasChunkAt(p) || !cells.getString(key).equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(level.getBlockState(p).getBlock()))))return false;
+            BlockPos p=savedPosition(key);
+            if(p==null || savedBlock(cells,key)==null || !level.hasChunkAt(p) || !cells.getString(key).equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(level.getBlockState(p).getBlock()))))return false;
         }
         return !cells.isEmpty();
     }
@@ -103,6 +120,9 @@ public final class WarGate {
         if(raid.warGate.isEmpty() && raid.pendingCampBlocks.isEmpty() && !NativeCampConstruction.active(raid)
                 && com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level,raid) && plan(level,raid,objective)) {
             RaidSavedData.get(level.getServer()).setDirty();
+        }
+        if(!raid.warGate.isEmpty() && !raid.warGate.contains("Center",net.minecraft.nbt.Tag.TAG_LONG)) {
+            raid.constructionPauseReason="War Gate: missing saved center";return;
         }
         CampRoad.retrofit(level,raid);
         if (!raid.warGate.isEmpty() && !raid.warGate.getBoolean("Assembled493")
@@ -126,19 +146,22 @@ public final class WarGate {
     }
     public static String status(ServerLevel level,RaidSavedData.RaidState raid) {
         if(raid.warGate.isEmpty())return "Finding a clear War Gate site";
+        if(!raid.warGate.contains("Center",net.minecraft.nbt.Tag.TAG_LONG))return "War Gate: missing saved center";
         var cells=raid.warGate.getCompound("Blocks");int missing=0;java.util.List<String> details=new java.util.ArrayList<>();
         for(String key:cells.getAllKeys()) {
-            BlockPos p=BlockPos.of(Long.parseLong(key));
+            BlockPos p=savedPosition(key);
+            if(p==null || savedBlock(cells,key)==null)return "War Gate: invalid saved blueprint";
             if(!level.hasChunkAt(p) || !cells.getString(key).equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(level.getBlockState(p).getBlock())))) { missing++; if(details.size()<2)details.add(cells.getString(key)+" at "+p.getX()+", "+p.getY()+", "+p.getZ()); }
         }
         return "War Gate: "+missing+" blocks unfinished"+(details.isEmpty()?"":" ("+String.join("; ",details)+")")+(raid.constructionPauseReason.isEmpty()?"":" — "+raid.constructionPauseReason);
     }
     private static boolean protectedAt(ServerLevel level,BlockPos p) {
         for(var raid:RaidSavedData.get(level.getServer()).raids.values()) {
-            if(raid.warGate.isEmpty() || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD))continue;
+            if(!raid.warGate.contains("Center",net.minecraft.nbt.Tag.TAG_LONG) || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD))continue;
             var road=raid.warGate.getCompound("RoadBlocks");
             for(String key:road.getAllKeys()) {
-                BlockPos floor=BlockPos.of(Long.parseLong(key));
+                BlockPos floor=savedPosition(key);
+                if(floor==null)continue;
                 if(p.getX()==floor.getX() && p.getZ()==floor.getZ() && p.getY()>=floor.getY() && p.getY()<=floor.getY()+4)return true;
             }
             BlockPos c=center(raid);
@@ -161,8 +184,9 @@ public final class WarGate {
     }
     /** Unconditional gate cleanup, even when ordinary camp cleanup is disabled. */
     public static void cleanup(ServerLevel level,RaidSavedData.RaidState raid) {
-        if(!raid.warGate.isEmpty())CampLoading.release(level,center(raid));
+        if(raid.warGate.contains("Center",net.minecraft.nbt.Tag.TAG_LONG))CampLoading.release(level,center(raid));
         var cells=raid.warGate.getCompound("Blocks");var allKeys=new HashSet<>(cells.getAllKeys());allKeys.addAll(raid.warGate.getCompound("RoadBefore").getAllKeys());var keys=new ArrayList<>(allKeys);
+        keys.removeIf(key->savedPosition(key)==null);
         keys.sort(Comparator.comparingInt((String k)->BlockPos.of(Long.parseLong(k)).getY()).reversed());
         for(String key:keys) {
             long packed=Long.parseLong(key);BlockPos p=BlockPos.of(packed);

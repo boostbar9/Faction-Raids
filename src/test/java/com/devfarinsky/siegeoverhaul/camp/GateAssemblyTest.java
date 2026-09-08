@@ -17,7 +17,12 @@ class GateAssemblyTest extends MinecraftTestSupport {
     RaidSavedData.RaidState raid=new RaidSavedData.RaidState("team:test","siege_core",0);
     BlockPos center=new BlockPos(0,64,0);
     Map<BlockPos,BlockState> world=new HashMap<>();
+    RaidSavedData saved;
+    org.mockito.MockedStatic<RaidSavedData> saves;
+    @AfterEach void closeSaves() { saves.close(); }
     @BeforeEach void setup() {
+        saved=new RaidSavedData();saves=mockStatic(RaidSavedData.class);
+        saves.when(()->RaidSavedData.get(null)).thenReturn(saved);
         when(level.hasChunkAt(any())).thenReturn(true);
         when(level.getWorldBorder()).thenReturn(new WorldBorder());
         when(level.getMinBuildHeight()).thenReturn(-64);when(level.getMaxBuildHeight()).thenReturn(320);
@@ -30,7 +35,8 @@ class GateAssemblyTest extends MinecraftTestSupport {
     @Test void assemblesCrestClearsFlowersAndLeavesOnlyCampJobs() {
         BlockPos job=center.offset(10,0,0);raid.pendingCampBlocks.put(job.asLong(),"minecraft:stone_bricks");
         world.put(center.above(),Blocks.DANDELION.defaultBlockState());
-        assertTrue(GateAssembly.install(level,raid));assertTrue(WarGate.ready(level,raid));
+        assertFalse(saved.isDirty());
+        assertTrue(GateAssembly.install(level,raid));assertTrue(saved.isDirty());assertTrue(WarGate.ready(level,raid));
         assertEquals(Blocks.LODESTONE.defaultBlockState(),world.get(center.above(7)));
         assertTrue(world.get(center.above()).isAir());
         assertEquals(Set.of(job.asLong()),raid.pendingCampBlocks.keySet());
@@ -48,5 +54,35 @@ class GateAssemblyTest extends MinecraftTestSupport {
         assertFalse(GateAssembly.install(level,raid));assertFalse(raid.warGate.getBoolean("Assembled493"));
         assertFalse(raid.pendingCampBlocks.isEmpty());assertTrue(raid.campBlocks.isEmpty());
         assertTrue(world.values().stream().allMatch(BlockState::isAir));
+    }
+    @Test void invalidSavedCoordinatesAndBlockIdsRejectWithoutMutations() {
+        var original=raid.warGate.copy();
+        for(String invalid:new String[]{"not-a-position","999999999999999999999999999"}) {
+            raid.warGate=original.copy();raid.warGate.getCompound("Blocks").putString(invalid,"minecraft:stone");
+            assertFalse(GateAssembly.install(level,raid));assertFalse(WarGate.ready(level,raid));
+            assertEquals("War Gate: invalid saved blueprint",WarGate.status(level,raid));
+        }
+        for(String invalid:new String[]{"BAD ID!","missing_mod:unknown_block"}) {
+            raid.warGate=original.copy();raid.warGate.getCompound("Blocks").putString(Long.toString(center.asLong()),invalid);
+            assertFalse(GateAssembly.install(level,raid));assertFalse(WarGate.ready(level,raid));
+            assertEquals("War Gate: invalid saved blueprint",WarGate.status(level,raid));
+        }
+        raid.warGate=original.copy();raid.warGate.getCompound("Blocks").putInt(Long.toString(center.asLong()),12);
+        assertFalse(GateAssembly.install(level,raid));
+        raid.warGate=original.copy();var before=new CompoundTag();before.put("broken",new CompoundTag());raid.warGate.put("RoadBefore",before);
+        assertFalse(GateAssembly.install(level,raid));assertFalse(CampRoad.prepare(level,raid));
+        verify(level,never()).setBlock(any(),any(),anyInt());assertTrue(raid.campBlocks.isEmpty());assertFalse(saved.isDirty());
+    }
+    @Test void missingCenterCannotAssembleAtWorldOrigin() {
+        raid.warGate.remove("Center");assertFalse(GateAssembly.install(level,raid));
+        verify(level,never()).setBlock(any(),any(),anyInt());assertFalse(saved.isDirty());
+    }
+    @Test void malformedKeysDoNotCrashRepairOrCleanup() {
+        raid.warGate.getCompound("Blocks").putString("broken","minecraft:stone");
+        raid.warGate.getCompound("Blocks").putString("123","BAD ID!");
+        assertDoesNotThrow(()->NativeCampConstruction.recoverMissingGateCells(level,raid));
+        try(var loading=mockStatic(CampLoading.class)) {
+            assertDoesNotThrow(()->WarGate.cleanup(level,raid));
+        }
     }
 }
