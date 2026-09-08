@@ -36,12 +36,13 @@ class CoreCaptureRegressionTest extends MinecraftTestSupport {
         var raid=new RaidSavedData.RaidState("team:blue","siege_core",0); raid.pendingWaveSpawns=8;
         var id=UUID.randomUUID();
         var claim=new RecruitsClaimsBridge.ClaimSnapshot(id,"Home","blue",new ChunkPos(0,0),Set.of(),false,100,100);
-        try(var claims=mockStatic(RecruitsClaimsBridge.class);var recruits=mockStatic(RecruitsBridge.class);var transfer=mockStatic(CoreClaimTransfer.class)) {
+        try(var claims=mockStatic(RecruitsClaimsBridge.class);var recruits=mockStatic(RaiderFactions.class,CALLS_REAL_METHODS);var transfer=mockStatic(CoreClaimTransfer.class)) {
             claims.when(()->RecruitsClaimsBridge.getClaimAt(level,BlockPos.ZERO)).thenReturn(Optional.of(claim));
-            recruits.when(()->RecruitsBridge.ensureRaidersFaction(server)).thenReturn(true);
+            recruits.when(()->RaiderFactions.ensure(server,raid.factionId)).thenReturn(true);
             assertFalse(CoreOccupation.capture(level,data,raid,BlockPos.ZERO));
+            assertEquals("Home",core.getString("OriginalClaimName"));
             assertFalse(core.getBoolean("Occupied")); assertFalse(raid.coreCaptured); assertEquals(8,raid.pendingWaveSpawns);
-            transfer.verify(()->CoreClaimTransfer.transfer(level,id,"blue",RecruitsBridge.RAIDERS_FACTION_ID));
+            transfer.verify(()->CoreClaimTransfer.transfer(level,id,"blue",RaiderFactions.id(raid.factionId),RaiderFactions.name(raid.factionId)+" Occupied Territory"));
         }
     }
 }

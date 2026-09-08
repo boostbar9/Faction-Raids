@@ -33,7 +33,7 @@ public final class CoreOccupation {
                 m -> m.isAlive() && !m.isPassenger() && inRing(m.position(),pos))) {
             if (RecruitsBridge.isRecruitSoldier(mob) && (key.equals(mob.getPersistentData().getString(ModConstants.Tags.RAID_TEAM))
                     || key.equals(mob.getPersistentData().getString(com.devfarinsky.siegeoverhaul.camp.CampGuards.TEAM_TAG))
-                    || RecruitsBridge.belongsTo(mob,"team:"+RecruitsBridge.RAIDERS_FACTION_ID,Set.of()))) enemies++;
+                    || (mob.getTeam()!=null && RaiderFactions.enemy(mob.getTeam().getName())))) enemies++;
             else if (RecruitsBridge.belongsTo(mob,key,members)) defenders++;
         }
         return new int[]{enemies,defenders};
@@ -43,15 +43,17 @@ public final class CoreOccupation {
         if(core==null || !raid.teamKey.startsWith("team:")) return false;
         var claim=RecruitsClaimsBridge.getClaimAt(level,pos).orElse(null);
         if(claim==null || !claim.ownerFactionStringId().equals(raid.teamKey.substring(5))) return false;
-        if(!RecruitsBridge.ensureRaidersFaction(level.getServer())) return false;
+        if(!RaiderFactions.ensure(level.getServer(),raid.factionId)) return false;
         // Persist identity before handing off to native listeners; a failed transfer never marks occupation.
         core.putUUID("OccupiedClaim",claim.claimId());
+        core.putString("OriginalClaimName",claim.claimName());
+        core.putString("OccupyingFaction",com.devfarinsky.siegeoverhaul.items.FactionBanners.FactionId.byIdOrDefault(raid.factionId).id);
         data.setDirty();
-        if(!CoreClaimTransfer.transfer(level,claim.claimId(),raid.teamKey.substring(5),RecruitsBridge.RAIDERS_FACTION_ID)) return false;
+        if(!CoreClaimTransfer.transfer(level,claim.claimId(),raid.teamKey.substring(5),RaiderFactions.id(raid.factionId),RaiderFactions.name(raid.factionId)+" Occupied Territory")) return false;
         core.putBoolean("Occupied",true); core.putInt("RecaptureTicks",0);
         raid.coreCaptured=true; raid.pendingWaveSpawns=0; raid.ticksToNextWave=0;
         data.setDirty();
-        notify(level.getServer(),raid.teamKey,"Your Siege Core was captured. Its entire Recruits claim now belongs to the Raiders. Outnumber them within "
+        notify(level.getServer(),raid.teamKey,"Your Siege Core was captured. Its territory now belongs to "+RaiderFactions.name(raid.factionId)+". Outnumber them within "
                 +RaidConfig.CORE_CAPTURE_RADIUS.get()+" blocks of the core for "+RaidConfig.CORE_RECAPTURE_SECONDS.get()+" seconds to reclaim it.");
         return true;
     }
@@ -69,7 +71,16 @@ public final class CoreOccupation {
             if(claim.ownerFactionStringId().equals(key.substring(5))) {
                 core.putBoolean("Occupied",false); core.putInt("RecaptureTicks",0); data.setDirty(); continue;
             }
-            if(!claim.ownerFactionStringId().equals(RecruitsBridge.RAIDERS_FACTION_ID)) continue;
+            if(!RaiderFactions.enemy(claim.ownerFactionStringId())) continue;
+            var activeRaid=data.raids.get(key);
+            String faction=core.contains("OccupyingFaction")?core.getString("OccupyingFaction"):activeRaid==null?null:activeRaid.factionId;
+            if(!core.contains("OriginalClaimName"))core.putString("OriginalClaimName",claim.claimName());
+            if(faction!=null && claim.ownerFactionStringId().equals(RecruitsBridge.RAIDERS_FACTION_ID) && RaiderFactions.ensure(server,faction)) {
+                if(CoreClaimTransfer.transfer(level,claim.claimId(),claim.ownerFactionStringId(),RaiderFactions.id(faction),RaiderFactions.name(faction)+" Occupied Territory")) {
+                    core.putString("OccupyingFaction",faction); data.setDirty();
+                    continue;
+                }
+            }
             var anchor=data.anchors.get(key);
             int[] counts=counts(level,pos,key,anchor==null?Set.of():anchor.members());
             int max=RaidConfig.CORE_RECAPTURE_SECONDS.get()*20;
@@ -80,7 +91,7 @@ public final class CoreOccupation {
             if(raid!=null) raid.objectiveStatus=status;
             if(level.getGameTime()%100==0) for(var player:level.players())
                 if(key.equals(SiegeCore.key(player))) player.displayClientMessage(Component.literal(status),true);
-            if(progress>=max && counts[1]>counts[0] && CoreClaimTransfer.transfer(level,claim.claimId(),RecruitsBridge.RAIDERS_FACTION_ID,key.substring(5))) {
+            if(progress>=max && counts[1]>counts[0] && CoreClaimTransfer.transfer(level,claim.claimId(),claim.ownerFactionStringId(),key.substring(5),core.getString("OriginalClaimName"))) {
                 core.putBoolean("Occupied",false); core.putInt("RecaptureTicks",0); data.setDirty();
                 notify(server,key,"Siege Core recaptured. Your faction owns its territory again.");
             }

@@ -567,6 +567,8 @@ public final class RaidSavedData extends SavedData {
         public CompoundTag nativeCamp = new CompoundTag();
         public boolean campUsesWorkers;
         public int campBuildTicks;
+        public int campUpgradeStage;
+        public int campUpgradeTicks;
         /** Only true while collecting the initial camp plan; never saved. */
         public transient boolean planningCamp;
         /**
@@ -689,6 +691,8 @@ public final class RaidSavedData extends SavedData {
             tag.put(ModConstants.Tags.NATIVE_CAMP, nativeCamp.copy());
             tag.putBoolean(ModConstants.Tags.CAMP_USES_WORKERS, campUsesWorkers);
             tag.putInt(ModConstants.Tags.CAMP_BUILD_TICKS, campBuildTicks);
+            tag.putInt("CampUpgradeStage",campUpgradeStage);
+            tag.putInt("CampUpgradeTicks",campUpgradeTicks);
             ListTag breached = new ListTag();
             breachedBlocks.forEach((position, blockState) -> {
                 CompoundTag entry = new CompoundTag();
@@ -841,6 +845,8 @@ public final class RaidSavedData extends SavedData {
             if (tag.contains(ModConstants.Tags.WAVE_FORMATION)) state.waveFormation = tag.getString(ModConstants.Tags.WAVE_FORMATION);
             state.nativeCamp = tag.getCompound(ModConstants.Tags.NATIVE_CAMP).copy();
             state.campUsesWorkers = tag.getBoolean(ModConstants.Tags.CAMP_USES_WORKERS);
+            state.campUpgradeStage=Math.max(0,Math.min(3,tag.getInt("CampUpgradeStage")));
+            state.campUpgradeTicks=Math.max(0,Math.min(2400,tag.getInt("CampUpgradeTicks")));
             state.campBuildTicks = Math.max(0, tag.getInt(ModConstants.Tags.CAMP_BUILD_TICKS));
             ListTag breached = tag.getList("BreachedBlocks", Tag.TAG_COMPOUND);
             for (int i = 0; i < breached.size(); i++) {

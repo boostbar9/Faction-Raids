@@ -55,18 +55,18 @@ public final class CampClaims {
         } catch (ReflectiveOperationException | RuntimeException ex) { return false; }
     }
     public static boolean create(ServerLevel level, RaidSavedData.RaidState raid, BlockPos center) {
-        if (!canClaim(level, center) || !RecruitsBridge.ensureRaidersFaction(level.getServer())) return false;
+        if (!canClaim(level, center) || !RaiderFactions.ensure(level.getServer(),raid.factionId)) return false;
         try {
             Object manager = manager();
             Object factions = Class.forName("com.talhanation.recruits.FactionEvents").getField("recruitsFactionManager").get(null);
-            Object faction = factions.getClass().getMethod("getFactionByStringID", String.class).invoke(factions, RecruitsBridge.RAIDERS_FACTION_ID);
+            Object faction = factions.getClass().getMethod("getFactionByStringID", String.class).invoke(factions, RaiderFactions.id(raid.factionId));
             if (faction == null) return false;
             Class<?> factionType = Class.forName(WORLD + "RecruitsFaction"), claimType = Class.forName(WORLD + "RecruitsClaim");
             Object claim = claimType.getConstructor(String.class, factionType).newInstance(raid.narrative!=null && raid.narrative.factionName!=null ? raid.narrative.factionName+" War Camp" : "Raider War Camp", faction);
             claimType.getMethod("setCenter", ChunkPos.class).invoke(claim, new ChunkPos(center));
             for (ChunkPos chunk : footprint(center)) claimType.getMethod("addChunk", ChunkPos.class).invoke(claim, chunk);
             Class<?> infoType = Class.forName(WORLD + "RecruitsPlayerInfo");
-            Object info = infoType.getConstructor(UUID.class, String.class, factionType).newInstance(RecruitsBridge.RAIDERS_LEADER_UUID, "Raiders", faction);
+            Object info = infoType.getConstructor(UUID.class, String.class, factionType).newInstance(RaiderFactions.leader(raid.factionId), RaiderFactions.name(raid.factionId), faction);
             claimType.getMethod("setPlayer", infoType).invoke(claim, info);
             // Keep camp sabotage and supply raids playable under the native claim permission system.
             claimType.getMethod("setBlockInteractionAllowed", boolean.class).invoke(claim, true);
@@ -93,7 +93,11 @@ public final class CampClaims {
         try {
             Object m = manager();
             Object claim = m.getClass().getMethod("getClaim", UUID.class).invoke(m, raid.campClaimId);
-            return claim != null && RecruitsBridge.RAIDERS_FACTION_ID.equals(claim.getClass().getMethod("getOwnerFactionStringID").invoke(claim));
+            if (claim == null) return false;
+            String owner=(String)claim.getClass().getMethod("getOwnerFactionStringID").invoke(claim);
+            if(RecruitsBridge.RAIDERS_FACTION_ID.equals(owner) && RaiderFactions.ensure(level.getServer(),raid.factionId))
+                return CoreClaimTransfer.transfer(level,raid.campClaimId,owner,RaiderFactions.id(raid.factionId),RaiderFactions.name(raid.factionId)+" War Camp");
+            return RaiderFactions.id(raid.factionId).equals(owner);
         } catch (ReflectiveOperationException | RuntimeException ex) { return false; }
     }
     public static void cleanOrphans(ServerLevel level, RaidSavedData data) {
@@ -105,7 +109,7 @@ public final class CampClaims {
                 Object m = manager();
                 if (m == null) return;
                 Object claim = m.getClass().getMethod("getClaim", UUID.class).invoke(m, id);
-                if (claim != null && RecruitsBridge.RAIDERS_FACTION_ID.equals(claim.getClass().getMethod("getOwnerFactionStringID").invoke(claim))) {
+                if (claim != null && RaiderFactions.enemy((String)claim.getClass().getMethod("getOwnerFactionStringID").invoke(claim))) {
                     m.getClass().getMethod("removeClaim", ServerLevel.class, UUID.class).invoke(m, level, id);
                     m.getClass().getMethod("save", ServerLevel.class).invoke(m, level);
                 }

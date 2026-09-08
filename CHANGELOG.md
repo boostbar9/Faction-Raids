@@ -1,3 +1,13 @@
+## 4.4.0 beta
+
+- Separate native enemy factions give camp and captured claims distinct map colors. Core capture renames territory; recapture restores its original name.
+- Dedicated camp guards use aggressive native hold orders at gate and rear flank posts; their assignments survive reloads.
+- Builders receive three sequential, finite native blueprint extensions after initial fortifications: timber shelters with distinct roofs. Jobs wait for safe, clear terrain and living builders.
+- New Hire a Hero tab: one level-10 featured recruit with diamond armor, 60 minimum health, and a melee damage bonus. Vanguard/Bulwark/Ranger/Arbalist offer odds: 40/30/20/10 percent. Price is 12 times native cost, minimum 256 configured currency.
+- Hero stock shares the 15-minute faction rotation; exact offers and prices are visible before hiring. Existing two recruit and one worker slots are retained.
+- Refreshed responsive cards, gradients and a brief reveal highlight. Network protocol 9 requires matching server/client versions.
+- Native Workers blueprint reference: https://www.curseforge.com/minecraft/mc-mods/workers
+
 ## 4.3.2 — Recruits siege engineer spawn compatibility
 
 - Fix the Recruits 1.15.2 engineer initialization ClassCastException confirmed in the supplied 4.3.0 log. Its native initializer still casts RecruitPathNavigation to GroundPathNavigation.

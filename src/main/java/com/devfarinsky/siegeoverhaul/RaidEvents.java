@@ -1752,13 +1752,8 @@ public final class RaidEvents {
             // Stage small groups throughout muster, rather than materializing the army at the horn.
             if (state.pendingWaveSpawns > 0) state.ticksToNextSquad = Math.max(state.ticksToNextSquad, 20);
         }
-        if (state.campPos != null && state.preparationTicks % 100 == 0) {
-            for (UUID id : state.raiders) if (level.getEntity(id) instanceof Mob mob && !mob.isPassenger()) {
-                com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
-                if (mob.getTarget() == null && mob.distanceToSqr(Vec3.atCenterOf(state.campPos)) > 100)
-                    mob.getNavigation().moveTo(state.campPos.getX()+.5, state.campPos.getY(), state.campPos.getZ()+.5, RaidConfig.RAIDER_ADVANCE_SPEED.get());
-            }
-        }
+        if (state.campPos != null && state.preparationTicks % 100 == 0)
+            com.devfarinsky.siegeoverhaul.camp.CampGuards.muster(level,state);
         state.preparationTicks = Math.max(0, state.preparationTicks - 20);
         state.ticksToNextWave = state.preparationTicks;
         state.objectiveStatus = preparationLabel(state);
@@ -1848,6 +1843,9 @@ public final class RaidEvents {
             }
         }
         if(state.campPos!=null) com.devfarinsky.siegeoverhaul.camp.CampLoading.keep(level,state.campPos);
+        com.devfarinsky.siegeoverhaul.compat.RaiderFactions.sync(level,state);
+        if(state.preparationTicks==0) for(UUID id:state.raiders) if(level.getEntity(id) instanceof Mob mob)
+            com.devfarinsky.siegeoverhaul.camp.CampGuards.releaseMuster(mob);
         setRaidMobsFrozen(level, state, false);
         com.devfarinsky.siegeoverhaul.camp.CampGuards.start(level, data, state);
         com.devfarinsky.siegeoverhaul.camp.CampGuards.tick(level, state, false);
@@ -1867,6 +1865,7 @@ public final class RaidEvents {
         // effect so it never flickers between passes but decays if the
         // captain dies.
         tickCaptainAura(level, state);
+        com.devfarinsky.siegeoverhaul.camp.CampDevelopment.tick(level,state);
         // Camp progress is persisted even when no wave or breach changed this pass.
         if (!state.pendingCampBlocks.isEmpty()) {
             progressDeferredCampBuilds(level, state);
