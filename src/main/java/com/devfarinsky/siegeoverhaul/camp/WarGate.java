@@ -48,7 +48,13 @@ public final class WarGate {
                 y=Math.max(y,level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,p.getX(),p.getZ()));
             }
             if(!valid || Math.abs(y-raid.campPos.getY())>6)continue;
-            c=new BlockPos(c.getX(),y,c.getZ());var plan=blueprint(c,front);
+            c=new BlockPos(c.getX(),y,c.getZ());
+            var volume=new net.minecraft.world.phys.AABB(c.offset(-3,0,-3),c.offset(4,8,4));
+            if(level.getEntities((net.minecraft.world.entity.Entity)null,volume).stream().anyMatch(entity->{
+                var id=ForgeRegistries.ENTITY_TYPES.getKey(entity.getType());
+                return entity instanceof net.minecraft.world.entity.LivingEntity || id!=null && id.getNamespace().equals("siegeweapons");
+            }))continue;
+            var plan=blueprint(c,front);
             for(int x=-3;x<=3;x++)for(int z=-2;z<=2;z++) {
                 BlockPos p=c.relative(front.getClockWise(),x).relative(front,z);
                 int floor=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,p.getX(),p.getZ());
