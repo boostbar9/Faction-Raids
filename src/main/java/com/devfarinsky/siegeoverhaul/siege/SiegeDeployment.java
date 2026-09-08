@@ -73,6 +73,7 @@ public final class SiegeDeployment {
             if (!vehicle.getPassengers().isEmpty()) {
                 for (Entity passenger : vehicle.getPassengers()) if (passenger instanceof net.minecraft.world.entity.Mob operator
                         && state.teamKey.equals(operator.getPersistentData().getString(TEAM_TAG))) {
+                    vehicle.getPersistentData().putUUID("SiegeOperatorUuid",operator.getUUID());
                     com.devfarinsky.siegeoverhaul.camp.CampLoading.keep(level, vehicle.blockPosition());
                     SiegeIntegration.advanceEngineer(operator, objective);
                     if (vehicle.getPersistentData().getInt("SiegeSupportWave") == state.wave && state.lastSiegeSupportWave < state.wave) {
@@ -82,7 +83,20 @@ public final class SiegeDeployment {
                 }
                 continue;
             }
-            if (vehicle.getPersistentData().getBoolean(OPERATOR_ASSIGNED)) continue;
+            if (vehicle.getPersistentData().getBoolean(OPERATOR_ASSIGNED)) {
+                // A dismounted living crew walks back to its own engine. Never replace dead crews.
+                if(vehicle.getPersistentData().hasUUID("SiegeOperatorUuid")
+                        && level.getEntity(vehicle.getPersistentData().getUUID("SiegeOperatorUuid")) instanceof net.minecraft.world.entity.Mob operator
+                        && operator.isAlive() && !operator.isPassenger() && state.teamKey.equals(operator.getPersistentData().getString(TEAM_TAG))) {
+                    double distance=operator.distanceToSqr(vehicle);
+                    if(distance<=16) {
+                        if(SiegeIntegration.assignSiegeEngineer(operator,vehicle))SiegeIntegration.advanceEngineer(operator,objective);
+                    } else if(distance<=32*32 && operator.getTarget()==null) {
+                        operator.getNavigation().moveTo(vehicle,1.1);
+                    }
+                }
+                continue;
+            }
             // Provision once, after the warning period. A killed operator is never replaced.
             if (!capacity(level, state)) continue;
             long now = level.getGameTime();
@@ -96,6 +110,7 @@ public final class SiegeDeployment {
                 state.raiders.add(operator.getUUID());
                 state.totalSpawned++;
                 vehicle.getPersistentData().putBoolean(OPERATOR_ASSIGNED, true);
+                vehicle.getPersistentData().putUUID("SiegeOperatorUuid",operator.getUUID());
                 state.lastSiegeSupportWave = Math.max(state.lastSiegeSupportWave, vehicle.getPersistentData().getInt("SiegeSupportWave"));
                 SiegeIntegration.advanceEngineer(operator, objective);
                 com.devfarinsky.siegeoverhaul.FactionLogger.LOG.info("Wave {} deployed {} with supplied Siege Engineer for {}", state.wave, type, state.teamKey);

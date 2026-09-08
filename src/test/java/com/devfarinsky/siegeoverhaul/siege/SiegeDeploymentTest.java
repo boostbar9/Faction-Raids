@@ -138,4 +138,10 @@ class SiegeDeploymentTest extends MinecraftTestSupport {
         assertEquals(SiegeEngineType.BALLISTA, SiegeConstruction.automaticType(SiegeEngineType.SIEGE_TOWER));
         assertEquals(SiegeEngineType.CATAPULT, SiegeConstruction.automaticType(SiegeEngineType.CATAPULT));
     }
+    @Test void firingPositionsRespectNativeMinimumRanges() {
+        assertTrue(SiegeIntegration.standOff(SiegeEngineType.CATAPULT)>30);
+        assertTrue(SiegeIntegration.standOff(SiegeEngineType.CATAPULT)<100);
+        assertTrue(SiegeIntegration.standOff(SiegeEngineType.BALLISTA)>Math.sqrt(200));
+        assertTrue(SiegeIntegration.standOff(SiegeEngineType.BALLISTA)<50);
+    }
 }

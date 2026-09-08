@@ -23,16 +23,30 @@ class CoreLootTest extends MinecraftTestSupport {
         when(player.getPersistentData()).thenReturn(new net.minecraft.nbt.CompoundTag());
         when(player.getRandom()).thenReturn(net.minecraft.util.RandomSource.create(1));
         inv.items.set(0,new ItemStack(Items.EMERALD,64));
-        assertTrue(CoreLoot.purchase(player,0));assertEquals(32,inv.countItem(Items.EMERALD));
-        assertFalse(CoreLoot.purchase(player,0));assertEquals(32,inv.countItem(Items.EMERALD));
-        when(level.getGameTime()).thenReturn(40L);
+        assertTrue(CoreLoot.purchase(player,0));assertEquals(48,inv.countItem(Items.EMERALD));
+        assertFalse(CoreLoot.purchase(player,0));assertEquals(48,inv.countItem(Items.EMERALD));
+        when(level.getGameTime()).thenReturn(80L);
         for(int i=1;i<36;i++)inv.items.set(i,new ItemStack(Items.STONE,64));
-        assertFalse(CoreLoot.purchase(player,0));assertEquals(32,inv.countItem(Items.EMERALD));
-        assertFalse(CoreLoot.purchase(player,2));assertEquals(32,inv.countItem(Items.EMERALD));
+        assertFalse(CoreLoot.purchase(player,0));assertEquals(48,inv.countItem(Items.EMERALD));
+        assertFalse(CoreLoot.purchase(player,2));assertEquals(48,inv.countItem(Items.EMERALD));
     }
     @Test void cannotFitEnchantedGearIntoFullInventoryOrFilterBadRolls() {
         var inventory=new java.util.ArrayList<ItemStack>();for(int i=0;i<36;i++)inventory.add(new ItemStack(Items.STONE,64));
         assertFalse(CoreLoot.fits(inventory,CoreLoot.reward(1,95)));
         inventory.set(0,ItemStack.EMPTY);assertTrue(CoreLoot.fits(inventory,CoreLoot.reward(1,95)));
+    }
+    @Test void receiptMatchesDeliveredRewardAndCannotChargeAgainDuringReveal() {
+        var player=mock(ServerPlayer.class);var level=mock(ServerLevel.class);var inv=new Inventory(player);
+        when(player.getInventory()).thenReturn(inv);when(player.serverLevel()).thenReturn(level);
+        when(player.getPersistentData()).thenReturn(new net.minecraft.nbt.CompoundTag());
+        when(player.getRandom()).thenReturn(net.minecraft.util.RandomSource.create(7));
+        inv.items.set(0,new ItemStack(Items.EMERALD,64));
+        var receipt=CoreLoot.purchaseWithReceipt(player,1);assertNotNull(receipt);
+        assertEquals(16,inv.countItem(Items.EMERALD));
+        assertEquals(receipt.prize().getCount(),inv.countItem(receipt.prize().getItem()));
+        assertTrue(inv.items.stream().anyMatch(s->ItemStack.isSameItemSameTags(s,receipt.prize())));
+        assertTrue(receipt.tier()>=0 && receipt.tier()<4);
+        when(level.getGameTime()).thenReturn(40L);
+        assertNull(CoreLoot.purchaseWithReceipt(player,0));assertEquals(16,inv.countItem(Items.EMERALD));
     }
 }

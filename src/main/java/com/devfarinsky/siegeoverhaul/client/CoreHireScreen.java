@@ -20,7 +20,27 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private CoreHireLayout layout;
     private boolean heroes, loot;
     private int confirmBox=-1;
-    private final net.minecraft.world.item.ItemStack[][] lootPreviews=new net.minecraft.world.item.ItemStack[3][4];
+    private int seenLoot, revealBox=-1, revealTicks, waitingTicks;
+    private net.minecraft.world.item.ItemStack revealed=net.minecraft.world.item.ItemStack.EMPTY;
+    private int revealedTier;
+    private static final int REVEAL_DURATION=45;
+    private void chime(float pitch) {
+        if(minecraft!=null)minecraft.getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
+                net.minecraft.sounds.SoundEvents.AMETHYST_BLOCK_CHIME,pitch));
+    }
+    @Override protected void containerTick() {
+        super.containerTick();
+        if(waitingTicks>0)waitingTicks--;
+        if(menu.lootSequence()!=seenLoot) {
+            seenLoot=menu.lootSequence();revealBox=menu.lootBox();revealed=menu.lootReward().copy();
+            revealedTier=menu.lootTier();revealTicks=REVEAL_DURATION;waitingTicks=0;
+        }
+        if(revealTicks>0) {
+            revealTicks--;
+            if(loot && (revealTicks==0 || revealTicks% (revealTicks>20?5:10)==0))
+                chime(revealTicks==0?1.2f:0.6f+(REVEAL_DURATION-revealTicks)*.01f);
+        }
+    }
     private final Button[] boxes=new Button[3];
     private int cardIndex(int i) { return i==3?(layout.compact()?0:1):i; }
     private final Button[] hire = new Button[4];
@@ -33,7 +53,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         event.enqueueWork(() -> MenuScreens.register(CoreMenus.HIRING.get(), CoreHireScreen::new));
     }
     @Override protected void init() {
-        for(int box=0;box<3;box++)for(int r=0;r<4;r++)lootPreviews[box][r]=CoreLoot.reward(box,new int[]{0,50,80,95}[r]);
+
         layout = CoreHireLayout.fit(width, height);
         imageWidth = layout.width(); imageHeight = layout.height();
         super.init();
@@ -46,7 +66,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             int by=layout.compact()?layout.cardY(i)+(ch-20)/2:layout.cardY(i)+ch-32;
             boxes[i]=addRenderableWidget(new CoreButton(Component.literal("Open"),b -> {
                 if(confirmBox!=box){confirmBox=box;return;}
-                if(minecraft!=null && minecraft.gameMode!=null)minecraft.gameMode.handleInventoryButtonClick(menu.containerId,20+box);
+                if(waitingTicks>0 || revealTicks>0)return;
+                if(minecraft!=null && minecraft.gameMode!=null) {
+                    waitingTicks=60;
+                    minecraft.gameMode.handleInventoryButtonClick(menu.containerId,20+box);
+                }
                 confirmBox=-1;
             },bx,by,bw,20,false,()->confirmBox==box));
         }
@@ -68,11 +92,15 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             hire[i].active = menu.role(i) >= 0 && menu.cost(i) >= 0 && !menu.sold(i) && menu.rotation() > 0;
             hire[i].setMessage(Component.literal(menu.sold(i) ? "Recruited" : menu.cost(i) < 0 ? "Unavailable" : "Recruit"));
         }
-        for(int i=0;i<3;i++){boxes[i].visible=loot;boxes[i].setMessage(Component.literal(confirmBox==i?"Confirm":"Open"));}
+        for(int i=0;i<3;i++){
+            boxes[i].visible=loot;
+            boxes[i].active=waitingTicks==0 && revealTicks==0 && menu.emeralds()>=CoreLoot.price(i);
+            boxes[i].setMessage(Component.literal(waitingTicks>0?"Waiting...":revealTicks>0?"Opening...":confirmBox==i?"Confirm":"Open"));
+        }
         super.render(g, mouseX, mouseY, partial);
         if(loot) {
             for(int i=0;i<3;i++)if(!boxes[i].isMouseOver(mouseX,mouseY) && mouseX>=layout.cardX(i) && mouseX<layout.cardX(i)+layout.cardWidth() && mouseY>=layout.cardY(i) && mouseY<layout.cardY(i)+layout.cardHeight())
-                g.renderTooltip(font,font.split(Component.literal(CoreLoot.price(i)+" emeralds • One reward. "+CoreLoot.pool(i)),Math.min(300,width-24)),mouseX,mouseY);
+                g.renderTooltip(font,font.split(Component.literal(CoreLoot.price(i)+" emeralds | One mystery reward. "+CoreLoot.odds()),Math.min(300,width-24)),mouseX,mouseY);
             return;
         }
         for (int i = 0; i < 4; i++) {
@@ -115,7 +143,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 g.drawString(font,line,x+14,ty,TEXT,false);ty+=11;
             }
         }
-        String footer = loot ? "One random reward • Hover for exact odds • Click twice to confirm" : heroes ? "One featured hero • Exact unit shown • No paid rerolls" : layout.compact() ? "Shared faction stock • 15-minute rotation" : "Two recruit offers + one worker offer  •  Shared faction stock  •  Refreshes every 15 minutes";
+        String footer = loot ? "Mystery rewards | Hover for rarity odds | Confirm one purchase" : heroes ? "One featured hero • Exact unit shown • No paid rerolls" : layout.compact() ? "Shared faction stock • 15-minute rotation" : "Two recruit offers + one worker offer  •  Shared faction stock  •  Refreshes every 15 minutes";
         g.drawString(font, font.plainSubstrByWidth(footer, w - 24), x + 12, y + h - 14, MUTED, false);
     }
     private void drawBox(GuiGraphics g,int i) {
@@ -123,17 +151,29 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         CoreButton.panel(g,x,y,w,h,0xff40516a);CoreButton.panel(g,x+1,y+1,w-2,h-2,0xff202b3c);
         if(layout.compact()) {
             g.drawString(font,font.plainSubstrByWidth(CoreLoot.NAMES[i],w-96),x+10,y+8,TEXT,false);
-            if(h>=34)g.drawString(font,CoreLoot.price(i)+" emeralds",x+10,y+22,GOLD,false);
+            if(h>=34) {
+                String line=revealBox==i ? revealTicks>0?"Unsealing...":revealed.getCount()+"x "+revealed.getHoverName().getString():CoreLoot.price(i)+" emeralds | Mystery";
+                g.drawString(font,font.plainSubstrByWidth(line,w-96),x+10,y+22,GOLD,false);
+            }
         } else {
             g.drawCenteredString(font,CoreLoot.NAMES[i],x+w/2,y+16,GOLD);
-            for(int r=0;r<4;r++) {
-                int ix=x+w/2-44+r*24;
-                CoreButton.panel(g,ix-2,y+34,20,24,0xff132030);
-                g.renderItem(lootPreviews[i][r],ix,y+38);
+            boolean opening=revealBox==i && revealTicks>0;
+            boolean done=revealBox==i && revealTicks==0 && !revealed.isEmpty();
+            for(int r=0;r<3;r++) {
+                int ix=x+w/2-35+r*26;
+                CoreButton.panel(g,ix-2,y+34,24,28,opening?0xff534467:0xff132030);
+                String symbol=opening?new String[]{"*","+","?","#"}[(revealTicks/4+r)%4]:"?";
+                g.drawCenteredString(font,symbol,ix+10,y+44,opening?GOLD:TEAL);
             }
-            g.drawCenteredString(font,CoreLoot.price(i)+" emeralds",x+w/2,y+64,TEXT);
-            int ty=y+82;
-            for(var line:font.split(Component.literal(CoreLoot.pool(i)),w-24)) {if(ty>y+h-52)break;g.drawString(font,line,x+12,ty,MUTED,false);ty+=11;}
+            if(done) {
+                CoreButton.panel(g,x+w/2-13,y+33,26,30,0xff263949);
+                g.renderItem(revealed,x+w/2-8,y+39);
+            }
+            g.drawCenteredString(font,CoreLoot.price(i)+" emeralds",x+w/2,y+70,TEXT);
+            String message=opening?"Unsealing...":done?CoreLoot.rarity(revealedTier)+" - "+revealed.getCount()+"x "+revealed.getHoverName().getString():"Sealed mystery reward";
+            int ty=y+90;
+            for(var line:font.split(Component.literal(message),w-24)) {if(ty>y+h-50)break;g.drawString(font,line,x+12,ty,done?GOLD:MUTED,false);ty+=11;}
+
         }
     }
     private void drawCard(GuiGraphics g, int i) {
