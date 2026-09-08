@@ -7,9 +7,10 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 class RaidMarchDisciplineTest extends MinecraftTestSupport {
-    @Test void removesAmbientWalkingButPreservesCombatAndClearsOldRestriction() {
+    @Test void removesAmbientWalkingButPreservesCombatAndClearsOldRestriction() throws ReflectiveOperationException {
         Mob mob=mock(Mob.class);
-        mob.goalSelector=new GoalSelector(()->net.minecraft.util.profiling.InactiveProfiler.INSTANCE);
+        var field=Mob.class.getDeclaredField("goalSelector");field.setAccessible(true);
+        field.set(mob,new GoalSelector(()->net.minecraft.util.profiling.InactiveProfiler.INSTANCE));
         Goal wander=mock(RandomStrollGoal.class),combat=mock(MeleeAttackGoal.class);
         mob.goalSelector.addGoal(10,wander);mob.goalSelector.addGoal(2,combat);
         RaidMarchDiscipline.install(mob);

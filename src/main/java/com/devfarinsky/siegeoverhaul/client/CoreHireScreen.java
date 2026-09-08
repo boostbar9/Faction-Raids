@@ -23,7 +23,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private int seenLoot, revealBox=-1, revealTicks, waitingTicks;
     private net.minecraft.world.item.ItemStack revealed=net.minecraft.world.item.ItemStack.EMPTY;
     private int revealedTier;
-    private static final int REVEAL_DURATION=45;
+    private static final int REVEAL_DURATION=CoreLoot.OPEN_TICKS;
     private void chime(float pitch) {
         if(minecraft!=null)minecraft.getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
                 net.minecraft.sounds.SoundEvents.AMETHYST_BLOCK_CHIME,pitch));

@@ -9,6 +9,7 @@ import java.util.List;
 /** Explicit fixed odds, one reward per box, atomic main-inventory purchases. */
 public final class CoreLoot {
     private CoreLoot() {}
+    public static final int OPEN_TICKS=60;
     public static final String[] NAMES={"Field Supplies","Veteran Armory","Royal Treasury"};
     public static int price(int box){return switch(box){case 0->16;case 1->48;case 2->96;default->-1;};}
     public static String odds() { return "Common 50% | Uncommon 30% | Rare 15% | Epic 5%"; }
@@ -43,7 +44,7 @@ public final class CoreLoot {
     public static Receipt purchaseWithReceipt(ServerPlayer player,int box) {
         int price=price(box);if(price<0)return null;
         long now=player.serverLevel().getGameTime();var data=player.getPersistentData();long next=data.getLong("SiegeLootNext");
-        if(next>now && next<=now+60)return null;
+        if(next>now && next<=now+OPEN_TICKS)return null;
         var inventory=player.getInventory();
         int emeralds=inventory.items.stream().filter(s->s.is(Items.EMERALD)).mapToInt(ItemStack::getCount).sum();
         if(emeralds<price){player.sendSystemMessage(Component.literal("You need "+price+" emeralds."));return null;}
@@ -59,7 +60,7 @@ public final class CoreLoot {
             int take=Math.min(remaining,stack.getCount());stack.shrink(take);remaining-=take;if(remaining==0)break;
         }
         // Capacity was checked on this same server thread; payment can only free space.
-        inventory.add(prize.copy());inventory.setChanged();data.putLong("SiegeLootNext",now+60);
+        inventory.add(prize.copy());inventory.setChanged();data.putLong("SiegeLootNext",now+OPEN_TICKS);
         player.sendSystemMessage(Component.literal("Opened "+NAMES[box]+": "+prize.getCount()+" × ").append(prize.getHoverName()));
         return new Receipt(prize.copy(),roll<50?0:roll<80?1:roll<95?2:3);
     }
