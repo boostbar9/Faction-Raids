@@ -47,6 +47,7 @@ public final class CampGuards {
                     container.addItem(new ItemStack(Items.BREAD,16));
                     if (id.equals("bowman")) container.addItem(new ItemStack(Items.ARROW,64));
                 }
+                com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(guard,raid.factionId,"guard");
                 guard.setPersistenceRequired();
                 guard.setCanPickUpLoot(false);
                 guard.getPersistentData().putString(TEAM_TAG,raid.teamKey);
@@ -64,6 +65,7 @@ public final class CampGuards {
             Entity entity=level.getEntity(id);
             if (entity == null) continue; // unloaded identity is still needed for cleanup
             if (!(entity instanceof Mob guard) || !guard.isAlive()) { raid.campGuards.remove(id); continue; }
+            com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(guard,raid.factionId,"guard");
             guard.setNoAi(frozen);
             if (frozen) guard.setTarget(null);
             // Native hold orders remain authoritative; guards are not redirected with assault waves.

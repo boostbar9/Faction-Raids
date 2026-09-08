@@ -93,10 +93,6 @@ public final class RecruitsSiegeBridge {
     @SubscribeEvent(priority = EventPriority.NORMAL)
     public static void onServerStarted(ServerStartedEvent event) {
         if (SUBSCRIBED.get() || RUNTIME_FAILED.get()) return;
-        if (!RaidConfig.BRIDGE_SIEGES_ENABLED.get()) {
-            FactionLogger.LOG.info("[SiegeOverhaul] Bridge Sieges disabled by config; skipping SiegeEvent subscription.");
-            return;
-        }
         if (!OptionalCompatBridge.isLoaded(OptionalCompatBridge.RECRUITS)) {
             FactionLogger.LOG.info("[SiegeOverhaul] Recruits not installed; Bridge Sieges idle.");
             return;
@@ -129,6 +125,9 @@ public final class RecruitsSiegeBridge {
                     (Class) startClass,
                     (java.util.function.Consumer) RecruitsSiegeBridge::handleSiegeStart);
 
+            Class<?> tickClass = Class.forName("com.talhanation.recruits.SiegeEvent$Tick");
+            MinecraftForge.EVENT_BUS.addListener(EventPriority.HIGHEST,false,(Class)tickClass,
+                    (java.util.function.Consumer)RecruitsSiegeBridge::handleSiegeStart);
             SUBSCRIBED.set(true);
             FactionLogger.LOG.info(
                     "[SiegeOverhaul] Bridge Sieges active: subscribed to {} \u2192 Faction Raids raid trigger.",
@@ -166,6 +165,28 @@ public final class RecruitsSiegeBridge {
                 return;
             }
 
+            // A registered core owns the conquest rule for its claim. Do not run the native
+            // whole-claim health timer in parallel, including while the core is occupied.
+            var data = com.devfarinsky.siegeoverhaul.RaidSavedData.get(level.getServer());
+            for (var core : data.siegeCores.values()) {
+                if (!core.contains("Position")) continue;
+                var pos = net.minecraft.core.BlockPos.of(core.getLong("Position"));
+                if (!snap.contains(new ChunkPos(pos))) continue;
+                // An unloaded core still reserves its objective; confirmed removed cores do not.
+                if (level.hasChunkAt(pos) && !level.getBlockState(pos).is(com.devfarinsky.siegeoverhaul.core.CoreBlocks.CORE.get())) continue;
+                if (event instanceof net.minecraftforge.eventbus.api.Event forgeEvent && forgeEvent.isCancelable()) forgeEvent.setCanceled(true);
+                // Native detection adds the claim to its active map even after a canceled Start.
+                // Cancel Tick as well so no parallel health-based conquest can complete.
+                if (event.getClass().getSimpleName().equals("Tick")) {
+                    claim.getClass().getField("isUnderSiege").setBoolean(claim,false);
+                    Object manager=Class.forName("com.talhanation.recruits.ClaimEvents").getField("recruitsClaimManager").get(null);
+                    manager.getClass().getMethod("removeActiveSiege",claim.getClass()).invoke(manager,claim);
+                    claim.getClass().getMethod("resetHealth").invoke(claim);
+                    manager.getClass().getMethod("broadcastClaimUpdateToAll",ServerLevel.class,claim.getClass()).invoke(manager,level,claim);
+                }
+                return;
+            }
+            if (!event.getClass().getSimpleName().equals("Start") || !RaidConfig.BRIDGE_SIEGES_ENABLED.get()) return;
             String ownerTeamKey = snap.ownerFactionStringId();
             ChunkPos center = snap.center();
             if (ownerTeamKey == null || ownerTeamKey.isBlank() || center == null) {

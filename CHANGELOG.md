@@ -1,3 +1,12 @@
+## 4.2.0 beta
+
+- Add faction armor palettes, rank trim colors/patterns and torso-mounted cosmetic faction banners for enemy soldiers and guards. Preserve weapons and native equipment inventories.
+- Replace the core raid perimeter timer with a fixed-time numerical-majority contest around the core. Exclude creative/spectator players, passengers, and combatants on distant floors.
+- Transfer the core's entire native Recruits claim on conquest; preserve surviving occupiers, stop further waves and support timed player/recruit recapture, including offline recruits.
+- Persist occupation independently of an active raid, retain recapture rights across restarts/admin stops, disable occupied-core hiring/movement, and prevent competing native conquest timers.
+- Show core capture/recapture status in the HUD and Codex. Keep physical gate destruction and terrain restoration.
+- Add regressions for timer/presence rules, native transfer rejection, save/reload and faction/rank equipment.
+
 ## 4.1.1 beta — Keep banners off player bases
 
 - Remove physical forward marker banners and wool plinths beside the defender's objective; the surface-height lookup could place them on a player's roof.

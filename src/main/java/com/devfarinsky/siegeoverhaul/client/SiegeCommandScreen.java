@@ -354,7 +354,7 @@ public final class SiegeCommandScreen extends Screen {
             }
 
             int strategicProgress = snapshot.breached() ? snapshot.occupationPercent() : snapshot.breachPercent();
-            String strategicLabel = snapshot.breached() ? "Occupation" : "Perimeter";
+            String strategicLabel = snapshot.breached() ? "Core control" : "Perimeter";
             progressBar(graphics, x + 10, botY + 48, w - 100, strategicProgress,
                     snapshot.breached() ? RED : GOLD);
             graphics.drawString(font, strategicLabel + " " + strategicProgress + "%",

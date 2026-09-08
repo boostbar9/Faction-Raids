@@ -1,3 +1,15 @@
+## 4.2.0 beta — Faction uniforms and core conquest
+
+Enemy soldiers and camp guards now wear faction uniforms. Chest/leg trims: Blackbay lapis blue, Hollowfang quartz white, Emberchant redstone red, Crownfall amethyst purple, Wilds emerald green. Helmet/boot trims mark rank: copper soldiers, iron guards, gold captains, diamond commanders. Commanders wear diamond armor; Wilds rank-and-file wear dyed leather; other uniforms use iron. Rank also changes the trim pattern. Cosmetic back banners show the faction sigil without replacing helmets or weapons. Existing tracked soldiers upgrade once; armor is never replenished automatically. Player-owned recruits keep their equipment.
+
+Core sieges no longer have a perimeter capture timer. By default enemies must outnumber your survival/adventure players and faction recruits within **10 horizontal blocks and 3 vertical blocks** of the core for **120 seconds**. A larger numerical advantage does not accelerate conquest. Ties and empty rings pause progress; an opposing majority reverses it at one second per second. Mounted units, creative players and spectators do not contribute. Breaking physical gates remains a way to reach the core, not a separate conquest objective. Kill and breach bonuses cannot speed up core capture.
+
+Capture transfers **the whole native Recruits claim containing the core**, including all its chunks, to the Raiders. It does not take unrelated claims. The surviving army occupies the core and stops receiving new waves. Your players or recruits must outnumber enemies there for **120 seconds** to recapture the core and return that same claim to your faction. Recapture can proceed with recruits while players are offline. No full five-wave loot reward is given for an early recapture. Occupation and recapture progress survive restarts and an administrator stopping the raid. Hiring and moving an occupied core are disabled. Normal terrain restoration happens when the siege ends after recapture (or an admin stops it).
+
+Config: `coreCaptureRadius` (10), `captureTimeSeconds` (120), `coreRecaptureSeconds` (120). Existing custom `captureTimeSeconds` values are respected. Recruits' parallel whole-claim siege timer is suppressed for registered core claims; native land ownership, permissions, map updates and save data remain authoritative. Third-party claim-update cancellation and admin claims are respected. Legacy non-core raids retain their previous objectives.
+
+**Beta:** automated regression tests and compilation are required before publishing; visual banner positioning and full native-mod gameplay still need an interactive Minecraft playtest. Install matching versions on server and clients.
+
 # The Siege Overhaul
 
 Enemy armies establish a foothold, build a fortified camp, assemble their troops, and attack your faction's **Siege Core**.

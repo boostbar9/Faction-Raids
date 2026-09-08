@@ -102,6 +102,8 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue FOLLOW_RESPAWN_POINT;
     public static final ForgeConfigSpec.BooleanValue MOBILIZE_RECRUITS;
     public static final ForgeConfigSpec.IntValue RECRUIT_MOBILIZATION_RADIUS;
+    public static final ForgeConfigSpec.IntValue CORE_CAPTURE_RADIUS;
+    public static final ForgeConfigSpec.IntValue CORE_RECAPTURE_SECONDS;
     public static final ForgeConfigSpec.IntValue CAPTURE_RADIUS;
     public static final ForgeConfigSpec.IntValue CAPTURE_TIME_SECONDS;
     public static final ForgeConfigSpec.IntValue CAPTURE_DECAY_PER_SECOND;
@@ -354,6 +356,8 @@ public final class RaidConfig {
                 .define("mobilizeRecruits", true);
         RECRUIT_MOBILIZATION_RADIUS = b.comment("Radius around the stronghold in which allied Recruits can join its defense.")
                 .defineInRange("recruitMobilizationRadius", 128, 32, 384);
+        CORE_CAPTURE_RADIUS = b.comment("Horizontal radius of the Siege Core contest; combatants must also be within three vertical blocks.").defineInRange("coreCaptureRadius", 10, 4, 32);
+        CORE_RECAPTURE_SECONDS = b.comment("Seconds of numerical superiority required for players or their recruits to reclaim an occupied core. Ties pause, enemy superiority reverses.").defineInRange("coreRecaptureSeconds", 120, 30, 1200);
         CAPTURE_RADIUS = b.comment("Radius around the stronghold that the invaders must occupy to win the siege.")
                 .defineInRange("captureRadius", 18, 6, 64);
         CAPTURE_TIME_SECONDS = b.comment("Continuous contested seconds required for invaders to capture the stronghold.")

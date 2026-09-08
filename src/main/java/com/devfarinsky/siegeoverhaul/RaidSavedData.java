@@ -25,7 +25,7 @@ public final class RaidSavedData extends SavedData {
     // v12 added pendingSpoils + raidNotifyOptOut (3.2.0 multiplayer polish).
     // v13 added persistent camp construction jobs and crew (3.4.0).
     // Old saves load cleanly because all new fields default to empty collections.
-    public static final int DATA_VERSION = 17;
+    public static final int DATA_VERSION = 18;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Set<UUID> campClaimLeases = new HashSet<>();
@@ -457,6 +457,7 @@ public final class RaidSavedData extends SavedData {
         public int ticksToNextSquad;
         public int squadsSpawned;
         public int captureTicks;
+        public boolean coreCaptured;
         /** Recomputed each siege pass; no save or network format change needed. */
         public transient String objectiveStatus = "Awaiting attackers";
         public int breachTicks;
@@ -625,6 +626,7 @@ public final class RaidSavedData extends SavedData {
             tag.putInt("NextSquad", ticksToNextSquad);
             tag.putInt("SquadsSpawned", squadsSpawned);
             tag.putInt("CaptureTicks", captureTicks);
+            tag.putBoolean("CoreCaptured", coreCaptured);
             tag.putInt("BreachTicks", breachTicks);
             tag.putBoolean("Breached", breached);
             tag.putInt("BreachWarningBand", lastBreachWarningBand);
@@ -762,6 +764,7 @@ public final class RaidSavedData extends SavedData {
             state.ticksToNextSquad = tag.getInt("NextSquad");
             state.squadsSpawned = tag.getInt("SquadsSpawned");
             state.captureTicks = tag.getInt("CaptureTicks");
+            state.coreCaptured = tag.getBoolean("CoreCaptured");
             state.breachTicks = tag.getInt("BreachTicks");
             state.breached = tag.contains("Breached", Tag.TAG_BYTE) ?
                     tag.getBoolean("Breached") : state.wave > 0;
