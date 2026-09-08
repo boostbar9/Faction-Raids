@@ -64,7 +64,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 int role = menu.role(i);
                 String tip = CoreHiring.NAMES[role] + " • " + CoreHiring.rarity(role) + " • " + CoreHiring.weight(role) + "% per "
                         + (i==3?"hero":i == 2 ? "worker" : "recruit") + " slot";
-                if(i==3) tip += " • Level 10 • Diamond armor • 60+ health";
+                if(i==3) tip += " • Level 10 • 60+ health • " + com.devfarinsky.siegeoverhaul.core.HeroTraits.description(role);
                 g.renderTooltip(font, Component.literal(tip), mouseX, mouseY);
             }
         }

@@ -42,9 +42,34 @@ public final class FactionUniforms {
         if(item instanceof DyeableLeatherItem leather) leather.setColor(stack,0x52663D);
         return stack;
     }
+    public static void decorateShield(ItemStack shield,String faction) {
+        if(!shield.is(Items.SHIELD))return;
+        var id=FactionBanners.FactionId.byIdOrDefault(faction);
+        CompoundTag tag=new CompoundTag(); FactionBanners.applyToBlockEntityTag(tag,id);
+        tag.putInt("Base",id.baseColor.getId());
+        shield.getOrCreateTag().put("BlockEntityTag",tag);
+        shield.getOrCreateTag().putString(FACTION,id.id);
+    }
+    private static void applyShields(Mob mob,String faction) {
+        try {
+            if(mob.getClass().getMethod("getInventory").invoke(mob) instanceof SimpleContainer inventory) {
+                for(int i=0;i<inventory.getContainerSize();i++) {
+                    ItemStack stack=inventory.getItem(i);
+                    if(stack.is(Items.SHIELD) && !faction.equals(stack.getOrCreateTag().getString(FACTION))) {
+                        decorateShield(stack,faction); inventory.setChanged();
+                    }
+                }
+            }
+            for(EquipmentSlot slot:new EquipmentSlot[]{EquipmentSlot.MAINHAND,EquipmentSlot.OFFHAND}) {
+                ItemStack stack=mob.getItemBySlot(slot);
+                if(stack.is(Items.SHIELD) && !faction.equals(stack.getOrCreateTag().getString(FACTION))) decorateShield(stack,faction);
+            }
+        } catch(ReflectiveOperationException ex) { FactionLogger.LOG.debug("Shield inventory unavailable",ex); }
+    }
     public static void apply(Mob mob,String faction,String role) {
         if (!RecruitsBridge.isRecruitSoldier(mob)) return;
         // Apply once to each siege soldier, never replenish broken armor or touch hired player units.
+        applyShields(mob,faction);
         if(mob.getPersistentData().getBoolean("SiegeUniformApplied")) return;
         try {
             Object inventory=mob.getClass().getMethod("getInventory").invoke(mob);

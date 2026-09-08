@@ -22,7 +22,7 @@ public final class StarterBagItem extends Item {
         long needed=Math.max(0,faction)+(long)Math.max(0,claim)+2L*Math.max(0,shield)+2L*Math.max(0,archer)+32;
         return (int)Math.min(16384,Math.max(128,((needed+63)/64)*64));
     }
-    private List<ItemStack> contents() throws ReflectiveOperationException {
+    List<ItemStack> contents() throws ReflectiveOperationException {
         List<ItemStack> out=new ArrayList<>();
         if(settlement) {
             add(out,ModItems.GUIDEBOOK.get(),1);add(out,ModItems.SIEGE_CORE.get(),1);add(out,Items.LOOM,1);
@@ -31,9 +31,9 @@ public final class StarterBagItem extends Item {
         } else {
             for(Item item:List.of(Items.IRON_SWORD,Items.IRON_PICKAXE,Items.IRON_AXE,Items.IRON_SHOVEL,Items.SHIELD,
                     Items.IRON_HELMET,Items.IRON_CHESTPLATE,Items.IRON_LEGGINGS,Items.IRON_BOOTS,Items.WATER_BUCKET,Items.CRAFTING_TABLE,Items.FURNACE,Items.WHITE_BED))add(out,item,1);
-            add(out,Items.COOKED_BEEF,64);add(out,Items.BREAD,64);add(out,Items.TORCH,64);
-            add(out,Items.STONE_BRICKS,1024);add(out,Items.STONE_BRICK_STAIRS,128);add(out,Items.STONE_BRICK_SLAB,128);
-            add(out,Items.OAK_PLANKS,128);add(out,Items.GLASS_PANE,32);add(out,Items.OAK_DOOR,2);add(out,Items.CHEST,4);add(out,Items.COAL,32);
+            add(out,Items.COOKED_BEEF,16);add(out,Items.BREAD,16);add(out,Items.TORCH,32);
+            add(out,Items.STONE_BRICKS,256);add(out,Items.STONE_BRICK_STAIRS,32);add(out,Items.STONE_BRICK_SLAB,32);
+            add(out,Items.OAK_PLANKS,64);add(out,Items.GLASS_PANE,16);add(out,Items.OAK_DOOR,2);add(out,Items.CHEST,2);add(out,Items.COAL,16);
         }
         return out;
     }
@@ -80,7 +80,7 @@ public final class StarterBagItem extends Item {
         return InteractionResultHolder.sidedSuccess(bag,false);
     }
     @Override public void appendHoverText(ItemStack stack,Level level,List<Component> tooltip,TooltipFlag flag) {
-        tooltip.add(Component.literal(settlement?"Faction setup, core, Codex and hiring funds":"Iron gear, food and a stone-brick base"));
+        tooltip.add(Component.literal(settlement?"Faction setup, core, Codex and hiring funds":"Iron gear, food and a small stone-brick shelter"));
         tooltip.add(Component.literal("Right-click to unpack. Overflow stays inside."));
         if(stack.hasTag() && stack.getTag().contains("Supplies"))tooltip.add(Component.literal(stack.getTag().getList("Supplies",Tag.TAG_COMPOUND).size()+" stacks remaining"));
     }

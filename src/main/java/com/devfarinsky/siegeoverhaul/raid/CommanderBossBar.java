@@ -86,6 +86,8 @@ public final class CommanderBossBar {
         }
         if (!(commander.level() instanceof ServerLevel level)) return;
 
+        bar.setName(commander.getPersistentData().getBoolean(com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal.CHARGING)
+                ? buildTitle(commander).copy().append(" — Wall strike! Interrupt!") : buildTitle(commander));
         float maxHp = commander.getMaxHealth();
         float hp = commander.getHealth();
         float progress = maxHp <= 0F ? 0F : Math.max(0F, Math.min(1F, hp / maxHp));

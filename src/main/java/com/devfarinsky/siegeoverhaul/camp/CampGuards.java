@@ -53,6 +53,7 @@ public final class CampGuards {
                     if (id.equals("bowman")) container.addItem(new ItemStack(Items.ARROW,64));
                 }
                 com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(guard,raid.factionId,"guard");
+                strengthen(guard);
                 guard.setPersistenceRequired();
                 guard.setCanPickUpLoot(false);
                 guard.getPersistentData().putString(TEAM_TAG,raid.teamKey);
@@ -71,6 +72,7 @@ public final class CampGuards {
             if (entity == null) continue; // unloaded identity is still needed for cleanup
             if (!(entity instanceof Mob guard) || !guard.isAlive()) { raid.campGuards.remove(id); continue; }
             com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(guard,raid.factionId,"guard");
+            strengthen(guard);
             guard.setNoAi(frozen);
             if (frozen) guard.setTarget(null);
             if (!frozen && raid.campPos != null) {
@@ -142,6 +144,19 @@ public final class CampGuards {
                 && level.getBlockState(p.above()).getCollisionShape(level,p.above()).isEmpty()
                 && level.getFluidState(p).isEmpty() && level.getBlockState(p.below()).isFaceSturdy(level,p.below(),Direction.UP)
                 && !raid.pendingCampBlocks.containsKey(p.asLong()) && !raid.pendingCampBlocks.containsKey(p.above().asLong());
+    }
+    private static void strengthen(Mob guard) {
+        if(guard.getPersistentData().getBoolean("SiegeVeteranGuard"))return;
+        var health=guard.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+        float oldMax=guard.getMaxHealth(),oldHealth=guard.getHealth();
+        if(health!=null)health.setBaseValue(Math.max(health.getBaseValue(),50));
+        // Preserve damage on existing sentries; never heal or refill equipment every tick.
+        guard.setHealth(oldMax>0?guard.getMaxHealth()*oldHealth/oldMax:oldHealth);
+        var damage=guard.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
+        if(damage!=null)damage.setBaseValue(damage.getBaseValue()+2);
+        var knockback=guard.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.KNOCKBACK_RESISTANCE);
+        if(knockback!=null)knockback.setBaseValue(Math.max(knockback.getBaseValue(),.35));
+        guard.getPersistentData().putBoolean("SiegeVeteranGuard",true);
     }
     public static void cleanup(ServerLevel level, RaidSavedData.RaidState raid) {
         for (UUID id : raid.campGuards) { Entity guard=level.getEntity(id); if (guard != null) guard.discard(); }

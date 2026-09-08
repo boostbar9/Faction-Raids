@@ -250,6 +250,8 @@ public final class RaidEvents {
      * setPathfindingMalus is idempotent.
      */
     private static void attachRaiderAI(Mob mob) {
+        mob.getPersistentData().remove(com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal.CHARGING);
+        mob.goalSelector.addGoal(0,new com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal(mob));
         // Parkour: leap short obstacles. Only meaningful for PathfinderMobs
         // because the goal drives horizontal-nudge + vertical impulse. Non
         // PathfinderMob raiders (e.g. vex) fall through unchanged.
@@ -2384,6 +2386,7 @@ public final class RaidEvents {
         } else if ("captain".equals(role)) {
             raider.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 20 * 60 * 60, 0, false, false));
         } else if (commander) {
+            com.devfarinsky.siegeoverhaul.raid.CommanderTraits.equip(raider,state.factionId);
             var health = raider.getAttribute(Attributes.MAX_HEALTH);
             if (health != null) {
                 health.setBaseValue(health.getBaseValue() * RaidConfig.COMMANDER_HEALTH_MULTIPLIER.get());
@@ -3159,6 +3162,7 @@ public final class RaidEvents {
             Entity entity = level.getEntity(id);
             if (!(entity instanceof Mob mob) || !mob.isAlive() || mob.isPassenger()
                     || com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)) continue;
+            if(mob.getPersistentData().getBoolean(com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal.CHARGING))continue;
             String role = mob.getPersistentData().getString(RAID_ROLE_TAG);
             if (!role.equals("breacher") && !role.equals("commander")) continue;
             if (++evaluatedBreachers > 8) break;
