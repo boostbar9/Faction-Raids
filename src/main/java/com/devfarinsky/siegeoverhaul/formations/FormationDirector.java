@@ -16,14 +16,14 @@ import java.util.Map;
 /** Issues native walking orders; combat and objective navigation release them explicitly. */
 public final class FormationDirector {
 
-    /** Minimum ticks between formation reapplication per raid. 4 seconds. */
-    public static final int REAPPLY_TICKS = 80;
+    /** Minimum ticks between formation reapplication per raid. 1 second. */
+    public static final int REAPPLY_TICKS = 20;
 
     /** Distance from objective at which the formation dissolves and raiders swarm. */
     public static final double DISSOLVE_DISTANCE = 12.0D;
 
     /** Distance ahead of the raiders (toward the objective) to place the formation waypoint. */
-    public static final double WAYPOINT_LEAD = 6.0D;
+    public static final double WAYPOINT_LEAD = 10.0D;
 
     /** Per-team-key last-tick timestamps so all raids share one lightweight ticker. */
     private static final Map<String, Long> LAST_APPLIED = new HashMap<>();
@@ -48,7 +48,7 @@ public final class FormationDirector {
 
         long now = level.getGameTime();
         Long last = LAST_APPLIED.get(state.teamKey);
-        if (last != null && now - last < REAPPLY_TICKS) return false;
+        if (last != null && now >= last && now - last < REAPPLY_TICKS) return false;
 
         List<Mob> raiders = collectLiveRaiders(level, state);
         raiders.removeIf(mob -> !shouldMarch(level, state.teamKey, mob, objective));
@@ -56,14 +56,8 @@ public final class FormationDirector {
         raiders.sort(java.util.Comparator.comparing(Mob::getUUID));
         if (raiders.isEmpty()) return false;
 
-        // Local role groups keep separated squads moving instead of waiting for a distant centroid.
-        Map<String,List<Mob>> groups=new java.util.LinkedHashMap<>();
-        for(Mob mob:raiders) {
-            var type=net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(mob.getType());
-            String role=FormationTactics.group(type==null?"":type.getPath());
-            String key=role+":"+(mob.blockPosition().getX()>>4)+":"+(mob.blockPosition().getZ()>>4);
-            groups.computeIfAbsent(key,k->new ArrayList<>()).add(mob);
-        }
+        // Stable local membership avoids slot reshuffles at every chunk edge.
+        Map<String,List<Mob>> groups=MarchSquads.group(raiders);
         boolean dispatched=false;
         for(var entry:groups.entrySet()) {
             List<Mob> group=entry.getValue();
