@@ -135,9 +135,10 @@ public final class SiegeIntegration {
             else if ("ballista".equals(key.getPath())) controllerField = ballistaControllerField;
             else return true; // Non-ranged engines don't need a Recruits controller.
             Object controller = controllerField.get(engineer);
-            if (controller == null) return true;
+            if (controller == null) return false;
             tryMountMethod.invoke(controller, vehicle);
-            return true;
+            engineer.getClass().getField("siegeController").set(engineer,controller);
+            return vehicle.equals(controller.getClass().getMethod("getSiegeEntity").invoke(controller));
         } catch (ReflectiveOperationException | RuntimeException e) {
             // Recruits API changed under us. Log at debug so server owners
             // running with debug logs enabled can see why siege engineers
@@ -189,6 +190,8 @@ public final class SiegeIntegration {
         }
     }
 
+    static double standOff(SiegeEngineType type) { return type==SiegeEngineType.CATAPULT?48:24; }
+
     /** Drive the native vehicle controller toward the core; it retains native combat targeting. */
     public static void advanceEngineer(Mob engineer, net.minecraft.core.BlockPos objective) {
         if (!engineer.isPassenger()) return;
@@ -199,12 +202,14 @@ public final class SiegeIntegration {
         Vec3 delta = Vec3.atCenterOf(objective).subtract(engineer.position()).multiply(1,0,1);
         double distance = delta.length();
         try {
-            if (distance <= 24) {
+            var vehicleKey=ForgeRegistries.ENTITY_TYPES.getKey(engineer.getVehicle().getType());
+            double standOff=standOff(vehicleKey!=null && vehicleKey.getPath().equals("catapult")?SiegeEngineType.CATAPULT:SiegeEngineType.BALLISTA);
+            if (distance <= standOff) {
                 if (Boolean.TRUE.equals(engineer.getClass().getMethod("getShouldMovePos").invoke(engineer)))
                     engineer.getClass().getMethod("setShouldMovePos", boolean.class).invoke(engineer, false);
                 return;
             }
-            Vec3 step = engineer.position().add(delta.normalize().scale(Math.min(16, distance - 24)));
+            Vec3 step = engineer.position().add(delta.normalize().scale(Math.min(24, distance - standOff)));
             net.minecraft.core.BlockPos ground = net.minecraft.core.BlockPos.containing(step);
             if (!(engineer.level() instanceof ServerLevel level) || !level.hasChunkAt(ground)) return;
             ground = level.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, ground);

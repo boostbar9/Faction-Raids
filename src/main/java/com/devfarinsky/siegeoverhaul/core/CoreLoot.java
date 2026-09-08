@@ -9,14 +9,12 @@ import java.util.List;
 /** Explicit fixed odds, one reward per box, atomic main-inventory purchases. */
 public final class CoreLoot {
     private CoreLoot() {}
+    public static final int OPEN_TICKS=60;
     public static final String[] NAMES={"Field Supplies","Veteran Armory","Royal Treasury"};
-    public static int price(int box){return switch(box){case 0->32;case 1->64;case 2->128;default->-1;};}
-    public static String pool(int box) {return switch(box) {
-        case 0 -> "50%: 2 golden apples; 30%: 64 arrows; 15%: 4 diamonds; 5%: 1 enchanted golden apple";
-        case 1 -> "50%: Power II bow; 30%: Efficiency III diamond axe; 15%: Protection II diamond chestplate; 5%: Sharpness IV diamond sword";
-        case 2 -> "50%: 8 golden apples; 30%: Protection III / Feather Falling IV diamond boots; 15%: Protection IV diamond chestplate; 5%: Sharpness III netherite sword";
-        default -> "";
-    };}
+    public static int price(int box){return switch(box){case 0->16;case 1->48;case 2->96;default->-1;};}
+    public static String odds() { return "Common 50% | Uncommon 30% | Rare 15% | Epic 5%"; }
+    public static String rarity(int tier) { return switch(tier){case 0->"Common";case 1->"Uncommon";case 2->"Rare";default->"Epic";}; }
+    public record Receipt(ItemStack prize,int tier) {}
     public static ItemStack reward(int box,int roll) {
         if(price(box)<0 || roll<0 || roll>=100)throw new IllegalArgumentException("Invalid loot roll");
         int tier=roll<50?0:roll<80?1:roll<95?2:3;
@@ -42,26 +40,28 @@ public final class CoreLoot {
         }
         return false;
     }
-    public static boolean purchase(ServerPlayer player,int box) {
-        int price=price(box);if(price<0)return false;
+    public static boolean purchase(ServerPlayer player,int box) { return purchaseWithReceipt(player,box)!=null; }
+    public static Receipt purchaseWithReceipt(ServerPlayer player,int box) {
+        int price=price(box);if(price<0)return null;
         long now=player.serverLevel().getGameTime();var data=player.getPersistentData();long next=data.getLong("SiegeLootNext");
-        if(next>now && next<=now+20)return false;
+        if(next>now && next<=now+OPEN_TICKS)return null;
         var inventory=player.getInventory();
         int emeralds=inventory.items.stream().filter(s->s.is(Items.EMERALD)).mapToInt(ItemStack::getCount).sum();
-        if(emeralds<price){player.sendSystemMessage(Component.literal("You need "+price+" emeralds."));return false;}
+        if(emeralds<price){player.sendSystemMessage(Component.literal("You need "+price+" emeralds."));return null;}
         // Require space for every possible outcome before rolling; full inventories
         // cannot be used to filter unwanted rewards or lose a paid reward.
         for(int roll:new int[]{0,50,80,95})if(!fits(inventory.items,reward(box,roll))) {
-            player.sendSystemMessage(Component.literal("Make room in your inventory before opening a box."));return false;
+            player.sendSystemMessage(Component.literal("Make room in your inventory before opening a box."));return null;
         }
-        ItemStack prize=reward(box,player.getRandom().nextInt(100));
+        int roll=player.getRandom().nextInt(100);
+        ItemStack prize=reward(box,roll);
         int remaining=price;
         for(var stack:inventory.items)if(stack.is(Items.EMERALD)) {
             int take=Math.min(remaining,stack.getCount());stack.shrink(take);remaining-=take;if(remaining==0)break;
         }
         // Capacity was checked on this same server thread; payment can only free space.
-        inventory.add(prize.copy());inventory.setChanged();data.putLong("SiegeLootNext",now+20);
+        inventory.add(prize.copy());inventory.setChanged();data.putLong("SiegeLootNext",now+OPEN_TICKS);
         player.sendSystemMessage(Component.literal("Opened "+NAMES[box]+": "+prize.getCount()+" × ").append(prize.getHoverName()));
-        return true;
+        return new Receipt(prize.copy(),roll<50?0:roll<80?1:roll<95?2:3);
     }
 }

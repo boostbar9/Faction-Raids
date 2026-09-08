@@ -251,6 +251,7 @@ public final class RaidEvents {
      * setPathfindingMalus is idempotent.
      */
     private static void attachRaiderAI(Mob mob) {
+        com.devfarinsky.siegeoverhaul.raid.RaidMarchDiscipline.install(mob);
         mob.getPersistentData().remove(com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal.CHARGING);
         mob.goalSelector.addGoal(0,new com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal(mob));
         // Parkour: leap short obstacles. Only meaningful for PathfinderMobs
@@ -2282,6 +2283,13 @@ public final class RaidEvents {
                     level.random.nextFloat() * 360.0F, 0.0F);
             Mob raider = RaidMobSpawner.initializeOrFallback(level, candidate);
             if (raider == null) continue;
+            // A dependency initializer may relocate or resize a mob. Recheck the designated
+            // gate after initialization, before registration, instead of accepting a remote spawn.
+            if (state.campPos!=null) {
+                BlockPos pad=com.devfarinsky.siegeoverhaul.camp.WarGate.spawn(level,state,raider);
+                if(pad==null){raider.discard();continue;}
+                raider.moveTo(pad.getX()+.5,pad.getY(),pad.getZ()+.5,raider.getYRot(),0);
+            }
             boolean squadLeader = spawned == 0;
             if (squadLeader && raider instanceof Raider vanillaRaider) vanillaRaider.setPatrolLeader(true);
             RecruitsBridge.configureHostileRaidRecruit(raider);
@@ -2512,8 +2520,6 @@ public final class RaidEvents {
         // Legacy fallback picker (still authoritative for commander slot and when composition is off/exhausted).
         if (recruitType == null) {
             if (RaidConfig.ENABLE_COMMANDER.get() && wave >= RaidConfig.WAVES.get() && index == 0) recruitType = "patrol_leader";
-            else if (wave >= 4 && index % 9 == 1 && ForgeRegistries.ENTITY_TYPES.containsKey(
-                    new ResourceLocation("recruits", "siege_engineer"))) recruitType = "siege_engineer";
             else if (wave >= 4 && index % 8 == 3) recruitType = "assassin";
             else if (wave >= 3 && index % 7 == 0) recruitType = "captain";
             else if ((index + wave) % 4 == 0) recruitType = "recruit_shieldman";
@@ -3634,12 +3640,20 @@ public final class RaidEvents {
             if (acquired) mob.setTarget(closest);
             else if (lockedOnObjective) mob.setTarget(null);
 
-            acquired = mob.getTarget() != null && mob.getTarget().isAlive();
+            if (!com.devfarinsky.siegeoverhaul.raid.RaidMarchDiscipline.retainTarget(mob,mob.getTarget(),objective,Math.sqrt(effectiveAggroRangeSq)))
+                mob.setTarget(null);
+            acquired = mob.getTarget() != null;
 
             // Native formations and direct navigation must never issue competing orders.
             boolean marching = com.devfarinsky.siegeoverhaul.formations.FormationDirector.shouldMarch(
                     level, state.teamKey, mob, BlockPos.containing(objective));
             if (!marching) com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
+            if (!mob.getPersistentData().getString(com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.TEAM_TAG).isBlank()
+                    && !mob.isPassenger() && state.siegeEngines.keySet().stream().anyMatch(engineId -> {
+                        Entity engine=level.getEntity(engineId);
+                        return engine!=null && engine.isAlive() && engine.getPersistentData().hasUUID("SiegeOperatorUuid")
+                                && engine.getPersistentData().getUUID("SiegeOperatorUuid").equals(mob.getUUID()) && mob.distanceToSqr(engine)<=32*32;
+                    })) { STUCK_TRACKER.remove(id);continue; }
             com.devfarinsky.siegeoverhaul.raid.RaidCavalry.advance(mob,objective,baseSpeed);
             if (mob.isPassenger() || (marching && mob.getPersistentData().getBoolean(ModConstants.Tags.FORMATION_MARCH))) {
                 STUCK_TRACKER.remove(id);

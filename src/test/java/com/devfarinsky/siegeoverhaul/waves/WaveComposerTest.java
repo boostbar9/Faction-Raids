@@ -18,6 +18,8 @@ class WaveComposerTest extends MinecraftTestSupport {
         RaidConfig.ENABLE_WAVE_COMPOSITION.set(true); RaidConfig.ENABLE_COMMANDER.set(true);
         Set<String> types=new HashSet<>();
         for(int wave=1;wave<=5;wave++)types.addAll(WaveComposer.compose(wave,5,20).roleCounts.keySet());
+        assertFalse(types.contains("siege_engineer")); // Engineers are reserved for supplied engines, not infantry slots.
+        types.add("siege_engineer"); // SiegeDeployment provides the dedicated per-wave support slot.
         types.add("patrol_leader"); // Explicit reserved final commander, outside the ordinary composition.
         assertEquals(new HashSet<>(WaveComposer.COMBAT_TYPES),types);
         assertFalse(types.contains("messenger"));assertFalse(types.contains("villager_noble"));

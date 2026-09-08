@@ -18,7 +18,7 @@ The core opens a responsive menu with three tabs:
 
 - **Army:** two recruit offers and one worker offer, rotating every **15 minutes of server runtime**. Each offer can be purchased once per rotation across your faction.
 - **Heroes:** a featured hero with enhanced equipment and a signature magical skill.
-- **Loot boxes:** spend emeralds on equipment and supplies. Prices, reward pools, and exact odds are visible before purchase.
+- **Loot boxes:** spend emeralds on equipment and supplies. Sealed boxes hide their contents until a short animated reveal. Prices and rarity odds are visible before purchase.
 
 The menu includes selected-tab highlighting, an emerald balance, offer refresh progress, and compact layouts for smaller screens or larger GUI scales.
 
@@ -35,13 +35,13 @@ Hero magic uses bounded effects and cooldowns while retaining the recruits' norm
 
 ## Emerald Loot Boxes
 
-| Box | Price | Reward examples |
+| Box | Price | Category |
 | --- | ---: | --- |
-| **Field Supplies** | 32 emeralds | Golden apples, arrows, diamonds, or an enchanted golden apple |
-| **Veteran Armory** | 64 emeralds | Enchanted bows, diamond tools, armor, or swords |
-| **Royal Treasury** | 128 emeralds | Golden apples, stronger enchanted diamond armor, or a netherite sword |
+| **Field Supplies** | 16 emeralds | Mystery supplies |
+| **Veteran Armory** | 48 emeralds | Mystery enchanted equipment |
+| **Royal Treasury** | 96 emeralds | Premium mystery rewards |
 
-Each box awards **one randomly selected reward stack** from four outcomes with **50% / 30% / 15% / 5% odds**. The menu shows the exact rewards and enchantments. Purchases require confirmation and enough inventory space for any outcome.
+Each box awards **one randomly selected reward stack**. Rarity odds are **Common 50% / Uncommon 30% / Rare 15% / Epic 5%**. Confirm a purchase to open the seal, watch the short reel-style animation, and reveal your reward. Purchases use emeralds and require enough inventory space for any outcome. Rewards are delivered by the server even if you close the menu before the animation ends.
 
 ## How a Siege Unfolds
 

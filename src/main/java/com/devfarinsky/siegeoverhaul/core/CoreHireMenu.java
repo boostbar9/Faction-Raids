@@ -13,15 +13,15 @@ import net.minecraft.world.item.*;
 public final class CoreHireMenu extends AbstractContainerMenu {
     private final ServerPlayer owner;
     private final BlockPos pos;
-    private final SimpleContainer display = new SimpleContainer(5);
-    private final ContainerData data = new SimpleContainerData(15);
+    private final SimpleContainer display = new SimpleContainer(6);
+    private final ContainerData data = new SimpleContainerData(18);
     private long shownAt = Long.MIN_VALUE;
     public CoreHireMenu(int id, Inventory inventory) { this(id, inventory, null); }
     public CoreHireMenu(int id, Inventory inventory, BlockPos pos) {
         super(CoreMenus.HIRING.get(), id);
         this.owner = inventory.player instanceof ServerPlayer sp ? sp : null;
         this.pos = pos == null ? null : pos.immutable();
-        for (int i = 0; i < 5; i++) addSlot(new Slot(display, i, -1000, -1000) {
+        for (int i = 0; i < 6; i++) addSlot(new Slot(display, i, -1000, -1000) {
             @Override public boolean mayPlace(ItemStack stack) { return false; }
             @Override public boolean mayPickup(Player player) { return false; }
         });
@@ -29,6 +29,10 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         addDataSlots(data);
         if (owner != null) refresh();
     }
+    public int lootSequence() { return data.get(16); }
+    public int lootBox() { return data.get(15)-1; }
+    public int lootTier() { return data.get(17); }
+    public ItemStack lootReward() { return display.getItem(5); }
     public int role(int slot) { return data.get(slot); }
     public int cost(int slot) { return data.get(slot + 4); }
     public boolean sold(int slot) { return (data.get(8) & (1 << slot)) != 0; }
@@ -82,9 +86,13 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     }
     @Override public boolean clickMenuButton(Player player,int button) {
         if(owner==null || player!=owner || !stillValid(player) || button<20 || button>22)return false;
-        boolean bought=CoreLoot.purchase(owner,button-20);
-        if(bought){owner.inventoryMenu.broadcastChanges();refresh();super.broadcastChanges();}
-        return bought;
+        var receipt=CoreLoot.purchaseWithReceipt(owner,button-20);
+        if(receipt==null)return false;
+        display.setItem(5,receipt.prize().copy());
+        data.set(15,button-19);data.set(17,receipt.tier());
+        data.set(16,data.get(16)%30000+1);
+        owner.inventoryMenu.broadcastChanges();refresh();super.broadcastChanges();
+        return true;
     }
     @Override public void broadcastChanges() {
         if (owner != null && owner.server.overworld().getGameTime() - shownAt >= 20) refresh();
