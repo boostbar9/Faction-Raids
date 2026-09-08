@@ -169,6 +169,14 @@ public final class RaidEvents {
             return;
         }
         if (!(event.getEntity() instanceof Mob mob)) return;
+        String guardTeam = mob.getPersistentData().getString(com.devfarinsky.siegeoverhaul.camp.CampGuards.TEAM_TAG);
+        if (!guardTeam.isBlank()) {
+            RaidSavedData.RaidState guardRaid = RaidSavedData.get(level.getServer()).raids.get(guardTeam);
+            if (event.loadedFromDisk() && (guardRaid == null || !guardRaid.campGuards.contains(mob.getUUID()))) {
+                mob.discard(); event.setCanceled(true);
+            }
+            return;
+        }
         String campTeam = mob.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM);
         if (!campTeam.isBlank()) {
             if (event.loadedFromDisk()) {
@@ -1431,6 +1439,7 @@ public final class RaidEvents {
         }
         // Core ownership follows the placing faction, not an individual changing teams.
         long now = server.overworld().getGameTime();
+        if (now / 20 % 5 == 0) com.devfarinsky.siegeoverhaul.compat.CampClaims.cleanOrphans(server.overworld(), data);
 
         if (RaidConfig.AUTOMATIC_RAIDS.get() && data.raids.size() < RaidConfig.MAX_CONCURRENT_RAIDS.get()) {
             for (RaidSavedData.Anchor anchor : new ArrayList<>(data.anchors.values())) {
@@ -1491,6 +1500,7 @@ public final class RaidEvents {
         MinecraftServer server = level.getServer();
         if (server == null) return false;
         RaidSavedData data = RaidSavedData.get(server);
+        teamKey = normalizeTeamKey(data, teamKey);
         // Dedupe: FR raid already in flight for this team.
         if (data.raids.containsKey(teamKey)) return false;
         RaidSavedData.Anchor anchor = data.anchors.get(teamKey);
@@ -1608,10 +1618,15 @@ public final class RaidEvents {
                     "Enemy camp at " + formatPos(state.campPos) + ": " + state.campWorkers.size()
                             + " builders and " + placed + " siege engines.").withStyle(ChatFormatting.GOLD), false);
             else if (RaidConfig.BUILD_WAR_CAMPS.get()) announce(server, anchor.teamKey(), Component.literal(
-                    "No safe camp site was found. This siege will proceed without camp builders or equipment.")
+                    "No claimable camp site was found in loaded terrain. Check Recruits claiming permissions and space around existing claims. This siege has no camp crew or equipment.")
                     .withStyle(ChatFormatting.GRAY), false);
         }
         data.raids.put(anchor.teamKey(), state);
+        if (raidLevel != null) {
+            com.devfarinsky.siegeoverhaul.camp.CampGuards.start(raidLevel, data, state);
+            if (!state.campGuards.isEmpty()) announce(server, anchor.teamKey(), Component.literal(
+                    state.campGuards.size() + " guards are protecting the builders at the enemy camp.").withStyle(ChatFormatting.GOLD), false);
+        }
         data.setDirty();
         ChatFormatting accent = state.narrative != null && state.narrative.accent != null
                 ? state.narrative.accent : ChatFormatting.GOLD;
@@ -1713,7 +1728,7 @@ public final class RaidEvents {
         String before = preparationLabel(state);
         int third = Math.max(1, state.preparationTotalTicks / 3);
         if (state.preparationTicks <= third * 2 && !state.pendingFortifications.isEmpty()
-                && state.pendingCampBlocks.isEmpty()) {
+                && state.pendingCampBlocks.isEmpty() && com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level, state)) {
             // Towers or defenders may occupy some wall cells by this point. Never replace them,
             // and do not let one occupied corner reject the entire native builder blueprint.
             for (var job : state.pendingFortifications.entrySet()) {
@@ -1794,6 +1809,8 @@ public final class RaidEvents {
             return;
         }
         setRaidMobsFrozen(level, state, false);
+        com.devfarinsky.siegeoverhaul.camp.CampGuards.start(level, data, state);
+        com.devfarinsky.siegeoverhaul.camp.CampGuards.tick(level, state, false);
         if (state.offlinePauseAnnounced) {
             state.offlinePauseAnnounced = false;
             announce(server, teamKey, Component.literal("The paused invasion has resumed.").withStyle(ChatFormatting.YELLOW), false);
@@ -2108,7 +2125,7 @@ public final class RaidEvents {
         int wanted = RaidConfig.BASE_ENEMIES_PER_WAVE.get() +
                 (playerCount - 1) * RaidConfig.ENEMIES_PER_EXTRA_PLAYER.get() +
                 (nextWave - 1) * 2 + recruitScale + assetScale;
-        wanted = Math.min(wanted, RaidConfig.MAX_ACTIVE_RAIDERS.get());
+        wanted = Math.min(wanted, Math.max(0, RaidConfig.MAX_ACTIVE_RAIDERS.get() - state.campGuards.size()));
         if (wanted <= 0) {
             state.ticksToNextWave = RaidConfig.SPAWN_RETRY_SECONDS.get() * 20;
             return;
@@ -2166,7 +2183,7 @@ public final class RaidEvents {
                                        RaidSavedData.Anchor anchor, RaidSavedData.DefensePoint point,
                                        RaidSavedData.RaidState state) {
         int perSquad = RaidConfig.STAGED_SQUADS.get() ? RaidConfig.SQUAD_SIZE.get() : state.pendingWaveSpawns;
-        int factionCapacity = Math.max(0, RaidConfig.MAX_ACTIVE_RAIDERS.get() - state.raiders.size());
+        int factionCapacity = Math.max(0, RaidConfig.MAX_ACTIVE_RAIDERS.get() - state.raiders.size() - state.campGuards.size());
         int globalCapacity = Math.max(0, RaidConfig.MAX_GLOBAL_RAIDERS.get() - globalTrackedCount(data));
         int wanted = Math.min(state.pendingWaveSpawns, Math.min(perSquad, Math.min(factionCapacity, globalCapacity)));
         if (wanted <= 0) {
@@ -2835,7 +2852,7 @@ public final class RaidEvents {
         // camp footprint plus safety margin.
         if (RaidConfig.RESPECT_FOREIGN_CLAIMS.get() && anchorRecord != null
                 && com.devfarinsky.siegeoverhaul.compat.ClaimBridge.anyProviderAvailable()) {
-            int radiusChunks = Math.max(4, (RaidConfig.MAX_SPAWN_DISTANCE.get() >> 4) + 4);
+            int radiusChunks = Math.max(20, (RaidConfig.MAX_SPAWN_DISTANCE.get() >> 4) + 6);
             excludedChunks.addAll(com.devfarinsky.siegeoverhaul.compat.ClaimBridge
                     .collectClaimedChunks(level, anchor, radiusChunks, anchorRecord));
         }
@@ -2843,13 +2860,16 @@ public final class RaidEvents {
             // First prefer the invasion approach, then search the surrounding ring for clear terrain.
             double angle = approachAngle + (attempt < 32 ? (level.random.nextDouble() - 0.5D) * 0.5D
                     : (attempt - 32) * 2.399963229728653);
-            int distance = Math.max(min, max - level.random.nextInt(Math.max(1, Math.min(16, max - min + 1))));
+            int distance = attempt < 32 ? Math.max(min, max - level.random.nextInt(Math.max(1, Math.min(16, max - min + 1))))
+                    : Math.max(max, 128) + ((attempt - 32) / 24) * 32 + level.random.nextInt(16);
             int x = anchor.getX() + Mth.floor(Math.cos(angle) * distance);
             int z = anchor.getZ() + Mth.floor(Math.sin(angle) * distance);
             if (!level.hasChunk(x >> 4, z >> 4)) continue;
             if (!excludedChunks.isEmpty()
                     && excludedChunks.contains(new net.minecraft.world.level.ChunkPos(x >> 4, z >> 4))) continue;
             BlockPos center = surfacePosition(level, x, z);
+            if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.canClaim(level, center)
+                    || com.devfarinsky.siegeoverhaul.compat.CampClaims.footprint(center).stream().anyMatch(excludedChunks::contains)) continue;
             if (!validCampSurface(level, center, anchor)) continue;
             // v2.16.1 - keep the palisade clear of the boat spawn. The
             // camp footprint is 19x19 (9 per side + gate); anything closer
@@ -2863,8 +2883,13 @@ public final class RaidEvents {
                 var terrain = com.devfarinsky.siegeoverhaul.camp.CampTerrain.plan(level, center,
                         pos -> excludedChunks.contains(new net.minecraft.world.level.ChunkPos(pos)));
                 if (terrain.isEmpty()) continue;
-                if (!com.devfarinsky.siegeoverhaul.camp.CampTerrain.apply(level, state, terrain.get())) continue;
-            }
+                if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.create(level, state, center)) continue;
+                if (!com.devfarinsky.siegeoverhaul.camp.CampTerrain.apply(level, state, terrain.get())) {
+                    state.campClaimId = null;
+                    com.devfarinsky.siegeoverhaul.compat.CampClaims.cleanOrphans(level, RaidSavedData.get(level.getServer()));
+                    continue;
+                }
+            } else if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.create(level, state, center)) continue;
             return center;
         }
         return null;
@@ -3915,6 +3940,7 @@ public final class RaidEvents {
     }
 
     private static void setRaidMobsFrozen(ServerLevel level, RaidSavedData.RaidState state, boolean frozen) {
+        com.devfarinsky.siegeoverhaul.camp.CampGuards.tick(level, state, frozen);
         for (UUID id : state.raiders) {
             Entity entity = level.getEntity(id);
             if (entity instanceof Mob mob && mob.isAlive()) {
@@ -3961,6 +3987,7 @@ public final class RaidEvents {
             ServerLevel level = getLevel(server, point);
             if (level != null) {
                 com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.cleanup(level, state);
+                com.devfarinsky.siegeoverhaul.camp.CampGuards.cleanup(level, state);
                 for (UUID id : state.raiders) {
                     Entity entity = level.getEntity(id);
                     if (entity != null) entity.discard();
@@ -3972,6 +3999,7 @@ public final class RaidEvents {
             long next = server.overworld().getGameTime() + randomCooldownTicks(server.overworld().random);
             data.anchors.put(teamKey, anchor.withNextRaid(next));
         }
+        com.devfarinsky.siegeoverhaul.compat.CampClaims.cleanOrphans(server.overworld(), data);
         boolean eligibleVictory = victory && reward && state != null && state.rewardEligible;
         // v2.28.0: track the "no breach" bonus outside the block so the
         // announcement branch below can mention it and the War Journal path
@@ -4877,7 +4905,7 @@ public final class RaidEvents {
     }
 
     private static int globalTrackedCount(RaidSavedData data) {
-        return data.raids.values().stream().mapToInt(r -> r.raiders.size()).sum();
+        return data.raids.values().stream().mapToInt(r -> r.raiders.size() + r.campGuards.size()).sum();
     }
 
     private static String normalizeTeamKey(RaidSavedData data, String supplied) {

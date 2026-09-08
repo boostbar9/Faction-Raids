@@ -71,7 +71,7 @@ public final class SiegeCommandScreen extends Screen {
 
     private enum Tab {
         OVERVIEW("Overview", GOLD),
-        FACTIONS("Factions", BLUE),
+        FACTIONS("Enemy lore", BLUE),
         UNITS("Units", RED),
         DEFENSE("Defense", GREEN),
         JOURNAL("Journal", 0xFFD0A05C),
@@ -156,13 +156,13 @@ public final class SiegeCommandScreen extends Screen {
         int footerY = top + PANEL_HEIGHT - FOOTER_HEIGHT + 5;
         int contentX = left + TAB_RAIL_WIDTH;
         int contentW = PANEL_WIDTH - TAB_RAIL_WIDTH - 8;
-        addRenderableWidget(new ActionButton(contentX + 8, footerY, (contentW - 24) / 2, 20,
-                Component.literal("Refresh Home"), BLUE,
-                () -> RaidNetwork.sendDashboardAction(RaidNetwork.Action.REFRESH_HOME)));
-        addRenderableWidget(new ActionButton(contentX + 16 + (contentW - 24) / 2, footerY,
-                (contentW - 24) / 2, 20,
-                Component.literal("Sync Now"), GOLD,
-                () -> RaidNetwork.sendDashboardAction(RaidNetwork.Action.SYNC)));
+        int buttonW = (contentW - 32) / 3;
+        addRenderableWidget(new ActionButton(contentX + 8, footerY, buttonW, 20,
+                Component.literal("Your faction"), BLUE, NativeRecruitsMenus::factions));
+        addRenderableWidget(new ActionButton(contentX + 16 + buttonW, footerY, buttonW, 20,
+                Component.literal("Claim map"), GOLD, NativeRecruitsMenus::claims));
+        addRenderableWidget(new ActionButton(contentX + 24 + buttonW * 2, footerY, buttonW, 20,
+                Component.literal("Sync"), GOLD, () -> RaidNetwork.sendDashboardAction(RaidNetwork.Action.SYNC)));
 
         // Faction / Unit sub-navigation for their respective tabs.
         if (activeTab == Tab.FACTIONS) {

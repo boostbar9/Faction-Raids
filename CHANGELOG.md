@@ -1,3 +1,12 @@
+## 4.1.0 beta — Native camp claims and starting guards
+
+- Preserve native builder jobs during temporary player/block obstructions and resume when clear. Replace native construction timeout cancellation with progress diagnostics.
+- Register new camps through Recruits' native claim manager with map synchronization, claim events, persistence, ownership and capture. Never overwrite existing claims; clean only leased Raider-owned claims, preserving captured player land.
+- Search a wider loaded area to respect the native initial claim footprint and spacing.
+- Add a finite starting garrison of two shieldmen, one archer and one recruit, subject to existing caps. Guards hold camp and never replenish after defeat.
+- Open Recruits' actual faction menu and claim map from the Codex. Sneak-right-click the core for native faction management. Rename the lore tab so it is not confused with faction management.
+- Correct the raid team prefix when looking up native claims and receiving native siege events.
+
 ## 4.0.0 — Siege Core and extended preparation
 
 - Require a player-placed core in the faction's native Recruits Overworld claim for new sieges; beds no longer set targets. Existing active raids retain their saved target.

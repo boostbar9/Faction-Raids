@@ -2,11 +2,23 @@
 
 Enemy armies establish a foothold, build a fortified camp, assemble their troops, and attack your faction's **Siege Core**.
 
-## Minecraft 1.20.1 Forge — version 4.0.0 beta
+## Minecraft 1.20.1 Forge — version 4.1.0 beta
 
 Build and automated regression checks validate this update. The new gameplay has not yet had an interactive Minecraft playtest.
 
 **Required on the server and every client:** [Villager Recruits](https://www.curseforge.com/minecraft/mc-mods/recruits) 1.15.2+, [Villager Workers 2](https://www.curseforge.com/minecraft/mc-mods/workers) 2.0.3+, [Small Ships](https://www.curseforge.com/minecraft/mc-mods/small-ships), and [Siege Weapons](https://www.curseforge.com/minecraft/mc-mods/siege-weapons). Forge 47.x and Java 17. Match Siege Overhaul versions on all clients and the server.
+
+## Native factions, camp claims and guards
+
+Use **Your faction** and **Claim map** in the Codex footer to open Villager Recruits' actual faction screen and world map. Sneak-right-click a Siege Core with an empty hand to open the native faction screen. Enemy faction stories are under **Enemy lore**.
+
+New enemy camps register real, non-admin Recruits claims with the native initial 5×5 chunk footprint and a three-chunk buffer from existing claims. Claims appear on the native map and use its ownership and capture system. NPC expeditions register through the claim manager; they do not charge a player's currency. Camps permit interaction and block breaking so sabotage remains possible. Existing claims are never overwritten. Uncaptured camp claims are removed after the siege; claims captured by players are preserved.
+
+Camps begin with up to four native guards: two shieldmen, an archer and a regular recruit. They hold camp separately from the assault waves, respect enemy caps, receive food/ammunition, and do not respawn after defeat. Existing active camps gain their garrison once after upgrading.
+
+Native builders now **pause and resume** if a player or replacement block obstructs the blueprint. Their work orders and finite supplies remain intact. Native jobs no longer disappear at the old construction timeout. Logs report obstruction, resumption, completion and lack of progress. Nighttime and unloaded camps still pause work; the original preparation schedule can also leave a completed crew waiting for fortification.
+
+Claim spacing may put camps farther away (the search extends to roughly 256 blocks). Only loaded terrain is searched; no chunks are force-loaded. If claiming is disabled, the native maximum claim size is below 25, or no eligible site exists, the siege announces that it has no camp. Existing 4.0 camps are not retroactively claimed over land that may now belong to a player.
 
 ## Your Siege Core
 
