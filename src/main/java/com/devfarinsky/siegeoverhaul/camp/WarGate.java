@@ -159,7 +159,7 @@ public final class WarGate {
     /** Unconditional gate cleanup, even when ordinary camp cleanup is disabled. */
     public static void cleanup(ServerLevel level,RaidSavedData.RaidState raid) {
         if(!raid.warGate.isEmpty())CampLoading.release(level,center(raid));
-        var cells=raid.warGate.getCompound("Blocks");var keys=new ArrayList<>(cells.getAllKeys());
+        var cells=raid.warGate.getCompound("Blocks");var allKeys=new HashSet<>(cells.getAllKeys());allKeys.addAll(raid.warGate.getCompound("RoadBefore").getAllKeys());var keys=new ArrayList<>(allKeys);
         keys.sort(Comparator.comparingInt((String k)->BlockPos.of(Long.parseLong(k)).getY()).reversed());
         for(String key:keys) {
             long packed=Long.parseLong(key);BlockPos p=BlockPos.of(packed);

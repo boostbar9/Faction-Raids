@@ -12,7 +12,7 @@ public final class BuilderWorkShift extends Goal {
     private final Goal nativeGoal;
     private final java.lang.reflect.Method shouldWork,needsChest;
     private final java.lang.reflect.Field fleeing;
-    private BuilderWorkShift(Mob worker,Goal original) throws ReflectiveOperationException {
+    BuilderWorkShift(Mob worker,Goal original) throws ReflectiveOperationException {
         this.worker=worker;nativeGoal=original;
         shouldWork=worker.getClass().getMethod("shouldWork");needsChest=worker.getClass().getMethod("needsToGetToChest");fleeing=worker.getClass().getField("isFleeing");
         setFlags(original.getFlags());

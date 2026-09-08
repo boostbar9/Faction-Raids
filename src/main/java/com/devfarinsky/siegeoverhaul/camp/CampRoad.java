@@ -76,13 +76,14 @@ public final class CampRoad {
             if(!level.hasChunkAt(pos)||!level.getBlockState(pos).equals(BlockRestoration.deserializeState(before.getCompound(key)))
                     ||!level.getEntitiesOfClass(LivingEntity.class,new AABB(pos),LivingEntity::isAlive).isEmpty())return false;
         }
-        // Capture the entire footprint first, including both halves of any tall plants.
-        for(String key:before.getAllKeys())raid.recordCampBlock(Long.parseLong(key),blocks.contains(key)?blocks.getString(key):"minecraft:air",before.getCompound(key));
-        var ordered=new ArrayList<>(before.getAllKeys());ordered.sort(Comparator.comparingInt((String key)->BlockPos.of(Long.parseLong(key)).getY()).reversed());
-        for(String key:ordered) {
-            BlockPos pos=BlockPos.of(Long.parseLong(key));
-            if(!level.getBlockState(pos).isAir())level.setBlock(pos,Blocks.AIR.defaultBlockState(),Block.UPDATE_ALL|Block.UPDATE_SUPPRESS_DROPS);
+        // Reuse transactional earthworks: a rejected mutation rolls the whole cut back.
+        java.util.List<CampTerrain.Change> changes=new ArrayList<>();
+        for(String key:before.getAllKeys()) {
+            BlockPos pos=BlockPos.of(Long.parseLong(key));BlockState original=level.getBlockState(pos);
+            if(!original.isAir())changes.add(new CampTerrain.Change(pos,original,Blocks.AIR.defaultBlockState()));
         }
+        if(!CampTerrain.apply(level,raid,new CampTerrain.Plan(changes)))return false;
+        for(String key:before.getAllKeys())raid.recordCampBlock(Long.parseLong(key),blocks.contains(key)?blocks.getString(key):"minecraft:air",before.getCompound(key));
         raid.warGate.putBoolean("RoadPrepared",true);RaidSavedData.get(level.getServer()).setDirty();return true;
     }
     /** Retrofit saved gates once the current native job finishes; never refill an existing job's barrel. */
