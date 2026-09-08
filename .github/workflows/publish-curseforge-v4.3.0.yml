@@ -1,0 +1,85 @@
+name: Publish tested 4.3.0 beta to CurseForge
+on:
+  push:
+    branches: [publish/curseforge-v4.3.0]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: curseforge-1364352-v4.3.0
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34182956629
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Verify tested bytes and metadata
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          jar = Path('dist/siegeoverhaul-4.3.0.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == '4b1f970e233983346b489db3ecde912e6ba7578a65e1b2acd1686302758bb0ce'
+          with zipfile.ZipFile(jar) as z:
+              data = tomllib.loads(z.read('META-INF/mods.toml').decode())
+          assert data['mods'][0]['modId'] == 'siegeoverhaul'
+          assert data['mods'][0]['version'] == '4.3.0'
+          dependencies = {x['modId']: x for x in data['dependencies']['siegeoverhaul']}
+          for mod in ['recruits', 'workers', 'smallships', 'siegeweapons']:
+              assert dependencies[mod]['mandatory'], mod
+          print('Verified', jar.name, digest)
+          CHECK
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.3.0.jar
+          name: The Siege Overhaul v4.3.0 beta - Core Hiring Desk
+          version: v4.3.0
+          version-type: beta
+          changelog: |
+            ## 4.3.0 beta - Core Hiring Desk
+            
+            The Siege Core now opens a dedicated hiring screen with dark command cards, gold and teal accents, unit icons, native prices, rarity labels, sold status and a refresh countdown. The layout switches to compact rows for smaller windows or larger GUI scales.
+            
+            Exactly two offers are recruits and one is a Villager Workers 2 worker. Recruit weights: Recruit 50%, Shieldman 25%, Archer 20%, Crossbowman 5%. Worker weights: Farmer 25%, Lumberjack 25%, Miner 20%, Builder 15%, Cook 10%, Courier 5%.
+            
+            Offers remain shared faction stock, with one purchase per slot every 15 minutes of server runtime. Existing saves retain their military offers, sold slots and rotation deadline. Breaking the core or restarting does not reroll stock. Stale and duplicate purchase requests are rejected by the server.
+            
+            Workers use native hiring, ownership, faction and unit limits, with configured native villager-trade prices and Recruits currency. Assign work areas, storage and building jobs through the normal Workers controls after hiring.
+            
+            Includes the 4.2.1 enemy camp claiming/loading fixes and 4.2.0 faction uniforms/core capture changes. Requires Minecraft 1.20.1 Forge, Java 17, Villager Recruits, Villager Workers 2, Small Ships and Siege Weapons. Install 4.3.0 on the server and every client (network protocol 8).
+            
+            Validation: clean Java 17 build; all 80 regression tests passed. No interactive Minecraft playtest; published as beta.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          dependencies: |
+            recruits(required)
+            workers(required)
+            smallships(required)
+            siegeweapons(required)
+          fail-mode: fail
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os
+          result = {'version': '4.3.0', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 4.3.0 beta: {result['url']}\n")
+          RECEIPT
