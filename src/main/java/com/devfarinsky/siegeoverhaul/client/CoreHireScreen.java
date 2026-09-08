@@ -21,7 +21,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private boolean heroes, loot;
     private int confirmBox=-1;
     private final Button[] boxes=new Button[3];
-    private long revealedAt;
     private int cardIndex(int i) { return i==3?(layout.compact()?0:1):i; }
     private final Button[] hire = new Button[4];
     private static final int GOLD = 0xffdfbf79, TEAL = 0xff75cabb, TEXT = 0xffeef0f4, MUTED = 0xffa0adbf;
@@ -36,19 +35,18 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         layout = CoreHireLayout.fit(width, height);
         imageWidth = layout.width(); imageHeight = layout.height();
         super.init();
-        revealedAt=net.minecraft.Util.getMillis();
-        addRenderableWidget(Button.builder(Component.literal("Army & workers"),b -> { heroes=false; loot=false; confirmBox=-1; revealedAt=net.minecraft.Util.getMillis(); }).bounds(layout.x()+10,layout.y()+25,(layout.width()-28)/3,20).build());
-        addRenderableWidget(Button.builder(Component.literal("Hire a Hero"),b -> { heroes=true; loot=false; confirmBox=-1; revealedAt=net.minecraft.Util.getMillis(); }).bounds(layout.x()+14+(layout.width()-28)/3,layout.y()+25,(layout.width()-28)/3,20).build());
-        addRenderableWidget(Button.builder(Component.literal("Loot boxes"),b -> {loot=true;heroes=false;confirmBox=-1;}).bounds(layout.x()+18+2*((layout.width()-28)/3),layout.y()+25,(layout.width()-28)/3,20).build());
+        addRenderableWidget(new CoreButton(Component.literal("Army"),b -> { heroes=false; loot=false; confirmBox=-1; },layout.x()+10,layout.y()+32,(layout.width()-28)/3,24,true,()->!heroes&&!loot));
+        addRenderableWidget(new CoreButton(Component.literal("Heroes"),b -> { heroes=true; loot=false; confirmBox=-1; },layout.x()+14+(layout.width()-28)/3,layout.y()+32,(layout.width()-28)/3,24,true,()->heroes));
+        addRenderableWidget(new CoreButton(Component.literal("Loot boxes"),b -> {loot=true;heroes=false;confirmBox=-1;},layout.x()+18+2*((layout.width()-28)/3),layout.y()+32,(layout.width()-28)/3,24,true,()->loot));
         for(int i=0;i<3;i++) {
             final int box=i;int cw=layout.cardWidth(),ch=layout.cardHeight();int bw=layout.compact()?72:cw-24;
             int bx=layout.compact()?layout.cardX(i)+cw-bw-8:layout.cardX(i)+12;
             int by=layout.compact()?layout.cardY(i)+(ch-20)/2:layout.cardY(i)+ch-32;
-            boxes[i]=addRenderableWidget(Button.builder(Component.literal("Open"),b -> {
+            boxes[i]=addRenderableWidget(new CoreButton(Component.literal("Open"),b -> {
                 if(confirmBox!=box){confirmBox=box;return;}
                 if(minecraft!=null && minecraft.gameMode!=null)minecraft.gameMode.handleInventoryButtonClick(menu.containerId,20+box);
                 confirmBox=-1;
-            }).bounds(bx,by,bw,20).build());
+            },bx,by,bw,20,false,()->confirmBox==box));
         }
         for (int i = 0; i < 4; i++) {
             final int index = i;
@@ -56,9 +54,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             int bw = layout.compact() ? 72 : cw - 24;
             int bx = layout.compact() ? layout.cardX(cardIndex(i)) + cw - bw - 8 : layout.cardX(cardIndex(i)) + 12;
             int by = layout.compact() ? layout.cardY(cardIndex(i)) + (ch - 20) / 2 : layout.cardY(cardIndex(i)) + ch - 32;
-            hire[i] = addRenderableWidget(Button.builder(Component.literal("Hire"), b -> {
+            hire[i] = addRenderableWidget(new CoreButton(Component.literal("Hire"), b -> {
                 RaidNetwork.purchaseCoreOffer(menu.containerId, index, menu.rotation());
-            }).bounds(bx, by, bw, 20).build());
+            },bx,by,bw,20,false,()->false));
         }
     }
     @Override public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
@@ -66,7 +64,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         for (int i = 0; i < 4; i++) {
             hire[i].visible = !loot && heroes==(i==3);
             hire[i].active = menu.role(i) >= 0 && menu.cost(i) >= 0 && !menu.sold(i) && menu.rotation() > 0;
-            hire[i].setMessage(Component.literal(menu.sold(i) ? "Hired" : menu.cost(i) < 0 ? "Unavailable" : "Hire"));
+            hire[i].setMessage(Component.literal(menu.sold(i) ? "Recruited" : menu.cost(i) < 0 ? "Unavailable" : "Recruit"));
         }
         for(int i=0;i<3;i++){boxes[i].visible=loot;boxes[i].setMessage(Component.literal(confirmBox==i?"Confirm":"Open"));}
         super.render(g, mouseX, mouseY, partial);
@@ -91,12 +89,20 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     @Override protected void renderLabels(GuiGraphics g, int x, int y) { }
     @Override protected void renderBg(GuiGraphics g, float partial, int mouseX, int mouseY) {
         int x = layout.x(), y = layout.y(), w = layout.width(), h = layout.height();
-        g.fill(x - 2, y - 2, x + w + 2, y + h + 2, 0xff080d16);
-        g.fillGradient(x, y, x + w, y + h, 0xff1c293a, 0xff101722);
-        g.fill(x, y, x + w, y + 2, GOLD);
-        g.drawString(font, "SIEGE CORE", x + 12, y + 12, GOLD, false);
-        String clock = String.format(java.util.Locale.ROOT, "New offers %d:%02d", menu.seconds() / 60, menu.seconds() % 60);
-        g.drawString(font, clock, x + w - font.width(clock) - 12, y + 12, TEAL, false);
+        CoreButton.panel(g,x-5,y+4,w+10,h+5,0x66000000);
+        CoreButton.panel(g,x-1,y-1,w+2,h+2,0xff405469);
+        CoreButton.panel(g,x,y,w,h,0xff111c29);
+        g.fill(x+12,y+27,x+w-12,y+28,0xff293a4a);
+        g.drawString(font,layout.compact()?"SIEGE CORE":"SIEGE  /  COMMAND",x+12,y+12,TEXT,false);
+        String clock=String.format(java.util.Locale.ROOT,"%d:%02d",menu.seconds()/60,menu.seconds()%60);
+        int emeralds=minecraft!=null && minecraft.player!=null?minecraft.player.getInventory().countItem(net.minecraft.world.item.Items.EMERALD):0;
+        String status=loot?emeralds+" emeralds":clock+"  |  "+emeralds+" emeralds";
+        g.drawString(font,font.plainSubstrByWidth(status,Math.max(1,w/2-12)),x+w-font.width(font.plainSubstrByWidth(status,Math.max(1,w/2-12)))-12,y+12,TEAL,false);
+        if(!loot) {
+            g.fill(x+12,y+h-23,x+w-12,y+h-21,0xff263949);
+            int progress=(int)((w-24)*Math.max(0,Math.min(900,menu.seconds()))/900.0);
+            g.fill(x+12,y+h-23,x+12+progress,y+h-21,TEAL);
+        }
 
         if(loot)for(int i=0;i<3;i++)drawBox(g,i);
         else for (int i = 0; i < 4; i++) if(heroes==(i==3)) drawCard(g, i);
@@ -112,13 +118,18 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     }
     private void drawBox(GuiGraphics g,int i) {
         int x=layout.cardX(i),y=layout.cardY(i),w=layout.cardWidth(),h=layout.cardHeight();
-        g.fillGradient(x,y,x+w,y+h,0xff3d3155,0xff142033);g.fill(x,y,x+w,y+2,GOLD);
+        CoreButton.panel(g,x,y,w,h,0xff40516a);CoreButton.panel(g,x+1,y+1,w-2,h-2,0xff202b3c);
         if(layout.compact()) {
             g.drawString(font,font.plainSubstrByWidth(CoreLoot.NAMES[i],w-96),x+10,y+8,TEXT,false);
-            g.drawString(font,CoreLoot.price(i)+" emeralds",x+10,y+22,GOLD,false);
+            if(h>=34)g.drawString(font,CoreLoot.price(i)+" emeralds",x+10,y+22,GOLD,false);
         } else {
             g.drawCenteredString(font,CoreLoot.NAMES[i],x+w/2,y+16,GOLD);
-            g.renderItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.CHEST),x+w/2-8,y+38);
+            int[] rolls={0,50,80,95};
+            for(int r=0;r<4;r++) {
+                int ix=x+w/2-44+r*24;
+                CoreButton.panel(g,ix-2,y+34,20,24,0xff132030);
+                g.renderItem(CoreLoot.reward(i,rolls[r]),ix,y+38);
+            }
             g.drawCenteredString(font,CoreLoot.price(i)+" emeralds",x+w/2,y+64,TEXT);
             int ty=y+82;
             for(var line:font.split(Component.literal(CoreLoot.pool(i)),w-24)) {if(ty>y+h-52)break;g.drawString(font,line,x+12,ty,MUTED,false);ty+=11;}
@@ -127,14 +138,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private void drawCard(GuiGraphics g, int i) {
         int x = layout.cardX(cardIndex(i)), y = layout.cardY(cardIndex(i)), w = layout.cardWidth(), h = layout.cardHeight();
         int accent = i==3 ? 0xffc19bff : i == 2 ? TEAL : GOLD;
-        g.fillGradient(x,y,x+w,y+h,menu.sold(i)?0xff171e29:i==3?0xff453463:0xff273b54,0xff142033);
-        g.fill(x,y,x+w,y+1,accent);
-        long elapsed=net.minecraft.Util.getMillis()-revealedAt;
-        if(elapsed<600) {
-            int line=x+(int)(elapsed*w/600);
-            g.fill(line,y,Math.min(x+w,line+2),y+h,0x4475cabb);
-        }
-        g.fill(x, y, x + 2, y + h, accent);
+        CoreButton.panel(g,x,y,w,h,menu.sold(i)?0xff283342:accent);
+        CoreButton.panel(g,x+1,y+1,w-2,h-2,menu.sold(i)?0xff16202c:i==3?0xff292438:0xff1c2b3b);
+        g.fill(x+8,y+1,x+w-8,y+2,accent);
         int role = menu.role(i);
         if (role < 0 || role >= CoreHiring.NAMES.length) return;
         String name = CoreHiring.NAMES[role];
@@ -143,15 +149,16 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         if (layout.compact()) {
             g.renderItem(menu.getSlot(i).getItem(), x + 8, y + (h - 16) / 2);
             g.drawString(font, font.plainSubstrByWidth((i==3?"Hero: ":i == 2 ? "Worker: " : "Recruit: ") + name, w - 120), x + 30, y + 7, TEXT, false);
-            g.drawString(font, font.plainSubstrByWidth(price, w - 120), x + 30, y + 19, MUTED, false);
+            if(h>=30)g.drawString(font, font.plainSubstrByWidth(price, w - 120), x + 30, y + 19, MUTED, false);
             if (h >= 45) g.drawString(font, CoreHiring.rarity(role) + " • " + CoreHiring.weight(role) + "%", x + 30, y + 31, accent, false);
         } else {
             g.drawString(font, i==3 ? "FEATURED HERO" : i == 2 ? "WORKFORCE" : "RECRUIT " + (i + 1), x + 12, y + 12, accent, false);
             g.fill(x + 12, y + 30, x + w - 12, y + 31, 0xff41506a);
+            CoreButton.panel(g,x+w/2-25,y+36,50,44,0xff111c29);
             g.pose().pushPose();
             g.pose().translate(x + w / 2f - 16, y + 42, 0); g.pose().scale(2, 2, 1);
             g.renderItem(menu.getSlot(i).getItem(), 0, 0); g.pose().popPose();
-            g.drawCenteredString(font, name, x + w / 2, y + 86, TEXT);
+            g.drawCenteredString(font,font.plainSubstrByWidth(name,w-20),x+w/2,y+86,TEXT);
             g.drawCenteredString(font, CoreHiring.rarity(role) + " • " + CoreHiring.weight(role) + "%", x + w / 2, y + 101, accent);
             if(i==3) {
                 int ty=y+120;
