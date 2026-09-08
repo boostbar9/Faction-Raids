@@ -1,0 +1,921 @@
+package com.devfarinsky.siegeoverhaul;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.saveddata.SavedData;
+
+import java.util.*;
+
+public final class RaidSavedData extends SavedData {
+    /**
+     * v3.0.0 renamed from {@code factionraids_data} to
+     * {@code siegeoverhaul_data}. Legacy files are copy-migrated on
+     * server about-to-start by {@link com.devfarinsky.siegeoverhaul.rebrand.RebrandMigration}.
+     */
+    public static final String DATA_NAME = "siegeoverhaul_data";
+    public static final String LEGACY_DATA_NAME = "factionraids_data";
+    // v10 added WarJournal + Discovery (2.12.0 Know Your Enemy release).
+    // v11 added scout missions (2.26.0).
+    // v12 added pendingSpoils + raidNotifyOptOut (3.2.0 multiplayer polish).
+    // v13 added persistent camp construction jobs and crew (3.4.0).
+    // Old saves load cleanly because all new fields default to empty collections.
+    public static final int DATA_VERSION = 20;
+    public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
+    public static final String HOME_POINT = "home";
+    public final Set<UUID> campClaimLeases = new HashSet<>();
+    public final Map<String, CompoundTag> siegeCores = new HashMap<>();
+    public final Map<String, Anchor> anchors = new HashMap<>();
+    public final Map<String, RaidState> raids = new HashMap<>();
+    /**
+     * Per-team siege history. Bounded to {@link WarJournal#MAX_ENTRIES} entries;
+     * older sieges roll off the back. Written to when a raid ends (victory or
+     * defeat) in RaidEvents.
+     */
+    public final Map<String, WarJournal> journals = new HashMap<>();
+    /**
+     * Per-team discovery ledger tracking which factions and units the team has
+     * seen in a real siege. Drives the Codex fog-of-war: undiscovered entries
+     * render as silhouettes until the team encounters one for the first time.
+     */
+    public final Map<String, Discovery> discoveries = new HashMap<>();
+    /**
+     * v2.26.0 scheduled/live pre-raid scouting missions, keyed by anchor teamKey.
+     * One entry per anchor in cooldown, cleared when the raid starts, the
+     * mission expires, or the anchor is deleted. Actual scheduling and
+     * lifecycle live in {@link com.devfarinsky.siegeoverhaul.scout.ScoutManager}.
+     */
+    public final Map<String, com.devfarinsky.siegeoverhaul.scout.ScoutMission> scoutMissions = new HashMap<>();
+    /**
+     * v3.2.0 — per-player unclaimed spoils queue. A member who was offline
+     * when their faction won a siege ends up with an entry here; on next login
+     * they get a chat prompt to run {@code /siegeoverhaul claim}, which drains
+     * this list and gives them the rewards.
+     */
+    public final Map<UUID, List<UnclaimedSpoils>> pendingSpoils = new HashMap<>();
+    /**
+     * v3.2.0 — players who have opted out of server-wide raid start
+     * announcements via {@code /siegeoverhaul notify off}. Absent = opted in
+     * (the default).
+     */
+    public final Set<UUID> raidNotifyOptOut = new HashSet<>();
+
+    public static RaidSavedData get(MinecraftServer server) {
+        return server.overworld().getDataStorage().computeIfAbsent(RaidSavedData::load, RaidSavedData::new, DATA_NAME);
+    }
+
+    public static RaidSavedData load(CompoundTag root) {
+        RaidSavedData data = new RaidSavedData();
+        ListTag leases = root.getList("CampClaimLeases", Tag.TAG_COMPOUND);
+        for (int i=0;i<leases.size();i++) if (leases.getCompound(i).hasUUID("Id")) data.campClaimLeases.add(leases.getCompound(i).getUUID("Id"));
+        CompoundTag cores = root.getCompound("SiegeCores");
+        for (String key : cores.getAllKeys()) data.siegeCores.put(key, cores.getCompound(key).copy());
+        ListTag anchorsTag = root.getList("Anchors", Tag.TAG_COMPOUND);
+        for (int i = 0; i < anchorsTag.size(); i++) {
+            Anchor anchor = Anchor.load(anchorsTag.getCompound(i));
+            data.anchors.put(anchor.teamKey, anchor);
+        }
+        ListTag raidsTag = root.getList("Raids", Tag.TAG_COMPOUND);
+        for (int i = 0; i < raidsTag.size(); i++) {
+            RaidState raid = RaidState.load(raidsTag.getCompound(i));
+            data.raids.put(raid.teamKey, raid);
+        }
+        // v10 additions — missing on older saves, so wrap in a version check.
+        if (root.contains("Journals", Tag.TAG_LIST)) {
+            ListTag journals = root.getList("Journals", Tag.TAG_COMPOUND);
+            for (int i = 0; i < journals.size(); i++) {
+                WarJournal journal = WarJournal.load(journals.getCompound(i));
+                data.journals.put(journal.teamKey, journal);
+            }
+        }
+        if (root.contains("Discoveries", Tag.TAG_LIST)) {
+            ListTag discoveries = root.getList("Discoveries", Tag.TAG_COMPOUND);
+            for (int i = 0; i < discoveries.size(); i++) {
+                Discovery discovery = Discovery.load(discoveries.getCompound(i));
+                data.discoveries.put(discovery.teamKey, discovery);
+            }
+        }
+        // v2.26.0: scout missions. Missing on pre-2.26 saves; treated as empty.
+        com.devfarinsky.siegeoverhaul.scout.ScoutManager.load(data, root);
+        // v3.2.0: pendingSpoils + raidNotifyOptOut. Missing on pre-3.2 saves; treated as empty.
+        if (root.contains("PendingSpoils", Tag.TAG_LIST)) {
+            ListTag ps = root.getList("PendingSpoils", Tag.TAG_COMPOUND);
+            for (int i = 0; i < ps.size(); i++) {
+                CompoundTag entry = ps.getCompound(i);
+                UUID uuid = entry.getUUID("Player");
+                ListTag spoilsList = entry.getList("Spoils", Tag.TAG_COMPOUND);
+                List<UnclaimedSpoils> list = new ArrayList<>();
+                for (int j = 0; j < spoilsList.size(); j++) list.add(UnclaimedSpoils.load(spoilsList.getCompound(j)));
+                if (!list.isEmpty()) data.pendingSpoils.put(uuid, list);
+            }
+        }
+        if (root.contains("RaidNotifyOptOut", Tag.TAG_LIST)) {
+            ListTag opt = root.getList("RaidNotifyOptOut", Tag.TAG_COMPOUND);
+            for (int i = 0; i < opt.size(); i++) data.raidNotifyOptOut.add(opt.getCompound(i).getUUID("Player"));
+        }
+        return data;
+    }
+
+    @Override
+    public CompoundTag save(CompoundTag root) {
+        root.putInt("DataVersion", DATA_VERSION);
+        ListTag leases = new ListTag();
+        campClaimLeases.forEach(id -> { CompoundTag entry = new CompoundTag(); entry.putUUID("Id", id); leases.add(entry); });
+        root.put("CampClaimLeases", leases);
+        CompoundTag cores = new CompoundTag();
+        siegeCores.forEach((key, value) -> cores.put(key, value.copy()));
+        root.put("SiegeCores", cores);
+        ListTag anchorsTag = new ListTag();
+        anchors.values().forEach(anchor -> anchorsTag.add(anchor.save()));
+        root.put("Anchors", anchorsTag);
+        ListTag raidsTag = new ListTag();
+        raids.values().forEach(raid -> raidsTag.add(raid.save()));
+        root.put("Raids", raidsTag);
+        ListTag journalsTag = new ListTag();
+        journals.values().forEach(j -> journalsTag.add(j.save()));
+        root.put("Journals", journalsTag);
+        ListTag discoveriesTag = new ListTag();
+        discoveries.values().forEach(d -> discoveriesTag.add(d.save()));
+        root.put("Discoveries", discoveriesTag);
+        // v2.26.0: scout missions round-trip.
+        com.devfarinsky.siegeoverhaul.scout.ScoutManager.save(this, root);
+        // v3.2.0: pending spoils queue + notify opt-outs.
+        ListTag ps = new ListTag();
+        pendingSpoils.forEach((uuid, list) -> {
+            if (list == null || list.isEmpty()) return;
+            CompoundTag entry = new CompoundTag();
+            entry.putUUID("Player", uuid);
+            ListTag spoilsList = new ListTag();
+            for (UnclaimedSpoils s : list) spoilsList.add(s.save());
+            entry.put("Spoils", spoilsList);
+            ps.add(entry);
+        });
+        root.put("PendingSpoils", ps);
+        ListTag opt = new ListTag();
+        raidNotifyOptOut.forEach(uuid -> {
+            CompoundTag entry = new CompoundTag();
+            entry.putUUID("Player", uuid);
+            opt.add(entry);
+        });
+        root.put("RaidNotifyOptOut", opt);
+        return root;
+    }
+
+    /**
+     * v3.2.0 — a single per-player queued reward from a siege the player
+     * missed by being offline. Recorded when the raid ends victorious;
+     * drained when the player runs {@code /siegeoverhaul claim}.
+     *
+     * @param factionId the defeated faction id, used to grant a trophy banner. Empty for none.
+     * @param emeralds  guaranteed emeralds owed.
+     * @param experience  XP owed.
+     * @param lootRoll  true when a victory loot table roll is owed.
+     * @param timestamp  epoch millis when queued (for age display).
+     * @param teamDisplay  human-readable team name for the login message.
+     */
+    public record UnclaimedSpoils(String factionId, int emeralds, int experience,
+                                  boolean lootRoll, long timestamp, String teamDisplay) {
+        public CompoundTag save() {
+            CompoundTag t = new CompoundTag();
+            t.putString("FactionId", factionId == null ? "" : factionId);
+            t.putInt("Emeralds", emeralds);
+            t.putInt("Experience", experience);
+            t.putBoolean("LootRoll", lootRoll);
+            t.putLong("Timestamp", timestamp);
+            t.putString("TeamDisplay", teamDisplay == null ? "" : teamDisplay);
+            return t;
+        }
+
+        public static UnclaimedSpoils load(CompoundTag t) {
+            return new UnclaimedSpoils(
+                    t.getString("FactionId"),
+                    t.getInt("Emeralds"),
+                    t.getInt("Experience"),
+                    t.getBoolean("LootRoll"),
+                    t.getLong("Timestamp"),
+                    t.getString("TeamDisplay"));
+        }
+    }
+
+    /**
+     * Bounded, chronological record of a team's recent sieges. Bounded because
+     * the journal is displayed in-book and unbounded growth would both bloat
+     * the network payload and make the UI unusable.
+     */
+    public static final class WarJournal {
+        public static final int MAX_ENTRIES = 10;
+        public final String teamKey;
+        // Newest first. Callers append via prepend + trim.
+        public final java.util.LinkedList<Entry> entries = new java.util.LinkedList<>();
+
+        public WarJournal(String teamKey) { this.teamKey = teamKey; }
+
+        public void record(Entry entry) {
+            entries.addFirst(entry);
+            while (entries.size() > MAX_ENTRIES) entries.removeLast();
+        }
+
+        public CompoundTag save() {
+            CompoundTag tag = new CompoundTag();
+            tag.putString("Team", teamKey);
+            ListTag list = new ListTag();
+            for (Entry e : entries) list.add(e.save());
+            tag.put("Entries", list);
+            return tag;
+        }
+
+        public static WarJournal load(CompoundTag tag) {
+            WarJournal j = new WarJournal(tag.getString("Team"));
+            ListTag list = tag.getList("Entries", Tag.TAG_COMPOUND);
+            for (int i = 0; i < list.size(); i++) j.entries.add(Entry.load(list.getCompound(i)));
+            return j;
+        }
+
+        /**
+         * One completed siege. {@code timestamp} is game-time ticks at the moment
+         * of recording; the client renders it as "3 days ago" using its own clock.
+         */
+        public record Entry(long timestamp, String factionId, String factionName,
+                            String casusBelliId, int wavesReached, int totalWaves,
+                            String outcome, int emeraldPayout) {
+            public CompoundTag save() {
+                CompoundTag t = new CompoundTag();
+                t.putLong("Ts", timestamp);
+                t.putString("FactionId", factionId == null ? "" : factionId);
+                t.putString("FactionName", factionName == null ? "" : factionName);
+                t.putString("CasusBelliId", casusBelliId == null ? "" : casusBelliId);
+                t.putInt("WavesReached", wavesReached);
+                t.putInt("TotalWaves", totalWaves);
+                t.putString("Outcome", outcome == null ? "unknown" : outcome);
+                t.putInt("Emeralds", emeraldPayout);
+                return t;
+            }
+
+            public static Entry load(CompoundTag t) {
+                return new Entry(t.getLong("Ts"), t.getString("FactionId"),
+                        t.getString("FactionName"), t.getString("CasusBelliId"),
+                        t.getInt("WavesReached"), t.getInt("TotalWaves"),
+                        t.getString("Outcome"), t.getInt("Emeralds"));
+            }
+        }
+    }
+
+    /**
+     * Per-team fog-of-war ledger. Sets of ids the team has actually encountered
+     * in combat. The client uses these to gate what's shown in the Codex's
+     * Factions and Units tabs, so a fresh team sees silhouettes rather than
+     * spoilers for content they have not yet fought.
+     */
+    public static final class Discovery {
+        public final String teamKey;
+        public final java.util.Set<String> factions = new java.util.LinkedHashSet<>();
+        public final java.util.Set<String> units = new java.util.LinkedHashSet<>();
+
+        public Discovery(String teamKey) { this.teamKey = teamKey; }
+
+        public boolean addFaction(String id) {
+            return id != null && !id.isEmpty() && factions.add(id);
+        }
+
+        public boolean addUnit(String id) {
+            return id != null && !id.isEmpty() && units.add(id);
+        }
+
+        public CompoundTag save() {
+            CompoundTag tag = new CompoundTag();
+            tag.putString("Team", teamKey);
+            ListTag f = new ListTag();
+            for (String s : factions) f.add(StringTag.valueOf(s));
+            tag.put("Factions", f);
+            ListTag u = new ListTag();
+            for (String s : units) u.add(StringTag.valueOf(s));
+            tag.put("Units", u);
+            return tag;
+        }
+
+        public static Discovery load(CompoundTag tag) {
+            Discovery d = new Discovery(tag.getString("Team"));
+            ListTag f = tag.getList("Factions", Tag.TAG_STRING);
+            for (int i = 0; i < f.size(); i++) d.factions.add(f.getString(i));
+            ListTag u = tag.getList("Units", Tag.TAG_STRING);
+            for (int i = 0; i < u.size(); i++) d.units.add(u.getString(i));
+            return d;
+        }
+    }
+
+    public record DefensePoint(String name, ResourceLocation dimension, BlockPos pos) {
+        public CompoundTag save() {
+            CompoundTag tag = new CompoundTag();
+            tag.putString("Name", name);
+            tag.putString("Dimension", dimension.toString());
+            tag.putLong("Position", pos.asLong());
+            return tag;
+        }
+
+        public static DefensePoint load(CompoundTag tag) {
+            ResourceLocation dimension = ResourceLocation.tryParse(tag.getString("Dimension"));
+            if (dimension == null) dimension = Level.OVERWORLD.location();
+            String name = tag.getString("Name");
+            if (name.isBlank()) name = HOME_POINT;
+            return new DefensePoint(name, dimension, BlockPos.of(tag.getLong("Position")));
+        }
+    }
+
+    public record Anchor(String teamKey, String teamDisplay, UUID ownerUuid, Set<UUID> members,
+                         boolean internalRoster, boolean automaticHome,
+                         Map<String, DefensePoint> defensePoints,
+                         long nextRaidGameTime) {
+        public Anchor {
+            members = new LinkedHashSet<>(members);
+            defensePoints = new LinkedHashMap<>(defensePoints);
+        }
+
+        public CompoundTag save() {
+            CompoundTag tag = new CompoundTag();
+            tag.putString("Team", teamKey);
+            tag.putString("Display", teamDisplay);
+            tag.putUUID("Owner", ownerUuid);
+            tag.putBoolean("InternalRoster", internalRoster);
+            tag.putBoolean("AutomaticHome", automaticHome);
+            tag.putLong("NextRaid", nextRaidGameTime);
+
+            ListTag memberTags = new ListTag();
+            members.forEach(id -> memberTags.add(StringTag.valueOf(id.toString())));
+            tag.put("Members", memberTags);
+
+            ListTag pointTags = new ListTag();
+            defensePoints.values().forEach(point -> pointTags.add(point.save()));
+            tag.put("DefensePoints", pointTags);
+
+            // Keep legacy location fields so older NBT inspection tools remain useful.
+            DefensePoint primary = primaryPoint();
+            tag.putString("Dimension", primary.dimension().toString());
+            tag.putLong("Position", primary.pos().asLong());
+            return tag;
+        }
+
+        public static Anchor load(CompoundTag tag) {
+            UUID owner = tag.hasUUID("Owner") ? tag.getUUID("Owner") : UNKNOWN_OWNER;
+            Set<UUID> members = new LinkedHashSet<>();
+            ListTag memberTags = tag.getList("Members", Tag.TAG_STRING);
+            for (int i = 0; i < memberTags.size(); i++) {
+                try {
+                    members.add(UUID.fromString(memberTags.getString(i)));
+                } catch (IllegalArgumentException ignored) {}
+            }
+            if (!UNKNOWN_OWNER.equals(owner)) members.add(owner);
+
+            Map<String, DefensePoint> points = new LinkedHashMap<>();
+            ListTag pointTags = tag.getList("DefensePoints", Tag.TAG_COMPOUND);
+            for (int i = 0; i < pointTags.size(); i++) {
+                DefensePoint point = DefensePoint.load(pointTags.getCompound(i));
+                points.put(point.name(), point);
+            }
+            if (points.isEmpty()) {
+                ResourceLocation dimension = ResourceLocation.tryParse(tag.getString("Dimension"));
+                if (dimension == null) dimension = Level.OVERWORLD.location();
+                points.put(HOME_POINT, new DefensePoint(HOME_POINT, dimension,
+                        BlockPos.of(tag.getLong("Position"))));
+            }
+
+            return new Anchor(tag.getString("Team"), tag.getString("Display"), owner, members,
+                    tag.getBoolean("InternalRoster"), tag.getBoolean("AutomaticHome"),
+                    points, tag.getLong("NextRaid"));
+        }
+
+        public DefensePoint primaryPoint() {
+            DefensePoint home = defensePoints.get(HOME_POINT);
+            return home != null ? home : defensePoints.values().iterator().next();
+        }
+
+        public DefensePoint point(String name) {
+            DefensePoint point = defensePoints.get(name);
+            return point != null ? point : primaryPoint();
+        }
+
+        public Anchor withNextRaid(long time) {
+            return new Anchor(teamKey, teamDisplay, ownerUuid, members, internalRoster, automaticHome,
+                    defensePoints, time);
+        }
+
+        public Anchor withIdentity(String newTeamKey, String newDisplay) {
+            return new Anchor(newTeamKey, newDisplay, ownerUuid, members, internalRoster, automaticHome,
+                    defensePoints, nextRaidGameTime);
+        }
+
+        public Anchor withOwner(UUID owner) {
+            Set<UUID> updated = new LinkedHashSet<>(members);
+            updated.add(owner);
+            return new Anchor(teamKey, teamDisplay, owner, updated, internalRoster, automaticHome,
+                    defensePoints, nextRaidGameTime);
+        }
+
+        public Anchor withRoster(Set<UUID> updatedMembers, boolean managed) {
+            Set<UUID> updated = new LinkedHashSet<>(updatedMembers);
+            if (!UNKNOWN_OWNER.equals(ownerUuid)) updated.add(ownerUuid);
+            return new Anchor(teamKey, teamDisplay, ownerUuid, updated, managed, automaticHome,
+                    defensePoints, nextRaidGameTime);
+        }
+
+        public Anchor withPoint(DefensePoint point) {
+            Map<String, DefensePoint> updated = new LinkedHashMap<>(defensePoints);
+            updated.put(point.name(), point);
+            return new Anchor(teamKey, teamDisplay, ownerUuid, members, internalRoster, automaticHome,
+                    updated, nextRaidGameTime);
+        }
+
+        public Anchor withoutPoint(String name) {
+            Map<String, DefensePoint> updated = new LinkedHashMap<>(defensePoints);
+            updated.remove(name);
+            return new Anchor(teamKey, teamDisplay, ownerUuid, members, internalRoster, automaticHome,
+                    updated, nextRaidGameTime);
+        }
+
+        public Anchor withAutomaticHome(boolean automatic) {
+            return new Anchor(teamKey, teamDisplay, ownerUuid, members, internalRoster, automatic,
+                    defensePoints, nextRaidGameTime);
+        }
+    }
+
+    public static final class RaidState {
+        public final String teamKey;
+        public String defensePointName;
+        public int wave;
+        public int ticksToNextWave;
+        public int preparationTicks;
+        public int preparationTotalTicks;
+        public final Map<Long, String> pendingFortifications = new LinkedHashMap<>();
+        public int abandonedTicks;
+        public int waveStartingCount;
+        public int plannedWaveSize;
+        public int pendingWaveSpawns;
+        public int ticksToNextSquad;
+        public int squadsSpawned;
+        public int captureTicks;
+        public boolean coreCaptured;
+        /** Recomputed each siege pass; no save or network format change needed. */
+        public transient String objectiveStatus = "Awaiting attackers";
+        public int breachTicks;
+        public boolean breached;
+        public int lastBreachWarningBand;
+        public BlockPos campPos;
+        public UUID campClaimId;
+        public CompoundTag warGate=new CompoundTag();
+        public int warGateWaitTicks;
+        public int reinforcementStallTicks;
+        public BlockPos campSearchPos;
+        public int campSearchStep;
+        public int campSearchTicks;
+        public boolean campCrewStarted;
+        public boolean campGuardsStarted;
+        public final Set<UUID> campGuards = new HashSet<>();
+        public int campCompletedBlocks;
+        public transient String constructionPauseReason = "";
+        public boolean campBuildAttempted;
+        /** Water-surface staging point when this raid has an amphibious component. Null otherwise. */
+        public BlockPos navalStagingPos;
+        /** Landing beach the naval convoy steers toward. Null when no naval staging. */
+        public BlockPos navalBeachPos;
+        /**
+         * Camp block ledger. Key: packed BlockPos. Value: CompoundTag holding two entries:
+         * <ul>
+         *   <li>{@code Placed}: the ResourceLocation string of the block the mod put down.
+         *       Used at cleanup to verify a player has not replaced the placed block since we set it.</li>
+         *   <li>{@code Original}: serialized BlockState (Name + Properties) of what was there
+         *       BEFORE the mod overwrote it, or an empty tag when the original was air.
+         *       Used at cleanup to restore the terrain (v3.1.0+).</li>
+         * </ul>
+         *
+         * <p>Pre-v3.1.0 saves stored a plain block-id String at this key; the load path
+         * migrates those entries to the tag form with an empty Original (treat as air).</p>
+         */
+        public final Map<Long, CompoundTag> campBlocks = new LinkedHashMap<>();
+
+        /**
+         * v3.1.0: single writer for the camp-block ledger. Callers must supply both
+         * the placed-block id (so cleanup can verify no player has replaced it) and
+         * the serialized original BlockState of what was there before (so cleanup can
+         * restore the terrain). Pass an empty CompoundTag for {@code originalState}
+         * when the original space was air — the cleanup path treats empty as air.
+         *
+         * <p>Repeated placements update the expected camp block but preserve the
+         * first terrain snapshot, including its block-entity contents.</p>
+         */
+        public void recordCampBlock(long posKey, String placedBlockId, CompoundTag originalState) {
+            CompoundTag record = new CompoundTag();
+            record.putString("Placed", placedBlockId);
+            CompoundTag previous = campBlocks.get(posKey);
+            CompoundTag original = previous == null ? originalState : previous.getCompound("Original");
+            record.put("Original", original == null ? new CompoundTag() : original.copy());
+            campBlocks.put(posKey, record);
+        }
+        /** UUID -> SiegeEngineType.name() for engines currently on the field. */
+        public final Map<UUID, String> siegeEngines = new LinkedHashMap<>();
+        /** How many sappers this raid has already dispatched (capped by config). */
+        public int sappersDispatched;
+        public int lastSiegeSupportWave;
+        public final Map<Long, CompoundTag> breachedBlocks = new LinkedHashMap<>();
+        public final Map<Long, Integer> blockBreachProgress = new HashMap<>();
+        public BlockPos currentBreachBlock;
+        public int currentBreachRequired;
+        public double approachAngle;
+        public int lastCaptureWarningBand;
+        public UUID commanderUuid;
+        public boolean commanderDefeated;
+        public long startedGameTime;
+        public int totalSpawned;
+        public int totalDefeated;
+        public int totalEscaped;
+        public boolean rewardEligible = true;
+        public int lastWarningSecond = Integer.MAX_VALUE;
+        public final Set<UUID> raiders = new HashSet<>();
+        public final Set<UUID> retreatedRaiders = new HashSet<>();
+        public final Map<UUID, Integer> missingTicks = new HashMap<>();
+        /**
+         * Last-known chunk position (packed long) of each raider. Written every
+         * tick a raider is seen alive; read when the entity briefly disappears
+         * so we know whether the chunk they were in is currently loaded. If it
+         * is loaded and they're gone anyway, they died silently (count as
+         * defeated). If it's unloaded, the grace timer advances — that is the
+         * only case where a mob "escapes."
+         */
+        public final Map<UUID, Long> lastKnownChunks = new HashMap<>();
+        /**
+         * Position of the war camp's central campfire. In 2.13.0 destroying
+         * this block cancels any queued reinforcements and disables further
+         * squad spawns for the wave. Null on raids with no camp built yet.
+         */
+        public BlockPos campfirePos;
+        /**
+         * Position of the war camp's central banner. Destroying it declares
+         * the current wave's morale broken — remaining raiders scatter and
+         * the raid advances to the next wave (or ends if this was the last).
+         */
+        public BlockPos bannerPos;
+        /**
+         * Position of the war camp supply barrel. Destroying it drops a
+         * bonus stack of emeralds — rewards aggressive defenders who push
+         * up the hill instead of turtling.
+         */
+        public BlockPos barrelPos;
+        /** Ordered decorative block jobs; placed through the normal camp restoration ledger. */
+        public final Map<Long, String> pendingCampBlocks = new LinkedHashMap<>();
+        public final Set<UUID> campWorkers = new LinkedHashSet<>();
+        public String waveFormation = "LINE";
+        public CompoundTag nativeCamp = new CompoundTag();
+        public boolean campUsesWorkers;
+        public int campBuildTicks;
+        public int campUpgradeStage;
+        public int campUpgradeTicks;
+        /** Only true while collecting the initial camp plan; never saved. */
+        public transient boolean planningCamp;
+        /**
+         * v3.2.0 — damage dealt to raiders by NON-faction defenders during
+         * this siege. Keyed by player UUID; value is total half-hearts of
+         * damage. Non-persistent (transient) because the payout runs at raid
+         * end — if the server restarts mid-raid, the contribution is lost,
+         * which we accept for now to avoid save-format churn.
+         */
+        public final transient Map<UUID, Float> allyDefenderDamage = new HashMap<>();
+        public int reconcileTicks;
+        public boolean performancePauseAnnounced;
+        public boolean offlinePauseAnnounced;
+        /**
+         * Themed narrative for this raid (who is attacking, why, and pre-rendered
+         * flavor strings). Null on raids loaded from pre-2.7 saves or when the
+         * narrative system is disabled in config — callers must fall back cleanly.
+         */
+        public com.devfarinsky.siegeoverhaul.narrative.RaidNarrative narrative;
+
+        /**
+         * Which of the five raiding factions is attacking this raid. Set once
+         * at raid start by {@code RaidEvents.pickFaction()} and persisted so
+         * banners, lore, and future territory logic stay consistent across a
+         * server restart. Null on raids loaded from pre-2.29.0 saves — callers
+         * must fall back to a safe default.
+         *
+         * <p>Valid values: {@code blackbay_reavers}, {@code hollowfang_clan},
+         * {@code emberchant_zealots}, {@code crownfall_exiles},
+         * {@code wilds_marauders}. These match the ids registered in
+         * {@code FactionLore}.</p>
+         */
+        public String factionId;
+
+        public RaidState(String teamKey, String defensePointName, int warningTicks) {
+            this.teamKey = teamKey;
+            this.defensePointName = defensePointName;
+            this.ticksToNextWave = warningTicks;
+        }
+
+        public CompoundTag save() {
+            CompoundTag tag = new CompoundTag();
+            tag.putString("Team", teamKey);
+            tag.putString("DefensePoint", defensePointName);
+            if (campClaimId != null) tag.putUUID("CampClaimId", campClaimId);
+            tag.put("WarGate",warGate.copy());tag.putInt("WarGateWaitTicks",warGateWaitTicks);
+            tag.putInt("ReinforcementStallTicks",reinforcementStallTicks);
+            tag.putBoolean("CampGuardsStarted", campGuardsStarted);
+            tag.putInt("CampCompletedBlocks", campCompletedBlocks);
+            ListTag guards = new ListTag();
+            campGuards.forEach(id -> { CompoundTag entry = new CompoundTag(); entry.putUUID("Id",id); guards.add(entry); });
+            tag.put("CampGuards", guards);
+            tag.putInt("Wave", wave);
+            tag.putInt("NextWave", ticksToNextWave);
+            tag.putInt("PreparationTicks", preparationTicks);
+            tag.putInt("PreparationTotal", preparationTotalTicks);
+            CompoundTag forts = new CompoundTag();
+            pendingFortifications.forEach((pos, block) -> forts.putString(Long.toString(pos), block));
+            tag.put("FortificationJobs", forts);
+            tag.putInt("Abandoned", abandonedTicks);
+            tag.putInt("WaveStartingCount", waveStartingCount);
+            tag.putInt("PlannedWaveSize", plannedWaveSize);
+            tag.putInt("PendingWaveSpawns", pendingWaveSpawns);
+            tag.putInt("NextSquad", ticksToNextSquad);
+            tag.putInt("SquadsSpawned", squadsSpawned);
+            tag.putInt("CaptureTicks", captureTicks);
+            tag.putBoolean("CoreCaptured", coreCaptured);
+            if(campSearchPos!=null) tag.putLong("CampSearchPos",campSearchPos.asLong());
+            tag.putInt("CampSearchStep",campSearchStep);
+            tag.putInt("CampSearchTicks",campSearchTicks);
+            tag.putBoolean("CampCrewStarted",campCrewStarted);
+            tag.putInt("BreachTicks", breachTicks);
+            tag.putBoolean("Breached", breached);
+            tag.putInt("BreachWarningBand", lastBreachWarningBand);
+            if (campPos != null) tag.putLong("CampPosition", campPos.asLong());
+            if (campfirePos != null) tag.putLong("CampfirePos", campfirePos.asLong());
+            if (bannerPos != null) tag.putLong("BannerPos", bannerPos.asLong());
+            if (factionId != null) tag.putString("FactionId", factionId);
+            if (barrelPos != null) tag.putLong("BarrelPos", barrelPos.asLong());
+            tag.putBoolean("CampBuildAttempted", campBuildAttempted);
+            if (navalStagingPos != null) tag.putLong("NavalStagingPos", navalStagingPos.asLong());
+            if (navalBeachPos != null) tag.putLong("NavalBeachPos", navalBeachPos.asLong());
+            tag.putInt("SappersDispatched", sappersDispatched);
+            tag.putInt("LastSiegeSupportWave", lastSiegeSupportWave);
+            ListTag siegeList = new ListTag();
+            siegeEngines.forEach((uuid, typeName) -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putUUID("UUID", uuid);
+                entry.putString("Type", typeName);
+                siegeList.add(entry);
+            });
+            tag.put("SiegeEngines", siegeList);
+            ListTag camp = new ListTag();
+            campBlocks.forEach((position, record) -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putLong("Position", position);
+                // v3.1.0: keep the legacy "Block" flat string in place for downgrade
+                // compatibility (a pre-3.1 mod loading a 3.1-saved world will still
+                // find its expected placed-id key), and add the richer Record tag
+                // with both placed id and original state.
+                entry.putString("Block", record.getString("Placed"));
+                entry.put("Record", record.copy());
+                camp.add(entry);
+            });
+            tag.put("CampBlocks", camp);
+            ListTag jobs = new ListTag();
+            pendingCampBlocks.forEach((position, block) -> {
+                CompoundTag job = new CompoundTag();
+                job.putLong("Position", position);
+                job.putString("Block", block);
+                jobs.add(job);
+            });
+            tag.put(ModConstants.Tags.CAMP_JOBS, jobs);
+            ListTag crew = new ListTag();
+            campWorkers.forEach(uuid -> {
+                CompoundTag worker = new CompoundTag();
+                worker.putUUID("UUID", uuid);
+                crew.add(worker);
+            });
+            tag.put(ModConstants.Tags.CAMP_CREW, crew);
+            tag.putString(ModConstants.Tags.WAVE_FORMATION, waveFormation);
+            tag.put(ModConstants.Tags.NATIVE_CAMP, nativeCamp.copy());
+            tag.putBoolean(ModConstants.Tags.CAMP_USES_WORKERS, campUsesWorkers);
+            tag.putInt(ModConstants.Tags.CAMP_BUILD_TICKS, campBuildTicks);
+            tag.putInt("CampUpgradeStage",campUpgradeStage);
+            tag.putInt("CampUpgradeTicks",campUpgradeTicks);
+            ListTag breached = new ListTag();
+            breachedBlocks.forEach((position, blockState) -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putLong("Position", position);
+                entry.put("State", blockState.copy());
+                breached.add(entry);
+            });
+            tag.put("BreachedBlocks", breached);
+            ListTag breachProgress = new ListTag();
+            blockBreachProgress.forEach((position, progress) -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putLong("Position", position);
+                entry.putInt("Progress", progress);
+                breachProgress.add(entry);
+            });
+            tag.put("BlockBreachProgress", breachProgress);
+            if (currentBreachBlock != null) tag.putLong("CurrentBreachBlock", currentBreachBlock.asLong());
+            tag.putInt("CurrentBreachRequired", currentBreachRequired);
+            tag.putDouble("ApproachAngle", approachAngle);
+            tag.putInt("CaptureWarningBand", lastCaptureWarningBand);
+            if (commanderUuid != null) tag.putUUID("Commander", commanderUuid);
+            tag.putBoolean("CommanderDefeated", commanderDefeated);
+            tag.putLong("StartedGameTime", startedGameTime);
+            tag.putInt("TotalSpawned", totalSpawned);
+            tag.putInt("TotalDefeated", totalDefeated);
+            tag.putInt("TotalEscaped", totalEscaped);
+            tag.putBoolean("RewardEligible", rewardEligible);
+            ListTag ids = new ListTag();
+            raiders.forEach(id -> ids.add(StringTag.valueOf(id.toString())));
+            tag.put("Raiders", ids);
+            ListTag retreated = new ListTag();
+            retreatedRaiders.forEach(id -> retreated.add(StringTag.valueOf(id.toString())));
+            tag.put(ModConstants.Tags.RETREATED_RAIDERS, retreated);
+            ListTag missing = new ListTag();
+            missingTicks.forEach((id, ticks) -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putUUID("Id", id);
+                entry.putInt("Ticks", ticks);
+                missing.add(entry);
+            });
+            tag.put("MissingEntities", missing);
+            // v2.20.0 SD1: persist lastKnownChunks so updateTrackedMobs can
+            // still distinguish "chunk loaded, mob gone (defeated)" from
+            // "chunk unloaded (grace timer, may escape)" after a mid-raid
+            // restart. Without this, every previously-tracked raider whose
+            // entity is missing at load time falls into the escape branch
+            // and inflates totalEscaped / deflates totalDefeated in the
+            // wave summary and war journal entry.
+            ListTag chunks = new ListTag();
+            lastKnownChunks.forEach((id, chunkKey) -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putUUID("Id", id);
+                entry.putLong("Chunk", chunkKey);
+                chunks.add(entry);
+            });
+            tag.put("LastKnownChunks", chunks);
+            if (narrative != null) tag.put("Narrative", narrative.save());
+            return tag;
+        }
+
+        public static RaidState load(CompoundTag tag) {
+            String point = tag.getString("DefensePoint");
+            if (point.isBlank()) point = HOME_POINT;
+            RaidState state = new RaidState(tag.getString("Team"), point, tag.getInt("NextWave"));
+            state.wave = tag.getInt("Wave");
+            state.campClaimId = tag.hasUUID("CampClaimId") ? tag.getUUID("CampClaimId") : null;
+            state.warGate=tag.getCompound("WarGate").copy();state.warGateWaitTicks=Math.max(0,tag.getInt("WarGateWaitTicks"));
+            state.reinforcementStallTicks=Math.max(0,tag.getInt("ReinforcementStallTicks"));
+            state.campGuardsStarted = tag.getBoolean("CampGuardsStarted");
+            state.campCompletedBlocks = tag.getInt("CampCompletedBlocks");
+            ListTag guards = tag.getList("CampGuards", Tag.TAG_COMPOUND);
+            for (int i=0;i<guards.size();i++) if (guards.getCompound(i).hasUUID("Id")) state.campGuards.add(guards.getCompound(i).getUUID("Id"));
+            state.preparationTotalTicks = Math.max(0, tag.getInt("PreparationTotal"));
+            state.preparationTicks = Math.max(0, Math.min(state.preparationTotalTicks, tag.getInt("PreparationTicks")));
+            CompoundTag forts = tag.getCompound("FortificationJobs");
+            for (String key : forts.getAllKeys()) {
+                try { state.pendingFortifications.put(Long.parseLong(key), forts.getString(key)); }
+                catch (NumberFormatException ignored) { }
+            }
+            state.abandonedTicks = tag.getInt("Abandoned");
+            state.waveStartingCount = tag.getInt("WaveStartingCount");
+            state.plannedWaveSize = tag.contains("PlannedWaveSize", Tag.TAG_INT) ?
+                    tag.getInt("PlannedWaveSize") : state.waveStartingCount;
+            state.pendingWaveSpawns = tag.getInt("PendingWaveSpawns");
+            state.ticksToNextSquad = tag.getInt("NextSquad");
+            state.squadsSpawned = tag.getInt("SquadsSpawned");
+            state.captureTicks = tag.getInt("CaptureTicks");
+            state.coreCaptured = tag.getBoolean("CoreCaptured");
+            if(tag.contains("CampSearchPos")) state.campSearchPos=BlockPos.of(tag.getLong("CampSearchPos"));
+            state.campSearchStep=Math.max(0,tag.getInt("CampSearchStep"));
+            state.campSearchTicks=Math.max(0,tag.getInt("CampSearchTicks"));
+            state.campCrewStarted=tag.contains("CampCrewStarted")?tag.getBoolean("CampCrewStarted"):tag.contains("CampPosition");
+            state.breachTicks = tag.getInt("BreachTicks");
+            state.breached = tag.contains("Breached", Tag.TAG_BYTE) ?
+                    tag.getBoolean("Breached") : state.wave > 0;
+            state.lastBreachWarningBand = tag.getInt("BreachWarningBand");
+            state.campPos = tag.contains("CampPosition", Tag.TAG_LONG) ?
+                    BlockPos.of(tag.getLong("CampPosition")) : null;
+            // v2.13.0 (DATA_VERSION 11) additions. Older saves omit these
+            // tags entirely — leave nulls in place; the runtime treats them
+            // as "no strategic camp blocks yet" and the next raid rebuilds.
+            state.campfirePos = tag.contains("CampfirePos", Tag.TAG_LONG) ?
+                    BlockPos.of(tag.getLong("CampfirePos")) : null;
+            state.bannerPos = tag.contains("BannerPos", Tag.TAG_LONG) ?
+                    BlockPos.of(tag.getLong("BannerPos")) : null;
+            state.factionId = tag.contains("FactionId", Tag.TAG_STRING) ?
+                    tag.getString("FactionId") : null;
+            state.barrelPos = tag.contains("BarrelPos", Tag.TAG_LONG) ?
+                    BlockPos.of(tag.getLong("BarrelPos")) : null;
+            state.campBuildAttempted = tag.getBoolean("CampBuildAttempted");
+            state.navalStagingPos = tag.contains("NavalStagingPos", Tag.TAG_LONG) ?
+                    BlockPos.of(tag.getLong("NavalStagingPos")) : null;
+            state.navalBeachPos = tag.contains("NavalBeachPos", Tag.TAG_LONG) ?
+                    BlockPos.of(tag.getLong("NavalBeachPos")) : null;
+            state.sappersDispatched = tag.getInt("SappersDispatched");
+            state.lastSiegeSupportWave = tag.getInt("LastSiegeSupportWave");
+            ListTag siegeList = tag.getList("SiegeEngines", Tag.TAG_COMPOUND);
+            for (int i = 0; i < siegeList.size(); i++) {
+                CompoundTag entry = siegeList.getCompound(i);
+                if (entry.hasUUID("UUID")) {
+                    state.siegeEngines.put(entry.getUUID("UUID"), entry.getString("Type"));
+                }
+            }
+            ListTag camp = tag.getList("CampBlocks", Tag.TAG_COMPOUND);
+            for (int i = 0; i < camp.size(); i++) {
+                CompoundTag entry = camp.getCompound(i);
+                CompoundTag record;
+                if (entry.contains("Record", Tag.TAG_COMPOUND)) {
+                    // v3.1.0+ format: pull the full record tag.
+                    record = entry.getCompound("Record").copy();
+                } else {
+                    // Legacy pre-v3.1.0 format: only the placed-block string is stored.
+                    // Migrate to the new record shape with an empty Original tag; the
+                    // cleanup path will treat empty-Original entries as air-was-here and
+                    // simply delete the placed block without attempting to restore.
+                    record = new CompoundTag();
+                    record.putString("Placed", entry.getString("Block"));
+                    record.put("Original", new CompoundTag());
+                }
+                state.campBlocks.put(entry.getLong("Position"), record);
+            }
+            ListTag jobs = tag.getList(ModConstants.Tags.CAMP_JOBS, Tag.TAG_COMPOUND);
+            for (int i = 0; i < jobs.size(); i++) {
+                CompoundTag job = jobs.getCompound(i);
+                state.pendingCampBlocks.put(job.getLong("Position"), job.getString("Block"));
+            }
+            ListTag crew = tag.getList(ModConstants.Tags.CAMP_CREW, Tag.TAG_COMPOUND);
+            for (int i = 0; i < crew.size(); i++) {
+                CompoundTag worker = crew.getCompound(i);
+                if (worker.hasUUID("UUID")) state.campWorkers.add(worker.getUUID("UUID"));
+            }
+            if (tag.contains(ModConstants.Tags.WAVE_FORMATION)) state.waveFormation = tag.getString(ModConstants.Tags.WAVE_FORMATION);
+            state.nativeCamp = tag.getCompound(ModConstants.Tags.NATIVE_CAMP).copy();
+            state.campUsesWorkers = tag.getBoolean(ModConstants.Tags.CAMP_USES_WORKERS);
+            state.campUpgradeStage=Math.max(0,Math.min(3,tag.getInt("CampUpgradeStage")));
+            state.campUpgradeTicks=Math.max(0,Math.min(2400,tag.getInt("CampUpgradeTicks")));
+            state.campBuildTicks = Math.max(0, tag.getInt(ModConstants.Tags.CAMP_BUILD_TICKS));
+            ListTag breached = tag.getList("BreachedBlocks", Tag.TAG_COMPOUND);
+            for (int i = 0; i < breached.size(); i++) {
+                CompoundTag entry = breached.getCompound(i);
+                state.breachedBlocks.put(entry.getLong("Position"), entry.getCompound("State").copy());
+            }
+            ListTag breachProgress = tag.getList("BlockBreachProgress", Tag.TAG_COMPOUND);
+            for (int i = 0; i < breachProgress.size(); i++) {
+                CompoundTag entry = breachProgress.getCompound(i);
+                state.blockBreachProgress.put(entry.getLong("Position"), entry.getInt("Progress"));
+            }
+            state.currentBreachBlock = tag.contains("CurrentBreachBlock", Tag.TAG_LONG) ?
+                    BlockPos.of(tag.getLong("CurrentBreachBlock")) : null;
+            state.currentBreachRequired = tag.getInt("CurrentBreachRequired");
+            state.approachAngle = tag.contains("ApproachAngle", Tag.TAG_DOUBLE) ?
+                    tag.getDouble("ApproachAngle") : 0.0D;
+            state.lastCaptureWarningBand = tag.getInt("CaptureWarningBand");
+            state.commanderUuid = tag.hasUUID("Commander") ? tag.getUUID("Commander") : null;
+            state.commanderDefeated = tag.getBoolean("CommanderDefeated");
+            state.startedGameTime = tag.getLong("StartedGameTime");
+            state.totalSpawned = tag.getInt("TotalSpawned");
+            state.totalDefeated = tag.getInt("TotalDefeated");
+            state.totalEscaped = tag.getInt("TotalEscaped");
+            state.rewardEligible = !tag.contains("RewardEligible", Tag.TAG_BYTE) ||
+                    tag.getBoolean("RewardEligible");
+            ListTag ids = tag.getList("Raiders", Tag.TAG_STRING);
+            for (int i = 0; i < ids.size(); i++) {
+                try {
+                    state.raiders.add(UUID.fromString(ids.getString(i)));
+                } catch (IllegalArgumentException ignored) {}
+            }
+            ListTag retreated = tag.getList(ModConstants.Tags.RETREATED_RAIDERS, Tag.TAG_STRING);
+            for (int i = 0; i < retreated.size(); i++) {
+                try { state.retreatedRaiders.add(UUID.fromString(retreated.getString(i))); }
+                catch (IllegalArgumentException ignored) { }
+            }
+            state.raiders.removeAll(state.retreatedRaiders);
+            if (!tag.contains("TotalSpawned", Tag.TAG_INT)) {
+                // A 2.1 raid cannot reconstruct earlier casualties, but counting
+                // every currently tracked attacker keeps upgraded summaries sane.
+                state.totalSpawned = state.raiders.size();
+            }
+            if (tag.contains("Narrative", Tag.TAG_COMPOUND)) {
+                state.narrative = com.devfarinsky.siegeoverhaul.narrative.RaidNarrative.load(tag.getCompound("Narrative"));
+            }
+            ListTag missing = tag.getList("MissingEntities", Tag.TAG_COMPOUND);
+            for (int i = 0; i < missing.size(); i++) {
+                CompoundTag entry = missing.getCompound(i);
+                if (entry.hasUUID("Id")) state.missingTicks.put(entry.getUUID("Id"), entry.getInt("Ticks"));
+            }
+            // v2.20.0 SD1: hydrate lastKnownChunks. Older saves (pre-2.20)
+            // omit this tag entirely; leave the map empty and let the next
+            // tick repopulate from live mobs. That fallback still degrades
+            // the accuracy of the very first wave summary after an upgrade
+            // save loads, but it's a one-time cost, and every subsequent
+            // restart writes and reads it correctly.
+            ListTag chunks = tag.getList("LastKnownChunks", Tag.TAG_COMPOUND);
+            for (int i = 0; i < chunks.size(); i++) {
+                CompoundTag entry = chunks.getCompound(i);
+                if (entry.hasUUID("Id")) state.lastKnownChunks.put(entry.getUUID("Id"), entry.getLong("Chunk"));
+            }
+            return state;
+        }
+    }
+}

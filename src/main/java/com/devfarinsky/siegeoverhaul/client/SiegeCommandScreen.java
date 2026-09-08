@@ -1,0 +1,757 @@
+package com.devfarinsky.siegeoverhaul.client;
+
+import com.devfarinsky.siegeoverhaul.RaidEvents;
+import com.devfarinsky.siegeoverhaul.RaidNetwork;
+import com.devfarinsky.siegeoverhaul.client.codex.DefensePlaybook;
+import com.devfarinsky.siegeoverhaul.client.codex.FactionLore;
+import com.devfarinsky.siegeoverhaul.client.codex.UnitCodex;
+import com.devfarinsky.siegeoverhaul.narrative.RaiderFaction;
+import com.devfarinsky.siegeoverhaul.narrative.RaiderFactionRegistry;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractButton;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * The Warlord's Codex — a tabbed in-game reference book.
+ *
+ * <p>Design goals for v2.11.0:
+ * <ul>
+ *   <li>Every tab must be actionable during a live siege — no lore-only pages
+ *       with no gameplay value.</li>
+ *   <li>Left-rail tab navigation preserves the "book" feel while giving
+ *       enough panel width to render tables and cards on the main pane.</li>
+ *   <li>The Overview tab is the crisis dashboard: it opens by default and is
+ *       laid out to be readable while a raid is happening on screen behind
+ *       the panel.</li>
+ *   <li>The Test Siege button was intentionally removed in 2.11.0. All players
+ *       can trigger a siege manually with <code>/siegeoverhaul start</code>,
+ *       so the button was redundant and confused new players about which
+ *       action was "safe" versus "will pay out rewards."</li>
+ * </ul>
+ */
+@OnlyIn(Dist.CLIENT)
+public final class SiegeCommandScreen extends Screen {
+
+    // Panel is wider than the pre-2.11 dashboard because the Factions tab needs
+    // room for a faction list column + faction detail pane side-by-side, and
+    // the Units tab needs a bestiary list + stat block. 460x256 is close to
+    // the maximum that fits comfortably on a 1080p window at default GUI scale.
+    private int PANEL_WIDTH = 460;
+    private int PANEL_HEIGHT = 256;
+    private static final int TAB_RAIL_WIDTH = 96;
+    private static final int HEADER_HEIGHT = 34;
+    private static final int FOOTER_HEIGHT = 30;
+
+    // Palette — kept identical to the pre-2.11 dashboard so nothing looks
+    // out of place if a screenshot is compared before/after.
+    private static final int INK = 0xFFF2E9D2;
+    private static final int MUTED = 0xFFB8AD98;
+    private static final int SUBTLE = 0xFF8A8172;
+    private static final int GOLD = 0xFFE0B45B;
+    private static final int RED = 0xFFD9534F;
+    private static final int GREEN = 0xFF58B878;
+    private static final int BLUE = 0xFF60A9C7;
+    private static final int PANEL_TOP = 0xF21A1A20;
+    private static final int PANEL_BOTTOM = 0xF20C0D11;
+    private static final int RAIL_BG = 0xFF13141A;
+    private static final int CARD_BG = 0xD926272E;
+    private static final int CARD_BORDER = 0xFF454149;
+    private static final int OUTER_BORDER = 0xFF6D5840;
+
+    private enum Tab {
+        OVERVIEW("Core", GOLD),
+        FACTIONS("Enemy lore", BLUE),
+        UNITS("Units", RED),
+        DEFENSE("How to play", GREEN),
+        JOURNAL("Journal", 0xFFD0A05C),
+        COMMANDS("Commands", 0xFFB08CE0);
+
+        final String label;
+        final int accent;
+        Tab(String label, int accent) { this.label = label; this.accent = accent; }
+    }
+
+    // Wave filter chip options for the Units tab. "all" is the default.
+    private static final String[] WAVE_FILTERS = {"all", "1+", "2+", "3+", "final"};
+
+    private RaidEvents.DashboardSnapshot snapshot;
+    private int left;
+    private int top;
+    private int syncTicks;
+    private Tab activeTab = Tab.OVERVIEW;
+    // Sub-selection within Factions and Units tabs. Persist across re-init
+    // (which happens on server sync) so the player doesn't lose their place.
+    private int selectedFactionIndex = 0;
+    private int selectedUnitIndex = 0;
+    // Defense tab scroll offset in tip rows (2 tips per row).
+    private int defenseScrollRows = 0;
+    // Units tab wave filter index into WAVE_FILTERS.
+    private int unitFilterIndex = 0;
+
+    public SiegeCommandScreen(RaidEvents.DashboardSnapshot snapshot) {
+        super(Component.literal("Warlord's Codex"));
+        this.snapshot = snapshot;
+    }
+
+    /**
+     * Called when a new DashboardSync arrives from the server. Rebuild widgets
+     * because button labels/states depend on {@link RaidEvents.DashboardSnapshot#active()}.
+     */
+    public void updateSnapshot(RaidEvents.DashboardSnapshot snapshot) {
+        this.snapshot = snapshot;
+        clearWidgets();
+        init();
+        // If the currently open faction tab is highlighting the actual attacker,
+        // auto-scroll to the attacker's index on the first snapshot that has it.
+        // This is a nice-to-have; if nothing matches we leave selection alone.
+        if (activeTab == Tab.FACTIONS && snapshot.factionId() != null && !snapshot.factionId().isEmpty()) {
+            List<String> ids = List.copyOf(RaiderFactionRegistry.all().keySet());
+            int idx = ids.indexOf(snapshot.factionId());
+            if (idx >= 0) selectedFactionIndex = idx;
+        }
+    }
+
+    @Override
+    public void tick() {
+        // Poll the server every 2 seconds so a siege in progress updates the
+        // Overview card. 40 ticks matches the pre-2.11 cadence.
+        if (++syncTicks >= 40) {
+            syncTicks = 0;
+            RaidNetwork.sendDashboardAction(RaidNetwork.Action.SYNC);
+        }
+    }
+
+    @Override
+    protected void init() {
+        PANEL_WIDTH=Math.min(460,width-16); PANEL_HEIGHT=Math.min(256,height-16);
+        left = (width - PANEL_WIDTH) / 2;
+        top = (height - PANEL_HEIGHT) / 2;
+
+        // Tab rail buttons. Each tab is a full-width button in the left rail.
+        int railX = left + 8;
+        int railTop = top + HEADER_HEIGHT + 8;
+        int tabHeight = 22;
+        int tabSpacing = 4;
+        Tab[] tabs = {Tab.OVERVIEW,Tab.DEFENSE,Tab.JOURNAL};
+        for (int i = 0; i < tabs.length; i++) {
+            final Tab t = tabs[i];
+            int y = railTop + i * (tabHeight + tabSpacing);
+            addRenderableWidget(new TabButton(railX, y, TAB_RAIL_WIDTH - 16, tabHeight,
+                    Component.literal(t.label), t, activeTab == t,
+                    () -> { activeTab = t; clearWidgets(); init(); }));
+        }
+
+        // Footer actions. Refresh Home is universally useful; the Test Siege
+        // button from the pre-2.11 layout is deliberately gone.
+        int footerY = top + PANEL_HEIGHT - FOOTER_HEIGHT + 5;
+        int contentX = left + TAB_RAIL_WIDTH;
+        int contentW = PANEL_WIDTH - TAB_RAIL_WIDTH - 8;
+        int buttonW = (contentW - 32) / 3;
+        addRenderableWidget(new ActionButton(contentX + 8, footerY, buttonW, 20,
+                Component.literal("Your faction"), BLUE, NativeRecruitsMenus::factions));
+        addRenderableWidget(new ActionButton(contentX + 16 + buttonW, footerY, buttonW, 20,
+                Component.literal("Claim map"), GOLD, NativeRecruitsMenus::claims));
+        addRenderableWidget(new ActionButton(contentX + 24 + buttonW * 2, footerY, buttonW, 20,
+                Component.literal("Sync"), GOLD, () -> RaidNetwork.sendDashboardAction(RaidNetwork.Action.SYNC)));
+
+        if(activeTab==Tab.DEFENSE) {
+            addRenderableWidget(new ActionButton(contentX+8,top+HEADER_HEIGHT+contentHeightForGuide()-18,44,16,
+                    Component.literal("Prev"),BLUE,()->defenseScrollRows=Math.max(0,defenseScrollRows-1)));
+            addRenderableWidget(new ActionButton(left+PANEL_WIDTH-60,top+HEADER_HEIGHT+contentHeightForGuide()-18,44,16,
+                    Component.literal("Next"),BLUE,()->defenseScrollRows=Math.min(DefensePlaybook.TIPS.size()-1,defenseScrollRows+1)));
+        }
+        // Faction / Unit sub-navigation for their respective tabs.
+        if (activeTab == Tab.FACTIONS) {
+            initFactionSubnav(contentX, contentW);
+        } else if (activeTab == Tab.UNITS) {
+            initUnitSubnav(contentX, contentW);
+            initUnitFilterChips(contentX, contentW);
+        }
+    }
+
+    /**
+     * Renders the wave filter chip row above the Units tab detail pane so
+     * players can slice the codex by which wave a unit first appears in.
+     * The filter is a display-only convenience; it never hides units the
+     * player has already discovered.
+     */
+    private void initUnitFilterChips(int contentX, int contentW) {
+        int chipX = contentX + 148;
+        int chipY = top + HEADER_HEIGHT + 10;
+        int chipW = 44;
+        int chipH = 14;
+        int gap = 4;
+        for (int i = 0; i < WAVE_FILTERS.length; i++) {
+            final int idx = i;
+            String label = "Wave " + WAVE_FILTERS[i];
+            if (WAVE_FILTERS[i].equals("all")) label = "All";
+            if (WAVE_FILTERS[i].equals("final")) label = "Final";
+            addRenderableWidget(new TabButton(chipX + i * (chipW + gap), chipY, chipW, chipH,
+                    Component.literal(label), null, unitFilterIndex == i,
+                    () -> { unitFilterIndex = idx; clearWidgets(); init(); }, RED));
+        }
+    }
+
+    private void initFactionSubnav(int contentX, int contentW) {
+        // Vertical list of faction picker chips in the left half of the content.
+        List<Map.Entry<String, RaiderFaction>> list = new ArrayList<>(RaiderFactionRegistry.all().entrySet());
+        int listX = contentX + 8;
+        int listY = top + HEADER_HEIGHT + 12;
+        int chipH = 20;
+        for (int i = 0; i < list.size(); i++) {
+            final int idx = i;
+            RaiderFaction f = list.get(i).getValue();
+            int color = chatColorToArgb(f.accent(), BLUE);
+            boolean isAttacker = f.id().equals(snapshot.factionId());
+            String label = f.name() + (isAttacker ? "  \u2694" : "");
+            addRenderableWidget(new TabButton(listX, listY + i * (chipH + 3), 150, chipH,
+                    Component.literal(label), null, selectedFactionIndex == i,
+                    () -> { selectedFactionIndex = idx; clearWidgets(); init(); }, color));
+        }
+    }
+
+    private void initUnitSubnav(int contentX, int contentW) {
+        // Vertical list of unit picker chips.
+        int listX = contentX + 8;
+        int listY = top + HEADER_HEIGHT + 12;
+        int chipH = 16;
+        List<UnitCodex.Entry> entries = UnitCodex.ENTRIES;
+        for (int i = 0; i < entries.size(); i++) {
+            final int idx = i;
+            UnitCodex.Entry e = entries.get(i);
+            addRenderableWidget(new TabButton(listX, listY + i * (chipH + 2), 130, chipH,
+                    Component.literal(e.name()), null, selectedUnitIndex == i,
+                    () -> { selectedUnitIndex = idx; clearWidgets(); init(); }, RED));
+        }
+    }
+
+    @Override
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        renderBackground(graphics);
+        drawPanel(graphics);
+        super.render(graphics, mouseX, mouseY, partialTick);
+    }
+
+    private void drawPanel(GuiGraphics graphics) {
+        // Panel chrome.
+        graphics.fillGradient(left, top, left + PANEL_WIDTH, top + PANEL_HEIGHT, PANEL_TOP, PANEL_BOTTOM);
+        border(graphics, left, top, PANEL_WIDTH, PANEL_HEIGHT, OUTER_BORDER);
+
+        // Header bar.
+        graphics.fillGradient(left + 1, top + 1, left + PANEL_WIDTH - 1, top + HEADER_HEIGHT + 1,
+                0xFF5A1718, 0xFF291619);
+        graphics.fill(left + 12, top + 10, left + 16, top + HEADER_HEIGHT - 6, RED);
+        graphics.drawString(font, "WARLORD'S CODEX", left + 22, top + 8, GOLD, false);
+        graphics.drawString(font, trim(snapshot.faction(), PANEL_WIDTH-40), left + 22, top + 20, INK, false);
+        String readiness = snapshot.nextWaveLabel().startsWith("Recapture")?"CORE OCCUPIED":snapshot.active()?"SIEGE ACTIVE":snapshot.registered()?"CORE READY":"PLACE CORE";
+        int readinessColor = snapshot.active() ? RED : GREEN;
+        graphics.drawString(font, readiness, left + PANEL_WIDTH - 12 - font.width(readiness),
+                top + 14, readinessColor, false);
+
+        // Tab rail background.
+        graphics.fill(left + 1, top + HEADER_HEIGHT + 1, left + TAB_RAIL_WIDTH,
+                top + PANEL_HEIGHT - 1, RAIL_BG);
+        graphics.fill(left + TAB_RAIL_WIDTH - 1, top + HEADER_HEIGHT + 1, left + TAB_RAIL_WIDTH,
+                top + PANEL_HEIGHT - 1, CARD_BORDER);
+
+        // Content pane per tab.
+        int contentX = left + TAB_RAIL_WIDTH + 4;
+        int contentY = top + HEADER_HEIGHT + 8;
+        int contentW = PANEL_WIDTH - TAB_RAIL_WIDTH - 12;
+        int contentH = PANEL_HEIGHT - HEADER_HEIGHT - FOOTER_HEIGHT - 10;
+        switch (activeTab) {
+            case OVERVIEW -> drawOverview(graphics, contentX, contentY, contentW, contentH);
+            case FACTIONS -> drawFactions(graphics, contentX, contentY, contentW, contentH);
+            case UNITS -> drawUnits(graphics, contentX, contentY, contentW, contentH);
+            case DEFENSE -> drawDefense(graphics, contentX, contentY, contentW, contentH);
+            case JOURNAL -> drawJournal(graphics, contentX, contentY, contentW, contentH);
+            case COMMANDS -> drawCommands(graphics, contentX, contentY, contentW, contentH);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // OVERVIEW TAB — live siege dashboard
+    // ---------------------------------------------------------------------
+
+    private int contentHeightForGuide() { return PANEL_HEIGHT-HEADER_HEIGHT-FOOTER_HEIGHT-10; }
+
+    private void drawOverview(GuiGraphics graphics, int x, int y, int w, int h) {
+        boolean reclaim=snapshot.nextWaveLabel().startsWith("Recapture") || snapshot.cooldown().startsWith("Core occupied");
+        card(graphics,x,y,w,46,"SIEGE CORE",BLUE);
+        graphics.drawString(font,trim(snapshot.registered()?snapshot.stronghold():"Place a core in your faction claim",w-20),x+10,y+22,INK,false);
+        graphics.drawString(font,trim(snapshot.claimName().isBlank()?"Use the claim map below":snapshot.claimName(),w-20),x+10,y+34,MUTED,false);
+        int sy=y+52;
+        card(graphics,x,sy,w,60,reclaim?"RECAPTURE":snapshot.active()?"DEFEND":"PREPARE",reclaim?RED:GOLD);
+        String status=snapshot.active()?snapshot.cooldown():reclaim?"Outnumber enemies at the core":snapshot.registered()?"Next siege: "+snapshot.cooldown():"Claim land, then place your core";
+        graphics.drawString(font,trim(status,w-20),x+10,sy+22,INK,false);
+        if(snapshot.active() || reclaim) {
+            progressBar(graphics,x+10,sy+38,w-52,snapshot.occupationPercent(),reclaim?BLUE:RED);
+            graphics.drawString(font,snapshot.occupationPercent()+"%",x+w-36,sy+36,INK,false);
+        } else graphics.drawString(font,trim("Hire troops and heroes at the core",w-20),x+10,sy+38,MUTED,false);
+        int by=y+118;
+        card(graphics,x,by,w,Math.max(38,h-118),"FIELD REPORT",GREEN);
+        String report=snapshot.active()?"Wave "+snapshot.wave()+"/"+snapshot.totalWaves()+" • "+snapshot.deployed()+" enemies":snapshot.recruits()+" nearby recruits";
+        graphics.drawString(font,trim(report,w-20),x+10,by+20,INK,false);
+        if(h>=170) graphics.drawString(font,trim(snapshot.active() && !snapshot.campDirection().isBlank()?"Camp: "+snapshot.campDirection()+" • "+snapshot.campDistance()+"m":"Keep a reserve beside your core",w-20),x+10,by+34,MUTED,false);
+    }
+
+    // ---------------------------------------------------------------------
+    // FACTIONS TAB — bestiary of raider factions
+    // ---------------------------------------------------------------------
+
+    private void drawFactions(GuiGraphics graphics, int x, int y, int w, int h) {
+        // Left side: list of faction chips (rendered as widgets in initFactionSubnav)
+        // Right side: detail pane.
+        int detailX = x + 162;
+        int detailW = w - 162;
+        List<Map.Entry<String, RaiderFaction>> list = new ArrayList<>(RaiderFactionRegistry.all().entrySet());
+        if (selectedFactionIndex >= list.size()) selectedFactionIndex = 0;
+        RaiderFaction f = list.get(selectedFactionIndex).getValue();
+        int accent = chatColorToArgb(f.accent(), BLUE);
+
+        card(graphics, detailX, y, detailW, h, f.name().toUpperCase(), accent);
+        graphics.drawString(font, "Epithet:  " + f.epithet(), detailX + 10, y + 22, INK, false);
+        graphics.drawString(font, "Accent:  " + f.accent().getName(), detailX + 10, y + 34, MUTED, false);
+
+        String tagLine = f.casusBelliTags().isEmpty() ? "Universal \u2014 any pretext" :
+                String.join(", ", f.casusBelliTags());
+        graphics.drawString(font, "Pretexts:", detailX + 10, y + 50, MUTED, false);
+        graphics.drawString(font, trim(tagLine, detailW - 30), detailX + 10, y + 62, INK, false);
+
+        // Faction lore — v2.12.0 pulls from client-side FactionLore registry
+        // instead of a hardcoded switch, so datapack factions can register
+        // matching entries at client mod init without touching this file.
+        boolean discoveredFaction = isFactionDiscovered(f.id());
+        if (discoveredFaction) {
+            List<String> lore = FactionLore.get(f.id());
+            int loreY = y + 82;
+            for (String line : lore) {
+                graphics.drawString(font, trim(line, detailW - 30), detailX + 10, loreY, MUTED, false);
+                loreY += 12;
+                if (loreY > y + h - 30) break;
+            }
+        } else {
+            // Undiscovered — hide lore behind fog-of-war.
+            graphics.drawString(font, "UNKNOWN FACTION", detailX + 10, y + 82, MUTED, false);
+            graphics.drawString(font, "Survive a siege against them or kill", detailX + 10, y + 96, SUBTLE, false);
+            graphics.drawString(font, "one of their raiders to reveal.", detailX + 10, y + 108, SUBTLE, false);
+        }
+
+        // Attacker indicator.
+        if (f.id().equals(snapshot.factionId())) {
+            graphics.drawString(font, "\u2694 CURRENTLY ATTACKING", detailX + 10, y + h - 20, RED, false);
+            if (!snapshot.factionChant().isEmpty()) {
+                graphics.drawString(font, trim("Chant: " + snapshot.factionChant(), detailW - 30),
+                        detailX + 10, y + h - 8, GOLD, false);
+            }
+        }
+    }
+
+    private boolean isFactionDiscovered(String id) {
+        // The active attacker is always considered discovered so players can
+        // read up on who's currently at their gates.
+        if (id.equals(snapshot.factionId())) return true;
+        return snapshot.discoveredFactions().contains(id);
+    }
+
+    private boolean isUnitDiscovered(String id) {
+        return snapshot.discoveredUnits().contains(id);
+    }
+
+    /**
+     * Wave-filter predicate: whether {@code entry.availability()} matches the
+     * currently selected wave filter chip. Availability strings from
+     * {@link UnitCodex} look like "Wave 1+", "Wave 2+", "Final wave" — we do
+     * a substring check because the strings are hand-authored.
+     */
+    private boolean matchesWaveFilter(UnitCodex.Entry entry) {
+        String filter = WAVE_FILTERS[unitFilterIndex];
+        if ("all".equals(filter)) return true;
+        String a = entry.availability() == null ? "" : entry.availability().toLowerCase(java.util.Locale.ROOT);
+        return switch (filter) {
+            case "1+" -> a.contains("wave 1") || a.contains("all wave") || a.contains("any wave");
+            case "2+" -> a.contains("wave 2") || a.contains("wave 3") || a.contains("final") || a.contains("all wave");
+            case "3+" -> a.contains("wave 3") || a.contains("final") || a.contains("all wave");
+            case "final" -> a.contains("final");
+            default -> true;
+        };
+    }
+
+    // ---------------------------------------------------------------------
+    // UNITS TAB — bestiary of individual raider unit types
+    // ---------------------------------------------------------------------
+
+    private void drawUnits(GuiGraphics graphics, int x, int y, int w, int h) {
+        int detailX = x + 142;
+        int detailW = w - 142;
+        if (selectedUnitIndex >= UnitCodex.ENTRIES.size()) selectedUnitIndex = 0;
+        UnitCodex.Entry e = UnitCodex.ENTRIES.get(selectedUnitIndex);
+
+        // Filter chip strip is added as widgets in initUnitFilterChips; leave
+        // a small header row for it above the detail pane.
+        int titleY = y + 20;
+        boolean discovered = isUnitDiscovered(e.id());
+        boolean matchesFilter = matchesWaveFilter(e);
+
+        card(graphics, detailX, titleY, detailW, h - 20,
+                discovered ? e.name().toUpperCase() : "???", RED);
+
+        if (!discovered) {
+            graphics.drawString(font, "Unknown unit type", detailX + 10, titleY + 22, MUTED, false);
+            graphics.drawString(font, "Kill one to add it to your codex.", detailX + 10, titleY + 36, SUBTLE, false);
+            graphics.drawString(font, "Appears: " + trim(e.availability(), detailW - 80),
+                    detailX + 10, titleY + h - 40, MUTED, false);
+            return;
+        }
+
+        // Discovered — render full page. Filter mismatch just gets a soft note
+        // so the entry is never fully hidden after it's been earned.
+        graphics.drawString(font, e.tagline(), detailX + 10, titleY + 22, INK, false);
+        graphics.drawString(font, trim(e.stats(), detailW - 20), detailX + 10, titleY + 38, GOLD, false);
+
+        int lineY = titleY + 56;
+        lineY = drawLabelBody(graphics, detailX + 10, lineY, detailW - 20, "Behavior", e.behavior());
+        lineY = drawLabelBody(graphics, detailX + 10, lineY + 4, detailW - 20, "Counter", e.counter());
+        lineY = drawLabelBody(graphics, detailX + 10, lineY + 4, detailW - 20, "Drops", e.drops());
+        graphics.drawString(font, "Appears: " + e.availability(),
+                detailX + 10, y + h - 18, matchesFilter ? MUTED : SUBTLE, false);
+    }
+
+    private int drawLabelBody(GuiGraphics graphics, int x, int y, int w, String label, String body) {
+        graphics.drawString(font, label + ":", x, y, MUTED, false);
+        int consumed = y + 10;
+        // Naive wrap: break body into ~w-width lines using the font.
+        List<String> lines = wrap(body, w);
+        for (String line : lines) {
+            graphics.drawString(font, line, x, consumed, INK, false);
+            consumed += 10;
+        }
+        return consumed;
+    }
+
+    // ---------------------------------------------------------------------
+    // DEFENSE TAB — tips playbook
+    // ---------------------------------------------------------------------
+
+    private void drawDefense(GuiGraphics graphics, int x, int y, int w, int h) {
+        defenseScrollRows=Mth.clamp(defenseScrollRows,0,DefensePlaybook.TIPS.size()-1);
+        var tip=DefensePlaybook.TIPS.get(defenseScrollRows);
+        card(graphics,x,y,w,h,tip.tag().toUpperCase(java.util.Locale.ROOT),GREEN);
+        int lineY=y+23;
+        for(String line:wrap(tip.title(),w-20)) { graphics.drawString(font,line,x+10,lineY,INK,false);lineY+=11; }
+        lineY+=6;
+        for(String line:wrap(tip.body(),w-20)) {
+            if(lineY>y+h-38)break;
+            graphics.drawString(font,line,x+10,lineY,MUTED,false);lineY+=11;
+        }
+        graphics.drawCenteredString(font,(defenseScrollRows+1)+" / "+DefensePlaybook.TIPS.size(),x+w/2,y+h-18,SUBTLE);
+    }
+
+    // ---------------------------------------------------------------------
+    // JOURNAL TAB — last N sieges (v2.12.0)
+    // ---------------------------------------------------------------------
+
+    /**
+     * War Journal renders the newest-first list of siege outcomes for this
+     * team. Each row is a compact card with faction, waves reached, outcome
+     * tag, and payout. This is the durable memory of "what has happened to
+     * us" and drives the discovery + fog-of-war reveal on Factions/Units.
+     */
+    private void drawJournal(GuiGraphics graphics, int x, int y, int w, int h) {
+        List<RaidEvents.JournalRow> rows = snapshot.warJournal();
+        if (rows.isEmpty()) {
+            card(graphics, x, y, w, h, "WAR JOURNAL", 0xFFD0A05C);
+            graphics.drawString(font, "No sieges recorded yet.", x + 10, y + 22, INK, false);
+            graphics.drawString(font, "Survive (or fall to) a siege and it will", x + 10, y + 36, MUTED, false);
+            graphics.drawString(font, "appear here \u2014 most recent first.", x + 10, y + 48, MUTED, false);
+            return;
+        }
+        int rowH = 32;
+        int gap = 3;
+        int visible = Math.min(rows.size(), (h - 10) / (rowH + gap));
+        for (int i = 0; i < visible; i++) {
+            RaidEvents.JournalRow r = rows.get(i);
+            int cy = y + i * (rowH + gap);
+            int outcomeColor = switch (r.outcome()) {
+                case "victory" -> GREEN;
+                case "victory_practice" -> GOLD;
+                case "defeat" -> RED;
+                default -> MUTED;
+            };
+            String outcomeLabel = switch (r.outcome()) {
+                case "victory" -> "VICTORY";
+                case "victory_practice" -> "PRACTICE WIN";
+                case "defeat" -> "DEFEAT";
+                default -> r.outcome().toUpperCase(java.util.Locale.ROOT);
+            };
+            card(graphics, x, cy, w, rowH, outcomeLabel, outcomeColor);
+            String title = (r.factionName() == null || r.factionName().isEmpty() ? "Unknown faction" : r.factionName())
+                    + "  \u2022  wave " + r.wavesReached() + "/" + r.totalWaves();
+            graphics.drawString(font, trim(title, w - 120), x + 10, cy + 20, INK, false);
+            String right = r.emeraldPayout() > 0 ? ("+" + r.emeraldPayout() + " emeralds") : "no reward";
+            graphics.drawString(font, right,
+                    x + w - 10 - font.width(right), cy + 20,
+                    r.emeraldPayout() > 0 ? GOLD : SUBTLE, false);
+        }
+        if (rows.size() > visible) {
+            String note = "+" + (rows.size() - visible) + " older entries (kept up to 10 total)";
+            graphics.drawString(font, note, x + 4, y + h - 12, SUBTLE, false);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // COMMANDS TAB — /siegeoverhaul reference
+    // ---------------------------------------------------------------------
+
+    /**
+     * Commands reference. v2.28.0 rewrite: entries are pulled from the
+     * actual registered command tree in {@link com.devfarinsky.siegeoverhaul.command.RaidCommands}
+     * instead of a hardcoded list \u2014 the pre-2.28 list invented
+     * {@code /reset} and {@code /config reload} which never existed, and
+     * omitted every anchor/territory/team command. Grouped so the tab
+     * doesn't turn into a wall of text.
+     */
+    private void drawCommands(GuiGraphics graphics, int x, int y, int w, int h) {
+        card(graphics, x, y, w, h, "COMMAND REFERENCE", 0xFFB08CE0);
+        String[][] cmds = new String[][]{
+                // -- Play --
+                {"/siegeoverhaul menu", "Open this Codex."},
+                {"/siegeoverhaul start", "Trigger your stronghold's next siege now."},
+                {"/siegeoverhaul status", "Print live siege status in chat."},
+                {"/siegeoverhaul help", "List every subcommand in chat."},
+                // -- Anchor --
+                {"/siegeoverhaul anchor set <team>", "Set your anchor at your current position."},
+                {"/siegeoverhaul anchor claim", "Claim ownership of the anchor at your position."},
+                {"/siegeoverhaul anchor remove", "Remove the anchor at your position."},
+                {"/siegeoverhaul home automatic <bool>", "Check the placed faction core."},
+                {"/siegeoverhaul home refresh", "Check your faction Siege Core."},
+                // -- Team --
+                {"/siegeoverhaul member add|remove|list", "Manage your faction roster."},
+                {"/siegeoverhaul territory add|remove|list", "Track additional bases as defense points."},
+                // -- Admin --
+                {"/siegeoverhaul stop", "Cancel the active siege (ops only)."},
+                {"/siegeoverhaul admin list|stop|remove|repair", "Server-wide raid administration (ops only)."},
+                {"/siegeoverhaul debug", "Verbose diagnostic dump (ops only)."},
+        };
+        int lineY = y + 22;
+        for (String[] pair : cmds) {
+            graphics.drawString(font, pair[0], x + 10, lineY, GOLD, false);
+            List<String> desc = wrap(pair[1], w - 30);
+            int dy = lineY + 10;
+            for (String line : desc) {
+                graphics.drawString(font, line, x + 20, dy, MUTED, false);
+                dy += 10;
+            }
+            lineY = dy + 3;
+            if (lineY > y + h - 16) break;
+        }
+        graphics.drawString(font, "All commands verified against the command tree on load.",
+                x + 10, y + h - 12, SUBTLE, false);
+    }
+
+    // ---------------------------------------------------------------------
+    // Rendering helpers
+    // ---------------------------------------------------------------------
+
+    private void card(GuiGraphics graphics, int x, int y, int w, int h, String title, int accent) {
+        graphics.fill(x, y, x + w, y + h, CARD_BG);
+        graphics.fill(x, y, x + 3, y + h, accent);
+        border(graphics, x, y, w, h, CARD_BORDER);
+        graphics.drawString(font, title, x + 10, y + 8, accent, false);
+    }
+
+    private void stat(GuiGraphics graphics, int x, int y, String name, int value, int color, int rightEdge) {
+        graphics.drawString(font, name, x, y, MUTED, false);
+        String number = Integer.toString(value);
+        graphics.drawString(font, number, rightEdge - 10 - font.width(number), y, color, false);
+    }
+
+    private void progressBar(GuiGraphics graphics, int x, int y, int width, int percent, int color) {
+        graphics.fill(x, y, x + width, y + 7, 0xFF111217);
+        int fill = Mth.clamp(percent, 0, 100) * width / 100;
+        if (fill > 0) graphics.fillGradient(x, y, x + fill, y + 7, darken(color), color);
+        border(graphics, x, y, width, 7, 0xFF514A43);
+    }
+
+    private void border(GuiGraphics graphics, int x, int y, int w, int h, int color) {
+        graphics.fill(x, y, x + w, y + 1, color);
+        graphics.fill(x, y + h - 1, x + w, y + h, color);
+        graphics.fill(x, y, x + 1, y + h, color);
+        graphics.fill(x + w - 1, y, x + w, y + h, color);
+    }
+
+    private String trim(String text, int maxWidth) {
+        return font.plainSubstrByWidth(text, maxWidth);
+    }
+
+    /**
+     * Naive word-wrap. Splits on spaces and greedily packs words up to
+     * {@code maxWidth}. Adequate for the short tip and command strings used
+     * in this book; not intended for long paragraphs.
+     */
+    private List<String> wrap(String text, int maxWidth) {
+        List<String> out = new ArrayList<>();
+        if (text == null || text.isEmpty()) { out.add(""); return out; }
+        String[] words = text.split(" ");
+        StringBuilder line = new StringBuilder();
+        for (String word : words) {
+            String candidate = line.length() == 0 ? word : line + " " + word;
+            if (font.width(candidate) > maxWidth && line.length() > 0) {
+                out.add(line.toString());
+                line = new StringBuilder(word);
+            } else {
+                line = new StringBuilder(candidate);
+            }
+        }
+        if (line.length() > 0) out.add(line.toString());
+        return out;
+    }
+
+    private static int darken(int color) {
+        int r = ((color >> 16) & 0xFF) * 2 / 3;
+        int g = ((color >> 8) & 0xFF) * 2 / 3;
+        int b = (color & 0xFF) * 2 / 3;
+        return 0xFF000000 | r << 16 | g << 8 | b;
+    }
+
+    private static int chatColorToArgb(ChatFormatting fmt, int fallback) {
+        if (fmt == null || fmt.getColor() == null) return fallback;
+        return 0xFF000000 | fmt.getColor();
+    }
+
+    @Override
+    public boolean isPauseScreen() {
+        return false;
+    }
+
+    /**
+     * Mouse wheel scroll for the Defense tab. Ignored on other tabs so the
+     * scroll wheel keeps behaving like a no-op there rather than surprising
+     * the player.
+     */
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (activeTab == Tab.DEFENSE) {
+            if (delta > 0 && defenseScrollRows > 0) {
+                defenseScrollRows--;
+                return true;
+            } else if (delta < 0) {
+                defenseScrollRows++;
+                return true;
+            }
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (activeTab == Tab.DEFENSE) {
+            // 265 = up, 264 = down (GLFW).
+            if (keyCode == 265 && defenseScrollRows > 0) {
+                defenseScrollRows--;
+                return true;
+            } else if (keyCode == 264) {
+                defenseScrollRows++;
+                return true;
+            }
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    // ---------------------------------------------------------------------
+    // Widgets
+    // ---------------------------------------------------------------------
+
+    /**
+     * Left-rail tab button. When {@code accentOverride > 0} the accent bar
+     * uses that color; used by the faction sub-nav to color-tag each faction
+     * chip with its faction accent.
+     */
+    private static final class TabButton extends AbstractButton {
+        private final Tab tab;
+        private final boolean selected;
+        private final Runnable action;
+        private final int accentOverride;
+
+        private TabButton(int x, int y, int width, int height, Component message, Tab tab,
+                          boolean selected, Runnable action) {
+            this(x, y, width, height, message, tab, selected, action, 0);
+        }
+
+        private TabButton(int x, int y, int width, int height, Component message, Tab tab,
+                          boolean selected, Runnable action, int accentOverride) {
+            super(x, y, width, height, message);
+            this.tab = tab;
+            this.selected = selected;
+            this.action = action;
+            this.accentOverride = accentOverride;
+        }
+
+        @Override
+        public void onPress() {
+            action.run();
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            int accent = accentOverride != 0 ? accentOverride : (tab != null ? tab.accent : GOLD);
+            int background = selected ? 0xFF302E34 :
+                    isHoveredOrFocused() ? 0xFF25252A : 0xFF1B1B21;
+            graphics.fill(getX(), getY(), getX() + width, getY() + height, background);
+            graphics.fill(getX(), getY(), getX() + 3, getY() + height,
+                    selected ? accent : 0xFF3A3A40);
+            int textColor = selected ? INK : MUTED;
+            graphics.drawString(Minecraft.getInstance().font, getMessage(),
+                    getX() + 8, getY() + (height - 8) / 2, textColor, false);
+        }
+
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput output) {
+            defaultButtonNarrationText(output);
+        }
+    }
+
+    /** Footer action button. Same visual language as the pre-2.11 SiegeButton. */
+    private static final class ActionButton extends AbstractButton {
+        private final int accent;
+        private final Runnable action;
+
+        private ActionButton(int x, int y, int width, int height, Component message,
+                             int accent, Runnable action) {
+            super(x, y, width, height, message);
+            this.accent = accent;
+            this.action = action;
+        }
+
+        @Override
+        public void onPress() {
+            action.run();
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            int background = !active ? 0xFF25252A : isHoveredOrFocused() ? 0xFF46414A : 0xFF302E34;
+            graphics.fill(getX(), getY(), getX() + width, getY() + height, background);
+            graphics.fill(getX(), getY(), getX() + 3, getY() + height, active ? accent : 0xFF55555A);
+            int textColor = active ? INK : 0xFF77777B;
+            graphics.drawCenteredString(Minecraft.getInstance().font, getMessage(),
+                    getX() + width / 2 + 1, getY() + (height - 8) / 2, textColor);
+        }
+
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput output) {
+            defaultButtonNarrationText(output);
+        }
+    }
+}
