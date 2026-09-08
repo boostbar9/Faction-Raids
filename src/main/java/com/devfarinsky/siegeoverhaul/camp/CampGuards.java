@@ -40,7 +40,7 @@ public final class CampGuards {
                 RecruitsBridge.configureHostileRaidRecruit(guard);
                 RecruitsBridge.assignToRaidersFaction(guard);
                 guard.getClass().getMethod("setListen", boolean.class).invoke(guard,false);
-                guard.getClass().getMethod("setHoldPos", BlockPos.class).invoke(guard,guard.blockPosition());
+                guard.getClass().getMethod("setHoldPos", net.minecraft.world.phys.Vec3.class).invoke(guard,guard.position());
                 guard.getClass().getMethod("setFollowState", int.class).invoke(guard,3);
                 var inventory = guard.getClass().getMethod("getInventory").invoke(guard);
                 if (inventory instanceof net.minecraft.world.SimpleContainer container) {

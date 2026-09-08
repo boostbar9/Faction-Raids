@@ -53,7 +53,7 @@ class NativeCampConstructionTest extends MinecraftTestSupport {
     }
 
     @Test
-    void replacementStopsNativeCrewBeforeTheirAiCanMineIt() {
+    void temporaryObstructionsPauseAndResumeTheSameNativeJobs() {
         var level = org.mockito.Mockito.mock(net.minecraft.server.level.ServerLevel.class);
         var server = org.mockito.Mockito.mock(net.minecraft.server.MinecraftServer.class);
         var worker = org.mockito.Mockito.mock(net.minecraft.world.entity.Mob.class);
