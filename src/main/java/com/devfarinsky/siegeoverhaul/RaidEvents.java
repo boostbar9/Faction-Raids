@@ -3659,7 +3659,8 @@ public final class RaidEvents {
                 if (RaidConfig.CONE_FALLBACK_ENABLED.get()
                         && stuck != null && stuck.escalationLevel >= 1
                         && mob instanceof PathfinderMob pmob) {
-                    target = coneFallbackTarget(pmob, objective);
+                    target = com.devfarinsky.siegeoverhaul.raid.FlankRoutes.find(level, pmob, objective);
+                    if (target == null) target = coneFallbackTarget(pmob, objective);
                 }
                 if (target != null) {
                     mob.getNavigation().moveTo(target.x, target.y, target.z, speed);
