@@ -7,6 +7,22 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 class CoreLootTest extends MinecraftTestSupport {
+    @Test void purchaseChatDoesNotSpoilAnyRewardBeforeTheReveal() {
+        for (int box=0;box<3;box++) for (int roll:new int[]{0,50,80,95}) {
+            var player=mock(ServerPlayer.class);var level=mock(ServerLevel.class);var inv=new Inventory(player);
+            var random=mock(net.minecraft.util.RandomSource.class);
+            when(player.getInventory()).thenReturn(inv);when(player.serverLevel()).thenReturn(level);
+            when(player.getPersistentData()).thenReturn(new net.minecraft.nbt.CompoundTag());
+            when(player.getRandom()).thenReturn(random);when(random.nextInt(100)).thenReturn(roll);
+            inv.items.set(0,new ItemStack(Items.EMERALD,64));inv.items.set(1,new ItemStack(Items.EMERALD,64));
+            var receipt=CoreLoot.purchaseWithReceipt(player,box);assertNotNull(receipt);
+            var message=org.mockito.ArgumentCaptor.forClass(net.minecraft.network.chat.Component.class);
+            verify(player).sendSystemMessage(message.capture());
+            assertEquals("Opening "+CoreLoot.NAMES[box]+"... Reward secured in your inventory.",message.getValue().getString());
+            assertEquals(128-CoreLoot.price(box),inv.countItem(Items.EMERALD));
+            assertTrue(inv.items.stream().anyMatch(s->ItemStack.isSameItemSameTags(s,receipt.prize())));
+        }
+    }
     @Test void exactAdvertisedOddsAndInvalidRolls() {
         int[] counts=new int[4];
         for(int roll=0;roll<100;roll++) {
