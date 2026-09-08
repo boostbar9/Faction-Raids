@@ -38,6 +38,7 @@ public final class NativeCampConstruction {
         Entity build = null, storage = null;
         BlockPos supply = null;
         try {
+            if(!CampRoad.prepare(level,raid))return false;
             for (long key : raid.pendingCampBlocks.keySet()) {
                 BlockPos p = BlockPos.of(key);
                 if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)
@@ -53,7 +54,7 @@ public final class NativeCampConstruction {
                     max.getX() - min.getX() + 1, max.getZ() - min.getZ() + 1, max.getY() - min.getY() + 1);
             CompoundTag blueprint = blueprint(raid.pendingCampBlocks);
             WorkersBridge.startBlueprint(build, blueprint);
-            List<ItemStack> supplies = splitStacks(WorkersBridge.materials(build));
+            List<ItemStack> supplies = splitStacks(materials(level, raid.pendingCampBlocks));
             if (supplies.size() > 27) throw new IllegalStateException("Camp supplies exceed barrel capacity");
             storage = WorkersBridge.createArea(level, "storagearea", supply, owner, 1, 1, 1);
 
@@ -64,10 +65,7 @@ public final class NativeCampConstruction {
                 BlockState before = level.getBlockState(p);
                 CompoundTag original = before.isAir() ? new CompoundTag() : BlockRestoration.serializeState(level, p, before);
                 raid.recordCampBlock(job.getKey(), job.getValue(), original);
-                if(CampVegetation.plant(before) && !CampVegetation.clear(level,raid,p))
-                    throw new IllegalStateException("Cannot clear camp vegetation");
-                if (!before.isAir() && !level.setBlock(p, Blocks.AIR.defaultBlockState(), 3))
-                    throw new IllegalStateException("Cannot prepare camp cell");
+                if (!prepareCell(level, raid, p)) throw new IllegalStateException("Cannot prepare camp cell at " + p);
             }
             if(CampVegetation.plant(level.getBlockState(supply)) && !CampVegetation.clear(level,raid,supply))throw new IllegalStateException("Supply site vegetation blocked");
             if(CampVegetation.plant(level.getBlockState(supply.above())) && !CampVegetation.clear(level,raid,supply.above()))throw new IllegalStateException("Supply access vegetation blocked");
@@ -136,6 +134,39 @@ public final class NativeCampConstruction {
         });
         tag.put("blocks", blocks);
         return tag;
+    }
+
+    static void recoverMissingGateCells(ServerLevel level, RaidSavedData.RaidState raid) {
+        if (raid.warGate.getBoolean("GateRepair480")) return;
+        raid.warGate.putBoolean("GateRepair480", true);
+        var cells=raid.warGate.getCompound("Blocks");
+        for(String key:cells.getAllKeys()) {
+            BlockPos pos=BlockPos.of(Long.parseLong(key));
+            // Recover only empty cells in the existing protected blueprint. Never
+            // remove player replacements or replenish completed construction.
+            if(raid.pendingCampBlocks.size()<512 && level.hasChunkAt(pos) && level.getBlockState(pos).isAir())
+                raid.pendingCampBlocks.putIfAbsent(pos.asLong(),cells.getString(key));
+        }
+    }
+
+    static boolean prepareCell(ServerLevel level, RaidSavedData.RaidState raid, BlockPos pos) {
+        if (CampVegetation.plant(level.getBlockState(pos))) return CampVegetation.clear(level, raid, pos);
+        return level.getBlockState(pos).isAir() || level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+    }
+
+    static List<ItemStack> materials(ServerLevel level, Map<Long, String> jobs) throws ReflectiveOperationException {
+        Map<net.minecraft.world.item.Item, Integer> counts = new LinkedHashMap<>();
+        for (String id : jobs.values()) {
+            var block = ForgeRegistries.BLOCKS.getValue(new ResourceLocation(id));
+            if (block == null || block == Blocks.AIR) throw new IllegalArgumentException("Invalid camp material " + id);
+            var item = WorkersBridge.buildMaterial(level, block);
+            if (item == null || item == net.minecraft.world.item.Items.AIR)
+                throw new IllegalStateException("No native material for " + id);
+            // Native placement consumes one parsed item per cell, including non-block
+            // ingredients such as amethyst shards omitted by getRequiredMaterials().
+            counts.merge(item, 1, Integer::sum);
+        }
+        return counts.entrySet().stream().map(e -> new ItemStack(e.getKey(), e.getValue())).toList();
     }
 
     static List<ItemStack> splitStacks(List<ItemStack> materials) {

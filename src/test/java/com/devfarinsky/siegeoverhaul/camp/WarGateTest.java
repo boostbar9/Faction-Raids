@@ -17,7 +17,9 @@ class WarGateTest extends MinecraftTestSupport {
         ServerLevel level=mock(ServerLevel.class);
         when(level.hasChunkAt(any())).thenReturn(true);
         when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(64);
-        when(level.getBlockState(any())).thenReturn(Blocks.AIR.defaultBlockState());
+        var border=mock(net.minecraft.world.level.border.WorldBorder.class);when(level.getWorldBorder()).thenReturn(border);
+        when(border.isWithinBounds(any(BlockPos.class))).thenReturn(true);when(level.getMinBuildHeight()).thenReturn(-64);when(level.getMaxBuildHeight()).thenReturn(320);
+        when(level.getBlockState(any())).thenAnswer(a->((BlockPos)a.getArgument(0)).getY()<64?Blocks.DIRT.defaultBlockState():Blocks.AIR.defaultBlockState());
         when(level.getFluidState(any())).thenAnswer(a->((BlockPos)a.getArgument(0)).getX()>18
                 ?net.minecraft.world.level.material.Fluids.WATER.defaultFluidState():net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState());
         var raid=new RaidSavedData.RaidState("team:test","siege_core",0);raid.campPos=new BlockPos(8,64,8);

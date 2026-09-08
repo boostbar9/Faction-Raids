@@ -134,6 +134,7 @@ public final class RaidEvents {
         if (raid != null && com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.active(raid)
                 && ((RaidConfig.PAUSE_WHEN_FACTION_OFFLINE.get() && onlineMembers(level.getServer(), team).isEmpty())
                 || !com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.safeToTick(level, raid))) event.setCanceled(true);
+        if(raid!=null && !event.isCanceled())com.devfarinsky.siegeoverhaul.camp.BuilderSupport.tick(level,mob,raid);
     }
 
     @SubscribeEvent

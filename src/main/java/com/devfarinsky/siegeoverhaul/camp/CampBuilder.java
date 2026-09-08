@@ -43,6 +43,14 @@ public final class CampBuilder {
     public static void tick(ServerLevel level, RaidState raid, BiConsumer<BlockPos, Block> place) {
         if (raid.pendingCampBlocks.isEmpty() || !com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level, raid)) return;
         if (NativeCampConstruction.active(raid)) { NativeCampConstruction.tick(level, raid); return; }
+        // One upgrade recovery for old fallback jobs. Never respawn a dead crew or
+        // repeatedly refill supplies. The native bridge handles elevated placements.
+        if (!raid.warGate.getBoolean("NativeRecovery480") && !raid.warGate.isEmpty()
+                && raid.campWorkers.stream().anyMatch(id -> level.getEntity(id) instanceof Mob m && m.isAlive())) {
+            raid.warGate.putBoolean("NativeRecovery480", true);
+            com.devfarinsky.siegeoverhaul.RaidSavedData.get(level.getServer()).setDirty();
+            if (NativeCampConstruction.start(level, raid)) return;
+        }
         // Do not force-load the camp, or time out while its chunk is unloaded.
         BlockPos first = BlockPos.of(raid.pendingCampBlocks.keySet().iterator().next());
         if (!level.hasChunkAt(first)) return;
