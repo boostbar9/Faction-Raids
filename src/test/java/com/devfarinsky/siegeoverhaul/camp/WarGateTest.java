@@ -28,6 +28,7 @@ class WarGateTest extends MinecraftTestSupport {
         raid.warGate.putLong("Center",c.asLong());raid.warGate.putInt("Facing",Direction.NORTH.get2DDataValue());raid.warGate.put("Blocks",cells);
         raid=RaidSavedData.RaidState.load(raid.save());assertEquals(c,WarGate.center(raid));
         ServerLevel level=mock(ServerLevel.class);when(level.hasChunkAt(any())).thenReturn(true);
+        when(level.getFluidState(any())).thenReturn(net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState());
         when(level.getBlockState(any())).thenAnswer(a->{String id=plan.get(((BlockPos)a.getArgument(0)).asLong());return id==null?Blocks.AIR.defaultBlockState():ForgeRegistries.BLOCKS.getValue(new ResourceLocation(id)).defaultBlockState();});
         Mob mob=mock(Mob.class);when(mob.position()).thenReturn(Vec3.ZERO);when(mob.getBoundingBox()).thenReturn(new AABB(-.3,0,-.3,.3,1.95,.3));
         when(level.noCollision(eq(mob),any(AABB.class))).thenReturn(true);when(level.getEntities(eq(mob),any(AABB.class))).thenReturn(List.of());
