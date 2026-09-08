@@ -26,6 +26,18 @@ class RaiderLadderGoalTest extends MinecraftTestSupport {
         }
         return level;
     }
+    @Test void crossingFindsInsideGroundBeyondThickWallAndRejectsDeepDrops() {
+        var level=wall(Direction.EAST,4);
+        when(level.getFluidState(any())).thenReturn(net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState());
+        var route=RaiderLadderGoal.readRoute(level,base);
+        // Two-block-thick wall, then ground at original approach height.
+        for(int y=0;y<4;y++)blocks.put(base.east(2).above(y),Blocks.STONE.defaultBlockState());
+        blocks.put(base.east(3).below(),Blocks.DIRT.defaultBlockState());
+        assertEquals(base.east(3),RaiderLadderGoal.findLanding(level,route));
+        blocks.remove(base.east(3).below());assertNull(RaiderLadderGoal.findLanding(level,route));
+        blocks.put(base.east(3).below(),Blocks.MAGMA_BLOCK.defaultBlockState());assertNull(RaiderLadderGoal.findLanding(level,route));
+    }
+
     @Test void findsExitAboveWallForEveryApproachDirection() {
         for (Direction dir : Direction.Plane.HORIZONTAL) {
             blocks.clear();
