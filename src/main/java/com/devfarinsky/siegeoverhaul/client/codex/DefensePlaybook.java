@@ -20,22 +20,11 @@ import java.util.List;
 public final class DefensePlaybook {
 
     public static final List<Tip> TIPS = List.of(
-            new Tip("Stronghold", "Defend your Siege Core",
-                    "Place one core in your faction's Recruits claim in the Overworld. Enemies must outnumber you and your recruits within 10 horizontal and 3 vertical blocks for 120 seconds by default. Ties pause progress. There is no perimeter timer."),
-            new Tip("Recruitment", "Check the core's hire offers",
-                    "Right-click the core for three shared faction hires. Each slot rolls 80% recruit, 10% shieldman and 10% archer. Stock refreshes every 15 minutes of server runtime. Native hiring prices, currency and unit limits apply."),
-            new Tip("Preparation", "Watch the enemy foothold grow",
-                    "By default, the enemy spends four minutes establishing camp, four building a timber palisade, and four gathering its first wave. The horn marks the assault. Builders need daytime to work; unfinished structures do not prevent an assault."),
-            new Tip("Counterattack", "Disrupt the muster",
-                    "The first wave gathers at camp before marching. Attack the assembling troops to weaken it. Once that wave is active, the campfire can stop its remaining reinforcements and the banner can force it to retreat."),
-            new Tip("Defense", "Keep soldiers near the core",
-                    "An enemy outside your wall is a threat; an enemy occupying the core is a losing siege. Keep a reserve inside the occupation ring and watch the pressure indicator."),
-            new Tip("Naval", "Watch the landing beach",
-                    "Later squads may arrive by warship when the coast supports a landing. Raiders disembark to join the ground assault. Do not leave your shoreline undefended."),
-            new Tip("Siege engines", "Defeat the operator",
-                    "Native Recruits engineers operate supplied ballistae and catapults after preparation. A defeated operator is not replaced. Reach the gun crew or destroy the engine."),
-            new Tip("Recovery", "Protect the faction's claim",
-                    "A captured core transfers its whole Recruits claim to the Raiders. Outnumber the enemy at your core for 120 seconds to reclaim the territory. Your recruits count even while you are offline. Timers and radius are configurable.")
+            new Tip("Setup","Claim land. Place your core.","Create or join a Recruits faction. Claim land in the Overworld, then place one Siege Core inside it. Enemies target that core."),
+            new Tip("Hire","Build your army at the core","Right-click the core for two recruit offers, one worker and a featured hero. Shared faction stock rotates every 15 minutes. Prices are shown before hiring."),
+            new Tip("Defend","Keep troops beside the core","Enemies capture by outnumbering you and your recruits in the core ring. Equal numbers pause progress; a defending majority reverses it. Walls buy time."),
+            new Tip("Recapture","Take your territory back","After capture, gather at the same core and outnumber its occupiers until recapture completes. The claim returns to your faction. Capture settings are configurable."),
+            new Tip("Counterattack","Strike the enemy camp","Builders expand the foothold while guards hold their posts. Disrupt preparations or defeat siege engineers, but leave a reserve to protect your core.")
     );
 
     private DefensePlaybook() {}

@@ -56,23 +56,33 @@ public final class FormationDirector {
         raiders.sort(java.util.Comparator.comparing(Mob::getUUID));
         if (raiders.isEmpty()) return false;
 
-        Vec3 centroid = centroidOf(raiders);
-        Vec3 objVec = Vec3.atCenterOf(objective);
-        double distance = centroid.distanceTo(objVec);
-        // Close enough: let raiders swarm instead of clumping in a shape.
-        if (distance <= DISSOLVE_DISTANCE) {
-            LAST_APPLIED.put(state.teamKey, now);
-            return false;
+        // Local role groups keep separated squads moving instead of waiting for a distant centroid.
+        Map<String,List<Mob>> groups=new java.util.LinkedHashMap<>();
+        for(Mob mob:raiders) {
+            var type=net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(mob.getType());
+            String role=FormationTactics.group(type==null?"":type.getPath());
+            String key=role+":"+(mob.blockPosition().getX()>>4)+":"+(mob.blockPosition().getZ()>>4);
+            groups.computeIfAbsent(key,k->new ArrayList<>()).add(mob);
         }
-
-        // Advance vector = normalized centroid -> objective. Waypoint sits
-        // WAYPOINT_LEAD blocks ahead of the centroid, on the same vector.
-        Vec3 direction = objVec.subtract(centroid).multiply(1, 0, 1);
-        double len = direction.length();
-        Vec3 forward = len < 1.0E-3 ? new Vec3(1, 0, 0) : direction.scale(1.0D / len);
-        Vec3 waypoint = centroid.add(forward.scale(Math.min(WAYPOINT_LEAD, len - 1.0D)));
-
-        boolean dispatched = RecruitsFormationBridge.apply(formation, forward, waypoint, raiders, false);
+        boolean dispatched=false;
+        for(var entry:groups.entrySet()) {
+            List<Mob> group=entry.getValue();
+            if(group.size()<2) { group.forEach(RecruitsFormationBridge::release);continue; }
+            Vec3 centroid=centroidOf(group),delta=Vec3.atCenterOf(objective).subtract(centroid).multiply(1,0,1);
+            if(delta.length()<DISSOLVE_DISTANCE) { group.forEach(RecruitsFormationBridge::release);continue; }
+            Vec3 forward=delta.normalize(),waypoint=centroid.add(forward.scale(WAYPOINT_LEAD));
+            String role=entry.getKey().split(":")[0];
+            if(role.equals("ranged") || role.equals("support")) waypoint=waypoint.subtract(forward.scale(2));
+            boolean narrow=false;
+            for(int side:new int[]{-3,3}) {
+                var p=BlockPos.containing(waypoint.add(-forward.z*side,0,forward.x*side));
+                if(!level.hasChunkAt(p) || !level.getBlockState(p).getCollisionShape(level,p).isEmpty()
+                        || !level.getBlockState(p.above()).getCollisionShape(level,p.above()).isEmpty()
+                        || !level.getBlockState(p.below()).isFaceSturdy(level,p.below(),net.minecraft.core.Direction.UP)) narrow=true;
+            }
+            boolean underFire=group.stream().anyMatch(m -> m.getLastHurtByMob()!=null && m.tickCount-m.getLastHurtByMobTimestamp()<100);
+            dispatched |= RecruitsFormationBridge.applyTactical(level,FormationTactics.choose(role,narrow,underFire),forward,waypoint,group,state.teamKey);
+        }
         LAST_APPLIED.put(state.teamKey, now);
         return dispatched;
     }

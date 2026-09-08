@@ -15,5 +15,8 @@ public enum Formation {
     /** Single line perpendicular to the advance vector. Good for early waves. */
     LINE,
     /** Filled square, three rows deep. Good for mid+ waves and command assault. */
-    SQUARE
+    SQUARE,
+    COLUMN,
+    SKIRMISH,
+    WEDGE
 }

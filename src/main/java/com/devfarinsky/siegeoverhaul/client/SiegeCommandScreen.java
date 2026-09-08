@@ -47,8 +47,8 @@ public final class SiegeCommandScreen extends Screen {
     // room for a faction list column + faction detail pane side-by-side, and
     // the Units tab needs a bestiary list + stat block. 460x256 is close to
     // the maximum that fits comfortably on a 1080p window at default GUI scale.
-    private static final int PANEL_WIDTH = 460;
-    private static final int PANEL_HEIGHT = 256;
+    private int PANEL_WIDTH = 460;
+    private int PANEL_HEIGHT = 256;
     private static final int TAB_RAIL_WIDTH = 96;
     private static final int HEADER_HEIGHT = 34;
     private static final int FOOTER_HEIGHT = 30;
@@ -70,10 +70,10 @@ public final class SiegeCommandScreen extends Screen {
     private static final int OUTER_BORDER = 0xFF6D5840;
 
     private enum Tab {
-        OVERVIEW("Overview", GOLD),
+        OVERVIEW("Core", GOLD),
         FACTIONS("Enemy lore", BLUE),
         UNITS("Units", RED),
-        DEFENSE("Defense", GREEN),
+        DEFENSE("How to play", GREEN),
         JOURNAL("Journal", 0xFFD0A05C),
         COMMANDS("Commands", 0xFFB08CE0);
 
@@ -134,6 +134,7 @@ public final class SiegeCommandScreen extends Screen {
 
     @Override
     protected void init() {
+        PANEL_WIDTH=Math.min(460,width-16); PANEL_HEIGHT=Math.min(256,height-16);
         left = (width - PANEL_WIDTH) / 2;
         top = (height - PANEL_HEIGHT) / 2;
 
@@ -142,7 +143,7 @@ public final class SiegeCommandScreen extends Screen {
         int railTop = top + HEADER_HEIGHT + 8;
         int tabHeight = 22;
         int tabSpacing = 4;
-        Tab[] tabs = Tab.values();
+        Tab[] tabs = {Tab.OVERVIEW,Tab.DEFENSE,Tab.JOURNAL};
         for (int i = 0; i < tabs.length; i++) {
             final Tab t = tabs[i];
             int y = railTop + i * (tabHeight + tabSpacing);
@@ -164,6 +165,12 @@ public final class SiegeCommandScreen extends Screen {
         addRenderableWidget(new ActionButton(contentX + 24 + buttonW * 2, footerY, buttonW, 20,
                 Component.literal("Sync"), GOLD, () -> RaidNetwork.sendDashboardAction(RaidNetwork.Action.SYNC)));
 
+        if(activeTab==Tab.DEFENSE) {
+            addRenderableWidget(new ActionButton(contentX+8,top+HEADER_HEIGHT+contentHeightForGuide()-18,44,16,
+                    Component.literal("Prev"),BLUE,()->defenseScrollRows=Math.max(0,defenseScrollRows-1)));
+            addRenderableWidget(new ActionButton(left+PANEL_WIDTH-60,top+HEADER_HEIGHT+contentHeightForGuide()-18,44,16,
+                    Component.literal("Next"),BLUE,()->defenseScrollRows=Math.min(DefensePlaybook.TIPS.size()-1,defenseScrollRows+1)));
+        }
         // Faction / Unit sub-navigation for their respective tabs.
         if (activeTab == Tab.FACTIONS) {
             initFactionSubnav(contentX, contentW);
@@ -246,8 +253,8 @@ public final class SiegeCommandScreen extends Screen {
                 0xFF5A1718, 0xFF291619);
         graphics.fill(left + 12, top + 10, left + 16, top + HEADER_HEIGHT - 6, RED);
         graphics.drawString(font, "WARLORD'S CODEX", left + 22, top + 8, GOLD, false);
-        graphics.drawString(font, trim(snapshot.faction(), 260), left + 22, top + 20, INK, false);
-        String readiness = snapshot.active() ? "SIEGE ACTIVE" : "STRONGHOLD SECURE";
+        graphics.drawString(font, trim(snapshot.faction(), PANEL_WIDTH-40), left + 22, top + 20, INK, false);
+        String readiness = snapshot.nextWaveLabel().startsWith("Recapture")?"CORE OCCUPIED":snapshot.active()?"SIEGE ACTIVE":snapshot.registered()?"CORE READY":"PLACE CORE";
         int readinessColor = snapshot.active() ? RED : GREEN;
         graphics.drawString(font, readiness, left + PANEL_WIDTH - 12 - font.width(readiness),
                 top + 14, readinessColor, false);
@@ -277,135 +284,26 @@ public final class SiegeCommandScreen extends Screen {
     // OVERVIEW TAB — live siege dashboard
     // ---------------------------------------------------------------------
 
+    private int contentHeightForGuide() { return PANEL_HEIGHT-HEADER_HEIGHT-FOOTER_HEIGHT-10; }
+
     private void drawOverview(GuiGraphics graphics, int x, int y, int w, int h) {
-        // Top row: stronghold card + defenders card.
-        int strongholdW = (w - 8) * 3 / 5;
-        int defendersW = w - 8 - strongholdW;
-        card(graphics, x, y, strongholdW, 62, "STRONGHOLD", BLUE);
-        graphics.drawString(font, trim(snapshot.stronghold(), strongholdW - 20), x + 10, y + 22, INK, false);
-        graphics.drawString(font, snapshot.registered() ? "Target synchronized" :
-                "Place a core inside your faction claim", x + 10, y + 34,
-                snapshot.registered() ? MUTED : RED, false);
-        String coolLabel = snapshot.active() ? "War camp deployed" : "Next siege: " + snapshot.cooldown();
-        graphics.drawString(font, coolLabel, x + 10, y + 46, MUTED, false);
-        // v2.28.0: claim-linked indicator when the defense point was picked
-        // from a Recruits claim (synthetic "claim:" name), so players can tell
-        // at a glance whether v2.27 claim-aware anchoring is in effect here.
-        if (snapshot.claimLinked()) {
-            String tag = snapshot.claimName().isEmpty()
-                    ? "Recruits claim linked"
-                    : "Claim: " + snapshot.claimName();
-            graphics.drawString(font, trim(tag, strongholdW - 20),
-                    x + 10, y + 56, GOLD, false);
-        }
-
-        card(graphics, x + strongholdW + 8, y, defendersW, 62, "DEFENDERS", GREEN);
-        int dx = x + strongholdW + 18;
-        stat(graphics, dx, y + 22, "Recruits", snapshot.recruits(), INK, x + strongholdW + defendersW + 8);
-        stat(graphics, dx, y + 34, "Workers", snapshot.workers(), MUTED, x + strongholdW + defendersW + 8);
-        stat(graphics, dx, y + 46, "War assets",
-                snapshot.ships() + snapshot.siegeWeapons(), MUTED, x + strongholdW + defendersW + 8);
-
-        // Middle row: casus belli quote (if narrative present) OR readiness card.
-        int midY = y + 68;
-        int midH = 62;
-        if (snapshot.active() && !snapshot.factionOpening().isEmpty()) {
-            card(graphics, x, midY, w, midH, "CASUS BELLI", GOLD);
-            graphics.drawString(font, trim("\u201C" + snapshot.factionOpening() + "\u201D", w - 20),
-                    x + 10, midY + 22, INK, false);
-            if (!snapshot.factionChant().isEmpty()) {
-                graphics.drawString(font, trim(snapshot.factionChant(), w - 20),
-                        x + 10, midY + 36, MUTED, false);
-            }
-            if (!snapshot.campDirection().isEmpty()) {
-                String camp = "War camp: " + snapshot.campDirection() + " \u2022 " + snapshot.campDistance() + "m";
-                graphics.drawString(font, camp,
-                        x + w - 12 - font.width(camp), midY + 48, GOLD, false);
-            }
-        } else {
-            card(graphics, x, midY, w, midH, "READINESS", GOLD);
-            graphics.drawString(font, "Emeralds per member:  " + snapshot.emeraldReward(),
-                    x + 10, midY + 22, INK, false);
-            graphics.drawString(font, "Next wave: " + snapshot.nextWaveLabel(),
-                    x + 10, midY + 34, MUTED, false);
-            if (!snapshot.nextWaveComposition().isEmpty()) {
-                graphics.drawString(font, trim(snapshot.nextWaveComposition(), w - 20),
-                        x + 10, midY + 46, SUBTLE, false);
-            }
-        }
-
-        // Bottom row: live siege progress OR defense forecast.
-        int botY = y + 68 + midH + 6;
-        int botH = h - (botY - y);
-        if (snapshot.active()) {
-            card(graphics, x, botY, w, botH, "LIVE SIEGE", RED);
-            graphics.drawString(font, "Wave " + snapshot.wave() + " / " + snapshot.totalWaves(),
-                    x + 10, botY + 22, INK, false);
-            graphics.drawString(font, snapshot.deployed() + " deployed  \u2022  " +
-                            snapshot.reinforcing() + " incoming  \u2022  " + snapshot.defeated() + " defeated",
-                    x + 96, botY + 22, MUTED, false);
-
-            // v2.12.0 threat breakdown — the whole point of Know Your Enemy.
-            // Shows exactly what unit types are on the field right now.
-            if (!snapshot.threatBreakdown().isEmpty()) {
-                graphics.drawString(font, "On field:", x + 10, botY + 34, MUTED, false);
-                graphics.drawString(font, trim(snapshot.threatBreakdown(), w - 60),
-                        x + 55, botY + 34, INK, false);
-            }
-
-            int strategicProgress = snapshot.breached() ? snapshot.occupationPercent() : snapshot.breachPercent();
-            String strategicLabel = snapshot.breached() ? "Core control" : "Perimeter";
-            progressBar(graphics, x + 10, botY + 48, w - 100, strategicProgress,
-                    snapshot.breached() ? RED : GOLD);
-            graphics.drawString(font, strategicLabel + " " + strategicProgress + "%",
-                    x + w - 90, botY + 47, MUTED, false);
-
-            int gateColor = snapshot.gateBreachPercent() >= 75 ? RED : GOLD;
-            progressBar(graphics, x + 10, botY + 60, w - 100, snapshot.gateBreachPercent(), gateColor);
-            graphics.drawString(font, "Gate " + snapshot.gateBreachPercent() + "%",
-                    x + w - 90, botY + 59, MUTED, false);
-
-            // Defense score + explainer stack.
-            int scoreColor = snapshot.defenseScore() >= 55 ? GREEN :
-                    snapshot.defenseScore() >= 35 ? GOLD : RED;
-            graphics.drawString(font, "Defense: " + snapshot.defenseScore() + " / 100 — " +
-                            snapshot.defenseScoreLabel(),
-                    x + 10, botY + 74, scoreColor, false);
-            if (!snapshot.defenseExplainer().isEmpty()) {
-                graphics.drawString(font, trim(snapshot.cooldown(), w - 20),
-                        x + 10, botY + 86, INK, false);
-            }
-        } else {
-            card(graphics, x, botY, w, botH, "DEFENSE FORECAST", GREEN);
-            graphics.drawString(font, "Nearby army:  " + snapshot.recruits() + " Recruits",
-                    x + 10, botY + 22, INK, false);
-            graphics.drawString(font, "Support:  " + snapshot.workers() + " Workers  \u2022  " +
-                            snapshot.ships() + " ships  \u2022  " + snapshot.siegeWeapons() + " siege engines",
-                    x + 10, botY + 34, MUTED, false);
-
-            int scoreColor = snapshot.defenseScore() >= 55 ? GREEN :
-                    snapshot.defenseScore() >= 35 ? GOLD : RED;
-            graphics.drawString(font, "Estimated defense: " + snapshot.defenseScore() + " / 100 — " +
-                            snapshot.defenseScoreLabel(),
-                    x + 10, botY + 50, scoreColor, false);
-            if (!snapshot.defenseExplainer().isEmpty()) {
-                graphics.drawString(font, trim(snapshot.defenseExplainer(), w - 20),
-                        x + 10, botY + 62, SUBTLE, false);
-            }
-            graphics.drawString(font, "Reward eligible: " + (snapshot.rewardEligible() ? "yes" : "no"),
-                    x + 10, botY + 76, snapshot.rewardEligible() ? GOLD : MUTED, false);
-        }
-        // v2.28.0: compat strip — tells the player which optional-mod bridges
-        // are actually loaded right now. Rendered at the bottom of Overview
-        // so the lore/promise ("linked with Small Ships / Siege Weapons")
-        // matches what the runtime can actually deliver on this world.
-        int stripY = y + h - 10;
-        String compat = "Compat: "
-                + "Recruits Claims " + (snapshot.recruitsClaimsBridgeReady() ? "on" : "off") + "  \u2022  "
-                + "Workers " + (snapshot.workersBridgeReady() ? "on" : "off") + "  \u2022  "
-                + "Small Ships " + (snapshot.smallShipsBridgeReady() ? "on" : "off") + "  \u2022  "
-                + "Siege Weapons " + (snapshot.siegeWeaponsBridgeReady() ? "on" : "off");
-        graphics.drawString(font, trim(compat, w - 12), x + 6, stripY, SUBTLE, false);
+        boolean reclaim=snapshot.nextWaveLabel().startsWith("Recapture") || snapshot.cooldown().startsWith("Core occupied");
+        card(graphics,x,y,w,46,"SIEGE CORE",BLUE);
+        graphics.drawString(font,trim(snapshot.registered()?snapshot.stronghold():"Place a core in your faction claim",w-20),x+10,y+22,INK,false);
+        graphics.drawString(font,trim(snapshot.claimName().isBlank()?"Use the claim map below":snapshot.claimName(),w-20),x+10,y+34,MUTED,false);
+        int sy=y+52;
+        card(graphics,x,sy,w,60,reclaim?"RECAPTURE":snapshot.active()?"DEFEND":"PREPARE",reclaim?RED:GOLD);
+        String status=snapshot.active()?snapshot.cooldown():reclaim?"Outnumber enemies at the core":snapshot.registered()?"Next siege: "+snapshot.cooldown():"Claim land, then place your core";
+        graphics.drawString(font,trim(status,w-20),x+10,sy+22,INK,false);
+        if(snapshot.active() || reclaim) {
+            progressBar(graphics,x+10,sy+38,w-52,snapshot.occupationPercent(),reclaim?BLUE:RED);
+            graphics.drawString(font,snapshot.occupationPercent()+"%",x+w-36,sy+36,INK,false);
+        } else graphics.drawString(font,trim("Hire troops and heroes at the core",w-20),x+10,sy+38,MUTED,false);
+        int by=y+118;
+        card(graphics,x,by,w,Math.max(38,h-118),"FIELD REPORT",GREEN);
+        String report=snapshot.active()?"Wave "+snapshot.wave()+"/"+snapshot.totalWaves()+" • "+snapshot.deployed()+" enemies":snapshot.recruits()+" nearby recruits";
+        graphics.drawString(font,trim(report,w-20),x+10,by+20,INK,false);
+        if(h>=170) graphics.drawString(font,trim(snapshot.active() && !snapshot.campDirection().isBlank()?"Camp: "+snapshot.campDirection()+" • "+snapshot.campDistance()+"m":"Keep a reserve beside your core",w-20),x+10,by+34,MUTED,false);
     }
 
     // ---------------------------------------------------------------------
@@ -547,46 +445,17 @@ public final class SiegeCommandScreen extends Screen {
     // ---------------------------------------------------------------------
 
     private void drawDefense(GuiGraphics graphics, int x, int y, int w, int h) {
-        // Two-column layout of tip cards, now with scrolling. Each card ~ half
-        // width, three rows tall per page. Mouse wheel or arrow keys advance
-        // {@code defenseScrollRows} to reveal more tips — v2.11.0 could only
-        // show 6 of 10 tips and the rest were unreachable.
-        int colGap = 6;
-        int cardW = (w - colGap) / 2;
-        int cardH = 54;
-        int rowGap = 4;
-        int rowsPerPage = 3;
-        int tipsPerRow = 2;
-        List<DefensePlaybook.Tip> tips = DefensePlaybook.TIPS;
-        int totalRows = (tips.size() + tipsPerRow - 1) / tipsPerRow;
-        int maxScroll = Math.max(0, totalRows - rowsPerPage);
-        if (defenseScrollRows > maxScroll) defenseScrollRows = maxScroll;
-        int startTip = defenseScrollRows * tipsPerRow;
-        int endTip = Math.min(tips.size(), startTip + rowsPerPage * tipsPerRow);
-
-        for (int i = startTip; i < endTip; i++) {
-            DefensePlaybook.Tip t = tips.get(i);
-            int rel = i - startTip;
-            int col = rel % tipsPerRow;
-            int row = rel / tipsPerRow;
-            int cx = x + col * (cardW + colGap);
-            int cy = y + row * (cardH + rowGap);
-            card(graphics, cx, cy, cardW, cardH, t.tag().toUpperCase(), GREEN);
-            graphics.drawString(font, trim(t.title(), cardW - 20), cx + 10, cy + 22, INK, false);
-            List<String> bodyLines = wrap(t.body(), cardW - 20);
-            int by = cy + 32;
-            for (int b = 0; b < Math.min(bodyLines.size(), 2); b++) {
-                graphics.drawString(font, bodyLines.get(b), cx + 10, by, MUTED, false);
-                by += 10;
-            }
+        defenseScrollRows=Mth.clamp(defenseScrollRows,0,DefensePlaybook.TIPS.size()-1);
+        var tip=DefensePlaybook.TIPS.get(defenseScrollRows);
+        card(graphics,x,y,w,h,tip.tag().toUpperCase(java.util.Locale.ROOT),GREEN);
+        int lineY=y+23;
+        for(String line:wrap(tip.title(),w-20)) { graphics.drawString(font,line,x+10,lineY,INK,false);lineY+=11; }
+        lineY+=6;
+        for(String line:wrap(tip.body(),w-20)) {
+            if(lineY>y+h-38)break;
+            graphics.drawString(font,line,x+10,lineY,MUTED,false);lineY+=11;
         }
-
-        // Scroll indicator + hint (only when scrolling is possible).
-        if (maxScroll > 0) {
-            String hint = "Tips " + (startTip + 1) + "\u2013" + endTip + " of " + tips.size() +
-                    "  \u2022  scroll or \u2191/\u2193";
-            graphics.drawString(font, hint, x + 4, y + h - 12, SUBTLE, false);
-        }
+        graphics.drawCenteredString(font,(defenseScrollRows+1)+" / "+DefensePlaybook.TIPS.size(),x+w/2,y+h-18,SUBTLE);
     }
 
     // ---------------------------------------------------------------------

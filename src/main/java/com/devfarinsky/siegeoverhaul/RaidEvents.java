@@ -139,6 +139,8 @@ public final class RaidEvents {
     @SubscribeEvent
     public static void onEntityJoin(EntityJoinLevelEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level)) return;
+        com.devfarinsky.siegeoverhaul.raid.RaidCavalry.join(event,level);
+        if(event.isCanceled())return;
         Entity joining = event.getEntity();
         if (joining instanceof net.minecraft.world.entity.projectile.Projectile projectile
                 && projectile.getOwner() instanceof Mob owner
@@ -2258,7 +2260,9 @@ public final class RaidEvents {
             Mob candidate = createAttackerForWave(level, anchor.teamKey(), state.wave, waveIndex);
             if (candidate == null) continue;
 
-            boolean asNaval = i < navalShare;
+            var candidateType=ForgeRegistries.ENTITY_TYPES.getKey(candidate.getType());
+            boolean cavalry=candidateType!=null && (candidateType.getPath().equals("horseman") || candidateType.getPath().equals("nomad"));
+            boolean asNaval = i < navalShare && !cavalry;
             BlockPos spawn = asNaval
                     ? state.navalStagingPos
                     : findSpawnPosition(level, point.pos(), level.random, candidate,
@@ -2275,6 +2279,7 @@ public final class RaidEvents {
             // this mob and it doesn't friendly-fire other raiders. Faction is
             // created lazily on server-start; this call is a no-op if the
             // scoreboard team hasn't been registered yet.
+            raider.getPersistentData().putString(RAID_TEAM_TAG,anchor.teamKey());
             RecruitsBridge.assignToRaidersFaction(raider);
             raider.setPersistenceRequired();
             raider.getPersistentData().putString(RAID_TEAM_TAG, anchor.teamKey());
@@ -2298,7 +2303,7 @@ public final class RaidEvents {
                 }
                 // Roll for sapper promotion. Cheap, capped, non-leaders only
                 // so squad leaders keep their role.
-                if (!squadLeader
+                if (!squadLeader && "recruit".equals(ForgeRegistries.ENTITY_TYPES.getKey(raider.getType()).getPath())
                         && com.devfarinsky.siegeoverhaul.siege.SiegeConstruction.canPromoteSapper(state)
                         && level.random.nextInt(100) < 15) {
                     com.devfarinsky.siegeoverhaul.siege.SiegeConstruction.assignSapper(state, raider);
@@ -2357,7 +2362,10 @@ public final class RaidEvents {
         else if (raider.getType() == EntityType.WITCH || raider.getType() == EntityType.EVOKER ||
                 raider.getType() == EntityType.ILLUSIONER) role = "warcaster";
         else if (recruitType.equals("captain") || recruitType.equals("patrol_leader")) role = "captain";
-        else if (squadLeader) role = "captain";
+        else if (recruitType.equals("assassin") || recruitType.equals("assassin_leader")) role = "flanker";
+        else if (recruitType.equals("horseman") || recruitType.equals("nomad")) role = "cavalry";
+        else if (recruitType.equals("scout")) role = "scout";
+        else if (squadLeader && recruitType.isEmpty()) role = "captain";
         else role = "marksman";
         raider.getPersistentData().putString(RAID_ROLE_TAG, role);
         // v2.15.0: name tag + role-colored glow team membership.
@@ -2479,24 +2487,18 @@ public final class RaidEvents {
         }
 
         String recruitType = null;
-        // Progressive composition overrides for indices > 0 (index 0 slots the commander in final wave).
-        if (!(wave >= RaidConfig.WAVES.get() && index == 0)) {
-            com.devfarinsky.siegeoverhaul.waves.WaveComposition comp = ACTIVE_COMPOSITIONS.get(teamKey);
-            if (comp != null && RaidConfig.ENABLE_WAVE_COMPOSITION.get()) {
-                // Account for reserved slots: subtract them so composition indexing
-                // starts from the first non-reserved slot.
-                int reserved = 0;
-                if (wave >= RaidConfig.WAVES.get() && RaidConfig.ENABLE_COMMANDER.get()) reserved += 1;
-                if (wave >= RaidConfig.WAVES.get()) reserved += 1; // ravager
-                if (wave >= 4 && RaidConfig.ENABLE_ILLUSIONERS.get()) reserved += 1;
-                int compIndex = index - reserved;
-                if (compIndex >= 0) recruitType = comp.roleAt(compIndex);
-            }
+        int compIndex=com.devfarinsky.siegeoverhaul.waves.WaveComposer.compositionIndex(wave,RaidConfig.WAVES.get(),index,
+                RaidConfig.ENABLE_COMMANDER.get(),RaidConfig.ENABLE_ILLUSIONERS.get());
+        var comp=ACTIVE_COMPOSITIONS.get(teamKey);
+        if(comp==null && RaidConfig.ENABLE_WAVE_COMPOSITION.get()) {
+            var raid=RaidSavedData.get(level.getServer()).raids.get(teamKey);
+            if(raid!=null) comp=com.devfarinsky.siegeoverhaul.waves.WaveComposer.compose(wave,RaidConfig.WAVES.get(),raid.waveStartingCount+raid.pendingWaveSpawns);
         }
+        if(compIndex>=0 && comp!=null && RaidConfig.ENABLE_WAVE_COMPOSITION.get()) recruitType=comp.roleAt(compIndex);
 
         // Legacy fallback picker (still authoritative for commander slot and when composition is off/exhausted).
         if (recruitType == null) {
-            if (wave >= RaidConfig.WAVES.get() && index == 0) recruitType = "patrol_leader";
+            if (RaidConfig.ENABLE_COMMANDER.get() && wave >= RaidConfig.WAVES.get() && index == 0) recruitType = "patrol_leader";
             else if (wave >= 4 && index % 9 == 1 && ForgeRegistries.ENTITY_TYPES.containsKey(
                     new ResourceLocation("recruits", "siege_engineer"))) recruitType = "siege_engineer";
             else if (wave >= 4 && index % 8 == 3) recruitType = "assassin";
@@ -3612,6 +3614,7 @@ public final class RaidEvents {
             boolean marching = com.devfarinsky.siegeoverhaul.formations.FormationDirector.shouldMarch(
                     level, state.teamKey, mob, BlockPos.containing(objective));
             if (!marching) com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
+            com.devfarinsky.siegeoverhaul.raid.RaidCavalry.advance(mob,objective,baseSpeed);
             if (mob.isPassenger() || (marching && mob.getPersistentData().getBoolean(ModConstants.Tags.FORMATION_MARCH))) {
                 STUCK_TRACKER.remove(id);
                 continue;
@@ -4066,6 +4069,7 @@ public final class RaidEvents {
                 com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,point.pos());
                 com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.cleanup(level, state);
                 com.devfarinsky.siegeoverhaul.camp.CampGuards.cleanup(level, state);
+                com.devfarinsky.siegeoverhaul.raid.RaidCavalry.cleanup(level,state.teamKey);
                 for (UUID id : state.raiders) {
                     Entity entity = level.getEntity(id);
                     if (entity != null) entity.discard();
@@ -4519,7 +4523,7 @@ public final class RaidEvents {
                     point.dimension() + " • " + formatPos(point.pos()), 0, RaidConfig.WAVES.get(),
                     0, 0, 0, 0, false, 0, recruits, compat.workers(), compat.ships(), compat.siegeWeapons(),
                     assetScalingEnemies(compat), 0, "No gate under attack", 0,
-                    formatTime(seconds), defaultEmeraldReward(), true,
+                    com.devfarinsky.siegeoverhaul.core.CoreOccupation.occupied(data,key)?"Core occupied — outnumber enemies to recapture":formatTime(seconds), defaultEmeraldReward(), true,
                     "", "", "", "", "", 0,
                     preview.label.isEmpty() ? "Wave 1" : "Wave 1 — " + preview.label,
                     formatRoleCounts(preview),
