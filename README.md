@@ -1,3 +1,11 @@
+## 4.2.1 beta — Claimed footholds before preparation
+
+Scouts now inspect one bounded terrain neighborhood at a time, searching roughly 160–544 blocks from the core after the initial nearby search. Temporary chunk tickets keep the core and the chosen camp active while the defending faction is online. Only one remote candidate is loaded at a time, with Minecraft's surrounding chunk-load margin; tickets expire after five seconds without refresh and are removed at siege end. No synchronous terrain generation or permanent force-loaded claims. Ordinary tall grass and flowers no longer reject camp sites; water, crops, structures, steep terrain and other claims remain protected.
+
+**No camp means no preparation countdown or assault.** A failed search stays in scouting and retries, including failed camps saved by 4.2.0. Once a native 25-chunk Recruits claim is confirmed, the camp is built inside it, supplied builders/engines initialize once and guards spawn. The full preparation countdown then begins. The map claim is named for the attacking faction (for example, Wilds Marauders War Camp), under the shared Raiders faction. Coordinates are announced only after successful registration. Recruits map fog-of-war settings still apply.
+
+No user configuration change is required for normal claiming-enabled worlds. Logs and chat identify unavailable claim APIs/claiming settings rather than claiming a nonexistent camp is forming. Full native-mod gameplay still needs in-game testing; release remains beta.
+
 ## 4.2.0 beta — Faction uniforms and core conquest
 
 Enemy soldiers and camp guards now wear faction uniforms. Chest/leg trims: Blackbay lapis blue, Hollowfang quartz white, Emberchant redstone red, Crownfall amethyst purple, Wilds emerald green. Helmet/boot trims mark rank: copper soldiers, iron guards, gold captains, diamond commanders. Commanders wear diamond armor; Wilds rank-and-file wear dyed leather; other uniforms use iron. Rank also changes the trim pattern. Cosmetic back banners show the faction sigil without replacing helmets or weapons. Existing tracked soldiers upgrade once; armor is never replenished automatically. Player-owned recruits keep their equipment.

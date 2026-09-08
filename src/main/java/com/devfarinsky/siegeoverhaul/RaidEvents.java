@@ -1614,23 +1614,10 @@ public final class RaidEvents {
                         " and will beach near " + formatPos(naval.beach()) + ".")
                         .withStyle(ChatFormatting.AQUA), false);
             }
-            // Wave-1 prefab siege engines: spawn immediately at the war camp so
-            // defenders can already see the pressure before the first squad marches.
-            int placed = com.devfarinsky.siegeoverhaul.siege.SiegeConstruction.spawnPrefabEngines(
-                    raidLevel, state, point.pos(), anchor.teamKey());
-            if (placed > 0) {
-                announce(server, anchor.teamKey(), Component.literal(
-                        placed + (placed == 1 ? " siege engine has been raised at the war camp."
-                                : " siege engines have been raised at the war camp."))
-                        .withStyle(ChatFormatting.GOLD), false);
-            }
-            com.devfarinsky.siegeoverhaul.camp.CampBuilder.startCamp(raidLevel, state);
-            if (state.campPos != null) announce(server, anchor.teamKey(), Component.literal(
-                    "Enemy camp at " + formatPos(state.campPos) + ": " + state.campWorkers.size()
-                            + " builders and " + placed + " siege engines.").withStyle(ChatFormatting.GOLD), false);
-            else if (RaidConfig.BUILD_WAR_CAMPS.get()) announce(server, anchor.teamKey(), Component.literal(
-                    "No claimable camp site was found in loaded terrain. Check Recruits claiming permissions and space around existing claims. This siege has no camp crew or equipment.")
-                    .withStyle(ChatFormatting.GRAY), false);
+            if (state.campPos != null) startCampCrew(raidLevel,state,point);
+            else if (RaidConfig.BUILD_WAR_CAMPS.get()) announce(server,anchor.teamKey(),Component.literal(
+                    "Scouts are searching for claimable land. Preparation waits until a real enemy camp is established.")
+                    .withStyle(ChatFormatting.GOLD),false);
         }
         data.raids.put(anchor.teamKey(), state);
         if (raidLevel != null) {
@@ -1644,13 +1631,14 @@ public final class RaidEvents {
         String opening = state.narrative != null && state.narrative.opening != null
                 ? state.narrative.opening
                 : "Enemy scouts have found " + anchor.teamDisplay() + " at '" + point.name() + "'";
-        String detail = " A war camp " + (state.campPos == null ? "is forming" : "has been raised at " + formatPos(state.campPos)) +
-                " to the " + approachDirection(state.approachAngle) + ". The siege begins in " +
-                formatTime(state.preparationTicks / 20) + ". Disrupt their preparations or rally your Recruits at the Siege Core.";
+        String detail = state.campPos == null && RaidConfig.BUILD_WAR_CAMPS.get()
+                ? " Scouts are searching for a foothold. No enemy claim or camp exists yet; the preparation countdown is paused."
+                : " Enemy camp at " + (state.campPos==null?"disabled by config":formatPos(state.campPos))
+                    + ". Assault in " + formatTime(state.preparationTicks/20) + ". Rally your Recruits at the Siege Core.";
         announce(server, anchor.teamKey(), Component.literal(opening + detail).withStyle(accent), true);
         Vec3 markedPoint = raidLevel == null ? Vec3.atCenterOf(point.pos()) : invasionObjective(raidLevel, point, state);
         announce(server, anchor.teamKey(), Component.literal("Defend the marked point at " +
-                formatPos(BlockPos.containing(markedPoint)) + ". Match or outnumber attackers inside the ring to reverse pressure.")
+                formatPos(BlockPos.containing(markedPoint)) + ". Outnumber attackers to reverse core capture; equal numbers pause it.")
                 .withStyle(ChatFormatting.AQUA), false);
         if (state.campPos != null && RaidConfig.CAMP_DESTRUCTIBLE_STRUCTURES.get()) {
             announce(server, anchor.teamKey(), Component.literal(
@@ -1661,7 +1649,8 @@ public final class RaidEvents {
             announce(server, anchor.teamKey(),
                     Component.literal(state.narrative.chant).withStyle(ChatFormatting.ITALIC, accent), false);
         }
-        String subtitle = state.narrative != null && state.narrative.factionEpithet != null
+        String subtitle = state.campPos == null && RaidConfig.BUILD_WAR_CAMPS.get() ? "Enemy scouts are searching for a foothold"
+                : state.narrative != null && state.narrative.factionEpithet != null
                 ? "The " + state.narrative.factionEpithet + " march from the " + approachDirection(state.approachAngle)
                 : "Enemy war camp sighted to the " + approachDirection(state.approachAngle);
         // v2.31.0: title cards use case-normal text. Weight comes from color, not caps.
@@ -1799,6 +1788,8 @@ public final class RaidEvents {
         if (level == null) return;
 
         if ("siege_core".equals(state.defensePointName)) {
+            if(RaidConfig.BUILD_WAR_CAMPS.get() && !onlineMembers(server,teamKey).isEmpty())
+                com.devfarinsky.siegeoverhaul.camp.CampLoading.keep(level,point.pos());
             if (!level.hasChunkAt(point.pos())) { setRaidMobsFrozen(level, state, true); return; }
             state.breached = true; // Core raids have no abstract perimeter phase.
             if (state.coreCaptured && !level.getBlockState(point.pos()).is(com.devfarinsky.siegeoverhaul.core.CoreBlocks.CORE.get())) {
@@ -1816,12 +1807,6 @@ public final class RaidEvents {
             return;
         }
 
-        // Upgrade active raids from older saves exactly once. Those raids did
-        // not persist a physical camp, so build one when 2.6 first processes it.
-        if (RaidConfig.BUILD_WAR_CAMPS.get() && !state.campBuildAttempted) {
-            buildWarCamp(level, anchor, point, state);
-        }
-
         List<ServerPlayer> members = onlineMembers(server, teamKey);
         if (members.isEmpty() && RaidConfig.PAUSE_WHEN_FACTION_OFFLINE.get() && !state.coreCaptured) {
             state.offlinePauseAnnounced = true;
@@ -1829,6 +1814,45 @@ public final class RaidEvents {
             updateBossBar(server, anchor, state, true);
             return;
         }
+        if (RaidConfig.BUILD_WAR_CAMPS.get() && state.campPos == null && !state.coreCaptured) {
+            // Previously failed 4.2.0 camps recover here too. No waves run without a foothold.
+            if (state.campSearchPos == null) {
+                for(int skip=0;skip<8;skip++) {
+                    BlockPos candidate=com.devfarinsky.siegeoverhaul.camp.CampLoading.candidate(point.pos(),state.approachAngle,state.campSearchStep++);
+                    if(com.devfarinsky.siegeoverhaul.compat.CampClaims.canClaim(level,candidate)) { state.campSearchPos=candidate; break; }
+                }
+            }
+            if(state.campSearchPos!=null) {
+                com.devfarinsky.siegeoverhaul.camp.CampLoading.keep(level,state.campSearchPos);
+                state.campSearchTicks+=20;
+                if(com.devfarinsky.siegeoverhaul.camp.CampLoading.ready(level,state.campSearchPos)) {
+                    buildWarCamp(level,anchor,point,state);
+                    if(state.campPos!=null) {
+                        com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,state.campSearchPos);
+                        com.devfarinsky.siegeoverhaul.camp.CampLoading.keep(level,state.campPos);
+                        state.preparationTotalTicks=RaidConfig.PREPARATION_MINUTES.get()*1200;
+                        state.preparationTicks=state.preparationTotalTicks;
+                        state.ticksToNextWave=state.preparationTicks;
+                        state.approachAngle=Math.atan2(state.campPos.getZ()-point.pos().getZ(),state.campPos.getX()-point.pos().getX());
+                        startCampCrew(level,state,point);
+                        announce(server,teamKey,Component.literal("Enemy territory claimed at "+formatPos(state.campPos)+". Builders and guards are establishing their camp there. Preparation starts now.").withStyle(ChatFormatting.GOLD),true);
+                    } else com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,state.campSearchPos);
+                    state.campSearchPos=null;state.campSearchTicks=0;
+                } else if(state.campSearchTicks>=1200) {
+                    com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,state.campSearchPos);
+                    state.campSearchPos=null;state.campSearchTicks=0;
+                }
+            }
+            if(state.campPos==null) {
+                String reason=com.devfarinsky.siegeoverhaul.compat.CampClaims.unavailableReason(level);
+                state.objectiveStatus=reason.isEmpty()?"Scouting claimable camp land; preparation paused":reason;
+                if(level.getGameTime()%600==0) FactionLogger.LOG.info("Camp search {}: candidate {}, step {}, status {}",teamKey,state.campSearchPos,state.campSearchStep,state.objectiveStatus);
+                setRaidMobsFrozen(level,state,true);
+                if(level.getGameTime()%600==0) announce(server,teamKey,Component.literal("Enemy camp search: "+state.objectiveStatus+". Preparation remains paused.").withStyle(ChatFormatting.GRAY),false);
+                updateBossBar(server,anchor,state,false);data.setDirty();return;
+            }
+        }
+        if(state.campPos!=null) com.devfarinsky.siegeoverhaul.camp.CampLoading.keep(level,state.campPos);
         setRaidMobsFrozen(level, state, false);
         com.devfarinsky.siegeoverhaul.camp.CampGuards.start(level, data, state);
         com.devfarinsky.siegeoverhaul.camp.CampGuards.tick(level, state, false);
@@ -2575,6 +2599,14 @@ public final class RaidEvents {
      * {@code bannerPos}, {@code barrelPos}. Breaking any of these triggers
      * a strategic effect — see {@link #onCampBlockBroken}.
      */
+    private static void startCampCrew(ServerLevel level,RaidSavedData.RaidState state,RaidSavedData.DefensePoint point) {
+        if(state.campPos==null || state.campCrewStarted)return;
+        state.campCrewStarted=true;
+        int engines=com.devfarinsky.siegeoverhaul.siege.SiegeConstruction.spawnPrefabEngines(level,state,point.pos(),state.teamKey);
+        com.devfarinsky.siegeoverhaul.camp.CampBuilder.startCamp(level,state);
+        FactionLogger.LOG.info("Enemy camp {}: native claim {}, builders {}, engines {}",state.campPos,state.campClaimId,state.campWorkers.size(),engines);
+    }
+
     private static void buildWarCamp(ServerLevel level, RaidSavedData.Anchor anchor,
                                      RaidSavedData.DefensePoint point,
                                      RaidSavedData.RaidState state) {
@@ -2884,13 +2916,14 @@ public final class RaidEvents {
         // own the surrounding territory. Search radius derived from
         // max spawn distance divided by 16 (chunk size), padded by 4 for
         // camp footprint plus safety margin.
-        if (RaidConfig.RESPECT_FOREIGN_CLAIMS.get() && anchorRecord != null
+        if ((state == null || state.campSearchPos == null) && RaidConfig.RESPECT_FOREIGN_CLAIMS.get() && anchorRecord != null
                 && com.devfarinsky.siegeoverhaul.compat.ClaimBridge.anyProviderAvailable()) {
             int radiusChunks = Math.max(20, (RaidConfig.MAX_SPAWN_DISTANCE.get() >> 4) + 6);
             excludedChunks.addAll(com.devfarinsky.siegeoverhaul.compat.ClaimBridge
                     .collectClaimedChunks(level, anchor, radiusChunks, anchorRecord));
         }
-        for (int attempt = 0; attempt < 128; attempt++) {
+        boolean remote = state != null && state.campSearchPos != null;
+        for (int attempt = 0; attempt < (remote ? 9 : 128); attempt++) {
             // First prefer the invasion approach, then search the surrounding ring for clear terrain.
             double angle = approachAngle + (attempt < 32 ? (level.random.nextDouble() - 0.5D) * 0.5D
                     : (attempt - 32) * 2.399963229728653);
@@ -2898,12 +2931,16 @@ public final class RaidEvents {
                     : Math.max(max, 128) + ((attempt - 32) / 24) * 32 + level.random.nextInt(16);
             int x = anchor.getX() + Mth.floor(Math.cos(angle) * distance);
             int z = anchor.getZ() + Mth.floor(Math.sin(angle) * distance);
+            if(remote) { x=state.campSearchPos.getX()+(attempt%3-1)*6; z=state.campSearchPos.getZ()+(attempt/3-1)*6; }
             if (!level.hasChunk(x >> 4, z >> 4)) continue;
             if (!excludedChunks.isEmpty()
                     && excludedChunks.contains(new net.minecraft.world.level.ChunkPos(x >> 4, z >> 4))) continue;
             BlockPos center = surfacePosition(level, x, z);
             if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.canClaim(level, center)
                     || com.devfarinsky.siegeoverhaul.compat.CampClaims.footprint(center).stream().anyMatch(excludedChunks::contains)) continue;
+            if (remote && RaidConfig.RESPECT_FOREIGN_CLAIMS.get() && anchorRecord!=null
+                    && com.devfarinsky.siegeoverhaul.compat.CampClaims.footprint(center).stream().anyMatch(chunk ->
+                        com.devfarinsky.siegeoverhaul.compat.ClaimBridge.isForeignClaim(level,chunk,anchorRecord))) continue;
             if (!validCampSurface(level, center, anchor)) continue;
             // v2.16.1 - keep the palisade clear of the boat spawn. The
             // camp footprint is 19x19 (9 per side + gate); anything closer
@@ -4030,6 +4067,9 @@ public final class RaidEvents {
             RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
             ServerLevel level = getLevel(server, point);
             if (level != null) {
+                com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,state.campSearchPos);
+                com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,state.campPos);
+                com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,point.pos());
                 com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.cleanup(level, state);
                 com.devfarinsky.siegeoverhaul.camp.CampGuards.cleanup(level, state);
                 for (UUID id : state.raiders) {
@@ -4169,6 +4209,7 @@ public final class RaidEvents {
      * occupation (standing on the stronghold to capture).
      */
     private static String raidPhaseLabel(RaidSavedData.RaidState state, boolean paused) {
+        if (!paused && state.campPos==null && RaidConfig.BUILD_WAR_CAMPS.get() && !state.coreCaptured) return "Scouting camp land";
         if (!paused && state.preparationTicks > 0) return preparationLabel(state) + " • " + (state.preparationTicks + 1199) / 1200 + "m until assault";
         if (paused) return "Paused";
         if (state.coreCaptured) return "Reclaim core";
@@ -4255,6 +4296,9 @@ public final class RaidEvents {
         String label;
         if (paused) {
             label = com.devfarinsky.siegeoverhaul.chat.ChatStyle.bossbarLabel(epithet, phase, "faction offline");
+        } else if (state.campPos==null && RaidConfig.BUILD_WAR_CAMPS.get() && !state.coreCaptured) {
+            bar.setProgress(0);
+            label = "Scouting camp land | preparation paused until territory is claimed";
         } else if (state.coreCaptured) {
             var core = RaidSavedData.get(server).siegeCores.get(state.teamKey);
             int progress = core == null ? 0 : core.getInt("RecaptureTicks");

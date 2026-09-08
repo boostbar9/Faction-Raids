@@ -64,6 +64,16 @@ class CampTerrainTest extends MinecraftTestSupport {
     }
 
     @Test
+    void ordinaryTallGrassDoesNotPreventAnOtherwiseSafeCamp() {
+        edits.put(new BlockPos(2,64,2),Blocks.TALL_GRASS.defaultBlockState());
+        edits.put(new BlockPos(2,65,2),Blocks.TALL_GRASS.defaultBlockState());
+        assertTrue(CampTerrain.plan(level,center,p->false).isPresent());
+        edits.put(new BlockPos(2,64,2),Blocks.WHEAT.defaultBlockState());
+        assertTrue(CampTerrain.plan(level,center,p->false).isEmpty());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
+    @Test
     void everyBoundaryColumnIsCheckedForClaimsAndUnloadedChunks() {
         assertTrue(CampTerrain.plan(level, center, p -> p.getX() == 12 && p.getZ() == 1).isEmpty());
         when(level.hasChunkAt(new BlockPos(12,64,1))).thenReturn(false);
