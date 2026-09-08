@@ -20,6 +20,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private CoreHireLayout layout;
     private boolean heroes, loot;
     private int confirmBox=-1;
+    private final net.minecraft.world.item.ItemStack[][] lootPreviews=new net.minecraft.world.item.ItemStack[3][4];
     private final Button[] boxes=new Button[3];
     private int cardIndex(int i) { return i==3?(layout.compact()?0:1):i; }
     private final Button[] hire = new Button[4];
@@ -32,6 +33,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         event.enqueueWork(() -> MenuScreens.register(CoreMenus.HIRING.get(), CoreHireScreen::new));
     }
     @Override protected void init() {
+        for(int box=0;box<3;box++)for(int r=0;r<4;r++)lootPreviews[box][r]=CoreLoot.reward(box,new int[]{0,50,80,95}[r]);
         layout = CoreHireLayout.fit(width, height);
         imageWidth = layout.width(); imageHeight = layout.height();
         super.init();
@@ -69,7 +71,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         for(int i=0;i<3;i++){boxes[i].visible=loot;boxes[i].setMessage(Component.literal(confirmBox==i?"Confirm":"Open"));}
         super.render(g, mouseX, mouseY, partial);
         if(loot) {
-            for(int i=0;i<3;i++)if(mouseX>=layout.cardX(i) && mouseX<layout.cardX(i)+layout.cardWidth() && mouseY>=layout.cardY(i) && mouseY<layout.cardY(i)+layout.cardHeight())
+            for(int i=0;i<3;i++)if(!boxes[i].isMouseOver(mouseX,mouseY) && mouseX>=layout.cardX(i) && mouseX<layout.cardX(i)+layout.cardWidth() && mouseY>=layout.cardY(i) && mouseY<layout.cardY(i)+layout.cardHeight())
                 g.renderTooltip(font,font.split(Component.literal(CoreLoot.price(i)+" emeralds • One reward. "+CoreLoot.pool(i)),Math.min(300,width-24)),mouseX,mouseY);
             return;
         }
@@ -124,11 +126,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             if(h>=34)g.drawString(font,CoreLoot.price(i)+" emeralds",x+10,y+22,GOLD,false);
         } else {
             g.drawCenteredString(font,CoreLoot.NAMES[i],x+w/2,y+16,GOLD);
-            int[] rolls={0,50,80,95};
             for(int r=0;r<4;r++) {
                 int ix=x+w/2-44+r*24;
                 CoreButton.panel(g,ix-2,y+34,20,24,0xff132030);
-                g.renderItem(CoreLoot.reward(i,rolls[r]),ix,y+38);
+                g.renderItem(lootPreviews[i][r],ix,y+38);
             }
             g.drawCenteredString(font,CoreLoot.price(i)+" emeralds",x+w/2,y+64,TEXT);
             int ty=y+82;
