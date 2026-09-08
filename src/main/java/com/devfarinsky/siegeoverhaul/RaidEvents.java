@@ -1848,6 +1848,7 @@ public final class RaidEvents {
             }
         }
         if(state.campPos!=null) com.devfarinsky.siegeoverhaul.camp.CampLoading.keep(level,state.campPos);
+        com.devfarinsky.siegeoverhaul.compat.RaiderFactions.sync(level,state);
         setRaidMobsFrozen(level, state, false);
         com.devfarinsky.siegeoverhaul.camp.CampGuards.start(level, data, state);
         com.devfarinsky.siegeoverhaul.camp.CampGuards.tick(level, state, false);
@@ -1867,6 +1868,7 @@ public final class RaidEvents {
         // effect so it never flickers between passes but decays if the
         // captain dies.
         tickCaptainAura(level, state);
+        com.devfarinsky.siegeoverhaul.camp.CampDevelopment.tick(level,state);
         // Camp progress is persisted even when no wave or breach changed this pass.
         if (!state.pendingCampBlocks.isEmpty()) {
             progressDeferredCampBuilds(level, state);

@@ -9,6 +9,8 @@ public final class CoreOffers {
     public static final int WORKER_START = 4;
     public static final int[] RECRUIT_WEIGHTS = {50, 25, 20, 5};
     public static final int[] WORKER_WEIGHTS = {25, 25, 20, 15, 10, 5};
+    public static final int[] HERO_WEIGHTS = {40,30,20,10};
+    public static int hero(int roll) { return 10 + weighted(roll,HERO_WEIGHTS); }
     private CoreOffers() {}
     public static int role(int roll) { return weighted(roll, RECRUIT_WEIGHTS); }
     public static int worker(int roll) { return WORKER_START + weighted(roll, WORKER_WEIGHTS); }
@@ -23,7 +25,7 @@ public final class CoreOffers {
                 && offers[2] >= WORKER_START && offers[2] < WORKER_START + WORKER_WEIGHTS.length;
     }
     public static boolean canPurchase(CompoundTag stock, int index, long rotation) {
-        return index >= 0 && index < 3 && valid(stock.getIntArray("Offers"))
+        return index >= 0 && index < 4 && (index < 3 || stock.getInt("HeroRole") >= 10 && stock.getInt("HeroRole") <= 13) && valid(stock.getIntArray("Offers"))
                 && rotation == stock.getLong("RefreshAt") && (stock.getInt("Sold") & (1 << index)) == 0;
     }
     public static boolean refresh(CompoundTag stock, long now, RandomSource random) {
@@ -35,12 +37,19 @@ public final class CoreOffers {
             existing[2] = worker(random.nextInt(100));
             stock.putIntArray("Offers", existing);
             stock.putInt("OfferSchema", 2);
+            stock.putInt("HeroRole",hero(random.nextInt(100)));
             return true;
         }
-        if (valid(existing) && now < stock.getLong("RefreshAt")) return false;
+        if (valid(existing) && now < stock.getLong("RefreshAt")) {
+            if (stock.getInt("HeroRole") < 10 || stock.getInt("HeroRole") > 13) {
+                stock.putInt("HeroRole",hero(random.nextInt(100))); return true;
+            }
+            return false;
+        }
         stock.putIntArray("Offers", new int[]{role(random.nextInt(100)), role(random.nextInt(100)), worker(random.nextInt(100))});
         stock.putInt("OfferSchema", 2);
         stock.putInt("Sold", 0);
+        stock.putInt("HeroRole",hero(random.nextInt(100)));
         long previous = stock.getLong("RefreshAt");
         long next = previous > 0 && previous <= now
                 ? previous + ((now - previous) / ROTATION_TICKS + 1) * ROTATION_TICKS : now + ROTATION_TICKS;

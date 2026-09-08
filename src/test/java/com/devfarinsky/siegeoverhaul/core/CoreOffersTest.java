@@ -67,10 +67,31 @@ class CoreOffersTest extends MinecraftTestSupport {
         assertFalse(CoreOffers.canPurchase(stock, 0, 18100));
         assertTrue(CoreOffers.canPurchase(stock, 1, 18100));
         assertFalse(CoreOffers.canPurchase(stock, -1, 18100));
-        assertFalse(CoreOffers.canPurchase(stock, 3, 18100));
+        assertFalse(CoreOffers.canPurchase(stock, 4, 18100));
         CoreOffers.refresh(stock, 18100, RandomSource.create(1));
         assertFalse(CoreOffers.canPurchase(stock, 1, 18100));
         assertTrue(CoreOffers.canPurchase(stock, 1, 36100));
+    }
+    @Test void heroStockSurvivesReloadAndCannotBePurchasedTwice() {
+        CompoundTag stock=new CompoundTag(); CoreOffers.refresh(stock,100,RandomSource.create(42));
+        int hero=stock.getInt("HeroRole"); assertTrue(hero>=10 && hero<=13);
+        assertTrue(CoreOffers.canPurchase(stock,3,18100));
+        stock.putInt("Sold",8);
+        var data=new RaidSavedData(); data.siegeCores.put("team:test",stock);
+        var loaded=RaidSavedData.load(data.save(new CompoundTag())).siegeCores.get("team:test");
+        assertFalse(CoreOffers.refresh(loaded,200,RandomSource.create(5)));
+        assertEquals(hero,loaded.getInt("HeroRole"));
+        assertFalse(CoreOffers.canPurchase(loaded,3,18100));
+        assertTrue(CoreOffers.canPurchase(loaded,0,18100));
+    }
+    @Test void oldStockGainsHeroWithoutResettingOffersOrPurchases() {
+        CompoundTag stock=new CompoundTag(); stock.putIntArray("Offers",new int[]{0,1,7});
+        stock.putInt("OfferSchema",2); stock.putInt("Sold",5); stock.putLong("RefreshAt",18100);
+        assertTrue(CoreOffers.refresh(stock,200,RandomSource.create(4)));
+        assertArrayEquals(new int[]{0,1,7},stock.getIntArray("Offers"));
+        assertEquals(5,stock.getInt("Sold")); assertEquals(18100,stock.getLong("RefreshAt"));
+        int[] counts=new int[4]; for(int i=0;i<100;i++)counts[CoreOffers.hero(i)-10]++;
+        assertArrayEquals(new int[]{40,30,20,10},counts);
     }
     @Test void hiringLayoutFitsGuiScalesAndResizes() {
         for (int[] size : new int[][]{{320,240},{480,270},{600,260},{854,480},{1920,1080}}) {
@@ -90,9 +111,11 @@ class CoreOffersTest extends MinecraftTestSupport {
         var raid = new RaidSavedData.RaidState("team:test", "siege_core", 0);
         raid.preparationTotalTicks = 14400;
         raid.preparationTicks = 7000;
+        raid.campUpgradeStage=2; raid.campUpgradeTicks=1200;
         raid.pendingFortifications.put(123L,"minecraft:spruce_log");
         var saved = RaidSavedData.RaidState.load(raid.save());
         assertEquals(7000, saved.preparationTicks);
+        assertEquals(2,saved.campUpgradeStage); assertEquals(1200,saved.campUpgradeTicks);
         assertEquals(14400, saved.preparationTotalTicks);
         assertEquals(raid.pendingFortifications, saved.pendingFortifications);
         var legacy = RaidSavedData.RaidState.load(new CompoundTag());

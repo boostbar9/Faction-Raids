@@ -9,6 +9,9 @@ import java.util.UUID;
 public final class CoreClaimTransfer {
     private CoreClaimTransfer() {}
     public static boolean transfer(ServerLevel level, UUID id, String expectedOwner, String newOwner) {
+        return transfer(level,id,expectedOwner,newOwner,null);
+    }
+    public static boolean transfer(ServerLevel level, UUID id, String expectedOwner, String newOwner, String name) {
         try {
             Object manager = Class.forName("com.talhanation.recruits.ClaimEvents").getField("recruitsClaimManager").get(null);
             if (manager == null) return false;
@@ -30,6 +33,7 @@ public final class CoreClaimTransfer {
                     factionType.getMethod("getTeamLeaderName").invoke(faction),faction);
             type.getMethod("setOwnerFaction",factionType).invoke(copy,faction);
             type.getMethod("setPlayer",infoType).invoke(copy,info);
+            if(name!=null && !name.isBlank()) type.getMethod("setName",String.class).invoke(copy,name);
             type.getField("isUnderSiege").setBoolean(copy,false);
             ((java.util.Collection<?>)type.getField("attackingParties").get(copy)).clear();
             ((java.util.Collection<?>)type.getField("defendingParties").get(copy)).clear();

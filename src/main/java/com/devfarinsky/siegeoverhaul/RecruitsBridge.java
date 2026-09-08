@@ -215,7 +215,7 @@ public final class RecruitsBridge {
 
         // Scoreboard team assignment — works whether or not Recruits is loaded.
         Scoreboard scoreboard = level.getScoreboard();
-        PlayerTeam raidersTeam = scoreboard.getPlayerTeam(RAIDERS_FACTION_ID);
+        PlayerTeam raidersTeam = scoreboard.getPlayerTeam(com.devfarinsky.siegeoverhaul.compat.RaiderFactions.forMob(recruit));
         if (raidersTeam != null) {
             scoreboard.addPlayerToTeam(recruit.getStringUUID(), raidersTeam);
             success = true;
