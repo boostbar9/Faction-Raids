@@ -71,6 +71,7 @@ public final class StragglerTracker {
             var target = mob.getTarget();
             if (mob.distanceToSqr(objVec) <= (double) objectiveRadius * objectiveRadius
                     || mob.isPassenger()
+                    || com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)
                     || (target != null && target.isAlive() && mob.getSensing().hasLineOfSight(target))) {
                 TRACKS.remove(id);
                 POSITIONS.remove(id);

@@ -1753,16 +1753,11 @@ public final class RaidEvents {
             if (state.pendingWaveSpawns > 0) state.ticksToNextSquad = Math.max(state.ticksToNextSquad, 20);
         }
         if (state.campPos != null && state.preparationTicks % 100 == 0) {
-            List<Mob> ready = new ArrayList<>();
             for (UUID id : state.raiders) if (level.getEntity(id) instanceof Mob mob && !mob.isPassenger()) {
-                // Camp defenders can fight attackers, but do not receive orders to march at the core.
-                if (mob.getTarget() == null) ready.add(mob);
+                com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
+                if (mob.getTarget() == null && mob.distanceToSqr(Vec3.atCenterOf(state.campPos)) > 100)
+                    mob.getNavigation().moveTo(state.campPos.getX()+.5, state.campPos.getY(), state.campPos.getZ()+.5, RaidConfig.RAIDER_ADVANCE_SPEED.get());
             }
-            ready.sort(java.util.Comparator.comparing(m -> m.getUUID().toString()));
-            com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.apply(
-                    com.devfarinsky.siegeoverhaul.formations.Formation.SQUARE,
-                    new Vec3(Math.cos(state.approachAngle), 0, Math.sin(state.approachAngle)),
-                    Vec3.atBottomCenterOf(state.campPos.offset(0, 0, 4)), ready, true);
         }
         state.preparationTicks = Math.max(0, state.preparationTicks - 20);
         state.ticksToNextWave = state.preparationTicks;
@@ -1904,6 +1899,7 @@ public final class RaidEvents {
             return;
         }
         if (RaidConfig.MOBILIZE_RECRUITS.get()) mobilizeRecruits(level, recruits, state);
+        com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assignNearby(level, state, point.pos());
         redirectRaiders(level, state, members, recruits, point);
 
         // Amphibious support: steer active raider boats toward the beach, and
@@ -3551,6 +3547,11 @@ public final class RaidEvents {
                 continue;
             }
 
+            if (com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)) {
+                com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
+                STUCK_TRACKER.remove(id);
+                continue;
+            }
             double distToObjectiveSq = mob.distanceToSqr(objective);
 
             // Role-gated aggression: breachers and the commander skip the
@@ -3616,7 +3617,7 @@ public final class RaidEvents {
 
             // Native formations and direct navigation must never issue competing orders.
             boolean marching = com.devfarinsky.siegeoverhaul.formations.FormationDirector.shouldMarch(
-                    mob, BlockPos.containing(objective));
+                    level, state.teamKey, mob, BlockPos.containing(objective));
             if (!marching) com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
             if (mob.isPassenger() || (marching && mob.getPersistentData().getBoolean(ModConstants.Tags.FORMATION_MARCH))) {
                 STUCK_TRACKER.remove(id);

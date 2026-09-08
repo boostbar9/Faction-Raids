@@ -32,7 +32,7 @@ import java.util.UUID;
  *   <li>Cast a horizontal ray from the raider centroid toward the objective.
  *       The first solid vertical column of height &ge;2 is the target wall.</li>
  *   <li>Place a ladder column on the raider-facing face, sized to
- *       {@code wallHeight + 1} blocks so the top rung clears the parapet.</li>
+ *       the wall height, with a clear two-block exit onto the wall.</li>
  *   <li>Ladders are tracked in {@code state.campBlocks} so the existing
  *       {@code cleanupWarCamp} pipeline removes them on raid end (and skips
  *       any block the player has replaced \u2014 preserving player edits).</li>
@@ -160,7 +160,10 @@ public final class LadderBuilder {
                 if (isSolid(level, wallBase.above(y))) height++;
                 else break;
             }
-            if (height < MIN_WALL_HEIGHT) continue;
+            if (height < MIN_WALL_HEIGHT || height > MAX_WALL_HEIGHT) continue;
+            // Require a clear, supported exit onto the wall, not a capped ladder.
+            if (!level.getBlockState(wallBase.above(height)).isAir()
+                    || !level.getBlockState(wallBase.above(height + 1)).isAir()) continue;
             // Confirm the raider-facing face is open air for the full column.
             boolean faceClear = true;
             for (int y = 0; y < height; y++) {
@@ -178,12 +181,11 @@ public final class LadderBuilder {
     }
 
     private static int placeLadderColumn(ServerLevel level, RaidSavedData.RaidState state, WallScan scan) {
-        // LadderBlock's FACING is the direction the ladder is attached to the wall's face,
-        // i.e. the direction from the ladder into the wall (opposite of scan.facing).
+        // FACING points away from the supporting wall toward the approaching raiders.
         BlockState ladder = Blocks.LADDER.defaultBlockState()
                 .setValue(LadderBlock.FACING, scan.facing.getOpposite());
         int placed = 0;
-        int columnHeight = scan.wallHeight + 1;
+        int columnHeight = scan.wallHeight;
         for (int y = 0; y < columnHeight; y++) {
             BlockPos pos = scan.baseFront.above(y);
             if (!level.getBlockState(pos).isAir()) continue;
@@ -192,7 +194,7 @@ public final class LadderBuilder {
             // already checked isAir a few lines up, but grabbing it defensively
             // means the record shape stays uniform across all camp-block writers).
             net.minecraft.nbt.CompoundTag original = new net.minecraft.nbt.CompoundTag();
-            level.setBlock(pos, ladder, 3);
+            if (!level.setBlock(pos, ladder, 3)) continue;
             // Track for cleanup via the existing camp-block pipeline.
             ResourceLocation id = ForgeRegistries.BLOCKS.getKey(Blocks.LADDER);
             if (id != null) state.recordCampBlock(pos.asLong(), id.toString(), original);

@@ -51,7 +51,7 @@ public final class FormationDirector {
         if (last != null && now - last < REAPPLY_TICKS) return false;
 
         List<Mob> raiders = collectLiveRaiders(level, state);
-        raiders.removeIf(mob -> !shouldMarch(mob, objective));
+        raiders.removeIf(mob -> !shouldMarch(level, state.teamKey, mob, objective));
         // Stable input order keeps surviving soldiers in their existing slots.
         raiders.sort(java.util.Comparator.comparing(Mob::getUUID));
         if (raiders.isEmpty()) return false;
@@ -77,8 +77,15 @@ public final class FormationDirector {
         return dispatched;
     }
 
+    public static boolean shouldMarch(ServerLevel level, String defendingTeam, Mob mob, BlockPos objective) {
+        return shouldMarch(mob, objective)
+                && com.devfarinsky.siegeoverhaul.core.SiegeCore.claimed(level, mob.blockPosition(), defendingTeam);
+    }
+
     public static boolean shouldMarch(Mob mob, BlockPos objective) {
         return RaidConfig.ENABLE_FORMATIONS.get() && !mob.isPassenger()
+                && !com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)
+                && !mob.horizontalCollision && !mob.onClimbable()
                 && (mob.getTarget() == null || !mob.getTarget().isAlive())
                 && mob.distanceToSqr(Vec3.atCenterOf(objective)) > DISSOLVE_DISTANCE * DISSOLVE_DISTANCE;
     }
