@@ -35,6 +35,7 @@ public final class NativeCampConstruction {
         if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level, raid)) return false;
         if (raid.campWorkers.isEmpty() || raid.pendingCampBlocks.isEmpty()
                 || raid.pendingCampBlocks.size() > 512 || !RaidConfig.CLEANUP_WAR_CAMPS.get()) return false;
+        if (!raid.warGate.isEmpty() && !GateAssembly.install(level,raid)) return false;
         Entity build = null, storage = null;
         BlockPos supply = null;
         try {
@@ -134,6 +135,21 @@ public final class NativeCampConstruction {
         });
         tag.put("blocks", blocks);
         return tag;
+    }
+
+    /** Rescan an existing job in place: preserve bounds, ownership and finite supplies. */
+    public static void refreshAfterGateAssembly(ServerLevel level, RaidSavedData.RaidState raid) {
+        if (!active(raid)) return;
+        Entity area=level.getEntity(raid.nativeCamp.getUUID(CAMP_BUILD_AREA));
+        if (area==null || !reloadArea(level,area,raid)) return;
+        for (UUID id : raid.campWorkers) {
+            if (level.getEntity(id) instanceof Mob worker && worker.isAlive()) {
+                worker.goalSelector.getRunningGoals().toList().forEach(net.minecraft.world.entity.ai.goal.WrappedGoal::stop);
+                WorkersBridge.parkBuilder(worker);
+                try { WorkersBridge.enableNative(worker,raid.nativeCamp.getUUID(CAMP_OWNER),false); }
+                catch (ReflectiveOperationException ex) { FactionLogger.LOG.warn("Cannot resume camp builder after gate assembly",ex); }
+            }
+        }
     }
 
     static void recoverMissingGateCells(ServerLevel level, RaidSavedData.RaidState raid) {

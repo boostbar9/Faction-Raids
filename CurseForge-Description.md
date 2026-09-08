@@ -1,6 +1,6 @@
 # The Siege Overhaul
 
-**Minecraft 1.20.1 • Forge 47.x • Java 17 • Server + Client**
+**Minecraft 1.20.1 | Forge 47.x | Java 17 | Server + Client**
 
 **Build a faction. Raise an army. Defend your Siege Core.**
 
@@ -48,7 +48,7 @@ Each box awards **one randomly selected reward stack** from four outcomes with *
 1. **An enemy foothold.** An attacking faction searches for a suitable camp site and registers a real Villager Recruits claim. Enemy factions have distinct map colors, banners, and equipment identities.
 2. **Time to prepare.** New sieges allow **12 minutes of preparation by default**, split between establishment, fortification, and army muster. Defenders can prepare their troops or disrupt the enemy camp.
 3. **Builders get to work.** Armored Workers 2 builders use native building jobs and supplied materials. Camp guards defend the site while construction and later upgrades progress.
-4. **The War Gate opens.** A protected reinforcement gate provides a designated ground-level arrival point. Builders construct a graded road to connect it to the camp where terrain permits. The gate is removed during siege cleanup.
+4. **The War Gate opens.** A protected reinforcement gate provides a designated ground-level arrival point. The gate and its graded access road arrive fully assembled when the camp is established, leaving builders free to work on the camp itself. The gate is removed during siege cleanup.
 5. **The army advances.** Infantry, ranged units, cavalry, officers, sappers, and siege engineers attack in waves. Units travel normally outside your territory and use local role-based formations inside it.
 6. **Defenses are tested.** Raiders use breaching, ladders, alternate approaches, and supported siege equipment. Commanders can perform a visible, interruptible strike against certain building blocks.
 7. **The core is contested.** Numerical superiority around the core drives capture. Losing the core transfers its territory to the enemy faction. Bring yourself and your recruits back to outnumber the occupiers and reclaim it.
@@ -102,7 +102,7 @@ Siege Overhaul records supported siege damage and temporary construction for res
 - Waves can delay when server performance falls below the configured TPS floor.
 - Temporary chunk tickets keep active siege areas ticking; they are not permanent world-wide chunk loaders.
 - Enemy camp construction, siege equipment, and pathfinding require suitable terrain and space. These systems continue to receive beta improvements.
-- The mod now includes a **custom Siege Core block and items**. The old “no custom blocks” description no longer applies.
+- The mod now includes a **custom Siege Core block and items**. The old "no custom blocks" description no longer applies.
 - Remove the old `factionraids-*.jar` when installing `siegeoverhaul-*.jar`. Do not run both.
 - `/factionraids` remains a legacy command alias. New sieges use claimed Siege Cores; old bed locations do not replace this setup.
 
@@ -120,7 +120,7 @@ This override changes **victory loot**, not the core menu's equipment-box reward
 
 ## Links and Credits
 
-[Source Code](https://github.com/boostbar9/Faction-Raids) • [Report an Issue](https://github.com/boostbar9/Faction-Raids/issues) • [GPL-3.0-only](https://spdx.org/licenses/GPL-3.0-only.html)
+[Source Code](https://github.com/boostbar9/Faction-Raids) | [Report an Issue](https://github.com/boostbar9/Faction-Raids/issues) | [GPL-3.0-only](https://spdx.org/licenses/GPL-3.0-only.html)
 
 **Author:** boostbar9
 
