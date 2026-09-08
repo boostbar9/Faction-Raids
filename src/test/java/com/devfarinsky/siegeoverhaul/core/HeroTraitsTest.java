@@ -8,6 +8,25 @@ import org.junit.jupiter.api.Test;
 import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 class HeroTraitsTest extends MinecraftTestSupport {
+    @Test void bloodthornHealsOnlyOnThirdEnemyMeleeHitAndRangedChainCannotRecurse() {
+        var level=mock(net.minecraft.server.level.ServerLevel.class);var hero=mock(Mob.class);var victim=mock(Mob.class);
+        var heroTag=new CompoundTag();heroTag.putBoolean("SiegeHiredHero",true);heroTag.putInt("SiegeHeroRole",10);
+        var enemyTag=new CompoundTag();enemyTag.putString(com.devfarinsky.siegeoverhaul.ModConstants.Tags.RAID_TEAM,"test");
+        when(hero.getPersistentData()).thenReturn(heroTag);when(victim.getPersistentData()).thenReturn(enemyTag);
+        when(hero.level()).thenReturn(level);when(hero.isAlive()).thenReturn(true);when(victim.isAlive()).thenReturn(true);
+        when(hero.hasLineOfSight(victim)).thenReturn(true);when(hero.getHealth()).thenReturn(10F);when(hero.getMaxHealth()).thenReturn(20F);
+        var type=net.minecraft.core.Holder.direct(new net.minecraft.world.damagesource.DamageType("test",0));
+        var source=new net.minecraft.world.damagesource.DamageSource(type,hero);
+        var event=new net.minecraftforge.event.entity.living.LivingDamageEvent(victim,source,2);
+        HeroTraits.hit(event);HeroTraits.hit(event);verify(hero,never()).heal(anyFloat());
+        HeroTraits.hit(event);verify(hero).heal(2);HeroTraits.hit(event);verify(hero,times(1)).heal(2);
+        heroTag.putInt("SiegeHeroRole",12);heroTag.putInt("SiegeHeroHits",0);
+        HeroTraits.hit(event);assertEquals(0,heroTag.getInt("SiegeHeroHits"));
+        enemyTag.remove(com.devfarinsky.siegeoverhaul.ModConstants.Tags.RAID_TEAM);
+        heroTag.putInt("SiegeHeroRole",10);heroTag.putInt("SiegeHeroHits",0);
+        HeroTraits.hit(event);assertEquals(0,heroTag.getInt("SiegeHeroHits"));
+    }
+
     @Test void distinctiveLoadoutsLiveInNativeEquipmentSlots() {
         var trims=new java.util.HashSet<String>();
         for(int role=10;role<=13;role++) {

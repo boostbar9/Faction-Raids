@@ -22,10 +22,10 @@ public final class HeroTraits {
     private HeroTraits() {}
     public static String description(int role) {
         return switch(role) {
-            case 10 -> "Vanguard: 5s combat speed burst / 20s cooldown";
-            case 11 -> "Bulwark: 5s Resistance I for up to 8 nearby allies / 25s";
-            case 12 -> "Ranger: Power II bow; 5s evasive speed / 20s";
-            case 13 -> "Arbalist: Quick Charge II; a hit slows for 3s / 20s";
+            case 10 -> "Bloodthorn: every third melee hit heals 1 heart; full health grants a short shield (2s cooldown)";
+            case 11 -> "Dawnwarden: shields one ally below 30% health for 5s (30s cooldown)";
+            case 12 -> "Stormbow: every fourth arrow chains 2 damage hearts to up to two enemies (3s cooldown)";
+            case 13 -> "Frostbinder: a bolt slows up to three enemies for 3s (10s cooldown)";
             default -> "";
         };
     }
@@ -70,35 +70,72 @@ public final class HeroTraits {
         }
         return tag.getInt("SiegeHeroRole");
     }
+    private static boolean hostile(Mob hero,LivingEntity target) {
+        return target.isAlive() && EnemyHiringProtection.enemy(target) && !hero.isAlliedTo(target) && hero.hasLineOfSight(target);
+    }
+    static boolean charged(CompoundTag tag,String key,int interval) {
+        int hits=Math.min(interval,Math.max(0,tag.getInt(key))+1);
+        tag.putInt(key,hits);return hits>=interval;
+    }
+    private static void sparkle(ServerLevel level,LivingEntity target,net.minecraft.core.particles.SimpleParticleType particle) {
+        level.sendParticles(particle,target.getX(),target.getY()+1,target.getZ(),16,.4,.6,.4,.02);
+    }
     @SubscribeEvent
     public static void tick(LivingEvent.LivingTickEvent event) {
         if(!(event.getEntity() instanceof Mob mob) || !(mob.level() instanceof ServerLevel level)
-                || mob.tickCount%20!=0 || !mob.isAlive() || mob.isNoAi())return;
-        int role=role(mob);if(role<10 || role>12 || mob.getTarget()==null || !mob.getTarget().isAlive())return;
+                || mob.tickCount%20!=0 || !mob.isAlive() || mob.isNoAi() || role(mob)!=11)return;
         long now=level.getGameTime();var tag=mob.getPersistentData();
         if(!ready(now,tag.getLong("SiegeHeroNext")))return;
-        if(role==12 && mob.distanceToSqr(mob.getTarget())>64)return;
-        if(role==11) {
-            var owner=RecruitsBridge.ownerUuid(mob);if(owner.isEmpty())return;
-            var allies=level.getEntitiesOfClass(LivingEntity.class,mob.getBoundingBox().inflate(6),other->other.isAlive()
-                    && !EnemyHiringProtection.enemy(other) && mob.hasLineOfSight(other)
-                    && (other.getUUID().equals(owner.get()) || RecruitsBridge.ownerUuid(other).equals(owner)));
-            allies.sort(java.util.Comparator.comparingDouble(mob::distanceToSqr));
-            allies.stream().limit(8).forEach(other->other.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE,100,0)));
-            mob.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE,100,0));
-        } else mob.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED,100,role==10?0:1));
-        tag.putLong("SiegeHeroNext",now+(role==11?500:400));
-        level.sendParticles(net.minecraft.core.particles.ParticleTypes.ENCHANT,mob.getX(),mob.getY()+1,mob.getZ(),16,.5,.6,.5,.05);
+        var owner=RecruitsBridge.ownerUuid(mob);if(owner.isEmpty())return;
+        var allies=level.getEntitiesOfClass(LivingEntity.class,mob.getBoundingBox().inflate(6),other->other.isAlive()
+                && other.getHealth()<=other.getMaxHealth()*.3F && !other.hasEffect(MobEffects.ABSORPTION)
+                && ready(now,other.getPersistentData().getLong("SiegeLastLight"))
+                && !EnemyHiringProtection.enemy(other) && mob.hasLineOfSight(other)
+                && (other.getUUID().equals(owner.get()) || RecruitsBridge.ownerUuid(other).equals(owner)));
+        allies.sort(java.util.Comparator.comparingDouble(other->other.getHealth()/other.getMaxHealth()));
+        if(allies.isEmpty())return;
+        var ally=allies.get(0);ally.addEffect(new MobEffectInstance(MobEffects.ABSORPTION,100,1));
+        ally.getPersistentData().putLong("SiegeLastLight",now+600);tag.putLong("SiegeHeroNext",now+600);
+        sparkle(level,ally,net.minecraft.core.particles.ParticleTypes.TOTEM_OF_UNDYING);
+        level.playSound(null,ally.blockPosition(),net.minecraft.sounds.SoundEvents.AMETHYST_BLOCK_CHIME,net.minecraft.sounds.SoundSource.NEUTRAL,0.7F,1.2F);
     }
     @SubscribeEvent
     public static void hit(LivingDamageEvent event) {
-        if(event.getAmount()<=0 || !(event.getSource().getDirectEntity() instanceof Projectile projectile)
-                || !(projectile.getOwner() instanceof Mob mob) || !(mob.level() instanceof ServerLevel level)
-                || !mob.isAlive() || role(mob)!=13 || mob.isAlliedTo(event.getEntity())
-                || !EnemyHiringProtection.enemy(event.getEntity()))return;
-        long now=level.getGameTime();var tag=mob.getPersistentData();
-        if(!ready(now,tag.getLong("SiegeHeroNext")))return;
-        event.getEntity().addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN,60,0));
-        tag.putLong("SiegeHeroNext",now+400);
+        if(event.getAmount()<=0 || !(event.getSource().getEntity() instanceof Mob mob)
+                || !(mob.level() instanceof ServerLevel level) || !mob.isAlive() || mob.isNoAi()
+                || !hostile(mob,event.getEntity()))return;
+        int role=role(mob);long now=level.getGameTime();var tag=mob.getPersistentData();
+        if(role==10 && event.getSource().getDirectEntity()==mob) {
+            if(!charged(tag,"SiegeHeroHits",3) || !ready(now,tag.getLong("SiegeHeroNext")))return;
+            tag.putInt("SiegeHeroHits",0);tag.putLong("SiegeHeroNext",now+40);
+            if(mob.getHealth()<mob.getMaxHealth())mob.heal(2);
+            else if(!mob.hasEffect(MobEffects.ABSORPTION))mob.addEffect(new MobEffectInstance(MobEffects.ABSORPTION,100,0));
+            sparkle(level,mob,net.minecraft.core.particles.ParticleTypes.HEART);return;
+        }
+        // Only real projectile hits trigger ranged magic. Secondary chain damage
+        // has the hero as its direct source, so it cannot recursively chain.
+        if(!(event.getSource().getDirectEntity() instanceof Projectile projectile) || projectile.getOwner()!=mob)return;
+        if(role==12) {
+            if(!charged(tag,"SiegeHeroHits",4)) {sparkle(level,mob,net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK);return;}
+            if(!ready(now,tag.getLong("SiegeHeroNext")))return;
+            tag.putInt("SiegeHeroHits",0);tag.putLong("SiegeHeroNext",now+60);
+            var primary=event.getEntity();
+            var enemies=level.getEntitiesOfClass(LivingEntity.class,primary.getBoundingBox().inflate(6),e->e!=primary && hostile(mob,e) && primary.hasLineOfSight(e));
+            enemies.sort(java.util.Comparator.comparingDouble(primary::distanceToSqr));
+            for(var enemy:enemies.stream().limit(2).toList()) {
+                if(enemy.hurt(level.damageSources().indirectMagic(mob,mob),4))sparkle(level,enemy,net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK);
+            }
+            sparkle(level,primary,net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK);
+        } else if(role==13 && ready(now,tag.getLong("SiegeHeroNext"))) {
+            tag.putLong("SiegeHeroNext",now+200);var primary=event.getEntity();
+            var enemies=level.getEntitiesOfClass(LivingEntity.class,primary.getBoundingBox().inflate(3),e->hostile(mob,e) && primary.hasLineOfSight(e));
+            enemies.sort(java.util.Comparator.comparingDouble(primary::distanceToSqr));
+            for(var enemy:enemies.stream().limit(3).toList()) {
+                if(!ready(now,enemy.getPersistentData().getLong("SiegeFrostNext")))continue;
+                enemy.getPersistentData().putLong("SiegeFrostNext",now+100);
+                enemy.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN,60,1));
+                sparkle(level,enemy,net.minecraft.core.particles.ParticleTypes.SNOWFLAKE);
+            }
+        }
     }
 }
