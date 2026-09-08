@@ -21,7 +21,7 @@ public final class DefensePlaybook {
 
     public static final List<Tip> TIPS = List.of(
             new Tip("Stronghold", "Defend your Siege Core",
-                    "Place one core in your faction's Recruits claim in the Overworld. It is the occupation objective: hold its inner ring to reverse enemy pressure. Beds no longer select the target."),
+                    "Place one core in your faction's Recruits claim in the Overworld. Enemies must outnumber you and your recruits within 10 horizontal and 3 vertical blocks for 120 seconds by default. Ties pause progress. There is no perimeter timer."),
             new Tip("Recruitment", "Check the core's hire offers",
                     "Right-click the core for three shared faction hires. Each slot rolls 80% recruit, 10% shieldman and 10% archer. Stock refreshes every 15 minutes of server runtime. Native hiring prices, currency and unit limits apply."),
             new Tip("Preparation", "Watch the enemy foothold grow",
@@ -35,7 +35,7 @@ public final class DefensePlaybook {
             new Tip("Siege engines", "Defeat the operator",
                     "Native Recruits engineers operate supplied ballistae and catapults after preparation. A defeated operator is not replaced. Reach the gun crew or destroy the engine."),
             new Tip("Recovery", "Protect the faction's claim",
-                    "Cores cannot be moved during an active siege. Losing the claim or forcibly removing the core ends the siege without a victory reward. Existing active raids from older versions retain their saved objective.")
+                    "A captured core transfers its whole Recruits claim to the Raiders. Outnumber the enemy at your core for 120 seconds to reclaim the territory. Your recruits count even while you are offline. Timers and radius are configurable.")
     );
 
     private DefensePlaybook() {}

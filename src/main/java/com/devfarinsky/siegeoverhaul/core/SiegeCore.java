@@ -22,7 +22,7 @@ public final class SiegeCore {
     }
     public static RaidSavedData.DefensePoint point(net.minecraft.server.MinecraftServer server, String key) {
         CompoundTag core = RaidSavedData.get(server).siegeCores.get(key);
-        if (core == null || !core.contains("Position")) return null;
+        if (core == null || core.getBoolean("Occupied") || !core.contains("Position")) return null;
         BlockPos pos = BlockPos.of(core.getLong("Position"));
         ServerLevel level = server.overworld();
         if (!level.hasChunkAt(pos) || !level.getBlockState(pos).is(CoreBlocks.CORE.get()) || !claimed(level, pos, key)) return null;
@@ -32,7 +32,7 @@ public final class SiegeCore {
         String key = key(player);
         if (!claimed(player.serverLevel(), pos, key)) return false;
         RaidSavedData data = RaidSavedData.get(player.server);
-        if (data.raids.containsKey(key)) return false;
+        if (data.raids.containsKey(key) || CoreOccupation.occupied(data,key)) return false;
         CompoundTag old = data.siegeCores.get(key);
         if (old == null || !old.contains("Position")) return true;
         BlockPos oldPos = BlockPos.of(old.getLong("Position"));
@@ -62,7 +62,7 @@ public final class SiegeCore {
         RaidSavedData data = RaidSavedData.get(player.server);
         for (var entry : data.siegeCores.entrySet()) {
             if (entry.getValue().contains("Position") && BlockPos.of(entry.getValue().getLong("Position")).equals(pos)) {
-                return !data.raids.containsKey(entry.getKey()) && (entry.getKey().equals(key(player)) || player.hasPermissions(2));
+                return !entry.getValue().getBoolean("Occupied") && !data.raids.containsKey(entry.getKey()) && (entry.getKey().equals(key(player)) || player.hasPermissions(2));
             }
         }
         return true;

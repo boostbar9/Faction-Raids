@@ -1424,6 +1424,8 @@ public final class RaidEvents {
         state.reconcileTicks = 0;
         reconcileTaggedMobs(level, point, state);
         updateTrackedMobs(level, state);
+        for (UUID id : state.raiders) if (level.getEntity(id) instanceof Mob mob)
+            com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(mob,state.factionId,mob.getPersistentData().getString(RAID_ROLE_TAG));
         data.setDirty();
         source.sendSuccess(() -> Component.literal("Reconciled invasion " + key + ": " +
                 state.raiders.size() + " enemies tracked.").withStyle(ChatFormatting.GREEN), true);
@@ -1437,6 +1439,7 @@ public final class RaidEvents {
                 syncAutomaticHome(server, data, player, false);
             }
         }
+        com.devfarinsky.siegeoverhaul.core.CoreOccupation.tick(server, data);
         // Core ownership follows the placing faction, not an individual changing teams.
         long now = server.overworld().getGameTime();
         if (now / 20 % 5 == 0) com.devfarinsky.siegeoverhaul.compat.CampClaims.cleanOrphans(server.overworld(), data);
@@ -1789,10 +1792,20 @@ public final class RaidEvents {
 
         if ("siege_core".equals(state.defensePointName)) {
             if (!level.hasChunkAt(point.pos())) { setRaidMobsFrozen(level, state, true); return; }
-            if (com.devfarinsky.siegeoverhaul.core.SiegeCore.point(server, teamKey) == null) {
+            state.breached = true; // Core raids have no abstract perimeter phase.
+            if (state.coreCaptured && !level.getBlockState(point.pos()).is(com.devfarinsky.siegeoverhaul.core.CoreBlocks.CORE.get())) {
+                finishRaid(server,data,teamKey,false,false,"The occupied core was removed; occupation data remains reserved for recovery.");
+                return;
+            }
+            if (!state.coreCaptured && com.devfarinsky.siegeoverhaul.core.SiegeCore.point(server, teamKey) == null) {
                 finishRaid(server, data, teamKey, false, false, "The Siege Core or its faction claim was lost. The siege has ended without rewards.");
                 return;
             }
+        }
+
+        if (state.coreCaptured && !com.devfarinsky.siegeoverhaul.core.CoreOccupation.occupied(data, teamKey)) {
+            finishRaid(server,data,teamKey,true,false,"Your faction reclaimed its Siege Core and territory.");
+            return;
         }
 
         // Upgrade active raids from older saves exactly once. Those raids did
@@ -1802,7 +1815,7 @@ public final class RaidEvents {
         }
 
         List<ServerPlayer> members = onlineMembers(server, teamKey);
-        if (members.isEmpty() && RaidConfig.PAUSE_WHEN_FACTION_OFFLINE.get()) {
+        if (members.isEmpty() && RaidConfig.PAUSE_WHEN_FACTION_OFFLINE.get() && !state.coreCaptured) {
             state.offlinePauseAnnounced = true;
             setRaidMobsFrozen(level, state, true);
             updateBossBar(server, anchor, state, true);
@@ -1818,6 +1831,8 @@ public final class RaidEvents {
 
         reconcileTaggedMobs(level, point, state);
         updateTrackedMobs(level, state);
+        for (UUID id : state.raiders) if (level.getEntity(id) instanceof Mob mob)
+            com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(mob,state.factionId,mob.getPersistentData().getString(RAID_ROLE_TAG));
         // v2.28.0: Captain aura \u2014 the Unit Codex has always promised that
         // Captains buff their squad. Now they actually do: any raider tagged
         // role="captain" pulses Strength I to friendly raiders within 8
@@ -1840,6 +1855,20 @@ public final class RaidEvents {
         List<Mob> recruits = alliedRecruits(level, point, anchor);
         if (state.preparationTicks > 0) {
             processPreparation(server, level, data, anchor, point, state, members, recruits);
+            return;
+        }
+        if (state.coreCaptured) {
+            // No fresh waves, escape deletion or surrender timeout during occupation.
+            // Surviving troops hold the core until the defenders reclaim it.
+            for (UUID id : state.raiders) if (level.getEntity(id) instanceof Mob mob && !mob.isPassenger()) {
+                com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
+                if (mob.getTarget() == null || !mob.getTarget().isAlive()) {
+                    if (mob.distanceToSqr(Vec3.atCenterOf(point.pos())) > 16)
+                        mob.getNavigation().moveTo(point.pos().getX()+.5,point.pos().getY(),point.pos().getZ()+.5,1.0);
+                }
+            }
+            if (RaidConfig.MOBILIZE_RECRUITS.get()) mobilizeRecruits(level,recruits,state);
+            updateBossBar(server,anchor,state,false);
             return;
         }
         if (RaidConfig.MOBILIZE_RECRUITS.get()) mobilizeRecruits(level, recruits, state);
@@ -1910,7 +1939,11 @@ public final class RaidEvents {
         processPhysicalBreaching(level, point, state);
 
         if (updateCaptureProgress(server, anchor, point, state, level, members, recruits)) {
-            finishRaid(server, data, teamKey, false, false,
+            if ("siege_core".equals(point.name())) {
+                if (!com.devfarinsky.siegeoverhaul.core.CoreOccupation.capture(level,data,state,point.pos()))
+                    state.objectiveStatus = "Capture ready: claim transfer blocked; retrying";
+                updateBossBar(server,anchor,state,false);
+            } else finishRaid(server, data, teamKey, false, false,
                     anchor.teamDisplay() + "'s stronghold has fallen to the enemy siege!");
             return;
         }
@@ -1919,7 +1952,7 @@ public final class RaidEvents {
         if (defended) state.abandonedTicks = 0;
         else state.abandonedTicks += 20;
         int abandonmentMinutes = RaidConfig.ABANDON_DEFEAT_MINUTES.get();
-        if (abandonmentMinutes > 0 && state.abandonedTicks >= abandonmentMinutes * 60 * 20) {
+        if (!"siege_core".equals(point.name()) && abandonmentMinutes > 0 && state.abandonedTicks >= abandonmentMinutes * 60 * 20) {
             finishRaid(server, data, teamKey, false, false,
                     anchor.teamDisplay() + " abandoned its territory. The invasion has prevailed!");
             return;
@@ -2306,6 +2339,7 @@ public final class RaidEvents {
         raider.getPersistentData().putString(RAID_ROLE_TAG, role);
         // v2.15.0: name tag + role-colored glow team membership.
         RaiderLabels.applyRole(raider, role);
+        com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(raider,state.factionId,role);
         // Mark this raider's unit id as discovered for the defending team.
         // We use the codex id, which for commander is fixed and for everyone
         // else is the entity type path (matches UnitCodex.Entry.id). This
@@ -2394,6 +2428,10 @@ public final class RaidEvents {
         state.commanderDefeated = true;
         // v2.34.0: tear down the Commander boss bar the moment the boss dies.
         com.devfarinsky.siegeoverhaul.raid.CommanderBossBar.onCommanderDefeated(anchor.teamKey());
+        if ("siege_core".equals(state.defensePointName)) {
+            announce(server,anchor.teamKey(),Component.literal("The siege commander has fallen. Hold the core to control its territory.").withStyle(ChatFormatting.GREEN),true);
+            return;
+        }
         if (!state.breached && RaidConfig.ENABLE_BREACH_PHASE.get()) {
             state.breachTicks = Math.max(0, state.breachTicks - 30 * 20);
         } else state.captureTicks = Math.max(0, state.captureTicks - 30 * 20);
@@ -3786,6 +3824,14 @@ public final class RaidEvents {
                                                  List<ServerPlayer> members, List<Mob> recruits) {
         if (state.wave <= 0) return false;
         Vec3 center = Vec3.atCenterOf(point.pos());
+        if ("siege_core".equals(point.name())) {
+            state.breached = true;
+            int[] counts = com.devfarinsky.siegeoverhaul.core.CoreOccupation.counts(level,point.pos(),state.teamKey,anchor.members());
+            int maximum = RaidConfig.CAPTURE_TIME_SECONDS.get()*20;
+            state.captureTicks = com.devfarinsky.siegeoverhaul.core.CoreControl.advance(state.captureTicks,maximum,counts[0],counts[1]);
+            state.objectiveStatus = "Core capture " + state.captureTicks*100/maximum + "% | " + counts[0] + " enemies / " + counts[1] + " defenders";
+            return state.captureTicks >= maximum && counts[0]>counts[1];
+        }
         if (RaidConfig.ENABLE_BREACH_PHASE.get() && !state.breached) {
             Vec3 breachObjective = invasionObjective(level, point, state);
             double objectiveRadius = RaidConfig.BREACH_OBJECTIVE_RADIUS.get();
@@ -4115,6 +4161,8 @@ public final class RaidEvents {
     private static String raidPhaseLabel(RaidSavedData.RaidState state, boolean paused) {
         if (!paused && state.preparationTicks > 0) return preparationLabel(state) + " • " + (state.preparationTicks + 1199) / 1200 + "m until assault";
         if (paused) return "Paused";
+        if (state.coreCaptured) return "Reclaim core";
+        if ("siege_core".equals(state.defensePointName) && state.wave > 0) return "Defend core";
         if (state.wave == 0) return "Rally";
         if (!state.breached && RaidConfig.ENABLE_BREACH_PHASE.get()) return "Breach";
         if (state.captureTicks > 0) return "Occupation";
@@ -4197,6 +4245,11 @@ public final class RaidEvents {
         String label;
         if (paused) {
             label = com.devfarinsky.siegeoverhaul.chat.ChatStyle.bossbarLabel(epithet, phase, "faction offline");
+        } else if (state.coreCaptured) {
+            var core = RaidSavedData.get(server).siegeCores.get(state.teamKey);
+            int progress = core == null ? 0 : core.getInt("RecaptureTicks");
+            bar.setProgress(Mth.clamp((float)progress/(RaidConfig.CORE_RECAPTURE_SECONDS.get()*20),0,1));
+            label = com.devfarinsky.siegeoverhaul.chat.ChatStyle.bossbarLabel(epithet,"Reclaim core",state.objectiveStatus);
         } else if (state.preparationTicks > 0 || state.wave == 0) {
             // Rally phase: approach direction is the useful chip.
             String target = objectiveName + distanceHint;
@@ -4221,7 +4274,9 @@ public final class RaidEvents {
         String previous = bar.getName().getString();
         if (!previous.equals(label)) bar.setName(Component.literal(label));
 
-        bar.setColor(computeBossBarColor(state, paused, breachPercent, capturePercent));
+        if ("siege_core".equals(state.defensePointName) && state.preparationTicks<=0 && !state.coreCaptured)
+            bar.setProgress(capturePercent/100f);
+        bar.setColor(state.coreCaptured ? BossEvent.BossBarColor.PURPLE : computeBossBarColor(state, paused, breachPercent, capturePercent));
     }
 
     /**
@@ -4437,6 +4492,11 @@ public final class RaidEvents {
         String nextLabel = nextWaveNumber <= state.wave ? "Final wave in progress" :
                 "Wave " + nextWaveNumber + (nextPreview.label.isEmpty() ? "" : " — " + nextPreview.label);
         String nextRoles = nextWaveNumber <= state.wave ? "" : formatRoleCounts(nextPreview);
+        if (state.coreCaptured) {
+            var occupiedCore = data.siegeCores.get(key);
+            occupation = occupiedCore == null ? 0 : occupiedCore.getInt("RecaptureTicks")*100/(RaidConfig.CORE_RECAPTURE_SECONDS.get()*20);
+            nextLabel = "Recapture your Siege Core"; nextRoles = "Outnumber the enemy at the core; no further assault waves.";
+        }
         int score = computeDefenseScore(recruits, compat, state.raiders.size() + state.pendingWaveSpawns,
                 state.wave);
         String campDir = state.campPos == null ? "" : approachDirection(state.approachAngle);
