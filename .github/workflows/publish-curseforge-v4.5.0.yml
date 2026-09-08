@@ -1,0 +1,81 @@
+name: Publish tested 4.5.0 beta to CurseForge
+on:
+  push:
+    branches: [publish/curseforge-v4.5.0]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: curseforge-1364352-v4.5.0
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34188414629
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Verify tested bytes and metadata
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          jar = Path('dist/siegeoverhaul-4.5.0.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == '2d10095cc5308b2339a5d0253e018179312dc891cf5f23e3dcf80c5ba9995668'
+          with zipfile.ZipFile(jar) as z:
+              data = tomllib.loads(z.read('META-INF/mods.toml').decode())
+          assert data['mods'][0]['modId'] == 'siegeoverhaul'
+          assert data['mods'][0]['version'] == '4.5.0'
+          dependencies = {x['modId']: x for x in data['dependencies']['siegeoverhaul']}
+          for mod in ['recruits', 'workers', 'smallships', 'siegeweapons']:
+              assert dependencies[mod]['mandatory'], mod
+          print('Verified', jar.name, digest)
+          CHECK
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.5.0.jar
+          name: The Siege Overhaul v4.5.0 beta - Combat Roster and Core Codex
+          version: v4.5.0
+          version-type: beta
+          changelog: |
+            ## 4.5.0 beta
+            
+            - Expanded progressive waves to all twelve native Recruits combat types, including recruits, scouts, horsemen, nomads and assassin leaders. Civilian messengers and nobles remain outside combat waves. Very small/custom sieges may not have room for every type.
+            - Fixed reserved-wave indexing and rebuilt composition after reload. Tiny waves cannot over-allocate specialist slots.
+            - Role-based local formations: shield/infantry lines, loose ranged spacing, mobile wedges and compact support; narrow approaches use columns. Reachability, claim boundaries and ground clearance are checked before native walking orders. Combat, ladders and the core ring release formations.
+            - Native cavalry mounts advance with the raid and riders dismount near the core or at obstacles. Unclaimed raid mounts are cleaned up at siege end, including later chunk reloads.
+            - Starting Codex now focuses on Core, How to play and Journal. Removed obsolete perimeter/gate progress and crowded stats from its overview; updated the short guide for core capture, recapture and hero hiring. Panel fits scaled screen dimensions.
+
+            Validation: Java 17 clean build and all 96 regression tests passed. No interactive Minecraft playtest; beta release. Install matching versions on server and every client.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          dependencies: |
+            recruits(required)
+            workers(required)
+            smallships(required)
+            siegeweapons(required)
+          fail-mode: fail
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os
+          result = {'version': '4.5.0', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 4.5.0 beta: {result['url']}\n")
+          RECEIPT
