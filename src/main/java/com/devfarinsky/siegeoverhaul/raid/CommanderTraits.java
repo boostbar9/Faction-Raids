@@ -31,7 +31,7 @@ public final class CommanderTraits {
     @SubscribeEvent(priority=EventPriority.LOWEST)
     public static void hurt(LivingDamageEvent event) {
         if(event.getAmount()>0 && commander(event.getEntity()) && event.getEntity().level() instanceof ServerLevel level)
-            event.getEntity().getPersistentData().putLong("SiegeBossHurtAt",level.getGameTime());
+            event.getEntity().getPersistentData().putLong("SiegeBossHurtAt",event.getEntity().getPersistentData().getLong("SiegeBossHurtAt")+1);
     }
     @SubscribeEvent
     public static void tick(LivingEvent.LivingTickEvent event) {
@@ -45,7 +45,7 @@ public final class CommanderTraits {
                 && team.equals(other.getPersistentData().getString(ModConstants.Tags.RAID_TEAM)) && mob.hasLineOfSight(other));
         allies.sort(java.util.Comparator.comparingDouble(mob::distanceToSqr));
         allies.stream().limit(6).forEach(other->other.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST,100,0)));
-        level.playSound(null,mob.blockPosition(),SoundEvents.RAID_HORN,SoundSource.HOSTILE,1,1);
+        level.playSound(null,mob.blockPosition(),SoundEvents.RAID_HORN.value(),SoundSource.HOSTILE,1,1);
         level.sendParticles(ParticleTypes.ANGRY_VILLAGER,mob.getX(),mob.getY()+2,mob.getZ(),16,1,.5,1,0);
         for(var player:level.players())if(player.distanceToSqr(mob)<1024)player.displayClientMessage(
                 net.minecraft.network.chat.Component.literal("Commander: Last Stand! Nearby troops gain strength for 5 seconds."),true);

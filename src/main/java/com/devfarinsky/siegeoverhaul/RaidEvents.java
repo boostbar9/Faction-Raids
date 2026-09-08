@@ -1718,7 +1718,7 @@ public final class RaidEvents {
             // and do not let one occupied corner reject the entire native builder blueprint.
             for (var job : state.pendingFortifications.entrySet()) {
                 BlockPos cell = BlockPos.of(job.getKey());
-                if (level.hasChunkAt(cell) && level.getBlockState(cell).canBeReplaced()
+                if (level.hasChunkAt(cell) && com.devfarinsky.siegeoverhaul.camp.CampVegetation.replaceable(level.getBlockState(cell))
                         && level.getBlockEntity(cell) == null && level.getFluidState(cell).isEmpty())
                     state.pendingCampBlocks.put(job.getKey(), job.getValue());
             }
@@ -2961,7 +2961,7 @@ public final class RaidEvents {
 
     private static boolean validCampSurface(ServerLevel level, BlockPos center, BlockPos anchor) {
         if (!level.getWorldBorder().isWithinBounds(center) || Math.abs(center.getY() - anchor.getY()) > 48 ||
-                !level.getBlockState(center).canBeReplaced()) return false;
+                !com.devfarinsky.siegeoverhaul.camp.CampVegetation.replaceable(level.getBlockState(center))) return false;
         // v2.16.1: the center block is *above* the ground. Water detection
         // has to look at what the palisade will actually stand on, which
         // is center.below(). Previously we only checked getFluidState(center)
@@ -3026,7 +3026,7 @@ public final class RaidEvents {
     private static void placeCampBlock(ServerLevel level, RaidSavedData.RaidState state,
                                        BlockPos pos, Block block) {
         if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)
-                || !level.getFluidState(pos).isEmpty() || !level.getBlockState(pos).canBeReplaced()) return;
+                || !level.getFluidState(pos).isEmpty() || !com.devfarinsky.siegeoverhaul.camp.CampVegetation.replaceable(level.getBlockState(pos))) return;
         if (state.planningCamp) {
             ResourceLocation id = ForgeRegistries.BLOCKS.getKey(block);
             if (id != null) state.pendingCampBlocks.putIfAbsent(pos.asLong(), id.toString());
@@ -3039,6 +3039,8 @@ public final class RaidEvents {
         // of leaving air holes. canBeReplaced() is true for air and short grass, so
         // this tag will be empty (air) most of the time — which is exactly what
         // the restore path expects.
+        if(com.devfarinsky.siegeoverhaul.camp.CampVegetation.plant(level.getBlockState(pos))
+                && !com.devfarinsky.siegeoverhaul.camp.CampVegetation.clear(level,state,pos))return;
         BlockState originalState = level.getBlockState(pos);
         CompoundTag original = originalState.isAir() ? new CompoundTag()
                 : com.devfarinsky.siegeoverhaul.siege.BlockRestoration.serializeState(level, pos, originalState);

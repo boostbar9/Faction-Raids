@@ -14,6 +14,19 @@ import static org.junit.jupiter.api.Assertions.*;
 import static com.devfarinsky.siegeoverhaul.ModConstants.Tags.*;
 
 class NativeCampConstructionTest extends MinecraftTestSupport {
+    @Test void connectedFenceAndBentStairsDoNotPauseConstruction() {
+        assertTrue(NativeCampConstruction.safeCell(Blocks.OAK_FENCE.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.FenceBlock.NORTH,true),"minecraft:oak_fence"));
+        assertTrue(NativeCampConstruction.safeCell(Blocks.STONE_BRICK_STAIRS.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.StairBlock.SHAPE,net.minecraft.world.level.block.state.properties.StairsShape.INNER_LEFT),"minecraft:stone_brick_stairs"));
+        assertFalse(NativeCampConstruction.safeCell(Blocks.OAK_FENCE.defaultBlockState(),"minecraft:spruce_fence"));
+    }
+    @Test void flowersAreClearableButCropsContainersAndTreesAreNot() {
+        for(var block:new net.minecraft.world.level.block.Block[]{Blocks.DANDELION,Blocks.POPPY,Blocks.SUNFLOWER,Blocks.LARGE_FERN})
+            assertTrue(CampVegetation.plant(block.defaultBlockState()));
+        for(var block:new net.minecraft.world.level.block.Block[]{Blocks.WHEAT,Blocks.OAK_SAPLING,Blocks.OAK_LOG,Blocks.CHEST,Blocks.STONE})
+            assertFalse(CampVegetation.plant(block.defaultBlockState()));
+    }
     @Test
     void nativeBlueprintRoundTripsNegativeCoordinatesAndHeight() {
         Map<Long, String> jobs = new LinkedHashMap<>();

@@ -53,7 +53,7 @@ public final class WarGate {
                 int floor=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,p.getX(),p.getZ());
                 if(y-floor>2 || !level.getFluidState(p.atY(floor-1)).isEmpty())valid=false;
                 for(int sy=floor;sy<y;sy++)plan.put(p.atY(sy).asLong(),"minecraft:polished_blackstone_bricks");
-                for(int sy=y;sy<=y+7;sy++)if(!level.getBlockState(p.atY(sy)).canBeReplaced() || !level.getFluidState(p.atY(sy)).isEmpty())valid=false;
+                for(int sy=y;sy<=y+7;sy++)if(!com.devfarinsky.siegeoverhaul.camp.CampVegetation.replaceable(level.getBlockState(p.atY(sy))) || !level.getFluidState(p.atY(sy)).isEmpty())valid=false;
             }
             if(!valid || raid.pendingCampBlocks.size()+plan.size()>512)continue;
             CompoundTag tag=new CompoundTag(),cells=new CompoundTag();plan.forEach((p,id)->cells.putString(Long.toString(p),id));

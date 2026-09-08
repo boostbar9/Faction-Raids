@@ -41,7 +41,7 @@ public final class NativeCampConstruction {
             for (long key : raid.pendingCampBlocks.keySet()) {
                 BlockPos p = BlockPos.of(key);
                 if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)
-                        || !level.getBlockState(p).canBeReplaced() || !level.getFluidState(p).isEmpty()
+                        || !CampVegetation.replaceable(level.getBlockState(p)) || !level.getFluidState(p).isEmpty()
                         || level.getBlockEntity(p) != null) return false;
             }
             supply = findSupplyPosition(level, raid);
@@ -64,9 +64,13 @@ public final class NativeCampConstruction {
                 BlockState before = level.getBlockState(p);
                 CompoundTag original = before.isAir() ? new CompoundTag() : BlockRestoration.serializeState(level, p, before);
                 raid.recordCampBlock(job.getKey(), job.getValue(), original);
+                if(CampVegetation.plant(before) && !CampVegetation.clear(level,raid,p))
+                    throw new IllegalStateException("Cannot clear camp vegetation");
                 if (!before.isAir() && !level.setBlock(p, Blocks.AIR.defaultBlockState(), 3))
                     throw new IllegalStateException("Cannot prepare camp cell");
             }
+            if(CampVegetation.plant(level.getBlockState(supply)) && !CampVegetation.clear(level,raid,supply))throw new IllegalStateException("Supply site vegetation blocked");
+            if(CampVegetation.plant(level.getBlockState(supply.above())) && !CampVegetation.clear(level,raid,supply.above()))throw new IllegalStateException("Supply access vegetation blocked");
             raid.recordCampBlock(supply.asLong(), "minecraft:barrel", new CompoundTag());
             if (!level.setBlock(supply, Blocks.BARREL.defaultBlockState(), 3)
                     || !(level.getBlockEntity(supply) instanceof Container container))
@@ -167,7 +171,8 @@ public final class NativeCampConstruction {
                 if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)
                         || raid.pendingCampBlocks.containsKey(p.asLong())
                         || raid.pendingCampBlocks.containsKey(p.above().asLong())) continue;
-                if (level.getBlockState(p).isAir() && level.getBlockState(p.above()).isAir()
+                if ((level.getBlockState(p).isAir() || CampVegetation.plant(level.getBlockState(p)))
+                        && (level.getBlockState(p.above()).isAir() || CampVegetation.plant(level.getBlockState(p.above())))
                         && level.getBlockState(p.below()).isFaceSturdy(level, p.below(), Direction.UP)
                         && level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, new AABB(p)).isEmpty()) return p;
             }
@@ -191,6 +196,10 @@ public final class NativeCampConstruction {
             BlockPos p = BlockPos.of(job.getKey());
             if (!level.hasChunkAt(p)) return false;
             BlockState current = level.getBlockState(p);
+            if(CampVegetation.plant(current)) {
+                if(!CampVegetation.clear(level,raid,p))return pause(raid,"Vegetation clearance blocked at "+p.toShortString());
+                current=level.getBlockState(p);
+            }
             if (!safeCell(current, job.getValue()) || !level.getFluidState(p).isEmpty()) {
                 return pause(raid, "Blueprint blocked at " + p.toShortString());
             }
@@ -216,8 +225,19 @@ public final class NativeCampConstruction {
     }
 
     static boolean safeCell(BlockState current, String planned) {
-        return current.isAir() || (planned.equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(current.getBlock())))
-                && current.equals(current.getBlock().defaultBlockState()));
+        if(current.isAir())return true;
+        if(!planned.equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(current.getBlock()))))return false;
+        BlockState expected=current.getBlock().defaultBlockState();
+        // Neighbor updates legitimately connect fences/walls and bend stairs after placement.
+        for(var property:current.getProperties()) {
+            boolean connection=(current.getBlock() instanceof net.minecraft.world.level.block.FenceBlock
+                    || current.getBlock() instanceof net.minecraft.world.level.block.WallBlock
+                    || current.getBlock() instanceof net.minecraft.world.level.block.IronBarsBlock)
+                    && Set.of("north","south","east","west","up").contains(property.getName());
+            boolean stairShape=current.getBlock() instanceof net.minecraft.world.level.block.StairBlock && property.getName().equals("shape");
+            if(!connection && !stairShape && !current.getValue(property).equals(expected.getValue(property)))return false;
+        }
+        return true;
     }
 
     public static void tick(ServerLevel level, RaidSavedData.RaidState raid) {
@@ -265,7 +285,18 @@ public final class NativeCampConstruction {
         try {
             if (raid == null || !active(raid)) return false;
             if (area.getUUID().equals(raid.nativeCamp.getUUID(CAMP_BUILD_AREA))) {
-                WorkersBridge.startBlueprint(area, blueprint(raid.pendingCampBlocks));
+                CompoundTag plan=blueprint(raid.pendingCampBlocks);
+                BlockPos min=bounds(raid.pendingCampBlocks,false);
+                for(var entry:plan.getList("blocks",net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+                    CompoundTag block=(CompoundTag)entry;
+                    BlockPos p=min.offset(block.getInt("x"),block.getInt("y"),block.getInt("z"));
+                    if(level.hasChunkAt(p)) {
+                        BlockState current=level.getBlockState(p);
+                        if(!current.isAir() && safeCell(current,raid.pendingCampBlocks.get(p.asLong())))
+                            block.put("state",NbtUtils.writeBlockState(current));
+                    }
+                }
+                WorkersBridge.startBlueprint(area,plan);
                 return true;
             }
             return area.getUUID().equals(raid.nativeCamp.getUUID(CAMP_STORAGE_AREA));
