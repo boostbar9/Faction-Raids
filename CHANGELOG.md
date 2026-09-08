@@ -1,3 +1,10 @@
+## 4.1.1 beta — Keep banners off player bases
+
+- Remove physical forward marker banners and wool plinths beside the defender's objective; the surface-height lookup could place them on a player's roof.
+- Restrict faction banner placement to the actual camp footprint.
+- Do not mutate an existing banner block entity when placement fails.
+- Includes all 4.1.0 builder, native claim, faction-interface and starting guard changes.
+
 ## 4.1.0 beta — Native camp claims and starting guards
 
 - Preserve native builder jobs during temporary player/block obstructions and resume when clear. Replace native construction timeout cancellation with progress diagnostics.
