@@ -1,5 +1,7 @@
 ## 4.6.0 beta
 
+- Builders construct a protected War Gate: blackstone landing pad, obsidian arch, crying-obsidian accents, amethyst pylons and a rotating portal effect. Land reinforcements use checked pad positions instead of camp roofs. Two guards defend the gate; it removes itself and restores its footprint when the siege ends.
+
 - First login now grants two distinct starter bags instead of loose core/book gifts. Existing players receive the bags once on their next login as an upgrade grant.
 - Faction bag: Codex, Siege Core, loom, two banners, three dye colors, and configured hiring currency covering faction creation, a first claim, two shieldmen and two archers plus a buffer (192 emeralds with native defaults).
 - Survival/building bag: iron tools and armor, shield, food, bed, water bucket, workstations, torches, 1,024 stone bricks, 128 stairs, 128 slabs, timber, glass and storage. Unpacking fills available inventory space; remaining supplies stay in the bag, including in Creative mode.

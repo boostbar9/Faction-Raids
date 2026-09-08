@@ -1589,7 +1589,7 @@ public final class RaidEvents {
         if (raidLevel != null) {
             com.devfarinsky.siegeoverhaul.naval.NavalStagingScanner.NavalStaging naval =
                     com.devfarinsky.siegeoverhaul.naval.NavalStagingScanner.scan(raidLevel, point.pos());
-            if (naval.found()) {
+            if (naval.found() && !RaidConfig.BUILD_WAR_CAMPS.get()) {
                 state.navalStagingPos = naval.surface();
                 state.navalBeachPos = naval.beach();
                 announce(server, anchor.teamKey(), Component.literal(
@@ -1848,6 +1848,11 @@ public final class RaidEvents {
         // effect so it never flickers between passes but decays if the
         // captain dies.
         tickCaptainAura(level, state);
+        com.devfarinsky.siegeoverhaul.camp.WarGate.tick(level,state,point.pos());
+        if(state.warGateWaitTicks>=20*60*30 && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
+            finishRaid(server,data,teamKey,false,false,"The enemy could not establish its War Gate. The siege has withdrawn without rewards.");
+            return;
+        }
         com.devfarinsky.siegeoverhaul.camp.CampDevelopment.tick(level,state);
         // Camp progress is persisted even when no wave or breach changed this pass.
         if (!state.pendingCampBlocks.isEmpty()) {
@@ -2216,6 +2221,10 @@ public final class RaidEvents {
     private static void spawnNextSquad(MinecraftServer server, ServerLevel level, RaidSavedData data,
                                        RaidSavedData.Anchor anchor, RaidSavedData.DefensePoint point,
                                        RaidSavedData.RaidState state) {
+        if(state.campPos!=null && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
+            state.objectiveStatus="Reinforcements waiting for the builders to complete the War Gate";
+            state.ticksToNextSquad=100;return;
+        }
         int perSquad = RaidConfig.STAGED_SQUADS.get() ? RaidConfig.SQUAD_SIZE.get() : state.pendingWaveSpawns;
         int factionCapacity = Math.max(0, RaidConfig.MAX_ACTIVE_RAIDERS.get() - state.raiders.size() - state.campGuards.size());
         int globalCapacity = Math.max(0, RaidConfig.MAX_GLOBAL_RAIDERS.get() - globalTrackedCount(data));
@@ -2232,7 +2241,7 @@ public final class RaidEvents {
 
         // Naval share: when a staging point is available, route a percentage of
         // this squad into boats. The rest still spawn on land as usual.
-        boolean amphibious = state.preparationTicks <= 0 && state.navalStagingPos != null && state.navalBeachPos != null;
+        boolean amphibious = state.campPos==null && state.preparationTicks <= 0 && state.navalStagingPos != null && state.navalBeachPos != null;
         int navalShare = amphibious ? (wanted * RaidConfig.NAVAL_WAVE_SHARE_PERCENT.get() + 50) / 100 : 0;
 
         int spawned = 0;
@@ -2246,8 +2255,8 @@ public final class RaidEvents {
             boolean asNaval = i < navalShare && !cavalry;
             BlockPos spawn = asNaval
                     ? state.navalStagingPos
-                    : findSpawnPosition(level, point.pos(), level.random, candidate,
-                            state.approachAngle, state.campPos);
+                    : state.campPos!=null ? com.devfarinsky.siegeoverhaul.camp.WarGate.spawn(level,state,candidate)
+                    : findSpawnPosition(level, point.pos(), level.random, candidate,state.approachAngle,null);
             if (spawn == null) continue;
             candidate.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5,
                     level.random.nextFloat() * 360.0F, 0.0F);
@@ -2712,6 +2721,7 @@ public final class RaidEvents {
                 final int tz = cz + rearDz + perpZ * tent;
                 buildTent(level, state, tx, tz, cy);
             }
+            com.devfarinsky.siegeoverhaul.camp.WarGate.plan(level,state,point.pos());
         } finally {
             state.planningCamp = false;
         }
@@ -4064,6 +4074,7 @@ public final class RaidEvents {
                 }
                 restoreBreachedBlocks(level, state);
                 com.devfarinsky.siegeoverhaul.camp.CampBuilder.cleanup(level, state);
+                com.devfarinsky.siegeoverhaul.camp.WarGate.cleanup(level,state);
                 cleanupWarCamp(level, state);
             }
             long next = server.overworld().getGameTime() + randomCooldownTicks(server.overworld().random);

@@ -465,6 +465,8 @@ public final class RaidSavedData extends SavedData {
         public int lastBreachWarningBand;
         public BlockPos campPos;
         public UUID campClaimId;
+        public CompoundTag warGate=new CompoundTag();
+        public int warGateWaitTicks;
         public BlockPos campSearchPos;
         public int campSearchStep;
         public int campSearchTicks;
@@ -614,6 +616,7 @@ public final class RaidSavedData extends SavedData {
             tag.putString("Team", teamKey);
             tag.putString("DefensePoint", defensePointName);
             if (campClaimId != null) tag.putUUID("CampClaimId", campClaimId);
+            tag.put("WarGate",warGate.copy());tag.putInt("WarGateWaitTicks",warGateWaitTicks);
             tag.putBoolean("CampGuardsStarted", campGuardsStarted);
             tag.putInt("CampCompletedBlocks", campCompletedBlocks);
             ListTag guards = new ListTag();
@@ -759,6 +762,7 @@ public final class RaidSavedData extends SavedData {
             RaidState state = new RaidState(tag.getString("Team"), point, tag.getInt("NextWave"));
             state.wave = tag.getInt("Wave");
             state.campClaimId = tag.hasUUID("CampClaimId") ? tag.getUUID("CampClaimId") : null;
+            state.warGate=tag.getCompound("WarGate").copy();state.warGateWaitTicks=Math.max(0,tag.getInt("WarGateWaitTicks"));
             state.campGuardsStarted = tag.getBoolean("CampGuardsStarted");
             state.campCompletedBlocks = tag.getInt("CampCompletedBlocks");
             ListTag guards = tag.getList("CampGuards", Tag.TAG_COMPOUND);
