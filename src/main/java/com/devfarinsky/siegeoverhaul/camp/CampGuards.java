@@ -97,6 +97,31 @@ public final class CampGuards {
             }
         }
     }
+    public static void muster(ServerLevel level,RaidSavedData.RaidState raid) {
+        int slot=0;
+        for(UUID id:new TreeSet<>(raid.raiders)) {
+            Entity entity=level.getEntity(id);
+            if(!(entity instanceof Mob mob) || mob.isPassenger())continue;
+            BlockPos post=raid.campPos.offset(-6+(slot%6)*2,0,-4+((slot/6)%5)*2); slot++;
+            if(!safePost(level,raid,post))continue;
+            try {
+                var nbt=mob.getPersistentData();
+                if(!nbt.contains("SiegeMusterAggro")) nbt.putInt("SiegeMusterAggro",(Integer)mob.getClass().getMethod("getState").invoke(mob));
+                mob.getClass().getMethod("setAggroState",int.class).invoke(mob,1);
+                mob.getClass().getMethod("setHoldPos",net.minecraft.world.phys.Vec3.class).invoke(mob,net.minecraft.world.phys.Vec3.atBottomCenterOf(post));
+                if(!Integer.valueOf(3).equals(mob.getClass().getMethod("getFollowState").invoke(mob)))
+                    mob.getClass().getMethod("setFollowState",int.class).invoke(mob,3);
+            } catch(ReflectiveOperationException ex) { FactionLogger.LOG.warn("Cannot muster camp unit",ex); }
+        }
+    }
+    public static void releaseMuster(Mob mob) {
+        var nbt=mob.getPersistentData(); if(!nbt.contains("SiegeMusterAggro"))return;
+        try {
+            mob.getClass().getMethod("setFollowState",int.class).invoke(mob,0);
+            mob.getClass().getMethod("setAggroState",int.class).invoke(mob,nbt.getInt("SiegeMusterAggro"));
+            nbt.remove("SiegeMusterAggro");
+        } catch(ReflectiveOperationException ex) { FactionLogger.LOG.warn("Cannot release mustered unit",ex); }
+    }
     /** Two gate sentries and two rear flank posts; the central approach remains open. */
     static List<BlockPos> candidates(RaidSavedData.RaidState raid, int slot) {
         double x=-Math.cos(raid.approachAngle), z=-Math.sin(raid.approachAngle);
