@@ -25,7 +25,7 @@ public final class RaidSavedData extends SavedData {
     // v12 added pendingSpoils + raidNotifyOptOut (3.2.0 multiplayer polish).
     // v13 added persistent camp construction jobs and crew (3.4.0).
     // Old saves load cleanly because all new fields default to empty collections.
-    public static final int DATA_VERSION = 18;
+    public static final int DATA_VERSION = 19;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Set<UUID> campClaimLeases = new HashSet<>();
@@ -465,6 +465,10 @@ public final class RaidSavedData extends SavedData {
         public int lastBreachWarningBand;
         public BlockPos campPos;
         public UUID campClaimId;
+        public BlockPos campSearchPos;
+        public int campSearchStep;
+        public int campSearchTicks;
+        public boolean campCrewStarted;
         public boolean campGuardsStarted;
         public final Set<UUID> campGuards = new HashSet<>();
         public int campCompletedBlocks;
@@ -627,6 +631,10 @@ public final class RaidSavedData extends SavedData {
             tag.putInt("SquadsSpawned", squadsSpawned);
             tag.putInt("CaptureTicks", captureTicks);
             tag.putBoolean("CoreCaptured", coreCaptured);
+            if(campSearchPos!=null) tag.putLong("CampSearchPos",campSearchPos.asLong());
+            tag.putInt("CampSearchStep",campSearchStep);
+            tag.putInt("CampSearchTicks",campSearchTicks);
+            tag.putBoolean("CampCrewStarted",campCrewStarted);
             tag.putInt("BreachTicks", breachTicks);
             tag.putBoolean("Breached", breached);
             tag.putInt("BreachWarningBand", lastBreachWarningBand);
@@ -765,6 +773,10 @@ public final class RaidSavedData extends SavedData {
             state.squadsSpawned = tag.getInt("SquadsSpawned");
             state.captureTicks = tag.getInt("CaptureTicks");
             state.coreCaptured = tag.getBoolean("CoreCaptured");
+            if(tag.contains("CampSearchPos")) state.campSearchPos=BlockPos.of(tag.getLong("CampSearchPos"));
+            state.campSearchStep=Math.max(0,tag.getInt("CampSearchStep"));
+            state.campSearchTicks=Math.max(0,tag.getInt("CampSearchTicks"));
+            state.campCrewStarted=tag.contains("CampCrewStarted")?tag.getBoolean("CampCrewStarted"):tag.contains("CampPosition");
             state.breachTicks = tag.getInt("BreachTicks");
             state.breached = tag.contains("Breached", Tag.TAG_BYTE) ?
                     tag.getBoolean("Breached") : state.wave > 0;

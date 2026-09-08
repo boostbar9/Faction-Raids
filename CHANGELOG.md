@@ -1,3 +1,11 @@
+## 4.2.1 beta
+
+- Fix camps failing outside loaded terrain: bounded asynchronous scouting, temporary core/camp chunk tickets and wider candidate rings.
+- Do not advance preparation or spawn assault waves until a camp exists; recover previously failed 4.2.0 camps automatically.
+- Accept ordinary tall grass and flowers during terrain validation while preserving crops, water and structures.
+- Initialize deferred builders, engines and guards after native claim registration; persist search/crew state and avoid duplicate crews on existing camps.
+- Name camp claims for their attacking faction and replace misleading startup announcements with actual scouting/claim status.
+
 ## 4.2.0 beta
 
 - Add faction armor palettes, rank trim colors/patterns and torso-mounted cosmetic faction banners for enemy soldiers and guards. Preserve weapons and native equipment inventories.

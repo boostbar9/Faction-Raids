@@ -85,7 +85,9 @@ public final class CampTerrain {
     }
 
     private static boolean isClearance(BlockState state) {
-        return state.isAir() || state.is(Blocks.GRASS) || state.is(Blocks.FERN) || state.is(Blocks.SNOW);
+        return state.isAir() || state.is(Blocks.GRASS) || state.is(Blocks.FERN) || state.is(Blocks.SNOW)
+                || state.is(Blocks.TALL_GRASS) || state.is(Blocks.LARGE_FERN) || state.is(Blocks.DEAD_BUSH)
+                || state.is(net.minecraft.tags.BlockTags.SMALL_FLOWERS) || state.is(net.minecraft.tags.BlockTags.TALL_FLOWERS);
     }
 
     /** Recheck the complete plan and capture every original before the first neighbor update. */

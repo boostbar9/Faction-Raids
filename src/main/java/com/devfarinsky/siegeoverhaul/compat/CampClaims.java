@@ -18,6 +18,17 @@ public final class CampClaims {
     private static Object config(String field) throws ReflectiveOperationException {
         return ((ForgeConfigSpec.ConfigValue<?>) Class.forName("com.talhanation.recruits.config.RecruitsServerConfig").getField(field).get(null)).get();
     }
+    public static String unavailableReason(ServerLevel level) {
+        if(!level.dimension().equals(Level.OVERWORLD))return "Camp claims require the Overworld";
+        try {
+            if(!Boolean.TRUE.equals(config("AllowClaiming")))return "Recruits AllowClaiming is disabled";
+            if((Integer)config("MaxClaimChunks")<25)return "Recruits MaxClaimChunks must be at least 25";
+            if(manager()==null)return "Waiting for Recruits claim manager";
+            return "";
+        } catch(ReflectiveOperationException | RuntimeException ex) {
+            return "Recruits camp claim API unavailable: "+ex.getClass().getSimpleName();
+        }
+    }
     public static Set<ChunkPos> footprint(BlockPos center) {
         Set<ChunkPos> chunks = new LinkedHashSet<>();
         ChunkPos c = new ChunkPos(center);
@@ -51,7 +62,7 @@ public final class CampClaims {
             Object faction = factions.getClass().getMethod("getFactionByStringID", String.class).invoke(factions, RecruitsBridge.RAIDERS_FACTION_ID);
             if (faction == null) return false;
             Class<?> factionType = Class.forName(WORLD + "RecruitsFaction"), claimType = Class.forName(WORLD + "RecruitsClaim");
-            Object claim = claimType.getConstructor(String.class, factionType).newInstance("Raider War Camp", faction);
+            Object claim = claimType.getConstructor(String.class, factionType).newInstance(raid.narrative!=null && raid.narrative.factionName!=null ? raid.narrative.factionName+" War Camp" : "Raider War Camp", faction);
             claimType.getMethod("setCenter", ChunkPos.class).invoke(claim, new ChunkPos(center));
             for (ChunkPos chunk : footprint(center)) claimType.getMethod("addChunk", ChunkPos.class).invoke(claim, chunk);
             Class<?> infoType = Class.forName(WORLD + "RecruitsPlayerInfo");
