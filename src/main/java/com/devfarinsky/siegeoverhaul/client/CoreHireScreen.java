@@ -95,7 +95,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         g.fill(x+12,y+27,x+w-12,y+28,0xff293a4a);
         g.drawString(font,layout.compact()?"SIEGE CORE":"SIEGE  /  COMMAND",x+12,y+12,TEXT,false);
         String clock=String.format(java.util.Locale.ROOT,"%d:%02d",menu.seconds()/60,menu.seconds()%60);
-        int emeralds=minecraft!=null && minecraft.player!=null?minecraft.player.getInventory().countItem(net.minecraft.world.item.Items.EMERALD):0;
+        int emeralds=menu.emeralds();
         String status=loot?emeralds+" emeralds":clock+"  |  "+emeralds+" emeralds";
         g.drawString(font,font.plainSubstrByWidth(status,Math.max(1,w/2-12)),x+w-font.width(font.plainSubstrByWidth(status,Math.max(1,w/2-12)))-12,y+12,TEAL,false);
         if(!loot) {

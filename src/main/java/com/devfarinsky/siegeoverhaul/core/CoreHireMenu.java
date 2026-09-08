@@ -14,7 +14,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     private final ServerPlayer owner;
     private final BlockPos pos;
     private final SimpleContainer display = new SimpleContainer(5);
-    private final ContainerData data = new SimpleContainerData(14);
+    private final ContainerData data = new SimpleContainerData(15);
     private long shownAt = Long.MIN_VALUE;
     public CoreHireMenu(int id, Inventory inventory) { this(id, inventory, null); }
     public CoreHireMenu(int id, Inventory inventory, BlockPos pos) {
@@ -32,6 +32,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     public int role(int slot) { return data.get(slot); }
     public int cost(int slot) { return data.get(slot + 4); }
     public boolean sold(int slot) { return (data.get(8) & (1 << slot)) != 0; }
+    public int emeralds() { return data.get(14); }
     public int seconds() { return data.get(9); }
     public long rotation() {
         long value = 0;
@@ -58,6 +59,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         data.set(8, core.getInt("Sold"));
         data.set(9, (int) Math.min(900, Math.max(0, (rotation - now + 19) / 20)));
         for (int i = 0; i < 4; i++) data.set(10 + i, (int) ((rotation >>> (i * 16)) & 0xffff));
+        data.set(14,owner.getInventory().items.stream().filter(stack->stack.is(Items.EMERALD)).mapToInt(ItemStack::getCount).sum());
         shownAt = now;
     }
     @Override public boolean stillValid(Player player) {
@@ -81,7 +83,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     @Override public boolean clickMenuButton(Player player,int button) {
         if(owner==null || player!=owner || !stillValid(player) || button<20 || button>22)return false;
         boolean bought=CoreLoot.purchase(owner,button-20);
-        if(bought)owner.inventoryMenu.broadcastChanges();
+        if(bought){owner.inventoryMenu.broadcastChanges();refresh();super.broadcastChanges();}
         return bought;
     }
     @Override public void broadcastChanges() {
