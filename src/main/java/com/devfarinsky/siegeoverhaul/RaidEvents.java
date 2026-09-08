@@ -1595,6 +1595,9 @@ public final class RaidEvents {
         state.narrative = previewed != null ? previewed :
                 com.devfarinsky.siegeoverhaul.narrative.RaidNarrativeSelector.select(
                         server.overworld().random, anchor.teamDisplay(), point.name());
+        if (state.narrative != null && state.narrative.factionId != null && !state.narrative.factionId.isBlank())
+            state.factionId = com.devfarinsky.siegeoverhaul.items.FactionBanners.FactionId.byIdOrDefault(state.narrative.factionId).id;
+        state.breached = "siege_core".equals(point.name());
         ServerLevel raidLevel = getLevel(server, point);
         if (raidLevel != null && RaidConfig.BUILD_WAR_CAMPS.get()) buildWarCamp(raidLevel, anchor, point, state);
         // Amphibious detection: if a large enough open-water body sits within
