@@ -62,7 +62,11 @@ public final class WarGate {
                 for(int sy=floor;sy<y;sy++)plan.put(p.atY(sy).asLong(),"minecraft:polished_blackstone_bricks");
                 for(int sy=y;sy<=y+7;sy++)if(!com.devfarinsky.siegeoverhaul.camp.CampVegetation.replaceable(level.getBlockState(p.atY(sy))) || !level.getFluidState(p.atY(sy)).isEmpty())valid=false;
             }
-            if(!valid || raid.pendingCampBlocks.size()+plan.size()>512)continue;
+            if(!valid)continue;
+            var road=CampRoad.plan(level,raid,c,front);
+            if(road.isEmpty())continue;
+            plan.putAll(road.get().blocks());
+            if(raid.pendingCampBlocks.size()+plan.size()>512)continue;
             var combined=new HashSet<Long>(raid.pendingCampBlocks.keySet());combined.addAll(plan.keySet());
             int minX=Integer.MAX_VALUE,minZ=minX,maxX=Integer.MIN_VALUE,maxZ=maxX;
             for(long key:combined){BlockPos p=BlockPos.of(key);minX=Math.min(minX,p.getX());minZ=Math.min(minZ,p.getZ());maxX=Math.max(maxX,p.getX());maxZ=Math.max(maxZ,p.getZ());}
@@ -72,12 +76,13 @@ public final class WarGate {
             // Foundations must be first in the native job sequence.
             var jobs=new LinkedHashMap<Long,String>();plan.entrySet().stream().sorted(Comparator.comparingInt(e->BlockPos.of(e.getKey()).getY())).forEach(e->jobs.put(e.getKey(),e.getValue()));
             jobs.putAll(raid.pendingCampBlocks);raid.pendingCampBlocks.clear();raid.pendingCampBlocks.putAll(jobs);
+            CampRoad.record(raid,road.get());
             return true;
         }
         return false;
     }
     public static boolean ready(ServerLevel level,RaidSavedData.RaidState raid) {
-        if(raid.warGate.isEmpty())return false;
+        if(raid.warGate.isEmpty() || raid.warGate.getBoolean("RoadPending"))return false;
         var cells=raid.warGate.getCompound("Blocks");
         for(String key:cells.getAllKeys()) {
             BlockPos p=BlockPos.of(Long.parseLong(key));
@@ -102,6 +107,7 @@ public final class WarGate {
                 && com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level,raid) && plan(level,raid,objective)) {
             NativeCampConstruction.start(level,raid);RaidSavedData.get(level.getServer()).setDirty();
         }
+        CampRoad.retrofit(level,raid);
         if(!raid.warGate.isEmpty())CampLoading.keep(level,center(raid));
         if(!ready(level,raid)) {
             raid.warGateWaitTicks=Math.min(20*60*30,raid.warGateWaitTicks+20);
@@ -127,6 +133,11 @@ public final class WarGate {
     private static boolean protectedAt(ServerLevel level,BlockPos p) {
         for(var raid:RaidSavedData.get(level.getServer()).raids.values()) {
             if(raid.warGate.isEmpty() || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD))continue;
+            var road=raid.warGate.getCompound("RoadBlocks");
+            for(String key:road.getAllKeys()) {
+                BlockPos floor=BlockPos.of(Long.parseLong(key));
+                if(p.getX()==floor.getX() && p.getZ()==floor.getZ() && p.getY()>=floor.getY() && p.getY()<=floor.getY()+4)return true;
+            }
             BlockPos c=center(raid);
             if(Math.abs(p.getX()-c.getX())<=3 && Math.abs(p.getZ()-c.getZ())<=3 && p.getY()>=c.getY()-2 && p.getY()<=c.getY()+7)return true;
         }

@@ -1,3 +1,10 @@
+## 4.8.0 beta
+
+- Enemy builders receive a one-time veteran kit: Protection III / Unbreaking III diamond armor, diamond tools with Efficiency III, four golden apples and food. At least 60 health, +20% movement speed and knockback resistance; existing damage is preserved and equipment is never replenished each tick. Undelivered supplies remain stored until backpack space opens.
+- Siege builders work through the night using native Workers building and storage jobs. Nearby village bells no longer stop this enemy crew; fleeing still takes priority. Morale recovers gradually while assigned to an active camp job. Player workers are unaffected.
+- War Gates require a three-wide stone-brick road to the camp with clear headroom, shallow terrain cuts/fills and gradual steps. Planning rejects roads through water, player structures or steep drops. Builders receive the finite road materials; road completion is part of gate readiness. New camp walls leave the road entrance open.
+- Saved gates attempt a road retrofit after the current job finishes. Road and terrain snapshots survive saves and restore on siege cleanup. The gate approach is protected from player block edits while active.
+
 ## 4.7.0 beta
 
 - Fix engineer-only waves when the War Gate has no buildable site: search all four sides, prioritize the gate over camp upgrades, retain its ticking chunks, keep artillery off its pad, delay the assault/support until infantry can deploy, report missing gate blocks, and withdraw without rewards after three active minutes of blocked deployment.

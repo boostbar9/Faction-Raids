@@ -46,6 +46,8 @@ public final class WorkersBridge {
             worker.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0, 0);
             worker.finalizeSpawn(level, level.getCurrentDifficultyAt(pos), MobSpawnType.EVENT, null, null);
             configureBuilder(worker, worker.position());
+            com.devfarinsky.siegeoverhaul.camp.BuilderSupport.provision(worker);
+            com.devfarinsky.siegeoverhaul.camp.BuilderWorkShift.install(worker);
             worker.setPersistenceRequired();
             worker.setCanPickUpLoot(false);
             worker.getPersistentData().putString(ModConstants.Tags.CAMP_WORKER_TEAM, defendingTeam);
@@ -92,14 +94,8 @@ public final class WorkersBridge {
     public static void enableNative(Mob worker, java.util.UUID owner, boolean equip) throws ReflectiveOperationException {
         call(worker, "setOwnerUUID", Optional.class, Optional.of(owner));
         call(worker, "setFollowState", int.class, 0);
-        if (equip) {
-            net.minecraft.world.SimpleContainer inventory = (net.minecraft.world.SimpleContainer)
-                    worker.getClass().getMethod("getInventory").invoke(worker);
-            inventory.addItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_PICKAXE));
-            inventory.addItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_AXE));
-            inventory.addItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SHOVEL));
-            inventory.addItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 16));
-        }
+        if (equip) com.devfarinsky.siegeoverhaul.camp.BuilderSupport.provision(worker);
+        com.devfarinsky.siegeoverhaul.camp.BuilderWorkShift.install(worker);
     }
 
     /** Keep the camp crew visible after its job finishes without leaving native jobs running. */

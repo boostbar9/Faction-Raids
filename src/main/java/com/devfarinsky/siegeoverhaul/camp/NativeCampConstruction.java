@@ -38,6 +38,7 @@ public final class NativeCampConstruction {
         Entity build = null, storage = null;
         BlockPos supply = null;
         try {
+            if(!CampRoad.prepare(level,raid))return false;
             for (long key : raid.pendingCampBlocks.keySet()) {
                 BlockPos p = BlockPos.of(key);
                 if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)
