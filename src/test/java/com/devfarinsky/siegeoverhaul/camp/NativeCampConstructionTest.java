@@ -14,6 +14,23 @@ import static org.junit.jupiter.api.Assertions.*;
 import static com.devfarinsky.siegeoverhaul.ModConstants.Tags.*;
 
 class NativeCampConstructionTest extends MinecraftTestSupport {
+    @Test void upgradeRecoversOnlyEmptyGateCellsOnce() {
+        var level=org.mockito.Mockito.mock(net.minecraft.server.level.ServerLevel.class);
+        var raid=new RaidSavedData.RaidState("team:test","home",0);
+        CompoundTag cells=new CompoundTag();
+        for(int i=0;i<3;i++)cells.putString(Long.toString(new BlockPos(i,70,0).asLong()),"minecraft:obsidian");
+        raid.warGate.put("Blocks",cells);
+        org.mockito.Mockito.when(level.hasChunkAt(org.mockito.ArgumentMatchers.any())).thenReturn(true);
+        org.mockito.Mockito.when(level.getBlockState(org.mockito.ArgumentMatchers.any())).thenAnswer(a -> switch(((BlockPos)a.getArgument(0)).getX()) {
+            case 0 -> Blocks.AIR.defaultBlockState(); case 1 -> Blocks.CHEST.defaultBlockState(); default -> Blocks.OBSIDIAN.defaultBlockState();
+        });
+        NativeCampConstruction.recoverMissingGateCells(level,raid);
+        assertEquals(Set.of(new BlockPos(0,70,0).asLong()),raid.pendingCampBlocks.keySet());
+        raid.pendingCampBlocks.clear();
+        NativeCampConstruction.recoverMissingGateCells(level,raid);
+        assertTrue(raid.pendingCampBlocks.isEmpty());
+    }
+
     @Test void successfulFlowerClearDoesNotAttemptToSetAirTwice() {
         var level=org.mockito.Mockito.mock(net.minecraft.server.level.ServerLevel.class);
         var raid=new RaidSavedData.RaidState("team:test","home",0);

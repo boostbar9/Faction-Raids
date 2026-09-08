@@ -93,6 +93,6 @@ public final class CampRoad {
         raid.warGate.putBoolean("RoadPending",true);
         var plan=plan(level,raid,WarGate.center(raid),WarGate.facing(raid));
         if(plan.isEmpty()){raid.constructionPauseReason="Existing gate needs a clear, gently sloped road to camp";return;}
-        record(raid,plan.get());NativeCampConstruction.start(level,raid);RaidSavedData.get(level.getServer()).setDirty();
+        record(raid,plan.get());NativeCampConstruction.recoverMissingGateCells(level,raid);NativeCampConstruction.start(level,raid);RaidSavedData.get(level.getServer()).setDirty();
     }
 }

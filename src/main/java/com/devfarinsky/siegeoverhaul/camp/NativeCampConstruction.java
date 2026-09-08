@@ -136,6 +136,19 @@ public final class NativeCampConstruction {
         return tag;
     }
 
+    static void recoverMissingGateCells(ServerLevel level, RaidSavedData.RaidState raid) {
+        if (raid.warGate.getBoolean("GateRepair480")) return;
+        raid.warGate.putBoolean("GateRepair480", true);
+        var cells=raid.warGate.getCompound("Blocks");
+        for(String key:cells.getAllKeys()) {
+            BlockPos pos=BlockPos.of(Long.parseLong(key));
+            // Recover only empty cells in the existing protected blueprint. Never
+            // remove player replacements or replenish completed construction.
+            if(raid.pendingCampBlocks.size()<512 && level.hasChunkAt(pos) && level.getBlockState(pos).isAir())
+                raid.pendingCampBlocks.putIfAbsent(pos.asLong(),cells.getString(key));
+        }
+    }
+
     static boolean prepareCell(ServerLevel level, RaidSavedData.RaidState raid, BlockPos pos) {
         if (CampVegetation.plant(level.getBlockState(pos))) return CampVegetation.clear(level, raid, pos);
         return level.getBlockState(pos).isAir() || level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
