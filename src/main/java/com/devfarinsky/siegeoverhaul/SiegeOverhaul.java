@@ -27,6 +27,7 @@ public final class SiegeOverhaul {
     public SiegeOverhaul() {
         IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, RaidConfig.SPEC);
+        com.devfarinsky.siegeoverhaul.core.CoreBlocks.BLOCKS.register(modBus);
         ModItems.register(modBus);
         ModBannerPatterns.register(modBus);
         RaidNetwork.init();

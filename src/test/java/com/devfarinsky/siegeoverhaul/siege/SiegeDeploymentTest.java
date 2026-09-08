@@ -31,7 +31,7 @@ class SiegeDeploymentTest extends MinecraftTestSupport {
         var raid = new RaidSavedData.RaidState("team:test", "home", 0);
         raid.siegeEngines.put(engineId, "BALLISTA");
         when(level.getEntity(engineId)).thenReturn(engine);
-        when(level.getGameTime()).thenReturn(100L);
+        when(level.getGameTime()).thenReturn(113L);
         when(engine.isAlive()).thenReturn(true);
         when(engine.getPersistentData()).thenReturn(new CompoundTag());
         when(engine.getPassengers()).thenReturn(java.util.List.of());

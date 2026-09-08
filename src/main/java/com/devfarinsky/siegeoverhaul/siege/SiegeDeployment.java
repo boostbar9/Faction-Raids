@@ -45,10 +45,14 @@ public final class SiegeDeployment {
                 continue;
             }
             SiegeEngineType type = SiegeEngineType.parse(entry.getValue());
-            if (type == null || !type.ranged() || state.wave <= 0) continue;
+            if (type == null || !type.ranged() || state.wave <= 0 || state.preparationTicks > 0) continue;
             if (!vehicle.getPassengers().isEmpty() || vehicle.getPersistentData().getBoolean(OPERATOR_ASSIGNED)) continue;
             // Provision once, after the warning period. A killed operator is never replaced.
-            if (level.getGameTime() % 100 != 0 || state.raiders.size() >= RaidConfig.MAX_ACTIVE_RAIDERS.get()) continue;
+            if (state.raiders.size() >= RaidConfig.MAX_ACTIVE_RAIDERS.get()) continue;
+            long now = level.getGameTime();
+            if (vehicle.getPersistentData().contains("SiegeOperatorLastAttempt")
+                    && now - vehicle.getPersistentData().getLong("SiegeOperatorLastAttempt") < 100) continue;
+            vehicle.getPersistentData().putLong("SiegeOperatorLastAttempt", now);
             int attempts = vehicle.getPersistentData().getInt(OPERATOR_ATTEMPTS);
             if (attempts >= 3) continue;
             vehicle.getPersistentData().putInt(OPERATOR_ATTEMPTS, attempts + 1);

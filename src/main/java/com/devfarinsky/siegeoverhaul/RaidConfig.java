@@ -16,6 +16,7 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue MIN_COOLDOWN_MINUTES;
     public static final ForgeConfigSpec.IntValue MAX_COOLDOWN_MINUTES;
     public static final ForgeConfigSpec.IntValue WARNING_SECONDS;
+    public static final ForgeConfigSpec.IntValue PREPARATION_MINUTES;
     public static final ForgeConfigSpec.IntValue WAVES;
     public static final ForgeConfigSpec.IntValue BASE_ENEMIES_PER_WAVE;
     public static final ForgeConfigSpec.IntValue ENEMIES_PER_EXTRA_PLAYER;
@@ -191,6 +192,8 @@ public final class RaidConfig {
                 .defineInRange("minimumCooldownMinutes", 60, 5, 1440);
         MAX_COOLDOWN_MINUTES = b.comment("Maximum server-runtime minutes between automatic invasions for a faction.")
                 .defineInRange("maximumCooldownMinutes", 90, 5, 2880);
+        PREPARATION_MINUTES = b.comment("Preparation before new sieges: equal establishment, fortification and army muster phases. Existing active sieges are unchanged.")
+                .defineInRange("siegePreparationMinutes", 12, 3, 60);
         WARNING_SECONDS = b.comment("Countdown before the first wave.")
                 .defineInRange("warningSeconds", 120, 10, 600);
         WAVES = b.comment("Number of invasion waves.").defineInRange("waves", 5, 1, 12);
