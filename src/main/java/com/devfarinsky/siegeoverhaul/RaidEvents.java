@@ -3634,6 +3634,8 @@ public final class RaidEvents {
             if (acquired) mob.setTarget(closest);
             else if (lockedOnObjective) mob.setTarget(null);
 
+            acquired = mob.getTarget() != null && mob.getTarget().isAlive();
+
             // Native formations and direct navigation must never issue competing orders.
             boolean marching = com.devfarinsky.siegeoverhaul.formations.FormationDirector.shouldMarch(
                     level, state.teamKey, mob, BlockPos.containing(objective));
@@ -3650,25 +3652,9 @@ public final class RaidEvents {
             // multiplier so escalated raiders visibly push harder.
             if (stuck != null && stuck.escalationLevel >= 1) speed *= 1.15;
 
-            // v2.23.0: force re-path every redirect tick when the raider has
-            // no target. The old "only if isDone()" gate parked raiders whose
-            // path had failed against a wall since the nav reports done and
-            // never retries. Force-repath is cheap (once per second per
-            // raider) and lets the pathfinder try a fresh route each tick.
-            //
-            // v2.24.0: when this raider has been marked stuck (escalation
-            // level >= 1) AND the cone fallback is enabled, do not retry the
-            // direct route to the objective (we already know it fails).
-            // Instead ask DefaultRandomPos.getPosTowards for a random
-            // reachable point in a narrow cone toward the objective, then
-            // widen to a full hemisphere if that fails. This mirrors
-            // Mojang's RaiderMoveThroughVillageGoal fallback: narrow cone
-            // (pi/10) at full radius, then wide cone (pi/2) at half radius.
-            // If both fail we give up this tick rather than spam a route we
-            // know is unreachable. Healthy raiders (no stuck entry) still
-            // path straight at the objective because that is faster when it
-            // works.
-            if (!acquired && forceRepath) {
+            // Preserve progressing paths, including detours around walls. A finished
+            // route or two seconds without movement may request a fresh path.
+            if (!acquired && forceRepath && com.devfarinsky.siegeoverhaul.raid.MarchProgress.shouldRepath(mob,objective,gameTime)) {
                 Vec3 target = null;
                 if (RaidConfig.CONE_FALLBACK_ENABLED.get()
                         && stuck != null && stuck.escalationLevel >= 1

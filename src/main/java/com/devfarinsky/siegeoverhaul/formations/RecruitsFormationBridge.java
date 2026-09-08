@@ -84,8 +84,21 @@ public final class RecruitsFormationBridge {
         for(int i=0;i<units.size();i++) {
             Mob mob=units.get(i);
             if(recruitEntityClass==null || !recruitEntityClass.isInstance(mob))continue;
+            // Renew near the waypoint, not in the middle of a useful walking leg.
+            if(mob.getPersistentData().getBoolean(com.devfarinsky.siegeoverhaul.ModConstants.Tags.FORMATION_MARCH)) {
+                try {
+                    Object old=mob.getClass().getMethod("getHoldPos").invoke(mob);
+                    if(old instanceof Vec3 hold && mob.distanceToSqr(hold)>9 && !mob.getNavigation().isDone()
+                            && !mob.horizontalCollision && !com.devfarinsky.siegeoverhaul.raid.MarchProgress.shouldRepath(mob,hold,level.getGameTime())) {
+                        applied=true;continue;
+                    }
+                } catch(ReflectiveOperationException ignored) { }
+            }
             Vec3 offset=FormationTactics.offset(shape,i,units.size());
             Vec3 slot=target.add(-forward.z*offset.x+forward.x*offset.z,0,forward.x*offset.x+forward.z*offset.z);
+            // A rear rank must never walk backwards to dress a moving formation.
+            double ahead=slot.subtract(mob.position()).dot(forward);
+            if(ahead<2)slot=slot.add(forward.scale(2-ahead));
             net.minecraft.core.BlockPos ground=null;
             for(int dy:new int[]{0,1,-1}) {
                 var p=net.minecraft.core.BlockPos.containing(slot.x,mob.getY()+dy,slot.z);
