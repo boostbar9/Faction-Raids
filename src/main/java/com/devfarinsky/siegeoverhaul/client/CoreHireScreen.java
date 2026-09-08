@@ -100,6 +100,13 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
         if(loot)for(int i=0;i<3;i++)drawBox(g,i);
         else for (int i = 0; i < 4; i++) if(heroes==(i==3)) drawCard(g, i);
+        if(heroes && layout.compact() && menu.role(3)>=10) {
+            int ty=layout.cardY(1)+6;
+            for(var line:font.split(Component.literal(HeroTraits.description(menu.role(3))),w-28)) {
+                if(ty>y+h-30)break;
+                g.drawString(font,line,x+14,ty,TEXT,false);ty+=11;
+            }
+        }
         String footer = loot ? "One random reward • Hover for exact odds • Click twice to confirm" : heroes ? "One featured hero • Exact unit shown • No paid rerolls" : layout.compact() ? "Shared faction stock • 15-minute rotation" : "Two recruit offers + one worker offer  •  Shared faction stock  •  Refreshes every 15 minutes";
         g.drawString(font, font.plainSubstrByWidth(footer, w - 24), x + 12, y + h - 14, MUTED, false);
     }
@@ -146,7 +153,13 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             g.renderItem(menu.getSlot(i).getItem(), 0, 0); g.pose().popPose();
             g.drawCenteredString(font, name, x + w / 2, y + 86, TEXT);
             g.drawCenteredString(font, CoreHiring.rarity(role) + " • " + CoreHiring.weight(role) + "%", x + w / 2, y + 101, accent);
-            g.drawCenteredString(font, font.plainSubstrByWidth(i==3?"Level 10 • Diamond armor":DETAILS[role], w - 20), x + w / 2, y + 122, MUTED);
+            if(i==3) {
+                int ty=y+120;
+                for(var line:font.split(Component.literal(HeroTraits.description(role)),w-24)) {
+                    if(ty>y+h-60)break;
+                    g.drawString(font,line,x+12,ty,MUTED,false);ty+=11;
+                }
+            } else g.drawCenteredString(font,font.plainSubstrByWidth(DETAILS[role],w-20),x+w/2,y+122,MUTED);
             g.drawCenteredString(font, font.plainSubstrByWidth(price, w - 20), x + w / 2, y + h - 49, TEXT);
         }
     }
