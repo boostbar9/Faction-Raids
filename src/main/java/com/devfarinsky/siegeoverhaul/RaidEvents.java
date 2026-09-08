@@ -459,26 +459,7 @@ public final class RaidEvents {
     @SubscribeEvent
     public static void onPlayerLoggedIn(net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer sp)) return;
-        net.minecraft.nbt.CompoundTag gift = sp.getPersistentData().getCompound(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG);
-        if (!gift.getBoolean("SiegeCoreGiven")) {
-            var coreItem = new net.minecraft.world.item.ItemStack(com.devfarinsky.siegeoverhaul.items.ModItems.SIEGE_CORE.get());
-            if (!sp.getInventory().add(coreItem)) sp.drop(coreItem, false);
-            gift.putBoolean("SiegeCoreGiven", true);
-            sp.getPersistentData().put(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG, gift);
-            sp.sendSystemMessage(Component.literal("Place your Siege Core in your faction's Recruits claim. It becomes the siege objective and offers recruits every 15 minutes."));
-        }
-        // First-login guidebook gift (unchanged behavior).
-        if (RaidConfig.SPAWN_GUIDEBOOK_ON_JOIN.get()) {
-            net.minecraft.nbt.CompoundTag persistent = sp.getPersistentData()
-                    .getCompound(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG);
-            if (!persistent.getBoolean("FactionRaidsGuidebookGiven")) {
-                net.minecraft.world.item.ItemStack book = new net.minecraft.world.item.ItemStack(
-                        com.devfarinsky.siegeoverhaul.items.ModItems.GUIDEBOOK.get());
-                if (!sp.getInventory().add(book)) sp.drop(book, false);
-                persistent.putBoolean("FactionRaidsGuidebookGiven", true);
-                sp.getPersistentData().put(net.minecraft.world.entity.player.Player.PERSISTED_NBT_TAG, persistent);
-            }
-        }
+        com.devfarinsky.siegeoverhaul.items.StarterBagItem.giveOnce(sp);
         // v3.2.0: notify player of any spoils queued while they were offline.
         try {
             RaidSavedData data = RaidSavedData.get(sp.server);
@@ -1608,7 +1589,7 @@ public final class RaidEvents {
         if (raidLevel != null) {
             com.devfarinsky.siegeoverhaul.naval.NavalStagingScanner.NavalStaging naval =
                     com.devfarinsky.siegeoverhaul.naval.NavalStagingScanner.scan(raidLevel, point.pos());
-            if (naval.found()) {
+            if (naval.found() && !RaidConfig.BUILD_WAR_CAMPS.get()) {
                 state.navalStagingPos = naval.surface();
                 state.navalBeachPos = naval.beach();
                 announce(server, anchor.teamKey(), Component.literal(
@@ -1867,6 +1848,11 @@ public final class RaidEvents {
         // effect so it never flickers between passes but decays if the
         // captain dies.
         tickCaptainAura(level, state);
+        com.devfarinsky.siegeoverhaul.camp.WarGate.tick(level,state,point.pos());
+        if(state.warGateWaitTicks>=20*60*30 && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
+            finishRaid(server,data,teamKey,false,false,"The enemy could not establish its War Gate. The siege has withdrawn without rewards.");
+            return;
+        }
         com.devfarinsky.siegeoverhaul.camp.CampDevelopment.tick(level,state);
         // Camp progress is persisted even when no wave or breach changed this pass.
         if (!state.pendingCampBlocks.isEmpty()) {
@@ -2235,6 +2221,10 @@ public final class RaidEvents {
     private static void spawnNextSquad(MinecraftServer server, ServerLevel level, RaidSavedData data,
                                        RaidSavedData.Anchor anchor, RaidSavedData.DefensePoint point,
                                        RaidSavedData.RaidState state) {
+        if(state.campPos!=null && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
+            state.objectiveStatus="Reinforcements waiting for the builders to complete the War Gate";
+            state.ticksToNextSquad=100;return;
+        }
         int perSquad = RaidConfig.STAGED_SQUADS.get() ? RaidConfig.SQUAD_SIZE.get() : state.pendingWaveSpawns;
         int factionCapacity = Math.max(0, RaidConfig.MAX_ACTIVE_RAIDERS.get() - state.raiders.size() - state.campGuards.size());
         int globalCapacity = Math.max(0, RaidConfig.MAX_GLOBAL_RAIDERS.get() - globalTrackedCount(data));
@@ -2251,7 +2241,7 @@ public final class RaidEvents {
 
         // Naval share: when a staging point is available, route a percentage of
         // this squad into boats. The rest still spawn on land as usual.
-        boolean amphibious = state.preparationTicks <= 0 && state.navalStagingPos != null && state.navalBeachPos != null;
+        boolean amphibious = state.campPos==null && state.preparationTicks <= 0 && state.navalStagingPos != null && state.navalBeachPos != null;
         int navalShare = amphibious ? (wanted * RaidConfig.NAVAL_WAVE_SHARE_PERCENT.get() + 50) / 100 : 0;
 
         int spawned = 0;
@@ -2265,8 +2255,8 @@ public final class RaidEvents {
             boolean asNaval = i < navalShare && !cavalry;
             BlockPos spawn = asNaval
                     ? state.navalStagingPos
-                    : findSpawnPosition(level, point.pos(), level.random, candidate,
-                            state.approachAngle, state.campPos);
+                    : state.campPos!=null ? com.devfarinsky.siegeoverhaul.camp.WarGate.spawn(level,state,candidate)
+                    : findSpawnPosition(level, point.pos(), level.random, candidate,state.approachAngle,null);
             if (spawn == null) continue;
             candidate.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5,
                     level.random.nextFloat() * 360.0F, 0.0F);
@@ -2731,6 +2721,7 @@ public final class RaidEvents {
                 final int tz = cz + rearDz + perpZ * tent;
                 buildTent(level, state, tx, tz, cy);
             }
+            com.devfarinsky.siegeoverhaul.camp.WarGate.plan(level,state,point.pos());
         } finally {
             state.planningCamp = false;
         }
@@ -3166,7 +3157,8 @@ public final class RaidEvents {
         int evaluatedBreachers = 0;
         for (UUID id : state.raiders) {
             Entity entity = level.getEntity(id);
-            if (!(entity instanceof Mob mob) || !mob.isAlive()) continue;
+            if (!(entity instanceof Mob mob) || !mob.isAlive() || mob.isPassenger()
+                    || com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)) continue;
             String role = mob.getPersistentData().getString(RAID_ROLE_TAG);
             if (!role.equals("breacher") && !role.equals("commander")) continue;
             if (++evaluatedBreachers > 8) break;
@@ -3351,9 +3343,13 @@ public final class RaidEvents {
         RaidSavedData.Anchor anchor = data.anchors.get(state.teamKey);
         boolean respectForeignClaims = RaidConfig.RESPECT_FOREIGN_CLAIMS.get()
                 && com.devfarinsky.siegeoverhaul.compat.ClaimBridge.anyProviderAvailable();
-        for (BlockPos candidate : BlockPos.betweenClosed(origin.offset(-3, -1, -3), origin.offset(3, 2, 3))) {
+        for (BlockPos candidate : BlockPos.betweenClosed(origin.offset(-3, 0, -3), origin.offset(3, 1, 3))) {
             if (candidate.distSqr(stronghold) > maximumDistanceSq ||
                     state.campBlocks.containsKey(candidate.asLong())) continue;
+            if(!level.hasChunkAt(candidate))continue;
+            Vec3 toward=objective.subtract(mob.position()).multiply(1,0,1);
+            Vec3 offset=Vec3.atCenterOf(candidate).subtract(mob.position()).multiply(1,0,1);
+            if(offset.dot(toward)<=0 || offset.lengthSqr()>9)continue;
             BlockState blockState = level.getBlockState(candidate);
             if (!isBreachableDefense(blockState)) continue;
             // v3.3.0: refuse to break blocks in another player's claim. This
@@ -3366,7 +3362,9 @@ public final class RaidEvents {
             }
             double mobDistance = candidate.distSqr(origin);
             double objectiveDistance = Vec3.atCenterOf(candidate).distanceToSqr(objective);
-            double score = mobDistance * 4.0D + objectiveDistance * 0.02D;
+            double score = mobDistance * 4.0D + objectiveDistance * 0.02D
+                    + (candidate.getY()==origin.getY()+1 && level.getBlockState(candidate.below()).isAir()?-20:0)
+                    + (state.blockBreachProgress.containsKey(candidate.asLong())?-8:0);
             if (score < bestScore) {
                 best = candidate.immutable();
                 bestScore = score;
@@ -4076,6 +4074,7 @@ public final class RaidEvents {
                 }
                 restoreBreachedBlocks(level, state);
                 com.devfarinsky.siegeoverhaul.camp.CampBuilder.cleanup(level, state);
+                com.devfarinsky.siegeoverhaul.camp.WarGate.cleanup(level,state);
                 cleanupWarCamp(level, state);
             }
             long next = server.overworld().getGameTime() + randomCooldownTicks(server.overworld().random);

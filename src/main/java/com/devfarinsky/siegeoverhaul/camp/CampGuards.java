@@ -81,6 +81,11 @@ public final class CampGuards {
                         BlockPos post=candidates(raid,slot).stream().filter(p -> safePost(level,raid,p)).findFirst().orElse(guard.blockPosition());
                         nbt.putInt("SiegeGuardSlot",slot); nbt.putLong("SiegeGuardPost",post.asLong());
                     }
+                    if(nbt.getInt("SiegeGuardSlot")<2 && !nbt.getBoolean("SiegeWarGatePost") && WarGate.ready(level,raid)) {
+                        BlockPos gate=WarGate.center(raid).relative(WarGate.facing(raid),2)
+                                .relative(WarGate.facing(raid).getClockWise(),nbt.getInt("SiegeGuardSlot")==0?2:-2).above();
+                        if(safePost(level,raid,gate)) { nbt.putLong("SiegeGuardPost",gate.asLong());nbt.putBoolean("SiegeWarGatePost",true); }
+                    }
                     BlockPos post=BlockPos.of(nbt.getLong("SiegeGuardPost"));
                     if (!safePost(level,raid,post)) {
                         post=candidates(raid,nbt.getInt("SiegeGuardSlot")).stream().filter(p -> safePost(level,raid,p)).findFirst().orElse(post);
