@@ -58,10 +58,31 @@ public final class BuilderSupport {
         }
         tag.put("SiegeBuilderSupplies",com.devfarinsky.siegeoverhaul.items.StarterBagItem.save(remaining));inventory.setChanged();
     }
+    private static void requestSpecialMaterials(ServerLevel level,Mob worker,RaidSavedData.RaidState raid) throws ReflectiveOperationException {
+        if (!NativeCampConstruction.active(raid) || raid.pendingCampBlocks.isEmpty()
+                || Boolean.TRUE.equals(worker.getClass().getMethod("needsToGetToChest").invoke(worker))) return;
+        // One live crew member fetches these ingredients, avoiding competing requests
+        // for the same finite stock. Native storage AI performs the actual trip.
+        for (var id:raid.campWorkers) if(level.getEntity(id) instanceof Mob candidate && candidate.isAlive()) {
+            if(candidate!=worker)return;
+            break;
+        }
+        if(!(worker.getClass().getMethod("getInventory").invoke(worker) instanceof SimpleContainer inventory))return;
+        for(var stack:NativeCampConstruction.materials(level,raid.pendingCampBlocks)) {
+            if(stack.getItem() instanceof net.minecraft.world.item.BlockItem || inventory.hasAnyMatching(s -> s.is(stack.getItem())))continue;
+            Class<?> needed=Class.forName("com.talhanation.workers.world.NeededItem");
+            java.util.function.Predicate<ItemStack> match=s -> s.is(stack.getItem());
+            Object request=needed.getConstructor(java.util.function.Predicate.class,int.class,boolean.class).newInstance(match,1,true);
+            worker.getClass().getMethod("addNeededItem",needed).invoke(worker,request);
+            return;
+        }
+    }
+
     public static void tick(ServerLevel level,Mob worker,RaidSavedData.RaidState raid) {
         if(worker.tickCount%20!=0 || worker.isNoAi() || !worker.isAlive())return;
         try {
             provision(worker);BuilderWorkShift.install(worker);
+            requestSpecialMaterials(level,worker,raid);
             if(worker.getClass().getMethod("getInventory").invoke(worker) instanceof SimpleContainer inventory)deliver(worker,inventory);
             if(NativeCampConstruction.active(raid) && !worker.getClass().getField("isFleeing").getBoolean(worker)
                     && level.getGameTime()%400==0) {
