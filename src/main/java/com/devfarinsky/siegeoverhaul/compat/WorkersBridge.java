@@ -154,6 +154,19 @@ public final class WorkersBridge {
         return stacks;
     }
 
+    public static net.minecraft.world.item.Item buildMaterial(net.minecraft.server.level.ServerLevel level,
+            net.minecraft.world.level.block.Block block) throws ReflectiveOperationException {
+        Class<?> parser = Class.forName("com.talhanation.workers.world.BuildBlockParse");
+        Object parsed;
+        try {
+            parsed = parser.getMethod("parseBlock", net.minecraft.world.level.block.Block.class,
+                    net.minecraft.world.level.Level.class).invoke(null, block, level);
+        } catch (NoSuchMethodException olderWorkers) {
+            parsed = parser.getMethod("parseBlock", net.minecraft.world.level.block.Block.class).invoke(null, block);
+        }
+        return (net.minecraft.world.item.Item) parser.getMethod("getItem").invoke(parsed);
+    }
+
     private static void call(Object target, String name, Class<?> type, Object value)
             throws ReflectiveOperationException {
         target.getClass().getMethod(name, type).invoke(target, value);

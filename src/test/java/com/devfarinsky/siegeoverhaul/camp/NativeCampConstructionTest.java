@@ -14,6 +14,36 @@ import static org.junit.jupiter.api.Assertions.*;
 import static com.devfarinsky.siegeoverhaul.ModConstants.Tags.*;
 
 class NativeCampConstructionTest extends MinecraftTestSupport {
+    @Test void successfulFlowerClearDoesNotAttemptToSetAirTwice() {
+        var level=org.mockito.Mockito.mock(net.minecraft.server.level.ServerLevel.class);
+        var raid=new RaidSavedData.RaidState("team:test","home",0);
+        org.mockito.Mockito.when(level.getBlockState(BlockPos.ZERO)).thenReturn(Blocks.POPPY.defaultBlockState());
+        try(var plants=org.mockito.Mockito.mockStatic(CampVegetation.class)) {
+            plants.when(() -> CampVegetation.plant(Blocks.POPPY.defaultBlockState())).thenReturn(true);
+            plants.when(() -> CampVegetation.clear(level,raid,BlockPos.ZERO)).thenReturn(true);
+            assertTrue(NativeCampConstruction.prepareCell(level,raid,BlockPos.ZERO));
+            org.mockito.Mockito.verify(level,org.mockito.Mockito.never()).setBlock(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyInt());
+        }
+    }
+
+    @Test void nativeSuppliesIncludeNonBlockIngredientsExactlyOncePerCell() throws Exception {
+        var level = org.mockito.Mockito.mock(net.minecraft.server.level.ServerLevel.class);
+        Map<Long,String> jobs = new LinkedHashMap<>();
+        jobs.put(BlockPos.ZERO.asLong(), "minecraft:amethyst_block");
+        jobs.put(BlockPos.ZERO.above().asLong(), "minecraft:amethyst_block");
+        jobs.put(BlockPos.ZERO.east().asLong(), "minecraft:stone_bricks");
+        try(var bridge=org.mockito.Mockito.mockStatic(com.devfarinsky.siegeoverhaul.compat.WorkersBridge.class)) {
+            bridge.when(() -> com.devfarinsky.siegeoverhaul.compat.WorkersBridge.buildMaterial(level,Blocks.AMETHYST_BLOCK)).thenReturn(Items.AMETHYST_SHARD);
+            bridge.when(() -> com.devfarinsky.siegeoverhaul.compat.WorkersBridge.buildMaterial(level,Blocks.STONE_BRICKS)).thenReturn(Items.STONE);
+            var supplies=NativeCampConstruction.materials(level,jobs);
+            assertEquals(2,supplies.size());
+            assertTrue(supplies.get(0).is(Items.AMETHYST_SHARD));
+            assertEquals(2,supplies.get(0).getCount());
+            assertTrue(supplies.get(1).is(Items.STONE));
+            assertEquals(1,supplies.get(1).getCount());
+        }
+    }
+
     @Test void connectedFenceAndBentStairsDoNotPauseConstruction() {
         assertTrue(NativeCampConstruction.safeCell(Blocks.OAK_FENCE.defaultBlockState()
                 .setValue(net.minecraft.world.level.block.FenceBlock.NORTH,true),"minecraft:oak_fence"));

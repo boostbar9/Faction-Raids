@@ -123,12 +123,12 @@ public final class WarGate {
     }
     public static String status(ServerLevel level,RaidSavedData.RaidState raid) {
         if(raid.warGate.isEmpty())return "Finding a clear War Gate site";
-        var cells=raid.warGate.getCompound("Blocks");int missing=0;
+        var cells=raid.warGate.getCompound("Blocks");int missing=0;java.util.List<String> details=new java.util.ArrayList<>();
         for(String key:cells.getAllKeys()) {
             BlockPos p=BlockPos.of(Long.parseLong(key));
-            if(!level.hasChunkAt(p) || !cells.getString(key).equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(level.getBlockState(p).getBlock()))))missing++;
+            if(!level.hasChunkAt(p) || !cells.getString(key).equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(level.getBlockState(p).getBlock())))) { missing++; if(details.size()<2)details.add(cells.getString(key)+" at "+p.getX()+", "+p.getY()+", "+p.getZ()); }
         }
-        return "War Gate: "+missing+" blocks unfinished"+(raid.constructionPauseReason.isEmpty()?"":" — "+raid.constructionPauseReason);
+        return "War Gate: "+missing+" blocks unfinished"+(details.isEmpty()?"":" ("+String.join("; ",details)+")")+(raid.constructionPauseReason.isEmpty()?"":" — "+raid.constructionPauseReason);
     }
     private static boolean protectedAt(ServerLevel level,BlockPos p) {
         for(var raid:RaidSavedData.get(level.getServer()).raids.values()) {
