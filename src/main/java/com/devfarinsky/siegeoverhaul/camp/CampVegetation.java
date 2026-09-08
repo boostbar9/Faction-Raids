@@ -32,7 +32,7 @@ public final class CampVegetation {
         }
         for(BlockPos cell:cells)raid.recordCampBlock(cell.asLong(),raid.pendingCampBlocks.getOrDefault(cell.asLong(),"minecraft:air"),BlockRestoration.serialize(level,cell));
         RaidSavedData.get(level.getServer()).setDirty();
-        cells.sort(java.util.Comparator.comparingInt(BlockPos::getY).reversed());
+        cells.sort(java.util.Comparator.<BlockPos>comparingInt(BlockPos::getY).reversed());
         for(BlockPos cell:cells) {
             level.levelEvent(2001,cell,Block.getId(level.getBlockState(cell)));
             level.setBlock(cell,Blocks.AIR.defaultBlockState(),Block.UPDATE_ALL | Block.UPDATE_SUPPRESS_DROPS);
