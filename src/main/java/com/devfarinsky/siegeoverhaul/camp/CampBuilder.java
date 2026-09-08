@@ -42,6 +42,7 @@ public final class CampBuilder {
     /** Called once per periodic siege pass. All pending jobs and crew IDs survive world saves. */
     public static void tick(ServerLevel level, RaidState raid, BiConsumer<BlockPos, Block> place) {
         if (raid.pendingCampBlocks.isEmpty() || !com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level, raid)) return;
+        if (!raid.warGate.isEmpty() && !raid.warGate.getBoolean("Assembled493")) return;
         if (NativeCampConstruction.active(raid)) { NativeCampConstruction.tick(level, raid); return; }
         // One upgrade recovery for old fallback jobs. Never respawn a dead crew or
         // repeatedly refill supplies. The native bridge handles elevated placements.

@@ -17,7 +17,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.registries.ForgeRegistries;
 import java.util.*;
 
-/** A native-builder blueprint and a bounded reinforcement pad, not a dimension portal. */
+/** A fully assembled reinforcement gate and bounded arrival pad, not a dimension portal. */
 @Mod.EventBusSubscriber(modid=SiegeOverhaul.MOD_ID)
 public final class WarGate {
     private WarGate() {}
@@ -66,17 +66,14 @@ public final class WarGate {
             var road=CampRoad.plan(level,raid,c,front);
             if(road.isEmpty())continue;
             plan.putAll(road.get().blocks());
-            if(raid.pendingCampBlocks.size()+plan.size()>512)continue;
-            var combined=new HashSet<Long>(raid.pendingCampBlocks.keySet());combined.addAll(plan.keySet());
-            int minX=Integer.MAX_VALUE,minZ=minX,maxX=Integer.MIN_VALUE,maxZ=maxX;
-            for(long key:combined){BlockPos p=BlockPos.of(key);minX=Math.min(minX,p.getX());minZ=Math.min(minZ,p.getZ());maxX=Math.max(maxX,p.getX());maxZ=Math.max(maxZ,p.getZ());}
-            if(maxX-minX>=32 || maxZ-minZ>=32)continue;
+            if(plan.size()>512)continue;
             CompoundTag tag=new CompoundTag(),cells=new CompoundTag();plan.forEach((p,id)->cells.putString(Long.toString(p),id));
             tag.putLong("Center",c.asLong());tag.putInt("Facing",front.get2DDataValue());tag.put("Blocks",cells);raid.warGate=tag;
             // Foundations must be first in the native job sequence.
             var jobs=new LinkedHashMap<Long,String>();plan.entrySet().stream().sorted(Comparator.comparingInt(e->BlockPos.of(e.getKey()).getY())).forEach(e->jobs.put(e.getKey(),e.getValue()));
             jobs.putAll(raid.pendingCampBlocks);raid.pendingCampBlocks.clear();raid.pendingCampBlocks.putAll(jobs);
             CampRoad.record(raid,road.get());
+            GateAssembly.install(level,raid);
             return true;
         }
         return false;
@@ -105,9 +102,15 @@ public final class WarGate {
         if(raid.campPos==null)return;
         if(raid.warGate.isEmpty() && raid.pendingCampBlocks.isEmpty() && !NativeCampConstruction.active(raid)
                 && com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level,raid) && plan(level,raid,objective)) {
-            NativeCampConstruction.start(level,raid);RaidSavedData.get(level.getServer()).setDirty();
+            RaidSavedData.get(level.getServer()).setDirty();
         }
         CampRoad.retrofit(level,raid);
+        if (!raid.warGate.isEmpty() && !raid.warGate.getBoolean("Assembled493")
+                && com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level,raid)
+                && GateAssembly.install(level,raid)) {
+            NativeCampConstruction.refreshAfterGateAssembly(level,raid);
+            RaidSavedData.get(level.getServer()).setDirty();
+        }
         if(!raid.warGate.isEmpty())CampLoading.keep(level,center(raid));
         if(!ready(level,raid)) {
             raid.warGateWaitTicks=Math.min(20*60*30,raid.warGateWaitTicks+20);
