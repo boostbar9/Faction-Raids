@@ -1,0 +1,89 @@
+name: Publish tested 4.1.1 beta to CurseForge
+on:
+  push:
+    branches: [publish/curseforge-v4.1.1]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: curseforge-1364352-v4.1.1
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34177499070
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Verify tested bytes and metadata
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          jar = Path('dist/siegeoverhaul-4.1.1.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == '8cba867ec9bf53ec1d4a882dfa5f6535cf0beaa8230575765d05386b967a61b8'
+          with zipfile.ZipFile(jar) as z:
+              data = tomllib.loads(z.read('META-INF/mods.toml').decode())
+          assert data['mods'][0]['modId'] == 'siegeoverhaul'
+          assert data['mods'][0]['version'] == '4.1.1'
+          dependencies = {x['modId']: x for x in data['dependencies']['siegeoverhaul']}
+          for mod in ['recruits', 'workers', 'smallships', 'siegeweapons']:
+              assert dependencies[mod]['mandatory'], mod
+          print('Verified', jar.name, digest)
+          CHECK
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.1.1.jar
+          name: The Siege Overhaul v4.1.1 beta - Native Camp Claims, Guards and Banner Fix
+          version: v4.1.1
+          version-type: beta
+          changelog: |
+            ## 4.1.1 beta - Native Camp Claims, Guards and Banner Fix
+
+            Fix banners appearing on player roofs: remove physical forward markers beside the raid objective, restrict banners to the camp, and prevent failed placement from altering an existing banner's pattern. Previously tracked markers remain covered by normal siege-end restoration.
+
+            Builders now pause and resume the same native Workers jobs when a player or replacement block obstructs the blueprint. Preserve finite supplies and work orders past the old timeout. Log obstruction, resumption, completion and lack of progress. Workers still sleep at night and pause in unloaded camps.
+
+            New enemy camps register actual Recruits claims using its map, ownership, capture, events and save system. Preserve the native initial 5x5 chunk footprint and three-chunk spacing buffer. Never overwrite existing land. Only leased Raider-owned claims are removed at siege end; player-captured claims remain. Camps permit interaction and breaking for sabotage. NPC claims do not deduct player currency.
+
+            Start camps with up to four guards: two shieldmen, an archer and a recruit. They hold camp separately from assault waves, receive food/ammunition, respect enemy caps, and do not respawn after defeat. Guard identities and claim cleanup leases survive server restarts.
+
+            Use Your faction and Claim map in the Codex to open Recruits' actual screens. Sneak-right-click the core with an empty hand for native faction management. Enemy faction stories are now labeled Enemy lore. Correct native claim lookups for the siege team's prefix.
+
+            Existing 4.0 camps gain guards once but are not retroactively claimed. New camps require Recruits claiming enabled, MaxClaimChunks at least 25, and sufficient unclaimed loaded terrain. Camps may form farther from the core to respect spacing. No chunks are force-loaded. If no eligible site exists, the siege announces that it has no camp.
+
+            Minecraft 1.20.1 Forge, Java 17. REQUIRED on server and every client: Villager Recruits 1.15.2+, Villager Workers 2 2.0.3+, Small Ships and Siege Weapons. Install matching Siege Overhaul versions on server and clients.
+
+            Validation: Java 17 clean build and all 65 regression tests passed. No interactive Minecraft playtest; published as beta.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          dependencies: |
+            recruits(required)
+            workers(required)
+            smallships(required)
+            siegeweapons(required)
+          fail-mode: fail
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os
+          result = {'version': '4.1.1', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 4.1.1 beta: {result['url']}\n")
+          RECEIPT
