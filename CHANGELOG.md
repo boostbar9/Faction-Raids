@@ -3,6 +3,7 @@
 - Reject failed War Gate installation candidates and try other sites, restoring camp and fortification job queues after each rejected placement.
 - Mark successful gate assembly and its terrain-restoration ledger for saving immediately, including callers that cannot start native worker jobs afterward.
 - Reject malformed saved gate coordinates and invalid or missing block IDs safely; guard gate readiness, status, road preparation, repair and cleanup against invalid coordinate entries.
+- Gate cleanup no longer restores old terrain over a later player/mod replacement. Original soil still restores after the gate is removed.
 - Preserve current loot prices, odds, companions and save format. No interactive Minecraft playtest.
 
 ## 4.10.1 beta

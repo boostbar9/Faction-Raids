@@ -198,7 +198,9 @@ public final class WarGate {
         Collections.reverse(keys);
         for(String key:keys) {
             long packed=Long.parseLong(key);var record=raid.campBlocks.remove(packed);
-            if(record!=null && !record.getCompound("Original").isEmpty())
+            // A player/mod replacement must survive cleanup, including when the gate
+            // could not be cleared. Only restore into cells that are actually empty.
+            if(record!=null && level.getBlockState(BlockPos.of(packed)).isAir() && !record.getCompound("Original").isEmpty())
                 com.devfarinsky.siegeoverhaul.siege.BlockRestoration.applyTo(level,BlockPos.of(packed),record.getCompound("Original"));
         }
     }

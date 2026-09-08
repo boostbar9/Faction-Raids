@@ -85,4 +85,19 @@ class GateAssemblyTest extends MinecraftTestSupport {
             assertDoesNotThrow(()->WarGate.cleanup(level,raid));
         }
     }
+    @Test void cleanupPreservesForeignReplacementInsteadOfRestoringOverIt() {
+        var original=com.devfarinsky.siegeoverhaul.siege.BlockRestoration.serializeState(level,center,Blocks.DIRT.defaultBlockState());
+        raid.recordCampBlock(center.asLong(),"minecraft:polished_blackstone_bricks",original);
+        world.put(center,Blocks.DIAMOND_BLOCK.defaultBlockState());
+        try(var loading=mockStatic(CampLoading.class)) { WarGate.cleanup(level,raid); }
+        assertEquals(Blocks.DIAMOND_BLOCK.defaultBlockState(),world.get(center));
+        verify(level,never()).setBlock(eq(center),any(),anyInt());
+    }
+    @Test void cleanupStillRestoresOriginalSoilAfterRemovingGate() {
+        var original=com.devfarinsky.siegeoverhaul.siege.BlockRestoration.serializeState(level,center,Blocks.DIRT.defaultBlockState());
+        raid.recordCampBlock(center.asLong(),"minecraft:polished_blackstone_bricks",original);
+        world.put(center,Blocks.POLISHED_BLACKSTONE_BRICKS.defaultBlockState());
+        try(var loading=mockStatic(CampLoading.class)) { WarGate.cleanup(level,raid); }
+        assertEquals(Blocks.DIRT.defaultBlockState(),world.get(center));
+    }
 }
