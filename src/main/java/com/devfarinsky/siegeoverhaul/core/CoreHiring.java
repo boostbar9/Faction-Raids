@@ -13,7 +13,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 /** Uses native costs, currency, hiring events, ownership, faction and unit-limit checks. */
 public final class CoreHiring {
     public static final String[] IDS = {"recruit", "recruit_shieldman", "bowman", "crossbowman", "farmer", "lumberjack", "miner", "builder", "cook", "courier"};
-    public static final String[] NAMES = {"Recruit", "Shieldman", "Archer", "Crossbowman", "Farmer", "Lumberjack", "Miner", "Builder", "Cook", "Courier", "Kael the Vanguard", "Branna the Bulwark", "Sylva the Ranger", "Orin the Arbalist"};
+    public static final String[] NAMES = {"Recruit", "Shieldman", "Archer", "Crossbowman", "Farmer", "Lumberjack", "Miner", "Builder", "Cook", "Courier", "Kael Bloodthorn", "Branna Dawnwarden", "Sylva Stormbow", "Orin Frostbinder"};
     private static final String[] COSTS = {"RecruitCost", "ShieldmanCost", "BowmanCost", "CrossbowmanCost", "FarmerCost", "LumberjackCost", "MinerCost", "BuilderCost", "CookCost", "CourierCost"};
     private CoreHiring() {}
     private static Object config(String name) throws ReflectiveOperationException {

@@ -78,6 +78,12 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         refresh();
         super.broadcastChanges();
     }
+    @Override public boolean clickMenuButton(Player player,int button) {
+        if(owner==null || player!=owner || !stillValid(player) || button<20 || button>22)return false;
+        boolean bought=CoreLoot.purchase(owner,button-20);
+        if(bought)owner.inventoryMenu.broadcastChanges();
+        return bought;
+    }
     @Override public void broadcastChanges() {
         if (owner != null && owner.server.overworld().getGameTime() - shownAt >= 20) refresh();
         super.broadcastChanges();
