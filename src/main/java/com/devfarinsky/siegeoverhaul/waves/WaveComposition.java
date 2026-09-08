@@ -45,6 +45,7 @@ public final class WaveComposition {
      * composition (caller falls back to a default).
      */
     public String roleAt(int index) {
+        if(index<0)return null;
         int cursor = 0;
         for (Map.Entry<String, Integer> entry : roleCounts.entrySet()) {
             cursor += entry.getValue();

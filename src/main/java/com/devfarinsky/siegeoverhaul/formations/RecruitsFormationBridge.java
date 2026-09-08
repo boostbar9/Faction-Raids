@@ -78,6 +78,36 @@ public final class RecruitsFormationBridge {
         }
     }
 
+    /** Native hold orders at reachable ground cells only; no surface snapping or teleporting. */
+    public static boolean applyTactical(net.minecraft.server.level.ServerLevel level,Formation shape,Vec3 forward,Vec3 target,List<Mob> units,String defendingTeam) {
+        ensureInitialized(); boolean applied=false;
+        for(int i=0;i<units.size();i++) {
+            Mob mob=units.get(i);
+            if(recruitEntityClass==null || !recruitEntityClass.isInstance(mob))continue;
+            Vec3 offset=FormationTactics.offset(shape,i,units.size());
+            Vec3 slot=target.add(-forward.z*offset.x+forward.x*offset.z,0,forward.x*offset.x+forward.z*offset.z);
+            net.minecraft.core.BlockPos ground=null;
+            for(int dy:new int[]{0,1,-1}) {
+                var p=net.minecraft.core.BlockPos.containing(slot.x,mob.getY()+dy,slot.z);
+                if(!level.hasChunkAt(p) || !com.devfarinsky.siegeoverhaul.core.SiegeCore.claimed(level,p,defendingTeam)
+                        || !level.getFluidState(p).isEmpty() || !level.getBlockState(p.below()).isFaceSturdy(level,p.below(),net.minecraft.core.Direction.UP))continue;
+                if(!level.noCollision(mob,mob.getBoundingBox().move(Vec3.atBottomCenterOf(p).subtract(mob.position()))))continue;
+                var path=mob.getNavigation().createPath(p,0);
+                if(path!=null && path.canReach()) { ground=p;break; }
+            }
+            if(ground==null) { release(mob);continue; }
+            try {
+                mob.getClass().getMethod("setHoldPos",Vec3.class).invoke(mob,Vec3.atBottomCenterOf(ground));
+                mob.getClass().getMethod("setFollowState",int.class).invoke(mob,3);
+                mob.getClass().getField("isInFormation").setBoolean(mob,true);
+                mob.getClass().getField("holdFormation").setBoolean(mob,false);
+                mob.getPersistentData().putBoolean(com.devfarinsky.siegeoverhaul.ModConstants.Tags.FORMATION_MARCH,true);
+                applied=true;
+            } catch(ReflectiveOperationException | RuntimeException ex) { release(mob); }
+        }
+        return applied;
+    }
+
     /** Release the hold-position order before combat or independent navigation takes over. */
     public static void release(Mob mob) {
         if (!mob.getPersistentData().getBoolean(com.devfarinsky.siegeoverhaul.ModConstants.Tags.FORMATION_MARCH)) return;
