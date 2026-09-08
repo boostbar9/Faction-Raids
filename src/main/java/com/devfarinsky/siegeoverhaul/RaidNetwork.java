@@ -19,7 +19,7 @@ public final class RaidNetwork {
     // discovered units/factions, and War Journal rows to DashboardSync.
     // Bump whenever the wire format changes so mismatched builds refuse to connect
     // instead of silently corrupting the dashboard payload.
-    private static final String PROTOCOL = "7";
+    private static final String PROTOCOL = "8";
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(SiegeOverhaul.MOD_ID, "main"))
             .networkProtocolVersion(() -> PROTOCOL)
@@ -29,6 +29,16 @@ public final class RaidNetwork {
     private static int messageId;
 
     public static void init() {
+        CHANNEL.messageBuilder(CorePurchase.class, messageId++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder((packet, buffer) -> { buffer.writeVarInt(packet.menuId()); buffer.writeVarInt(packet.index()); buffer.writeLong(packet.rotation()); })
+                .decoder(buffer -> new CorePurchase(buffer.readVarInt(), buffer.readVarInt(), buffer.readLong()))
+                .consumerMainThread((packet, supplier) -> {
+                    var context = supplier.get();
+                    var player = context.getSender();
+                    if (player != null && player.containerMenu instanceof com.devfarinsky.siegeoverhaul.core.CoreHireMenu menu
+                            && menu.containerId == packet.menuId()) menu.purchase(player, packet.index(), packet.rotation());
+                    context.setPacketHandled(true);
+                }).add();
         CHANNEL.messageBuilder(DashboardSync.class, messageId++, NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(DashboardSync::encode)
                 .decoder(DashboardSync::decode)
@@ -198,5 +208,9 @@ public final class RaidNetwork {
         }
     }
 
+    public record CorePurchase(int menuId, int index, long rotation) {}
+    public static void purchaseCoreOffer(int menuId, int index, long rotation) {
+        CHANNEL.sendToServer(new CorePurchase(menuId, index, rotation));
+    }
     private RaidNetwork() {}
 }

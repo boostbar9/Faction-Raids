@@ -2,71 +2,77 @@ package com.devfarinsky.siegeoverhaul.core;
 
 import com.devfarinsky.siegeoverhaul.RaidSavedData;
 import net.minecraft.core.BlockPos;
-import net.minecraft.nbt.*;
-import net.minecraft.network.chat.Component;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.*;
 import net.minecraft.world.inventory.*;
 import net.minecraft.world.item.*;
 
-/** Vanilla nine-slot client screen; server handles every purchase and never exposes removable stock. */
-public final class CoreHireMenu extends ChestMenu {
+/** Read-only offer display; server owns stock, prices, permissions and purchases. */
+public final class CoreHireMenu extends AbstractContainerMenu {
     private final ServerPlayer owner;
     private final BlockPos pos;
-    private final SimpleContainer display;
+    private final SimpleContainer display = new SimpleContainer(4);
+    private final ContainerData data = new SimpleContainerData(12);
     private long shownAt = Long.MIN_VALUE;
-    private long displayedRotation;
+    public CoreHireMenu(int id, Inventory inventory) { this(id, inventory, null); }
     public CoreHireMenu(int id, Inventory inventory, BlockPos pos) {
-        this(id, inventory, pos, new SimpleContainer(9));
+        super(CoreMenus.HIRING.get(), id);
+        this.owner = inventory.player instanceof ServerPlayer sp ? sp : null;
+        this.pos = pos == null ? null : pos.immutable();
+        for (int i = 0; i < 4; i++) addSlot(new Slot(display, i, -1000, -1000) {
+            @Override public boolean mayPlace(ItemStack stack) { return false; }
+            @Override public boolean mayPickup(Player player) { return false; }
+        });
+        for (int i = 0; i < 3; i++) { data.set(i, -1); data.set(i + 3, -1); }
+        addDataSlots(data);
+        if (owner != null) refresh();
     }
-    private CoreHireMenu(int id, Inventory inventory, BlockPos pos, SimpleContainer display) {
-        super(MenuType.GENERIC_9x1, id, inventory, display, 1);
-        this.owner = (ServerPlayer) inventory.player;
-        this.pos = pos.immutable();
-        this.display = display;
-        refresh();
+    public int role(int slot) { return data.get(slot); }
+    public int cost(int slot) { return data.get(slot + 3); }
+    public boolean sold(int slot) { return (data.get(6) & (1 << slot)) != 0; }
+    public int seconds() { return data.get(7); }
+    public long rotation() {
+        long value = 0;
+        for (int i = 0; i < 4; i++) value |= (long) (data.get(8 + i) & 0xffff) << (i * 16);
+        return value;
     }
     private void refresh() {
-        if (!SiegeCore.canUse(owner, pos)) return;
-        RaidSavedData data = RaidSavedData.get(owner.server);
-        CompoundTag core = data.siegeCores.get(SiegeCore.key(owner));
+        if (owner == null || !stillValid(owner)) return;
+        RaidSavedData saved = RaidSavedData.get(owner.server);
+        CompoundTag core = saved.siegeCores.get(SiegeCore.key(owner));
         long now = owner.server.overworld().getGameTime();
-        if (CoreOffers.refresh(core, now, owner.serverLevel().random)) data.setDirty();
-        displayedRotation = core.getLong("RefreshAt");
-        display.clearContent();
+        if (CoreOffers.refresh(core, now, owner.serverLevel().random)) saved.setDirty();
+        long rotation = core.getLong("RefreshAt");
         int[] offers = core.getIntArray("Offers");
         for (int i = 0; i < 3; i++) {
-            int role = offers[i];
-            boolean sold = (core.getInt("Sold") & (1 << i)) != 0;
-            ItemStack icon = new ItemStack(sold ? Items.BARRIER : role == 1 ? Items.SHIELD : role == 2 ? Items.BOW : Items.IRON_SWORD);
-            try {
-                icon.setHoverName(Component.literal(CoreHiring.NAMES[role] + (sold ? " — Hired" : " — " + CoreHiring.cost(role) + " ")).append(sold ? Component.empty() : CoreHiring.currency().getDescription()));
-                ListTag lore = new ListTag();
-                lore.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal(sold ? "Returns next rotation" : "Click to hire • faction stock"))));
-                icon.getOrCreateTagElement("display").put("Lore", lore);
-            } catch (ReflectiveOperationException | RuntimeException ex) { icon.setHoverName(Component.literal("Hiring unavailable")); }
-            display.setItem(1 + i * 3, icon);
+            data.set(i, offers[i]);
+            display.setItem(i, new ItemStack(CoreHiring.icon(offers[i])));
+            try { data.set(i + 3, Math.min(32767, Math.max(0, CoreHiring.cost(offers[i])))); }
+            catch (ReflectiveOperationException | RuntimeException ex) { data.set(i + 3, -1); }
         }
-        long seconds = Math.max(0, (displayedRotation - now + 19) / 20);
-        ItemStack clock = new ItemStack(Items.CLOCK);
-        clock.setHoverName(Component.literal("New offers in " + seconds / 60 + ":" + String.format(java.util.Locale.ROOT, "%02d", seconds % 60)));
-        display.setItem(8, clock);
+        try { display.setItem(3, new ItemStack(CoreHiring.currency())); }
+        catch (ReflectiveOperationException | RuntimeException ex) { display.setItem(3, ItemStack.EMPTY); }
+        data.set(6, core.getInt("Sold"));
+        data.set(7, (int) Math.min(900, Math.max(0, (rotation - now + 19) / 20)));
+        for (int i = 0; i < 4; i++) data.set(8 + i, (int) ((rotation >>> (i * 16)) & 0xffff));
         shownAt = now;
     }
-    @Override public boolean stillValid(Player player) { return player == owner && SiegeCore.canUse(owner, pos); }
+    @Override public boolean stillValid(Player player) {
+        return owner == null ? pos == null : player == owner && SiegeCore.canUse(owner, pos);
+    }
     @Override public ItemStack quickMoveStack(Player player, int slot) { return ItemStack.EMPTY; }
-    @Override public void clicked(int slot, int button, ClickType click, Player player) {
-        if (!stillValid(player) || click != ClickType.PICKUP || button != 0 || slot < 1 || slot > 7 || (slot - 1) % 3 != 0) return;
-        RaidSavedData data = RaidSavedData.get(owner.server);
-        CompoundTag core = data.siegeCores.get(SiegeCore.key(owner));
-        long oldRotation = displayedRotation;
+    @Override public void clicked(int slot, int button, ClickType click, Player player) { }
+    public void purchase(ServerPlayer player, int index, long expectedRotation) {
+        if (owner == null || !stillValid(player)) return;
         refresh();
-        if (oldRotation != displayedRotation) { super.broadcastChanges(); return; }
-        int index = (slot - 1) / 3;
-        if ((core.getInt("Sold") & (1 << index)) == 0 && CoreHiring.hire(owner, pos, core.getIntArray("Offers")[index])) {
+        RaidSavedData saved = RaidSavedData.get(owner.server);
+        CompoundTag core = saved.siegeCores.get(SiegeCore.key(owner));
+        if (CoreOffers.canPurchase(core, index, expectedRotation)
+                && CoreHiring.hire(owner, pos, core.getIntArray("Offers")[index])) {
             core.putInt("Sold", core.getInt("Sold") | (1 << index));
-            data.setDirty();
+            saved.setDirty();
         }
         refresh();
         super.broadcastChanges();

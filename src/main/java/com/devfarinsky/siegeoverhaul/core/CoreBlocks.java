@@ -52,8 +52,8 @@ public final class CoreBlocks {
             }
             if (player instanceof ServerPlayer sp) {
                 if (SiegeCore.canUse(sp, pos)) sp.openMenu(new SimpleMenuProvider(
-                        (id, inv, p) -> new CoreHireMenu(id, inv, pos), Component.literal("Siege Core • Recruit offers")));
-                else sp.displayClientMessage(Component.literal("This core needs your faction's claim to recruit soldiers."), false);
+                        (id, inv, p) -> new CoreHireMenu(id, inv, pos), Component.literal("Siege Core • Hiring")));
+                else sp.displayClientMessage(Component.literal("This core needs your faction's claim to hire units."), false);
             }
             return InteractionResult.sidedSuccess(level.isClientSide);
         }

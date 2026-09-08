@@ -52,7 +52,18 @@ Claim spacing may put camps farther away (the search extends to roughly 256 bloc
 
 The core is the exact occupation objective. Attackers win by holding its inner ring; defenders reverse occupation by clearing or matching them. This is an occupation objective, not a block-health system. Cores resist explosions and cannot be moved during a siege. Losing the claim or forcibly removing the core ends that siege without rewards.
 
-The core offers **three shared faction hires**, refreshing every **15 minutes of server runtime**. Each slot independently rolls 80% regular recruit, 10% shieldman, or 10% archer; duplicates are possible. Each offer can be purchased once before refresh. Recruits' configured hiring costs, currency, ownership and unit limits apply. Breaking/replacing a core or restarting the server does not reroll stock. Stock refreshes while the server runs, not while it is shut down.
+The core opens a **responsive hiring desk** with **two recruit slots and one worker slot**, refreshing every **15 minutes of server runtime**. Wide screens show offer cards; smaller windows and larger GUI scales show compact rows. Each offer shows its native hiring price, rarity and purchase status, with a shared refresh countdown.
+
+| Recruit type | Chance per recruit slot | Worker type | Chance per worker slot |
+| --- | ---: | --- | ---: |
+| Recruit | 50% | Farmer | 25% |
+| Shieldman | 25% | Lumberjack | 25% |
+| Archer | 20% | Miner | 20% |
+| Crossbowman | 5% | Builder | 15% |
+| | | Cook | 10% |
+| | | Courier | 5% |
+
+Slots roll independently, so recruit duplicates are possible. Each offer can be purchased once per rotation across the faction. Native configured villager-trade prices, Recruits currency, ownership and unit limits apply. Hired workers use their normal Villager Workers controls: assign their work areas, storage and building jobs after hiring. Breaking/replacing the core or restarting the server does not reroll stock. Stock refreshes while the server runs, not while it is shut down. Upgrading preserves existing military offers, purchased slots and the refresh deadline.
 
 ## A longer siege
 
