@@ -61,7 +61,9 @@ public final class CoreLoot {
         }
         // Capacity was checked on this same server thread; payment can only free space.
         inventory.add(prize.copy());inventory.setChanged();data.putLong("SiegeLootNext",now+OPEN_TICKS);
-        player.sendSystemMessage(Component.literal("Opened "+NAMES[box]+": "+prize.getCount()+" × ").append(prize.getHoverName()));
+        // Keep chat free of reward details while the client plays its sealed reveal.
+        // Delivery remains immediate, so closing the menu cannot lose a paid prize.
+        player.sendSystemMessage(Component.literal("Opening "+NAMES[box]+"... Reward secured in your inventory."));
         return new Receipt(prize.copy(),roll<50?0:roll<80?1:roll<95?2:3);
     }
 }

@@ -1,3 +1,9 @@
+## 4.10.1 beta
+
+- Keep loot-box purchase chat generic so it no longer reveals the prize before the mystery animation. Rewards are still delivered immediately and safely if the menu closes; prices and odds are unchanged.
+- Resolve siege-controller APIs before mounting engineers. Verify both native controller and passenger attachment before activating control; failed native attachment dismounts the crew so deployment can retry rather than leaving a stranded passenger.
+- Add regression coverage for all twelve loot-box outcomes and engineer attachment success, missing APIs/controllers, exceptions, mismatched vehicles, refused mounts and retries. No interactive Minecraft playtest.
+
 ## 4.8.0 beta
 
 - Enemy builders receive a one-time veteran kit: Protection III / Unbreaking III diamond armor, diamond tools with Efficiency III, four golden apples and food. At least 60 health, +20% movement speed and knockback resistance; existing damage is preserved and equipment is never replenished each tick. Undelivered supplies remain stored until backpack space opens.

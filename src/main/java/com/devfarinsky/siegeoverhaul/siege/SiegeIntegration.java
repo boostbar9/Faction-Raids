@@ -126,25 +126,43 @@ public final class SiegeIntegration {
         if (!isSiegeEngineerAvailable() || engineer == null || vehicle == null) return false;
         if (!initReflection()) return false;
         try {
-            if (!engineer.startRiding(vehicle, true)) return false;
             // Pick catapult or ballista controller based on the vehicle's registry key.
             ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(vehicle.getType());
-            if (key == null) return true;
+            if (key == null) return false;
             java.lang.reflect.Field controllerField;
             if ("catapult".equals(key.getPath())) controllerField = catapultControllerField;
             else if ("ballista".equals(key.getPath())) controllerField = ballistaControllerField;
-            else return true; // Non-ranged engines don't need a Recruits controller.
+            else return engineer.startRiding(vehicle, true); // Non-ranged engines don't need a Recruits controller.
             Object controller = controllerField.get(engineer);
-            if (controller == null) return false;
-            tryMountMethod.invoke(controller, vehicle);
-            engineer.getClass().getField("siegeController").set(engineer,controller);
-            return vehicle.equals(controller.getClass().getMethod("getSiegeEntity").invoke(controller));
+            return mountWithController(engineer, vehicle, controller, tryMountMethod);
         } catch (ReflectiveOperationException | RuntimeException e) {
             // Recruits API changed under us. Log at debug so server owners
             // running with debug logs enabled can see why siege engineers
             // stopped operating engines, without spamming production logs.
             FactionLogger.LOG.debug("assignSiegeEngineer reflection failed: {}", e.toString());
             return false;
+        }
+    }
+
+    /** A failed native attach must leave the crew dismounted so deployment can retry. */
+    static boolean mountWithController(Mob engineer, Entity vehicle, Object controller, Method mountMethod) {
+        if (controller == null) return false;
+        boolean attached = false;
+        try {
+            // Resolve the API before changing passenger state.
+            var activeController = engineer.getClass().getField("siegeController");
+            var getSiegeEntity = controller.getClass().getMethod("getSiegeEntity");
+            if (!engineer.startRiding(vehicle, true)) return false;
+            mountMethod.invoke(controller, vehicle);
+            if (engineer.getVehicle() != vehicle || !vehicle.equals(getSiegeEntity.invoke(controller))) return false;
+            activeController.set(engineer, controller);
+            attached = true;
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            FactionLogger.LOG.debug("Siege controller attach failed: {}", e.toString());
+            return false;
+        } finally {
+            if (!attached && engineer.getVehicle() == vehicle) engineer.stopRiding();
         }
     }
 
