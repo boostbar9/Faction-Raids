@@ -8,6 +8,36 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EndlessSiegeTest extends MinecraftTestSupport {
+    @Test void endlessLabelsShowAbsoluteWaveAndRetreatCheckpointWithoutAFiveWaveLimit() {
+        var state = new RaidSavedData.RaidState("team:test", "siege_core", 0);
+        for (int wave : new int[]{1, 5, 6, 10, 11, 20, 30}) {
+            state.wave = wave;
+            int checkpoint = ((wave - 1) / 5 + 1) * 5;
+            assertEquals("wave " + wave + " | retreat at " + checkpoint, EndlessSiege.waveLabel(state, 5));
+        }
+        state = RaidSavedData.RaidState.load(state.save());
+        assertEquals("wave 30 | retreat at 30", EndlessSiege.waveLabel(state, 5));
+        state.defensePointName = "legacy"; state.wave = 3;
+        assertEquals("wave 3/7", EndlessSiege.waveLabel(state, 7));
+        assertEquals(5, EndlessSiege.nextCheckpoint(0));
+        assertEquals(Integer.MAX_VALUE, EndlessSiege.nextCheckpoint(Integer.MAX_VALUE));
+    }
+    @Test void voteDisplayCountsSavedEligibleBallotsWithoutChangingDecisionOrDeadline() {
+        var a = UUID.randomUUID(); var b = UUID.randomUUID(); var c = UUID.randomUUID();
+        var campaign = new CompoundTag();
+        EndlessSiege.begin(campaign, 10, List.of(a, b, c), "ten");
+        EndlessSiege.cast(campaign, a, "ten", true); EndlessSiege.cast(campaign, b, "ten", false);
+        campaign.getCompound("Ballots").putBoolean(UUID.randomUUID().toString(), true);
+        campaign.putInt("VoteTicks", 21);
+        var before = campaign.copy();
+        assertEquals("Retreat 1/2 needed | continue 1 | 2s", EndlessSiege.voteStatus(campaign));
+        assertEquals(before, campaign);
+        assertEquals(EndlessSiege.Decision.WAIT, EndlessSiege.decision(campaign));
+        EndlessSiege.cast(campaign, c, "ten", true);
+        assertEquals("Retreat 2/2 needed | continue 1 | 2s", EndlessSiege.voteStatus(campaign));
+        assertEquals(EndlessSiege.Decision.RETREAT, EndlessSiege.decision(campaign));
+    }
+
     @Test void votesRejectOutsidersStaleLinksAndDuplicateBallotsAcrossReload() {
         var voter = UUID.randomUUID(); var other = UUID.randomUUID(); var campaign = new CompoundTag();
         EndlessSiege.begin(campaign, 5, List.of(voter, other), "current");

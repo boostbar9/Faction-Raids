@@ -2030,7 +2030,7 @@ public final class RaidEvents {
                 finishRaid(server, data, teamKey, true, true, "Your faction accepted the enemy retreat after wave " + state.wave + "."); return;
             }
             if (decision == EndlessSiege.Decision.WAIT) {
-                state.objectiveStatus = "Retreat vote: " + (state.campaign.getInt("VoteTicks") + 19) / 20 + "s remaining";
+                state.objectiveStatus = EndlessSiege.voteStatus(state.campaign);
                 updateBossBar(server, anchor, state, false); return;
             }
             announce(server, teamKey, Component.literal("The siege continues. The next five waves pay more into your faction bank.").withStyle(ChatFormatting.GOLD), false);
@@ -4386,7 +4386,7 @@ public final class RaidEvents {
             label = com.devfarinsky.siegeoverhaul.chat.ChatStyle.bossbarLabel(epithet, phase, target, deployed, pressure);
         } else {
             String held = objectiveName + " " + capturePercent + "% | " + compactObjectiveStatus(state);
-            String waveChip = "wave " + Math.max(1, state.wave) + "/" + totalWaves;
+            String waveChip = EndlessSiege.waveLabel(state, totalWaves);
             String deployed = state.raiders.size() + " deployed"
                     + (state.pendingWaveSpawns > 0 ? " + " + state.pendingWaveSpawns + " reinforcing" : "");
             label = com.devfarinsky.siegeoverhaul.chat.ChatStyle.bossbarLabel(epithet, phase, held, waveChip, deployed);
@@ -5335,7 +5335,7 @@ public final class RaidEvents {
         return directions[index];
     }
 
-    private static int nextCheckpoint(int wave) { return (int)Math.min(Integer.MAX_VALUE, ((Math.max(1,wave)-1L)/5+1)*5); }
+    private static int nextCheckpoint(int wave) { return EndlessSiege.nextCheckpoint(wave); }
 
     private static String waveTitle(int wave) {
         int total = RaidConfig.WAVES.get();

@@ -1,3 +1,9 @@
+# 4.11.3 beta
+
+- Endless siege boss bars show the absolute wave and its retreat checkpoint instead of impossible totals such as wave 10/5.
+- Active retreat votes show accepted retreat ballots, the strict-majority target, continue ballots and remaining seconds. Displaying the tally never changes votes or the deadline.
+- Preserve difficulty, rewards, active-enemy limits, legacy finite sieges and the core-occupation progress bar.
+
 # 4.11.2 beta
 
 - Later waves can reuse unoccupied siege-owned artillery after its previous crew is confirmed killed. Replacement crews deploy at the War Gate and walk to their equipment, without teleporting or increasing the fleet limit. Player-mounted equipment is excluded from reuse and cleanup.
