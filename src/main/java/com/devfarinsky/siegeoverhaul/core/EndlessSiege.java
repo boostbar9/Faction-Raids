@@ -13,6 +13,26 @@ public final class EndlessSiege {
     private EndlessSiege() {}
     public static boolean active(RaidSavedData.RaidState state) { return state != null && "siege_core".equals(state.defensePointName); }
     public static int chapterWave(int wave) { return Math.floorMod(Math.max(1, wave) - 1, CHECKPOINT) + 1; }
+    /** The current chapter's retreat checkpoint, including its final wave. */
+    public static int nextCheckpoint(int wave) {
+        return (int) Math.min(Integer.MAX_VALUE, ((Math.max(1, wave) - 1L) / CHECKPOINT + 1) * CHECKPOINT);
+    }
+    public static String waveLabel(RaidSavedData.RaidState state, int finiteLimit) {
+        int wave = Math.max(1, state.wave);
+        return active(state) ? "wave " + wave + " | retreat at " + nextCheckpoint(wave)
+                : "wave " + wave + "/" + finiteLimit;
+    }
+    /** Read-only tally: only ballots belonging to the saved electorate count. */
+    public static String voteStatus(CompoundTag campaign) {
+        CompoundTag electorate = campaign.getCompound("Electorate"), ballots = campaign.getCompound("Ballots");
+        int retreat = 0, continueSiege = 0;
+        for (String voter : electorate.getAllKeys()) if (ballots.contains(voter)) {
+            if (ballots.getBoolean(voter)) retreat++; else continueSiege++;
+        }
+        long seconds = (Math.max(0L, campaign.getInt("VoteTicks")) + 19) / 20;
+        return "Retreat " + retreat + "/" + (electorate.size() / 2 + 1)
+                + " needed | continue " + continueSiege + " | " + seconds + "s";
+    }
     public static int reward(int wave) {
         long base = Math.max(0, RaidConfig.VICTORY_EMERALDS_PER_WAVE.get());
         return (int) Math.min(1_000_000L, base * (2L + (Math.max(1, wave) - 1L) / CHECKPOINT) / 2);
