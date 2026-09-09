@@ -26,6 +26,10 @@ public final class EnemyCore {
             if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)) continue;
             var claim = RecruitsClaimsBridge.getClaimAt(level, pos).orElse(null);
             if (claim == null || !claim.claimId().equals(raid.campClaimId)) continue;
+            var anchor = RaidSavedData.get(level.getServer()).anchors.get(raid.teamKey);
+            // Permit only this camp's native claim while retaining external player-claim exclusions.
+            if (anchor == null || ClaimBridge.isForeignClaim(level, pos,
+                    anchor.withIdentity(claim.ownerFactionStringId(), anchor.teamDisplay()))) continue;
             var before = level.getBlockState(pos);
             if (!CampVegetation.replaceable(before) || before.hasBlockEntity() || !before.getFluidState().isEmpty()) continue;
             var change = new CampTerrain.Change(pos, before, CoreBlocks.CORE.get().defaultBlockState());

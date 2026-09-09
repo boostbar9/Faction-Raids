@@ -4748,7 +4748,7 @@ public final class RaidEvents {
         String factionId = state.narrative != null ? state.narrative.factionId : "";
         String factionName = state.narrative != null ? state.narrative.factionName : "Unknown raiders";
         String casusBelli = state.narrative != null ? state.narrative.casusBelliId : "";
-        int payout = eligibleVictory ? guaranteedEmeraldReward(state) : 0;
+        int payout = EndlessSiege.active(state) ? (int)Math.min(FactionBank.LIMIT, state.campaign.getLong("Deposited")) : eligibleVictory ? guaranteedEmeraldReward(state) : 0;
         // Outcome is a short machine-readable tag so the client can style it
         // (green vs. red vs. yellow) without brittle string matching.
         String outcome = victory ? (eligibleVictory ? "victory" : "victory_practice") : "defeat";

@@ -77,12 +77,15 @@ public final class SiegeCorpseCleanup {
                     if(delay>0 && now-tag.getLong("SiegeEmptySince")>=delay*20L)corpse.discard();
                 }else{
                     tag.remove("SiegeEmptySince");int delay=RaidConfig.SIEGE_CORPSE_SECONDS.get();
-                    if(delay>0 && tag.getBoolean("SiegeEnemyCorpse") && now-tag.getLong("SiegeCorpseBorn")>=delay*20L
-                            && recruitCorpse(corpse))spill(level,corpse);
+                    if(expiredEnemy(tag,now,delay) && recruitCorpse(corpse))spill(level,corpse);
                 }
             }catch(ReflectiveOperationException|RuntimeException|LinkageError ignored){ /* No destructive fallback. */ }
             if(corpse.isRemoved())TRACKED.remove(ref.id);else CORPSES.addLast(ref);
         }
+    }
+    static boolean expiredEnemy(CompoundTag tag,long now,int delay) {
+        return delay>0 && tag.getBoolean("SiegeEnemyCorpse") && tag.contains("SiegeCorpseBorn")
+                && now>=tag.getLong("SiegeCorpseBorn") && now-tag.getLong("SiegeCorpseBorn")>=delay*20L;
     }
     static List<ItemStack> inventory(Object corpse) throws ReflectiveOperationException {
         Object death=corpse.getClass().getMethod("getDeath").invoke(corpse);List<ItemStack> items=new ArrayList<>();

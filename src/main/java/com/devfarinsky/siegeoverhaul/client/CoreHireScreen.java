@@ -69,12 +69,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
         super.render(g,mx,my,partial);
         if(tab==0)for(int i=0;i<4;i++)if(over(mx,my,layout.cardX(i),layout.cardY(i),layout.cardWidth(),layout.cardHeight())&&menu.role(i)>=0){
-            int role=menu.role(i);String info=CoreHiring.NAMES[role]+" • "+CoreHiring.rarity(role)+" • "+(i==3?HeroTraits.description(role):"Shared faction offer; refreshes every15 minutes.");
+            int role=menu.role(i);String info=CoreHiring.NAMES[role]+" • "+CoreHiring.rarity(role)+" • "+(i==3?HeroTraits.description(role):"Shared faction offer; refreshes every 15 minutes.");
             tooltip(g,info,mx,my);
         }
         if(tab==1)for(int i=0;i<3;i++){
             if(over(mx,my,layout.cardX(0),layout.marketY(i),layout.cardWidth(),layout.marketHeight()))tooltip(g,revealBox==i&&revealTicks==0&&!revealed.isEmpty()?CoreLoot.rarity(revealedTier)+" • "+revealed.getCount()+"× "+revealed.getHoverName().getString():"One mystery reward • "+CoreLoot.odds(),mx,my);
-            if(over(mx,my,layout.cardX(1),layout.marketY(i),layout.cardWidth(),layout.marketHeight()))tooltip(g,CoreBuffs.DETAILS[i]+" for5 minutes. Uses your personal emeralds; existing effects are preserved.",mx,my);
+            if(over(mx,my,layout.cardX(1),layout.marketY(i),layout.cardWidth(),layout.marketHeight()))tooltip(g,CoreBuffs.DETAILS[i]+" for 5 minutes. Uses your personal emeralds; existing effects are preserved.",mx,my);
         }
     }
     private boolean over(int mx,int my,int x,int y,int w,int h){return mx>=x&&mx<x+w&&my>=y&&my<y+h;}

@@ -49,7 +49,7 @@ Each box awards **one randomly selected reward stack**. Rarity odds are **Common
 2. **Time to prepare.** New sieges allow **12 minutes of preparation by default**, split between establishment, fortification, and army muster. Defenders can prepare their troops or disrupt the enemy camp.
 3. **Builders get to work.** Armored Workers 2 builders use native building jobs and supplied materials. Camp guards defend the site while construction and later upgrades progress.
 4. **The War Gate opens.** A protected reinforcement gate provides a designated ground-level arrival point. The gate and its graded access road arrive fully assembled when the camp is established, leaving builders free to work on the camp itself. The gate is removed during siege cleanup.
-5. **The army advances.** Infantry, ranged units, cavalry, officers, sappers, and siege engineers attack in waves. Units travel normally outside your territory and use local role-based formations inside it.
+5. **The army advances.** Infantry, ranged units, cavalry, officers, sappers, and siege engineers attack in waves. Units use reachable, role-based formations on the approach and release marching orders for combat or obstacles.
 6. **Defenses are tested.** Raiders use breaching, ladders, alternate approaches, and supported siege equipment. Commanders can perform a visible, interruptible strike against certain building blocks.
 7. **The core is contested.** Numerical superiority around the core drives capture. Losing the core transfers its territory to the enemy faction. Bring yourself and your recruits back to outnumber the occupiers and reclaim it.
 
@@ -78,7 +78,7 @@ Use the **Warlord's Codex** for concise siege guidance, status, and access to th
 
 ## Victory and Restoration
 
-With default settings, an eligible five-wave victory with the commander defeated awards **48 emeralds per online faction member**, plus a customizable victory loot roll. Manually started raids do not award victory rewards by default.
+Eligible Siege Core campaigns deposit emeralds into the shared faction bank after every survived wave. Each five-wave chapter increases the per-wave payment by 50% of the starting amount. There is no five-wave ending: accept a majority retreat vote at a checkpoint or capture the enemy command core. Victory loot and XP remain available; bank wave payments replace personal emerald victory payouts for these campaigns. Manually started raids do not award rewards by default.
 
 Siege Overhaul records supported siege damage and temporary construction for restoration. **Cleanup settings control restoration**, and later player replacements are respected. Restoration covers tracked changes; it is not a universal rollback for unrelated mods or player activity.
 
@@ -130,7 +130,7 @@ Built with **Villager Recruits, Villager Workers 2, Small Ships, and Siege Weapo
 
 With henkelmax's Corpse mod installed, camp earthworks and War Gate assembly reject changes that overlap a recovery body. Native camp builders pause when a corpse overlaps pending blueprint cells and resume after it is removed, retaining their jobs and supplies. Fallback camp placement and native supply-barrel placement also avoid corpse space.
 
-Corpse remains optional and controls death inventories, ownership permissions, decay and recovery. This integration does not create NPC corpses or change those settings. Automated regression coverage is provided; combined in-game playtesting remains outstanding.
+Corpse remains optional. Cleanup checks at most 32 loaded bodies per second. Empty bodies are removed after 60 seconds; positively identified new siege NPC bodies convert their full inventory into ordinary dropped loot after 120 seconds. Dropped loot then follows normal pickup and despawn rules. Nonempty player bodies and older/unidentified bodies are preserved. Both cleanup timers are configurable; zero disables that cleanup. Native Recruits creates NPC corpses. Automated regression coverage is provided; combined in-game playtesting remains outstanding.
 
 ## Optional Epic Knights and Musket Mod
 
@@ -139,3 +139,18 @@ With **Epic Knights: Shields, Armor and Weapons** (`magistuarmory`) installed, n
 With **ewewukek's Musket Mod** (`musketmod`) installed and its native Recruits combat API available, one-third of new ordinary crossbowman hires receive a named musket and 32 cartridges. They use Recruits' existing musket aiming, reload and ammunition rules. If the expected API or items are absent, the hire keeps its crossbow and arrows. Named ranged heroes retain their specialized weapons.
 
 Both integrations are optional on Minecraft 1.20.1 Forge. Automated tests and upstream API inspection do not replace a combined-mod in-game playtest; this remains a beta release.
+
+
+## Arcane command center (4.11.0)
+
+The Siege Core has a glowing crystal model and three compact service tabs:
+
+- **Army & Heroes:** ordinary hires, workers, and the rotating hero offer together.
+- **Loot & Buffs:** mystery boxes remain 16/48/96 emeralds. Personal five-minute blessings offer Speed I (16), Strength I (24), or Resistance I (32), without replacing an existing effect.
+- **Bank & Faction:** shared balance, online/offline faction roster, upcoming wave rewards, and deposit/withdraw controls. Members may deposit; the faction leader may withdraw. Inventory space and bank capacity are checked server-side.
+
+The bank earns **1% interest per real 24-hour day** by default, configurable from 0–10%. Fractional interest carries forward; full-day catch-up is bounded to 365 days. The ledger, completed-wave payments, and votes survive saves and core relocation.
+
+Core sieges continue through progressively stronger five-wave chapters. Reinforcements are staged under existing active-entity and performance caps. Every fifth cleared wave offers a 60-second clickable retreat vote to the faction's eligible online members. Each member gets one ballot; a strict majority accepts retreat. A tie or no majority continues the siege. Capturing the enemy core on its War Gate pad also ends the invasion: outnumber the defenders in the capture radius for the configured recapture duration. Camp restoration still runs afterward.
+
+Bank withdrawals, buffs, and voting are validated on the server. Matching server/client versions are required. This beta is validated by automated checks, not an interactive Minecraft playtest.
