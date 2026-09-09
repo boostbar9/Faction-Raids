@@ -20,7 +20,7 @@ class CampDevelopmentTest extends MinecraftTestSupport {
         var saved=new RaidSavedData();saved.anchors.put(raid.teamKey,new RaidSavedData.Anchor(raid.teamKey,"Test",UUID.randomUUID(),Set.of(),false,false,Map.of(),0));
         var claim=mock(RecruitsClaimsBridge.ClaimSnapshot.class);when(claim.claimId()).thenReturn(raid.campClaimId);when(claim.ownerFactionStringId()).thenReturn("enemy");
         var gate=WarGate.blueprint(new BlockPos(8,64,8),net.minecraft.core.Direction.NORTH);
-        var cells=new net.minecraft.nbt.CompoundTag();gate.forEach((pos,id)->cells.putString(Long.toString(pos),id));raid.warGate.put("Blocks",cells);
+        var cells=new net.minecraft.nbt.CompoundTag();gate.forEach((pos,id)->cells.putString(Long.toString(pos),id));raid.warGate.put("Blocks",cells);raid.warGate.putLong("Center",new BlockPos(8,64,8).asLong());
         when(level.getBlockState(any())).thenAnswer(call->{String id=gate.get(((BlockPos)call.getArgument(0)).asLong());return id==null?net.minecraft.world.level.block.Blocks.AIR.defaultBlockState():net.minecraftforge.registries.ForgeRegistries.BLOCKS.getValue(new net.minecraft.resources.ResourceLocation(id)).defaultBlockState();});
         var sites=new ArrayList<Set<Long>>();
         try(var camps=mockStatic(CampClaims.class);var nativeJobs=mockStatic(NativeCampConstruction.class);

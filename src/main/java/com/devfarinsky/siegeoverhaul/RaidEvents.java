@@ -3697,7 +3697,8 @@ public final class RaidEvents {
                     && !mob.isPassenger() && state.siegeEngines.keySet().stream().anyMatch(engineId -> {
                         Entity engine=level.getEntity(engineId);
                         return engine!=null && engine.isAlive() && engine.getPersistentData().hasUUID("SiegeOperatorUuid")
-                                && engine.getPersistentData().getUUID("SiegeOperatorUuid").equals(mob.getUUID()) && mob.distanceToSqr(engine)<=32*32;
+                                && engine.getPersistentData().getUUID("SiegeOperatorUuid").equals(mob.getUUID())
+                                && !engine.getPersistentData().getBoolean(com.devfarinsky.siegeoverhaul.siege.SiegeFleet.CAPTURED);
                     })) { STUCK_TRACKER.remove(id);continue; }
             com.devfarinsky.siegeoverhaul.raid.RaidCavalry.advance(mob,objective,baseSpeed);
             if (mob.isPassenger() || (marching && mob.getPersistentData().getBoolean(ModConstants.Tags.FORMATION_MARCH))) {

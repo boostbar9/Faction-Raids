@@ -52,4 +52,11 @@ class FormationDirectorTest extends MinecraftTestSupport {
         when(soldier.distanceToSqr(any(Vec3.class))).thenReturn(100.0);
         assertFalse(FormationDirector.shouldMarch(soldier, BlockPos.ZERO));
     }
+    @Test void dismountedEngineerKeepsEquipmentAssignmentInsteadOfInfantryFormation() {
+        var level=mock(net.minecraft.server.level.ServerLevel.class);Mob engineer=mock(Mob.class);
+        var tag=new net.minecraft.nbt.CompoundTag();tag.putString(com.devfarinsky.siegeoverhaul.ModConstants.Tags.RAID_TEAM,"team:test");
+        tag.putString(com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.TEAM_TAG,"team:test");
+        when(engineer.getPersistentData()).thenReturn(tag);when(engineer.distanceToSqr(any(Vec3.class))).thenReturn(10000.0);
+        assertFalse(FormationDirector.shouldMarch(level,"team:test",engineer,BlockPos.ZERO));
+    }
 }

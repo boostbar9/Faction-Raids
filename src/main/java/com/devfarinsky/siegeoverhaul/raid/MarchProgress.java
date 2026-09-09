@@ -5,6 +5,7 @@ import net.minecraft.world.phys.Vec3;
 
 /** Keep useful paths alive; retry a failed or stationary route without teleporting. */
 public final class MarchProgress {
+    private static final String ADVANCE_AT="MarchAdvanceAt", BEST_DISTANCE="MarchBestDistance";
     private MarchProgress() {}
     public static boolean shouldRepath(Mob mob, Vec3 destination, long now) {
         var data=mob.getPersistentData();
@@ -14,11 +15,11 @@ public final class MarchProgress {
         boolean moved=mob.position().distanceToSqr(previous)>=0.25;
         boolean changed=destination.distanceToSqr(goal)>4;
         double remaining=mob.position().distanceTo(destination);
-        boolean advanceFresh=fresh || changed || !data.contains("MarchAdvanceAt");
-        boolean advancing=advanceFresh || remaining < data.getDouble("MarchBestDistance")-.5;
-        boolean circling=!advanceFresh && now-data.getLong("MarchAdvanceAt")>=200;
+        boolean advanceFresh=fresh || changed || !data.contains(ADVANCE_AT);
+        boolean advancing=advanceFresh || remaining < data.getDouble(BEST_DISTANCE)-.5;
+        boolean circling=!advanceFresh && now-data.getLong(ADVANCE_AT)>=200;
         if(advancing || circling) {
-            data.putDouble("MarchBestDistance",remaining);data.putLong("MarchAdvanceAt",now);
+            data.putDouble(BEST_DISTANCE,remaining);data.putLong(ADVANCE_AT,now);
         }
         boolean stalled=!fresh && !moved && now-data.getLong("MarchProgressAt")>=40;
         if(fresh || moved || changed || stalled) {
