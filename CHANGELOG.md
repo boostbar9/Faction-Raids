@@ -1,3 +1,9 @@
+# 4.10.4 beta
+
+- Fail closed when an installed optional claim provider throws: claim-aware placement no longer proceeds after silently disabling protection.
+- Keep failed-provider protection active on subsequent placement checks and show the failure in claim diagnostics. Repair the provider and restart the server to clear the failure.
+- No save format or mandatory dependency changes.
+
 ## 4.10.3 beta
 
 - Add optional henkelmax Corpse compatibility: camp earthworks and gate assembly reject overlapping recovery bodies; native builders pause and resume the same blueprint jobs when bodies are removed.
