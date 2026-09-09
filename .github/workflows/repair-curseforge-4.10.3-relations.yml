@@ -1,0 +1,37 @@
+name: Repair 4.10.3 CurseForge dependency metadata
+on:
+  push:
+    branches: [maintenance/curseforge-small-ships-4.10.3]
+permissions:
+  contents: read
+concurrency:
+  group: curseforge-1364352-metadata
+  cancel-in-progress: false
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Update existing file relations without uploading bytes
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request, uuid
+          projects = [
+              {'slug': 'recruits', 'type': 'requiredDependency'},
+              {'slug': 'workers', 'type': 'requiredDependency'},
+              {'slug': 'small-ships', 'projectID': '450659', 'type': 'requiredDependency'},
+              {'slug': 'siegeweapons', 'type': 'requiredDependency'},
+              {'slug': 'corpse', 'type': 'optionalDependency'},
+          ]
+          metadata = {'fileID': 8841092, 'relations': {'projects': projects}}
+          boundary = 'SiegeMetadata' + uuid.uuid4().hex
+          body = ('--' + boundary + '\r\nContent-Disposition: form-data; name="metadata"\r\nContent-Type: application/json\r\n\r\n' + json.dumps(metadata) + '\r\n--' + boundary + '--\r\n').encode()
+          request = urllib.request.Request('https://minecraft.curseforge.com/api/projects/1364352/update-file',
+              data=body, headers={'X-Api-Token': os.environ['CURSEFORGE_TOKEN'], 'Content-Type': 'multipart/form-data; boundary=' + boundary}, method='POST')
+          with urllib.request.urlopen(request, timeout=60) as response:
+              receipt = json.load(response)
+          assert int(receipt['id']) == metadata['fileID'], receipt
+          print(json.dumps({'receipt': receipt, 'relations': projects, 'jar_changed': False}))
+          PY
