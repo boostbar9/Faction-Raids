@@ -69,9 +69,12 @@ public final class EndlessSiege {
     public static void offer(RaidSavedData.RaidState state, List<ServerPlayer> members) {
         String token = UUID.randomUUID().toString();
         begin(state.campaign, state.wave, members.stream().filter(p -> !p.isSpectator()).map(ServerPlayer::getUUID).toList(), token);
-        for (var player : members) player.sendSystemMessage(Component.literal("Wave " + state.wave + " survived. Call it good? The enemy offers retreat. ")
+        for (var player : members) {
+            player.getPersistentData().putString("SiegeVoteReminder",token);
+            player.sendSystemMessage(Component.literal("Wave " + state.wave + " survived. Call it good? The enemy offers retreat. ")
                 .append(choice("[Accept retreat]", token, true)).append(" ").append(choice("[Fight 5 more]", token, false))
                 .append(Component.literal(" Strict majority of " + state.campaign.getCompound("Electorate").size() + " eligible members; 60 seconds. A tie/no majority continues. Next wave: " + reward(state.wave + 1) + " bank emeralds.")));
+        }
     }
     public static void remindIfNeeded(ServerPlayer player,RaidSavedData.RaidState state) {
         if(active(state) && !state.campaign.getString("VoteToken").equals(player.getPersistentData().getString("SiegeVoteReminder")))remind(player,state);

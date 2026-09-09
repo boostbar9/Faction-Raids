@@ -83,4 +83,15 @@ class EndlessSiegeTest extends MinecraftTestSupport {
         org.mockito.Mockito.clearInvocations(player);EndlessSiege.cast(raid.campaign,id,"original",true);
         EndlessSiege.remind(player,raid);org.mockito.Mockito.verify(player,org.mockito.Mockito.never()).sendSystemMessage(org.mockito.ArgumentMatchers.any());
     }
+    @Test void automaticRemindersWaitForMembershipAndSendOnlyOnceUntilReconnect() {
+        var player=org.mockito.Mockito.mock(net.minecraft.server.level.ServerPlayer.class);var id=UUID.randomUUID();var tag=new CompoundTag();
+        org.mockito.Mockito.when(player.getUUID()).thenReturn(id);org.mockito.Mockito.when(player.getPersistentData()).thenReturn(tag);
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        EndlessSiege.remindIfNeeded(player,null);
+        EndlessSiege.begin(raid.campaign,5,List.of(id),"vote");
+        EndlessSiege.remindIfNeeded(player,raid);EndlessSiege.remindIfNeeded(player,raid);
+        org.mockito.Mockito.verify(player,org.mockito.Mockito.times(1)).sendSystemMessage(org.mockito.ArgumentMatchers.any());
+        tag.remove("SiegeVoteReminder");EndlessSiege.remindIfNeeded(player,raid);
+        org.mockito.Mockito.verify(player,org.mockito.Mockito.times(2)).sendSystemMessage(org.mockito.ArgumentMatchers.any());
+    }
 }

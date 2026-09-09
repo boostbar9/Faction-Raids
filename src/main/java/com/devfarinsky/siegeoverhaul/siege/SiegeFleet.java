@@ -15,7 +15,7 @@ public final class SiegeFleet {
     public static final String SUPPORT_WAVE="SiegeSupportWave", OPERATOR_UUID="SiegeOperatorUuid",
             REPLACEMENT_CREW="SiegeReplacementCrew", LAST_ATTEMPT="SiegeOperatorLastAttempt";
     private SiegeFleet() {}
-    @SubscribeEvent public static void death(LivingDeathEvent event) {
+    @SubscribeEvent(priority=net.minecraftforge.eventbus.api.EventPriority.LOWEST) public static void death(LivingDeathEvent event) {
         if(event.isCanceled() || !(event.getEntity().level() instanceof ServerLevel level))return;
         var mob=event.getEntity();String team=mob.getPersistentData().getString(SiegeDeployment.TEAM_TAG);
         if(team.isBlank())return;

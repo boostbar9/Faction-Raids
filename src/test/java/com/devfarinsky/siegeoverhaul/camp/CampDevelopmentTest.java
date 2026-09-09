@@ -32,6 +32,9 @@ class CampDevelopmentTest extends MinecraftTestSupport {
             CampDevelopment.tick(level,raid);
             assertEquals(2,sites.size());assertNotEquals(sites.get(0),sites.get(1));assertEquals(1,raid.campUpgradeStage);
             assertTrue(raid.pendingCampBlocks.size()<512);verify(level,never()).setBlock(any(),any(),anyInt());
+            raid.pendingCampBlocks.clear();raid.campUpgradeTicks=2400;
+            external.when(()->ClaimBridge.isForeignClaim(eq(level),any(BlockPos.class),any(RaidSavedData.Anchor.class))).thenReturn(true);
+            CampDevelopment.tick(level,raid);assertEquals(2,sites.size());assertEquals(1,raid.campUpgradeStage);
         }
     }
 }
