@@ -1,3 +1,8 @@
+# 4.11.5 beta
+
+- Dismounted siege engineers cancel their siege-issued vehicle travel command before returning on foot, preventing native walking orders from repeatedly overriding the return route.
+- Restore the original firing setting and preserve unrelated movement orders. Failed cancellation retains ownership for a later retry; no vehicle reset or teleport is performed.
+
 # 4.11.4 beta
 
 - Isolated marching soldiers and lone squad survivors can regroup with nearby troops of the same role instead of keeping a permanent one-person formation.

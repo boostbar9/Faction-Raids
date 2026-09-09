@@ -222,7 +222,7 @@ public final class SiegeIntegration {
 
     /** Drive the native vehicle controller toward the core; it retains native combat targeting. */
     public static void advanceEngineer(Mob engineer, net.minecraft.core.BlockPos objective) {
-        if (!engineer.isPassenger()) { EngineerAdvanceOrders.restore(engineer); return; }
+        if (!engineer.isPassenger()) { EngineerAdvanceOrders.cancelTravel(engineer); return; }
         long now = engineer.level().getGameTime();
         Vec3 delta = Vec3.atCenterOf(objective).subtract(engineer.position()).multiply(1,0,1);
         double distance = delta.length();

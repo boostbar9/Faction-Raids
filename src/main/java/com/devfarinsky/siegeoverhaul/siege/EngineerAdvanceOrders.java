@@ -29,6 +29,22 @@ final class EngineerAdvanceOrders {
         data.remove(SAVED_RANGED);
     }
 
+    /** Cancel only our pending travel order before on-foot navigation takes over. */
+    static void cancelTravel(Object engineer, CompoundTag data) throws ReflectiveOperationException {
+        if (!data.contains(SAVED_RANGED)) return;
+        // Clear movement before consuming the ownership marker. If reflection fails,
+        // retain the marker so the next tick can retry instead of losing ownership.
+        engineer.getClass().getMethod("setShouldMovePos", boolean.class).invoke(engineer, false);
+        restore(engineer, data);
+    }
+
+    static void cancelTravel(Mob engineer) {
+        try { cancelTravel(engineer, engineer.getPersistentData()); }
+        catch (ReflectiveOperationException | RuntimeException ex) {
+            com.devfarinsky.siegeoverhaul.FactionLogger.LOG.debug("Could not cancel siege operator travel", ex);
+        }
+    }
+
     static void restore(Mob engineer) {
         try { restore(engineer, engineer.getPersistentData()); }
         catch (ReflectiveOperationException | RuntimeException ex) {
