@@ -157,7 +157,8 @@ public final class NativeCampConstruction {
         raid.warGate.putBoolean("GateRepair480", true);
         var cells=raid.warGate.getCompound("Blocks");
         for(String key:cells.getAllKeys()) {
-            BlockPos pos=BlockPos.of(Long.parseLong(key));
+            BlockPos pos=WarGate.savedPosition(key);
+            if(pos==null || WarGate.savedBlock(cells,key)==null)continue;
             // Recover only empty cells in the existing protected blueprint. Never
             // remove player replacements or replenish completed construction.
             if(raid.pendingCampBlocks.size()<512 && level.hasChunkAt(pos) && level.getBlockState(pos).isAir())

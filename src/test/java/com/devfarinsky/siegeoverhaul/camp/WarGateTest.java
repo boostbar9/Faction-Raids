@@ -19,11 +19,16 @@ class WarGateTest extends MinecraftTestSupport {
         when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(64);
         var border=mock(net.minecraft.world.level.border.WorldBorder.class);when(level.getWorldBorder()).thenReturn(border);
         when(border.isWithinBounds(any(BlockPos.class))).thenReturn(true);when(level.getMinBuildHeight()).thenReturn(-64);when(level.getMaxBuildHeight()).thenReturn(320);
-        when(level.getBlockState(any())).thenAnswer(a->((BlockPos)a.getArgument(0)).getY()<64?Blocks.DIRT.defaultBlockState():Blocks.AIR.defaultBlockState());
+        Map<BlockPos,net.minecraft.world.level.block.state.BlockState> world=new HashMap<>();
+        when(level.getBlockState(any())).thenAnswer(a->world.getOrDefault(a.getArgument(0),((BlockPos)a.getArgument(0)).getY()<64?Blocks.DIRT.defaultBlockState():Blocks.AIR.defaultBlockState()));
+        when(level.setBlock(any(),any(),anyInt())).thenAnswer(a->{world.put(((BlockPos)a.getArgument(0)).immutable(),a.getArgument(1));return true;});
         when(level.getFluidState(any())).thenAnswer(a->((BlockPos)a.getArgument(0)).getX()>18
                 ?net.minecraft.world.level.material.Fluids.WATER.defaultFluidState():net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState());
         var raid=new RaidSavedData.RaidState("team:test","siege_core",0);raid.campPos=new BlockPos(8,64,8);
-        assertTrue(WarGate.plan(level,raid,new BlockPos(100,64,8)));
+        try(var saves=mockStatic(RaidSavedData.class)) {
+            saves.when(()->RaidSavedData.get(null)).thenReturn(new RaidSavedData());
+            assertTrue(WarGate.plan(level,raid,new BlockPos(100,64,8)));
+        }
         assertTrue(WarGate.center(raid).getZ()>raid.campPos.getZ());
         raid.reinforcementStallTicks=1400;
         assertEquals(1400,RaidSavedData.RaidState.load(raid.save()).reinforcementStallTicks);
@@ -50,5 +55,31 @@ class WarGateTest extends MinecraftTestSupport {
         assertTrue(WarGate.ready(level,raid));BlockPos spawn=WarGate.spawn(level,raid,mob);assertNotNull(spawn);assertEquals(c.getY()+1,spawn.getY());
         when(level.noCollision(eq(mob),any(AABB.class))).thenReturn(false);assertNull(WarGate.spawn(level,raid,mob));
         plan.remove(c.above(7).asLong());assertFalse(WarGate.ready(level,raid));assertNull(WarGate.spawn(level,raid,mob));
+    }
+    @Test void failedInstallRestoresQueuesAndTriesAnotherCandidate() {
+        var level=mock(ServerLevel.class);
+        when(level.hasChunkAt(any())).thenReturn(true);
+        when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(64);
+        when(level.getBlockState(any())).thenReturn(Blocks.AIR.defaultBlockState());
+        when(level.getFluidState(any())).thenReturn(net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState());
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);raid.campPos=new BlockPos(8,64,8);
+        long campJob=new BlockPos(8,64,8).asLong(), fortJob=new BlockPos(9,64,8).asLong();
+        raid.pendingCampBlocks.put(campJob,"minecraft:oak_planks");raid.pendingFortifications.put(fortJob,"minecraft:oak_fence");
+        var originalCamp=new LinkedHashMap<>(raid.pendingCampBlocks);var originalFort=new LinkedHashMap<>(raid.pendingFortifications);
+        var road=new CampRoad.Plan(Map.of(),Map.of(),Set.of(campJob,fortJob));
+        try(var roads=mockStatic(CampRoad.class);var assembly=mockStatic(GateAssembly.class)) {
+            roads.when(()->CampRoad.plan(eq(level),eq(raid),any(),any())).thenAnswer(call->{
+                assertEquals(originalCamp,raid.pendingCampBlocks);assertEquals(originalFort,raid.pendingFortifications);assertTrue(raid.warGate.isEmpty());
+                return Optional.of(road);
+            });
+            roads.when(()->CampRoad.record(raid,road)).thenCallRealMethod();
+            assembly.when(()->GateAssembly.install(level,raid)).thenReturn(false);
+            assertFalse(WarGate.plan(level,raid,new BlockPos(100,64,8)));
+            assertTrue(raid.warGate.isEmpty());assertEquals(originalCamp,raid.pendingCampBlocks);assertEquals(originalFort,raid.pendingFortifications);
+            assembly.verify(()->GateAssembly.install(level,raid),times(16));
+            assembly.when(()->GateAssembly.install(level,raid)).thenReturn(false,true);
+            assertTrue(WarGate.plan(level,raid,new BlockPos(100,64,8)));
+            assertEquals(raid.campPos.relative(Direction.EAST,17),WarGate.center(raid));
+        }
     }
 }

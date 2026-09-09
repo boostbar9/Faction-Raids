@@ -72,8 +72,8 @@ public final class CampRoad {
         if(!raid.warGate.contains("RoadBefore") || raid.warGate.getBoolean("RoadPrepared"))return true;
         CompoundTag before=raid.warGate.getCompound("RoadBefore"),blocks=raid.warGate.getCompound("RoadBlocks");
         for(String key:before.getAllKeys()) {
-            BlockPos pos=BlockPos.of(Long.parseLong(key));
-            if(!level.hasChunkAt(pos)||!level.getBlockState(pos).equals(BlockRestoration.deserializeState(before.getCompound(key)))
+            BlockPos pos=WarGate.savedPosition(key);
+            if(pos==null || !level.hasChunkAt(pos)||!level.getBlockState(pos).equals(BlockRestoration.deserializeState(before.getCompound(key)))
                     ||!level.getEntitiesOfClass(LivingEntity.class,new AABB(pos),LivingEntity::isAlive).isEmpty())return false;
         }
         // Reuse transactional earthworks: a rejected mutation rolls the whole cut back.
@@ -88,7 +88,7 @@ public final class CampRoad {
     }
     /** Retrofit saved gates once the current native job finishes; never refill an existing job's barrel. */
     public static void retrofit(ServerLevel level,RaidSavedData.RaidState raid) {
-        if(raid.warGate.isEmpty() || raid.warGate.contains("RoadBlocks") || !raid.pendingCampBlocks.isEmpty() || NativeCampConstruction.active(raid))return;
+        if(!raid.warGate.contains("Center",net.minecraft.nbt.Tag.TAG_LONG) || raid.warGate.contains("RoadBlocks") || !raid.pendingCampBlocks.isEmpty() || NativeCampConstruction.active(raid))return;
         if(raid.campWorkers.stream().noneMatch(id->level.getEntity(id) instanceof LivingEntity worker && worker.isAlive()))return;
         raid.warGate.putBoolean("RoadPending",true);
         var plan=plan(level,raid,WarGate.center(raid),WarGate.facing(raid));
