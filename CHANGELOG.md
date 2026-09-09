@@ -1,3 +1,8 @@
+# 4.11.4 beta
+
+- Isolated marching soldiers and lone squad survivors can regroup with nearby troops of the same role instead of keeping a permanent one-person formation.
+- Preserve intact squad membership, the six-unit squad limit, proximity checks and combat/engineer exclusions. No difficulty, reward or dependency changes.
+
 # 4.11.3 beta
 
 - Endless siege boss bars show the absolute wave and its retreat checkpoint instead of impossible totals such as wave 10/5.

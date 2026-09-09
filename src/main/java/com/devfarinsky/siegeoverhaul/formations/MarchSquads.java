@@ -17,6 +17,16 @@ public final class MarchSquads {
             if(group.size()<6 && (group.isEmpty() || mob.position().distanceToSqr(group.get(0).position())<=24*24))group.add(mob);
             else unassigned.add(mob);
         }
+        // A saved one-person squad cannot form up. Let its survivor join nearby
+        // role peers again, while preserving every intact squad and its slots.
+        var iterator=groups.entrySet().iterator();
+        while(iterator.hasNext()) {
+            var entry=iterator.next();
+            if(entry.getValue().size()<2) {
+                unassigned.addAll(entry.getValue());iterator.remove();
+            }
+        }
+        unassigned.sort(Comparator.comparing(Mob::getUUID));
         for(Mob mob:unassigned) {
             String prefix=role(mob)+":";String chosen=null;double best=12*12;
             for(var entry:groups.entrySet()) {
