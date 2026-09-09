@@ -1,3 +1,21 @@
+# 4.12.0 beta — command-center preview
+
+- Show the native Minecraft emerald beside balances, wave rewards, loot and blessing prices, and bank controls. Recruitment uses the actual configured hiring currency icon.
+
+- Introduce a consistent set of small custom command icons for kingdom, territory, combat, treasury, sealed loot and blessings. Actual recruit equipment and revealed rewards retain their item icons.
+
+- Add custom obsidian, gold and amethyst command-center artwork behind the existing functional panels.
+
+- Show remaining active-effect time, explain bank permissions and map controls, and add bounded roster scrolling with member counts, alternating rows and a scroll indicator. Keep buff descriptions above compact purchase controls.
+
+- Keep the loot reveal reel clear of purchase buttons across GUI scales; show personal emeralds on the market tab even when the overview is collapsed. Prevent long faction names from overlapping the treasury header.
+
+- Rebuild the core around Kingdom Command: layered panels, responsive territory overview, faction treasury and live wave/reward status above the existing three service tabs.
+- Embed Recruits terrain cache and native claim overlays, centered on the player. Open map launches the full native Recruits map for territory management; small screens retain this button while collapsing the preview.
+- Add unticked native role portraits on larger hire cards and subtle button lighting. Portraits illustrate the role, not the eventual randomized equipment.
+- Preserve server-authoritative purchases, hidden loot contents, prices, dependencies, worker assignments and save/network formats.
+- Candidate pending native-client visual verification of map framebuffer clipping, portraits and GUI scales; not a verified public release yet.
+
 # 4.11.7 beta
 
 - New ordinary core recruits receive simple first names such as Bobby and Fernan.
