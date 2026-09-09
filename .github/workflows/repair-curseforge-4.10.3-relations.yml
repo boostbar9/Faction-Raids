@@ -30,8 +30,12 @@ jobs:
           body = ('--' + boundary + '\r\nContent-Disposition: form-data; name="metadata"\r\nContent-Type: application/json\r\n\r\n' + json.dumps(metadata) + '\r\n--' + boundary + '--\r\n').encode()
           request = urllib.request.Request('https://minecraft.curseforge.com/api/projects/1364352/update-file',
               data=body, headers={'X-Api-Token': os.environ['CURSEFORGE_TOKEN'], 'Content-Type': 'multipart/form-data; boundary=' + boundary}, method='POST')
-          with urllib.request.urlopen(request, timeout=60) as response:
-              receipt = json.load(response)
+          try:
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  receipt = json.load(response)
+          except urllib.error.HTTPError as error:
+              print(error.read().decode().replace(os.environ['CURSEFORGE_TOKEN'], '[redacted]'))
+              raise
           assert int(receipt['id']) == metadata['fileID'], receipt
           print(json.dumps({'receipt': receipt, 'relations': projects, 'jar_changed': False}))
           PY
