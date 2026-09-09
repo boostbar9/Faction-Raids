@@ -25,7 +25,7 @@ public final class RaidSavedData extends SavedData {
     // v12 added pendingSpoils + raidNotifyOptOut (3.2.0 multiplayer polish).
     // v13 added persistent camp construction jobs and crew (3.4.0).
     // Old saves load cleanly because all new fields default to empty collections.
-    public static final int DATA_VERSION = 20;
+    public static final int DATA_VERSION = 21;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Set<UUID> campClaimLeases = new HashSet<>();
@@ -466,6 +466,7 @@ public final class RaidSavedData extends SavedData {
         public BlockPos campPos;
         public UUID campClaimId;
         public CompoundTag warGate=new CompoundTag();
+        public CompoundTag campaign=new CompoundTag();
         public int warGateWaitTicks;
         public int reinforcementStallTicks;
         public BlockPos campSearchPos;
@@ -617,6 +618,7 @@ public final class RaidSavedData extends SavedData {
             tag.putString("Team", teamKey);
             tag.putString("DefensePoint", defensePointName);
             if (campClaimId != null) tag.putUUID("CampClaimId", campClaimId);
+            tag.put("Campaign",campaign.copy());
             tag.put("WarGate",warGate.copy());tag.putInt("WarGateWaitTicks",warGateWaitTicks);
             tag.putInt("ReinforcementStallTicks",reinforcementStallTicks);
             tag.putBoolean("CampGuardsStarted", campGuardsStarted);
@@ -764,6 +766,7 @@ public final class RaidSavedData extends SavedData {
             RaidState state = new RaidState(tag.getString("Team"), point, tag.getInt("NextWave"));
             state.wave = tag.getInt("Wave");
             state.campClaimId = tag.hasUUID("CampClaimId") ? tag.getUUID("CampClaimId") : null;
+            state.campaign=tag.getCompound("Campaign").copy();
             state.warGate=tag.getCompound("WarGate").copy();state.warGateWaitTicks=Math.max(0,tag.getInt("WarGateWaitTicks"));
             state.reinforcementStallTicks=Math.max(0,tag.getInt("ReinforcementStallTicks"));
             state.campGuardsStarted = tag.getBoolean("CampGuardsStarted");

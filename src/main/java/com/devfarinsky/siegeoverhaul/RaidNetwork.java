@@ -19,7 +19,7 @@ public final class RaidNetwork {
     // discovered units/factions, and War Journal rows to DashboardSync.
     // Bump whenever the wire format changes so mismatched builds refuse to connect
     // instead of silently corrupting the dashboard payload.
-    private static final String PROTOCOL = "12";
+    private static final String PROTOCOL = "13";
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(SiegeOverhaul.MOD_ID, "main"))
             .networkProtocolVersion(() -> PROTOCOL)
@@ -29,6 +29,16 @@ public final class RaidNetwork {
     private static int messageId;
 
     public static void init() {
+        CHANNEL.messageBuilder(CoreDetails.class,messageId++,NetworkDirection.PLAY_TO_CLIENT)
+                .encoder((p,b) -> { b.writeVarInt(p.menuId()); b.writeUtf(p.faction(),128); b.writeCollection(p.members(),(out,name)->out.writeUtf(name,64)); })
+                .decoder(b -> new CoreDetails(b.readVarInt(),b.readUtf(128),b.readList(in -> in.readUtf(64))))
+                .consumerMainThread((p,supplier) -> {
+                    DistExecutor.unsafeRunWhenOn(Dist.CLIENT,() -> () -> {
+                        var player=net.minecraft.client.Minecraft.getInstance().player;
+                        if(player!=null && player.containerMenu instanceof com.devfarinsky.siegeoverhaul.core.CoreHireMenu menu && menu.containerId==p.menuId()) menu.details(p.faction(),p.members());
+                    });
+                    supplier.get().setPacketHandled(true);
+                }).add();
         CHANNEL.messageBuilder(CorePurchase.class, messageId++, NetworkDirection.PLAY_TO_SERVER)
                 .encoder((packet, buffer) -> { buffer.writeVarInt(packet.menuId()); buffer.writeVarInt(packet.index()); buffer.writeLong(packet.rotation()); })
                 .decoder(buffer -> new CorePurchase(buffer.readVarInt(), buffer.readVarInt(), buffer.readLong()))
@@ -49,6 +59,11 @@ public final class RaidNetwork {
                 .decoder(DashboardAction::decode)
                 .consumerMainThread(DashboardAction::handle)
                 .add();
+    }
+
+    public record CoreDetails(int menuId,String faction,java.util.List<String> members) {}
+    public static void coreDetails(ServerPlayer player,int menuId,String faction,java.util.List<String> members) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),new CoreDetails(menuId,faction.substring(0,Math.min(128,faction.length())),members));
     }
 
     public static void openDashboard(ServerPlayer player) {

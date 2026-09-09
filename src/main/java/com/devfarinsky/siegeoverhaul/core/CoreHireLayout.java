@@ -1,15 +1,15 @@
 package com.devfarinsky.siegeoverhaul.core;
 
-/** Coordinates use Minecraft's scaled GUI dimensions, recalculated on every resize. */
-public record CoreHireLayout(int x, int y, int width, int height, boolean compact) {
-    public static CoreHireLayout fit(int screenWidth, int screenHeight) {
-        int width = Math.min(820, screenWidth - 16);
-        int height = Math.min(380, screenHeight - 16);
-        return new CoreHireLayout((screenWidth - width) / 2, (screenHeight - height) / 2,
-                width, height, width < 560 || height < 340);
+/** Compact two-column command panels at every supported Minecraft GUI scale. */
+public record CoreHireLayout(int x,int y,int width,int height,boolean compact) {
+    public static CoreHireLayout fit(int screenWidth,int screenHeight) {
+        int w=Math.min(660,screenWidth-16),h=Math.min(350,screenHeight-16);
+        return new CoreHireLayout((screenWidth-w)/2,(screenHeight-h)/2,w,h,w<500||h<300);
     }
-    public int cardWidth() { return compact ? width - 20 : (width - 40) / 3; }
-    public int cardHeight() { return compact ? (height - 94) / 3 : height - 108; }
-    public int cardX(int index) { return x + 10 + (compact ? 0 : index * (cardWidth() + 10)); }
-    public int cardY(int index) { return y + 64 + (compact ? index * (cardHeight() + 4) : 0); }
+    public int cardWidth(){return (width-30)/2;}
+    public int cardHeight(){return (height-88)/2;}
+    public int cardX(int i){return x+10+(i%2)*(cardWidth()+10);}
+    public int cardY(int i){return y+62+(i/2)*(cardHeight()+6);}
+    public int marketHeight(){return (height-88)/3;}
+    public int marketY(int i){return y+62+i*(marketHeight()+4);}
 }

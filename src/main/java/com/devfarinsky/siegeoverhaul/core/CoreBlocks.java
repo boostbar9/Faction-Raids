@@ -39,7 +39,15 @@ public final class CoreBlocks {
         }
     }
     public static class CoreBlock extends Block {
-        public CoreBlock() { super(BlockBehaviour.Properties.of().strength(5, 3600000).lightLevel(s -> 10).pushReaction(PushReaction.BLOCK)); }
+        public CoreBlock() { super(BlockBehaviour.Properties.of().strength(5, 3600000).noOcclusion().lightLevel(s -> 14).pushReaction(PushReaction.BLOCK)); }
+        private static final net.minecraft.world.phys.shapes.VoxelShape SHAPE=net.minecraft.world.phys.shapes.Shapes.or(
+                Block.box(0,0,0,16,5,16),Block.box(3,5,3,13,16,13));
+        @Override public net.minecraft.world.phys.shapes.VoxelShape getShape(BlockState state,net.minecraft.world.level.BlockGetter level,BlockPos pos,net.minecraft.world.phys.shapes.CollisionContext context){return SHAPE;}
+        @Override public void animateTick(BlockState state,Level level,BlockPos pos,net.minecraft.util.RandomSource random){
+            double angle=level.getGameTime()*.07+random.nextDouble()*.25;
+            level.addParticle(net.minecraft.core.particles.ParticleTypes.ENCHANT,pos.getX()+.5+Math.cos(angle)*.55,pos.getY()+1.05,pos.getZ()+.5+Math.sin(angle)*.55,0,.02,0);
+            if(random.nextInt(4)==0)level.addParticle(net.minecraft.core.particles.ParticleTypes.END_ROD,pos.getX()+.5,pos.getY()+1.05,pos.getZ()+.5,0,.01,0);
+        }
         @Override public void setPlacedBy(Level level, BlockPos pos, BlockState state, LivingEntity entity, ItemStack stack) {
             if (entity instanceof ServerPlayer player) SiegeCore.placed(player, pos);
         }
@@ -52,14 +60,20 @@ public final class CoreBlocks {
             }
             if (player instanceof ServerPlayer sp) {
                 if (SiegeCore.canUse(sp, pos)) sp.openMenu(new SimpleMenuProvider(
-                        (id, inv, p) -> new CoreHireMenu(id, inv, pos), Component.literal("Siege Core • Hiring")));
-                else sp.displayClientMessage(Component.literal("This core needs your faction's claim to hire units."), false);
+                        (id, inv, p) -> new CoreHireMenu(id, inv, pos), Component.literal("Siege Core • Arcane Command")));
+                else {
+                    var data=com.devfarinsky.siegeoverhaul.RaidSavedData.get(sp.server);
+                    var raid=data.raids.get(SiegeCore.key(sp));
+                    if(raid!=null && pos.equals(EnemyCore.position(raid)))sp.displayClientMessage(Component.literal("Enemy command core: outnumber its defenders within "+com.devfarinsky.siegeoverhaul.RaidConfig.CORE_CAPTURE_RADIUS.get()+" blocks for "+com.devfarinsky.siegeoverhaul.RaidConfig.CORE_RECAPTURE_SECONDS.get()+" seconds to end the invasion."),false);
+                    else sp.displayClientMessage(Component.literal("This core needs your faction's claim to open command services."), false);
+                }
             }
             return InteractionResult.sidedSuccess(level.isClientSide);
         }
     }
     @SubscribeEvent public static void protectCore(BlockEvent.BreakEvent event) {
-        if (event.getState().is(CORE.get()) && event.getPlayer() instanceof ServerPlayer player && !SiegeCore.canBreak(player, event.getPos())) {
+        if (event.getState().is(CORE.get()) && event.getPlayer() instanceof ServerPlayer player && (!SiegeCore.canBreak(player, event.getPos()) || com.devfarinsky.siegeoverhaul.RaidSavedData.get(player.server).raids.values().stream()
+                .anyMatch(raid -> event.getPos().equals(EnemyCore.position(raid))))) {
             event.setCanceled(true);
             player.displayClientMessage(Component.literal("Your faction's core must stay in place until the siege ends."), false);
         }

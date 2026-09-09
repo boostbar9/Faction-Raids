@@ -35,6 +35,10 @@ public final class RaidCommands {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         LiteralArgumentBuilder<CommandSourceStack> tree = Commands.literal("siegeoverhaul")
                 .executes(ctx -> RaidEvents.openDashboardCmd(ctx.getSource()))
+                .then(Commands.literal("truce")
+                        .then(Commands.argument("vote", StringArgumentType.word())
+                                .then(Commands.literal("yes").executes(ctx -> com.devfarinsky.siegeoverhaul.core.EndlessSiege.vote(ctx.getSource().getPlayerOrException(), StringArgumentType.getString(ctx,"vote"), true)))
+                                .then(Commands.literal("no").executes(ctx -> com.devfarinsky.siegeoverhaul.core.EndlessSiege.vote(ctx.getSource().getPlayerOrException(), StringArgumentType.getString(ctx,"vote"), false)))))
                 .then(Commands.literal("menu")
                         .executes(ctx -> RaidEvents.openDashboardCmd(ctx.getSource())))
                 .then(Commands.literal("anchor")

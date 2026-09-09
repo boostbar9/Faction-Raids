@@ -102,7 +102,7 @@ public final class RecruitsFormationBridge {
             net.minecraft.core.BlockPos ground=null;
             for(int dy:new int[]{0,1,-1}) {
                 var p=net.minecraft.core.BlockPos.containing(slot.x,mob.getY()+dy,slot.z);
-                if(!level.hasChunkAt(p) || !com.devfarinsky.siegeoverhaul.core.SiegeCore.claimed(level,p,defendingTeam)
+                if(!level.hasChunkAt(p)
                         || !level.getFluidState(p).isEmpty() || !level.getBlockState(p.below()).isFaceSturdy(level,p.below(),net.minecraft.core.Direction.UP))continue;
                 if(!level.noCollision(mob,mob.getBoundingBox().move(Vec3.atBottomCenterOf(p).subtract(mob.position()))))continue;
                 var path=mob.getNavigation().createPath(p,0);

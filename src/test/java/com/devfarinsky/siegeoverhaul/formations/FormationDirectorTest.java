@@ -20,7 +20,7 @@ class FormationDirectorTest extends MinecraftTestSupport {
     }
 
     @Test
-    void formationsRequireDefendingFactionTerritory() {
+    void formationsMarchAcrossUnclaimedApproachButOnlyForTheirAssignedRaid() {
         var level = mock(net.minecraft.server.level.ServerLevel.class);
         Mob soldier = mock(Mob.class);
         when(soldier.getPersistentData()).thenReturn(new net.minecraft.nbt.CompoundTag());
@@ -28,7 +28,7 @@ class FormationDirectorTest extends MinecraftTestSupport {
         when(soldier.distanceToSqr(any(Vec3.class))).thenReturn(1600.0);
         try (var claims = mockStatic(com.devfarinsky.siegeoverhaul.core.SiegeCore.class)) {
             assertFalse(FormationDirector.shouldMarch(level, "team:defenders", soldier, BlockPos.ZERO));
-            claims.when(() -> com.devfarinsky.siegeoverhaul.core.SiegeCore.claimed(level, soldier.blockPosition(), "team:defenders")).thenReturn(true);
+            soldier.getPersistentData().putString(com.devfarinsky.siegeoverhaul.ModConstants.Tags.RAID_TEAM, "team:defenders");
             assertTrue(FormationDirector.shouldMarch(level, "team:defenders", soldier, BlockPos.ZERO));
             soldier.horizontalCollision = true;
             assertFalse(FormationDirector.shouldMarch(level, "team:defenders", soldier, BlockPos.ZERO));
