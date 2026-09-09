@@ -1,0 +1,85 @@
+name: Publish tested 4.10.5 beta to CurseForge
+on:
+  push:
+    branches: [publish/curseforge-v4.10.5]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: curseforge-1364352-v4.10.5
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34303800617
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Verify tested bytes and metadata
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          jar = Path('dist/siegeoverhaul-4.10.5.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == '43a9ae8069cfebdeee43d5d5d097847901dc6b53b881a7fdb1ec9f98129f90dd'
+          with zipfile.ZipFile(jar) as z:
+              data = tomllib.loads(z.read('META-INF/mods.toml').decode())
+          assert data['mods'][0]['modId'] == 'siegeoverhaul'
+          assert data['mods'][0]['version'] == '4.10.5'
+          dependencies = {x['modId']: x for x in data['dependencies']['siegeoverhaul']}
+          for mod in ['recruits', 'workers', 'smallships', 'siegeweapons']:
+              assert dependencies[mod]['mandatory'], mod
+          assert not dependencies['corpse']['mandatory']
+          print('Verified', jar.name, digest)
+          CHECK
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.10.5.jar
+          name: The Siege Overhaul v4.10.5 beta - Recruits with Personality
+          version: v4.10.5
+          version-type: beta
+          changelog: |
+            ## 4.10.5 beta
+
+            - Ordinary soldiers hired through Siege Cores now have randomized personal names and personalized weapons.
+            - Iron-and-chainmail starting armor has coordinated randomized trim colors.
+            - Role-appropriate swords, bows or crossbows; shieldmen receive shields.
+            - Eight bread per recruit and thirty-two arrows for ranged recruits.
+            - Gear is assigned once in the native inventory. Existing units, workers, named heroes, hiring prices and ownership remain unchanged.
+
+            Minecraft 1.20.1 Forge, Java 17. REQUIRED on server and every client: Villager Recruits 1.15.2+, Villager Workers 2 2.0.3+, Small Ships and Siege Weapons. Matching Siege Overhaul versions required. Corpse optional.
+
+            Validation: clean Java 17 Forge build, 167 passing regression tests, zero skipped. No interactive Minecraft playtest; beta.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            corpse(optional)
+          fail-mode: fail
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os
+          result = {'version': '4.10.5', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 4.10.5 beta: {result['url']}\n")
+          RECEIPT
