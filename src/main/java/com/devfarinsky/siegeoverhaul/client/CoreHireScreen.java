@@ -18,6 +18,7 @@ import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 @Mod.EventBusSubscriber(modid=SiegeOverhaul.MOD_ID,bus=Mod.EventBusSubscriber.Bus.MOD,value=Dist.CLIENT)
 public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> {
     private static final int TEXT=0xffeee9ff,MUTED=0xffa6a9c7,GOLD=0xffe2c581,TEAL=0xff81e8da,VIOLET=0xffb89aff;
+    private static final net.minecraft.resources.ResourceLocation COMMAND_ART=new net.minecraft.resources.ResourceLocation(SiegeOverhaul.MOD_ID,"textures/gui/kingdom_command.png");
     private CoreHireLayout layout;
     private RecruitsTerritoryView territory;
     private Button mapButton;
@@ -106,10 +107,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     @Override protected void renderLabels(GuiGraphics g,int x,int y){}
     @Override protected void renderBg(GuiGraphics g,float partial,int mx,int my){
         int x=layout.x(),y=layout.y(),w=layout.width(),h=layout.height();
-        CoreButton.panel(g,x-4,y+3,w+8,h+5,0x99000000);CoreButton.panel(g,x-1,y-1,w+2,h+2,0xff7663ac);
-        g.fillGradient(x,y,x+w,y+h,0xff151d2d,0xff0a101c);
-        g.fillGradient(x+1,y+1,x+w-1,y+33,0xff273044,0xff151c2b);
-        g.renderItem(new ItemStack(Items.AMETHYST_SHARD),x+12,y+9);
+        CoreButton.panel(g,x-4,y+3,w+8,h+5,0x99000000);
+        // Scale the decorative frame only; all interactive controls retain their tested bounds.
+        g.blit(COMMAND_ART,x-6,y-6,w+12,h+12,0.0f,0.0f,1613,975,1613,975);
+        g.fillGradient(x+7,y+2,x+w-7,y+33,0xb0273044,0xd0151c2b);
+        CommandIcon.CROWN.draw(g,x+12,y+9,16);
         text(g,"KINGDOM COMMAND",x+36,y+7,w>=600?w-286:w-140,GOLD);
         text(g,menu.factionName(),x+36,y+20,w>=600?w-286:w-140,MUTED);
         if(w>=600)text(g,String.format(java.util.Locale.ROOT,"Treasury %,d",menu.bank()),x+w-240,y+14,138,TEAL);
@@ -129,10 +131,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             g.fillGradient(x+2,y+19,x+mw-2,y+h-2,0xff162331,0xff111827);
             text(g,"Preview unavailable — Open map",x+10,y+Math.max(24,h/2),mw-20,MUTED);
         }
-        text(g,"TERRITORY",x+9,y+6,mw-18,GOLD);
+        CommandIcon.MAP.draw(g,x+5,y+2,16);
+        text(g,"TERRITORY",x+25,y+6,mw-30,GOLD);
         int sx=x+mw+10,sw=layout.width()-30-mw;
         panel(g,sx,y,sw,h,GOLD);
-        text(g,menu.currentWave()>0?"SIEGE ACTIVE":"KINGDOM WATCH",sx+10,y+8,sw-20,GOLD);
+        (menu.currentWave()>0?CommandIcon.SWORDS:CommandIcon.SHIELD).draw(g,sx+7,y+4,16);
+        text(g,menu.currentWave()>0?"SIEGE ACTIVE":"KINGDOM WATCH",sx+27,y+8,sw-34,GOLD);
         text(g,menu.currentWave()>0?"Wave "+menu.currentWave():"Stand ready",sx+10,y+23,sw-20,TEXT);
         if(h>=85){
             String next=menu.voteSeconds()>0?"Retreat vote: "+menu.voteSeconds()+"s":menu.currentWave()>0?"Retreat checkpoint: "+EndlessSiege.nextCheckpoint(menu.currentWave()):"Prepare your defenses";
@@ -162,7 +166,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private void drawLoot(GuiGraphics g,int i){
         int x=layout.cardX(0),y=layout.marketY(i),w=layout.cardWidth(),h=layout.marketHeight();panel(g,x,y,w,h,GOLD);
         boolean opening=revealBox==i&&revealTicks>0,done=revealBox==i&&revealTicks==0&&!revealed.isEmpty();
-        if(done)g.renderItem(revealed,x+7,y+7);else g.drawCenteredString(font,opening?new String[]{"*","+","?","#"}[(revealTicks/4)%4]:"?",x+16,y+11,opening?VIOLET:GOLD);
+        if(done)g.renderItem(revealed,x+7,y+7);else if(opening)g.drawCenteredString(font,new String[]{"*","+","?","#"}[(revealTicks/4)%4],x+16,y+11,VIOLET);else CommandIcon.CHEST.draw(g,x+7,y+7,16);
         text(g,CoreLoot.NAMES[i],x+29,y+6,w-36,TEXT);
         if(h>=49)text(g,opening?"✦  +  ?  ✦":done?revealed.getHoverName().getString():"Sealed mystery",x+29,y+17,w-36,opening?VIOLET:MUTED);
         if(layout.reelHeight()>=12 && opening){
@@ -176,15 +180,16 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     }
     private void drawBuff(GuiGraphics g,int i){
         int x=layout.cardX(1),y=layout.marketY(i),w=layout.cardWidth(),h=layout.marketHeight();panel(g,x,y,w,h,TEAL);
-        g.renderItem(new ItemStack(i==0?Items.FEATHER:i==1?Items.BLAZE_POWDER:Items.AMETHYST_SHARD),x+7,y+7);
+        (i==0?CommandIcon.WIND:i==1?CommandIcon.POWER:CommandIcon.SHIELD).draw(g,x+7,y+7,16);
         text(g,CoreBuffs.NAMES[i],x+29,y+6,w-36,TEXT);if(h>=49)text(g,CoreBuffs.DETAILS[i],x+29,y+17,w-36,MUTED);
         if(h>=68)text(g,"Personal blessing • 5 min",x+9,y+34,w-18,TEAL);
     }
     private void drawFaction(GuiGraphics g){
         int x=layout.x(),y=layout.contentY()-62,w=layout.width(),h=layout.contentHeight()+84;
         panel(g,x+10,y+62,w-20,34,VIOLET);
-        text(g,menu.factionName(),x+18,y+67,w/2-24,TEXT);
-        text(g,String.format(java.util.Locale.ROOT,"Bank: %,d emeralds",menu.bank()),x+18,y+80,w/2-24,GOLD);
+        CommandIcon.BANK.draw(g,x+17,y+68,20);
+        text(g,menu.factionName(),x+42,y+67,w/2-48,TEXT);
+        text(g,String.format(java.util.Locale.ROOT,"Bank: %,d emeralds",menu.bank()),x+42,y+80,w/2-48,GOLD);
         text(g,"Next wave "+menu.nextWave()+": +"+menu.nextReward(),x+w/2,y+68,w/2-18,TEAL);
         text(g,menu.voteSeconds()>0?"Retreat vote: "+menu.voteSeconds()+"s":menu.currentWave()>0?"Surviving wave "+menu.currentWave():"Preparing for the next siege",x+w/2,y+81,w/2-18,MUTED);
         int lines=layout.rosterLines(),count=menu.members().size();

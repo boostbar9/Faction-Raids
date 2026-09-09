@@ -1,5 +1,9 @@
 # 4.12.0 beta — command-center preview
 
+- Introduce a consistent set of small custom command icons for kingdom, territory, combat, treasury, sealed loot and blessings. Actual recruit equipment and revealed rewards retain their item icons.
+
+- Add custom obsidian, gold and amethyst command-center artwork behind the existing functional panels.
+
 - Show remaining active-effect time, explain bank permissions and map controls, and add bounded roster scrolling with member counts, alternating rows and a scroll indicator. Keep buff descriptions above compact purchase controls.
 
 - Keep the loot reveal reel clear of purchase buttons across GUI scales; show personal emeralds on the market tab even when the overview is collapsed. Prevent long faction names from overlapping the treasury header.
