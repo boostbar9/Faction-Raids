@@ -2013,6 +2013,8 @@ public final class RaidEvents {
             }
         }
 
+        long paid = EndlessSiege.awardClearedWave(data, state, System.currentTimeMillis(), RaidConfig.BANK_INTEREST_BASIS_POINTS.get());
+        if (paid > 0) announce(server, teamKey, Component.literal("Wave " + state.wave + " survived: +" + paid + " emeralds deposited in your faction bank.").withStyle(ChatFormatting.GREEN), false);
         if (com.devfarinsky.siegeoverhaul.core.EnemyCore.tick(level, data, state, anchor)) {
             finishRaid(server, data, teamKey, true, true, "Your faction captured the enemy Siege Core. The invasion is defeated!");
             return;
@@ -2031,8 +2033,6 @@ public final class RaidEvents {
         if (state.wave > 0 && state.pendingWaveSpawns <= 0 && state.raiders.isEmpty() &&
                 state.ticksToNextWave <= 0) {
             if (EndlessSiege.active(state)) {
-                long paid = EndlessSiege.award(data, state, System.currentTimeMillis(), RaidConfig.BANK_INTEREST_BASIS_POINTS.get());
-                if (paid > 0) announce(server, teamKey, Component.literal("Wave " + state.wave + " survived: +" + paid + " emeralds deposited in your faction bank.").withStyle(ChatFormatting.GREEN), false);
                 if (state.wave % 5 == 0 && state.campaign.getInt("VoteWave") != state.wave) {
                     EndlessSiege.offer(state, members); data.setDirty(); return;
                 }

@@ -21,6 +21,12 @@ public final class EndlessSiege {
         // Reinforcements are staged by the existing per-faction/global active caps.
         return (int) Math.min(Math.max(1L, activeLimit) * 8, Math.max(1L, base) + Math.max(0L, wave - 1L) * 2);
     }
+    /** Settle a genuinely cleared wave before any competing victory path can remove its state. */
+    public static long awardClearedWave(RaidSavedData data, RaidSavedData.RaidState state, long now, int rate) {
+        if (state == null || state.preparationTicks > 0 || state.coreCaptured
+                || state.pendingWaveSpawns > 0 || !state.raiders.isEmpty()) return 0;
+        return award(data, state, now, rate);
+    }
     public static long award(RaidSavedData data, RaidSavedData.RaidState state, long now, int rate) {
         if (!active(state) || state.wave <= 0 || state.campaign.getInt("PaidWave") >= state.wave) return 0;
         state.campaign.putInt("PaidWave", state.wave); data.setDirty();

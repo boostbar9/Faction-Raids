@@ -1,3 +1,8 @@
+# 4.11.1 beta
+
+- Credit a cleared wave before checking enemy-core victory, so simultaneous last-enemy defeat and core capture cannot lose the wave reward.
+- Preserve once-only payouts across checkpoint votes, countdowns and reloads; preparation, remaining reinforcements and occupied player cores cannot award a cleared wave.
+
 # 4.11.0 beta
 
 - Siege Core campaigns continue beyond five waves. Every fifth cleared wave offers a sixty-second, one-ballot-per-member retreat vote; strict majority accepts retreat, otherwise the siege continues. Old vote buttons cannot affect later checkpoints.
