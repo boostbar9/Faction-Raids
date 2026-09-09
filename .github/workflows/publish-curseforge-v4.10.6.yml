@@ -1,0 +1,89 @@
+name: Publish tested 4.10.6 beta to CurseForge
+on:
+  push:
+    branches: [publish/curseforge-v4.10.6]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: curseforge-1364352-v4.10.6
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34314303267
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Verify tested bytes and metadata
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          jar = Path('dist/siegeoverhaul-4.10.6.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == 'f98b3a2c0442b0037830001fc709ff0a15d5b18a285f529f0266fa639bbb4bbf'
+          with zipfile.ZipFile(jar) as z:
+              data = tomllib.loads(z.read('META-INF/mods.toml').decode())
+          assert data['mods'][0]['modId'] == 'siegeoverhaul'
+          assert data['mods'][0]['version'] == '4.10.6'
+          dependencies = {x['modId']: x for x in data['dependencies']['siegeoverhaul']}
+          for mod in ['recruits', 'workers', 'smallships', 'siegeweapons']:
+              assert dependencies[mod]['mandatory'], mod
+          for mod in ['corpse', 'magistuarmory', 'musketmod']:
+              assert not dependencies[mod]['mandatory'], mod
+          print('Verified', jar.name, digest)
+          CHECK
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.10.6.jar
+          name: The Siege Overhaul v4.10.6 beta - Siege Advance and Optional Knight/Musket Gear
+          version: v4.10.6
+          version-type: beta
+          changelog: |
+            ## 4.10.6 beta
+
+            - Siege captains and commanders relinquish conflicting native army regroup/hold/retreat orders.
+            - Engineers prioritize driving to their firing position, account for native stopping tolerance, and restore firing on arrival or dismount, including unloaded-vehicle recovery.
+            - Stopping clears latched steering without waiting for travel throttling.
+            - Optional Epic Knights supplies coherent faction, new core-recruit and hero armor outfits, retaining names, trims and enchantments.
+            - Optional ewewukek's Musket Mod supplies some new crossbowmen with personalized muskets and 32 cartridges using native Recruits musket AI.
+            - Missing or incompatible optional items retain existing equipment. Existing unit equipment, player inventory, prices and mandatory dependencies are preserved.
+
+            Minecraft 1.20.1 Forge, Java 17. REQUIRED on server and every client: Villager Recruits 1.15.2+, Villager Workers 2 2.0.3+, Small Ships and Siege Weapons. Matching Siege Overhaul versions required. Corpse, Epic Knights and ewewukek's Musket Mod optional.
+
+            Validation: clean Java 17 Forge build, 182 passing regression tests, zero skipped. Companion APIs checked against 1.20.1 upstream source. No interactive Minecraft playtest; difficult vehicle terrain remains subject to native pathfinding. Beta.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+          fail-mode: fail
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os
+          result = {'version': '4.10.6', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 4.10.6 beta: {result['url']}\n")
+          RECEIPT
