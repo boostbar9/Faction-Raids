@@ -43,7 +43,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         });
         for (int i = 0; i < 4; i++) { data.set(i, -1); data.set(i + 4, -1); }
         addDataSlots(data);
-        if (owner != null) { refresh(); sentRoster=""; }
+        if (owner != null) { refresh(); sentRoster=""; EndlessSiege.remind(owner,RaidSavedData.get(owner.server).raids.get(SiegeCore.key(owner))); }
     }
     public int lootSequence() { return data.get(16); }
     public int lootBox() { return data.get(15)-1; }
@@ -84,7 +84,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         wide(18,(int)FactionBank.balance(core)); data.set(20,com.devfarinsky.siegeoverhaul.RaidConfig.BANK_INTEREST_BASIS_POINTS.get());
         var raid = saved.raids.get(SiegeCore.key(owner));
         int next = raid == null ? 1 : (int)Math.min(Integer.MAX_VALUE,raid.wave+1L);
-        wide(21,next); wide(23,EndlessSiege.reward(next)); data.set(25,FactionBank.canWithdraw(owner)?1:0);
+        wide(21,next); wide(23,raid!=null && !raid.rewardEligible ? 0 : EndlessSiege.reward(next)); data.set(25,FactionBank.canWithdraw(owner)?1:0);
         wide(26,raid==null?0:raid.wave); data.set(28,raid==null?0:(raid.campaign.getInt("VoteTicks")+19)/20);
         String faction=owner.getTeam() instanceof net.minecraft.world.scores.PlayerTeam team?team.getDisplayName().getString():"Faction";
         java.util.List<String> roster = owner.getTeam()==null?java.util.List.of():owner.getTeam().getPlayers().stream()

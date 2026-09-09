@@ -465,6 +465,7 @@ public final class RaidEvents {
      */
     @SubscribeEvent
     public static void onPlayerLoggedIn(net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
+        if(event.getEntity() instanceof ServerPlayer player) EndlessSiege.remind(player,RaidSavedData.get(player.server).raids.get(com.devfarinsky.siegeoverhaul.core.SiegeCore.key(player)));
         if (!(event.getEntity() instanceof ServerPlayer sp)) return;
         com.devfarinsky.siegeoverhaul.items.StarterBagItem.giveOnce(sp);
         // v3.2.0: notify player of any spoils queued while they were offline.

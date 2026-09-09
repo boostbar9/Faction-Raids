@@ -73,6 +73,15 @@ public final class EndlessSiege {
                 .append(choice("[Accept retreat]", token, true)).append(" ").append(choice("[Fight 5 more]", token, false))
                 .append(Component.literal(" Strict majority of " + state.campaign.getCompound("Electorate").size() + " eligible members; 60 seconds. A tie/no majority continues. Next wave: " + reward(state.wave + 1) + " bank emeralds.")));
     }
+    /** Re-send the existing ballot; never reopen a vote or change its electorate. */
+    public static void remind(ServerPlayer player, RaidSavedData.RaidState state) {
+        if(!active(state) || !voting(state) || player.isSpectator()
+                || !state.campaign.getCompound("Electorate").getBoolean(player.getUUID().toString())
+                || state.campaign.getCompound("Ballots").contains(player.getUUID().toString()))return;
+        String token=state.campaign.getString("VoteToken");
+        player.sendSystemMessage(Component.literal("Wave "+state.campaign.getInt("VoteWave")+" retreat vote: "+(state.campaign.getInt("VoteTicks")+19)/20+"s remaining. ")
+                .append(choice("[Accept retreat]",token,true)).append(" ").append(choice("[Fight 5 more]",token,false)));
+    }
     private static Component choice(String text, String token, boolean retreat) {
         return Component.literal(text).withStyle(s -> s.withColor(retreat ? net.minecraft.ChatFormatting.GREEN : net.minecraft.ChatFormatting.GOLD)
                 .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/siegeoverhaul truce " + token + " " + (retreat ? "yes" : "no"))));

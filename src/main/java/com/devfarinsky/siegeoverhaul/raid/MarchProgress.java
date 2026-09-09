@@ -13,12 +13,19 @@ public final class MarchProgress {
         boolean fresh=!data.contains("MarchProgressAt") || now<data.getLong("MarchProgressAt");
         boolean moved=mob.position().distanceToSqr(previous)>=0.25;
         boolean changed=destination.distanceToSqr(goal)>4;
+        double remaining=mob.position().distanceTo(destination);
+        boolean advanceFresh=fresh || changed || !data.contains("MarchAdvanceAt");
+        boolean advancing=advanceFresh || remaining < data.getDouble("MarchBestDistance")-.5;
+        boolean circling=!advanceFresh && now-data.getLong("MarchAdvanceAt")>=200;
+        if(advancing || circling) {
+            data.putDouble("MarchBestDistance",remaining);data.putLong("MarchAdvanceAt",now);
+        }
         boolean stalled=!fresh && !moved && now-data.getLong("MarchProgressAt")>=40;
         if(fresh || moved || changed || stalled) {
             data.putDouble("MarchX",mob.getX());data.putDouble("MarchY",mob.getY());data.putDouble("MarchZ",mob.getZ());
             data.putLong("MarchProgressAt",now);
         }
         data.putDouble("MarchGoalX",destination.x);data.putDouble("MarchGoalY",destination.y);data.putDouble("MarchGoalZ",destination.z);
-        return fresh || changed || stalled || mob.getNavigation().isDone();
+        return fresh || changed || stalled || circling || mob.getNavigation().isDone();
     }
 }

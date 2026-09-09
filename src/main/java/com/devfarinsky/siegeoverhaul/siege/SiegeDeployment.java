@@ -37,11 +37,15 @@ public final class SiegeDeployment {
         for (UUID id : state.siegeEngines.keySet()) {
             Entity engine = level.getEntity(id);
             if (engine == null) continue;
-            if (!engine.isAlive() || engine.isRemoved()) continue;
+            if (!engine.isAlive() || engine.isRemoved() || engine.getPersistentData().getBoolean(SiegeFleet.CAPTURED)) continue;
             int wave = engine.getPersistentData().getInt("SiegeSupportWave");
             if (wave == state.wave) return;
             // Adopt camp prefabs and current pre-upgrade equipment without duplicating a crew.
             if (wave == 0 && !(engine.getPersistentData().getBoolean(OPERATOR_ASSIGNED) && engine.getPassengers().isEmpty())) { engine.getPersistentData().putInt("SiegeSupportWave", state.wave); return; }
+        }
+        for(UUID id:state.siegeEngines.keySet()) {
+            Entity vehicle=level.getEntity(id);
+            if(vehicle!=null && SiegeFleet.reuse(level,state,vehicle))return;
         }
         if (level.getGameTime() % 100 != 0) return;
         if (!SiegeConstruction.deployWaveEngine(level, state, objective)) {
@@ -68,6 +72,7 @@ public final class SiegeDeployment {
                 removed++;
                 continue;
             }
+            if(vehicle.getPersistentData().getBoolean(SiegeFleet.CAPTURED)) continue;
             SiegeEngineType type = SiegeEngineType.parse(entry.getValue());
             if (type == null || !type.ranged() || state.wave <= 0 || state.preparationTicks > 0) continue;
             if (!vehicle.getPassengers().isEmpty()) {
@@ -92,7 +97,7 @@ public final class SiegeDeployment {
                     double distance=operator.distanceToSqr(vehicle);
                     if(distance<=16) {
                         if(SiegeIntegration.assignSiegeEngineer(operator,vehicle))SiegeIntegration.advanceEngineer(operator,objective);
-                    } else if(distance<=32*32 && operator.getTarget()==null) {
+                    } else if(operator.getTarget()==null && com.devfarinsky.siegeoverhaul.raid.MarchProgress.shouldRepath(operator,vehicle.position(),level.getGameTime())) {
                         operator.getNavigation().moveTo(vehicle,1.1);
                     }
                 }
@@ -107,7 +112,9 @@ public final class SiegeDeployment {
             int attempts = vehicle.getPersistentData().getInt(OPERATOR_ATTEMPTS);
             // Failed initialization may recover after terrain/entity changes. Retry without duplicating successful crews.
             vehicle.getPersistentData().putInt(OPERATOR_ATTEMPTS, attempts + 1);
-            SiegeIntegration.spawnSiegeEngineer(level, vehicle.position(), state.teamKey, vehicle, type).ifPresent(operator -> {
+            boolean replacement=vehicle.getPersistentData().getBoolean("SiegeReplacementCrew");
+            (replacement ? SiegeIntegration.spawnSiegeEngineer(level, state.campPos==null?vehicle.position():Vec3.atBottomCenterOf(state.campPos), state.teamKey, vehicle, type, false)
+                    : SiegeIntegration.spawnSiegeEngineer(level, vehicle.position(), state.teamKey, vehicle, type)).ifPresent(operator -> {
                 state.raiders.add(operator.getUUID());
                 state.totalSpawned++;
                 vehicle.getPersistentData().putBoolean(OPERATOR_ASSIGNED, true);
@@ -134,7 +141,7 @@ public final class SiegeDeployment {
         }
         for (UUID id : state.siegeEngines.keySet()) {
             Entity vehicle = level.getEntity(id);
-            if (vehicle != null && vehicle.isAlive()) vehicle.discard();
+            if (vehicle != null && vehicle.isAlive() && !vehicle.getPersistentData().getBoolean(SiegeFleet.CAPTURED)) vehicle.discard();
         }
         state.siegeEngines.clear();
     }

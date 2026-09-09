@@ -49,6 +49,7 @@ public final class FactionBank {
         CompoundTag core = data.siegeCores.get(key);
         if (core == null || amount == 0 || Math.abs((long) amount) > 64 || amount < 0 && !canWithdraw(player)) return false;
         settle(data, core);
+        long before = balance(core);
         if (amount > 0) {
             int count = player.getInventory().items.stream().filter(s -> s.is(Items.EMERALD)).mapToInt(ItemStack::getCount).sum();
             int deposit = (int) Math.min(Math.min(count, amount), LIMIT - balance(core));
@@ -72,6 +73,8 @@ public final class FactionBank {
             if (delivered <= 0) return false;
             debit(core, delivered);
         }
+        long delta=balance(core)-before;
+        player.displayClientMessage(net.minecraft.network.chat.Component.literal((delta>0?"Deposited ":"Withdrew ")+Math.abs(delta)+" emeralds. Faction bank: "+balance(core)+"."),true);
         data.setDirty(); player.getInventory().setChanged(); player.inventoryMenu.broadcastChanges(); return true;
     }
 }
