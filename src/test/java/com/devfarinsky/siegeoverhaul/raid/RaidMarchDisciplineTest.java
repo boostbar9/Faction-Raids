@@ -30,4 +30,23 @@ class RaidMarchDisciplineTest extends MinecraftTestSupport {
         when(mob.isAlliedTo(target)).thenReturn(false);when(target.isAlive()).thenReturn(false);
         assertFalse(RaidMarchDiscipline.retainTarget(mob,target,Vec3.ZERO,32));
     }
+    public enum Patrol { IDLE, ATTACKING, RETREATING }
+    public static class Leader {
+        public byte action = 1;
+        public Patrol patrol = Patrol.RETREATING;
+        public int follow = 2;
+        public void setEnemyAction(byte value) { action = value; }
+        public void setPatrolState(Patrol value) { patrol = value; }
+        public void setFollowState(int value) { follow = value; }
+    }
+    @Test void nativeLeaderCannotRestartHoldOrRetreatControllerAfterSiegeLoad() {
+        Leader leader = new Leader();
+        assertTrue(RaidMarchDiscipline.releaseNativePatrol(leader));
+        assertEquals(2, leader.action); assertEquals(Patrol.IDLE, leader.patrol); assertEquals(0, leader.follow);
+        assertTrue(RaidMarchDiscipline.releaseNativePatrol(leader));
+        assertEquals(Patrol.IDLE, leader.patrol);
+    }
+    @Test void mobsWithoutLeaderApiAreUnaffected() {
+        assertFalse(RaidMarchDiscipline.releaseNativePatrol(new Object()));
+    }
 }

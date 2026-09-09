@@ -131,3 +131,11 @@ Built with **Villager Recruits, Villager Workers 2, Small Ships, and Siege Weapo
 With henkelmax's Corpse mod installed, camp earthworks and War Gate assembly reject changes that overlap a recovery body. Native camp builders pause when a corpse overlaps pending blueprint cells and resume after it is removed, retaining their jobs and supplies. Fallback camp placement and native supply-barrel placement also avoid corpse space.
 
 Corpse remains optional and controls death inventories, ownership permissions, decay and recovery. This integration does not create NPC corpses or change those settings. Automated regression coverage is provided; combined in-game playtesting remains outstanding.
+
+## Optional Epic Knights and Musket Mod
+
+With **Epic Knights: Shields, Armor and Weapons** (`magistuarmory`) installed, new core-hired soldiers and heroes use coordinated medieval armor outfits. Enemy siege uniforms also use faction-specific styles and colors, retaining rank trims and faction banners. Missing/disabled outfit pieces retain the vanilla outfit. Existing equipment and player armor are not automatically replaced. Workers retain their work equipment.
+
+With **ewewukek's Musket Mod** (`musketmod`) installed and its native Recruits combat API available, one-third of new ordinary crossbowman hires receive a named musket and 32 cartridges. They use Recruits' existing musket aiming, reload and ammunition rules. If the expected API or items are absent, the hire keeps its crossbow and arrows. Named ranged heroes retain their specialized weapons.
+
+Both integrations are optional on Minecraft 1.20.1 Forge. Automated tests and upstream API inspection do not replace a combined-mod in-game playtest; this remains a beta release.

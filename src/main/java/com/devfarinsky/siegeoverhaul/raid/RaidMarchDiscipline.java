@@ -15,6 +15,32 @@ public final class RaidMarchDiscipline {
                     || name.endsWith("$LongDistancePatrolGoal")) mob.goalSelector.removeGoal(goal);
         }
         mob.clearRestriction();
+        releaseNativePatrol(mob);
+    }
+
+    /** Native leaders otherwise start a second army controller that can regroup/hold/retreat. */
+    static boolean releaseNativePatrol(Object leader) {
+        try {
+            var action = leader.getClass().getMethod("setEnemyAction", byte.class);
+            java.lang.reflect.Method patrol = null;
+            Object idle = null;
+            for (var method : leader.getClass().getMethods()) {
+                if (!method.getName().equals("setPatrolState") || method.getParameterCount() != 1
+                        || !method.getParameterTypes()[0].isEnum()) continue;
+                for (Object value : method.getParameterTypes()[0].getEnumConstants()) {
+                    if (((Enum<?>) value).name().equals("IDLE")) { patrol = method; idle = value; }
+                }
+            }
+            if (patrol == null) return false;
+            // Recruits 1.15.2 EnemyAction.KEEP_PATROLLING: skip its army attack controller,
+            // while leaving individual melee/target goals and Siege Overhaul orders active.
+            action.invoke(leader, (byte) 2);
+            patrol.invoke(leader, idle);
+            leader.getClass().getMethod("setFollowState", int.class).invoke(leader, 0);
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            return false; // Ordinary mobs do not expose the optional leader API.
+        }
     }
     public static boolean retainTarget(Mob mob,LivingEntity target,Vec3 objective,double range) {
         return target!=null && target.isAlive() && target.level()==mob.level() && !mob.isAlliedTo(target)

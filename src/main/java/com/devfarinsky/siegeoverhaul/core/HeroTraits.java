@@ -40,7 +40,7 @@ public final class HeroTraits {
     public static void equip(Mob mob,int role,SimpleContainer inventory) {
         Item[] armor={Items.DIAMOND_HELMET,Items.DIAMOND_CHESTPLATE,Items.DIAMOND_LEGGINGS,Items.DIAMOND_BOOTS};
         EquipmentSlot[] slots={EquipmentSlot.HEAD,EquipmentSlot.CHEST,EquipmentSlot.LEGS,EquipmentSlot.FEET};
-        for(int i=0;i<4;i++){ItemStack stack=armor(role,armor[i]);inventory.setItem(i,stack);mob.setItemSlot(slots[i],stack);}
+        for(int i=0;i<4;i++){ItemStack stack=armor(role,armor[i]);stack=com.devfarinsky.siegeoverhaul.compat.EpicKnightsCompatibility.armor(stack,4+(role%2),slots[i],new int[]{0x963F3F,0x476B86,0x738062,0x78548B}[role-10]);inventory.setItem(i,stack);mob.setItemSlot(slots[i],stack);}
         ItemStack weapon=new ItemStack(switch(role){case 12->Items.BOW;case 13->Items.CROSSBOW;default->Items.DIAMOND_SWORD;});
         if(role==12)weapon.enchant(Enchantments.POWER_ARROWS,2);
         else if(role==13){weapon.enchant(Enchantments.QUICK_CHARGE,2);weapon.enchant(Enchantments.PIERCING,1);}

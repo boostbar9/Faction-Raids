@@ -24,7 +24,10 @@ public final class RecruitPersonality {
         if (inventory.getContainerSize() < 8) throw new IllegalStateException("Recruit equipment inventory too small");
         RandomSource random = mob.getRandom();
         String name = name(random);
-        String material = MATERIALS[random.nextInt(MATERIALS.length)];
+        int palette = random.nextInt(MATERIALS.length);
+        String material = MATERIALS[palette];
+        int color = new int[]{0x476B86,0x738062,0x9E793C,0x963F3F}[palette];
+        int outfit = random.nextInt(4);
         Item[] armor = {random.nextBoolean() ? Items.IRON_HELMET : Items.CHAINMAIL_HELMET,
                 Items.IRON_CHESTPLATE, Items.CHAINMAIL_LEGGINGS, Items.IRON_BOOTS};
         EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
@@ -34,11 +37,13 @@ public final class RecruitPersonality {
             trim.putString("material", "minecraft:" + material);
             trim.putString("pattern", "minecraft:sentry");
             stack.getOrCreateTag().put("Trim", trim);
+            stack = com.devfarinsky.siegeoverhaul.compat.EpicKnightsCompatibility.armor(stack,outfit,slots[i],color);
             inventory.setItem(i, stack);
             mob.setItemSlot(slots[i], stack);
         }
-        ItemStack weapon = new ItemStack(role == 2 ? Items.BOW : role == 3 ? Items.CROSSBOW : Items.IRON_SWORD);
-        weapon.setHoverName(Component.literal(name + "'s " + (role == 2 ? "Bow" : role == 3 ? "Crossbow" : "Sword")));
+        var musket = role == 3 && random.nextInt(3) == 0 ? com.devfarinsky.siegeoverhaul.compat.MusketCompatibility.kit() : null;
+        ItemStack weapon = new ItemStack(musket != null ? musket.weapon() : role == 2 ? Items.BOW : role == 3 ? Items.CROSSBOW : Items.IRON_SWORD);
+        weapon.setHoverName(Component.literal(name + "'s " + (musket != null ? "Musket" : role == 2 ? "Bow" : role == 3 ? "Crossbow" : "Sword")));
         inventory.setItem(5, weapon);
         mob.setItemSlot(EquipmentSlot.MAINHAND, weapon);
         if (role == 1) {
@@ -47,7 +52,7 @@ public final class RecruitPersonality {
             mob.setItemSlot(EquipmentSlot.OFFHAND, shield);
         }
         inventory.setItem(6, new ItemStack(Items.BREAD, 8));
-        if (role >= 2) inventory.setItem(7, new ItemStack(Items.ARROW, 32));
+        if (role >= 2) inventory.setItem(7, new ItemStack(musket != null ? musket.ammunition() : Items.ARROW, 32));
         mob.setCustomName(Component.literal(name));
         mob.getPersistentData().putBoolean(MARKER, true);
         inventory.setChanged();
