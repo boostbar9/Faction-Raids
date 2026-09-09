@@ -14,6 +14,8 @@ public class SiegeIntegrationTest extends MinecraftTestSupport {
         public Object siegeController;
         public boolean getShouldRanged() { return true; }
         public void setShouldRanged(boolean value) {}
+        public boolean getShouldMovePos() { return true; }
+        public void setShouldMovePos(boolean value) {}
         protected Engineer() { super(EntityType.ZOMBIE, null); }
     }
     public static class Controller {
@@ -44,6 +46,23 @@ public class SiegeIntegrationTest extends MinecraftTestSupport {
         verify(engineer).setShouldRanged(true);
         assertFalse(data.contains("SiegeAdvanceSavedRanged"));
         verify(engineer, never()).level();
+    }
+    @Test void arrivalBypassesTravelThrottleAndClearsMoveOrderEvenIfSteeringApiFails() {
+        var engineer = engineer();
+        var data = new net.minecraft.nbt.CompoundTag();
+        data.putBoolean("SiegeAdvanceSavedRanged", true); data.putLong("SiegeAdvanceAt", 1000);
+        when(engineer.getPersistentData()).thenReturn(data);
+        when(engineer.isPassenger()).thenReturn(true);
+        var vehicle = mock(Entity.class); when(vehicle.getType()).thenReturn(EntityType.ZOMBIE);
+        when(engineer.getVehicle()).thenReturn(vehicle);
+        when(engineer.position()).thenReturn(new net.minecraft.world.phys.Vec3(20, 0, 0));
+        var level = mock(net.minecraft.server.level.ServerLevel.class);
+        when(engineer.level()).thenReturn(level); when(level.getGameTime()).thenReturn(1000L);
+        when(engineer.getShouldMovePos()).thenReturn(true);
+        engineer.siegeController = new Object(); // incompatible steering API must not strand travel state
+        SiegeIntegration.advanceEngineer(engineer, net.minecraft.core.BlockPos.ZERO);
+        verify(engineer).setShouldMovePos(false); verify(engineer).setShouldRanged(true);
+        assertFalse(data.contains("SiegeAdvanceSavedRanged"));
     }
     private boolean attach(Mob engineer, Entity engine, Controller controller) throws Exception {
         return SiegeIntegration.mountWithController(engineer, engine, controller,

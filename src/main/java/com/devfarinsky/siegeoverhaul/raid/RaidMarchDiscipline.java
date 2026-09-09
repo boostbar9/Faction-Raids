@@ -15,7 +15,12 @@ public final class RaidMarchDiscipline {
                     || name.endsWith("$LongDistancePatrolGoal")) mob.goalSelector.removeGoal(goal);
         }
         mob.clearRestriction();
-        releaseNativePatrol(mob);
+        for (Class<?> type = mob.getClass(); type != null; type = type.getSuperclass()) {
+            if (type.getName().equals("com.talhanation.recruits.entities.AbstractLeaderEntity")) {
+                releaseNativePatrol(mob);
+                break;
+            }
+        }
     }
 
     /** Native leaders otherwise start a second army controller that can regroup/hold/retreat. */

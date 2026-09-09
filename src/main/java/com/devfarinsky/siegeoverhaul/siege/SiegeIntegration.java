@@ -214,9 +214,6 @@ public final class SiegeIntegration {
     public static void advanceEngineer(Mob engineer, net.minecraft.core.BlockPos objective) {
         if (!engineer.isPassenger()) { EngineerAdvanceOrders.restore(engineer); return; }
         long now = engineer.level().getGameTime();
-        if (engineer.getPersistentData().contains("SiegeAdvanceAt")
-                && now - engineer.getPersistentData().getLong("SiegeAdvanceAt") < 100) return;
-        engineer.getPersistentData().putLong("SiegeAdvanceAt", now);
         Vec3 delta = Vec3.atCenterOf(objective).subtract(engineer.position()).multiply(1,0,1);
         double distance = delta.length();
         try {
@@ -225,12 +222,15 @@ public final class SiegeIntegration {
             double standOff=standOff(type);
             if (EngineerAdvanceOrders.arrived(type, distance)) {
                 if (Boolean.TRUE.equals(engineer.getClass().getMethod("getShouldMovePos").invoke(engineer))) {
-                    EngineerAdvanceOrders.stop(engineer);
-                    engineer.getClass().getMethod("setShouldMovePos", boolean.class).invoke(engineer, false);
+                    try { EngineerAdvanceOrders.stop(engineer); }
+                    finally { engineer.getClass().getMethod("setShouldMovePos", boolean.class).invoke(engineer, false); }
                 }
                 EngineerAdvanceOrders.restore(engineer);
                 return;
             }
+            if (engineer.getPersistentData().contains("SiegeAdvanceAt")
+                    && now - engineer.getPersistentData().getLong("SiegeAdvanceAt") < 100) return;
+            engineer.getPersistentData().putLong("SiegeAdvanceAt", now);
             Vec3 step = engineer.position().add(delta.normalize().scale(Math.min(24, distance - standOff)));
             net.minecraft.core.BlockPos ground = net.minecraft.core.BlockPos.containing(step);
             if (!(engineer.level() instanceof ServerLevel level) || !level.hasChunkAt(ground)) {
