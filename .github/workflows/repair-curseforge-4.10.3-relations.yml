@@ -21,7 +21,7 @@ jobs:
           projects = [
               {'slug': 'recruits', 'type': 'requiredDependency'},
               {'slug': 'workers', 'type': 'requiredDependency'},
-              {'slug': 'small-ships', 'projectID': '450659', 'type': 'requiredDependency'},
+              {'slug': 'small-ships', 'projectID': 450659, 'type': 'requiredDependency'},
               {'slug': 'siegeweapons', 'type': 'requiredDependency'},
               {'slug': 'corpse', 'type': 'optionalDependency'},
           ]
