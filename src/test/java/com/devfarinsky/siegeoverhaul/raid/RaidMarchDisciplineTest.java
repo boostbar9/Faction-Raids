@@ -37,8 +37,8 @@ class RaidMarchDisciplineTest extends MinecraftTestSupport {
             assertTrue(RaidMarchDiscipline.pushPastDefenders(role, true, false));
             assertFalse(RaidMarchDiscipline.pushPastDefenders(role, false, false));
         }
-        assertFalse(RaidMarchDiscipline.pushPastDefenders("melee", true, false));
-        assertFalse(RaidMarchDiscipline.pushPastDefenders("ranged", true, false));
+        assertFalse(RaidMarchDiscipline.pushPastDefenders("captain", true, false));
+        assertFalse(RaidMarchDiscipline.pushPastDefenders("marksman", true, false));
     }
     @Test void objectiveCombatStillRejectsInvalidTargets() {
         Mob commander=mock(Mob.class); LivingEntity defender=mock(LivingEntity.class);
