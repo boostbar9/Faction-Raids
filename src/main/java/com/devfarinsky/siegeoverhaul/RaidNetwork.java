@@ -19,7 +19,7 @@ public final class RaidNetwork {
     // discovered units/factions, and War Journal rows to DashboardSync.
     // Bump whenever the wire format changes so mismatched builds refuse to connect
     // instead of silently corrupting the dashboard payload.
-    private static final String PROTOCOL = "12";
+    private static final String PROTOCOL = "13";
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(SiegeOverhaul.MOD_ID, "main"))
             .networkProtocolVersion(() -> PROTOCOL)
@@ -29,6 +29,16 @@ public final class RaidNetwork {
     private static int messageId;
 
     public static void init() {
+        CHANNEL.messageBuilder(CoreDetails.class,messageId++,NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(CoreDetails::encode)
+                .decoder(CoreDetails::decode)
+                .consumerMainThread((p,supplier) -> {
+                    DistExecutor.unsafeRunWhenOn(Dist.CLIENT,() -> () -> {
+                        var player=net.minecraft.client.Minecraft.getInstance().player;
+                        if(player!=null && player.containerMenu instanceof com.devfarinsky.siegeoverhaul.core.CoreHireMenu menu && menu.containerId==p.menuId()) menu.details(p.faction(),p.members());
+                    });
+                    supplier.get().setPacketHandled(true);
+                }).add();
         CHANNEL.messageBuilder(CorePurchase.class, messageId++, NetworkDirection.PLAY_TO_SERVER)
                 .encoder((packet, buffer) -> { buffer.writeVarInt(packet.menuId()); buffer.writeVarInt(packet.index()); buffer.writeLong(packet.rotation()); })
                 .decoder(buffer -> new CorePurchase(buffer.readVarInt(), buffer.readVarInt(), buffer.readLong()))
@@ -49,6 +59,34 @@ public final class RaidNetwork {
                 .decoder(DashboardAction::decode)
                 .consumerMainThread(DashboardAction::handle)
                 .add();
+    }
+
+    public record CoreDetails(int menuId,String faction,java.util.List<String> members) {
+        public CoreDetails {
+            faction=bounded(faction,128);
+            members=members==null?java.util.List.of():members.stream().filter(java.util.Objects::nonNull)
+                    .limit(100).map(name->bounded(name,64)).toList();
+        }
+        private static String bounded(String text,int limit) {
+            if(text==null)return "";
+            int end=Math.min(text.length(),limit);
+            if(end>0 && end<text.length() && Character.isHighSurrogate(text.charAt(end-1)))end--;
+            return text.substring(0,end);
+        }
+        public void encode(FriendlyByteBuf buffer) {
+            buffer.writeVarInt(menuId);buffer.writeUtf(faction,128);
+            buffer.writeCollection(members,(out,name)->out.writeUtf(name,64));
+        }
+        public static CoreDetails decode(FriendlyByteBuf buffer) {
+            int id=buffer.readVarInt();String faction=buffer.readUtf(128);int size=buffer.readVarInt();
+            if(size<0 || size>100)throw new IllegalArgumentException("Invalid core roster size");
+            var members=new java.util.ArrayList<String>(size);
+            for(int i=0;i<size;i++)members.add(buffer.readUtf(64));
+            return new CoreDetails(id,faction,members);
+        }
+    }
+    public static void coreDetails(ServerPlayer player,int menuId,String faction,java.util.List<String> members) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),new CoreDetails(menuId,faction,members));
     }
 
     public static void openDashboard(ServerPlayer player) {

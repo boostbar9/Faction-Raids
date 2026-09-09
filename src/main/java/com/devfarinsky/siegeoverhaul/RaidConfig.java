@@ -184,9 +184,15 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue CREWED_ASSETS_PER_EXTRA_ENEMY;
     public static final ForgeConfigSpec.IntValue MAX_ASSET_SCALING_ENEMIES;
 
+    public static final ForgeConfigSpec.IntValue BANK_INTEREST_BASIS_POINTS;
+    public static final ForgeConfigSpec.IntValue SIEGE_CORPSE_SECONDS, EMPTY_CORPSE_SECONDS;
+
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
         b.comment("Player-focused faction invasion settings.").push("playerRaids");
+        SIEGE_CORPSE_SECONDS = b.comment("Known enemy siege corpses become normal dropped loot after this many seconds. Player and unclassified nonempty corpses are preserved. Zero disables conversion.").defineInRange("siegeCorpseSeconds",120,0,3600);
+        EMPTY_CORPSE_SECONDS = b.comment("Remove fully empty corpses after this many seconds. No inventories are deleted. Zero keeps native timing.").defineInRange("emptyCorpseSeconds",60,0,3600);
+        BANK_INTEREST_BASIS_POINTS = b.comment("Faction bank interest per real 24-hour day in basis points (100=1%). Up to 365 days of offline catch-up; no clock rollback payouts.").defineInRange("bankDailyInterestBasisPoints",100,0,1000);
         ENABLED = b.comment("Master switch.").define("enabled", true);
         AUTOMATIC_RAIDS = b.comment("Automatically schedule invasions for registered faction anchors.")
                 .define("automaticRaids", true);
@@ -198,7 +204,7 @@ public final class RaidConfig {
                 .defineInRange("siegePreparationMinutes", 12, 3, 60);
         WARNING_SECONDS = b.comment("Countdown before the first wave.")
                 .defineInRange("warningSeconds", 120, 10, 600);
-        WAVES = b.comment("Number of invasion waves.").defineInRange("waves", 5, 1, 12);
+        WAVES = b.comment("Legacy invasion wave count. Siege Core campaigns are endless with a retreat vote every five waves.").defineInRange("waves", 5, 1, 12);
         BASE_ENEMIES_PER_WAVE = b.comment("Enemies per wave with one defending player.")
                 .defineInRange("baseEnemiesPerWave", 10, 1, 40);
         ENEMIES_PER_EXTRA_PLAYER = b.comment("Additional enemies per wave for each extra online faction member.")

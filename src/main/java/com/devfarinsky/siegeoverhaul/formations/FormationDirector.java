@@ -75,7 +75,7 @@ public final class FormationDirector {
                         || !level.getBlockState(p.below()).isFaceSturdy(level,p.below(),net.minecraft.core.Direction.UP)) narrow=true;
             }
             boolean underFire=group.stream().anyMatch(m -> m.getLastHurtByMob()!=null && m.tickCount-m.getLastHurtByMobTimestamp()<100);
-            dispatched |= RecruitsFormationBridge.applyTactical(level,FormationTactics.choose(role,narrow,underFire),forward,waypoint,group,state.teamKey);
+            dispatched |= RecruitsFormationBridge.applyTactical(level,FormationTactics.choose(role,narrow,underFire),forward,waypoint,group);
         }
         LAST_APPLIED.put(state.teamKey, now);
         return dispatched;
@@ -83,8 +83,8 @@ public final class FormationDirector {
 
     public static boolean shouldMarch(ServerLevel level, String defendingTeam, Mob mob, BlockPos objective) {
         return shouldMarch(mob, objective)
-                && !com.devfarinsky.siegeoverhaul.raid.FlankRoutes.active(mob,level.getGameTime())
-                && com.devfarinsky.siegeoverhaul.core.SiegeCore.claimed(level, mob.blockPosition(), defendingTeam);
+                && defendingTeam.equals(mob.getPersistentData().getString(com.devfarinsky.siegeoverhaul.ModConstants.Tags.RAID_TEAM))
+                && !com.devfarinsky.siegeoverhaul.raid.FlankRoutes.active(mob,level.getGameTime());
     }
 
     public static boolean shouldMarch(Mob mob, BlockPos objective) {

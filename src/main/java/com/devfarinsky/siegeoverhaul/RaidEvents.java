@@ -1,5 +1,8 @@
 package com.devfarinsky.siegeoverhaul;
 
+import com.devfarinsky.siegeoverhaul.core.EndlessSiege;
+import com.devfarinsky.siegeoverhaul.core.FactionBank;
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
@@ -1121,8 +1124,8 @@ public final class RaidEvents {
                 source.sendSuccess(() -> Component.literal("Phase: ").withStyle(ChatFormatting.GRAY)
                         .append(Component.literal(state.wave == 0 ? "War camp forming" :
                                 (!state.breached && RaidConfig.ENABLE_BREACH_PHASE.get() ?
-                                        "Perimeter breach " + breach + "% — wave " + state.wave + "/" + RaidConfig.WAVES.get() :
-                                        waveTitle(state.wave) + " — wave " + state.wave + "/" + RaidConfig.WAVES.get()))
+                                        "Perimeter breach " + breach + "% — wave " + state.wave + (EndlessSiege.active(state) ? " (endless)" : "/" + RaidConfig.WAVES.get()) :
+                                        waveTitle(EndlessSiege.active(state) ? EndlessSiege.chapterWave(state.wave) : state.wave) + " — wave " + state.wave + (EndlessSiege.active(state) ? " (endless)" : "/" + RaidConfig.WAVES.get())))
                                 .withStyle(ChatFormatting.RED)), false);
                 source.sendSuccess(() -> Component.literal("Enemy force: ").withStyle(ChatFormatting.GRAY)
                         .append(Component.literal(state.raiders.size() + " deployed • " +
@@ -1352,7 +1355,7 @@ public final class RaidEvents {
                     ServerLevel level = getLevel(source.getServer(), point);
                     return level != null && level.getEntity(id) != null;
                 }).count();
-                source.sendSuccess(() -> Component.literal("Raid state: wave " + state.wave + "/" + RaidConfig.WAVES.get() +
+                source.sendSuccess(() -> Component.literal("Raid state: wave " + state.wave + (EndlessSiege.active(state) ? " (endless)" : "/" + RaidConfig.WAVES.get()) +
                         " at '" + state.defensePointName + "' | tracked: " + state.raiders.size() +
                         " | queued: " + state.pendingWaveSpawns + " | squads: " + state.squadsSpawned +
                         " | loaded: " + loaded + " | missing grace: " + state.missingTicks.size() +
@@ -1432,6 +1435,9 @@ public final class RaidEvents {
             }
         }
         com.devfarinsky.siegeoverhaul.core.CoreOccupation.tick(server, data);
+        long bankNow = System.currentTimeMillis();
+        int bankRate = RaidConfig.BANK_INTEREST_BASIS_POINTS.get();
+        for (var core : data.siegeCores.values()) if (FactionBank.settle(core, bankNow, bankRate)) data.setDirty();
         // Core ownership follows the placing faction, not an individual changing teams.
         long now = server.overworld().getGameTime();
         if (now / 20 % 5 == 0) com.devfarinsky.siegeoverhaul.compat.CampClaims.cleanOrphans(server.overworld(), data);
@@ -2007,9 +2013,30 @@ public final class RaidEvents {
             }
         }
 
+        if (com.devfarinsky.siegeoverhaul.core.EnemyCore.tick(level, data, state, anchor)) {
+            finishRaid(server, data, teamKey, true, true, "Your faction captured the enemy Siege Core. The invasion is defeated!");
+            return;
+        }
+        if (EndlessSiege.active(state) && EndlessSiege.voting(state)) {
+            var decision = EndlessSiege.tick(state.campaign); data.setDirty();
+            if (decision == EndlessSiege.Decision.RETREAT) {
+                finishRaid(server, data, teamKey, true, true, "Your faction accepted the enemy retreat after wave " + state.wave + "."); return;
+            }
+            if (decision == EndlessSiege.Decision.WAIT) {
+                state.objectiveStatus = "Retreat vote: " + (state.campaign.getInt("VoteTicks") + 19) / 20 + "s remaining";
+                updateBossBar(server, anchor, state, false); return;
+            }
+            announce(server, teamKey, Component.literal("The siege continues. The next five waves pay more into your faction bank.").withStyle(ChatFormatting.GOLD), false);
+        }
         if (state.wave > 0 && state.pendingWaveSpawns <= 0 && state.raiders.isEmpty() &&
                 state.ticksToNextWave <= 0) {
-            if (state.wave >= RaidConfig.WAVES.get()) {
+            if (EndlessSiege.active(state)) {
+                long paid = EndlessSiege.award(data, state, System.currentTimeMillis(), RaidConfig.BANK_INTEREST_BASIS_POINTS.get());
+                if (paid > 0) announce(server, teamKey, Component.literal("Wave " + state.wave + " survived: +" + paid + " emeralds deposited in your faction bank.").withStyle(ChatFormatting.GREEN), false);
+                if (state.wave % 5 == 0 && state.campaign.getInt("VoteWave") != state.wave) {
+                    EndlessSiege.offer(state, members); data.setDirty(); return;
+                }
+            } else if (state.wave >= RaidConfig.WAVES.get()) {
                 finishRaid(server, data, teamKey, true, true,
                         anchor.teamDisplay() + " has crushed the enemy invasion!");
                 return;
@@ -2185,7 +2212,7 @@ public final class RaidEvents {
             state.objectiveStatus=com.devfarinsky.siegeoverhaul.camp.WarGate.status(level,state);
             state.ticksToNextWave=100;return;
         }
-        int nextWave = state.wave + 1;
+        int nextWave = (int) Math.min(Integer.MAX_VALUE, state.wave + 1L);
         int playerCount = Math.max(1, members.size());
         int recruitScale = 0;
         int divisor = RaidConfig.RECRUITS_PER_EXTRA_ENEMY.get();
@@ -2193,10 +2220,10 @@ public final class RaidEvents {
                 recruits.size() / divisor);
         OptionalCompatBridge.CompatSnapshot compat = nearbyCompatAssets(level, point, anchor);
         int assetScale = assetScalingEnemies(compat);
-        int wanted = RaidConfig.BASE_ENEMIES_PER_WAVE.get() +
-                (playerCount - 1) * RaidConfig.ENEMIES_PER_EXTRA_PLAYER.get() +
-                (nextWave - 1) * 2 + recruitScale + assetScale;
-        wanted = Math.min(wanted, Math.max(0, RaidConfig.MAX_ACTIVE_RAIDERS.get() - state.campGuards.size()));
+        int baseSize = RaidConfig.BASE_ENEMIES_PER_WAVE.get() +
+                (playerCount - 1) * RaidConfig.ENEMIES_PER_EXTRA_PLAYER.get() + recruitScale + assetScale;
+        int wanted = EndlessSiege.active(state) ? EndlessSiege.waveSize(baseSize, nextWave, RaidConfig.MAX_ACTIVE_RAIDERS.get())
+                : Math.min(baseSize + (nextWave - 1) * 2, Math.max(0, RaidConfig.MAX_ACTIVE_RAIDERS.get() - state.campGuards.size()));
         if (wanted <= 0) {
             state.ticksToNextWave = RaidConfig.SPAWN_RETRY_SECONDS.get() * 20;
             return;
@@ -2212,7 +2239,7 @@ public final class RaidEvents {
         // counts (shieldmen/bowmen/captains/etc.) and a formation shape the
         // FormationDirector will hold on advance.
         com.devfarinsky.siegeoverhaul.waves.WaveComposition composition =
-                com.devfarinsky.siegeoverhaul.waves.WaveComposer.compose(nextWave, RaidConfig.WAVES.get(), wanted);
+                com.devfarinsky.siegeoverhaul.waves.WaveComposer.compose(EndlessSiege.active(state) ? EndlessSiege.chapterWave(nextWave) : nextWave, EndlessSiege.active(state) ? 5 : RaidConfig.WAVES.get(), wanted);
         ACTIVE_COMPOSITIONS.put(anchor.teamKey(), composition);
         state.waveFormation = composition == null ? "NONE" : composition.formation.name();
         state.ticksToNextWave = 0;
@@ -2224,12 +2251,11 @@ public final class RaidEvents {
                 !composition.label.isEmpty()) {
             formationSuffix = " — " + composition.label;
         }
-        announce(server, anchor.teamKey(), Component.literal(waveTitle(state.wave) + " — wave " + state.wave + "/" +
-                RaidConfig.WAVES.get() + ": " + wanted + (state.preparationTicks > 0 ? " invaders are assembling at camp to the " : " invaders are advancing from the ") +
+        announce(server, anchor.teamKey(), Component.literal(waveTitle(EndlessSiege.active(state) ? EndlessSiege.chapterWave(state.wave) : state.wave) + " — wave " + state.wave + (EndlessSiege.active(state) ? " (endless)" : "/" + RaidConfig.WAVES.get()) + ": " + wanted + (state.preparationTicks > 0 ? " invaders are assembling at camp to the " : " invaders are advancing from the ") +
                 approachDirection(state.approachAngle) + formationSuffix +
                 scoutingSummary(recruitScale, assetScale, recruits.size(), compat))
                 .withStyle(ChatFormatting.RED), true);
-        if (state.preparationTicks <= 0 && state.wave >= RaidConfig.WAVES.get()) {
+        if (state.preparationTicks <= 0 && (EndlessSiege.active(state) ? state.wave % 5 == 0 : state.wave >= RaidConfig.WAVES.get())) {
             // v2.32.0: command assault reads as MAJOR (final wave, high stakes).
             showTitle(server, anchor.teamKey(), Component.literal("Command Assault")
                             .withStyle(ChatFormatting.DARK_RED),
@@ -2370,7 +2396,7 @@ public final class RaidEvents {
 
     private static void assignSiegeRole(Mob raider, RaidSavedData.RaidState state,
                                         int waveIndex, boolean squadLeader) {
-        boolean commander = RaidConfig.ENABLE_COMMANDER.get() && state.wave >= RaidConfig.WAVES.get() &&
+        boolean commander = RaidConfig.ENABLE_COMMANDER.get() && (EndlessSiege.active(state) ? state.wave % 5 == 0 : state.wave >= RaidConfig.WAVES.get()) &&
                 waveIndex == 0;
         String role;
         ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(raider.getType());
@@ -2438,6 +2464,13 @@ public final class RaidEvents {
         // full; damage adds an ATTRIBUTE_MODIFIER; XP is stored on
         // persistent data because Mob.setXpReward is protected.
         applyDifficultyScaling(raider);
+        if (EndlessSiege.active(state)) {
+            double escalation = Math.log1p(Math.max(0, state.wave - 1) / 5.0);
+            var health = raider.getAttribute(Attributes.MAX_HEALTH);
+            if (health != null) { health.setBaseValue(health.getBaseValue() * (1 + .30 * escalation)); raider.setHealth(raider.getMaxHealth()); }
+            var damage = raider.getAttribute(Attributes.ATTACK_DAMAGE);
+            if (damage != null) damage.setBaseValue(damage.getBaseValue() * (1 + .15 * escalation));
+        }
     }
 
     /**
@@ -2501,25 +2534,28 @@ public final class RaidEvents {
     }
 
     private static Mob createAttackerForWave(ServerLevel level, String teamKey, int wave, int index) {
-        if (!RaidConfig.USE_RECRUIT_INVADERS.get()) return createVanillaAttacker(level, wave, index);
-        if (wave >= RaidConfig.WAVES.get() && index == 1) return EntityType.RAVAGER.create(level);
+        var campaignState = RaidSavedData.get(level.getServer()).raids.get(teamKey);
+        int totalWaves = EndlessSiege.active(campaignState) ? 5 : RaidConfig.WAVES.get();
+        if (EndlessSiege.active(campaignState)) wave = EndlessSiege.chapterWave(wave);
+        if (!RaidConfig.USE_RECRUIT_INVADERS.get()) return createVanillaAttacker(level, wave, index, totalWaves);
+        if (wave >= totalWaves && index == 1) return EntityType.RAVAGER.create(level);
         if (RaidConfig.ENABLE_ILLUSIONERS.get() && wave >= 4 && index == 2) {
             return EntityType.ILLUSIONER.create(level);
         }
 
         String recruitType = null;
-        int compIndex=com.devfarinsky.siegeoverhaul.waves.WaveComposer.compositionIndex(wave,RaidConfig.WAVES.get(),index,
+        int compIndex=com.devfarinsky.siegeoverhaul.waves.WaveComposer.compositionIndex(wave,totalWaves,index,
                 RaidConfig.ENABLE_COMMANDER.get(),RaidConfig.ENABLE_ILLUSIONERS.get());
         var comp=ACTIVE_COMPOSITIONS.get(teamKey);
         if(comp==null && RaidConfig.ENABLE_WAVE_COMPOSITION.get()) {
             var raid=RaidSavedData.get(level.getServer()).raids.get(teamKey);
-            if(raid!=null) comp=com.devfarinsky.siegeoverhaul.waves.WaveComposer.compose(wave,RaidConfig.WAVES.get(),raid.waveStartingCount+raid.pendingWaveSpawns);
+            if(raid!=null) comp=com.devfarinsky.siegeoverhaul.waves.WaveComposer.compose(wave,totalWaves,raid.waveStartingCount+raid.pendingWaveSpawns);
         }
         if(compIndex>=0 && comp!=null && RaidConfig.ENABLE_WAVE_COMPOSITION.get()) recruitType=comp.roleAt(compIndex);
 
         // Legacy fallback picker (still authoritative for commander slot and when composition is off/exhausted).
         if (recruitType == null) {
-            if (RaidConfig.ENABLE_COMMANDER.get() && wave >= RaidConfig.WAVES.get() && index == 0) recruitType = "patrol_leader";
+            if (RaidConfig.ENABLE_COMMANDER.get() && wave >= totalWaves && index == 0) recruitType = "patrol_leader";
             else if (wave >= 4 && index % 8 == 3) recruitType = "assassin";
             else if (wave >= 3 && index % 7 == 0) recruitType = "captain";
             else if ((index + wave) % 4 == 0) recruitType = "recruit_shieldman";
@@ -2534,8 +2570,8 @@ public final class RaidEvents {
         return index % 3 == 0 ? EntityType.VINDICATOR.create(level) : EntityType.PILLAGER.create(level);
     }
 
-    private static Mob createVanillaAttacker(ServerLevel level, int wave, int index) {
-        if (wave >= RaidConfig.WAVES.get() && index == 0) return EntityType.RAVAGER.create(level);
+    private static Mob createVanillaAttacker(ServerLevel level, int wave, int index, int totalWaves) {
+        if (wave >= totalWaves && index == 0) return EntityType.RAVAGER.create(level);
         if (wave >= 4 && index == 1) return EntityType.EVOKER.create(level);
         if (RaidConfig.ENABLE_ILLUSIONERS.get() && wave >= 4 && index == 2) {
             return EntityType.ILLUSIONER.create(level);
@@ -4121,7 +4157,7 @@ public final class RaidEvents {
             int experience = RaidConfig.VICTORY_EXPERIENCE.get();
             List<ServerPlayer> winners = onlineMembers(server, teamKey);
             if (experience > 0) winners.forEach(p -> p.giveExperiencePoints(experience));
-            int emeralds = guaranteedEmeraldReward(state);
+            int emeralds = EndlessSiege.active(state) ? 0 : guaranteedEmeraldReward(state);
             if (emeralds > 0) winners.forEach(p -> giveEmeralds(p, emeralds));
             // v2.28.0: no-breach Commander kill bonus. When the perimeter
             // was never breached during the entire siege AND the defenders
@@ -4198,9 +4234,9 @@ public final class RaidEvents {
             announce(server, teamKey, Component.literal("Practice siege complete. Manual test raids do not grant rewards by default.")
                     .withStyle(ChatFormatting.YELLOW), false);
         } else if (eligibleVictory) {
-            int emeralds = guaranteedEmeraldReward(state);
-            announce(server, teamKey, Component.literal("Victory spoils: " + emeralds +
-                    " guaranteed emeralds, " + RaidConfig.VICTORY_EXPERIENCE.get() +
+            int emeralds = EndlessSiege.active(state) ? 0 : guaranteedEmeraldReward(state);
+            announce(server, teamKey, Component.literal((EndlessSiege.active(state) ? "Faction bank earned " + state.campaign.getLong("Deposited") + " emeralds during this siege. Victory grants " : "Victory spoils: " + emeralds +
+                    " guaranteed emeralds, ") + RaidConfig.VICTORY_EXPERIENCE.get() +
                     " experience and bonus campaign loot for each online faction member.")
                     .withStyle(ChatFormatting.GREEN), false);
             if (noBreachBonus > 0) {
@@ -4290,8 +4326,8 @@ public final class RaidEvents {
             if (!currentMembers.contains(shown)) bar.removePlayer(shown);
         }
         for (ServerPlayer p : currentMembers) bar.addPlayer(p);
-        int totalWaves = RaidConfig.WAVES.get();
-        float completedWaves = Math.max(0, state.wave - 1);
+        int totalWaves = EndlessSiege.active(state) ? 5 : RaidConfig.WAVES.get();
+        float completedWaves = Math.max(0, (EndlessSiege.active(state) ? EndlessSiege.chapterWave(state.wave) : state.wave) - 1);
         int planned = Math.max(state.plannedWaveSize, state.waveStartingCount + state.pendingWaveSpawns);
         float clearedFraction = planned <= 0 ? 0.0F :
                 1.0F - (float) (state.raiders.size() + state.pendingWaveSpawns) / planned;
@@ -4567,9 +4603,9 @@ public final class RaidEvents {
         }
         int occupation = state.captureTicks * 100 /
                 Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20);
-        int nextWaveNumber = Math.min(state.wave + 1, RaidConfig.WAVES.get());
+        int nextWaveNumber = EndlessSiege.active(state) ? (int)Math.min(Integer.MAX_VALUE,state.wave+1L) : Math.min(state.wave + 1, RaidConfig.WAVES.get());
         com.devfarinsky.siegeoverhaul.waves.WaveComposition nextPreview =
-                com.devfarinsky.siegeoverhaul.waves.WaveComposer.compose(nextWaveNumber, RaidConfig.WAVES.get(),
+                com.devfarinsky.siegeoverhaul.waves.WaveComposer.compose(EndlessSiege.active(state) ? EndlessSiege.chapterWave(nextWaveNumber) : nextWaveNumber, EndlessSiege.active(state) ? 5 : RaidConfig.WAVES.get(),
                         Math.max(1, RaidConfig.BASE_ENEMIES_PER_WAVE.get()));
         String nextLabel = nextWaveNumber <= state.wave ? "Final wave in progress" :
                 "Wave " + nextWaveNumber + (nextPreview.label.isEmpty() ? "" : " — " + nextPreview.label);
@@ -4595,14 +4631,14 @@ public final class RaidEvents {
         return new DashboardSnapshot(anchor.teamDisplay(), true, true,
                 point.dimension() + " • " + formatPos(point.pos()) +
                         (state.campPos == null ? " • camp unavailable" : " • camp " + formatPos(state.campPos)),
-                state.wave, RaidConfig.WAVES.get(),
+                state.wave, EndlessSiege.active(state) ? nextCheckpoint(state.wave) : RaidConfig.WAVES.get(),
                 state.raiders.size(), state.pendingWaveSpawns, state.totalDefeated, occupation,
                 state.breached || !RaidConfig.ENABLE_BREACH_PHASE.get(), breachPercent(state),
                 recruits, compat.workers(), compat.ships(), compat.siegeWeapons(), assetScalingEnemies(compat),
                 state.breachedBlocks.size(),
                 state.currentBreachBlock == null ? "No gate under attack" : formatPos(state.currentBreachBlock),
                 gateBreachPercent(state), state.objectiveStatus,
-                guaranteedEmeraldReward(state), state.rewardEligible,
+                EndlessSiege.active(state) ? EndlessSiege.reward(nextWaveNumber) : guaranteedEmeraldReward(state), state.rewardEligible,
                 facId, cbId, opening, chant, campDir, campDist,
                 nextLabel, nextRoles, score, defenseScoreLabel(score),
                 threat, explainer,
@@ -4714,13 +4750,13 @@ public final class RaidEvents {
         String factionId = state.narrative != null ? state.narrative.factionId : "";
         String factionName = state.narrative != null ? state.narrative.factionName : "Unknown raiders";
         String casusBelli = state.narrative != null ? state.narrative.casusBelliId : "";
-        int payout = eligibleVictory ? guaranteedEmeraldReward(state) : 0;
+        int payout = EndlessSiege.active(state) ? (int)Math.min(FactionBank.LIMIT, state.campaign.getLong("Deposited")) : eligibleVictory ? guaranteedEmeraldReward(state) : 0;
         // Outcome is a short machine-readable tag so the client can style it
         // (green vs. red vs. yellow) without brittle string matching.
         String outcome = victory ? (eligibleVictory ? "victory" : "victory_practice") : "defeat";
         journal.record(new RaidSavedData.WarJournal.Entry(
                 server.overworld().getGameTime(), factionId, factionName, casusBelli,
-                state.wave, RaidConfig.WAVES.get(), outcome, payout));
+                state.wave, EndlessSiege.active(state) ? nextCheckpoint(state.wave) : RaidConfig.WAVES.get(), outcome, payout));
         data.setDirty();
     }
 
@@ -5292,6 +5328,8 @@ public final class RaidEvents {
         int index = (int) Math.floor((normalized + Math.PI / 8.0D) / (Math.PI / 4.0D)) & 7;
         return directions[index];
     }
+
+    private static int nextCheckpoint(int wave) { return (int)Math.min(Integer.MAX_VALUE, ((Math.max(1,wave)-1L)/5+1)*5); }
 
     private static String waveTitle(int wave) {
         int total = RaidConfig.WAVES.get();

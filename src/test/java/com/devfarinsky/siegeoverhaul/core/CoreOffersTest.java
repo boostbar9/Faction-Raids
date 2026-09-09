@@ -97,7 +97,7 @@ class CoreOffersTest extends MinecraftTestSupport {
         for (int[] size : new int[][]{{320,240},{480,270},{600,260},{854,480},{1920,1080}}) {
             var layout = CoreHireLayout.fit(size[0],size[1]);
             assertTrue(layout.x() >= 0 && layout.y() >= 0);
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < 4; i++) {
                 assertTrue(layout.cardWidth() > 70 && layout.cardHeight() >= 40);
                 assertTrue(layout.cardX(i) >= layout.x());
                 assertTrue(layout.cardX(i) + layout.cardWidth() <= layout.x() + layout.width());

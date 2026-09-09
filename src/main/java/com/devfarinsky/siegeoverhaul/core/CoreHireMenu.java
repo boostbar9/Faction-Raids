@@ -14,8 +14,24 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     private final ServerPlayer owner;
     private final BlockPos pos;
     private final SimpleContainer display = new SimpleContainer(6);
-    private final ContainerData data = new SimpleContainerData(18);
+    private final ContainerData data = new SimpleContainerData(29);
     private long shownAt = Long.MIN_VALUE;
+    private long lastActionAt = -1;
+    private String sentRoster = "";
+    private String factionName = "Faction";
+    private java.util.List<String> members = java.util.List.of();
+    public String factionName() { return factionName; }
+    public java.util.List<String> members() { return members; }
+    public void details(String faction, java.util.List<String> roster) { factionName = faction; members = java.util.List.copyOf(roster); }
+    private int wide(int low) { return (data.get(low) & 0xffff) | (data.get(low+1) & 0xffff) << 16; }
+    private void wide(int low,int value) { data.set(low,value & 0xffff); data.set(low+1,(value >>> 16) & 0xffff); }
+    public int bank() { return wide(18); }
+    public int interestRate() { return data.get(20); }
+    public int nextWave() { return wide(21); }
+    public int nextReward() { return wide(23); }
+    public boolean canWithdraw() { return data.get(25) != 0; }
+    public int currentWave() { return wide(26); }
+    public int voteSeconds() { return data.get(28); }
     public CoreHireMenu(int id, Inventory inventory) { this(id, inventory, null); }
     public CoreHireMenu(int id, Inventory inventory, BlockPos pos) {
         super(CoreMenus.HIRING.get(), id);
@@ -27,7 +43,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         });
         for (int i = 0; i < 4; i++) { data.set(i, -1); data.set(i + 4, -1); }
         addDataSlots(data);
-        if (owner != null) refresh();
+        if (owner != null) { refresh(); sentRoster=""; }
     }
     public int lootSequence() { return data.get(16); }
     public int lootBox() { return data.get(15)-1; }
@@ -64,10 +80,23 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         data.set(9, (int) Math.min(900, Math.max(0, (rotation - now + 19) / 20)));
         for (int i = 0; i < 4; i++) data.set(10 + i, (int) ((rotation >>> (i * 16)) & 0xffff));
         data.set(14,owner.getInventory().items.stream().filter(stack->stack.is(Items.EMERALD)).mapToInt(ItemStack::getCount).sum());
+        FactionBank.settle(saved,core);
+        wide(18,(int)FactionBank.balance(core)); data.set(20,com.devfarinsky.siegeoverhaul.RaidConfig.BANK_INTEREST_BASIS_POINTS.get());
+        var raid = saved.raids.get(SiegeCore.key(owner));
+        int next = raid == null ? 1 : (int)Math.min(Integer.MAX_VALUE,raid.wave+1L);
+        wide(21,next); wide(23,EndlessSiege.reward(next)); data.set(25,FactionBank.canWithdraw(owner)?1:0);
+        wide(26,raid==null?0:raid.wave); data.set(28,raid==null?0:(raid.campaign.getInt("VoteTicks")+19)/20);
+        String faction=owner.getTeam() instanceof net.minecraft.world.scores.PlayerTeam team?team.getDisplayName().getString():"Faction";
+        java.util.List<String> roster = owner.getTeam()==null?java.util.List.of():owner.getTeam().getPlayers().stream()
+                .filter(name -> !name.startsWith("#"))
+                .filter(name -> { try { java.util.UUID.fromString(name); return false; } catch(IllegalArgumentException ignored) { return true; } })
+                .sorted().limit(100).map(name -> (owner.server.getPlayerList().getPlayerByName(name)!=null?"Online  ":"Offline  ")+name).toList();
+        String signature=faction+roster;
+        if (!signature.equals(sentRoster)) { sentRoster=signature; com.devfarinsky.siegeoverhaul.RaidNetwork.coreDetails(owner,containerId,faction,roster); }
         shownAt = now;
     }
     @Override public boolean stillValid(Player player) {
-        return owner == null ? pos == null : player == owner && SiegeCore.canUse(owner, pos);
+        return owner == null ? pos == null : player == owner && owner.isAlive() && !owner.isSpectator() && SiegeCore.canUse(owner, pos);
     }
     @Override public ItemStack quickMoveStack(Player player, int slot) { return ItemStack.EMPTY; }
     @Override public void clicked(int slot, int button, ClickType click, Player player) { }
@@ -85,14 +114,20 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         super.broadcastChanges();
     }
     @Override public boolean clickMenuButton(Player player,int button) {
-        if(owner==null || player!=owner || !stillValid(player) || button<20 || button>22)return false;
-        var receipt=CoreLoot.purchaseWithReceipt(owner,button-20);
-        if(receipt==null)return false;
-        display.setItem(5,receipt.prize().copy());
-        data.set(15,button-19);data.set(17,receipt.tier());
-        data.set(16,data.get(16)%30000+1);
-        owner.inventoryMenu.broadcastChanges();refresh();super.broadcastChanges();
-        return true;
+        if(owner==null || player!=owner || !stillValid(player))return false;
+        long now=owner.server.overworld().getGameTime();
+        if(lastActionAt>=0 && now-lastActionAt<5)return false;
+        lastActionAt=now;
+        boolean changed=false;
+        if(button>=20 && button<=22) {
+            var receipt=CoreLoot.purchaseWithReceipt(owner,button-20);
+            if(receipt==null)return false;
+            display.setItem(5,receipt.prize().copy()); data.set(15,button-19);data.set(17,receipt.tier());
+            data.set(16,data.get(16)%30000+1); changed=true;
+        } else if(button>=30 && button<=32) changed=CoreBuffs.purchase(owner,button-30);
+        else if(button>=40 && button<=43) changed=FactionBank.transact(owner,new int[]{8,64,-8,-64}[button-40]);
+        if(!changed)return false;
+        owner.inventoryMenu.broadcastChanges();refresh();super.broadcastChanges();return true;
     }
     @Override public void broadcastChanges() {
         if (owner != null && owner.server.overworld().getGameTime() - shownAt >= 20) refresh();
