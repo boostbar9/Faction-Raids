@@ -30,6 +30,29 @@ class RaidMarchDisciplineTest extends MinecraftTestSupport {
         when(mob.isAlliedTo(target)).thenReturn(false);when(target.isAlive()).thenReturn(false);
         assertFalse(RaidMarchDiscipline.retainTarget(mob,target,Vec3.ZERO,32));
     }
+    @Test void assaultSpecialistsSwitchFromApproachToCombatAndBack() {
+        for (String role : new String[]{"commander", "breacher"}) {
+            assertTrue(RaidMarchDiscipline.pushPastDefenders(role, true, false));
+            assertFalse(RaidMarchDiscipline.pushPastDefenders(role, true, true));
+            assertTrue(RaidMarchDiscipline.pushPastDefenders(role, true, false));
+            assertFalse(RaidMarchDiscipline.pushPastDefenders(role, false, false));
+        }
+        assertFalse(RaidMarchDiscipline.pushPastDefenders("melee", true, false));
+        assertFalse(RaidMarchDiscipline.pushPastDefenders("ranged", true, false));
+    }
+    @Test void objectiveCombatStillRejectsInvalidTargets() {
+        Mob commander=mock(Mob.class); LivingEntity defender=mock(LivingEntity.class);
+        when(defender.isAlive()).thenReturn(true);
+        when(commander.distanceToSqr(defender)).thenReturn(16D);
+        when(defender.distanceToSqr(Vec3.ZERO)).thenReturn(25D);
+        assertFalse(RaidMarchDiscipline.pushPastDefenders("commander",true,true));
+        assertTrue(RaidMarchDiscipline.retainTarget(commander,defender,Vec3.ZERO,32));
+        when(commander.isAlliedTo(defender)).thenReturn(true);
+        assertFalse(RaidMarchDiscipline.retainTarget(commander,defender,Vec3.ZERO,32));
+        when(commander.isAlliedTo(defender)).thenReturn(false);
+        when(defender.isAlive()).thenReturn(false);
+        assertFalse(RaidMarchDiscipline.retainTarget(commander,defender,Vec3.ZERO,32));
+    }
     public enum Patrol { IDLE, ATTACKING, RETREATING }
     public static class Leader {
         public byte action = 1;

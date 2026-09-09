@@ -47,6 +47,10 @@ public final class RaidMarchDiscipline {
             return false; // Ordinary mobs do not expose the optional leader API.
         }
     }
+    /** Keep assault specialists on approach, but permit combat once they reach the objective area. */
+    public static boolean pushPastDefenders(String role, boolean enabled, boolean atObjective) {
+        return enabled && !atObjective && ("breacher".equals(role) || "commander".equals(role));
+    }
     public static boolean retainTarget(Mob mob,LivingEntity target,Vec3 objective,double range) {
         return target!=null && target.isAlive() && target.level()==mob.level() && !mob.isAlliedTo(target)
                 && (!(target instanceof net.minecraft.world.entity.player.Player p) || !p.isCreative() && !p.isSpectator())

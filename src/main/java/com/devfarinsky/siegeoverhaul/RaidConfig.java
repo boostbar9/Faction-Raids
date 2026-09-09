@@ -227,7 +227,7 @@ public final class RaidConfig {
                 .defineInRange("aggroRadius", 40, 8, 160);
         OFF_AXIS_DRIFT_LIMIT = b.comment("If a raider drifts this many blocks perpendicular to the invasion axis, drop its current defender target and re-lock onto the objective. Prevents raiders getting dragged sideways deep into the base by a fleeing defender.")
                 .defineInRange("offAxisDriftLimit", 24, 8, 128);
-        BREACHERS_IGNORE_DEFENDERS = b.comment("When true (default), breachers and the siege commander refuse to acquire defender targets and only path to the objective, so gate-breach progress is not interrupted by defender skirmishes. Melee raiders still engage defenders normally.")
+        BREACHERS_IGNORE_DEFENDERS = b.comment("When true (default), breachers and the siege commander ignore defender targets during the approach. Inside the objective area (1.5 times aggroRadius), they engage defenders normally. Other melee raiders engage defenders throughout the approach.")
                 .define("breachersIgnoreDefenders", true);
         // v2.23.0 Press-the-Attack:
         STUCK_DETECTION_ENABLED = b.comment("When true (default), raiders that stop making progress toward the objective get escalating help: at 5s a forced re-path plus jump plus small speed burst; at 10s a widened aggro radius so they will chase any nearby defender; at 20s the nearest wall block between them and the objective is queued for physical breaching. Fixes the classic 'raiders standing around outside the wall' problem.")
