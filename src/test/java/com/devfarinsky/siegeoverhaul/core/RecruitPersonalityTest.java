@@ -53,4 +53,21 @@ class RecruitPersonalityTest extends MinecraftTestSupport {
         for(int i=0;i<100;i++){String name=RecruitPersonality.name(a);assertEquals(name,RecruitPersonality.name(b));names.add(name);}
         assertTrue(names.size()>75);
     }
+    @Test void compatibleMusketHireUsesNativeWeaponSlotAndFiniteCartridgesOnlyOnce() {
+        Mob mob=mock(Mob.class);when(mob.getPersistentData()).thenReturn(new CompoundTag());
+        RandomSource random=mock(RandomSource.class);when(mob.getRandom()).thenReturn(random);
+        SimpleContainer inventory=new SimpleContainer(36);
+        try(var muskets=mockStatic(com.devfarinsky.siegeoverhaul.compat.MusketCompatibility.class)) {
+            muskets.when(com.devfarinsky.siegeoverhaul.compat.MusketCompatibility::kit).thenReturn(
+                    new com.devfarinsky.siegeoverhaul.compat.MusketCompatibility.Kit(Items.STICK,Items.PAPER));
+            RecruitPersonality.prepare(mob,3,inventory);
+            assertTrue(inventory.getItem(5).is(Items.STICK));
+            assertTrue(inventory.getItem(5).getHoverName().getString().endsWith("Musket"));
+            verify(mob).setItemSlot(EquipmentSlot.MAINHAND,inventory.getItem(5));
+            assertTrue(inventory.getItem(7).is(Items.PAPER));assertEquals(32,inventory.getItem(7).getCount());
+            inventory.setItem(7,ItemStack.EMPTY);
+            RecruitPersonality.prepare(mob,3,inventory);
+            assertTrue(inventory.getItem(7).isEmpty());
+        }
+    }
 }

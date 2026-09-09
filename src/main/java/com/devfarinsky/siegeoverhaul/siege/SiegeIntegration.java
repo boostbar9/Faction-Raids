@@ -212,30 +212,38 @@ public final class SiegeIntegration {
 
     /** Drive the native vehicle controller toward the core; it retains native combat targeting. */
     public static void advanceEngineer(Mob engineer, net.minecraft.core.BlockPos objective) {
-        if (!engineer.isPassenger()) return;
+        if (!engineer.isPassenger()) { EngineerAdvanceOrders.restore(engineer); return; }
         long now = engineer.level().getGameTime();
-        if (engineer.getPersistentData().contains("SiegeAdvanceAt")
-                && now - engineer.getPersistentData().getLong("SiegeAdvanceAt") < 100) return;
-        engineer.getPersistentData().putLong("SiegeAdvanceAt", now);
         Vec3 delta = Vec3.atCenterOf(objective).subtract(engineer.position()).multiply(1,0,1);
         double distance = delta.length();
         try {
             var vehicleKey=ForgeRegistries.ENTITY_TYPES.getKey(engineer.getVehicle().getType());
-            double standOff=standOff(vehicleKey!=null && vehicleKey.getPath().equals("catapult")?SiegeEngineType.CATAPULT:SiegeEngineType.BALLISTA);
-            if (distance <= standOff) {
-                if (Boolean.TRUE.equals(engineer.getClass().getMethod("getShouldMovePos").invoke(engineer)))
-                    engineer.getClass().getMethod("setShouldMovePos", boolean.class).invoke(engineer, false);
+            SiegeEngineType type=vehicleKey!=null && vehicleKey.getPath().equals("catapult")?SiegeEngineType.CATAPULT:SiegeEngineType.BALLISTA;
+            double standOff=standOff(type);
+            if (EngineerAdvanceOrders.arrived(type, distance)) {
+                if (Boolean.TRUE.equals(engineer.getClass().getMethod("getShouldMovePos").invoke(engineer))) {
+                    try { EngineerAdvanceOrders.stop(engineer); }
+                    finally { engineer.getClass().getMethod("setShouldMovePos", boolean.class).invoke(engineer, false); }
+                }
+                EngineerAdvanceOrders.restore(engineer);
                 return;
             }
+            if (engineer.getPersistentData().contains("SiegeAdvanceAt")
+                    && now - engineer.getPersistentData().getLong("SiegeAdvanceAt") < 100) return;
+            engineer.getPersistentData().putLong("SiegeAdvanceAt", now);
             Vec3 step = engineer.position().add(delta.normalize().scale(Math.min(24, distance - standOff)));
             net.minecraft.core.BlockPos ground = net.minecraft.core.BlockPos.containing(step);
-            if (!(engineer.level() instanceof ServerLevel level) || !level.hasChunkAt(ground)) return;
+            if (!(engineer.level() instanceof ServerLevel level) || !level.hasChunkAt(ground)) {
+                EngineerAdvanceOrders.restore(engineer); return;
+            }
             ground = level.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, ground);
             if (!Integer.valueOf(0).equals(engineer.getClass().getMethod("getFollowState").invoke(engineer)))
                 engineer.getClass().getMethod("setFollowState", int.class).invoke(engineer, 0);
             engineer.getClass().getMethod("setMovePos", net.minecraft.core.BlockPos.class).invoke(engineer, ground);
             engineer.getClass().getMethod("setShouldMovePos", boolean.class).invoke(engineer, true);
+            EngineerAdvanceOrders.travel(engineer, engineer.getPersistentData());
         } catch (ReflectiveOperationException | RuntimeException ex) {
+            EngineerAdvanceOrders.restore(engineer);
             FactionLogger.LOG.debug("Native siege advance unavailable: {}", ex.toString());
         }
     }

@@ -1,3 +1,12 @@
+# 4.10.6 beta
+
+- Siege captains and commanders now relinquish native patrol regroup/hold/retreat orders to the siege assault controller, including after reload. Camp guards and player-owned leaders are excluded.
+- Siege engineers prioritize driving into their established firing position before native firing/reloading. Arrival accounts for native vehicle stopping tolerance, clears latched steering, and restores the previous ranged setting; dismounted operators regain their firing setting.
+
+- Optional Epic Knights armor outfits for new core hires, heroes, and siege faction uniforms. Coordinated dye colors preserve identities; missing or disabled outfit pieces fall back to vanilla.
+- Optional ewewukek Musket Mod: one-third of newly hired ordinary crossbowmen receive a personal musket and 32 cartridges when the native Recruits musket API passes compatibility checks.
+- Existing equipment, player armor, worker jobs, hiring and loot-box prices remain unchanged. No new mandatory dependencies.
+
 # 4.10.5 beta
 
 - Ordinary soldiers hired at Siege Cores now receive randomized personal names and named role-appropriate weapons.

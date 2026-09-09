@@ -40,7 +40,10 @@ public final class FactionUniforms {
         stack.getOrCreateTag().put("Trim",trim);
         stack.getOrCreateTag().putString(FACTION,FactionBanners.FactionId.byIdOrDefault(faction).id);
         if(item instanceof DyeableLeatherItem leather) leather.setColor(stack,0x52663D);
-        return stack;
+        int factionIndex=FactionBanners.FactionId.byIdOrDefault(faction).ordinal();
+        int outfit=commander?4+factionIndex%2:wild?6:Math.floorMod(factionIndex,4);
+        int color=new int[]{0x35495C,0x74777A,0xA13E27,0x705084,0x52663D}[factionIndex];
+        return com.devfarinsky.siegeoverhaul.compat.EpicKnightsCompatibility.armor(stack,outfit,slot,color);
     }
     public static void decorateShield(ItemStack shield,String faction) {
         if(!shield.is(Items.SHIELD))return;

@@ -88,6 +88,7 @@ public final class SiegeDeployment {
                 if(vehicle.getPersistentData().hasUUID("SiegeOperatorUuid")
                         && level.getEntity(vehicle.getPersistentData().getUUID("SiegeOperatorUuid")) instanceof net.minecraft.world.entity.Mob operator
                         && operator.isAlive() && !operator.isPassenger() && state.teamKey.equals(operator.getPersistentData().getString(TEAM_TAG))) {
+                    EngineerAdvanceOrders.restore(operator);
                     double distance=operator.distanceToSqr(vehicle);
                     if(distance<=16) {
                         if(SiegeIntegration.assignSiegeEngineer(operator,vehicle))SiegeIntegration.advanceEngineer(operator,objective);
