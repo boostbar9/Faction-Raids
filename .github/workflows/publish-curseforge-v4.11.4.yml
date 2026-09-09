@@ -1,0 +1,86 @@
+name: Publish tested 4.11.4 beta to CurseForge
+on:
+  push:
+    branches: [publish/curseforge-v4.11.4]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: curseforge-1364352-v4.11.4
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34380868057
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Verify tested bytes and metadata
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          jar = Path('dist/siegeoverhaul-4.11.4.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == '7e734b0a7b6cd7741464001bb6cfdc610e7417d5b5690e6c1106e413db634ce6'
+          with zipfile.ZipFile(jar) as z:
+              data = tomllib.loads(z.read('META-INF/mods.toml').decode())
+          assert data['mods'][0]['modId'] == 'siegeoverhaul'
+          assert data['mods'][0]['version'] == '4.11.4'
+          dependencies = {x['modId']: x for x in data['dependencies']['siegeoverhaul']}
+          for mod in ['recruits', 'workers', 'smallships', 'siegeweapons']:
+              assert dependencies[mod]['mandatory'], mod
+          for mod in ['corpse', 'magistuarmory', 'musketmod']:
+              assert not dependencies[mod]['mandatory'], mod
+          print('Verified', jar.name, digest)
+          CHECK
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.11.4.jar
+          name: The Siege Overhaul v4.11.4 beta - Survivor Formations
+          version: v4.11.4
+          version-type: beta
+          changelog: |
+            ## 4.11.4 beta
+
+            - Isolated marching soldiers and lone squad survivors regroup with nearby same-role troops instead of remaining in permanent one-person squads.
+            - Preserve intact squads, proximity checks, six-unit limits and combat/engineer exclusions.
+            - No difficulty, reward, dependency or save-format changes.
+
+            Minecraft 1.20.1 Forge, Java 17. REQUIRED on server and every client: Villager Recruits 1.15.2+, Villager Workers 2 2.0.3+, Small Ships and Siege Weapons. Matching Siege Overhaul versions required. Corpse, Epic Knights and ewewukek's Musket Mod remain optional.
+
+            Validation: clean Java 17 Forge build, 217 passing regression tests, zero failures/errors/skipped. Exact tested reobfuscated artifact. No interactive Minecraft playtest. No in-game visual or long-session performance playtest was performed. Beta.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+          fail-mode: fail
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os
+          result = {'version': '4.11.4', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 4.11.4 beta: {result['url']}\n")
+          RECEIPT
