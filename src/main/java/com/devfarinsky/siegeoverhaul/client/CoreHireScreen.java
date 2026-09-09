@@ -63,7 +63,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         renderBackground(g);
         mapButton.active=minecraft!=null && minecraft.level!=null && minecraft.level.dimension()==net.minecraft.world.level.Level.OVERWORLD;
         for(int i=0;i<4;i++){
-            hire[i].visible=tab==0;hire[i].active=menu.role(i)>=0&&menu.cost(i)>=0&&!menu.sold(i)&&menu.rotation()>0;
+            hire[i].visible=tab==0;hire[i].active=menu.role(i)>=0&&menu.role(i)<CoreHiring.NAMES.length&&menu.cost(i)>=0&&!menu.sold(i)&&menu.rotation()>0;
             hire[i].setMessage(Component.literal(menu.sold(i)?"Recruited":menu.cost(i)<0?"Unavailable":"Recruit • "+menu.cost(i)));
             bank[i].visible=tab==2;bank[i].active=i<2?menu.emeralds()>0:menu.canWithdraw()&&menu.bank()>0;
         }
@@ -73,17 +73,26 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             boxes[i].setMessage(Component.literal(waitingTicks>0?"Waiting…":revealTicks>0?"Unsealing…":(confirmBox==i?"Confirm • ":"Open • ")+CoreLoot.price(i)));
             boolean active=minecraft!=null&&minecraft.player!=null&&minecraft.player.hasEffect(CoreBuffs.effect(i));
             buffs[i].active=!active&&menu.emeralds()>=CoreBuffs.PRICES[i];
-            buffs[i].setMessage(Component.literal(active?"Blessing active":"Bless • "+CoreBuffs.PRICES[i]));
+            buffs[i].setMessage(Component.literal(active?"Active • "+effectTime(i):"Bless • "+CoreBuffs.PRICES[i]));
         }
         super.render(g,mx,my,partial);
+        if(mapButton.isHovered())tooltip(g,mapButton.active?"Open the full Recruits map. Closes this command center.":"The Recruits territory map is available in the Overworld.",mx,my);
+        if(tab==2)for(int i=0;i<4;i++)if(bank[i].isHovered())tooltip(g,i<2?"Deposit up to "+(i==0?8:64)+" personal emeralds. Your purse: "+menu.emeralds():!menu.canWithdraw()?"Only the faction leader can withdraw emeralds.":"Withdraw up to "+(i==2?8:64)+" emeralds. Limited by bank balance and inventory space.",mx,my);
         if(tab==0)for(int i=0;i<4;i++)if(over(mx,my,layout.cardX(i),layout.cardY(i),layout.cardWidth(),layout.cardHeight())&&menu.role(i)>=0&&menu.role(i)<CoreHiring.NAMES.length){
             int role=menu.role(i);String info=CoreHiring.NAMES[role]+" • "+CoreHiring.rarity(role)+" • "+(i==3?HeroTraits.description(role):"Shared faction offer; refreshes every 15 minutes. Portrait shows the role; hired equipment varies.");
             tooltip(g,info,mx,my);
         }
         if(tab==1)for(int i=0;i<3;i++){
             if(over(mx,my,layout.cardX(0),layout.marketY(i),layout.cardWidth(),layout.marketHeight()))tooltip(g,revealBox==i&&revealTicks==0&&!revealed.isEmpty()?CoreLoot.rarity(revealedTier)+" • "+revealed.getCount()+"× "+revealed.getHoverName().getString():"One mystery reward • "+CoreLoot.odds(),mx,my);
-            if(over(mx,my,layout.cardX(1),layout.marketY(i),layout.cardWidth(),layout.marketHeight()))tooltip(g,CoreBuffs.DETAILS[i]+" for 5 minutes. Uses your personal emeralds; existing effects are preserved.",mx,my);
+            if(over(mx,my,layout.cardX(1),layout.marketY(i),layout.cardWidth(),layout.marketHeight()))tooltip(g,CoreBuffs.DETAILS[i]+" • "+(minecraft!=null&&minecraft.player!=null&&minecraft.player.hasEffect(CoreBuffs.effect(i))?"Current effect remaining: "+effectTime(i):"Duration: 5 minutes")+". Uses your personal emeralds; existing effects are preserved.",mx,my);
         }
+    }
+    private String effectTime(int index){
+        var effect=minecraft==null||minecraft.player==null?null:minecraft.player.getEffect(CoreBuffs.effect(index));
+        if(effect==null)return "0:00";
+        if(effect.isInfiniteDuration())return "Infinite";
+        int seconds=(int)Math.max(0,(effect.getDuration()+19L)/20);
+        return String.format(java.util.Locale.ROOT,"%d:%02d",seconds/60,seconds%60);
     }
     private boolean over(int mx,int my,int x,int y,int w,int h){return mx>=x&&mx<x+w&&my>=y&&my<y+h;}
     private void tooltip(GuiGraphics g,String text,int x,int y){g.renderTooltip(font,font.split(Component.literal(text),Math.min(300,width-24)),x,y);}
@@ -169,7 +178,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int x=layout.cardX(1),y=layout.marketY(i),w=layout.cardWidth(),h=layout.marketHeight();panel(g,x,y,w,h,TEAL);
         g.renderItem(new ItemStack(i==0?Items.FEATHER:i==1?Items.BLAZE_POWDER:Items.AMETHYST_SHARD),x+7,y+7);
         text(g,CoreBuffs.NAMES[i],x+29,y+6,w-36,TEXT);if(h>=49)text(g,CoreBuffs.DETAILS[i],x+29,y+17,w-36,MUTED);
-        if(h>64)text(g,"Personal blessing • 5 min",x+9,y+34,w-18,TEAL);
+        if(h>=68)text(g,"Personal blessing • 5 min",x+9,y+34,w-18,TEAL);
     }
     private void drawFaction(GuiGraphics g){
         int x=layout.x(),y=layout.contentY()-62,w=layout.width(),h=layout.contentHeight()+84;
@@ -178,13 +187,25 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         text(g,String.format(java.util.Locale.ROOT,"Bank: %,d emeralds",menu.bank()),x+18,y+80,w/2-24,GOLD);
         text(g,"Next wave "+menu.nextWave()+": +"+menu.nextReward(),x+w/2,y+68,w/2-18,TEAL);
         text(g,menu.voteSeconds()>0?"Retreat vote: "+menu.voteSeconds()+"s":menu.currentWave()>0?"Surviving wave "+menu.currentWave():"Preparing for the next siege",x+w/2,y+81,w/2-18,MUTED);
-        text(g,"FACTION ROSTER",x+12,y+130,w-24,VIOLET);
-        int lines=Math.max(1,(h-163)/12);rosterOffset=Math.min(rosterOffset,Math.max(0,menu.members().size()-lines));
-        if(menu.members().isEmpty())text(g,"Roster is synchronizing…",x+14,y+145,w-28,MUTED);
-        for(int i=0;i<lines&&i+rosterOffset<menu.members().size();i++)text(g,menu.members().get(i+rosterOffset),x+14,y+145+i*12,w-28,TEXT);
+        int lines=layout.rosterLines(),count=menu.members().size();
+        rosterOffset=layout.rosterOffset(rosterOffset,count);
+        text(g,"FACTION ROSTER • "+count,x+12,y+130,w-130,VIOLET);
+        if(count>0)text(g,(rosterOffset+1)+"–"+Math.min(count,rosterOffset+lines)+" / "+count,x+w-112,y+130,100,MUTED);
+        if(count==0)text(g,"No faction members listed",x+14,layout.rosterY(),w-28,MUTED);
+        for(int i=0;i<lines&&i+rosterOffset<count;i++){
+            int rowY=layout.rosterY()+i*12;
+            if(i%2==0)g.fill(x+11,rowY-1,x+w-17,rowY+10,0x202f425b);
+            text(g,menu.members().get(i+rosterOffset),x+14,rowY,w-36,TEXT);
+        }
+        if(count>lines){
+            int track=lines*12,thumb=Math.max(8,track*lines/count);
+            int top=layout.rosterY()+(track-thumb)*rosterOffset/(count-lines);
+            g.fill(x+w-14,layout.rosterY(),x+w-11,layout.rosterY()+track,0xff293447);
+            g.fill(x+w-14,top,x+w-11,top+thumb,VIOLET);
+        }
     }
     @Override public boolean mouseScrolled(double x,double y,double delta){
-        if(tab==2){rosterOffset=Math.max(0,Math.min(Math.max(0,menu.members().size()-1),rosterOffset-(int)Math.signum(delta)));return true;}
+        if(tab==2&&layout.overRoster(x,y)&&delta!=0){rosterOffset=layout.rosterOffset(rosterOffset-(int)Math.signum(delta),menu.members().size());return true;}
         return super.mouseScrolled(x,y,delta);
     }
 }

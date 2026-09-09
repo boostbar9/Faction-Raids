@@ -42,6 +42,19 @@ class KingdomCommandLayoutTest {
         }
         assertTrue(animated);
     }
+    @Test void rosterStaysWithinContentAndClampsAfterResizeOrMembershipChanges() {
+        for(int[] size:new int[][]{{320,240},{640,360},{854,480},{1920,1080}}){
+            var l=CoreHireLayout.fit(size[0],size[1]);
+            assertTrue(l.rosterY()+l.rosterLines()*12<=l.contentY()+l.contentHeight());
+            assertEquals(0,l.rosterOffset(99,0));
+            assertEquals(0,l.rosterOffset(-1,100));
+            assertEquals(100-l.rosterLines(),l.rosterOffset(100,100));
+            assertEquals(0,l.rosterOffset(90,2));
+            assertFalse(l.overRoster(l.x()+15,l.contentY()+40));
+            assertTrue(l.overRoster(l.x()+15,l.rosterY()));
+            assertFalse(l.overRoster(l.x()+15,l.rosterY()+l.rosterLines()*12));
+        }
+    }
     @Test void smallScreensCollapseOverviewButNormalScreensShowIt() {
         assertEquals(0,CoreHireLayout.fit(320,240).overviewHeight());
         assertTrue(CoreHireLayout.fit(640,360).overviewHeight()>=80);

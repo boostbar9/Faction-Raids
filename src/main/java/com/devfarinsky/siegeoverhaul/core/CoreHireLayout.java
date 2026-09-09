@@ -16,6 +16,10 @@ public record CoreHireLayout(int x,int y,int width,int height,boolean compact) {
     public int cardHeight(){return (contentHeight()-6)/2;}
     public int cardX(int i){return x+10+(i%2)*(cardWidth()+10);}
     public int cardY(int i){return contentY()+(i/2)*(cardHeight()+6);}
+    public int rosterY(){return contentY()+83;}
+    public int rosterLines(){return Math.max(1,(contentHeight()-83)/12);}
+    public int rosterOffset(int offset,int members){return Math.max(0,Math.min(offset,Math.max(0,members-rosterLines())));}
+    public boolean overRoster(double mx,double my){return mx>=x+10 && mx<x+width-10 && my>=rosterY() && my<rosterY()+rosterLines()*12;}
     public int marketHeight(){return (contentHeight()-8)/3;}
     /** Keep the animated reel above the purchase control at every GUI scale. */
     public int marketButtonY(int i){return marketY(i)+marketHeight()-21;}

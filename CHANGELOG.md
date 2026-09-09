@@ -1,5 +1,7 @@
 # 4.12.0 beta — command-center preview
 
+- Show remaining active-effect time, explain bank permissions and map controls, and add bounded roster scrolling with member counts, alternating rows and a scroll indicator. Keep buff descriptions above compact purchase controls.
+
 - Keep the loot reveal reel clear of purchase buttons across GUI scales; show personal emeralds on the market tab even when the overview is collapsed. Prevent long faction names from overlapping the treasury header.
 
 - Rebuild the core around Kingdom Command: layered panels, responsive territory overview, faction treasury and live wave/reward status above the existing three service tabs.
