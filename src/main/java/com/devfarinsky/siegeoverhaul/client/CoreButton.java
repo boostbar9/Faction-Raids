@@ -10,6 +10,14 @@ import java.util.function.BooleanSupplier;
 public final class CoreButton extends Button {
     private final BooleanSupplier selected;
     private final boolean tab;
+    private java.util.function.Supplier<net.minecraft.world.item.ItemStack> currency=()->net.minecraft.world.item.ItemStack.EMPTY;
+    public CoreButton currency(java.util.function.Supplier<net.minecraft.world.item.ItemStack> currency){this.currency=currency;return this;}
+    static void itemIcon(GuiGraphics g,net.minecraft.world.item.ItemStack item,int x,int y,int size){
+        if(item.isEmpty())return;
+        g.pose().pushPose();
+        try{g.pose().translate(x,y,0);g.pose().scale(size/16.0f,size/16.0f,1);g.renderItem(item,0,0);}
+        finally{g.pose().popPose();}
+    }
     private float hoverLight;
     private long lastFrame;
     public CoreButton(Component text,OnPress press,int x,int y,int width,int height,boolean tab,BooleanSupplier selected) {
@@ -31,7 +39,9 @@ public final class CoreButton extends Button {
         g.fillGradient(getX()+2,getY()+2,getX()+width-2,getY()+height-2,(light<<24)|0xd7b8ff,0x00d7b8ff);
         if(chosen)g.fill(getX()+8,getY()+height-2,getX()+width-8,getY()+height-1,0xffe2c581);
         var font=Minecraft.getInstance().font;
-        String label=font.plainSubstrByWidth(getMessage().getString(),Math.max(1,width-12));
-        g.drawCenteredString(font,label,getX()+width/2,getY()+(height-8)/2,!active?0xff728091:chosen?0xfff1ddb2:0xfff1f5f8);
+        var item=currency.get();int reserve=item.isEmpty()?0:14;
+        if(reserve>0)itemIcon(g,item,getX()+5,getY()+(height-10)/2,10);
+        String label=font.plainSubstrByWidth(getMessage().getString(),Math.max(1,width-12-reserve));
+        g.drawCenteredString(font,label,getX()+(width+reserve)/2,getY()+(height-8)/2,!active?0xff728091:chosen?0xfff1ddb2:0xfff1f5f8);
     }
 }

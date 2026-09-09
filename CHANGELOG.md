@@ -1,5 +1,7 @@
 # 4.12.0 beta — command-center preview
 
+- Show the native Minecraft emerald beside balances, wave rewards, loot and blessing prices, and bank controls. Recruitment uses the actual configured hiring currency icon.
+
 - Introduce a consistent set of small custom command icons for kingdom, territory, combat, treasury, sealed loot and blessings. Actual recruit equipment and revealed rewards retain their item icons.
 
 - Add custom obsidian, gold and amethyst command-center artwork behind the existing functional panels.

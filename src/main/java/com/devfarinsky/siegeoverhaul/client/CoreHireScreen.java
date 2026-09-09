@@ -19,6 +19,7 @@ import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> {
     private static final int TEXT=0xffeee9ff,MUTED=0xffa6a9c7,GOLD=0xffe2c581,TEAL=0xff81e8da,VIOLET=0xffb89aff;
     private static final net.minecraft.resources.ResourceLocation COMMAND_ART=new net.minecraft.resources.ResourceLocation(SiegeOverhaul.MOD_ID,"textures/gui/kingdom_command.png");
+    private static final ItemStack EMERALD_ICON=new ItemStack(Items.EMERALD);
     private CoreHireLayout layout;
     private RecruitsTerritoryView territory;
     private Button mapButton;
@@ -40,9 +41,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         mapButton=addRenderableWidget(new CoreButton(Component.literal("Open map"),b->RecruitsTerritoryView.openFullMap(),layout.x()+layout.width()-92,layout.y()+7,82,21,false,()->false));
         for(int i=0;i<4;i++){
             final int index=i;
-            hire[i]=addRenderableWidget(new CoreButton(Component.literal("Recruit"),b->RaidNetwork.purchaseCoreOffer(menu.containerId,index,menu.rotation()),layout.cardX(i)+8,layout.cardY(i)+layout.cardHeight()-23,layout.cardWidth()-16,18,false,()->false));
+            hire[i]=addRenderableWidget(new CoreButton(Component.literal("Recruit"),b->RaidNetwork.purchaseCoreOffer(menu.containerId,index,menu.rotation()),layout.cardX(i)+8,layout.cardY(i)+layout.cardHeight()-23,layout.cardWidth()-16,18,false,()->false).currency(()->menu.sold(index)||menu.cost(index)<0?ItemStack.EMPTY:menu.getSlot(4).getItem()));
             int bw=(layout.width()-38)/4;
-            bank[i]=addRenderableWidget(new CoreButton(Component.literal(new String[]{"Store 8","Store 64","Take 8","Take 64"}[i]),b->action(40+index),layout.x()+10+i*(bw+6),layout.contentY()+40,bw,18,false,()->false));
+            bank[i]=addRenderableWidget(new CoreButton(Component.literal(new String[]{"Store 8","Store 64","Take 8","Take 64"}[i]),b->action(40+index),layout.x()+10+i*(bw+6),layout.contentY()+40,bw,18,false,()->false).currency(()->EMERALD_ICON));
         }
         for(int i=0;i<3;i++){
             final int index=i;int y=layout.marketButtonY(i);
@@ -50,8 +51,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 if(confirmBox!=index){confirmBox=index;return;}
                 if(waitingTicks>0||revealTicks>0)return;
                 waitingTicks=60;action(20+index);confirmBox=-1;
-            },layout.cardX(0)+7,y,layout.cardWidth()-14,17,false,()->confirmBox==index));
-            buffs[i]=addRenderableWidget(new CoreButton(Component.literal("Bless"),b->action(30+index),layout.cardX(1)+7,y,layout.cardWidth()-14,17,false,()->false));
+            },layout.cardX(0)+7,y,layout.cardWidth()-14,17,false,()->confirmBox==index).currency(()->waitingTicks>0||revealTicks>0?ItemStack.EMPTY:EMERALD_ICON));
+            buffs[i]=addRenderableWidget(new CoreButton(Component.literal("Bless"),b->action(30+index),layout.cardX(1)+7,y,layout.cardWidth()-14,17,false,()->false).currency(()->minecraft!=null&&minecraft.player!=null&&minecraft.player.hasEffect(CoreBuffs.effect(index))?ItemStack.EMPTY:EMERALD_ICON));
         }
     }
     @Override protected void containerTick(){
@@ -98,6 +99,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private boolean over(int mx,int my,int x,int y,int w,int h){return mx>=x&&mx<x+w&&my>=y&&my<y+h;}
     private void tooltip(GuiGraphics g,String text,int x,int y){g.renderTooltip(font,font.split(Component.literal(text),Math.min(300,width-24)),x,y);}
     private void text(GuiGraphics g,String text,int x,int y,int width,int color){g.drawString(font,font.plainSubstrByWidth(text,Math.max(1,width)),x,y,color,false);}
+    private void emeraldText(GuiGraphics g,String label,int x,int y,int width,int color){
+        CoreButton.itemIcon(g,EMERALD_ICON,x,y-1,10);
+        text(g,label,x+13,y,width-13,color);
+    }
     private void panel(GuiGraphics g,int x,int y,int w,int h,int accent){
         CoreButton.panel(g,x+1,y+3,w,h,0x70000000);
         CoreButton.panel(g,x,y,w,h,0xff354157);
@@ -114,14 +119,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         CommandIcon.CROWN.draw(g,x+12,y+9,16);
         text(g,"KINGDOM COMMAND",x+36,y+7,w>=600?w-286:w-140,GOLD);
         text(g,menu.factionName(),x+36,y+20,w>=600?w-286:w-140,MUTED);
-        if(w>=600)text(g,String.format(java.util.Locale.ROOT,"Treasury %,d",menu.bank()),x+w-240,y+14,138,TEAL);
+        if(w>=600)emeraldText(g,String.format(java.util.Locale.ROOT,"Treasury %,d",menu.bank()),x+w-240,y+14,138,TEAL);
         g.fill(x+10,y+32,x+w-10,y+33,0xff63567a);
         if(layout.overviewHeight()>0)drawOverview(g);
         if(tab==0)for(int i=0;i<4;i++)drawHire(g,i);
         else if(tab==1)for(int i=0;i<3;i++){drawLoot(g,i);drawBuff(g,i);}
         else drawFaction(g);
         String footer=tab==0?String.format(java.util.Locale.ROOT,"Shared stock • Refresh %d:%02d",menu.seconds()/60,menu.seconds()%60):tab==1?"Your emeralds: "+menu.emeralds()+" • Loot & five-minute blessings":"Interest "+menu.interestRate()/100.0+"% /24h • Leader withdrawals • Scroll roster";
-        text(g,footer,x+10,y+h-13,w-20,MUTED);
+        if(tab==1)emeraldText(g,footer,x+10,y+h-13,w-20,MUTED);else text(g,footer,x+10,y+h-13,w-20,MUTED);
     }
     private void drawOverview(GuiGraphics g){
         int x=layout.x()+10,y=layout.overviewY(),h=layout.overviewHeight(),mw=layout.mapWidth();
@@ -142,10 +147,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             String next=menu.voteSeconds()>0?"Retreat vote: "+menu.voteSeconds()+"s":menu.currentWave()>0?"Retreat checkpoint: "+EndlessSiege.nextCheckpoint(menu.currentWave()):"Prepare your defenses";
             text(g,next,sx+10,y+38,sw-20,MUTED);
             g.fill(sx+10,y+52,sx+sw-10,y+53,0xff3a4154);
-            text(g,"Next wave: +"+menu.nextReward()+" emeralds",sx+10,y+61,sw-20,TEAL);
+            emeraldText(g,"Next wave: +"+menu.nextReward(),sx+10,y+61,sw-20,TEAL);
         }
-        if(h>=115){text(g,String.format(java.util.Locale.ROOT,"Faction bank: %,d",menu.bank()),sx+10,y+80,sw-20,TEXT);
-            text(g,"Your purse: "+menu.emeralds(),sx+10,y+96,sw-20,MUTED);}
+        if(h>=115){emeraldText(g,String.format(java.util.Locale.ROOT,"Faction bank: %,d",menu.bank()),sx+10,y+80,sw-20,TEXT);
+            emeraldText(g,"Your purse: "+menu.emeralds(),sx+10,y+96,sw-20,MUTED);}
     }
     @Override public void removed(){if(territory!=null)territory.close();portraits.clear();super.removed();}
     private void drawHire(GuiGraphics g,int i){
@@ -189,8 +194,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         panel(g,x+10,y+62,w-20,34,VIOLET);
         CommandIcon.BANK.draw(g,x+17,y+68,20);
         text(g,menu.factionName(),x+42,y+67,w/2-48,TEXT);
-        text(g,String.format(java.util.Locale.ROOT,"Bank: %,d emeralds",menu.bank()),x+42,y+80,w/2-48,GOLD);
-        text(g,"Next wave "+menu.nextWave()+": +"+menu.nextReward(),x+w/2,y+68,w/2-18,TEAL);
+        emeraldText(g,String.format(java.util.Locale.ROOT,"Bank: %,d",menu.bank()),x+42,y+80,w/2-48,GOLD);
+        emeraldText(g,"Next wave "+menu.nextWave()+": +"+menu.nextReward(),x+w/2,y+68,w/2-18,TEAL);
         text(g,menu.voteSeconds()>0?"Retreat vote: "+menu.voteSeconds()+"s":menu.currentWave()>0?"Surviving wave "+menu.currentWave():"Preparing for the next siege",x+w/2,y+81,w/2-18,MUTED);
         int lines=layout.rosterLines(),count=menu.members().size();
         rosterOffset=layout.rosterOffset(rosterOffset,count);
