@@ -88,6 +88,12 @@ public final class CoreHiring {
             if (!found) { recruit.discard(); player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Clear a safe space beside the core for your new unit.")); return false; }
             recruit.finalizeSpawn(player.serverLevel(), player.serverLevel().getCurrentDifficultyAt(recruit.blockPosition()), MobSpawnType.EVENT, null, null);
             if (role>=10) prepareHero(recruit,role);
+            else if (role < CoreOffers.WORKER_START) {
+                Object inventory = recruit.getClass().getMethod("getInventory").invoke(recruit);
+                if (!(inventory instanceof net.minecraft.world.SimpleContainer container))
+                    throw new IllegalStateException("Recruit inventory missing");
+                RecruitPersonality.prepare(recruit, role, container);
+            }
             // Use the same configured price as native villager hiring trades. Some workers
             // still hard-code their spawn cost, so align the entity with the displayed trade.
             int price = Math.max(0, cost(role));

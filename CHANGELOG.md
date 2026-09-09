@@ -1,3 +1,9 @@
+# 4.10.5 beta
+
+- Ordinary soldiers hired at Siege Cores now receive randomized personal names and named role-appropriate weapons.
+- New core hires arrive in iron and chainmail armor with coordinated randomized trim colors, eight bread, and thirty-two arrows for ranged roles. Shieldmen receive shields.
+- Existing soldiers, worker jobs, named heroes, hiring prices, ownership and unit limits are unchanged. Equipment is assigned once and uses the native inventory.
+
 # 4.10.4 beta
 
 - Fail closed when an installed optional claim provider throws: claim-aware placement no longer proceeds after silently disabling protection.
