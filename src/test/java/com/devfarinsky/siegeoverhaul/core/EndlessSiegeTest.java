@@ -72,4 +72,26 @@ class EndlessSiegeTest extends MinecraftTestSupport {
         assertEquals(0,raid.campaign.getInt("PaidWave"));
         raid.coreCaptured=false; assertTrue(EndlessSiege.awardClearedWave(data,raid,1000,100)>0);
     }
+    @Test void reconnectReminderKeepsTheOriginalBallotAndDoesNotIncludeOutsidersOrRepeatVoters() {
+        var player=org.mockito.Mockito.mock(net.minecraft.server.level.ServerPlayer.class);var id=UUID.randomUUID();
+        org.mockito.Mockito.when(player.getUUID()).thenReturn(id);
+        org.mockito.Mockito.when(player.getPersistentData()).thenReturn(new CompoundTag());
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        EndlessSiege.begin(raid.campaign,10,List.of(id),"original");var before=raid.campaign.copy();
+        EndlessSiege.remind(player,raid);assertEquals(before,raid.campaign);
+        org.mockito.Mockito.verify(player).sendSystemMessage(org.mockito.ArgumentMatchers.any(net.minecraft.network.chat.Component.class));
+        org.mockito.Mockito.clearInvocations(player);EndlessSiege.cast(raid.campaign,id,"original",true);
+        EndlessSiege.remind(player,raid);org.mockito.Mockito.verify(player,org.mockito.Mockito.never()).sendSystemMessage(org.mockito.ArgumentMatchers.any());
+    }
+    @Test void automaticRemindersWaitForMembershipAndSendOnlyOnceUntilReconnect() {
+        var player=org.mockito.Mockito.mock(net.minecraft.server.level.ServerPlayer.class);var id=UUID.randomUUID();var tag=new CompoundTag();
+        org.mockito.Mockito.when(player.getUUID()).thenReturn(id);org.mockito.Mockito.when(player.getPersistentData()).thenReturn(tag);
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        EndlessSiege.remindIfNeeded(player,null);
+        EndlessSiege.begin(raid.campaign,5,List.of(id),"vote");
+        EndlessSiege.remindIfNeeded(player,raid);EndlessSiege.remindIfNeeded(player,raid);
+        org.mockito.Mockito.verify(player,org.mockito.Mockito.times(1)).sendSystemMessage(org.mockito.ArgumentMatchers.any());
+        tag.remove("SiegeVoteReminder");EndlessSiege.remindIfNeeded(player,raid);
+        org.mockito.Mockito.verify(player,org.mockito.Mockito.times(2)).sendSystemMessage(org.mockito.ArgumentMatchers.any());
+    }
 }

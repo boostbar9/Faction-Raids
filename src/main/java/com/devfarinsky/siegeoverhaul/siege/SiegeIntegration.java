@@ -173,6 +173,9 @@ public final class SiegeIntegration {
      * @return the spawned mob, or empty on failure.
      */
     public static Optional<Mob> spawnSiegeEngineer(ServerLevel level, Vec3 pos, String team, Entity vehicle, SiegeEngineType type) {
+        return spawnSiegeEngineer(level,pos,team,vehicle,type,true);
+    }
+    public static Optional<Mob> spawnSiegeEngineer(ServerLevel level, Vec3 pos, String team, Entity vehicle, SiegeEngineType type, boolean mount) {
         if (!isRecruitsPresent()) return Optional.empty();
         if (!ForgeRegistries.ENTITY_TYPES.containsKey(SIEGE_ENGINEER_ID)) return Optional.empty();
         EntityType<?> et = ForgeRegistries.ENTITY_TYPES.getValue(SIEGE_ENGINEER_ID);
@@ -181,6 +184,12 @@ public final class SiegeIntegration {
         if (!(entity instanceof Mob mob)) return Optional.empty();
         try {
             mob.moveTo(pos.x, pos.y, pos.z, vehicle.getYRot(), 0F);
+            if(!mount) {
+                var raid=com.devfarinsky.siegeoverhaul.RaidSavedData.get(level.getServer()).raids.get(team);
+                var safe=raid==null?null:com.devfarinsky.siegeoverhaul.camp.WarGate.spawn(level,raid,mob);
+                if(safe==null){mob.discard();return Optional.empty();}
+                mob.moveTo(safe.getX()+.5,safe.getY(),safe.getZ()+.5,vehicle.getYRot(),0F);
+            }
             com.devfarinsky.siegeoverhaul.compat.EngineerSpawnCompatibility.initialize(level, mob);
             com.devfarinsky.siegeoverhaul.RecruitsBridge.configureHostileRaidRecruit(mob);
             com.devfarinsky.siegeoverhaul.RecruitsBridge.assignToRaidersFaction(mob);
@@ -197,7 +206,8 @@ public final class SiegeIntegration {
             if (ammunition == null || ammunition == net.minecraft.world.item.Items.AIR) throw new IllegalStateException("Missing siege ammunition");
             inventory.addItem(new net.minecraft.world.item.ItemStack(ammunition, 64));
             inventory.addItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 16));
-            if (!assignSiegeEngineer(mob, vehicle) || !level.addFreshEntity(mob)) {
+            if ((!mount && (!level.hasChunkAt(mob.blockPosition()) || !level.noCollision(mob)))
+                    || (mount && !assignSiegeEngineer(mob, vehicle)) || !level.addFreshEntity(mob)) {
                 mob.stopRiding(); mob.discard(); return Optional.empty();
             }
             return Optional.of(mob);

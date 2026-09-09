@@ -25,20 +25,36 @@ public final class CampDevelopment {
         double x=-Math.cos(raid.approachAngle),z=-Math.sin(raid.approachAngle);
         Direction front=Math.abs(x)>=Math.abs(z)?(x>=0?Direction.EAST:Direction.WEST):(z>=0?Direction.SOUTH:Direction.NORTH);
         Direction extension=raid.campUpgradeStage==0?front.getClockWise():raid.campUpgradeStage==1?front.getCounterClockWise():front.getOpposite();
-        BlockPos center=raid.campPos.relative(extension,15);
+        for(BlockPos center : candidates(raid.campPos,extension)) if(trySite(level,raid,center))return;
+    }
+    static List<BlockPos> candidates(BlockPos camp,Direction preferred) {
+        var sites=new ArrayList<BlockPos>();
+        for(int distance:new int[]{15,23}) for(Direction side:new Direction[]{preferred,preferred.getClockWise(),preferred.getCounterClockWise(),preferred.getOpposite()})
+            sites.add(camp.relative(side,distance));
+        return sites;
+    }
+    private static boolean trySite(ServerLevel level,RaidSavedData.RaidState raid,BlockPos center) {
+        var anchor=RaidSavedData.get(level.getServer()).anchors.get(raid.teamKey);
+        if(anchor==null)return false;
+        Set<net.minecraft.world.level.ChunkPos> checked=new HashSet<>();
         Map<Long,String> plan=new LinkedHashMap<>();
         int y=Integer.MIN_VALUE;
         for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++) {
             BlockPos p=center.offset(dx,0,dz);
-            if(!level.hasChunkAt(p))return;
+            if(!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p))return false;
+            if(checked.add(new net.minecraft.world.level.ChunkPos(p))) {
+                var claim=com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.getClaimAt(level,p).orElse(null);
+                if(claim==null || !claim.claimId().equals(raid.campClaimId)
+                        || com.devfarinsky.siegeoverhaul.compat.ClaimBridge.isForeignClaim(level,p,anchor.withIdentity(claim.ownerFactionStringId(),anchor.teamDisplay())))return false;
+            }
             y=Math.max(y,level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,p.getX(),p.getZ()));
         }
-        if(Math.abs(y-raid.campPos.getY())>2)return;
+        if(Math.abs(y-raid.campPos.getY())>2)return false;
         center=new BlockPos(center.getX(),y,center.getZ());
         for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++) {
             BlockPos p=center.offset(dx,0,dz);
             int ground=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,p.getX(),p.getZ());
-            if(y-ground>2 || !level.getFluidState(new BlockPos(p.getX(),ground-1,p.getZ())).isEmpty())return;
+            if(y-ground>2 || !level.getFluidState(new BlockPos(p.getX(),ground-1,p.getZ())).isEmpty())return false;
             for(int sy=ground;sy<y;sy++)plan.put(new BlockPos(p.getX(),sy,p.getZ()).asLong(),"minecraft:cobblestone");
             plan.put(p.asLong(),"minecraft:spruce_planks");
         }
@@ -54,7 +70,7 @@ public final class CampDevelopment {
         plan.put(center.offset(-2,1,2).asLong(),"minecraft:hay_block");
         raid.pendingCampBlocks.putAll(plan);
         // Never fall back to remote placement for an upgrade or replace an obstructing player block.
-        if(NativeCampConstruction.start(level,raid)) raid.campUpgradeStage++;
-        else raid.pendingCampBlocks.clear();
+        if(NativeCampConstruction.start(level,raid)) { raid.campUpgradeStage++; return true; }
+        raid.pendingCampBlocks.clear(); return false;
     }
 }

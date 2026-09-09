@@ -154,3 +154,10 @@ The bank earns **1% interest per real 24-hour day** by default, configurable fro
 Core sieges continue through progressively stronger five-wave chapters. Reinforcements are staged under existing active-entity and performance caps. Every fifth cleared wave offers a 60-second clickable retreat vote to the faction's eligible online members. Each member gets one ballot; a strict majority accepts retreat. A tie or no majority continues the siege. Capturing the enemy core on its War Gate pad also ends the invasion: outnumber the defenders in the capture radius for the configured recapture duration. Camp restoration still runs afterward.
 
 Bank withdrawals, buffs, and voting are validated on the server. Matching server/client versions are required. This beta is validated by automated checks, not an interactive Minecraft playtest.
+
+
+### Long-campaign reliability (4.11.2)
+
+Later waves can reuse a siege-owned engine when its previous crew is confirmed killed and the vehicle is unoccupied. Replacement engineers deploy at the War Gate and walk to their assigned equipment; vehicles are never teleported. The fleet and population limits still apply. Mounting captured artillery protects it from siege reuse and end-of-siege cleanup. Unknown crew deaths from older saves are preserved rather than guessed.
+
+Assault navigation retries prolonged circling while allowing short detours. Builders try alternative claim-checked upgrade sites if the preferred site is obstructed, without replacing player blocks. Guards retain their stationed aggressive defense. Bank actions report the actual transfer and balance. Eligible members can recover an uncast retreat ballot after reconnecting or reopening the core; the original deadline and one-vote limit remain. Practice sieges show zero upcoming bank payment. Loot-box contents stay hidden.

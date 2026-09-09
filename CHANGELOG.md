@@ -1,3 +1,10 @@
+# 4.11.2 beta
+
+- Later waves can reuse unoccupied siege-owned artillery after its previous crew is confirmed killed. Replacement crews deploy at the War Gate and walk to their equipment, without teleporting or increasing the fleet limit. Player-mounted equipment is excluded from reuse and cleanup.
+- Assault paths now recover after ten seconds without approaching their objective, while retaining short obstacle detours and combat behavior.
+- Camp builders try eight bounded upgrade sites when a preferred site is obstructed, preserving player blocks, camp claims and external claim exclusions.
+- Reopening the core or reconnecting restores uncast active retreat-vote links. Bank transactions report the actual transferred amount and balance; practice sieges show zero upcoming bank rewards. Loot-box contents stay hidden.
+
 # 4.11.1 beta
 
 - Credit a cleared wave before checking enemy-core victory, so simultaneous last-enemy defeat and core capture cannot lose the wave reward.

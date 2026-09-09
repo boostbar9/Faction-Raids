@@ -95,7 +95,7 @@ public final class SiegeConstruction {
                 Optional<Entity> vehicle = SiegeIntegration.spawnSiegeVehicle(level, type, new Vec3(x + 0.5, y, z + 0.5), yaw);
                 if (vehicle.isEmpty()) continue;
                 vehicle.get().getPersistentData().putString(SiegeDeployment.TEAM_TAG, teamKey);
-                vehicle.get().getPersistentData().putInt("SiegeSupportWave", state.wave);
+                vehicle.get().getPersistentData().putInt(SiegeFleet.SUPPORT_WAVE, state.wave);
                 state.siegeEngines.put(vehicle.get().getUUID(), type.name());
                 return true;
             }
