@@ -73,12 +73,16 @@ public final class EndlessSiege {
                 .append(choice("[Accept retreat]", token, true)).append(" ").append(choice("[Fight 5 more]", token, false))
                 .append(Component.literal(" Strict majority of " + state.campaign.getCompound("Electorate").size() + " eligible members; 60 seconds. A tie/no majority continues. Next wave: " + reward(state.wave + 1) + " bank emeralds.")));
     }
+    public static void remindIfNeeded(ServerPlayer player,RaidSavedData.RaidState state) {
+        if(active(state) && !state.campaign.getString("VoteToken").equals(player.getPersistentData().getString("SiegeVoteReminder")))remind(player,state);
+    }
     /** Re-send the existing ballot; never reopen a vote or change its electorate. */
     public static void remind(ServerPlayer player, RaidSavedData.RaidState state) {
         if(!active(state) || !voting(state) || player.isSpectator()
                 || !state.campaign.getCompound("Electorate").getBoolean(player.getUUID().toString())
                 || state.campaign.getCompound("Ballots").contains(player.getUUID().toString()))return;
         String token=state.campaign.getString("VoteToken");
+        player.getPersistentData().putString("SiegeVoteReminder",token);
         player.sendSystemMessage(Component.literal("Wave "+state.campaign.getInt("VoteWave")+" retreat vote: "+(state.campaign.getInt("VoteTicks")+19)/20+"s remaining. ")
                 .append(choice("[Accept retreat]",token,true)).append(" ").append(choice("[Fight 5 more]",token,false)));
     }

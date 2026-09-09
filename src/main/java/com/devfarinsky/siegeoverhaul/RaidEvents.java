@@ -465,7 +465,10 @@ public final class RaidEvents {
      */
     @SubscribeEvent
     public static void onPlayerLoggedIn(net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
-        if(event.getEntity() instanceof ServerPlayer player) EndlessSiege.remind(player,RaidSavedData.get(player.server).raids.get(com.devfarinsky.siegeoverhaul.core.SiegeCore.key(player)));
+        if(event.getEntity() instanceof ServerPlayer player) {
+            player.getPersistentData().remove("SiegeVoteReminder");
+            EndlessSiege.remind(player,RaidSavedData.get(player.server).raids.get(com.devfarinsky.siegeoverhaul.core.SiegeCore.key(player)));
+        }
         if (!(event.getEntity() instanceof ServerPlayer sp)) return;
         com.devfarinsky.siegeoverhaul.items.StarterBagItem.giveOnce(sp);
         // v3.2.0: notify player of any spoils queued while they were offline.
@@ -2021,6 +2024,7 @@ public final class RaidEvents {
             return;
         }
         if (EndlessSiege.active(state) && EndlessSiege.voting(state)) {
+            for(var member:members) EndlessSiege.remindIfNeeded(member,state);
             var decision = EndlessSiege.tick(state.campaign); data.setDirty();
             if (decision == EndlessSiege.Decision.RETREAT) {
                 finishRaid(server, data, teamKey, true, true, "Your faction accepted the enemy retreat after wave " + state.wave + "."); return;

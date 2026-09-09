@@ -34,4 +34,31 @@ class SiegeFleetTest extends MinecraftTestSupport {
             verify(engine,never()).discard();verify(engine,never()).moveTo(anyDouble(),anyDouble(),anyDouble());
         }
     }
+    @Test void playerMountProtectsVehicleFromReuseAndCleanup() {
+        var level=mock(ServerLevel.class);var vehicle=mock(Entity.class);var rider=mock(net.minecraft.world.entity.player.Player.class);
+        var tag=new CompoundTag();tag.putString(SiegeDeployment.TEAM_TAG,"team:test");
+        when(vehicle.getPersistentData()).thenReturn(tag);when(vehicle.level()).thenReturn(level);when(vehicle.isAlive()).thenReturn(true);
+        when(rider.getPersistentData()).thenReturn(new CompoundTag());
+        var event=mock(net.minecraftforge.event.entity.EntityMountEvent.class);
+        when(event.isMounting()).thenReturn(true);when(event.getEntityBeingMounted()).thenReturn(vehicle);when(event.getEntityMounting()).thenReturn(rider);
+        SiegeFleet.mount(event);assertTrue(tag.getBoolean(SiegeFleet.CAPTURED));
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);UUID id=UUID.randomUUID();raid.siegeEngines.put(id,"BALLISTA");
+        when(level.getEntity(id)).thenReturn(vehicle);SiegeDeployment.cleanup(level,raid);
+        verify(vehicle,never()).discard();assertTrue(raid.siegeEngines.isEmpty());
+    }
+    @Test void onlyAssignedCrewDeathMarksEquipmentReusable() {
+        var level=mock(ServerLevel.class);var vehicle=mock(Entity.class);var crew=mock(net.minecraft.world.entity.Mob.class);
+        UUID id=UUID.randomUUID(),crewId=UUID.randomUUID();var tag=new CompoundTag();
+        tag.putUUID("SiegeOperatorUuid",crewId);tag.putInt("SiegeSupportWave",9);
+        when(vehicle.getPersistentData()).thenReturn(tag);when(level.getEntity(id)).thenReturn(vehicle);
+        var crewTag=new CompoundTag();crewTag.putString(SiegeDeployment.TEAM_TAG,"team:test");
+        when(crew.getPersistentData()).thenReturn(crewTag);when(crew.level()).thenReturn(level);when(crew.getUUID()).thenReturn(crewId);
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);raid.siegeEngines.put(id,"BALLISTA");
+        var saved=new RaidSavedData();saved.raids.put(raid.teamKey,raid);
+        var event=mock(net.minecraftforge.event.entity.living.LivingDeathEvent.class);when(event.getEntity()).thenReturn(crew);
+        try(var saves=mockStatic(RaidSavedData.class)) {
+            saves.when(()->RaidSavedData.get(null)).thenReturn(saved);SiegeFleet.death(event);assertEquals(9,tag.getInt(SiegeFleet.DEFEATED));
+            tag.remove(SiegeFleet.DEFEATED);when(event.isCanceled()).thenReturn(true);SiegeFleet.death(event);assertFalse(tag.contains(SiegeFleet.DEFEATED));
+        }
+    }
 }

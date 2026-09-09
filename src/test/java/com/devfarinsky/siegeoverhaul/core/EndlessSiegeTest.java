@@ -75,6 +75,7 @@ class EndlessSiegeTest extends MinecraftTestSupport {
     @Test void reconnectReminderKeepsTheOriginalBallotAndDoesNotIncludeOutsidersOrRepeatVoters() {
         var player=org.mockito.Mockito.mock(net.minecraft.server.level.ServerPlayer.class);var id=UUID.randomUUID();
         org.mockito.Mockito.when(player.getUUID()).thenReturn(id);
+        org.mockito.Mockito.when(player.getPersistentData()).thenReturn(new CompoundTag());
         var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
         EndlessSiege.begin(raid.campaign,10,List.of(id),"original");var before=raid.campaign.copy();
         EndlessSiege.remind(player,raid);assertEquals(before,raid.campaign);

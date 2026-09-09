@@ -19,10 +19,13 @@ class CampDevelopmentTest extends MinecraftTestSupport {
         var border=mock(net.minecraft.world.level.border.WorldBorder.class);when(level.getWorldBorder()).thenReturn(border);when(border.isWithinBounds(any(BlockPos.class))).thenReturn(true);
         var saved=new RaidSavedData();saved.anchors.put(raid.teamKey,new RaidSavedData.Anchor(raid.teamKey,"Test",UUID.randomUUID(),Set.of(),false,false,Map.of(),0));
         var claim=mock(RecruitsClaimsBridge.ClaimSnapshot.class);when(claim.claimId()).thenReturn(raid.campClaimId);when(claim.ownerFactionStringId()).thenReturn("enemy");
+        var gate=WarGate.blueprint(new BlockPos(8,64,8),net.minecraft.core.Direction.NORTH);
+        var cells=new net.minecraft.nbt.CompoundTag();gate.forEach((pos,id)->cells.putString(Long.toString(pos),id));raid.warGate.put("Blocks",cells);
+        when(level.getBlockState(any())).thenAnswer(call->{String id=gate.get(((BlockPos)call.getArgument(0)).asLong());return id==null?net.minecraft.world.level.block.Blocks.AIR.defaultBlockState():net.minecraftforge.registries.ForgeRegistries.BLOCKS.getValue(new net.minecraft.resources.ResourceLocation(id)).defaultBlockState();});
         var sites=new ArrayList<Set<Long>>();
-        try(var gates=mockStatic(WarGate.class);var camps=mockStatic(CampClaims.class);var nativeJobs=mockStatic(NativeCampConstruction.class);
+        try(var camps=mockStatic(CampClaims.class);var nativeJobs=mockStatic(NativeCampConstruction.class);
             var saves=mockStatic(RaidSavedData.class);var claims=mockStatic(RecruitsClaimsBridge.class);var external=mockStatic(ClaimBridge.class)) {
-            gates.when(()->WarGate.ready(level,raid)).thenReturn(true);camps.when(()->CampClaims.owns(level,raid)).thenReturn(true);
+            camps.when(()->CampClaims.owns(level,raid)).thenReturn(true);
             saves.when(()->RaidSavedData.get(null)).thenReturn(saved);
             claims.when(()->RecruitsClaimsBridge.getClaimAt(eq(level),any(BlockPos.class))).thenReturn(Optional.of(claim));
             nativeJobs.when(()->NativeCampConstruction.start(level,raid)).thenAnswer(call->{sites.add(Set.copyOf(raid.pendingCampBlocks.keySet()));return sites.size()==2;});
