@@ -12,6 +12,8 @@ import static org.mockito.Mockito.*;
 public class SiegeIntegrationTest extends MinecraftTestSupport {
     public abstract static class Engineer extends Mob {
         public Object siegeController;
+        public boolean getShouldRanged() { return true; }
+        public void setShouldRanged(boolean value) {}
         protected Engineer() { super(EntityType.ZOMBIE, null); }
     }
     public static class Controller {
@@ -32,6 +34,16 @@ public class SiegeIntegrationTest extends MinecraftTestSupport {
         when(engineer.getVehicle()).thenAnswer(call -> passengerOf.get());
         doAnswer(call -> { passengerOf.set(null); return null; }).when(engineer).stopRiding();
         return engineer;
+    }
+    @Test void dismountedOperatorRestoresFireEvenWhenItsVehicleIsUnloaded() {
+        var engineer = engineer();
+        var data = new net.minecraft.nbt.CompoundTag();
+        data.putBoolean("SiegeAdvanceSavedRanged", true);
+        when(engineer.getPersistentData()).thenReturn(data);
+        SiegeIntegration.advanceEngineer(engineer, net.minecraft.core.BlockPos.ZERO);
+        verify(engineer).setShouldRanged(true);
+        assertFalse(data.contains("SiegeAdvanceSavedRanged"));
+        verify(engineer, never()).level();
     }
     private boolean attach(Mob engineer, Entity engine, Controller controller) throws Exception {
         return SiegeIntegration.mountWithController(engineer, engine, controller,

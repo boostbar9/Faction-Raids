@@ -3649,6 +3649,9 @@ public final class RaidEvents {
             boolean marching = com.devfarinsky.siegeoverhaul.formations.FormationDirector.shouldMarch(
                     level, state.teamKey, mob, BlockPos.containing(objective));
             if (!marching) com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
+            if (!mob.isPassenger() && !mob.getPersistentData().getString(
+                    com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.TEAM_TAG).isBlank())
+                com.devfarinsky.siegeoverhaul.siege.SiegeIntegration.advanceEngineer(mob, BlockPos.containing(objective));
             if (!mob.getPersistentData().getString(com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.TEAM_TAG).isBlank()
                     && !mob.isPassenger() && state.siegeEngines.keySet().stream().anyMatch(engineId -> {
                         Entity engine=level.getEntity(engineId);
