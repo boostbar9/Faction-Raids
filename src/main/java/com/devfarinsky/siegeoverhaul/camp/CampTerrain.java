@@ -92,6 +92,8 @@ public final class CampTerrain {
 
     /** Recheck the complete plan and capture every original before the first neighbor update. */
     public static boolean apply(ServerLevel level, RaidState raid, Plan plan) {
+        if (com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.blocksAny(level,
+                plan.changes().stream().map(change->change.pos().asLong()).toList())) return false;
         for (Change change : plan.changes()) {
             if (!level.hasChunkAt(change.pos()) || !level.getBlockState(change.pos()).equals(change.before())
                     || !level.getEntitiesOfClass(LivingEntity.class, new AABB(change.pos()), LivingEntity::isAlive).isEmpty())
