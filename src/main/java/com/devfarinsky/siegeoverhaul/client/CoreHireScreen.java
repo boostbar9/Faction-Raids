@@ -19,6 +19,9 @@ import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> {
     private static final int TEXT=0xffeee9ff,MUTED=0xffa6a9c7,GOLD=0xffe2c581,TEAL=0xff81e8da,VIOLET=0xffb89aff;
     private CoreHireLayout layout;
+    private RecruitsTerritoryView territory;
+    private Button mapButton;
+    private final CoreRecruitPreviews portraits=new CoreRecruitPreviews();
     private int tab,confirmBox=-1,seenLoot,revealBox=-1,revealTicks,waitingTicks,rosterOffset;
     private ItemStack revealed=ItemStack.EMPTY;
     private int revealedTier;
@@ -27,14 +30,18 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     @SubscribeEvent public static void setup(FMLClientSetupEvent event){event.enqueueWork(()->MenuScreens.register(CoreMenus.HIRING.get(),CoreHireScreen::new));}
     private void action(int id){if(minecraft!=null&&minecraft.gameMode!=null)minecraft.gameMode.handleInventoryButtonClick(menu.containerId,id);}
     @Override protected void init(){
+        if(territory!=null)territory.close();
+        portraits.clear();
+        territory=new RecruitsTerritoryView();
         layout=CoreHireLayout.fit(width,height);imageWidth=layout.width();imageHeight=layout.height();super.init();
         String[] tabs={"Army & Heroes","Loot & Buffs","Bank & Faction"};int tw=(layout.width()-28)/3;
-        for(int i=0;i<3;i++){final int index=i;addRenderableWidget(new CoreButton(Component.literal(tabs[i]),b->{tab=index;confirmBox=-1;},layout.x()+10+i*(tw+4),layout.y()+32,tw,22,true,()->tab==index));}
+        for(int i=0;i<3;i++){final int index=i;addRenderableWidget(new CoreButton(Component.literal(tabs[i]),b->{tab=index;confirmBox=-1;},layout.x()+10+i*(tw+4),layout.tabY(),tw,22,true,()->tab==index));}
+        mapButton=addRenderableWidget(new CoreButton(Component.literal("Open map"),b->RecruitsTerritoryView.openFullMap(),layout.x()+layout.width()-92,layout.y()+7,82,21,false,()->false));
         for(int i=0;i<4;i++){
             final int index=i;
             hire[i]=addRenderableWidget(new CoreButton(Component.literal("Recruit"),b->RaidNetwork.purchaseCoreOffer(menu.containerId,index,menu.rotation()),layout.cardX(i)+8,layout.cardY(i)+layout.cardHeight()-23,layout.cardWidth()-16,18,false,()->false));
             int bw=(layout.width()-38)/4;
-            bank[i]=addRenderableWidget(new CoreButton(Component.literal(new String[]{"Store 8","Store 64","Take 8","Take 64"}[i]),b->action(40+index),layout.x()+10+i*(bw+6),layout.y()+102,bw,18,false,()->false));
+            bank[i]=addRenderableWidget(new CoreButton(Component.literal(new String[]{"Store 8","Store 64","Take 8","Take 64"}[i]),b->action(40+index),layout.x()+10+i*(bw+6),layout.contentY()+40,bw,18,false,()->false));
         }
         for(int i=0;i<3;i++){
             final int index=i;int y=layout.marketY(i)+layout.marketHeight()-21;
@@ -54,6 +61,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     }
     @Override public void render(GuiGraphics g,int mx,int my,float partial){
         renderBackground(g);
+        mapButton.active=minecraft!=null && minecraft.level!=null && minecraft.level.dimension()==net.minecraft.world.level.Level.OVERWORLD;
         for(int i=0;i<4;i++){
             hire[i].visible=tab==0;hire[i].active=menu.role(i)>=0&&menu.cost(i)>=0&&!menu.sold(i)&&menu.rotation()>0;
             hire[i].setMessage(Component.literal(menu.sold(i)?"Recruited":menu.cost(i)<0?"Unavailable":"Recruit • "+menu.cost(i)));
@@ -69,7 +77,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
         super.render(g,mx,my,partial);
         if(tab==0)for(int i=0;i<4;i++)if(over(mx,my,layout.cardX(i),layout.cardY(i),layout.cardWidth(),layout.cardHeight())&&menu.role(i)>=0){
-            int role=menu.role(i);String info=CoreHiring.NAMES[role]+" • "+CoreHiring.rarity(role)+" • "+(i==3?HeroTraits.description(role):"Shared faction offer; refreshes every 15 minutes.");
+            int role=menu.role(i);String info=CoreHiring.NAMES[role]+" • "+CoreHiring.rarity(role)+" • "+(i==3?HeroTraits.description(role):"Shared faction offer; refreshes every 15 minutes. Portrait shows the role; hired equipment varies.");
             tooltip(g,info,mx,my);
         }
         if(tab==1)for(int i=0;i<3;i++){
@@ -80,25 +88,53 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private boolean over(int mx,int my,int x,int y,int w,int h){return mx>=x&&mx<x+w&&my>=y&&my<y+h;}
     private void tooltip(GuiGraphics g,String text,int x,int y){g.renderTooltip(font,font.split(Component.literal(text),Math.min(300,width-24)),x,y);}
     private void text(GuiGraphics g,String text,int x,int y,int width,int color){g.drawString(font,font.plainSubstrByWidth(text,Math.max(1,width)),x,y,color,false);}
-    private void panel(GuiGraphics g,int x,int y,int w,int h,int accent){CoreButton.panel(g,x,y,w,h,accent);CoreButton.panel(g,x+1,y+1,w-2,h-2,0xff171c32);g.fill(x+7,y+1,x+w-7,y+2,accent);}
+    private void panel(GuiGraphics g,int x,int y,int w,int h,int accent){
+        CoreButton.panel(g,x+1,y+3,w,h,0x70000000);
+        CoreButton.panel(g,x,y,w,h,0xff354157);
+        g.fillGradient(x+1,y+1,x+w-1,y+h-1,0xff202a3e,0xff101827);
+        g.fill(x+7,y+1,x+w-7,y+2,accent);
+    }
     @Override protected void renderLabels(GuiGraphics g,int x,int y){}
     @Override protected void renderBg(GuiGraphics g,float partial,int mx,int my){
         int x=layout.x(),y=layout.y(),w=layout.width(),h=layout.height();
         CoreButton.panel(g,x-4,y+3,w+8,h+5,0x99000000);CoreButton.panel(g,x-1,y-1,w+2,h+2,0xff7663ac);
-        g.fillGradient(x,y,x+w,y+h,0xff20203c,0xff0d1828);
-        // Small arcane sigil: restrained animation with no custom textures or per-frame entities.
-        long time=minecraft!=null&&minecraft.level!=null?minecraft.level.getGameTime():0;
-        for(int i=0;i<8;i++){double a=i*Math.PI/4+time*.012;int sx=x+21+(int)(Math.cos(a)*10),sy=y+16+(int)(Math.sin(a)*10);g.fill(sx,sy,sx+2,sy+2,i%2==0?TEAL:VIOLET);}
-        g.drawCenteredString(font,"✦",x+22,y+12,GOLD);
-        text(g,"ARCANE COMMAND",x+40,y+12,w/2-36,TEXT);
-        String purse=menu.emeralds()+" emeralds";text(g,purse,x+w-font.width(purse)-12,y+12,w/2,TEAL);
-        g.fill(x+10,y+27,x+w-10,y+28,0xff564776);
+        g.fillGradient(x,y,x+w,y+h,0xff151d2d,0xff0a101c);
+        g.fillGradient(x+1,y+1,x+w-1,y+33,0xff273044,0xff151c2b);
+        g.renderItem(new ItemStack(Items.AMETHYST_SHARD),x+12,y+9);
+        text(g,"KINGDOM COMMAND",x+36,y+7,Math.max(100,w-140),GOLD);
+        text(g,menu.factionName(),x+36,y+20,Math.max(100,w-140),MUTED);
+        if(w>=600)text(g,String.format(java.util.Locale.ROOT,"Treasury %,d",menu.bank()),x+w-240,y+14,138,TEAL);
+        g.fill(x+10,y+32,x+w-10,y+33,0xff63567a);
+        if(layout.overviewHeight()>0)drawOverview(g);
         if(tab==0)for(int i=0;i<4;i++)drawHire(g,i);
         else if(tab==1)for(int i=0;i<3;i++){drawLoot(g,i);drawBuff(g,i);}
         else drawFaction(g);
         String footer=tab==0?String.format(java.util.Locale.ROOT,"Shared stock • Refresh %d:%02d",menu.seconds()/60,menu.seconds()%60):tab==1?"Mystery loot & five-minute blessings • Personal emeralds":"Interest "+menu.interestRate()/100.0+"% /24h • Leader withdrawals • Scroll roster";
         text(g,footer,x+10,y+h-13,w-20,MUTED);
     }
+    private void drawOverview(GuiGraphics g){
+        int x=layout.x()+10,y=layout.overviewY(),h=layout.overviewHeight(),mw=layout.mapWidth();
+        panel(g,x,y,mw,h,VIOLET);
+        boolean available=territory.draw(g,x+2,y+19,mw-4,h-21);
+        if(!available){
+            g.fillGradient(x+2,y+19,x+mw-2,y+h-2,0xff162331,0xff111827);
+            text(g,"Preview unavailable — Open map",x+10,y+Math.max(24,h/2),mw-20,MUTED);
+        }
+        text(g,"TERRITORY",x+9,y+6,mw-18,GOLD);
+        int sx=x+mw+10,sw=layout.width()-30-mw;
+        panel(g,sx,y,sw,h,GOLD);
+        text(g,menu.currentWave()>0?"SIEGE ACTIVE":"KINGDOM WATCH",sx+10,y+8,sw-20,GOLD);
+        text(g,menu.currentWave()>0?"Wave "+menu.currentWave():"Stand ready",sx+10,y+23,sw-20,TEXT);
+        if(h>=85){
+            String next=menu.voteSeconds()>0?"Retreat vote: "+menu.voteSeconds()+"s":menu.currentWave()>0?"Retreat checkpoint: "+EndlessSiege.nextCheckpoint(menu.currentWave()):"Prepare your defenses";
+            text(g,next,sx+10,y+38,sw-20,MUTED);
+            g.fill(sx+10,y+52,sx+sw-10,y+53,0xff3a4154);
+            text(g,"Next wave: +"+menu.nextReward()+" emeralds",sx+10,y+61,sw-20,TEAL);
+        }
+        if(h>=115){text(g,String.format(java.util.Locale.ROOT,"Faction bank: %,d",menu.bank()),sx+10,y+80,sw-20,TEXT);
+            text(g,"Your purse: "+menu.emeralds(),sx+10,y+96,sw-20,MUTED);}
+    }
+    @Override public void removed(){if(territory!=null)territory.close();portraits.clear();super.removed();}
     private void drawHire(GuiGraphics g,int i){
         int x=layout.cardX(i),y=layout.cardY(i),w=layout.cardWidth(),h=layout.cardHeight(),role=menu.role(i);
         int accent=i==3?VIOLET:i==2?TEAL:GOLD;panel(g,x,y,w,h,menu.sold(i)?0xff45485f:accent);
@@ -106,7 +142,13 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         g.renderItem(menu.getSlot(i).getItem(),x+8,y+8);
         text(g,(i==3?"Hero • ":i==2?"Worker • ":"")+CoreHiring.NAMES[role],x+29,y+7,w-36,TEXT);
         text(g,CoreHiring.rarity(role),x+29,y+19,w-36,accent);
-        if(h>80){text(g,i==3?HeroTraits.description(role):"Ready to join your faction",x+9,y+40,w-18,MUTED);text(g,"Cost: "+menu.cost(i)+" "+menu.getSlot(4).getItem().getHoverName().getString(),x+9,y+54,w-18,TEXT);}
+        boolean portrait=h>=100&&w>=220;
+        int detailWidth=w-(portrait?92:18);
+        if(h>80){text(g,i==3?HeroTraits.description(role):"Ready to join your faction",x+9,y+40,detailWidth,MUTED);text(g,"Cost: "+menu.cost(i)+" "+menu.getSlot(4).getItem().getHoverName().getString(),x+9,y+54,detailWidth,TEXT);}
+        if(portrait){
+            g.enableScissor(x+2,y+29,x+w-2,y+h-25);
+            try{portraits.draw(g,role,x+w-40,y+h-26,Math.min(32,(h-56)/2));}finally{g.disableScissor();}
+        }
     }
     private void drawLoot(GuiGraphics g,int i){
         int x=layout.cardX(0),y=layout.marketY(i),w=layout.cardWidth(),h=layout.marketHeight();panel(g,x,y,w,h,GOLD);
@@ -129,7 +171,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         if(h>64)text(g,"Personal blessing • 5 min",x+9,y+34,w-18,TEAL);
     }
     private void drawFaction(GuiGraphics g){
-        int x=layout.x(),y=layout.y(),w=layout.width(),h=layout.height();
+        int x=layout.x(),y=layout.contentY()-62,w=layout.width(),h=layout.contentHeight()+84;
         panel(g,x+10,y+62,w-20,34,VIOLET);
         text(g,menu.factionName(),x+18,y+67,w/2-24,TEXT);
         text(g,String.format(java.util.Locale.ROOT,"Bank: %,d emeralds",menu.bank()),x+18,y+80,w/2-24,GOLD);
