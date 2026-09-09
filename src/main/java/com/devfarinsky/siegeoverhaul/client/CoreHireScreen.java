@@ -114,7 +114,13 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         if(done)g.renderItem(revealed,x+7,y+7);else g.drawCenteredString(font,opening?new String[]{"*","+","?","#"}[(revealTicks/4)%4]:"?",x+16,y+11,opening?VIOLET:GOLD);
         text(g,CoreLoot.NAMES[i],x+29,y+6,w-36,TEXT);
         if(h>=49)text(g,opening?"✦  +  ?  ✦":done?revealed.getHoverName().getString():"Sealed mystery",x+29,y+17,w-36,opening?VIOLET:MUTED);
-        if(h>64)text(g,done?CoreLoot.rarity(revealedTier):"Reveal your reward",x+9,y+34,w-18,GOLD);
+        if(h>64 && opening){
+            g.enableScissor(x+7,y+31,x+w-7,y+57);
+            double elapsed=CoreLoot.OPEN_TICKS-revealTicks;
+            int shift=(int)(elapsed*6-elapsed*elapsed*2/CoreLoot.OPEN_TICKS)%24;
+            for(int n=-1;n<=w/24+1;n++)g.drawCenteredString(font,new String[]{"?","*","+","#"}[Math.floorMod(n,4)],x+12+n*24-shift,y+39,n%2==0?VIOLET:TEAL);
+            g.disableScissor();g.fill(x+w/2-1,y+31,x+w/2+1,y+35,GOLD);g.fill(x+w/2-1,y+53,x+w/2+1,y+57,GOLD);
+        }else if(h>64)text(g,done?CoreLoot.rarity(revealedTier):"Reveal your reward",x+9,y+34,w-18,GOLD);
     }
     private void drawBuff(GuiGraphics g,int i){
         int x=layout.cardX(1),y=layout.marketY(i),w=layout.cardWidth(),h=layout.marketHeight();panel(g,x,y,w,h,TEAL);
