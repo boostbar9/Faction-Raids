@@ -43,7 +43,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             final int index=i;
             hire[i]=addRenderableWidget(new CoreButton(Component.literal("Recruit"),b->RaidNetwork.purchaseCoreOffer(menu.containerId,index,menu.rotation()),layout.cardX(i)+8,layout.cardY(i)+layout.cardHeight()-23,layout.cardWidth()-16,18,false,()->false).currency(()->menu.sold(index)||menu.cost(index)<0?ItemStack.EMPTY:menu.getSlot(4).getItem()));
             int bw=(layout.width()-38)/4;
-            bank[i]=addRenderableWidget(new CoreButton(Component.literal(new String[]{"Store 8","Store 64","Take 8","Take 64"}[i]),b->action(40+index),layout.x()+10+i*(bw+6),layout.contentY()+40,bw,18,false,()->false).currency(()->EMERALD_ICON));
+            bank[i]=addRenderableWidget(new CoreButton(Component.literal((bw<80?new String[]{"In 8","In 64","Out 8","Out 64"}:new String[]{"Store 8","Store 64","Take 8","Take 64"})[i]),b->action(40+index),layout.x()+10+i*(bw+6),layout.contentY()+40,bw,18,false,()->false).currency(()->EMERALD_ICON));
         }
         for(int i=0;i<3;i++){
             final int index=i;int y=layout.marketButtonY(i);
