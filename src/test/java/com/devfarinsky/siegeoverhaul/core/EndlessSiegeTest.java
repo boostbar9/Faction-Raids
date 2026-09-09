@@ -51,4 +51,25 @@ class EndlessSiegeTest extends MinecraftTestSupport {
         assertEquals(320,EndlessSiege.waveSize(10,Integer.MAX_VALUE,40));
         assertTrue(EndlessSiege.reward(Integer.MAX_VALUE)>0);
     }
+    @Test void clearedWavePaysBeforeEarlyVictoryEvenWithCountdownAndOnlyOnceAfterReload() {
+        var data=new RaidSavedData(); var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        raid.wave=5; raid.rewardEligible=true; raid.ticksToNextWave=40;
+        data.raids.put(raid.teamKey,raid); data.siegeCores.put(raid.teamKey,new CompoundTag());
+        long paid=EndlessSiege.awardClearedWave(data,raid,1000,100);
+        assertEquals(EndlessSiege.reward(5),paid);
+        data=RaidSavedData.load(data.save(new CompoundTag())); raid=data.raids.get("team:test");
+        assertEquals(0,EndlessSiege.awardClearedWave(data,raid,1000,100));
+        assertEquals(paid,FactionBank.balance(data.siegeCores.get(raid.teamKey)));
+    }
+    @Test void incompleteWaveAndOccupiedCoreNeverReceiveClearedWavePayment() {
+        var data=new RaidSavedData(); var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        raid.wave=1; raid.rewardEligible=true; data.siegeCores.put(raid.teamKey,new CompoundTag());
+        raid.pendingWaveSpawns=1; assertEquals(0,EndlessSiege.awardClearedWave(data,raid,1000,100));
+        raid.pendingWaveSpawns=0; raid.raiders.add(UUID.randomUUID());
+        assertEquals(0,EndlessSiege.awardClearedWave(data,raid,1000,100)); raid.raiders.clear();
+        raid.preparationTicks=20; assertEquals(0,EndlessSiege.awardClearedWave(data,raid,1000,100));
+        raid.preparationTicks=0; raid.coreCaptured=true; assertEquals(0,EndlessSiege.awardClearedWave(data,raid,1000,100));
+        assertEquals(0,raid.campaign.getInt("PaidWave"));
+        raid.coreCaptured=false; assertTrue(EndlessSiege.awardClearedWave(data,raid,1000,100)>0);
+    }
 }
