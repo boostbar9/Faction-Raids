@@ -33,8 +33,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * </ol>
  *
  * <p>All reflection paths are guarded by {@link ModList#isLoaded} and cached
- * per-JVM. Any thrown exception disables that provider for the session; the
- * mod continues to work with the remaining providers.</p>
+ * per-JVM. Any thrown exception disables that provider for the session; claim-aware placement
+ * remains blocked until the incompatible provider is repaired and the server restarted.</p>
  *
  * <p>Design intent: return {@code true} from {@link #isClaimed} only when
  * some player OTHER than the raid target has claimed the chunk. Raiders
@@ -46,6 +46,7 @@ public final class ClaimBridge {
     // Cache "is this provider available" answers per JVM to avoid repeated
     // ModList lookups + reflection failures on hot code paths.
     private static final ConcurrentHashMap<String, Boolean> PROVIDER_AVAILABLE = new ConcurrentHashMap<>();
+    private static final Set<String> BROKEN_PROVIDERS = ConcurrentHashMap.newKeySet();
 
     // FTB Chunks reflection handles - resolved lazily on first call, cached
     // to null-sentinel when unavailable so we don't re-throw every tick.
@@ -81,6 +82,7 @@ public final class ClaimBridge {
     public static boolean isForeignClaim(ServerLevel level, ChunkPos chunk,
                                           RaidSavedData.Anchor defenderAnchor) {
         if (level == null || chunk == null) return false;
+        if (!BROKEN_PROVIDERS.isEmpty()) return true; // Unknown ownership must never authorize placement.
         Set<UUID> defenderMembers = defenderAnchor == null
                 ? java.util.Collections.emptySet() : defenderAnchor.members();
 
@@ -113,6 +115,7 @@ public final class ClaimBridge {
                 if (owner != null && !defenderMembers.contains(owner)) return true;
             } catch (Throwable t) {
                 markProviderBroken("ftbchunks", t);
+                return true;
             }
         }
 
@@ -123,6 +126,7 @@ public final class ClaimBridge {
                 if (owner != null && !defenderMembers.contains(owner)) return true;
             } catch (Throwable t) {
                 markProviderBroken("openpartiesandclaims", t);
+                return true;
             }
         }
 
@@ -155,14 +159,14 @@ public final class ClaimBridge {
      * command to surface provider-availability status.
      */
     public static boolean anyProviderAvailable() {
-        return RecruitsClaimsBridge.available() || ftbAvailable() || opacAvailable();
+        return !BROKEN_PROVIDERS.isEmpty() || RecruitsClaimsBridge.available() || ftbAvailable() || opacAvailable();
     }
 
     public static String diagnosticStatus() {
         StringBuilder sb = new StringBuilder();
         sb.append("Recruits: ").append(RecruitsClaimsBridge.available() ? "on" : "off");
-        sb.append(" | FTB Chunks: ").append(ftbAvailable() ? "on" : "off");
-        sb.append(" | Open Parties: ").append(opacAvailable() ? "on" : "off");
+        sb.append(" | FTB Chunks: ").append(BROKEN_PROVIDERS.contains("ftbchunks") ? "ERROR (placement blocked)" : ftbAvailable() ? "on" : "off");
+        sb.append(" | Open Parties: ").append(BROKEN_PROVIDERS.contains("openpartiesandclaims") ? "ERROR (placement blocked)" : opacAvailable() ? "on" : "off");
         return sb.toString();
     }
 
@@ -255,9 +259,9 @@ public final class ClaimBridge {
 
     private static void markProviderBroken(String key, Throwable t) {
         // Log once per provider per JVM, then cache "off" so we stop retrying.
-        if (Boolean.FALSE.equals(PROVIDER_AVAILABLE.get(key))) return;
+        if (!BROKEN_PROVIDERS.add(key)) return;
         PROVIDER_AVAILABLE.put(key, Boolean.FALSE);
-        FactionLogger.LOG.warn("[SiegeOverhaul] Claim provider {} disabled for this session: {} {}",
+        FactionLogger.LOG.warn("[SiegeOverhaul] Claim provider {} failed; claim-aware placement blocked until repaired and server restarted: {} {}",
                 key, t.getClass().getSimpleName(), t.getMessage());
     }
 }
