@@ -1,0 +1,84 @@
+name: Publish tested 4.10.3 beta to CurseForge
+on:
+  push:
+    branches: [publish/curseforge-v4.10.3]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: curseforge-1364352-v4.10.3
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download tested artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34294771544
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Verify tested bytes and metadata
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          jar = Path('dist/siegeoverhaul-4.10.3.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == '784aaa25a4c20a0f5134eff3b9fd2eb4016db005ba84f62dadabd631ab520219'
+          with zipfile.ZipFile(jar) as z:
+              data = tomllib.loads(z.read('META-INF/mods.toml').decode())
+          assert data['mods'][0]['modId'] == 'siegeoverhaul'
+          assert data['mods'][0]['version'] == '4.10.3'
+          dependencies = {x['modId']: x for x in data['dependencies']['siegeoverhaul']}
+          for mod in ['recruits', 'workers', 'smallships', 'siegeweapons']:
+              assert dependencies[mod]['mandatory'], mod
+          assert not dependencies['corpse']['mandatory']
+          print('Verified', jar.name, digest)
+          CHECK
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.10.3.jar
+          name: The Siege Overhaul v4.10.3 beta - Corpse Compatibility
+          version: v4.10.3
+          version-type: beta
+          changelog: |
+            ## 4.10.3 beta
+
+            - Optional Corpse compatibility: camp earthworks and gate placement reject recovery-body overlaps.
+            - Native Workers camp builders pause around a corpse in their blueprint and resume when it is removed, preserving jobs and supplies.
+            - Fallback construction and supply barrels avoid corpse space.
+            - Corpse retains control of death inventories, access and decay; no NPC corpses are added.
+
+            Minecraft 1.20.1 Forge, Java 17. REQUIRED on server and every client: Villager Recruits 1.15.2+, Villager Workers 2 2.0.3+, Small Ships and Siege Weapons. Install matching Siege Overhaul versions. Corpse is optional.
+
+            Validation: clean Java 17 Forge build and 160 passing regression tests, zero skipped. No interactive Minecraft or combined-mod playtest; beta.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          dependencies: |
+            recruits(required)
+            workers(required)
+            smallships(required)
+            siegeweapons(required)
+            corpse(optional)
+          fail-mode: fail
+      - name: Record published file
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os
+          result = {'version': '4.10.3', 'file_id': os.environ['RELEASE_FILE_ID'], 'url': os.environ['RELEASE_URL']}
+          assert result['file_id'] and result['url'], 'CurseForge did not return a published file'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Published The Siege Overhaul 4.10.3 beta: {result['url']}\n")
+          RECEIPT
