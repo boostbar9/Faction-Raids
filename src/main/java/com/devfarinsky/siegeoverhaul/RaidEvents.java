@@ -1435,7 +1435,9 @@ public final class RaidEvents {
             }
         }
         com.devfarinsky.siegeoverhaul.core.CoreOccupation.tick(server, data);
-        for (var core : data.siegeCores.values()) FactionBank.settle(data, core);
+        long bankNow = System.currentTimeMillis();
+        int bankRate = RaidConfig.BANK_INTEREST_BASIS_POINTS.get();
+        for (var core : data.siegeCores.values()) if (FactionBank.settle(core, bankNow, bankRate)) data.setDirty();
         // Core ownership follows the placing faction, not an individual changing teams.
         long now = server.overworld().getGameTime();
         if (now / 20 % 5 == 0) com.devfarinsky.siegeoverhaul.compat.CampClaims.cleanOrphans(server.overworld(), data);

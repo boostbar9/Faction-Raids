@@ -192,7 +192,7 @@ public final class RaidConfig {
         b.comment("Player-focused faction invasion settings.").push("playerRaids");
         SIEGE_CORPSE_SECONDS = b.comment("Known enemy siege corpses become normal dropped loot after this many seconds. Player and unclassified nonempty corpses are preserved. Zero disables conversion.").defineInRange("siegeCorpseSeconds",120,0,3600);
         EMPTY_CORPSE_SECONDS = b.comment("Remove fully empty corpses after this many seconds. No inventories are deleted. Zero keeps native timing.").defineInRange("emptyCorpseSeconds",60,0,3600);
-        BANK_INTEREST_BASIS_POINTS = b.comment("Faction bank interest per real24-hour day in basis points (100=1%). Up to365 days of offline catch-up; no clock rollback payouts.").defineInRange("bankDailyInterestBasisPoints",100,0,1000);
+        BANK_INTEREST_BASIS_POINTS = b.comment("Faction bank interest per real 24-hour day in basis points (100=1%). Up to 365 days of offline catch-up; no clock rollback payouts.").defineInRange("bankDailyInterestBasisPoints",100,0,1000);
         ENABLED = b.comment("Master switch.").define("enabled", true);
         AUTOMATIC_RAIDS = b.comment("Automatically schedule invasions for registered faction anchors.")
                 .define("automaticRaids", true);

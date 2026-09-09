@@ -79,7 +79,7 @@ public final class RecruitsFormationBridge {
     }
 
     /** Native hold orders at reachable ground cells only; no surface snapping or teleporting. */
-    public static boolean applyTactical(net.minecraft.server.level.ServerLevel level,Formation shape,Vec3 forward,Vec3 target,List<Mob> units,String defendingTeam) {
+    public static boolean applyTactical(net.minecraft.server.level.ServerLevel level,Formation shape,Vec3 forward,Vec3 target,List<Mob> units) {
         ensureInitialized(); boolean applied=false;
         for(int i=0;i<units.size();i++) {
             Mob mob=units.get(i);

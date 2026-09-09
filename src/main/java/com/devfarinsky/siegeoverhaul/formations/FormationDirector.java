@@ -75,7 +75,7 @@ public final class FormationDirector {
                         || !level.getBlockState(p.below()).isFaceSturdy(level,p.below(),net.minecraft.core.Direction.UP)) narrow=true;
             }
             boolean underFire=group.stream().anyMatch(m -> m.getLastHurtByMob()!=null && m.tickCount-m.getLastHurtByMobTimestamp()<100);
-            dispatched |= RecruitsFormationBridge.applyTactical(level,FormationTactics.choose(role,narrow,underFire),forward,waypoint,group,state.teamKey);
+            dispatched |= RecruitsFormationBridge.applyTactical(level,FormationTactics.choose(role,narrow,underFire),forward,waypoint,group);
         }
         LAST_APPLIED.put(state.teamKey, now);
         return dispatched;

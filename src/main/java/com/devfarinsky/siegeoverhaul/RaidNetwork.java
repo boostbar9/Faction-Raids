@@ -30,8 +30,8 @@ public final class RaidNetwork {
 
     public static void init() {
         CHANNEL.messageBuilder(CoreDetails.class,messageId++,NetworkDirection.PLAY_TO_CLIENT)
-                .encoder((p,b) -> { b.writeVarInt(p.menuId()); b.writeUtf(p.faction(),128); b.writeCollection(p.members(),(out,name)->out.writeUtf(name,64)); })
-                .decoder(b -> new CoreDetails(b.readVarInt(),b.readUtf(128),b.readList(in -> in.readUtf(64))))
+                .encoder(CoreDetails::encode)
+                .decoder(CoreDetails::decode)
                 .consumerMainThread((p,supplier) -> {
                     DistExecutor.unsafeRunWhenOn(Dist.CLIENT,() -> () -> {
                         var player=net.minecraft.client.Minecraft.getInstance().player;
@@ -61,9 +61,32 @@ public final class RaidNetwork {
                 .add();
     }
 
-    public record CoreDetails(int menuId,String faction,java.util.List<String> members) {}
+    public record CoreDetails(int menuId,String faction,java.util.List<String> members) {
+        public CoreDetails {
+            faction=bounded(faction,128);
+            members=members==null?java.util.List.of():members.stream().filter(java.util.Objects::nonNull)
+                    .limit(100).map(name->bounded(name,64)).toList();
+        }
+        private static String bounded(String text,int limit) {
+            if(text==null)return "";
+            int end=Math.min(text.length(),limit);
+            if(end>0 && end<text.length() && Character.isHighSurrogate(text.charAt(end-1)))end--;
+            return text.substring(0,end);
+        }
+        public void encode(FriendlyByteBuf buffer) {
+            buffer.writeVarInt(menuId);buffer.writeUtf(faction,128);
+            buffer.writeCollection(members,(out,name)->out.writeUtf(name,64));
+        }
+        public static CoreDetails decode(FriendlyByteBuf buffer) {
+            int id=buffer.readVarInt();String faction=buffer.readUtf(128);int size=buffer.readVarInt();
+            if(size<0 || size>100)throw new IllegalArgumentException("Invalid core roster size");
+            var members=new java.util.ArrayList<String>(size);
+            for(int i=0;i<size;i++)members.add(buffer.readUtf(64));
+            return new CoreDetails(id,faction,members);
+        }
+    }
     public static void coreDetails(ServerPlayer player,int menuId,String faction,java.util.List<String> members) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),new CoreDetails(menuId,faction.substring(0,Math.min(128,faction.length())),members));
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),new CoreDetails(menuId,faction,members));
     }
 
     public static void openDashboard(ServerPlayer player) {

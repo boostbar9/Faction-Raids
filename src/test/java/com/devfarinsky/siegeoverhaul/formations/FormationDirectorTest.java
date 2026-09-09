@@ -26,16 +26,14 @@ class FormationDirectorTest extends MinecraftTestSupport {
         when(soldier.getPersistentData()).thenReturn(new net.minecraft.nbt.CompoundTag());
         when(soldier.blockPosition()).thenReturn(new BlockPos(100,64,100));
         when(soldier.distanceToSqr(any(Vec3.class))).thenReturn(1600.0);
-        try (var claims = mockStatic(com.devfarinsky.siegeoverhaul.core.SiegeCore.class)) {
-            assertFalse(FormationDirector.shouldMarch(level, "team:defenders", soldier, BlockPos.ZERO));
-            soldier.getPersistentData().putString(com.devfarinsky.siegeoverhaul.ModConstants.Tags.RAID_TEAM, "team:defenders");
-            assertTrue(FormationDirector.shouldMarch(level, "team:defenders", soldier, BlockPos.ZERO));
-            soldier.horizontalCollision = true;
-            assertFalse(FormationDirector.shouldMarch(level, "team:defenders", soldier, BlockPos.ZERO));
-            soldier.horizontalCollision = false;
-            when(soldier.onClimbable()).thenReturn(true);
-            assertFalse(FormationDirector.shouldMarch(level, "team:defenders", soldier, BlockPos.ZERO));
-        }
+        assertFalse(FormationDirector.shouldMarch(level, "team:defenders", soldier, BlockPos.ZERO));
+        soldier.getPersistentData().putString(com.devfarinsky.siegeoverhaul.ModConstants.Tags.RAID_TEAM, "team:defenders");
+        assertTrue(FormationDirector.shouldMarch(level, "team:defenders", soldier, BlockPos.ZERO));
+        soldier.horizontalCollision = true;
+        assertFalse(FormationDirector.shouldMarch(level, "team:defenders", soldier, BlockPos.ZERO));
+        soldier.horizontalCollision = false;
+        when(soldier.onClimbable()).thenReturn(true);
+        assertFalse(FormationDirector.shouldMarch(level, "team:defenders", soldier, BlockPos.ZERO));
     }
 
     @Test

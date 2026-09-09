@@ -43,7 +43,7 @@ public final class FactionBank {
         var anchor = RaidSavedData.get(player.server).anchors.get(SiegeCore.key(player));
         return RecruitsBridge.factionLeader(player).orElse(anchor == null ? RaidSavedData.UNKNOWN_OWNER : anchor.ownerUuid()).equals(player.getUUID());
     }
-    /** Positive amount deposits, negative withdraws; only server-approved fixed quantities enter here. */
+    /** Positive amount deposits, negative withdraws; requests are capped at 64 and fill partially when inventory or balance is limited. */
     public static boolean transact(ServerPlayer player, int amount) {
         String key = SiegeCore.key(player); var data = RaidSavedData.get(player.server);
         CompoundTag core = data.siegeCores.get(key);
