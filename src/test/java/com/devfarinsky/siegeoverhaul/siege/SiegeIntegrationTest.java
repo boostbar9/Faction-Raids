@@ -53,7 +53,7 @@ public class SiegeIntegrationTest extends MinecraftTestSupport {
         data.putBoolean("SiegeAdvanceSavedRanged", true); data.putLong("SiegeAdvanceAt", 1000);
         when(engineer.getPersistentData()).thenReturn(data);
         when(engineer.isPassenger()).thenReturn(true);
-        var vehicle = mock(Entity.class); when(vehicle.getType()).thenReturn(EntityType.ZOMBIE);
+        var vehicle = mock(Entity.class); doReturn(EntityType.ZOMBIE).when(vehicle).getType();
         when(engineer.getVehicle()).thenReturn(vehicle);
         when(engineer.position()).thenReturn(new net.minecraft.world.phys.Vec3(20, 0, 0));
         var level = mock(net.minecraft.server.level.ServerLevel.class);
