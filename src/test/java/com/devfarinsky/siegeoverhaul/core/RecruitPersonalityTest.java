@@ -48,10 +48,10 @@ class RecruitPersonalityTest extends MinecraftTestSupport {
             RecruitPersonality.prepare(mob,role,inventory);verifyNoInteractions(mob);assertTrue(inventory.isEmpty());
         }
     }
-    @Test void namesHaveBroadRepeatableVariety() {
+    @Test void namesAreSimpleRepeatableFirstNames() {
         RandomSource a=RandomSource.create(12),b=RandomSource.create(12);HashSet<String> names=new HashSet<>();
-        for(int i=0;i<100;i++){String name=RecruitPersonality.name(a);assertEquals(name,RecruitPersonality.name(b));names.add(name);}
-        assertTrue(names.size()>75);
+        for(int i=0;i<100;i++){String name=RecruitPersonality.name(a);assertEquals(name,RecruitPersonality.name(b));assertTrue(name.matches("[A-Z][a-z]+")); names.add(name);}
+        assertTrue(names.size()>20);
     }
     @Test void compatibleMusketHireUsesNativeWeaponSlotAndFiniteCartridgesOnlyOnce() {
         Mob mob=mock(Mob.class);when(mob.getPersistentData()).thenReturn(new CompoundTag());
