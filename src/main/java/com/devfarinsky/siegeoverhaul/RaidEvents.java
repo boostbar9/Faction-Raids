@@ -3566,8 +3566,8 @@ public final class RaidEvents {
      *   <li>Only defenders on the raider's objective-side hemisphere are
      *       eligible — we don't chase somebody who is behind us.</li>
      *   <li>Breachers and the commander skip defender acquisition
-     *       entirely when {@code BREACHERS_IGNORE_DEFENDERS} is on so gate
-     *       breach progress is uninterrupted.</li>
+     *       on approach when {@code BREACHERS_IGNORE_DEFENDERS} is on;
+     *       inside the objective area they can engage defenders normally.</li>
      *   <li>If the raider has drifted more than
      *       {@code OFF_AXIS_DRIFT_LIMIT} blocks perpendicular to the
      *       invasion axis, the current target is dropped and the raider
@@ -3621,11 +3621,7 @@ public final class RaidEvents {
             }
             double distToObjectiveSq = mob.distanceToSqr(objective);
 
-            // Role-gated aggression: breachers and the commander skip the
-            // defender search entirely and only path to the objective.
             String role = mob.getPersistentData().getString(RAID_ROLE_TAG);
-            boolean lockedOnObjective = breachersIgnore &&
-                    (role.equals("breacher") || role.equals("commander"));
 
             // v2.23.0: widened aggro cone when this raider is already at the
             // objective. Fixes the "reached the base, no defender in the
@@ -3635,6 +3631,8 @@ public final class RaidEvents {
             // reaches escalation level 2 for any raider.
             StuckEntry stuck = stuckEnabled ? STUCK_TRACKER.get(id) : null;
             boolean atObjective = distToObjectiveSq < innerRangeSq;
+            boolean lockedOnObjective = com.devfarinsky.siegeoverhaul.raid.RaidMarchDiscipline
+                    .pushPastDefenders(role, breachersIgnore, atObjective);
             boolean wideAggro = atObjective || (stuck != null && stuck.escalationLevel >= 2);
             double effectiveAggroRangeSq = wideAggro ? widenedAggroRangeSq : aggroRangeSq;
 

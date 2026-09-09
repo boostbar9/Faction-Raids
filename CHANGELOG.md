@@ -1,3 +1,8 @@
+# 4.11.6 beta
+
+- Commanders and breachers can engage defenders after reaching the existing objective area instead of repeatedly clearing their combat targets. Their approach remains focused on the core when the existing ignore-defenders option is enabled.
+- Preserve target range, ally/dead-target checks, other troop roles, difficulty, rewards and dependencies. Clarify the configuration description.
+
 # 4.11.5 beta
 
 - Dismounted siege engineers cancel their siege-issued vehicle travel command before returning on foot, preventing native walking orders from repeatedly overriding the return route.
