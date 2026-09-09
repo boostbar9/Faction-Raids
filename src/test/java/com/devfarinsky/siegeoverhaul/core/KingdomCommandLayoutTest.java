@@ -27,6 +27,21 @@ class KingdomCommandLayoutTest {
             }
         }
     }
+    @Test void lootReelNeverOverlapsPurchaseButtons() {
+        // Sweep the thresholds where the old fixed 26px reel crossed the button.
+        boolean animated=false;
+        for(int height=240;height<=1080;height++) {
+            var l=CoreHireLayout.fit(854,height);
+            for(int i=0;i<3;i++) {
+                assertTrue(l.marketButtonY(i)+17<=l.marketY(i)+l.marketHeight());
+                if(l.reelHeight()>=12) {
+                    animated=true;
+                    assertTrue(l.marketY(i)+31+l.reelHeight()<=l.marketButtonY(i)-4);
+                }
+            }
+        }
+        assertTrue(animated);
+    }
     @Test void smallScreensCollapseOverviewButNormalScreensShowIt() {
         assertEquals(0,CoreHireLayout.fit(320,240).overviewHeight());
         assertTrue(CoreHireLayout.fit(640,360).overviewHeight()>=80);

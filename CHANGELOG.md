@@ -1,5 +1,7 @@
 # 4.12.0 beta — command-center preview
 
+- Keep the loot reveal reel clear of purchase buttons across GUI scales; show personal emeralds on the market tab even when the overview is collapsed. Prevent long faction names from overlapping the treasury header.
+
 - Rebuild the core around Kingdom Command: layered panels, responsive territory overview, faction treasury and live wave/reward status above the existing three service tabs.
 - Embed Recruits terrain cache and native claim overlays, centered on the player. Open map launches the full native Recruits map for territory management; small screens retain this button while collapsing the preview.
 - Add unticked native role portraits on larger hire cards and subtle button lighting. Portraits illustrate the role, not the eventual randomized equipment.

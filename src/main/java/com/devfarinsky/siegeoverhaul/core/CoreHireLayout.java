@@ -17,5 +17,8 @@ public record CoreHireLayout(int x,int y,int width,int height,boolean compact) {
     public int cardX(int i){return x+10+(i%2)*(cardWidth()+10);}
     public int cardY(int i){return contentY()+(i/2)*(cardHeight()+6);}
     public int marketHeight(){return (contentHeight()-8)/3;}
+    /** Keep the animated reel above the purchase control at every GUI scale. */
+    public int marketButtonY(int i){return marketY(i)+marketHeight()-21;}
+    public int reelHeight(){return Math.max(0,Math.min(26,marketHeight()-56));}
     public int marketY(int i){return contentY()+i*(marketHeight()+4);}
 }
