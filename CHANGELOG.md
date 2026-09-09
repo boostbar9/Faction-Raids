@@ -1,3 +1,9 @@
+# 4.11.7 beta
+
+- New ordinary core recruits receive simple first names such as Bobby and Fernan.
+- Core-hired workers receive one-time job supplies: farmers get a diamond hoe, water bucket and wheat seeds; lumberjacks get a diamond axe and saplings; miners get diamond mining tools, torches and cobblestone; builders get diamond tools and starter blocks; cooks get fuel and raw food. All receive eight bread; couriers retain cargo space.
+- Native equipment slots and existing items are preserved. Kits do not refill after reload; full inventories reject preparation before charging. Work areas, routes, recipes and project-specific building materials still require normal Workers setup.
+
 # 4.11.6 beta
 
 - Commanders and breachers can engage defenders after reaching the existing objective area instead of repeatedly clearing their combat targets. Their approach remains focused on the core when the existing ignore-defenders option is enabled.

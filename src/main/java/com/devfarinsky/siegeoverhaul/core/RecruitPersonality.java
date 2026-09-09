@@ -10,13 +10,12 @@ import net.minecraft.world.item.*;
 /** One-time starting identity and finite supplies for ordinary core-hired soldiers. */
 public final class RecruitPersonality {
     private static final String MARKER = "SiegeCoreOutfitted";
-    private static final String[] FIRST = {"Rowan", "Mira", "Alden", "Tessa", "Bram", "Elara", "Gareth", "Nora", "Finn", "Lyra", "Tobin", "Freya", "Dorian", "Wren", "Cedric", "Hazel", "Ronan", "Vera", "Jasper", "Maeve", "Owen", "Iris", "Silas", "Ada"};
-    private static final String[] LAST = {"Ashford", "Reed", "Ironwood", "Hawthorne", "Brook", "Stonefield", "Vale", "Oakheart", "Thorne", "Hillcrest", "Wells", "Foxglove", "Greybank", "Alder", "Fairwind", "Briar", "Moss", "Ridgeway", "Wintermere", "Redfern", "Blackwell", "Dawson", "Greenhill", "Westbrook"};
+    private static final String[] FIRST = {"Bobby", "Fernan", "Sam", "Nora", "Ben", "Mia", "Tom", "Anna", "Leo", "Emma", "Jack", "Lucy", "Finn", "Rose", "Max", "Lily", "Owen", "Ruby", "Alex", "Ada", "Oscar", "Molly", "Henry", "Ella", "Charlie", "Zoe", "Fred", "Ivy", "George", "Sophie", "Daniel", "Clara"};
     private static final String[] MATERIALS = {"copper", "iron", "gold", "redstone"};
     private RecruitPersonality() {}
 
     static String name(RandomSource random) {
-        return FIRST[random.nextInt(FIRST.length)] + " " + LAST[random.nextInt(LAST.length)];
+        return FIRST[random.nextInt(FIRST.length)];
     }
 
     public static void prepare(Mob mob, int role, SimpleContainer inventory) {

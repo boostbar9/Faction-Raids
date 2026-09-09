@@ -94,6 +94,12 @@ public final class CoreHiring {
                     throw new IllegalStateException("Recruit inventory missing");
                 RecruitPersonality.prepare(recruit, role, container);
             }
+            if (role >= CoreOffers.WORKER_START && role < 10) {
+                Object inventory = recruit.getClass().getMethod("getInventory").invoke(recruit);
+                if (!(inventory instanceof net.minecraft.world.SimpleContainer container))
+                    throw new IllegalStateException("Worker inventory missing");
+                WorkerStartingKit.prepare(recruit, role, container);
+            }
             // Use the same configured price as native villager hiring trades. Some workers
             // still hard-code their spawn cost, so align the entity with the displayed trade.
             int price = Math.max(0, cost(role));
