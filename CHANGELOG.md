@@ -1,3 +1,9 @@
+## 4.10.3 beta
+
+- Add optional henkelmax Corpse compatibility: camp earthworks and gate assembly reject overlapping recovery bodies; native builders pause and resume the same blueprint jobs when bodies are removed.
+- Protect fallback camp placement, native cell preparation and supply-barrel sites from overlapping corpses. No corpse inventory, owner, decay or NPC death behavior is changed.
+- Corpse remains optional. Minecraft 1.20.1 Forge / Java 17 and the four required companion mods are unchanged.
+
 ## 4.10.2 beta
 
 - Reject failed War Gate installation candidates and try other sites, restoring camp and fortification job queues after each rejected placement.

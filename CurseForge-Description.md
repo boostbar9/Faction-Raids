@@ -125,3 +125,9 @@ This override changes **victory loot**, not the core menu's equipment-box reward
 **Author:** boostbar9
 
 Built with **Villager Recruits, Villager Workers 2, Small Ships, and Siege Weapons** by **Talhanation**.
+
+## Optional Corpse Compatibility
+
+With henkelmax's Corpse mod installed, camp earthworks and War Gate assembly reject changes that overlap a recovery body. Native camp builders pause when a corpse overlaps pending blueprint cells and resume after it is removed, retaining their jobs and supplies. Fallback camp placement and native supply-barrel placement also avoid corpse space.
+
+Corpse remains optional and controls death inventories, ownership permissions, decay and recovery. This integration does not create NPC corpses or change those settings. Automated regression coverage is provided; combined in-game playtesting remains outstanding.

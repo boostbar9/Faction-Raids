@@ -163,6 +163,16 @@ class NativeCampConstructionTest extends MinecraftTestSupport {
             assertTrue(NativeCampConstruction.active(raid));
             org.mockito.Mockito.when(level.players()).thenReturn(java.util.List.of());
             assertTrue(NativeCampConstruction.safeToTick(level, raid));
+            try(var corpses=org.mockito.Mockito.mockStatic(com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.class)) {
+                corpses.when(()->com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.blocksAny(org.mockito.ArgumentMatchers.eq(level),org.mockito.ArgumentMatchers.any())).thenReturn(true);
+                var before=new LinkedHashMap<>(raid.pendingCampBlocks);var nativeBefore=raid.nativeCamp.copy();
+                assertFalse(NativeCampConstruction.safeToTick(level,raid));
+                assertTrue(raid.constructionPauseReason.startsWith("Corpse inside blueprint"));
+                assertEquals(before,raid.pendingCampBlocks);assertEquals(nativeBefore,raid.nativeCamp);
+                corpses.when(()->com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.blocksAny(org.mockito.ArgumentMatchers.eq(level),org.mockito.ArgumentMatchers.any())).thenReturn(false);
+                assertTrue(NativeCampConstruction.safeToTick(level,raid));assertEquals("",raid.constructionPauseReason);
+                assertEquals(before,raid.pendingCampBlocks);assertEquals(nativeBefore,raid.nativeCamp);
+            }
             assertFalse(raid.pendingCampBlocks.isEmpty());
             org.mockito.Mockito.when(level.isDay()).thenReturn(true);
             raid.campBuildTicks = com.devfarinsky.siegeoverhaul.RaidConfig.CAMP_MAX_BUILD_SECONDS.get()*20-20;

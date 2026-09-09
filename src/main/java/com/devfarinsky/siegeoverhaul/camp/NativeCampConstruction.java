@@ -39,6 +39,7 @@ public final class NativeCampConstruction {
         Entity build = null, storage = null;
         BlockPos supply = null;
         try {
+            if(com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.blocksAny(level,raid.pendingCampBlocks.keySet()))return false;
             if(!CampRoad.prepare(level,raid))return false;
             for (long key : raid.pendingCampBlocks.keySet()) {
                 BlockPos p = BlockPos.of(key);
@@ -167,6 +168,7 @@ public final class NativeCampConstruction {
     }
 
     static boolean prepareCell(ServerLevel level, RaidSavedData.RaidState raid, BlockPos pos) {
+        if(com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.blocksAt(level,pos))return false;
         if (CampVegetation.plant(level.getBlockState(pos))) return CampVegetation.clear(level, raid, pos);
         return level.getBlockState(pos).isAir() || level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
     }
@@ -218,7 +220,8 @@ public final class NativeCampConstruction {
                 BlockPos p = raid.campPos.relative(direction, radius);
                 if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)
                         || raid.pendingCampBlocks.containsKey(p.asLong())
-                        || raid.pendingCampBlocks.containsKey(p.above().asLong())) continue;
+                        || raid.pendingCampBlocks.containsKey(p.above().asLong())
+                        || com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.blocksAt(level,p)) continue;
                 if ((level.getBlockState(p).isAir() || CampVegetation.plant(level.getBlockState(p)))
                         && (level.getBlockState(p.above()).isAir() || CampVegetation.plant(level.getBlockState(p.above())))
                         && level.getBlockState(p.below()).isFaceSturdy(level, p.below(), Direction.UP)
@@ -232,6 +235,8 @@ public final class NativeCampConstruction {
     public static boolean safeToTick(ServerLevel level, RaidSavedData.RaidState raid) {
         if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level, raid)) return pause(raid, "Camp claim lost or unavailable");
         if (!RaidConfig.ENABLED.get() || !RaidConfig.ENABLE_CAMP_CONSTRUCTION.get() || !WorkersBridge.available()) return false;
+        if(com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.blocksAny(level,raid.pendingCampBlocks.keySet()))
+            return pause(raid,"Corpse inside blueprint: recover its items to resume construction");
         BlockPos supply = BlockPos.of(raid.nativeCamp.getLong(CAMP_SUPPLY_POS));
         if (!level.hasChunkAt(supply)) return false;
         var be = level.getBlockEntity(supply);

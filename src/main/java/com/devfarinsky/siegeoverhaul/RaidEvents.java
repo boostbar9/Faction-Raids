@@ -3058,6 +3058,7 @@ public final class RaidEvents {
             if (id != null) state.pendingCampBlocks.putIfAbsent(pos.asLong(), id.toString());
             return;
         }
+        if (com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.blocksAt(level,pos)) return;
         // Never wall in a player, worker, or another living entity during construction.
         if (!level.getEntitiesOfClass(LivingEntity.class, new AABB(pos), LivingEntity::isAlive).isEmpty()) return;
         // v3.1.0: snapshot the ORIGINAL block before we overwrite it so
