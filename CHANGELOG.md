@@ -1,3 +1,9 @@
+# 4.20.1 beta
+
+- Nightcaller's temporary Shadow Wolves now expire at their saved deadline instead of accumulating permanently. Cleanup also handles already-saved summons and wolves with disabled AI.
+- Summoned wolves no longer masquerade as hired recruit heroes. Ordinary wolves and player pets without the summon deadline are untouched.
+- No changes to prices, hero abilities, required companions or save format. Automated regression coverage; no interactive gameplay playtesting.
+
 # 4.11.7 beta
 
 - New ordinary core recruits receive simple first names such as Bobby and Fernan.
