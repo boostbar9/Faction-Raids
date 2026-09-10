@@ -39,6 +39,8 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue CONE_FALLBACK_ENABLED;
     public static final ForgeConfigSpec.IntValue CONE_FALLBACK_RADIUS;
     public static final ForgeConfigSpec.IntValue CONE_FALLBACK_VERTICAL;
+    public static final ForgeConfigSpec.BooleanValue STUCK_L3_TELEPORT_ENABLED;
+    public static final ForgeConfigSpec.IntValue STUCK_L3_TELEPORT_BLOCKS;
     // v2.25.0 Parkour + Hazard Avoidance + Shout-to-Allies:
     public static final ForgeConfigSpec.BooleanValue PARKOUR_ENABLED;
     public static final ForgeConfigSpec.IntValue PARKOUR_MAX_FORWARD;
@@ -244,6 +246,10 @@ public final class RaidConfig {
                 .defineInRange("coneFallbackRadius", 16, 4, 48);
         CONE_FALLBACK_VERTICAL = b.comment("Vertical tolerance (blocks) for the vanilla cone fallback. Vanilla uses 7. Higher values let raiders find reachable points on higher terrain around the objective.")
                 .defineInRange("coneFallbackVertical", 7, 1, 16);
+        STUCK_L3_TELEPORT_ENABLED = b.comment("When true (default), raiders stalled at 4x stuckEscalationSeconds get a short teleport forward along the direction to the objective. This is the last-ditch fix for raiders trapped by terrain the pathfinder cannot solve (deep pits, isolated ledges, hostile block combinations). It moves the raider a few blocks, not to the objective, so combat pacing is preserved. Turn off if you want strictly organic movement.")
+                .define("stuckL3TeleportEnabled", true);
+        STUCK_L3_TELEPORT_BLOCKS = b.comment("How many blocks forward toward the objective a stuck raider is teleported at stuck escalation Level 3. Keep small so the assist is not a free warp.")
+                .defineInRange("stuckL3TeleportBlocks", 6, 2, 24);
         // v2.25.0 Parkour + Hazards + Shout:
         PARKOUR_ENABLED = b.comment("When true (default), raiders can leap 1-3 blocks forward when a solid obstacle blocks their path to the objective. Fixes raiders freezing at low walls, fences, and ledges without needing to break blocks or wait for stuck escalation. Adapted from Enhanced AI (LGPL-3.0) by Insane96.")
                 .define("parkourEnabled", true);

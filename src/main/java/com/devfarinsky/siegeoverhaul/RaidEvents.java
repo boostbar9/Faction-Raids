@@ -106,7 +106,9 @@ public final class RaidEvents {
     static final class StuckEntry {
         double lastDistSq;
         long lastProgressGameTime;
-        int escalationLevel; // 0 = fresh, 1 = jump+burst, 2 = wide-aggro + longer teleport-to-front
+        // 0 = fresh, 1 = jump+burst, 2 = wide-aggro + cone fallback,
+        // 3 = short teleport forward toward objective (v4.17.0).
+        int escalationLevel;
 
         StuckEntry(double distSq, long gameTime) {
             this.lastDistSq = distSq;
@@ -3663,6 +3665,7 @@ public final class RaidEvents {
         int stuckSeconds = RaidConfig.STUCK_ESCALATION_SECONDS.get();
         long stuckTicksL1 = stuckSeconds * 20L;
         long stuckTicksL2 = stuckTicksL1 * 2L;
+        long stuckTicksL3 = stuckTicksL1 * 4L;
         double innerMultiplier = RaidConfig.INNER_AGGRO_MULTIPLIER.get();
         double innerRangeSq = (aggroRange * 1.5) * (aggroRange * 1.5); // "at the objective" band
         double widenedAggroRangeSq = (aggroRange * innerMultiplier) * (aggroRange * innerMultiplier);
@@ -3797,8 +3800,8 @@ public final class RaidEvents {
             // aren't stuck, they've won). Progress is measured as a
             // meaningful reduction in distanceToObjectiveSq over the window.
             if (stuckEnabled && !acquired && distToObjectiveSq > 25.0) {
-                updateStuckTracker(mob, id, distToObjectiveSq, gameTime,
-                        stuckTicksL1, stuckTicksL2);
+                updateStuckTracker(mob, id, objective, distToObjectiveSq, gameTime,
+                        stuckTicksL1, stuckTicksL2, stuckTicksL3);
             } else if (stuckEnabled) {
                 // Either engaged in melee, or we've reached the objective:
                 // clear stuck state so the next stall starts a fresh clock.
@@ -3868,8 +3871,8 @@ public final class RaidEvents {
                 objective, 1.5707963705062866);
     }
 
-    private static void updateStuckTracker(Mob mob, UUID id, double distToObjectiveSq,
-                                           long gameTime, long ticksL1, long ticksL2) {
+    private static void updateStuckTracker(Mob mob, UUID id, Vec3 objective, double distToObjectiveSq,
+                                           long gameTime, long ticksL1, long ticksL2, long ticksL3) {
         StuckEntry entry = STUCK_TRACKER.get(id);
         if (entry == null) {
             STUCK_TRACKER.put(id, new StuckEntry(distToObjectiveSq, gameTime));
@@ -3897,6 +3900,59 @@ public final class RaidEvents {
             // on the next tick. No direct action needed here.
             entry.escalationLevel = 2;
         }
+        if (entry.escalationLevel < 3 && stalledFor >= ticksL3) {
+            // Level 3 (v4.17.0): short teleport forward. Fires only if the
+            // config toggle is on. Moves the raider up to STUCK_L3_TELEPORT_BLOCKS
+            // blocks along the horizontal vector to the objective, snapping to
+            // the surface heightmap so we don't teleport into a wall. If the
+            // destination fails our sanity checks we skip and let the next
+            // sample retry. This is the last-ditch fix for terrain the
+            // pathfinder cannot solve.
+            if (RaidConfig.STUCK_L3_TELEPORT_ENABLED.get() && mob.level() instanceof ServerLevel serverLevel) {
+                teleportStuckRaiderForward(serverLevel, mob, objective);
+            }
+            entry.escalationLevel = 3;
+            // Reset the progress clock so we don't re-teleport on the very
+            // next tick if the teleport itself didn't close the gap far
+            // enough to trip the progress threshold.
+            entry.lastDistSq = mob.distanceToSqr(objective);
+            entry.lastProgressGameTime = gameTime;
+        }
+    }
+
+    /**
+     * v4.17.0 Level 3 stuck escalation: teleport a raider a short distance
+     * forward toward the objective. Distance capped by config so this is not
+     * a free warp. Uses the WORLD_SURFACE heightmap to snap Y to the ground
+     * so we never drop the raider inside a wall or under the floor. If the
+     * destination is not a safe standing position we abort.
+     */
+    private static void teleportStuckRaiderForward(ServerLevel level, Mob mob, Vec3 objective) {
+        int maxBlocks = RaidConfig.STUCK_L3_TELEPORT_BLOCKS.get();
+        Vec3 pos = mob.position();
+        double dx = objective.x - pos.x;
+        double dz = objective.z - pos.z;
+        double horizLen = Math.sqrt(dx * dx + dz * dz);
+        if (horizLen < 1.0) return;
+        double step = Math.min(maxBlocks, horizLen - 1.0);
+        if (step < 2.0) return;
+        double nx = pos.x + (dx / horizLen) * step;
+        double nz = pos.z + (dz / horizLen) * step;
+        int destX = (int) Math.floor(nx);
+        int destZ = (int) Math.floor(nz);
+        // WORLD_SURFACE_WG returns the highest non-air block, so +0 lands us
+        // one block above it, i.e. standing on top. Use WORLD_SURFACE (not
+        // MOTION_BLOCKING) so leaves/liquid don't confuse us.
+        int destY = level.getHeight(Heightmap.Types.WORLD_SURFACE, destX, destZ);
+        // Sanity check: destination must be loaded and non-lava under-block.
+        BlockPos foot = new BlockPos(destX, destY, destZ);
+        if (!level.isLoaded(foot)) return;
+        var under = level.getBlockState(foot.below());
+        if (under.getFluidState().is(net.minecraft.tags.FluidTags.LAVA)) return;
+        // Two blocks of clearance above the destination for the raider hitbox.
+        if (level.getBlockState(foot).isSolid() || level.getBlockState(foot.above()).isSolid()) return;
+        mob.getNavigation().stop();
+        mob.teleportTo(destX + 0.5, destY, destZ + 0.5);
     }
 
     /**
