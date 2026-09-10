@@ -7,7 +7,9 @@ public record CoreHireLayout(int x,int y,int width,int height,boolean compact) {
         return new CoreHireLayout((screenWidth-w)/2,(screenHeight-h)/2,w,h,w<500||h<300);
     }
     public int cardWidth(){return (width-30)/2;}
-    public int cardHeight(){return (height-88)/2;}
+    // Reserve 30px at the bottom of the card grid so siege yard row on the
+    // Army tab (bottom-32) does not overlap the hire button of the bottom cards.
+    public int cardHeight(){return (height-118)/2;}
     public int cardX(int i){return x+10+(i%2)*(cardWidth()+10);}
     public int cardY(int i){return y+62+(i/2)*(cardHeight()+6);}
     public int marketHeight(){return (height-88)/3;}
