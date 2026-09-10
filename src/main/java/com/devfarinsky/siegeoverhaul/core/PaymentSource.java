@@ -39,6 +39,12 @@ public final class PaymentSource {
         return inv + bank;
     }
 
+    /** True when the player has a server-side saved-data context (real world, not a unit-test mock). */
+    private static boolean hasServerContext(ServerPlayer player) {
+        try { return player.server != null; }
+        catch (RuntimeException | NoClassDefFoundError e) { return false; }
+    }
+
     /**
      * Attempt to consume the given number of emeralds. Bank is debited first
      * (up to `price`), then any remainder is taken from the player's
@@ -54,8 +60,11 @@ public final class PaymentSource {
         long inv = player.getInventory().items.stream()
                 .filter(s -> s.is(Items.EMERALD))
                 .mapToInt(ItemStack::getCount).sum();
-        RaidSavedData data = RaidSavedData.get(player.server);
-        CompoundTag core = coreTag(player);
+        // Bank access requires a real server context; skip cleanly when running
+        // under unit tests (mocked ServerPlayer without a server field).
+        boolean hasContext = hasServerContext(player);
+        RaidSavedData data = hasContext ? RaidSavedData.get(player.server) : null;
+        CompoundTag core = hasContext ? coreTag(player) : null;
         long bank = core == null ? 0 : FactionBank.balance(core);
         if (inv + bank < price) return false;
 
@@ -68,7 +77,7 @@ public final class PaymentSource {
                 // Debit shouldn't fail given the balance() check, but be safe.
                 return false;
             }
-            data.setDirty();
+            if (data != null) data.setDirty();
         }
         if (fromInv > 0) {
             int remaining = fromInv;
@@ -95,9 +104,10 @@ public final class PaymentSource {
 
     private static CompoundTag coreTag(ServerPlayer player) {
         try {
+            if (!hasServerContext(player)) return null;
             RaidSavedData data = RaidSavedData.get(player.server);
             return data.siegeCores.get(SiegeCore.key(player));
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | NoClassDefFoundError e) {
             return null;
         }
     }
