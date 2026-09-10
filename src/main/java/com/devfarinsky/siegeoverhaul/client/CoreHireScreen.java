@@ -63,6 +63,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private int revealedTier;
 
     private final Button[] hire = new Button[4];
+    private final Button[] siegeYard = new Button[2];
+    private final Button[] territoryBuffs = new Button[4];
     private final Button[] boxes = new Button[3];
     private final Button[] buffs = new Button[3];
     private final Button[] bank = new Button[4];
@@ -144,6 +146,37 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     layout.y() + 114,
                     bw, 20,
                     false, () -> false, bankIcons[i]));
+        }
+
+        // Siege Yard buttons on the Army tab (v4.18.0): hire a friendly
+        // siege engineer pre-mounted on a catapult or ballista. Sits along
+        // the bottom of the Army tab under the offer cards.
+        int yardW = (layout.width() - 32) / 2;
+        for (int i = 0; i < 2; i++) {
+            final int index = i;
+            siegeYard[i] = addRenderableWidget(new CoreButton(
+                    Component.literal(SiegeYard.LABELS[i] + "  " + SiegeYard.PRICES[i]),
+                    b -> action(50 + index),
+                    layout.x() + 10 + i * (yardW + 6),
+                    layout.y() + layout.height() - 32,
+                    yardW, 20,
+                    false, () -> false,
+                    i == 0 ? CommandIcon.SWORDS : CommandIcon.BOOK));
+        }
+
+        // Territory-level buff buttons (v4.18.0): four one-time purchases
+        // that apply faction-wide effects. Row sits between the tab bar and
+        // the map, above the recenter/zoom controls.
+        int tbW = (layout.width() - 32) / TerritoryBuffs.COUNT;
+        for (int i = 0; i < TerritoryBuffs.COUNT; i++) {
+            final int index = i;
+            territoryBuffs[i] = addRenderableWidget(new CoreButton(
+                    Component.literal(TerritoryBuffs.LABELS[i]),
+                    b -> action(60 + index),
+                    layout.x() + 10 + i * (tbW + 6),
+                    layout.y() + 40,
+                    tbW, 18,
+                    false, () -> false, CommandIcon.FLAG));
         }
 
         // Territory tab helper keys: recenter + zoom in / out.
@@ -233,6 +266,24 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
             bank[i].visible = tab == 2;
             bank[i].active = i < 2 ? menu.emeralds() > 0 : menu.canWithdraw() && menu.bank() > 0;
+        }
+        for (int i = 0; i < siegeYard.length; i++) {
+            siegeYard[i].visible = tab == 0;
+            int total = menu.emeralds() + menu.bank();
+            siegeYard[i].active = SiegeYard.available() && total >= SiegeYard.PRICES[i];
+            siegeYard[i].setMessage(Component.literal(
+                    SiegeYard.available()
+                            ? "Hire " + SiegeYard.LABELS[i] + "  " + SiegeYard.PRICES[i]
+                            : SiegeYard.LABELS[i] + " (needs Siege Weapons)"));
+        }
+        for (int i = 0; i < territoryBuffs.length; i++) {
+            territoryBuffs[i].visible = tab == 3;
+            boolean owned = menu.hasTerritoryBuff(i);
+            int totalFunds = menu.emeralds() + menu.bank();
+            territoryBuffs[i].active = !owned && totalFunds >= TerritoryBuffs.PRICES[i];
+            territoryBuffs[i].setMessage(Component.literal(
+                    owned ? TerritoryBuffs.LABELS[i] + " (active)"
+                          : TerritoryBuffs.LABELS[i] + "  " + TerritoryBuffs.PRICES[i]));
         }
         for (int i = 0; i < 3; i++) {
             recenterButton.visible = tab == 3;
@@ -638,7 +689,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private int mapX() { return layout.x() + 10; }
     private int mapY() { return layout.y() + 62; }
     private int mapW() { return layout.width() - 20; }
-    private int mapH() { return layout.height() - 62 - 40; }
+    private int mapH() { return layout.height() - 62 - 40; } // room for buff row above + zoom row below
 
     private void drawTerritory(GuiGraphics g) {
         int mx = mapX(), my = mapY(), mw = mapW(), mh = mapH();
@@ -989,7 +1040,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 rightX, y + 92, rightW, CommandPalette.TEXT_DIM);
 
         // Roster panel below (pushed down to make room for the taller bank card
-        // and its Deposit/Withdraw button row).
+        // and its Deposit/Withdraw button row). We split it into a left roster
+        // column and a right activity-graph column when the roster is short
+        // enough to leave room; otherwise the roster takes the full width.
         int rosterY = y + 138;
         int rosterH = h - (rosterY - y) - 22;
         CommandFrame.card(g, x + 10, rosterY, w - 20, rosterH, CommandPalette.ACCENT_ARCANE);
@@ -997,6 +1050,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         text(g, "FACTION ROSTER", x + 32, rosterY + 6, w - 48,
                 CommandPalette.ACCENT_ARCANE);
 
+        int graphW = Math.min(180, (w - 20) / 2 - 8);
+        int rosterListW = w - 32 - graphW - 8;
         int listTop = rosterY + 22;
         int lines = Math.max(1, (rosterH - 26) / 12);
         int count = menu.members().size();
@@ -1004,12 +1059,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         rosterOffset = Math.max(0, Math.min(rosterOffset, maxOffset));
 
         if (count == 0) {
-            text(g, "Roster is synchronizing...", x + 18, listTop, w - 36,
+            text(g, "Roster is synchronizing...", x + 18, listTop, rosterListW,
                     CommandPalette.TEXT_MUTED);
         } else {
             for (int i = 0; i < lines && i + rosterOffset < count; i++) {
                 text(g, "-  " + menu.members().get(i + rosterOffset),
-                        x + 18, listTop + i * 12, w - 36, CommandPalette.TEXT);
+                        x + 18, listTop + i * 12, rosterListW, CommandPalette.TEXT);
             }
         }
         // Scroll indicator when overflow is present.
@@ -1017,9 +1072,64 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             String indicator = String.format(Locale.ROOT,
                     "%d - %d of %d  |  Scroll",
                     rosterOffset + 1, Math.min(count, rosterOffset + lines), count);
-            text(g, indicator, x + w - 18 - font.width(indicator),
-                    rosterY + 6, w / 2, CommandPalette.TEXT_DIM);
+            text(g, indicator, x + 18 + rosterListW - font.width(indicator),
+                    rosterY + 6, rosterListW, CommandPalette.TEXT_DIM);
         }
+
+        // Activity graph: right side of the roster panel. Uses the recent
+        // bank ledger (deposits, withdrawals, wave rewards) as bars centered
+        // on a zero line. Green above = credit, red below = debit.
+        int gx = x + 18 + rosterListW + 8;
+        int gy = rosterY + 22;
+        int gh = rosterH - 30;
+        drawBankGraph(g, gx, gy, graphW, gh);
+    }
+
+    /** v4.18.0 bank activity sparkline. Renders a zero-centered bar chart. */
+    private void drawBankGraph(GuiGraphics g, int gx, int gy, int gw, int gh) {
+        // Frame + label header.
+        g.fill(gx, gy, gx + gw, gy + gh, 0x40000000);
+        g.fill(gx, gy, gx + gw, gy + 1, 0xFF6b4a1a);
+        g.fill(gx, gy + gh - 1, gx + gw, gy + gh, 0xFF6b4a1a);
+        g.fill(gx, gy, gx + 1, gy + gh, 0xFF6b4a1a);
+        g.fill(gx + gw - 1, gy, gx + gw, gy + gh, 0xFF6b4a1a);
+        text(g, "RECENT ACTIVITY", gx + 4, gy + 3, gw - 8, CommandPalette.ACCENT_GOLD);
+
+        int[] ledger = menu.bankLedger();
+        int plotTop = gy + 16;
+        int plotBottom = gy + gh - 12;
+        int plotH = plotBottom - plotTop;
+        int zeroY = plotTop + plotH / 2;
+        // Zero line.
+        g.fill(gx + 4, zeroY, gx + gw - 4, zeroY + 1, 0x60ffffff);
+
+        if (ledger.length == 0) {
+            text(g, "No transactions yet", gx + 6, zeroY + 6, gw - 12, CommandPalette.TEXT_DIM);
+            return;
+        }
+        // Find max absolute delta for scaling.
+        int maxAbs = 1;
+        for (int d : ledger) maxAbs = Math.max(maxAbs, Math.abs(d));
+        int plotW = gw - 8;
+        int barW = Math.max(2, plotW / Math.max(ledger.length, 8));
+        int startX = gx + 4 + (plotW - barW * ledger.length) / 2;
+        int totalCredit = 0, totalDebit = 0;
+        for (int i = 0; i < ledger.length; i++) {
+            int d = ledger[i];
+            int bx = startX + i * barW;
+            int barH = (int) ((long) Math.abs(d) * (plotH / 2 - 2) / maxAbs);
+            if (d >= 0) {
+                g.fill(bx + 1, zeroY - barH, bx + barW - 1, zeroY, 0xFF2E9E4A);
+                totalCredit += d;
+            } else {
+                g.fill(bx + 1, zeroY + 1, bx + barW - 1, zeroY + 1 + barH, 0xFFB1352B);
+                totalDebit += -d;
+            }
+        }
+        // Footer totals.
+        String footer = String.format(Locale.ROOT, "+%d  /  -%d over last %d",
+                totalCredit, totalDebit, ledger.length);
+        text(g, footer, gx + 6, gy + gh - 10, gw - 12, CommandPalette.TEXT_MUTED);
     }
 
     @Override

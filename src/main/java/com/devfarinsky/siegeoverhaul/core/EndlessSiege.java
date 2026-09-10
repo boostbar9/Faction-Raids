@@ -55,6 +55,9 @@ public final class EndlessSiege {
         FactionBank.settle(core, now, rate);
         long paid = FactionBank.credit(core, reward(state.wave));
         state.campaign.putLong("Deposited", Math.min(FactionBank.LIMIT, state.campaign.getLong("Deposited") + paid));
+        // v4.18.0: log wave rewards in the bank ledger so the graph reflects
+        // real activity rather than only manual deposits/withdrawals.
+        if (paid > 0) FactionBank.record(core, (int) Math.min(Integer.MAX_VALUE, paid));
         return paid;
     }
     public static boolean voting(RaidSavedData.RaidState state) { return state.campaign.getInt("VoteTicks") > 0; }

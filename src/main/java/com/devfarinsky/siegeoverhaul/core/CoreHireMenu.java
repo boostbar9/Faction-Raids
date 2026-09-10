@@ -14,15 +14,22 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     private final ServerPlayer owner;
     private final BlockPos pos;
     private final SimpleContainer display = new SimpleContainer(6);
-    private final ContainerData data = new SimpleContainerData(29);
+    private final ContainerData data = new SimpleContainerData(30);
     private long shownAt = Long.MIN_VALUE;
     private long lastActionAt = -1;
     private String sentRoster = "";
     private String factionName = "Faction";
     private java.util.List<String> members = java.util.List.of();
+    private int[] ledger = new int[0];
     public String factionName() { return factionName; }
     public java.util.List<String> members() { return members; }
-    public void details(String faction, java.util.List<String> roster) { factionName = faction; members = java.util.List.copyOf(roster); }
+    /** v4.18.0 recent bank transactions (signed deltas, oldest first). */
+    public int[] bankLedger() { return ledger; }
+    public void details(String faction, java.util.List<String> roster, int[] recentLedger) {
+        factionName = faction;
+        members = java.util.List.copyOf(roster);
+        ledger = recentLedger == null ? new int[0] : recentLedger.clone();
+    }
     private int wide(int low) { return (data.get(low) & 0xffff) | (data.get(low+1) & 0xffff) << 16; }
     private void wide(int low,int value) { data.set(low,value & 0xffff); data.set(low+1,(value >>> 16) & 0xffff); }
     public int bank() { return wide(18); }
@@ -32,6 +39,9 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     public boolean canWithdraw() { return data.get(25) != 0; }
     public int currentWave() { return wide(26); }
     public int voteSeconds() { return data.get(28); }
+    /** v4.18.0 Territory buff ownership bitmask replicated to the client. */
+    public int territoryBuffMask() { return data.get(29); }
+    public boolean hasTerritoryBuff(int index) { return (data.get(29) & (1 << index)) != 0; }
     public CoreHireMenu(int id, Inventory inventory) { this(id, inventory, null); }
     public CoreHireMenu(int id, Inventory inventory, BlockPos pos) {
         super(CoreMenus.HIRING.get(), id);
@@ -86,13 +96,17 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         int next = raid == null ? 1 : (int)Math.min(Integer.MAX_VALUE,raid.wave+1L);
         wide(21,next); wide(23,raid!=null && !raid.rewardEligible ? 0 : EndlessSiege.reward(next)); data.set(25,FactionBank.canWithdraw(owner)?1:0);
         wide(26,raid==null?0:raid.wave); data.set(28,raid==null?0:(raid.campaign.getInt("VoteTicks")+19)/20);
+        data.set(29, com.devfarinsky.siegeoverhaul.core.TerritoryBuffs.mask(core));
         String faction=owner.getTeam() instanceof net.minecraft.world.scores.PlayerTeam team?team.getDisplayName().getString():"Faction";
         java.util.List<String> roster = owner.getTeam()==null?java.util.List.of():owner.getTeam().getPlayers().stream()
                 .filter(name -> !name.startsWith("#"))
                 .filter(name -> { try { java.util.UUID.fromString(name); return false; } catch(IllegalArgumentException ignored) { return true; } })
                 .sorted().limit(100).map(name -> (owner.server.getPlayerList().getPlayerByName(name)!=null?"Online  ":"Offline  ")+name).toList();
         String signature=faction+roster;
-        if (!signature.equals(sentRoster)) { sentRoster=signature; com.devfarinsky.siegeoverhaul.RaidNetwork.coreDetails(owner,containerId,faction,roster); }
+        int[] ledgerCurrent = FactionBank.ledgerDeltas(core);
+        String ledgerSig = java.util.Arrays.toString(ledgerCurrent);
+        String signatureFull = signature + ledgerSig;
+        if (!signatureFull.equals(sentRoster)) { sentRoster=signatureFull; com.devfarinsky.siegeoverhaul.RaidNetwork.coreDetails(owner,containerId,faction,roster,ledgerCurrent); }
         shownAt = now;
     }
     @Override public boolean stillValid(Player player) {
@@ -126,6 +140,8 @@ public final class CoreHireMenu extends AbstractContainerMenu {
             data.set(16,data.get(16)%30000+1); changed=true;
         } else if(button>=30 && button<=32) changed=CoreBuffs.purchase(owner,button-30);
         else if(button>=40 && button<=43) changed=FactionBank.transact(owner,new int[]{8,64,-8,-64}[button-40]);
+        else if(button>=50 && button<=51) changed=SiegeYard.hire(owner, pos, button-50);
+        else if(button>=60 && button<=63) changed=TerritoryBuffs.purchase(owner, pos, button-60);
         if(!changed)return false;
         owner.inventoryMenu.broadcastChanges();refresh();super.broadcastChanges();return true;
     }

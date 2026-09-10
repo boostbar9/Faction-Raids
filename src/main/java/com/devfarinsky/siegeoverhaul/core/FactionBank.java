@@ -9,7 +9,38 @@ import net.minecraft.world.item.*;
 public final class FactionBank {
     public static final long LIMIT = 1_000_000_000L;
     public static final long DAY = 86_400_000L;
+    /**
+     * v4.18.0 transaction ledger: we retain the last N deltas on the core
+     * so the client can render a recent-activity graph on the Bank tab.
+     * Kept small so it doesn't bloat save files; the graph only needs a
+     * rolling window.
+     */
+    public static final int LEDGER_MAX = 32;
+    private static final String LEDGER_TAG = "BankLedger";
+
     private FactionBank() {}
+
+    /** Append a delta (signed emeralds) to the ledger, trimming to LEDGER_MAX. */
+    public static void record(CompoundTag core, int delta) {
+        if (delta == 0) return;
+        long packed = ((long) System.currentTimeMillis() & 0xFFFFFFFFL) << 32 | (delta & 0xFFFFFFFFL);
+        long[] cur = core.getLongArray(LEDGER_TAG);
+        int len = Math.min(cur.length + 1, LEDGER_MAX);
+        long[] next = new long[len];
+        int keep = Math.min(cur.length, LEDGER_MAX - 1);
+        // shift so the newest entry sits at index len-1
+        System.arraycopy(cur, cur.length - keep, next, 0, keep);
+        next[len - 1] = packed;
+        core.putLongArray(LEDGER_TAG, next);
+    }
+
+    /** Return the ledger as signed int deltas, oldest first. */
+    public static int[] ledgerDeltas(CompoundTag core) {
+        long[] cur = core.getLongArray(LEDGER_TAG);
+        int[] out = new int[cur.length];
+        for (int i = 0; i < cur.length; i++) out[i] = (int) cur[i];
+        return out;
+    }
     public static long balance(CompoundTag core) { return Math.max(0, Math.min(LIMIT, core.getLong("BankEmeralds"))); }
     public static long credit(CompoundTag core, long amount) {
         long accepted = Math.min(Math.max(0, amount), LIMIT - balance(core));
@@ -37,7 +68,10 @@ public final class FactionBank {
         return true;
     }
     public static void settle(RaidSavedData data, CompoundTag core) {
-        if (settle(core, System.currentTimeMillis(), RaidConfig.BANK_INTEREST_BASIS_POINTS.get())) data.setDirty();
+        // v4.18.0 Territory Provisioning buff boosts bank interest by +50%.
+        int base = RaidConfig.BANK_INTEREST_BASIS_POINTS.get();
+        int rate = TerritoryBuffs.has(core, 2) ? (int) Math.min(Integer.MAX_VALUE, Math.round(base * 1.5)) : base;
+        if (settle(core, System.currentTimeMillis(), rate)) data.setDirty();
     }
     public static boolean canWithdraw(ServerPlayer player) {
         var anchor = RaidSavedData.get(player.server).anchors.get(SiegeCore.key(player));
@@ -74,6 +108,8 @@ public final class FactionBank {
             debit(core, delivered);
         }
         long delta=balance(core)-before;
+        // v4.18.0: log the delta so the Bank tab graph can plot recent flow.
+        record(core, (int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, delta)));
         player.displayClientMessage(net.minecraft.network.chat.Component.literal((delta>0?"Deposited ":"Withdrew ")+Math.abs(delta)+" emeralds. Faction bank: "+balance(core)+"."),true);
         data.setDirty(); player.getInventory().setChanged(); player.inventoryMenu.broadcastChanges(); return true;
     }
