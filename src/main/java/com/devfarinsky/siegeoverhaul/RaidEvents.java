@@ -2333,6 +2333,11 @@ public final class RaidEvents {
                     level.random.nextFloat() * 360.0F, 0.0F);
             Mob raider = RaidMobSpawner.initializeOrFallback(level, candidate);
             if (raider == null) continue;
+            // If the dependency's finalizeSpawn saddled the raider onto a
+            // placeholder animal (some Recruits builds mount cavalry on a pig
+            // when horses fail to place), dismount and discard the mount so
+            // we don't tag a pig with team + role + name.
+            scrubPigMount(raider);
             // A dependency initializer may relocate or resize a mob. Recheck the designated
             // gate after initialization, before registration, instead of accepting a remote spawn.
             if (state.campPos!=null) {
@@ -2590,8 +2595,46 @@ public final class RaidEvents {
 
         EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("recruits", recruitType));
         Entity created = type == null ? null : type.create(level);
-        if (created instanceof Mob mob) return mob;
+        if (created instanceof Mob mob && isAllowedRaiderType(mob.getType())) return mob;
+        // If the type resolved to something we don't want to arm as a raider
+        // (rare: a Recruits build with a placeholder entity, or a random
+        // registry collision from a client-only mod), fall back to a vanilla
+        // pillager instead of parading a farm animal in a war camp.
+        if (created != null) created.discard();
         return index % 3 == 0 ? EntityType.VINDICATOR.create(level) : EntityType.PILLAGER.create(level);
+    }
+
+    /**
+     * Guardrail against the "enemy pig wearing a recruit class" bug.
+     * Only allow Recruits mod entities, Workers mod entities, and the small
+     * vanilla raid pool through as raiders. Everything else (pigs, cows,
+     * villagers, etc.) is rejected so the wave doesn't decorate a farm
+     * animal with our team tag, role, name, and uniform.
+     */
+    private static boolean isAllowedRaiderType(EntityType<?> t) {
+        if (t == EntityType.PILLAGER || t == EntityType.VINDICATOR || t == EntityType.EVOKER
+                || t == EntityType.WITCH || t == EntityType.RAVAGER || t == EntityType.ILLUSIONER) return true;
+        ResourceLocation id = ForgeRegistries.ENTITY_TYPES.getKey(t);
+        if (id == null) return false;
+        String ns = id.getNamespace();
+        return ns.equals("recruits") || ns.equals("workers");
+    }
+
+    /**
+     * If finalizeSpawn stuck the raider on a pig (or any farm animal) instead
+     * of a proper mount, drop them off and delete the mount. Horses, donkeys,
+     * mules, camels, and llamas are legitimate cavalry mounts and stay.
+     */
+    private static void scrubPigMount(Mob raider) {
+        Entity vehicle = raider.getVehicle();
+        if (vehicle == null) return;
+        EntityType<?> mt = vehicle.getType();
+        if (mt == EntityType.HORSE || mt == EntityType.DONKEY || mt == EntityType.MULE
+                || mt == EntityType.CAMEL || mt == EntityType.LLAMA) return;
+        // Anything else being ridden by a raider is a bug (pig, cow, chicken,
+        // even a boat placed in the middle of a war camp). Get off, kill mount.
+        raider.stopRiding();
+        try { vehicle.discard(); } catch (RuntimeException ignored) {}
     }
 
     private static Mob createVanillaAttacker(ServerLevel level, int wave, int index, int totalWaves) {

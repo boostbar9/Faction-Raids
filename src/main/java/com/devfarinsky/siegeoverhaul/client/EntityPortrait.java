@@ -9,7 +9,10 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.HashMap;
@@ -132,11 +135,122 @@ public final class EntityPortrait {
             if (role >= 10) {
                 living.getPersistentData().putBoolean("SiegeHiredHero", true);
             }
+            // Client-side entities never receive the server's spawn loadout,
+            // so equip a role-appropriate vanilla kit here so the portrait
+            // matches the printed "Kit:" line on the hire card. Cosmetic only:
+            // this instance never sees combat.
+            applyKit(living, role);
             CACHE.put(role, living);
             return living;
         } catch (Throwable t) {
             FAILED.add(role);
             return null;
+        }
+    }
+
+    /**
+     * Equip a display-only vanilla loadout so the portrait mob actually looks
+     * like the printed kit. Uses only vanilla items so it works whether or not
+     * downstream mods (Epic Knights, Musket, etc.) are present.
+     */
+    private static void applyKit(LivingEntity e, int role) {
+        // Helmet + body per role. Heroes get netherite so they read as elite.
+        ItemStack head = ItemStack.EMPTY;
+        ItemStack chest = ItemStack.EMPTY;
+        ItemStack legs = ItemStack.EMPTY;
+        ItemStack feet = ItemStack.EMPTY;
+        ItemStack main = ItemStack.EMPTY;
+        ItemStack off = ItemStack.EMPTY;
+        switch (role) {
+            case 0 -> { // Recruit
+                head = new ItemStack(Items.LEATHER_HELMET);
+                chest = new ItemStack(Items.LEATHER_CHESTPLATE);
+                main = new ItemStack(Items.IRON_SWORD);
+                off = new ItemStack(Items.SHIELD);
+            }
+            case 1 -> { // Shieldman
+                head = new ItemStack(Items.IRON_HELMET);
+                chest = new ItemStack(Items.IRON_CHESTPLATE);
+                legs = new ItemStack(Items.IRON_LEGGINGS);
+                main = new ItemStack(Items.IRON_SWORD);
+                off = new ItemStack(Items.SHIELD);
+            }
+            case 2 -> { // Archer
+                head = new ItemStack(Items.LEATHER_HELMET);
+                chest = new ItemStack(Items.LEATHER_CHESTPLATE);
+                main = new ItemStack(Items.BOW);
+            }
+            case 3 -> { // Crossbowman
+                head = new ItemStack(Items.CHAINMAIL_HELMET);
+                chest = new ItemStack(Items.CHAINMAIL_CHESTPLATE);
+                main = new ItemStack(Items.CROSSBOW);
+            }
+            case 4 -> { // Farmer
+                main = new ItemStack(Items.IRON_HOE);
+                off = new ItemStack(Items.WHEAT_SEEDS);
+            }
+            case 5 -> { // Lumberjack
+                head = new ItemStack(Items.LEATHER_HELMET);
+                main = new ItemStack(Items.IRON_AXE);
+            }
+            case 6 -> { // Miner
+                head = new ItemStack(Items.IRON_HELMET);
+                main = new ItemStack(Items.IRON_PICKAXE);
+                off = new ItemStack(Items.TORCH);
+            }
+            case 7 -> { // Builder
+                head = new ItemStack(Items.LEATHER_HELMET);
+                main = new ItemStack(Items.OAK_PLANKS);
+            }
+            case 8 -> { // Cook
+                main = new ItemStack(Items.IRON_SWORD);
+                off = new ItemStack(Items.BREAD);
+            }
+            case 9 -> { // Courier
+                feet = new ItemStack(Items.LEATHER_BOOTS);
+                main = new ItemStack(Items.FILLED_MAP);
+            }
+            case 10 -> { // Kael Bloodthorn (Warblade)
+                head = new ItemStack(Items.NETHERITE_HELMET);
+                chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
+                legs = new ItemStack(Items.NETHERITE_LEGGINGS);
+                feet = new ItemStack(Items.NETHERITE_BOOTS);
+                main = new ItemStack(Items.NETHERITE_SWORD);
+            }
+            case 11 -> { // Branna Dawnwarden (Bulwark)
+                head = new ItemStack(Items.NETHERITE_HELMET);
+                chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
+                legs = new ItemStack(Items.NETHERITE_LEGGINGS);
+                feet = new ItemStack(Items.NETHERITE_BOOTS);
+                main = new ItemStack(Items.NETHERITE_AXE);
+                off = new ItemStack(Items.SHIELD);
+            }
+            case 12 -> { // Sylva Stormbow (Archer hero)
+                head = new ItemStack(Items.NETHERITE_HELMET);
+                chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
+                legs = new ItemStack(Items.NETHERITE_LEGGINGS);
+                feet = new ItemStack(Items.NETHERITE_BOOTS);
+                main = new ItemStack(Items.BOW);
+            }
+            case 13 -> { // Orin Frostbinder (Crossbow hero)
+                head = new ItemStack(Items.NETHERITE_HELMET);
+                chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
+                legs = new ItemStack(Items.NETHERITE_LEGGINGS);
+                feet = new ItemStack(Items.NETHERITE_BOOTS);
+                main = new ItemStack(Items.CROSSBOW);
+            }
+            default -> { /* leave bare */ }
+        }
+        try {
+            if (!head.isEmpty()) e.setItemSlot(EquipmentSlot.HEAD, head);
+            if (!chest.isEmpty()) e.setItemSlot(EquipmentSlot.CHEST, chest);
+            if (!legs.isEmpty()) e.setItemSlot(EquipmentSlot.LEGS, legs);
+            if (!feet.isEmpty()) e.setItemSlot(EquipmentSlot.FEET, feet);
+            if (!main.isEmpty()) e.setItemSlot(EquipmentSlot.MAINHAND, main);
+            if (!off.isEmpty()) e.setItemSlot(EquipmentSlot.OFFHAND, off);
+        } catch (Throwable t) {
+            // Some modded entities override setItemSlot with strict checks;
+            // ignore, portrait still renders without the kit.
         }
     }
 
