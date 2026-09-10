@@ -467,8 +467,8 @@ public final class RaidConfig {
                 .define("enableLadderBuilding", true);
         MAX_LADDERS_PER_RAID = b.comment("Maximum ladder columns a single raid can build. Each column is up to 7 blocks tall.")
                 .defineInRange("maxLaddersPerRaid", 6, 0, 32);
-        SPAWN_GUIDEBOOK_ON_JOIN = b.comment("Give each player a Faction Raids guidebook item on first login. Right-click the book to open the dashboard.")
-                .define("spawnGuidebookOnJoin", true);
+        SPAWN_GUIDEBOOK_ON_JOIN = b.comment("Deprecated in v4.13.0: the Codex content lives in the Command Center HUD's Intel tab, so no book is required. Left in for existing worlds; default is now off.")
+                .define("spawnGuidebookOnJoin", false);
         ENABLE_GATE_BREACHING = b.comment("Allow tracked siege breachers to break doors, trapdoors, fence gates and fences blocking their advance.")
                 .define("enableRestorableGateBreaching", true);
         WOODEN_BREACH_SECONDS = b.comment("Approximate focused breach time for wooden defenses. Multiple nearby breachers accelerate it.")

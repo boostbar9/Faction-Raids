@@ -48,6 +48,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private int revealTicks;
     private int waitingTicks;
     private int rosterOffset;
+    /** Intel tab: 0 = Units, 1 = Enemy Lore, 2 = How to Play. */
+    private int intelSection;
+    private int intelOffset;
     private ItemStack revealed = ItemStack.EMPTY;
     private int revealedTier;
 
@@ -83,8 +86,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         super.init();
 
         // Tab rail across the top: icon + label, evenly spaced.
-        String[] tabLabels = {"Army & Heroes", "Loot & Blessings", "Bank & Faction", "Territory"};
-        CommandIcon[] tabIcons = {CommandIcon.SWORDS, CommandIcon.CHEST, CommandIcon.BANK, CommandIcon.MAP};
+        String[] tabLabels = {"Army", "Loot", "Bank", "Territory", "Intel"};
+        CommandIcon[] tabIcons = {CommandIcon.SWORDS, CommandIcon.CHEST, CommandIcon.BANK, CommandIcon.MAP, CommandIcon.BOOK};
         int tabCount = tabLabels.length;
         int tabWidth = (layout.width() - 28 - 4 * (tabCount - 1)) / tabCount;
         for (int i = 0; i < tabCount; i++) {
@@ -114,15 +117,16 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     layout.cardWidth() - hirePortrait - 22, 20,
                     false, () -> false));
 
-            String[] bankLabels = {"Store 8", "Store 64", "Take 8", "Take 64"};
+            String[] bankLabels = {"Deposit 8", "Deposit 64", "Withdraw 8", "Withdraw 64"};
+            CommandIcon[] bankIcons = {CommandIcon.EMERALD, CommandIcon.EMERALD, CommandIcon.BANK, CommandIcon.BANK};
             int bw = (layout.width() - 38) / 4;
             bank[i] = addRenderableWidget(new CoreButton(
                     Component.literal(bankLabels[i]),
                     b -> action(40 + index),
                     layout.x() + 10 + i * (bw + 6),
                     layout.y() + 102,
-                    bw, 18,
-                    false, () -> false));
+                    bw, 22,
+                    false, () -> false, bankIcons[i]));
         }
 
         // Territory tab helper keys: recenter + zoom in / out.
@@ -295,19 +299,23 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // Header banner strip that sits behind the crown, title and treasury chip.
         CommandFrame.header(g, x, y, w, 26);
 
-        // Crown + title cluster on the left.
-        CommandIcon.CROWN.draw(g, x + 12, y + 10, 14);
-        text(g, "COMMAND CENTER", x + 32, y + 12, w / 2 - 40, CommandPalette.ACCENT_GOLD);
-        text(g, menu.factionName().toUpperCase(Locale.ROOT),
-                x + 32, y + 22, w / 2 - 40, CommandPalette.TEXT_MUTED);
+        // Hanging crest banner on the left of the header (like the reference).
+        drawCrestBanner(g, x - 6, y + 6);
 
-        // Treasury chip on the right, with emerald glyph.
+        // Title cluster to the right of the crest.
+        text(g, "KINGDOM COMMAND", x + 42, y + 12,
+                w / 2 - 50, CommandPalette.ACCENT_GOLD);
+        text(g, menu.factionName(),
+                x + 42, y + 22, w / 2 - 50, CommandPalette.TEXT_MUTED);
+
+        // Treasury chip on the right, with emerald glyph. Gold border for prominence.
         String purse = String.format(Locale.ROOT, "%,d", menu.emeralds());
-        int chipW = Math.min(w / 3, Math.max(66, font.width(purse) + 34));
+        int chipW = Math.min(w / 3, Math.max(80, font.width(purse) + 40));
         int chipX = x + w - chipW - 12;
-        CommandFrame.chip(g, chipX, y + 10, chipW, 16, CommandPalette.ACCENT_EMERALD);
-        CommandIcon.EMERALD.draw(g, chipX + 4, y + 12, 12);
-        text(g, purse, chipX + 20, y + 14, chipW - 26, CommandPalette.ACCENT_EMERALD);
+        CommandFrame.chip(g, chipX, y + 8, chipW, 20, CommandPalette.ACCENT_GOLD);
+        text(g, "Treasury", chipX + 6, y + 11, chipW - 12, CommandPalette.TEXT_MUTED);
+        CommandIcon.EMERALD.draw(g, chipX + 6, y + 18, 10);
+        text(g, purse, chipX + 20, y + 19, chipW - 26, CommandPalette.ACCENT_EMERALD);
 
         // Active-siege ribbon under the header.
         drawSiegeRibbon(g, x, y, w);
@@ -319,21 +327,185 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             for (int i = 0; i < 3; i++) { drawLoot(g, i); drawBuff(g, i); }
         } else if (tab == 2) {
             drawFaction(g);
-        } else {
+        } else if (tab == 3) {
             drawTerritory(g);
+        } else if (tab == 4) {
+            drawIntel(g);
         }
 
-        // Footer contextual hint.
-        String footer = switch (tab) {
-            case 0 -> String.format(Locale.ROOT,
-                    "Shared stock  |  Refresh in %d:%02d",
-                    menu.seconds() / 60, menu.seconds() % 60);
-            case 1 -> "Mystery loot & five-minute blessings  |  Personal emeralds";
-            case 2 -> "Interest " + menu.interestRate() / 100.0
-                    + "% /24h  |  Leader withdrawals  |  Scroll roster";
+        // Footer stats strip: faction size + contextual tab hint.
+        drawFooterStrip(g, x, y + h - 16, w);
+    }
+
+    /**
+     * Small hanging crest banner drawn to the left of the title. Purely
+     * procedural; sits over the header rail and reads as a heraldic banner.
+     */
+    private void drawCrestBanner(GuiGraphics g, int x, int y) {
+        int w = 24, h = 30;
+        // Rope hanger.
+        g.fill(x + w / 2, y - 4, x + w / 2 + 1, y, CommandPalette.BEVEL_DARK);
+        // Banner cloth.
+        g.fill(x, y, x + w, y + h - 4, CommandPalette.HEADER_TOP);
+        g.fillGradient(x + 1, y + 1, x + w - 1, y + h - 5,
+                0xff3f4a6a, 0xff222839);
+        // Gold trim.
+        int gold = CommandPalette.ACCENT_GOLD;
+        g.fill(x, y, x + w, y + 1, gold);
+        g.fill(x, y, x + 1, y + h - 4, gold);
+        g.fill(x + w - 1, y, x + w, y + h - 4, gold);
+        // Swallow-tail bottom (two triangles).
+        for (int i = 0; i < 4; i++) {
+            int cutY = y + h - 4 + i;
+            g.fill(x + i, cutY, x + w / 2 - i, cutY + 1, CommandPalette.HEADER_TOP);
+            g.fill(x + w / 2 + i, cutY, x + w - i, cutY + 1, CommandPalette.HEADER_TOP);
+            g.fill(x + i, cutY, x + i + 1, cutY + 1, gold);
+            g.fill(x + w - i - 1, cutY, x + w - i, cutY + 1, gold);
+        }
+        // Crown emblem centred on the banner.
+        CommandIcon.CROWN.draw(g, x + w / 2 - 6, y + 8, 12);
+    }
+
+    /**
+     * Bottom strip with the faction size chip on the left, contextual tab
+     * hint in the middle, and refresh timer / interest on the right.
+     */
+    private void drawFooterStrip(GuiGraphics g, int x, int y, int w) {
+        // Faction member count on the left.
+        int members = menu.members().size();
+        String membersLine = members + (members == 1 ? " member" : " members");
+        CommandIcon.SHIELD.draw(g, x + 10, y + 2, 10);
+        text(g, membersLine, x + 24, y + 3, 100, CommandPalette.TEXT_MUTED);
+
+        // Context hint in the middle.
+        String hint = switch (tab) {
+            case 0 -> "Shared stock rotates every 15 minutes";
+            case 1 -> "Loot & blessings use personal emeralds";
+            case 2 -> "Interest " + menu.interestRate() / 100.0 + "% every 24h";
+            case 3 -> "Drag to pan  |  Scroll to zoom  |  Right-click to recenter";
             default -> "";
         };
-        if (tab != 3) text(g, footer, x + 12, y + h - 13, w - 24, CommandPalette.TEXT_DIM);
+        int hintW = font.width(hint);
+        text(g, hint, x + (w - hintW) / 2, y + 3, hintW + 4, CommandPalette.TEXT_DIM);
+
+        // Refresh timer on the right (only for tabs where it applies).
+        if (tab == 0) {
+            String timer = String.format(Locale.ROOT, "Refresh %d:%02d",
+                    menu.seconds() / 60, menu.seconds() % 60);
+            int tw = font.width(timer);
+            text(g, timer, x + w - tw - 12, y + 3, tw + 4, CommandPalette.TEXT_MUTED);
+        }
+    }
+
+    /**
+     * Intel tab: three sub-sections (Units, Enemy Lore, How to Play) that
+     * bake in the old Warlord's Codex content so the player no longer needs
+     * to spawn a book.
+     */
+    private void drawIntel(GuiGraphics g) {
+        int x = layout.x() + 10, y = layout.y() + 62;
+        int w = layout.width() - 20;
+        int h = layout.height() - (y - layout.y()) - 22;
+
+        // Sub-tab strip
+        String[] labels = {"Units", "Enemy Lore", "How to Play"};
+        int segW = w / 3;
+        for (int i = 0; i < 3; i++) {
+            int sx = x + i * segW;
+            boolean active = intelSection == i;
+            int bg = active ? CommandPalette.CARD_TOP : CommandPalette.CARD_TOP_DIM;
+            g.fill(sx, y, sx + segW - 2, y + 18, bg);
+            g.fill(sx, y + 17, sx + segW - 2, y + 18,
+                    active ? CommandPalette.ACCENT_GOLD : CommandPalette.BEVEL_DARK);
+            int labelW = font.width(labels[i]);
+            text(g, labels[i], sx + (segW - labelW) / 2, y + 5, segW,
+                    active ? CommandPalette.ACCENT_GOLD : CommandPalette.TEXT_MUTED);
+        }
+
+        // Body panel
+        int bodyY = y + 22;
+        int bodyH = h - 24;
+        CommandFrame.card(g, x, bodyY, w, bodyH, CommandPalette.ACCENT_ARCANE);
+
+        // Use scissor so long content clips at the panel edges.
+        g.enableScissor(x + 2, bodyY + 2, x + w - 2, bodyY + bodyH - 2);
+        int cursorY = bodyY + 8 - intelOffset;
+        int textX = x + 10;
+        int textW = w - 20;
+
+        int drawn = switch (intelSection) {
+            case 0 -> drawUnitsSection(g, textX, cursorY, textW);
+            case 1 -> drawLoreSection(g, textX, cursorY, textW);
+            default -> drawHowToPlaySection(g, textX, cursorY, textW);
+        };
+        g.disableScissor();
+
+        // Clamp scroll so we can't drag past the end.
+        int maxOffset = Math.max(0, drawn - bodyH + 16);
+        if (intelOffset > maxOffset) intelOffset = maxOffset;
+    }
+
+    private int drawUnitsSection(GuiGraphics g, int x, int startY, int w) {
+        int y = startY;
+        for (var entry : com.devfarinsky.siegeoverhaul.client.codex.UnitCodex.ENTRIES) {
+            text(g, entry.name(), x, y, w, CommandPalette.ACCENT_GOLD); y += 12;
+            text(g, entry.tagline(), x, y, w, CommandPalette.TEXT); y += 10;
+            text(g, entry.stats(), x, y, w, CommandPalette.ACCENT_TEAL); y += 10;
+            y += drawWrapped(g, entry.behavior(), x, y, w, CommandPalette.TEXT_MUTED);
+            y += drawWrapped(g, "Counter: " + entry.counter(), x, y, w, CommandPalette.TEXT);
+            y += drawWrapped(g, "Drops: " + entry.drops(), x, y, w, CommandPalette.ACCENT_EMERALD);
+            text(g, entry.availability(), x, y, w, CommandPalette.TEXT_DIM); y += 10;
+            y += 4;
+            g.fill(x, y, x + w, y + 1, CommandPalette.BEVEL_DARK);
+            y += 6;
+        }
+        return y - startY;
+    }
+
+    private int drawLoreSection(GuiGraphics g, int x, int startY, int w) {
+        int y = startY;
+        for (var entry : com.devfarinsky.siegeoverhaul.client.codex.FactionLore.all().entrySet()) {
+            String name = entry.getKey().replace('_', ' ');
+            // Simple title case.
+            StringBuilder title = new StringBuilder(name.length());
+            boolean cap = true;
+            for (char c : name.toCharArray()) {
+                title.append(cap ? Character.toUpperCase(c) : c);
+                cap = c == ' ';
+            }
+            text(g, title.toString(), x, y, w, CommandPalette.ACCENT_GOLD); y += 12;
+            for (String line : entry.getValue()) {
+                text(g, line, x, y, w, CommandPalette.TEXT_MUTED); y += 10;
+            }
+            y += 4;
+            g.fill(x, y, x + w, y + 1, CommandPalette.BEVEL_DARK);
+            y += 6;
+        }
+        return y - startY;
+    }
+
+    private int drawHowToPlaySection(GuiGraphics g, int x, int startY, int w) {
+        int y = startY;
+        for (var tip : com.devfarinsky.siegeoverhaul.client.codex.DefensePlaybook.TIPS) {
+            text(g, "[" + tip.tag() + "] " + tip.title(), x, y, w, CommandPalette.ACCENT_GOLD);
+            y += 12;
+            y += drawWrapped(g, tip.body(), x, y, w, CommandPalette.TEXT_MUTED);
+            y += 4;
+            g.fill(x, y, x + w, y + 1, CommandPalette.BEVEL_DARK);
+            y += 6;
+        }
+        return y - startY;
+    }
+
+    /** Word-wrap helper. Returns the total height consumed. */
+    private int drawWrapped(GuiGraphics g, String s, int x, int y, int w, int colour) {
+        var lines = font.split(net.minecraft.network.chat.Component.literal(s), w);
+        int used = 0;
+        for (var line : lines) {
+            g.drawString(font, line, x, y + used, colour, false);
+            used += 10;
+        }
+        return used;
     }
 
     /** Dimensions of the map body inside the Territory tab. */
@@ -557,8 +729,13 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 x + 46, y + 80, w / 2 - 52, CommandPalette.ACCENT_EMERALD);
 
         int rightX = x + w / 2;
+        // Interest projection: today's earnings at the configured rate.
+        long dailyInterest = (long) menu.bank() * menu.interestRate() / 10000L;
         text(g, "Next wave " + menu.nextWave() + ": +" + menu.nextReward(),
                 rightX, y + 66, w / 2 - 18, CommandPalette.ACCENT_TEAL);
+        text(g, String.format(Locale.ROOT, "Interest: +%,d /24h (%.2f%%)",
+                        dailyInterest, menu.interestRate() / 100.0),
+                rightX, y + 80, w / 2 - 18, CommandPalette.ACCENT_GOLD);
 
         String status = menu.voteSeconds() > 0
                 ? "Retreat vote in progress: " + menu.voteSeconds() + "s"
@@ -615,11 +792,30 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             rosterOffset = Math.max(0, Math.min(maxOffset, rosterOffset + step));
             return true;
         }
+        if (tab == 4) {
+            int step = (int) -Math.signum(delta) * 12;
+            intelOffset = Math.max(0, intelOffset + step);
+            return true;
+        }
         return super.mouseScrolled(x, y, delta);
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (tab == 4 && button == 0) {
+            // Sub-tab strip at the top of the Intel panel: hit-test one of
+            // three equal segments and switch section.
+            int x = layout.x() + 10, y = layout.y() + 62, w = layout.width() - 20;
+            int segW = w / 3;
+            for (int i = 0; i < 3; i++) {
+                int sx = x + i * segW;
+                if (mouseX >= sx && mouseX < sx + segW
+                        && mouseY >= y && mouseY < y + 18) {
+                    if (intelSection != i) { intelSection = i; intelOffset = 0; }
+                    return true;
+                }
+            }
+        }
         if (tab == 3) {
             if (button == 1 && mouseX >= mapX() && mouseX < mapX() + mapW()
                     && mouseY >= mapY() && mouseY < mapY() + mapH()) {

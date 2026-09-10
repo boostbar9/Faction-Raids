@@ -41,7 +41,9 @@ public final class ModItems {
     @SubscribeEvent
     public static void addCreativeTab(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
-            event.accept(GUIDEBOOK.get());
+            // v4.13.0: guidebook removed from the creative tab. The item is
+            // still registered so existing books in old worlds continue to work,
+            // but new copies come from /siegeoverhaul book only.
             event.accept(SIEGE_CORE.get());
             event.accept(SETTLEMENT_BAG.get());event.accept(SURVIVAL_BAG.get());
         }

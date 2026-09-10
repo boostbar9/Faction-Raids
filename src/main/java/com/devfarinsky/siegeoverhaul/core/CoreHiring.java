@@ -105,10 +105,11 @@ public final class CoreHiring {
             int price = Math.max(0, cost(role));
             recruit.getClass().getMethod("setCost", int.class).invoke(recruit, price);
             Item currency = currency();
-            int available = player.getInventory().countItem(currency);
-            if (!player.isCreative() && available < price) {
+            // Bank-first payment: check combined bank + inventory funds.
+            long combined = PaymentSource.available(player, price);
+            if (!player.isCreative() && combined < price) {
                 recruit.discard();
-                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("You need " + price + " ").append(currency.getDescription()));
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("You need " + price + " ").append(currency.getDescription()).append(net.minecraft.network.chat.Component.literal(" (bank + inventory)")));
                 return false;
             }
             Class<?> group = Class.forName("com.talhanation.recruits.world.RecruitsGroup");
@@ -117,14 +118,11 @@ public final class CoreHiring {
             recruit.setPersistenceRequired();
             if (!player.serverLevel().addFreshEntity(recruit)) { recruit.discard(); return false; }
             if (!Boolean.TRUE.equals(hire.invoke(recruit, player, null, true))) { recruit.discard(); return false; }
-            // Remove only the price, preserving all other stacks and their NBT.
-            if (!player.isCreative()) {
-                int remaining = price;
-                for (int i = 0; i < player.getInventory().getContainerSize() && remaining > 0; i++) {
-                    ItemStack stack = player.getInventory().getItem(i);
-                    if (stack.is(currency)) { int take = Math.min(remaining, stack.getCount()); stack.shrink(take); remaining -= take; }
-                }
-                player.getInventory().setChanged();
+            // Bank-first debit; PaymentSource handles the shared-treasury draw
+            // before touching the player's own emeralds.
+            if (!PaymentSource.consume(player, price)) {
+                recruit.discard();
+                return false;
             }
             // Hire already assigned owner, scoreboard team and the player's unit count.
             try { faction.invoke(null, player.serverLevel(), player.getTeam().getName(), 1); }

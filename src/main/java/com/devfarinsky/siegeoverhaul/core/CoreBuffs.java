@@ -18,12 +18,9 @@ public final class CoreBuffs {
         MobEffect effect = effect(index);
         if (effect == null || player.hasEffect(effect) || !player.isAlive() || player.isSpectator()) return false;
         int price = PRICES[index];
-        if (player.getInventory().items.stream().filter(s -> s.is(Items.EMERALD)).mapToInt(ItemStack::getCount).sum() < price) return false;
+        if (PaymentSource.available(player, price) < price) return false;
         if (!player.addEffect(new MobEffectInstance(effect, DURATION, 0, false, true, true))) return false;
-        int left = price;
-        for (ItemStack stack : player.getInventory().items) if (stack.is(Items.EMERALD)) {
-            int take = Math.min(left, stack.getCount()); stack.shrink(take); left -= take; if (left == 0) break;
-        }
+        if (!PaymentSource.consume(player, price)) return false;
         player.getInventory().setChanged(); player.inventoryMenu.broadcastChanges(); return true;
     }
 }
