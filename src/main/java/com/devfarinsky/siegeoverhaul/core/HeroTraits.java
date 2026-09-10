@@ -195,7 +195,21 @@ public final class HeroTraits {
     @SubscribeEvent
     public static void tick(LivingEvent.LivingTickEvent event) {
         if(!(event.getEntity() instanceof Mob mob) || !(mob.level() instanceof ServerLevel level)
-                || mob.tickCount%20!=0 || !mob.isAlive() || mob.isNoAi()) return;
+                || mob.tickCount%20!=0) return;
+        // Summons are not recruit heroes. Process their saved deadline before hero/AI gates,
+        // including legacy wolves incorrectly stamped as hired heroes in 4.19/4.20.
+        if (mob instanceof net.minecraft.world.entity.animal.Wolf
+                && mob.getPersistentData().contains("SiegeShadowDespawn", net.minecraft.nbt.Tag.TAG_LONG)) {
+            var summonTag = mob.getPersistentData();
+            summonTag.remove("SiegeHiredHero");
+            summonTag.remove("SiegeHeroRole");
+            if (summonTag.getLong("SiegeShadowDespawn") <= level.getGameTime()) {
+                burst(level, mob.getX(), mob.getY() + 0.5, mob.getZ(), net.minecraft.core.particles.ParticleTypes.SOUL, 20, 0.4, 0.05);
+                mob.discard();
+            }
+            return;
+        }
+        if (!mob.isAlive() || mob.isNoAi()) return;
         int r = role(mob); if (r < 0) return;
         long now = level.getGameTime();
         var tag = mob.getPersistentData();
@@ -242,7 +256,7 @@ public final class HeroTraits {
             level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.AMETHYST_BLOCK_CHIME, net.minecraft.sounds.SoundSource.HOSTILE, 1.2F, 1.6F);
             return;
         }
-        // Nightcaller (28): summon two wolf allies for 30s, 45s cooldown. Wolves are tamed to hero owner via NBT tag; despawn timer via SiegeShadowDespawn.
+        // Nightcaller (28): summon two wolves for 30s, 45s cooldown; saved deadline identifies summons.
         if (r == 28 && mob.getTarget() != null && ready(now, tag.getLong("SiegeHeroNext"))) {
             tag.putLong("SiegeHeroNext", now + 900);
             for (int i = 0; i < 2; i++) {
@@ -250,19 +264,12 @@ public final class HeroTraits {
                 if (wolf == null) continue;
                 double angle = (i * Math.PI); wolf.setPos(mob.getX() + Math.cos(angle) * 1.5, mob.getY(), mob.getZ() + Math.sin(angle) * 1.5);
                 wolf.getPersistentData().putLong("SiegeShadowDespawn", now + 600);
-                wolf.getPersistentData().putBoolean("SiegeHiredHero", true);
                 wolf.setCustomName(Component.literal("Shadow Wolf").withStyle(ChatFormatting.DARK_PURPLE));
                 if (mob.getTarget() != null) wolf.setTarget(mob.getTarget());
                 level.addFreshEntity(wolf);
                 burst(level, wolf.getX(), wolf.getY() + 0.5, wolf.getZ(), net.minecraft.core.particles.ParticleTypes.SOUL, 30, 0.5, 0.05);
             }
             level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.WOLF_HOWL, net.minecraft.sounds.SoundSource.HOSTILE, 1.5F, 0.5F);
-            return;
-        }
-        // Shadow wolf cleanup: entities with SiegeShadowDespawn past their deadline vanish in a soul burst.
-        if (mob.getPersistentData().contains("SiegeShadowDespawn") && mob.getPersistentData().getLong("SiegeShadowDespawn") <= now) {
-            burst(level, mob.getX(), mob.getY() + 0.5, mob.getZ(), net.minecraft.core.particles.ParticleTypes.SOUL, 20, 0.4, 0.05);
-            mob.discard();
             return;
         }
         // Chronos (29): every 30s, all enemies within 10 blocks slowed 90% for 4s.
