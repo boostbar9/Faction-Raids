@@ -1,0 +1,121 @@
+name: Publish tested 4.20.1 beta to CurseForge
+on:
+  push:
+    branches: [publish/curseforge-v4.20.1]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: curseforge-1364352-v4.20.1
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify successful source build and merged tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          import json, os, urllib.request
+          def get(path):
+              req = urllib.request.Request('https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(req) as r: return json.load(r)
+          run = get('actions/runs/34497770419')
+          assert run['status'] == 'completed' and run['conclusion'] == 'success'
+          assert run['head_sha'] == '1b1dd73574adb31df423b66a01a3647c1fd33314'
+          pr = get('pulls/105')
+          assert pr['merged'] and pr['merge_commit_sha'] == '1f486cd8b736e20f2c3acb32b3d802099845a42a'
+          for sha in [run['head_sha'], pr['merge_commit_sha']]:
+              assert get('git/commits/' + sha)['tree']['sha'] == '7eb3076d1e0b6c8b7c2657600e70ab9ad3c19f81'
+          CHECK
+      - name: Download tested artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34497770419
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Download regression results
+        uses: actions/download-artifact@v4
+        with:
+          name: regression-test-results
+          run-id: 34497770419
+          github-token: ${{ github.token }}
+          path: regression
+      - name: Verify tested bytes, metadata and regression results
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib, xml.etree.ElementTree as ET
+          jar = Path('dist/siegeoverhaul-4.20.1.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == '62bd8eadb59aa8c68ef918ae2eb1a98672ecc8a0a6dba3cab14adf63d3d6e47b'
+          with zipfile.ZipFile(jar) as z:
+              data = tomllib.loads(z.read('META-INF/mods.toml').decode())
+          mod = data['mods'][0]
+          assert mod['modId'] == 'siegeoverhaul' and mod['version'] == '4.20.1'
+          assert mod['displayTest'] == 'MATCH_VERSION'
+          dependencies = {x['modId']: x for x in data['dependencies']['siegeoverhaul']}
+          for mod in ['recruits', 'workers', 'smallships', 'siegeweapons']:
+              assert dependencies[mod]['mandatory'] and dependencies[mod]['side'] == 'BOTH', mod
+          assert dependencies['recruits']['versionRange'] == '[1.15.2,)'
+          assert dependencies['workers']['versionRange'] == '[2.0.3,)'
+          for mod in ['corpse', 'magistuarmory', 'musketmod']:
+              assert not dependencies[mod]['mandatory'], mod
+          totals = dict.fromkeys(['tests','failures','errors','skipped'], 0)
+          for file in Path('regression').rglob('TEST-*.xml'):
+              result = ET.parse(file).getroot()
+              for key in totals: totals[key] += int(result.get(key, 0))
+          assert totals == {'tests':232, 'failures':0, 'errors':0, 'skipped':0}, totals
+          print('Verified', jar.name, digest, totals)
+          CHECK
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.20.1.jar
+          name: The Siege Overhaul v4.20.1 beta - Shadow Wolf Cleanup
+          version: v4.20.1
+          version-type: beta
+          changelog: |
+            ## 4.20.1 beta
+
+            - Fix Nightcaller Shadow Wolves persisting permanently instead of expiring after 30 seconds. Saved summons, including wolves with disabled AI, now reach their existing cleanup deadline.
+            - Stop classifying summoned wolves as hired recruit heroes and remove erroneous legacy hero tags. Ordinary wolves and pets without the summon deadline are untouched.
+            - Save compatibility, prices, hero abilities and companion requirements preserved.
+
+            Minecraft 1.20.1 Forge, Java 17. REQUIRED on server and every client: Villager Recruits 1.15.2+, Villager Workers 2 2.0.3+, Small Ships and Siege Weapons. Matching Siege Overhaul versions required. Corpse, Epic Knights and ewewukek's Musket Mod remain optional.
+
+            Validation: clean Java 17 Forge build, 232 passing regression tests, zero failures/errors/skipped, including five new lifecycle regressions. Exact tested reobfuscated JAR from build 34497770419. No interactive Minecraft playtesting or in-game performance benchmark. Beta.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+          fail-mode: fail
+      - name: Record accepted upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os
+          result = {'version':'4.20.1', 'file_id':os.environ['RELEASE_FILE_ID'], 'url':os.environ['RELEASE_URL'],
+              'source':'1b1dd73574adb31df423b66a01a3647c1fd33314', 'build_run':34497770419,
+              'sha256':'62bd8eadb59aa8c68ef918ae2eb1a98672ecc8a0a6dba3cab14adf63d3d6e47b'}
+          assert result['file_id'] and result['url'], 'CurseForge did not return an upload receipt'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Accepted upload (moderation/public availability separate): ' + json.dumps(result) + '\n')
+          RECEIPT
