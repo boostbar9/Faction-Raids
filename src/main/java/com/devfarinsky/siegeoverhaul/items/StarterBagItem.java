@@ -25,9 +25,10 @@ public final class StarterBagItem extends Item {
     List<ItemStack> contents() throws ReflectiveOperationException {
         List<ItemStack> out=new ArrayList<>();
         if(settlement) {
-            // v4.13.0: guidebook removed from the starter bag; the Codex content
-            // is baked into the Command Center HUD's Intel tab, so no book is
-            // needed. Existing books still work but no new copies are handed out.
+            // v4.18.0: the setup-guide paper walks a new player through faction
+            // creation, claiming land, and placing the Siege Core in the correct
+            // order. Intel tab still holds the full codex; this is the quick-start.
+            out.add(setupGuide());
             add(out,ModItems.SIEGE_CORE.get(),1);add(out,Items.LOOM,1);
             add(out,Items.WHITE_BANNER,2);add(out,Items.BLUE_DYE,16);add(out,Items.WHITE_DYE,16);add(out,Items.BLACK_DYE,16);
             add(out,CoreHiring.currency(),budget(configured("FactionCreationCost"),configured("ClaimingCost"),CoreHiring.cost(1),CoreHiring.cost(2)));
@@ -35,13 +36,38 @@ public final class StarterBagItem extends Item {
         return out;
     }
     static List<ItemStack> survivalContents() {
+        // v4.18.0 slimmed building supplies so the bag doesn't bloat inventory.
+        // Previous amounts:  STONE_BRICKS 256, STAIRS/SLAB 32, OAK_PLANKS 64.
+        // Tuned down to a shelter-starter kit rather than a full castle load.
         List<ItemStack> out=new ArrayList<>();
             for(Item item:List.of(Items.IRON_SWORD,Items.IRON_PICKAXE,Items.IRON_AXE,Items.IRON_SHOVEL,Items.SHIELD,
                     Items.IRON_HELMET,Items.IRON_CHESTPLATE,Items.IRON_LEGGINGS,Items.IRON_BOOTS,Items.WATER_BUCKET,Items.CRAFTING_TABLE,Items.FURNACE,Items.WHITE_BED))add(out,item,1);
             add(out,Items.COOKED_BEEF,16);add(out,Items.BREAD,16);add(out,Items.TORCH,32);
-            add(out,Items.STONE_BRICKS,256);add(out,Items.STONE_BRICK_STAIRS,32);add(out,Items.STONE_BRICK_SLAB,32);
-            add(out,Items.OAK_PLANKS,64);add(out,Items.GLASS_PANE,16);add(out,Items.OAK_DOOR,2);add(out,Items.CHEST,2);add(out,Items.COAL,16);
+            add(out,Items.STONE_BRICKS,96);add(out,Items.STONE_BRICK_STAIRS,16);add(out,Items.STONE_BRICK_SLAB,16);
+            add(out,Items.OAK_PLANKS,32);add(out,Items.GLASS_PANE,8);add(out,Items.OAK_DOOR,2);add(out,Items.CHEST,2);add(out,Items.COAL,16);
         return out;
+    }
+
+    /**
+     * v4.18.0 written-book setup guide. Uses vanilla WRITTEN_BOOK so it opens
+     * cleanly in every client with no extra assets. Kept short: three pages,
+     * one topic each. Longer lore lives in the in-game Intel tab.
+     */
+    static ItemStack setupGuide() {
+        ItemStack book = new ItemStack(Items.WRITTEN_BOOK);
+        CompoundTag tag = book.getOrCreateTag();
+        tag.putString("title", "Faction Setup Guide");
+        tag.putString("author", "The Siege Overhaul");
+        ListTag pages = new ListTag();
+        pages.add(net.minecraft.nbt.StringTag.valueOf(
+                "\"Welcome, commander.\\n\\n1) Make a faction:\\n /faction create <name>\\n\\n2) Claim your land:\\n Stand where you want your keep and use\\n /claim create\\n\\nEmeralds for both come from your Settlement Bag.\""));
+        pages.add(net.minecraft.nbt.StringTag.valueOf(
+                "\"3) Place the Siege Core inside your claim. This is your command center.\\n\\n4) Right-click the core to open the HUD: Army, Loot, Bank, Territory, Intel.\\n\\n5) Hire your first shieldman and archer from the Army tab.\""));
+        pages.add(net.minecraft.nbt.StringTag.valueOf(
+                "\"6) Build a wall and a gate. Recruits will defend your claim.\\n\\n7) When you are ready, invite the first wave from the Intel tab.\\n\\nUnlock territory buffs on the Territory tab as your bank grows.\\n\\nGood luck.\""));
+        tag.put("pages", pages);
+        tag.putInt("generation", 0);
+        return book;
     }
     private static void add(List<ItemStack> list,Item item,int count) {
         while(count>0) { int n=Math.min(count,item.getMaxStackSize());list.add(new ItemStack(item,n));count-=n; }

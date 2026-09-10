@@ -19,10 +19,24 @@ public final class CoreHiring {
     private static Object config(String name) throws ReflectiveOperationException {
         return ((ForgeConfigSpec.ConfigValue<?>) Class.forName("com.talhanation.recruits.config.RecruitsServerConfig").getField(name).get(null)).get();
     }
+    /**
+     * v4.18.0 price uplift so Faction-tab hires feel meaningful vs. bank
+     * income. Applied to combat recruits (roles 0-3) and workers (4-9);
+     * heroes derive their price from the base recruit price so the uplift
+     * flows through automatically. Never lowers the mod-configured price.
+     */
+    private static int applyUplift(int base, int role) {
+        if (base <= 0) return base;
+        // Combat recruits +50%, workers +25%. Heroes already amplify (x12).
+        double factor = role < CoreOffers.WORKER_START ? 1.50 : 1.25;
+        long lifted = Math.max(base, (long) Math.ceil(base * factor));
+        return (int) Math.min(Integer.MAX_VALUE, lifted);
+    }
     public static int cost(int role) throws ReflectiveOperationException {
         if (role >= 10 && role <= 13) return (int)Math.min(32767L,Math.max(256L,(long)cost(role-10)*12));
-        if (role < CoreOffers.WORKER_START) return (Integer) config(COSTS[role]);
-        return (Integer) ((ForgeConfigSpec.ConfigValue<?>) Class.forName("com.talhanation.workers.config.WorkersServerConfig").getField(COSTS[role]).get(null)).get();
+        if (role < CoreOffers.WORKER_START) return applyUplift((Integer) config(COSTS[role]), role);
+        int workerBase = (Integer) ((ForgeConfigSpec.ConfigValue<?>) Class.forName("com.talhanation.workers.config.WorkersServerConfig").getField(COSTS[role]).get(null)).get();
+        return applyUplift(workerBase, role);
     }
     public static Item icon(int role) {
         if (role >= 10 && role <= 13) return icon(role-10);
@@ -87,6 +101,14 @@ public final class CoreHiring {
             }
             if (!found) { recruit.discard(); player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Clear a safe space beside the core for your new unit.")); return false; }
             recruit.finalizeSpawn(player.serverLevel(), player.serverLevel().getCurrentDifficultyAt(recruit.blockPosition()), MobSpawnType.EVENT, null, null);
+            // v4.18.0 Iron Levy territory buff: extra 4 HP (2 hearts) on all fresh hires.
+            if (TerritoryBuffs.has(player.server.overworld() == null ? null
+                    : com.devfarinsky.siegeoverhaul.RaidSavedData.get(player.server).siegeCores.get(SiegeCore.key(player)),
+                    3)) {
+                var health = recruit.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+                if (health != null) health.setBaseValue(health.getBaseValue() + 4);
+                recruit.setHealth(recruit.getMaxHealth());
+            }
             if (role>=10) prepareHero(recruit,role);
             else if (role < CoreOffers.WORKER_START) {
                 Object inventory = recruit.getClass().getMethod("getInventory").invoke(recruit);

@@ -35,7 +35,7 @@ public final class RaidNetwork {
                 .consumerMainThread((p,supplier) -> {
                     DistExecutor.unsafeRunWhenOn(Dist.CLIENT,() -> () -> {
                         var player=net.minecraft.client.Minecraft.getInstance().player;
-                        if(player!=null && player.containerMenu instanceof com.devfarinsky.siegeoverhaul.core.CoreHireMenu menu && menu.containerId==p.menuId()) menu.details(p.faction(),p.members());
+                        if(player!=null && player.containerMenu instanceof com.devfarinsky.siegeoverhaul.core.CoreHireMenu menu && menu.containerId==p.menuId()) menu.details(p.faction(),p.members(),p.ledger());
                     });
                     supplier.get().setPacketHandled(true);
                 }).add();
@@ -61,11 +61,17 @@ public final class RaidNetwork {
                 .add();
     }
 
-    public record CoreDetails(int menuId,String faction,java.util.List<String> members) {
+    public record CoreDetails(int menuId,String faction,java.util.List<String> members,int[] ledger) {
         public CoreDetails {
             faction=bounded(faction,128);
             members=members==null?java.util.List.of():members.stream().filter(java.util.Objects::nonNull)
                     .limit(100).map(name->bounded(name,64)).toList();
+            if (ledger == null) ledger = new int[0];
+            if (ledger.length > 64) {
+                int[] trimmed = new int[64];
+                System.arraycopy(ledger, ledger.length - 64, trimmed, 0, 64);
+                ledger = trimmed;
+            }
         }
         private static String bounded(String text,int limit) {
             if(text==null)return "";
@@ -76,17 +82,30 @@ public final class RaidNetwork {
         public void encode(FriendlyByteBuf buffer) {
             buffer.writeVarInt(menuId);buffer.writeUtf(faction,128);
             buffer.writeCollection(members,(out,name)->out.writeUtf(name,64));
+            buffer.writeVarIntArray(ledger);
         }
         public static CoreDetails decode(FriendlyByteBuf buffer) {
             int id=buffer.readVarInt();String faction=buffer.readUtf(128);int size=buffer.readVarInt();
             if(size<0 || size>100)throw new IllegalArgumentException("Invalid core roster size");
             var members=new java.util.ArrayList<String>(size);
             for(int i=0;i<size;i++)members.add(buffer.readUtf(64));
-            return new CoreDetails(id,faction,members);
+            int[] ledger = buffer.readVarIntArray(64);
+            return new CoreDetails(id,faction,members,ledger);
+        }
+        // Records with an int[] component would use reference equality for that
+        // field, which breaks round-trip tests. Override with array-value equality.
+        @Override public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof CoreDetails o)) return false;
+            return menuId == o.menuId && faction.equals(o.faction)
+                    && members.equals(o.members) && java.util.Arrays.equals(ledger, o.ledger);
+        }
+        @Override public int hashCode() {
+            return java.util.Objects.hash(menuId, faction, members, java.util.Arrays.hashCode(ledger));
         }
     }
-    public static void coreDetails(ServerPlayer player,int menuId,String faction,java.util.List<String> members) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),new CoreDetails(menuId,faction,members));
+    public static void coreDetails(ServerPlayer player,int menuId,String faction,java.util.List<String> members,int[] ledger) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),new CoreDetails(menuId,faction,members,ledger));
     }
 
     public static void openDashboard(ServerPlayer player) {

@@ -11,7 +11,8 @@ import static org.mockito.Mockito.*;
 class StarterBagTest extends MinecraftTestSupport {
     @Test void buildingBagIsAShelterBudget() throws Exception {
         var contents=StarterBagItem.survivalContents();
-        assertEquals(256,contents.stream().filter(s->s.is(Items.STONE_BRICKS)).mapToInt(ItemStack::getCount).sum());
+        // v4.18.0 slimmed the shelter kit: stone bricks were 256, now 96.
+        assertEquals(96,contents.stream().filter(s->s.is(Items.STONE_BRICKS)).mapToInt(ItemStack::getCount).sum());
         assertEquals(32,contents.stream().filter(s->s.is(Items.BREAD)||s.is(Items.COOKED_BEEF)).mapToInt(ItemStack::getCount).sum());
         assertEquals(2,contents.stream().filter(s->s.is(Items.CHEST)).mapToInt(ItemStack::getCount).sum());
     }

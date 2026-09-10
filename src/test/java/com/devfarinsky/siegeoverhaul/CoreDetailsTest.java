@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class CoreDetailsTest extends MinecraftTestSupport {
     @Test void oversizedRosterAndNamesEncodeSafelyAndRoundTripAsImmutableSnapshot() {
         var names=new ArrayList<String>(); for(int i=0;i<1000;i++)names.add("Online " + "x".repeat(200));
-        var packet=new RaidNetwork.CoreDetails(17,"f".repeat(200),names); names.clear();
+        var packet=new RaidNetwork.CoreDetails(17,"f".repeat(200),names,new int[0]); names.clear();
         assertEquals(100,packet.members().size()); assertEquals(128,packet.faction().length());
         assertTrue(packet.members().stream().allMatch(n->n.length()==64));
         var buffer=new FriendlyByteBuf(Unpooled.buffer());
@@ -24,7 +24,7 @@ class CoreDetailsTest extends MinecraftTestSupport {
         finally {buffer.release();}
     }
     @Test void truncationDoesNotSplitSupplementaryCharacters() {
-        var packet=new RaidNetwork.CoreDetails(1,"f".repeat(127)+"\uD83D\uDE00",List.of("x".repeat(63)+"\uD83D\uDE00"));
+        var packet=new RaidNetwork.CoreDetails(1,"f".repeat(127)+"\uD83D\uDE00",List.of("x".repeat(63)+"\uD83D\uDE00"),new int[0]);
         assertEquals(127,packet.faction().length());assertEquals(63,packet.members().get(0).length());
     }
 }
