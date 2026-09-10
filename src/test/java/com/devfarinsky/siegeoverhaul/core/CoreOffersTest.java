@@ -74,7 +74,7 @@ class CoreOffersTest extends MinecraftTestSupport {
     }
     @Test void heroStockSurvivesReloadAndCannotBePurchasedTwice() {
         CompoundTag stock=new CompoundTag(); CoreOffers.refresh(stock,100,RandomSource.create(42));
-        int hero=stock.getInt("HeroRole"); assertTrue(hero>=10 && hero<=13);
+        int hero=stock.getInt("HeroRole"); assertTrue(hero>=10 && hero<=29);
         assertTrue(CoreOffers.canPurchase(stock,3,18100));
         stock.putInt("Sold",8);
         var data=new RaidSavedData(); data.siegeCores.put("team:test",stock);
@@ -90,8 +90,14 @@ class CoreOffersTest extends MinecraftTestSupport {
         assertTrue(CoreOffers.refresh(stock,200,RandomSource.create(4)));
         assertArrayEquals(new int[]{0,1,7},stock.getIntArray("Offers"));
         assertEquals(5,stock.getInt("Sold")); assertEquals(18100,stock.getLong("RefreshAt"));
-        int[] counts=new int[4]; for(int i=0;i<100;i++)counts[CoreOffers.hero(i)-10]++;
-        assertArrayEquals(new int[]{40,30,20,10},counts);
+        // Weighted roster of 20 heroes: each pick must be in [10,29];
+        // Common heroes (roles 10,11 with weight 15 each) should be picked far
+        // more often than any single Legendary (roles 27+ with weight 1-2).
+        int[] counts=new int[20];
+        for(int i=0;i<100;i++) { int h=CoreOffers.hero(i); assertTrue(h>=10 && h<=29,"hero out of range: "+h); counts[h-10]++; }
+        int commons=counts[0]+counts[1];
+        int legendaries=counts[27-10]+counts[28-10]+counts[29-10];
+        assertTrue(commons>legendaries,"commons("+commons+") should outweigh legendaries("+legendaries+")");
     }
     @Test void hiringLayoutFitsGuiScalesAndResizes() {
         for (int[] size : new int[][]{{320,240},{480,270},{600,260},{854,480},{1920,1080}}) {

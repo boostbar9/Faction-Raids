@@ -28,7 +28,7 @@ import java.util.Optional;
  */
 public final class SiegeYard {
     /** Index 0 = catapult crew, 1 = ballista crew. */
-    public static final int[] PRICES = { 384, 320 };
+    public static final int[] PRICES = { 560, 480 };
     public static final String[] LABELS = { "Catapult Crew", "Ballista Crew" };
     public static final SiegeEngineType[] TYPES = { SiegeEngineType.CATAPULT, SiegeEngineType.BALLISTA };
 

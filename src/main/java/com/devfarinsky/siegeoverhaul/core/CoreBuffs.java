@@ -8,7 +8,7 @@ import net.minecraft.world.item.*;
 public final class CoreBuffs {
     public static final String[] NAMES = {"Windstep", "Warborn", "Aegis"};
     public static final String[] DETAILS = {"Speed I", "Strength I", "Resistance I"};
-    public static final int[] PRICES = {16,24,32};
+    public static final int[] PRICES = {24,36,48};
     public static final int DURATION = 5 * 60 * 20;
     private CoreBuffs() {}
     public static MobEffect effect(int index) {

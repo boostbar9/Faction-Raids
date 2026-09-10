@@ -66,7 +66,8 @@ public final class CommandPalette {
             case 0 -> 0xffc7c1b5;   // Common
             case 1 -> ACCENT_EMERALD; // Uncommon
             case 2 -> ACCENT_STEEL;   // Rare
-            default -> ACCENT_ARCANE; // Epic
+            case 3 -> ACCENT_ARCANE;  // Epic
+            default -> ACCENT_GOLD;   // Legendary
         };
     }
 }

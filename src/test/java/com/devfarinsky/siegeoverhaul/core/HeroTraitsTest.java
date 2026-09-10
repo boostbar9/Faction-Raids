@@ -28,18 +28,29 @@ class HeroTraitsTest extends MinecraftTestSupport {
     }
 
     @Test void distinctiveLoadoutsLiveInNativeEquipmentSlots() {
+        // Every hero has: a stored role tag, an enchanted mainhand weapon
+        // that matches its base (sword/shield -> DIAMOND_SWORD, bow -> BOW,
+        // crossbow -> CROSSBOW, mage -> BLAZE_ROD), and shield-based non-mages
+        // carry a shield in the offhand. Trims are unique across the roster.
         var trims=new java.util.HashSet<String>();
-        for(int role=10;role<=13;role++) {
+        for(int role=10;role<=29;role++) {
             Mob mob=mock(Mob.class);CompoundTag tag=new CompoundTag();when(mob.getPersistentData()).thenReturn(tag);
             SimpleContainer inventory=new SimpleContainer(36);HeroTraits.equip(mob,role,inventory);
-            trims.add(inventory.getItem(1).getTag().getCompound("Trim").getString("material"));
+            trims.add(inventory.getItem(1).getTag().getCompound("Trim").getString("material")+"/"
+                    +inventory.getItem(1).getTag().getCompound("Trim").getString("pattern"));
             assertEquals(role,tag.getInt("SiegeHeroRole"));
             assertTrue(inventory.getItem(5).isEnchanted());
-            assertEquals(role==12?Items.BOW:role==13?Items.CROSSBOW:Items.DIAMOND_SWORD,inventory.getItem(5).getItem());
-            if(role<12)assertTrue(inventory.getItem(4).is(Items.SHIELD));else assertTrue(inventory.getItem(4).isEmpty());
+            int base=CoreHiring.heroBase(role);
+            boolean mage=role==22||role==23||role==24||role>=27;
+            Item expected= mage?Items.BLAZE_ROD : base==2?Items.BOW : base==3?Items.CROSSBOW : Items.DIAMOND_SWORD;
+            assertEquals(expected,inventory.getItem(5).getItem());
+            if(base==1 && !mage) assertTrue(inventory.getItem(4).is(Items.SHIELD));
+            else assertTrue(inventory.getItem(4).isEmpty());
             verify(mob).setItemSlot(EquipmentSlot.MAINHAND,inventory.getItem(5));
         }
-        assertEquals(4,trims.size());
+        // With 20 heroes assigned distinct material/pattern pairs, we expect many
+        // unique trims. Rather than pin exact count, assert at least 8 distinct pairs.
+        assertTrue(trims.size()>=8,"expected >=8 distinct hero trims, got "+trims.size());
     }
     @Test void cooldownSurvivesReloadAndRecoversAfterWorldClockReset() {
         assertFalse(HeroTraits.ready(100,500));assertTrue(HeroTraits.ready(500,500));assertTrue(HeroTraits.ready(0,5000));

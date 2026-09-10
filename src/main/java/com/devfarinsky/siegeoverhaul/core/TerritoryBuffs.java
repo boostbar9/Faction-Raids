@@ -28,7 +28,7 @@ import net.minecraft.server.level.ServerPlayer;
  * {@code TerritoryBuffs} bitmask on the core tag.</p>
  */
 public final class TerritoryBuffs {
-    public static final int[] PRICES = { 640, 480, 800, 512 };
+    public static final int[] PRICES = { 900, 600, 1200, 750 };
     public static final String[] LABELS = {
             "Fortified Walls",
             "Watchtower",
