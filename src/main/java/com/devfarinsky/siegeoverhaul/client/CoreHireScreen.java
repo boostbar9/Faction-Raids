@@ -369,6 +369,19 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         icon.draw(g, x + 14, ribbonY + 2, 12);
         text(g, status, x + 30, ribbonY + 4, w / 2, accent);
         text(g, detail, x + w / 2, ribbonY + 4, w / 2 - 14, CommandPalette.TEXT);
+
+        // Faint tab-specific emblem watermark in the top-right of the tab body.
+        TabEmblem emblem = switch (tab) {
+            case 0 -> TabEmblem.ARMY;
+            case 1 -> TabEmblem.LOOT;
+            case 2 -> TabEmblem.BANK;
+            default -> TabEmblem.TERRITORY;
+        };
+        // Only draw the watermark if there is room and we are not in territory
+        // (the map fills that area itself).
+        if (tab != 3 && w > 480) {
+            emblem.draw(g, x + w - 46, y + 58, 32);
+        }
     }
 
     private void drawHire(GuiGraphics g, int i) {
@@ -385,27 +398,34 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
         if (role < 0 || role >= CoreHiring.NAMES.length) return;
 
-        // Portrait tile with the recruit's signature item.
-        int portrait = Math.min(28, h - 20);
-        CommandFrame.chip(g, x + 6, y + 6, portrait, portrait, accent);
-        g.renderItem(menu.getSlot(i).getItem(), x + 6 + (portrait - 16) / 2,
-                y + 6 + (portrait - 16) / 2);
+        // Avatar portrait tile on the left. Size scales with card height so
+        // the layout stays readable on the compact 350-tall window.
+        int portrait = Math.min(Math.max(36, h - 24), 66);
+        RolePortrait.draw(g, role, x + 6, y + 6, portrait);
 
         int textLeft = x + 10 + portrait;
-        String prefix = i == 3 ? "Hero  |  " : i == 2 ? "Worker  |  " : "";
-        text(g, prefix + CoreHiring.NAMES[role], textLeft, y + 8, w - textLeft + x - 6,
+        int textAreaWidth = w - textLeft + x - 6;
+        String prefix = i == 3 ? "HERO" : i == 2 ? "WORKER" : "SOLDIER";
+        text(g, prefix, textLeft, y + 8, textAreaWidth, accent);
+        text(g, CoreHiring.NAMES[role], textLeft, y + 18, textAreaWidth,
                 CommandPalette.TEXT);
-        text(g, CoreHiring.rarity(role), textLeft, y + 20, w - textLeft + x - 6, accent);
+        text(g, CoreHiring.rarity(role), textLeft, y + 30, textAreaWidth,
+                CommandPalette.TEXT_MUTED);
 
         if (h > 80) {
-            CommandFrame.divider(g, x + 6, y + 40, w - 12);
+            CommandFrame.divider(g, textLeft, y + 43, textAreaWidth);
             String blurb = i == 3
                     ? HeroTraits.description(role)
                     : "Ready to join your faction";
-            text(g, blurb, x + 8, y + 46, w - 16, CommandPalette.TEXT_MUTED);
+            text(g, blurb, textLeft, y + 47, textAreaWidth, CommandPalette.TEXT_MUTED);
+            // Signature item chip with cost on the right, portrait side already used.
             String currency = menu.getSlot(4).getItem().getHoverName().getString();
-            text(g, "Cost " + menu.cost(i) + " " + currency,
-                    x + 8, y + 60, w - 16, CommandPalette.ACCENT_EMERALD);
+            String costLine = "Cost " + menu.cost(i) + " " + currency;
+            CommandFrame.chip(g, textLeft, y + h - 32, textAreaWidth - 2, 14,
+                    CommandPalette.ACCENT_EMERALD);
+            g.renderItem(menu.getSlot(i).getItem(), textLeft + 2, y + h - 34);
+            text(g, costLine, textLeft + 22, y + h - 29,
+                    textAreaWidth - 24, CommandPalette.ACCENT_EMERALD);
         }
     }
 
