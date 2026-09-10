@@ -164,37 +164,41 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     i == 0 ? CommandIcon.SWORDS : CommandIcon.BOOK));
         }
 
-        // Territory-level buff buttons (v4.18.0): four one-time purchases
-        // that apply faction-wide effects. Row sits between the tab bar and
-        // the map, above the recenter/zoom controls.
-        int tbW = (layout.width() - 32) / TerritoryBuffs.COUNT;
+        // Territory-level buff buttons: four one-time upgrades that apply
+        // faction-wide effects. Placed as a 2x2 grid of tall purchase cards
+        // that fill the tab body. No map, no zoom controls; this tab is a
+        // pure upgrade shop for kingdom-wide territory buffs.
+        int tbCols = 2;
+        int tbRows = (TerritoryBuffs.COUNT + tbCols - 1) / tbCols;
+        int tbGridTop = layout.y() + 62;
+        int tbGridBottom = layout.y() + layout.height() - 20;
+        int tbCellW = (layout.width() - 20 - (tbCols - 1) * 8) / tbCols;
+        int tbCellH = (tbGridBottom - tbGridTop - (tbRows - 1) * 8) / tbRows;
+        // Purchase button lives inside its card, near the bottom-right.
+        int btnH = 18;
         for (int i = 0; i < TerritoryBuffs.COUNT; i++) {
             final int index = i;
+            int col = i % tbCols, row = i / tbCols;
+            int cellX = layout.x() + 10 + col * (tbCellW + 8);
+            int cellY = tbGridTop + row * (tbCellH + 8);
+            int btnW = Math.min(140, tbCellW - 16);
             territoryBuffs[i] = addRenderableWidget(new CoreButton(
                     Component.literal(TerritoryBuffs.LABELS[i]),
                     b -> action(60 + index),
-                    layout.x() + 10 + i * (tbW + 6),
-                    layout.y() + 40,
-                    tbW, 18,
+                    cellX + tbCellW - btnW - 8,
+                    cellY + tbCellH - btnH - 6,
+                    btnW, btnH,
                     false, () -> false, CommandIcon.FLAG));
         }
-
-        // Territory tab helper keys: recenter + zoom in / out.
+        // Recenter/zoom buttons removed; the Territory tab is now a pure
+        // upgrade shop. Keep the button fields non-null for the render loop
+        // by pointing them at hidden placeholders that render nothing.
         recenterButton = addRenderableWidget(new CoreButton(
-                Component.literal("Recenter"),
-                b -> territory.recenter(),
-                layout.x() + 10, layout.y() + layout.height() - 32,
-                80, 18, false, () -> false, CommandIcon.FLAG));
+                Component.literal(""), b -> {}, 0, -100, 1, 1, false, () -> false));
         zoomInButton = addRenderableWidget(new CoreButton(
-                Component.literal("Zoom in"),
-                b -> territory.zoomIn(),
-                layout.x() + 96, layout.y() + layout.height() - 32,
-                80, 18, false, () -> false, CommandIcon.SCROLL));
+                Component.literal(""), b -> {}, 0, -100, 1, 1, false, () -> false));
         zoomOutButton = addRenderableWidget(new CoreButton(
-                Component.literal("Zoom out"),
-                b -> territory.zoomOut(),
-                layout.x() + 182, layout.y() + layout.height() - 32,
-                80, 18, false, () -> false, CommandIcon.MAP));
+                Component.literal(""), b -> {}, 0, -100, 1, 1, false, () -> false));
 
         // Loot boxes and blessing keys.
         for (int i = 0; i < 3; i++) {
@@ -685,16 +689,49 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         return used;
     }
 
-    /** Dimensions of the map body inside the Territory tab. */
-    private int mapX() { return layout.x() + 10; }
-    private int mapY() { return layout.y() + 62; }
-    private int mapW() { return layout.width() - 20; }
-    private int mapH() { return layout.height() - 62 - 40; } // room for buff row above + zoom row below
-
     private void drawTerritory(GuiGraphics g) {
-        int mx = mapX(), my = mapY(), mw = mapW(), mh = mapH();
-        CommandFrame.card(g, mx, my, mw, mh, CommandPalette.ACCENT_STEEL);
-        territory.draw(g, mx + 2, my + 2, mw - 4, mh - 4);
+        // Territory tab is a pure upgrade shop: four one-time faction-wide
+        // purchases laid out as a 2x2 grid of tall cards. Each card shows
+        // the label, a short description, price and status, with the
+        // purchase button in the bottom-right (added in init()).
+        int cols = 2;
+        int rows = (TerritoryBuffs.COUNT + cols - 1) / cols;
+        int gridTop = layout.y() + 62;
+        int gridBottom = layout.y() + layout.height() - 20;
+        int cellW = (layout.width() - 20 - (cols - 1) * 8) / cols;
+        int cellH = (gridBottom - gridTop - (rows - 1) * 8) / rows;
+        for (int i = 0; i < TerritoryBuffs.COUNT; i++) {
+            int col = i % cols, row = i / cols;
+            int cx = layout.x() + 10 + col * (cellW + 8);
+            int cy = gridTop + row * (cellH + 8);
+            boolean owned = menu.hasTerritoryBuff(i);
+            int accent = owned ? CommandPalette.ACCENT_EMERALD
+                    : (menu.emeralds() + menu.bank() >= TerritoryBuffs.PRICES[i]
+                            ? CommandPalette.ACCENT_GOLD
+                            : CommandPalette.ACCENT_STEEL);
+            if (owned) CommandFrame.cardDimmed(g, cx, cy, cellW, cellH);
+            else CommandFrame.card(g, cx, cy, cellW, cellH, accent);
+
+            // Flag icon + label at top of card.
+            CommandIcon.FLAG.draw(g, cx + 8, cy + 8, 14);
+            text(g, TerritoryBuffs.LABELS[i], cx + 28, cy + 10, cellW - 34, accent);
+
+            // Multi-line description below the label.
+            String desc = TerritoryBuffs.DESCRIPTIONS[i];
+            drawWrapped(g, desc, cx + 10, cy + 28, cellW - 20, CommandPalette.TEXT);
+
+            // Price / status line just above the purchase button.
+            String status;
+            int statusColor;
+            if (owned) {
+                status = "Active";
+                statusColor = CommandPalette.ACCENT_EMERALD;
+            } else {
+                status = TerritoryBuffs.PRICES[i] + "e";
+                statusColor = CommandPalette.ACCENT_GOLD;
+            }
+            text(g, status, cx + 10, cy + cellH - 40, 80, statusColor);
+        }
     }
 
     /** Contextual band below the header: shows wave state or peacetime hint. */
@@ -1134,10 +1171,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     @Override
     public boolean mouseScrolled(double x, double y, double delta) {
-        if (tab == 3) {
-            if (territory.mouseScrolled(delta, x, y,
-                    mapX() + 2, mapY() + 2, mapW() - 4, mapH() - 4)) return true;
-        }
+        // Territory tab is now a pure upgrade shop; no map scroll needed.
         if (tab == 2) {
             int count = menu.members().size();
             int rosterH = layout.height() - (118 - 0) - 22;
@@ -1192,21 +1226,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 return true;
             }
         }
-        if (tab == 3) {
-            if (button == 1 && mouseX >= mapX() && mouseX < mapX() + mapW()
-                    && mouseY >= mapY() && mouseY < mapY() + mapH()) {
-                territory.recenter();
-                return true;
-            }
-            if (territory.mouseClicked(mouseX, mouseY, button,
-                    mapX() + 2, mapY() + 2, mapW() - 4, mapH() - 4)) return true;
-        }
+        // Territory tab is now a pure upgrade shop; no map click handling.
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (tab == 3 && territory.mouseReleased(mouseX, mouseY, button)) return true;
         if (intelDragging && button == 0) { intelDragging = false; return true; }
         return super.mouseReleased(mouseX, mouseY, button);
     }
@@ -1214,7 +1239,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button,
                                 double dx, double dy) {
-        if (tab == 3 && territory.mouseDragged(mouseX, mouseY, dx, dy)) return true;
+        // Territory tab is now a pure upgrade shop; no map drag handling.
         if (tab == 4 && intelDragging && button == 0 && intelMaxOffset > 0) {
             // Map the mouse's Y travel back into scroll offset via the
             // thumb's travel range. Same formula as the draw call.
