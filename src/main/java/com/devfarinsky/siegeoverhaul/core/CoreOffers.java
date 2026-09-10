@@ -9,7 +9,22 @@ public final class CoreOffers {
     public static final int WORKER_START = 4;
     public static final int[] RECRUIT_WEIGHTS = {50, 25, 20, 5};
     public static final int[] WORKER_WEIGHTS = {25, 25, 20, 15, 10, 5};
-    public static final int[] HERO_WEIGHTS = {40,30,20,10};
+    /**
+     * v4.19.0 rarity spread across 20 heroes (roles 10-29):
+     *   Common (2) at 15 each = 30
+     *   Uncommon (4) at 8 each = 32
+     *   Rare (6) at 4 each     = 24
+     *   Epic (5) at 2 each     = 10
+     *   Legendary (3) at ~1.3  = 4  (2 + 1 + 1)
+     * Sums to 100. Legendaries stay genuinely rare so the tier feels earned.
+     */
+    public static final int[] HERO_WEIGHTS = {
+        15, 15,              // Common
+        8, 8, 8, 8,          // Uncommon
+        4, 4, 4, 4, 4, 4,    // Rare
+        2, 2, 2, 2, 2,       // Epic
+        2, 1, 1              // Legendary
+    };
     public static int hero(int roll) { return 10 + weighted(roll,HERO_WEIGHTS); }
     private CoreOffers() {}
     public static int role(int roll) { return weighted(roll, RECRUIT_WEIGHTS); }
@@ -25,7 +40,8 @@ public final class CoreOffers {
                 && offers[2] >= WORKER_START && offers[2] < WORKER_START + WORKER_WEIGHTS.length;
     }
     public static boolean canPurchase(CompoundTag stock, int index, long rotation) {
-        return index >= 0 && index < 4 && (index < 3 || stock.getInt("HeroRole") >= 10 && stock.getInt("HeroRole") <= 13) && valid(stock.getIntArray("Offers"))
+        int hero = stock.getInt("HeroRole");
+        return index >= 0 && index < 4 && (index < 3 || (hero >= 10 && hero <= 29)) && valid(stock.getIntArray("Offers"))
                 && rotation == stock.getLong("RefreshAt") && (stock.getInt("Sold") & (1 << index)) == 0;
     }
     public static boolean refresh(CompoundTag stock, long now, RandomSource random) {
@@ -41,7 +57,8 @@ public final class CoreOffers {
             return true;
         }
         if (valid(existing) && now < stock.getLong("RefreshAt")) {
-            if (stock.getInt("HeroRole") < 10 || stock.getInt("HeroRole") > 13) {
+            int hero = stock.getInt("HeroRole");
+            if (hero < 10 || hero > 29) {
                 stock.putInt("HeroRole",hero(random.nextInt(100))); return true;
             }
             return false;

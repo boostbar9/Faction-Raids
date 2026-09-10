@@ -13,7 +13,51 @@ import net.minecraftforge.registries.ForgeRegistries;
 /** Uses native costs, currency, hiring events, ownership, faction and unit-limit checks. */
 public final class CoreHiring {
     public static final String[] IDS = {"recruit", "recruit_shieldman", "bowman", "crossbowman", "farmer", "lumberjack", "miner", "builder", "cook", "courier"};
-    public static final String[] NAMES = {"Recruit", "Shieldman", "Archer", "Crossbowman", "Farmer", "Lumberjack", "Miner", "Builder", "Cook", "Courier", "Kael Bloodthorn", "Branna Dawnwarden", "Sylva Stormbow", "Orin Frostbinder"};
+    /**
+     * v4.19.0 hero roster expanded from 4 to 20 across five rarities.
+     * Role IDs 10-29 map to the {@link #HERO_BASE} entity role (0=sword,
+     * 1=shield, 2=bow, 3=crossbow) that drives spawn type, gear and offer pool.
+     * Mage heroes ride on top of role 0 (sword base) but replace their weapon
+     * and attack loop through {@link HeroTraits}.
+     */
+    public static final String[] NAMES = {
+        "Recruit", "Shieldman", "Archer", "Crossbowman",
+        "Farmer", "Lumberjack", "Miner", "Builder", "Cook", "Courier",
+        // Commons (10-11)
+        "Garrick Ironoath", "Mira Stonehand",
+        // Uncommons (12-15)
+        "Sylva Stormbow", "Orin Frostbinder", "Kael Bloodthorn", "Branna Dawnwarden",
+        // Rares (16-21)
+        "Vex Emberstep", "Nyx Hollowveil", "Roric Warbell", "Elowen Verdant", "Thane Grimwatch", "Zara Wildsong",
+        // Epics (22-26)
+        "Arcanis Voidweaver", "Lyria Starweaver", "Pyra Ashenheart", "Sable Ironclad", "Talon Skyrender",
+        // Legendaries (27-29)
+        "Solmyra the Radiant", "Umbros the Nightcaller", "Chronos Timebender"
+    };
+    /** Underlying entity role each hero uses when spawned. 0=sword,1=shield,2=bow,3=crossbow. */
+    public static final int[] HERO_BASE = {
+        0, 1,          // Common: Garrick sword, Mira shield
+        2, 3, 0, 1,    // Uncommon: bow, crossbow, sword, shield
+        0, 2, 1, 2, 3, 0, // Rare
+        0, 0, 0, 1, 2, // Epic: three mages + shield + bow
+        0, 0, 0        // Legendary: all mages
+    };
+    /** Rarity tier per hero, 0=Common..4=Legendary. Aligns with {@link #RARITY_NAMES}. */
+    public static final int[] HERO_TIER = {
+        0, 0,
+        1, 1, 1, 1,
+        2, 2, 2, 2, 2, 2,
+        3, 3, 3, 3, 3,
+        4, 4, 4
+    };
+    /** Cost multiplier applied to base recruit cost, per rarity tier. */
+    public static final double[] TIER_COST_MULT = { 8.0, 12.0, 18.0, 26.0, 40.0 };
+    public static final String[] RARITY_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary" };
+    public static final int HERO_ID_MIN = 10;
+    public static final int HERO_ID_MAX = 29;
+    public static boolean isHero(int role) { return role >= HERO_ID_MIN && role <= HERO_ID_MAX; }
+    public static int heroTier(int role) { return isHero(role) ? HERO_TIER[role - HERO_ID_MIN] : -1; }
+    public static int heroBase(int role) { return isHero(role) ? HERO_BASE[role - HERO_ID_MIN] : role; }
     private static final String[] COSTS = {"RecruitCost", "ShieldmanCost", "BowmanCost", "CrossbowmanCost", "FarmerCost", "LumberjackCost", "MinerCost", "BuilderCost", "CookCost", "CourierCost"};
     private CoreHiring() {}
     private static Object config(String name) throws ReflectiveOperationException {
@@ -33,13 +77,19 @@ public final class CoreHiring {
         return (int) Math.min(Integer.MAX_VALUE, lifted);
     }
     public static int cost(int role) throws ReflectiveOperationException {
-        if (role >= 10 && role <= 13) return (int)Math.min(32767L,Math.max(256L,(long)cost(role-10)*12));
+        if (isHero(role)) {
+            int base = cost(heroBase(role));
+            double mult = TIER_COST_MULT[heroTier(role)];
+            // Floor at the old 256e minimum so heroes never feel disposable
+            // on servers that lowered base recruit cost.
+            return (int) Math.min(32767L, Math.max(256L, Math.round(base * mult)));
+        }
         if (role < CoreOffers.WORKER_START) return applyUplift((Integer) config(COSTS[role]), role);
         int workerBase = (Integer) ((ForgeConfigSpec.ConfigValue<?>) Class.forName("com.talhanation.workers.config.WorkersServerConfig").getField(COSTS[role]).get(null)).get();
         return applyUplift(workerBase, role);
     }
     public static Item icon(int role) {
-        if (role >= 10 && role <= 13) return icon(role-10);
+        if (isHero(role)) return icon(heroBase(role));
         return switch (role) {
             case 0 -> Items.IRON_SWORD; case 1 -> Items.SHIELD; case 2 -> Items.BOW;
             case 3 -> Items.CROSSBOW; case 4 -> Items.WHEAT; case 5 -> Items.IRON_AXE;
@@ -48,12 +98,12 @@ public final class CoreHiring {
         };
     }
     public static int weight(int role) {
-        if (role >= 10 && role <= 13) return CoreOffers.HERO_WEIGHTS[role-10];
+        if (isHero(role)) return CoreOffers.HERO_WEIGHTS[role - HERO_ID_MIN];
         return role < CoreOffers.WORKER_START ? CoreOffers.RECRUIT_WEIGHTS[role]
                 : CoreOffers.WORKER_WEIGHTS[role - CoreOffers.WORKER_START];
     }
     public static String rarity(int role) {
-        if (role >= 10 && role <= 13) return "Hero";
+        if (isHero(role)) return RARITY_NAMES[heroTier(role)];
         int weight = weight(role);
         return weight >= 25 ? "Common" : weight >= 15 ? "Uncommon" : weight >= 10 ? "Rare" : "Very rare";
     }
@@ -78,7 +128,7 @@ public final class CoreHiring {
     }
     public static boolean hire(ServerPlayer player, BlockPos core, int role) {
         if (role < 0 || role >= NAMES.length) return false;
-        int typeRole=role>=10?role-10:role;
+        int typeRole = isHero(role) ? heroBase(role) : role;
         Mob mob = null;
         try {
             var type = ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation(typeRole < CoreOffers.WORKER_START ? "recruits" : "workers", IDS[typeRole]));

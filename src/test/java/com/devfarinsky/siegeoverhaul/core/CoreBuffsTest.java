@@ -23,8 +23,8 @@ class CoreBuffsTest extends MinecraftTestSupport {
         when(player.addEffect(any())).thenReturn(false);
         assertFalse(CoreBuffs.purchase(player,1)); assertEquals(64,inventory.items.get(0).getCount());
         when(player.addEffect(any())).thenReturn(true);
-        assertTrue(CoreBuffs.purchase(player,1)); assertEquals(40,inventory.items.get(0).getCount());
+        assertTrue(CoreBuffs.purchase(player,1)); assertEquals(28,inventory.items.get(0).getCount());
         when(player.hasEffect(MobEffects.DAMAGE_BOOST)).thenReturn(true);
-        assertFalse(CoreBuffs.purchase(player,1)); assertEquals(40,inventory.items.get(0).getCount());
+        assertFalse(CoreBuffs.purchase(player,1)); assertEquals(28,inventory.items.get(0).getCount());
     }
 }
