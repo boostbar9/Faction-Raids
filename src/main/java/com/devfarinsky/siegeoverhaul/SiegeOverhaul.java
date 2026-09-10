@@ -31,6 +31,7 @@ public final class SiegeOverhaul {
         com.devfarinsky.siegeoverhaul.core.CoreMenus.MENUS.register(modBus);
         ModItems.register(modBus);
         ModBannerPatterns.register(modBus);
+        com.devfarinsky.siegeoverhaul.items.ModTabs.register(modBus);
         RaidNetwork.init();
         MinecraftForge.EVENT_BUS.register(RaidEvents.class);
         // v2.30.0: install the Bridge Sieges listener. Bootstrap is deferred
