@@ -1,14 +1,19 @@
 package com.devfarinsky.siegeoverhaul.client;
 
+import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.MapColor;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -41,11 +46,58 @@ public final class TerritoryPanel {
     private final Map<Long, int[]> chunkCache = new HashMap<>();
     private int cacheZoom = -1;
 
+    /**
+     * Per-chunk uploaded texture cache. Uploading one 16x16 texture and
+     * blitting it once is drastically cheaper than 256 g.fill() calls per
+     * chunk per frame. LRU-capped at 1024 chunks (256 KB of client texture
+     * memory worst case) so long sessions don't leak.
+     */
+    private final LinkedHashMap<Long, ChunkTex> texCache =
+            new LinkedHashMap<>(64, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<Long, ChunkTex> e) {
+                    if (size() > MAX_CACHED_TEXTURES) {
+                        e.getValue().close();
+                        return true;
+                    }
+                    return false;
+                }
+            };
+    private static final int MAX_CACHED_TEXTURES = 1024;
+
+    /**
+     * Simple holder so we can free the underlying texture on eviction /
+     * reset without leaking a GL handle.
+     */
+    private static final class ChunkTex {
+        final DynamicTexture tex;
+        final ResourceLocation loc;
+        ChunkTex(DynamicTexture tex, ResourceLocation loc) {
+            this.tex = tex;
+            this.loc = loc;
+        }
+        void close() {
+            try {
+                Minecraft.getInstance().getTextureManager().release(loc);
+                tex.close();
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private static int UPLOAD_COUNTER = 0;
+
     /** Reset any drag state (called on close or on tab switch). */
     public void reset() {
         dragging = false;
         panBlockX = 0;
         panBlockZ = 0;
+    }
+
+    /** Drop all cached textures. Called when the screen closes. */
+    public void closeTextures() {
+        for (ChunkTex ct : texCache.values()) ct.close();
+        texCache.clear();
+        chunkCache.clear();
     }
 
     /** Snap the view back to the player. */
@@ -126,6 +178,8 @@ public final class TerritoryPanel {
             int bpp = blocksPerPixel();
             if (bpp != cacheZoom) {
                 chunkCache.clear();
+                for (ChunkTex ct : texCache.values()) ct.close();
+                texCache.clear();
                 cacheZoom = bpp;
             }
 
@@ -179,27 +233,79 @@ public final class TerritoryPanel {
         int chunkMinZ = worldTop >> 4;
         int chunkMaxZ = worldBottom >> 4;
 
-        int budget = 320; // cap per-frame sampling cost.
+        // Per-frame sampling budget: sampling is the expensive part, so cap
+        // hard. Cached chunks always draw regardless of budget.
+        int budget = 8;
         for (int cz = chunkMinZ; cz <= chunkMaxZ; cz++) {
             for (int cx = chunkMinX; cx <= chunkMaxX; cx++) {
                 long key = (((long) cx) << 32) | (cz & 0xffffffffL);
-                int[] colors = chunkCache.get(key);
-                if (colors == null) {
+                ChunkTex ct = texCache.get(key);
+                if (ct == null) {
                     if (budget <= 0) continue;
-                    colors = sampleChunk(level, cx, cz);
-                    if (colors != null) {
+                    int[] colors = chunkCache.get(key);
+                    if (colors == null) {
+                        colors = sampleChunk(level, cx, cz);
+                        if (colors == null) continue;
                         chunkCache.put(key, colors);
-                        budget--;
                     }
+                    ct = uploadChunkTexture(colors);
+                    if (ct == null) continue;
+                    texCache.put(key, ct);
+                    budget--;
                 }
-                if (colors == null) continue;
-
-                drawChunkTile(g, colors, cx, cz, mx, my, mw, mh, camX, camZ, bpp);
+                drawChunkBlit(g, ct, cx, cz, mx, my, mw, mh, camX, camZ, bpp);
             }
         }
     }
 
-    /** Sample a loaded chunk's top block colors. Returns null if the chunk is not loaded. */
+    private static ChunkTex uploadChunkTexture(int[] colors) {
+        try {
+            NativeImage img = new NativeImage(NativeImage.Format.RGBA, 16, 16, false);
+            for (int z = 0; z < 16; z++) {
+                for (int x = 0; x < 16; x++) {
+                    int c = colors[z * 16 + x];
+                    // Vanilla NativeImage.setPixelRGBA takes 0xAABBGGRR (little-endian ABGR).
+                    int a = (c >>> 24) & 0xff;
+                    int r = (c >>> 16) & 0xff;
+                    int gc = (c >>> 8) & 0xff;
+                    int b = c & 0xff;
+                    int abgr = (a << 24) | (b << 16) | (gc << 8) | r;
+                    img.setPixelRGBA(x, z, abgr);
+                }
+            }
+            DynamicTexture tex = new DynamicTexture(img);
+            ResourceLocation loc = new ResourceLocation("siegeoverhaul",
+                    "territory_chunk_" + (UPLOAD_COUNTER++));
+            Minecraft.getInstance().getTextureManager().register(loc, tex);
+            return new ChunkTex(tex, loc);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private static void drawChunkBlit(GuiGraphics g, ChunkTex ct,
+                                      int cx, int cz,
+                                      int mx, int my, int mw, int mh,
+                                      double camX, double camZ, int bpp) {
+        int screenCenterX = mx + mw / 2;
+        int screenCenterY = my + mh / 2;
+        int chunkWorldX = cx << 4;
+        int chunkWorldZ = cz << 4;
+        int sx = screenCenterX + (int) Math.floor((chunkWorldX - camX) / (double) bpp);
+        int sy = screenCenterY + (int) Math.floor((chunkWorldZ - camZ) / (double) bpp);
+        int tileSize = Math.max(1, 16 / bpp) * 16;
+        // Trivial reject if fully off-screen.
+        if (sx + tileSize <= mx || sx >= mx + mw) return;
+        if (sy + tileSize <= my || sy >= my + mh) return;
+        g.blit(ct.loc, sx, sy, 0, 0f, 0f, tileSize, tileSize, tileSize, tileSize);
+    }
+
+    /**
+     * Sample a loaded chunk's top block colors. Uses the WORLD_SURFACE
+     * heightmap so we do at most one blockstate fetch per column (256 per
+     * chunk) instead of scanning the entire build height (256 * ~320).
+     * Returns null if the chunk isn't loaded.
+     */
     private static int[] sampleChunk(Level level, int cx, int cz) {
         LevelChunk chunk;
         try {
@@ -208,24 +314,32 @@ public final class TerritoryPanel {
         } catch (Exception ex) {
             return null;
         }
-        int base = level.getMinBuildHeight();
-        int top = level.getMaxBuildHeight();
+        int minY = level.getMinBuildHeight();
         int[] out = new int[16 * 16];
         var pos = new net.minecraft.core.BlockPos.MutableBlockPos();
         for (int z = 0; z < 16; z++) {
             for (int x = 0; x < 16; x++) {
                 int worldX = (cx << 4) + x;
                 int worldZ = (cz << 4) + z;
-                pos.set(worldX, top - 1, worldZ);
+                int surfaceY;
+                try {
+                    surfaceY = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
+                } catch (Exception ex) {
+                    surfaceY = minY;
+                }
+                if (surfaceY < minY) surfaceY = minY;
+                pos.set(worldX, surfaceY, worldZ);
                 int color = 0xff0a1219;
-                for (int y = top - 1; y >= base; y--) {
-                    pos.setY(y);
-                    var state = chunk.getBlockState(pos);
-                    if (state.isAir()) continue;
-                    MapColor mc = state.getMapColor(level, pos);
-                    if (mc == MapColor.NONE) continue;
+                var state = chunk.getBlockState(pos);
+                if (state.isAir()) {
+                    // Rare but possible: heightmap can point at air above a fluid.
+                    // Try one step down.
+                    pos.setY(surfaceY - 1);
+                    state = chunk.getBlockState(pos);
+                }
+                MapColor mc = state.getMapColor(level, pos);
+                if (mc != MapColor.NONE) {
                     color = 0xff000000 | mc.calculateRGBColor(MapColor.Brightness.NORMAL);
-                    break;
                 }
                 out[z * 16 + x] = color;
             }

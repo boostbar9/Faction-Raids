@@ -103,6 +103,15 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     tabIcons[i]));
         }
 
+        // Close (X) button in the header for players who can't reach Escape
+        // (e.g. controller users, one-handed play, remap conflicts).
+        addRenderableWidget(new CoreButton(
+                Component.literal("X"),
+                b -> onClose(),
+                layout.x() + layout.width() - 22, layout.y() + 6,
+                16, 16,
+                false, () -> false));
+
         // Hire keys and bank keys share the same iteration to stay compact.
         for (int i = 0; i < 4; i++) {
             final int index = i;
@@ -124,8 +133,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     Component.literal(bankLabels[i]),
                     b -> action(40 + index),
                     layout.x() + 10 + i * (bw + 6),
-                    layout.y() + 102,
-                    bw, 22,
+                    layout.y() + 114,
+                    bw, 20,
                     false, () -> false, bankIcons[i]));
         }
 
@@ -334,16 +343,20 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
         // Treasury pill on the right, using the textured rounded pill from
         // the atlas plus an emerald icon glyph and a live-updating balance.
+        // Leaves 26px of room on the far right for the close (X) button.
         String purse = String.format(Locale.ROOT, "%,d", menu.emeralds());
         int chipW = Math.max(96, Math.min(w / 3, font.width(purse) + 60));
-        int chipX = x + w - chipW - 12;
+        int chipX = x + w - chipW - 30;
         // Soft glow behind the pill for treasury prominence.
         HudAtlas.enableAdditive();
         HudAtlas.blitTinted(g, HudAtlas.GLOW_SOFT,
                 chipX - 16, y + 4, chipW + 32, 32, 0x60ffe0a0);
         HudAtlas.disableAdditive();
         HudAtlas.blit(g, HudAtlas.TREASURY_PILL, chipX, y + 6, chipW, 24);
-        text(g, "TREASURY", chipX + 26, y + 10, chipW - 32, CommandPalette.ACCENT_GOLD);
+        // Top-right pill shows the player's personal emeralds (what they can
+        // spend right now). The Bank card shows the faction-wide treasury.
+        // Two different pools, two clearly different labels.
+        text(g, "YOUR PURSE", chipX + 26, y + 10, chipW - 32, CommandPalette.ACCENT_GOLD);
         text(g, purse, chipX + 26, y + 20, chipW - 32, CommandPalette.ACCENT_EMERALD);
 
         // Active-siege ribbon under the header.
@@ -684,12 +697,104 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             gear[g_i].draw(g, gx, glyphY, glyphSize);
         }
 
-        // Item chip below the gear glyphs: shows the recruit's signature item
-        // (bread, arrows, tool) so players know what loadout they get.
-        int chipY = y + h - 48;
-        if (chipY > y + 48) {
-            g.renderItem(menu.getSlot(i).getItem(), infoLeft, chipY);
+        // Descriptive blurb: role summary for regular recruits/workers,
+        // ability line for heroes. Wrapped across up to three lines so the
+        // player doesn't have to hover the tooltip to know what they're
+        // hiring.
+        String blurb = i == 3 ? HeroTraits.description(role) : roleBlurb(role);
+        int blurbY = y + 48;
+        int blurbLines = drawWrappedText(g, blurb, infoLeft, blurbY,
+                infoWidth, 3, CommandPalette.TEXT_MUTED);
+
+        // Stat/armor line: shows the loadout tier text and the armor material
+        // so players understand what armor the unit is going to wear. Regular
+        // recruits are cloth/leather; workers wear their tool kit; heroes wear
+        // a themed trimmed set from HeroTraits.
+        String kit = kitDescriptor(role);
+        int kitY = blurbY + Math.min(blurbLines, 3) * 10 + 2;
+        if (kitY + 10 <= y + h - 26) {
+            text(g, kit, infoLeft, kitY, infoWidth, CommandPalette.ACCENT_TEAL);
         }
+
+        // Item chip in the bottom-left of the info column: shows the recruit's
+        // signature item (bread, arrows, tool). Sits above the Hire button.
+        int chipY = y + h - 44;
+        g.renderItem(menu.getSlot(i).getItem(), infoLeft, chipY);
+        // Cost readout next to the item so the player sees the price at a
+        // glance without hovering.
+        text(g, menu.cost(i) + "e", infoLeft + 20, chipY + 4,
+                infoWidth - 20, CommandPalette.ACCENT_EMERALD);
+    }
+
+    /**
+     * Draw text wrapped to a max width across up to maxLines lines. Returns
+     * the number of lines actually rendered so callers can position the
+     * next element under it.
+     */
+    private int drawWrappedText(GuiGraphics g, String s, int x, int y, int width,
+                                int maxLines, int color) {
+        if (s == null || s.isEmpty()) return 0;
+        String[] words = s.split(" ");
+        StringBuilder line = new StringBuilder();
+        int drawn = 0;
+        for (int w = 0; w < words.length; w++) {
+            String candidate = line.length() == 0 ? words[w] : line + " " + words[w];
+            if (font.width(candidate) <= width) {
+                line.setLength(0);
+                line.append(candidate);
+            } else {
+                if (line.length() > 0) {
+                    g.drawString(font, line.toString(), x, y + drawn * 10, color, false);
+                    drawn++;
+                    if (drawn >= maxLines) return drawn;
+                }
+                line.setLength(0);
+                line.append(words[w]);
+            }
+        }
+        if (line.length() > 0 && drawn < maxLines) {
+            g.drawString(font, line.toString(), x, y + drawn * 10, color, false);
+            drawn++;
+        }
+        return drawn;
+    }
+
+    /** One-sentence description for non-hero recruits and workers. */
+    private static String roleBlurb(int role) {
+        return switch (role) {
+            case 0 -> "Front-line recruit. Sword and shield. Cheapest hire, good in numbers.";
+            case 1 -> "Shield wall anchor. Absorbs melee pressure so archers can work.";
+            case 2 -> "Ranged skirmisher. Bow. Break-away kites best of the recruit line.";
+            case 3 -> "Heavy ranged. Crossbow bolts pierce armor. Slow to reload.";
+            case 4 -> "Tends crops in the war camp. Feeds the whole faction.";
+            case 5 -> "Chops trees near the camp. Keeps timber flowing for repairs.";
+            case 6 -> "Mines stone and coal nearby. Restocks fortification materials.";
+            case 7 -> "Repairs damaged blocks after a siege ends. Speeds recovery.";
+            case 8 -> "Cooks raw ingredients into food. Multiplies farmer output.";
+            case 9 -> "Runs goods between chests. Ties your logistics together.";
+            default -> "Faction unit.";
+        };
+    }
+
+    /** Loadout / armor hint shown under the blurb. */
+    private static String kitDescriptor(int role) {
+        return switch (role) {
+            case 0 -> "Kit: leather cap, iron sword, wooden shield";
+            case 1 -> "Kit: iron helm, iron sword, iron shield";
+            case 2 -> "Kit: leather cap, bow, arrows";
+            case 3 -> "Kit: chain helm, crossbow, tipped bolts";
+            case 4 -> "Kit: straw hat, hoe, seeds";
+            case 5 -> "Kit: leather cap, iron axe";
+            case 6 -> "Kit: iron helm, iron pickaxe, torches";
+            case 7 -> "Kit: leather cap, hammer, timber";
+            case 8 -> "Kit: chef hat, iron knife, cook pot";
+            case 9 -> "Kit: leather boots, satchel, map";
+            case 10 -> "Kit: netherite helm, Cinderfang blade, redstone-trimmed armor";
+            case 11 -> "Kit: netherite helm, Oathkeeper blade, ward-trimmed armor";
+            case 12 -> "Kit: netherite helm, Thornsong bow, wild-trimmed armor";
+            case 13 -> "Kit: netherite helm, Stormbolt crossbow, eye-trimmed armor";
+            default -> "";
+        };
     }
 
     private static String shortRole(int role) {
@@ -796,12 +901,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int x = layout.x(), y = layout.y();
         int w = layout.width(), h = layout.height();
 
-        // Bank summary card up top: bank icon + name/balance on the left,
-        // wave payout + vote/countdown on the right.
-        CommandFrame.card(g, x + 10, y + 62, w - 20, 34, CommandPalette.ACCENT_GOLD);
+        // Bank summary card up top: taller card so we have three text rows
+        // per side without overlap.
+        int bankCardH = 46;
+        CommandFrame.card(g, x + 10, y + 62, w - 20, bankCardH, CommandPalette.ACCENT_GOLD);
 
-        // Textured bank coin-stack icon with a soft glow. Scales in size with
-        // the treasury balance so a rich treasury reads as a taller stack.
+        // Textured bank coin-stack icon with a soft glow.
         int coinX = x + 14, coinY = y + 66;
         HudAtlas.enableAdditive();
         HudAtlas.blitTinted(g, HudAtlas.GLOW_SOFT,
@@ -809,28 +914,33 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         HudAtlas.disableAdditive();
         HudAtlas.blit(g, HudAtlas.ICON_BANK, coinX, coinY);
 
-        text(g, menu.factionName(), x + 46, y + 66, w / 2 - 52, CommandPalette.TEXT);
+        int leftX = x + 46;
+        int leftW = w / 2 - 52;
+        text(g, menu.factionName(), leftX, y + 68, leftW, CommandPalette.TEXT);
         text(g, String.format(Locale.ROOT, "Treasury: %,d emeralds", menu.bank()),
-                x + 46, y + 80, w / 2 - 52, CommandPalette.ACCENT_EMERALD);
-
-        int rightX = x + w / 2;
-        // Interest projection: today's earnings at the configured rate.
-        long dailyInterest = (long) menu.bank() * menu.interestRate() / 10000L;
-        text(g, "Next wave " + menu.nextWave() + ": +" + menu.nextReward(),
-                rightX, y + 66, w / 2 - 18, CommandPalette.ACCENT_TEAL);
-        text(g, String.format(Locale.ROOT, "Interest: +%,d /24h (%.2f%%)",
-                        dailyInterest, menu.interestRate() / 100.0),
-                rightX, y + 80, w / 2 - 18, CommandPalette.ACCENT_GOLD);
-
+                leftX, y + 80, leftW, CommandPalette.ACCENT_EMERALD);
+        // Status line (peace / siege / retreat vote) below treasury.
         String status = menu.voteSeconds() > 0
-                ? "Retreat vote in progress: " + menu.voteSeconds() + "s"
+                ? "Retreat vote: " + menu.voteSeconds() + "s remaining"
                 : menu.currentWave() > 0
                         ? "Surviving wave " + menu.currentWave()
                         : "Preparing for the next siege";
-        text(g, status, rightX, y + 80, w / 2 - 18, CommandPalette.TEXT_MUTED);
+        text(g, status, leftX, y + 92, leftW, CommandPalette.TEXT_MUTED);
 
-        // Roster panel below.
-        int rosterY = y + 118;
+        int rightX = x + w / 2;
+        int rightW = w / 2 - 18;
+        long dailyInterest = (long) menu.bank() * menu.interestRate() / 10000L;
+        text(g, "Next wave " + menu.nextWave() + ": +" + menu.nextReward() + " to bank",
+                rightX, y + 68, rightW, CommandPalette.ACCENT_TEAL);
+        text(g, String.format(Locale.ROOT, "Interest: +%,d /24h (%.2f%%)",
+                        dailyInterest, menu.interestRate() / 100.0),
+                rightX, y + 80, rightW, CommandPalette.ACCENT_GOLD);
+        text(g, "Purchases pull from bank first, then your pack",
+                rightX, y + 92, rightW, CommandPalette.TEXT_DIM);
+
+        // Roster panel below (pushed down to make room for the taller bank card
+        // and its Deposit/Withdraw button row).
+        int rosterY = y + 138;
         int rosterH = h - (rosterY - y) - 22;
         CommandFrame.card(g, x + 10, rosterY, w - 20, rosterH, CommandPalette.ACCENT_ARCANE);
         CommandIcon.SCROLL.draw(g, x + 16, rosterY + 4, 12);
@@ -929,6 +1039,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     @Override
     public void onClose() {
         territory.reset();
+        territory.closeTextures();
         EntityPortrait.clear();
         super.onClose();
     }
