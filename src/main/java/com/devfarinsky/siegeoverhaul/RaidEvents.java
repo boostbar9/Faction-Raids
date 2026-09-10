@@ -279,6 +279,25 @@ public final class RaidEvents {
             mob.setPathfindingMalus(BlockPathTypes.DAMAGE_OTHER, 16.0f);
             mob.setPathfindingMalus(BlockPathTypes.DANGER_OTHER, 16.0f);
         }
+        // Hole avoidance: strongly penalise routes that go through mid-air
+        // (OPEN) or over cliff-edge fall damage. Raiders were routinely
+        // walking into 3-block+ pits on their way to the core because vanilla
+        // GroundPathNavigation treats any drop the mob can survive as free.
+        // Setting a positive malus on these path types makes the search
+        // strongly prefer walking around the pit unless the detour is very
+        // long, without hard-blocking (in case the only route is down).
+        if (mob instanceof PathfinderMob) {
+            // Very high malus on cliffs and mid-air makes the planner refuse
+            // to route through ravines and cave openings unless there is no
+            // other way through. Values > 20 effectively veto the route in
+            // vanilla A*, but still allow a fallback when everything else
+            // is worse (e.g. underwater sieges).
+            mob.setPathfindingMalus(BlockPathTypes.DAMAGE_CAUTIOUS, 24.0f);
+            mob.setPathfindingMalus(BlockPathTypes.WATER_BORDER, 12.0f);
+            // Non-blocking, per-tick hole and cave escape watcher.
+            mob.goalSelector.addGoal(1,
+                    new com.devfarinsky.siegeoverhaul.siege.RaiderHoleAvoidGoal((PathfinderMob) mob));
+        }
     }
 
     /**

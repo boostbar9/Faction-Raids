@@ -114,15 +114,16 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     layout.cardWidth() - hirePortrait - 22, 20,
                     false, () -> false));
 
-            String[] bankLabels = {"Store 8", "Store 64", "Take 8", "Take 64"};
+            String[] bankLabels = {"Deposit 8", "Deposit 64", "Withdraw 8", "Withdraw 64"};
+            CommandIcon[] bankIcons = {CommandIcon.EMERALD, CommandIcon.EMERALD, CommandIcon.BANK, CommandIcon.BANK};
             int bw = (layout.width() - 38) / 4;
             bank[i] = addRenderableWidget(new CoreButton(
                     Component.literal(bankLabels[i]),
                     b -> action(40 + index),
                     layout.x() + 10 + i * (bw + 6),
                     layout.y() + 102,
-                    bw, 18,
-                    false, () -> false));
+                    bw, 22,
+                    false, () -> false, bankIcons[i]));
         }
 
         // Territory tab helper keys: recenter + zoom in / out.
@@ -295,19 +296,23 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // Header banner strip that sits behind the crown, title and treasury chip.
         CommandFrame.header(g, x, y, w, 26);
 
-        // Crown + title cluster on the left.
-        CommandIcon.CROWN.draw(g, x + 12, y + 10, 14);
-        text(g, "COMMAND CENTER", x + 32, y + 12, w / 2 - 40, CommandPalette.ACCENT_GOLD);
-        text(g, menu.factionName().toUpperCase(Locale.ROOT),
-                x + 32, y + 22, w / 2 - 40, CommandPalette.TEXT_MUTED);
+        // Hanging crest banner on the left of the header (like the reference).
+        drawCrestBanner(g, x - 6, y + 6);
 
-        // Treasury chip on the right, with emerald glyph.
+        // Title cluster to the right of the crest.
+        text(g, "KINGDOM COMMAND", x + 42, y + 12,
+                w / 2 - 50, CommandPalette.ACCENT_GOLD);
+        text(g, menu.factionName(),
+                x + 42, y + 22, w / 2 - 50, CommandPalette.TEXT_MUTED);
+
+        // Treasury chip on the right, with emerald glyph. Gold border for prominence.
         String purse = String.format(Locale.ROOT, "%,d", menu.emeralds());
-        int chipW = Math.min(w / 3, Math.max(66, font.width(purse) + 34));
+        int chipW = Math.min(w / 3, Math.max(80, font.width(purse) + 40));
         int chipX = x + w - chipW - 12;
-        CommandFrame.chip(g, chipX, y + 10, chipW, 16, CommandPalette.ACCENT_EMERALD);
-        CommandIcon.EMERALD.draw(g, chipX + 4, y + 12, 12);
-        text(g, purse, chipX + 20, y + 14, chipW - 26, CommandPalette.ACCENT_EMERALD);
+        CommandFrame.chip(g, chipX, y + 8, chipW, 20, CommandPalette.ACCENT_GOLD);
+        text(g, "Treasury", chipX + 6, y + 11, chipW - 12, CommandPalette.TEXT_MUTED);
+        CommandIcon.EMERALD.draw(g, chipX + 6, y + 18, 10);
+        text(g, purse, chipX + 20, y + 19, chipW - 26, CommandPalette.ACCENT_EMERALD);
 
         // Active-siege ribbon under the header.
         drawSiegeRibbon(g, x, y, w);
@@ -323,17 +328,68 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             drawTerritory(g);
         }
 
-        // Footer contextual hint.
-        String footer = switch (tab) {
-            case 0 -> String.format(Locale.ROOT,
-                    "Shared stock  |  Refresh in %d:%02d",
-                    menu.seconds() / 60, menu.seconds() % 60);
-            case 1 -> "Mystery loot & five-minute blessings  |  Personal emeralds";
-            case 2 -> "Interest " + menu.interestRate() / 100.0
-                    + "% /24h  |  Leader withdrawals  |  Scroll roster";
+        // Footer stats strip: faction size + contextual tab hint.
+        drawFooterStrip(g, x, y + h - 16, w);
+    }
+
+    /**
+     * Small hanging crest banner drawn to the left of the title. Purely
+     * procedural; sits over the header rail and reads as a heraldic banner.
+     */
+    private void drawCrestBanner(GuiGraphics g, int x, int y) {
+        int w = 24, h = 30;
+        // Rope hanger.
+        g.fill(x + w / 2, y - 4, x + w / 2 + 1, y, CommandPalette.BEVEL_DARK);
+        // Banner cloth.
+        g.fill(x, y, x + w, y + h - 4, CommandPalette.HEADER_TOP);
+        g.fillGradient(x + 1, y + 1, x + w - 1, y + h - 5,
+                0xff3f4a6a, 0xff222839);
+        // Gold trim.
+        int gold = CommandPalette.ACCENT_GOLD;
+        g.fill(x, y, x + w, y + 1, gold);
+        g.fill(x, y, x + 1, y + h - 4, gold);
+        g.fill(x + w - 1, y, x + w, y + h - 4, gold);
+        // Swallow-tail bottom (two triangles).
+        for (int i = 0; i < 4; i++) {
+            int cutY = y + h - 4 + i;
+            g.fill(x + i, cutY, x + w / 2 - i, cutY + 1, CommandPalette.HEADER_TOP);
+            g.fill(x + w / 2 + i, cutY, x + w - i, cutY + 1, CommandPalette.HEADER_TOP);
+            g.fill(x + i, cutY, x + i + 1, cutY + 1, gold);
+            g.fill(x + w - i - 1, cutY, x + w - i, cutY + 1, gold);
+        }
+        // Crown emblem centred on the banner.
+        CommandIcon.CROWN.draw(g, x + w / 2 - 6, y + 8, 12);
+    }
+
+    /**
+     * Bottom strip with the faction size chip on the left, contextual tab
+     * hint in the middle, and refresh timer / interest on the right.
+     */
+    private void drawFooterStrip(GuiGraphics g, int x, int y, int w) {
+        // Faction member count on the left.
+        int members = menu.members().size();
+        String membersLine = members + (members == 1 ? " member" : " members");
+        CommandIcon.SHIELD.draw(g, x + 10, y + 2, 10);
+        text(g, membersLine, x + 24, y + 3, 100, CommandPalette.TEXT_MUTED);
+
+        // Context hint in the middle.
+        String hint = switch (tab) {
+            case 0 -> "Shared stock rotates every 15 minutes";
+            case 1 -> "Loot & blessings use personal emeralds";
+            case 2 -> "Interest " + menu.interestRate() / 100.0 + "% every 24h";
+            case 3 -> "Drag to pan  |  Scroll to zoom  |  Right-click to recenter";
             default -> "";
         };
-        if (tab != 3) text(g, footer, x + 12, y + h - 13, w - 24, CommandPalette.TEXT_DIM);
+        int hintW = font.width(hint);
+        text(g, hint, x + (w - hintW) / 2, y + 3, hintW + 4, CommandPalette.TEXT_DIM);
+
+        // Refresh timer on the right (only for tabs where it applies).
+        if (tab == 0) {
+            String timer = String.format(Locale.ROOT, "Refresh %d:%02d",
+                    menu.seconds() / 60, menu.seconds() % 60);
+            int tw = font.width(timer);
+            text(g, timer, x + w - tw - 12, y + 3, tw + 4, CommandPalette.TEXT_MUTED);
+        }
     }
 
     /** Dimensions of the map body inside the Territory tab. */
@@ -557,8 +613,13 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 x + 46, y + 80, w / 2 - 52, CommandPalette.ACCENT_EMERALD);
 
         int rightX = x + w / 2;
+        // Interest projection: today's earnings at the configured rate.
+        long dailyInterest = (long) menu.bank() * menu.interestRate() / 10000L;
         text(g, "Next wave " + menu.nextWave() + ": +" + menu.nextReward(),
                 rightX, y + 66, w / 2 - 18, CommandPalette.ACCENT_TEAL);
+        text(g, String.format(Locale.ROOT, "Interest: +%,d /24h (%.2f%%)",
+                        dailyInterest, menu.interestRate() / 100.0),
+                rightX, y + 80, w / 2 - 18, CommandPalette.ACCENT_GOLD);
 
         String status = menu.voteSeconds() > 0
                 ? "Retreat vote in progress: " + menu.voteSeconds() + "s"

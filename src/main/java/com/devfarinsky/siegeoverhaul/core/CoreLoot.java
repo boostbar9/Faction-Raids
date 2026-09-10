@@ -46,8 +46,9 @@ public final class CoreLoot {
         long now=player.serverLevel().getGameTime();var data=player.getPersistentData();long next=data.getLong("SiegeLootNext");
         if(next>now && next<=now+OPEN_TICKS)return null;
         var inventory=player.getInventory();
-        int emeralds=inventory.items.stream().filter(s->s.is(Items.EMERALD)).mapToInt(ItemStack::getCount).sum();
-        if(emeralds<price){player.sendSystemMessage(Component.literal("You need "+price+" emeralds."));return null;}
+        // Bank-first affordability check via PaymentSource.
+        long combined = PaymentSource.available(player, price);
+        if(combined<price){player.sendSystemMessage(Component.literal("You need "+price+" emeralds (bank + inventory)."));return null;}
         // Require space for every possible outcome before rolling; full inventories
         // cannot be used to filter unwanted rewards or lose a paid reward.
         for(int roll:new int[]{0,50,80,95})if(!fits(inventory.items,reward(box,roll))) {
@@ -55,10 +56,7 @@ public final class CoreLoot {
         }
         int roll=player.getRandom().nextInt(100);
         ItemStack prize=reward(box,roll);
-        int remaining=price;
-        for(var stack:inventory.items)if(stack.is(Items.EMERALD)) {
-            int take=Math.min(remaining,stack.getCount());stack.shrink(take);remaining-=take;if(remaining==0)break;
-        }
+        if(!PaymentSource.consume(player, price)) return null;
         // Capacity was checked on this same server thread; payment can only free space.
         inventory.add(prize.copy());inventory.setChanged();data.putLong("SiegeLootNext",now+OPEN_TICKS);
         // Keep chat free of reward details while the client plays its sealed reveal.
