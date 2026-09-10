@@ -51,6 +51,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     /** Intel tab: 0 = Units, 1 = Enemy Lore, 2 = How to Play. */
     private int intelSection;
     private int intelOffset;
+    /** Last-drawn intel body geometry, cached so mouseClicked/mouseDragged can hit-test the scrollbar. */
+    private int intelBodyX, intelBodyY, intelBodyW, intelBodyH;
+    /** Last-computed max scroll offset so the scrollbar drag can map cleanly. */
+    private int intelMaxOffset;
+    /** Drag state for the intel scrollbar thumb. */
+    private boolean intelDragging;
+    private int intelDragGrabY;
+    private int intelDragStartOffset;
     private ItemStack revealed = ItemStack.EMPTY;
     private int revealedTier;
 
@@ -503,11 +511,16 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int bodyH = h - 24;
         CommandFrame.card(g, x, bodyY, w, bodyH, CommandPalette.ACCENT_ARCANE);
 
+        // Reserve an 8px scrollbar gutter on the right so content never draws
+        // under the thumb. Content clip is narrower than the panel.
+        int scrollGutter = 10;
+        int contentRight = x + w - scrollGutter;
+
         // Use scissor so long content clips at the panel edges.
-        g.enableScissor(x + 2, bodyY + 2, x + w - 2, bodyY + bodyH - 2);
+        g.enableScissor(x + 2, bodyY + 2, contentRight, bodyY + bodyH - 2);
         int cursorY = bodyY + 8 - intelOffset;
         int textX = x + 10;
-        int textW = w - 20;
+        int textW = w - 20 - scrollGutter;
 
         int drawn = switch (intelSection) {
             case 0 -> drawUnitsSection(g, textX, cursorY, textW);
@@ -519,6 +532,43 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // Clamp scroll so we can't drag past the end.
         int maxOffset = Math.max(0, drawn - bodyH + 16);
         if (intelOffset > maxOffset) intelOffset = maxOffset;
+
+        // Cache geometry for mouseClicked / mouseDragged.
+        intelBodyX = x;
+        intelBodyY = bodyY;
+        intelBodyW = w;
+        intelBodyH = bodyH;
+        intelMaxOffset = maxOffset;
+
+        // === Scrollbar ===
+        // Track sits in the right gutter, inset a couple of pixels so it
+        // reads as separate from the card border.
+        int trackX = x + w - 8;
+        int trackY = bodyY + 4;
+        int trackW = 4;
+        int trackH = bodyH - 8;
+        g.fill(trackX, trackY, trackX + trackW, trackY + trackH, 0x66000000);
+        g.fill(trackX, trackY, trackX + 1, trackY + trackH, CommandPalette.BEVEL_DARK);
+        g.fill(trackX + trackW - 1, trackY, trackX + trackW, trackY + trackH, CommandPalette.BEVEL_DARK);
+        if (drawn > bodyH) {
+            // Thumb sized proportional to visible / total, min 16px so it's clickable.
+            int thumbH = Math.max(16, (int) ((long) trackH * bodyH / Math.max(1, drawn)));
+            int thumbTravel = trackH - thumbH;
+            int thumbY = trackY + (maxOffset == 0 ? 0
+                    : (int) ((long) thumbTravel * intelOffset / maxOffset));
+            int thumbColor = intelDragging
+                    ? CommandPalette.ACCENT_GOLD
+                    : CommandPalette.ACCENT_ARCANE;
+            g.fill(trackX, thumbY, trackX + trackW, thumbY + thumbH, thumbColor);
+            g.fill(trackX, thumbY, trackX + trackW, thumbY + 1, CommandPalette.ACCENT_GOLD);
+            g.fill(trackX, thumbY + thumbH - 1, trackX + trackW, thumbY + thumbH,
+                    CommandPalette.BEVEL_DARK);
+        } else {
+            // Content fits: draw an inactive marker so the gutter still reads
+            // as a scrollbar (empty track alone looks like a UI bug).
+            g.fill(trackX, trackY, trackX + trackW, trackY + Math.min(16, trackH),
+                    0x33ffffff);
+        }
     }
 
     private int drawUnitsSection(GuiGraphics g, int x, int startY, int w) {
@@ -1010,6 +1060,27 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     return true;
                 }
             }
+            // Scrollbar hit-test: 8px wide gutter on the right edge of the body panel.
+            int trackX = intelBodyX + intelBodyW - 8;
+            int trackY = intelBodyY + 4;
+            int trackH = intelBodyH - 8;
+            if (mouseX >= trackX && mouseX < trackX + 4
+                    && mouseY >= trackY && mouseY < trackY + trackH
+                    && intelMaxOffset > 0) {
+                intelDragging = true;
+                intelDragGrabY = (int) mouseY;
+                intelDragStartOffset = intelOffset;
+                // Also jump the thumb to the click point immediately so
+                // click-anywhere on the track scrolls there (standard behavior).
+                int thumbH = Math.max(16, (int) ((long) trackH * intelBodyH
+                        / Math.max(1, intelBodyH + intelMaxOffset)));
+                int thumbTravel = Math.max(1, trackH - thumbH);
+                int newOffset = (int) ((mouseY - trackY - thumbH / 2.0)
+                        * intelMaxOffset / thumbTravel);
+                intelOffset = Math.max(0, Math.min(intelMaxOffset, newOffset));
+                intelDragStartOffset = intelOffset;
+                return true;
+            }
         }
         if (tab == 3) {
             if (button == 1 && mouseX >= mapX() && mouseX < mapX() + mapW()
@@ -1026,6 +1097,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (tab == 3 && territory.mouseReleased(mouseX, mouseY, button)) return true;
+        if (intelDragging && button == 0) { intelDragging = false; return true; }
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
@@ -1033,6 +1105,19 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     public boolean mouseDragged(double mouseX, double mouseY, int button,
                                 double dx, double dy) {
         if (tab == 3 && territory.mouseDragged(mouseX, mouseY, dx, dy)) return true;
+        if (tab == 4 && intelDragging && button == 0 && intelMaxOffset > 0) {
+            // Map the mouse's Y travel back into scroll offset via the
+            // thumb's travel range. Same formula as the draw call.
+            int trackH = intelBodyH - 8;
+            int thumbH = Math.max(16, (int) ((long) trackH * intelBodyH
+                    / Math.max(1, intelBodyH + intelMaxOffset)));
+            int thumbTravel = Math.max(1, trackH - thumbH);
+            int deltaPx = (int) mouseY - intelDragGrabY;
+            int newOffset = intelDragStartOffset + (int) ((long) deltaPx
+                    * intelMaxOffset / thumbTravel);
+            intelOffset = Math.max(0, Math.min(intelMaxOffset, newOffset));
+            return true;
+        }
         return super.mouseDragged(mouseX, mouseY, button, dx, dy);
     }
 
