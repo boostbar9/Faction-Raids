@@ -236,8 +236,28 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     active ? "Blessing active" : "Bless  " + CoreBuffs.PRICES[i]));
         }
 
+        // Draw an active-tab under-glow before the tab bar paints so the
+        // active tab gets a soft candlelight backing.
+        drawActiveTabGlow(g);
+
         super.render(g, mx, my, partial);
         drawTooltips(g, mx, my);
+    }
+
+    /**
+     * Paint a soft additive glow behind the currently active tab button so
+     * the selected tab clearly reads as "lit". Tab button positions match
+     * the layout in {@link #init()}.
+     */
+    private void drawActiveTabGlow(GuiGraphics g) {
+        int tabCount = 5;
+        int tabWidth = (layout.width() - 28 - 4 * (tabCount - 1)) / tabCount;
+        int gx = layout.x() + 10 + tab * (tabWidth + 4);
+        int gy = layout.y() + 32;
+        HudAtlas.enableAdditive();
+        HudAtlas.blitTinted(g, HudAtlas.GLOW_SOFT,
+                gx - 8, gy - 6, tabWidth + 16, 32, 0x50ffd08a);
+        HudAtlas.disableAdditive();
     }
 
     private void drawTooltips(GuiGraphics g, int mx, int my) {
@@ -302,23 +322,37 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // Hanging crest banner on the left of the header (like the reference).
         drawCrestBanner(g, x - 6, y + 6);
 
-        // Title cluster to the right of the crest.
-        text(g, "KINGDOM COMMAND", x + 42, y + 12,
-                w / 2 - 50, CommandPalette.ACCENT_GOLD);
+        // Title cluster to the right of the crest. Double-shadow for a
+        // struck-metal look: dark drop shadow, then warm bronze halo, then
+        // the crisp gold glyph on top.
+        String title = "KINGDOM COMMAND";
+        g.drawString(font, title, x + 43, y + 13, 0xff000000, false);
+        g.drawString(font, title, x + 42, y + 13, CommandPalette.BEVEL_DARK, false);
+        text(g, title, x + 42, y + 12, w / 2 - 50, CommandPalette.ACCENT_GOLD);
         text(g, menu.factionName(),
                 x + 42, y + 22, w / 2 - 50, CommandPalette.TEXT_MUTED);
 
-        // Treasury chip on the right, with emerald glyph. Gold border for prominence.
+        // Treasury pill on the right, using the textured rounded pill from
+        // the atlas plus an emerald icon glyph and a live-updating balance.
         String purse = String.format(Locale.ROOT, "%,d", menu.emeralds());
-        int chipW = Math.min(w / 3, Math.max(80, font.width(purse) + 40));
+        int chipW = Math.max(96, Math.min(w / 3, font.width(purse) + 60));
         int chipX = x + w - chipW - 12;
-        CommandFrame.chip(g, chipX, y + 8, chipW, 20, CommandPalette.ACCENT_GOLD);
-        text(g, "Treasury", chipX + 6, y + 11, chipW - 12, CommandPalette.TEXT_MUTED);
-        CommandIcon.EMERALD.draw(g, chipX + 6, y + 18, 10);
-        text(g, purse, chipX + 20, y + 19, chipW - 26, CommandPalette.ACCENT_EMERALD);
+        // Soft glow behind the pill for treasury prominence.
+        HudAtlas.enableAdditive();
+        HudAtlas.blitTinted(g, HudAtlas.GLOW_SOFT,
+                chipX - 16, y + 4, chipW + 32, 32, 0x60ffe0a0);
+        HudAtlas.disableAdditive();
+        HudAtlas.blit(g, HudAtlas.TREASURY_PILL, chipX, y + 6, chipW, 24);
+        text(g, "TREASURY", chipX + 26, y + 10, chipW - 32, CommandPalette.ACCENT_GOLD);
+        text(g, purse, chipX + 26, y + 20, chipW - 32, CommandPalette.ACCENT_EMERALD);
 
         // Active-siege ribbon under the header.
         drawSiegeRibbon(g, x, y, w);
+
+        // Drifting golden motes across the tab body for atmosphere. Motes
+        // are procedural so they cost no textures; positions come from a
+        // stable hash mixed with real time so they slowly drift diagonally.
+        drawMotes(g, x + 4, y + 60, w - 8, h - 80);
 
         // Tab body.
         if (tab == 0) {
@@ -338,32 +372,52 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     }
 
     /**
-     * Small hanging crest banner drawn to the left of the title. Purely
-     * procedural; sits over the header rail and reads as a heraldic banner.
+     * Drifting golden atmosphere motes across the tab body. Motes are pure
+     * math (no textures, no allocations) so they stay cheap; positions come
+     * from a stable hash mixed with real time so each mote drifts diagonally
+     * and wraps within the bounds.
+     */
+    private void drawMotes(GuiGraphics g, int x, int y, int w, int h) {
+        if (w <= 0 || h <= 0) return;
+        long tick = minecraft != null && minecraft.level != null
+                ? minecraft.level.getGameTime() : 0;
+        float t = tick + (minecraft != null ? minecraft.getFrameTime() : 0);
+        int count = Math.min(24, Math.max(6, (w * h) / 4000));
+        for (int i = 0; i < count; i++) {
+            float phase = i * 137.5f;
+            float sx = (float) ((Math.sin(i * 12.9898) * 43758.5453) % 1.0);
+            float sy = (float) ((Math.sin(i * 78.233) * 43758.5453) % 1.0);
+            if (sx < 0) sx += 1;
+            if (sy < 0) sy += 1;
+            float px = sx + (t * 0.0007f + phase * 0.001f);
+            float py = sy + (t * 0.0011f);
+            px -= (float) Math.floor(px);
+            py -= (float) Math.floor(py);
+            int mx = x + (int) (px * (w - 2));
+            int my = y + (int) (py * (h - 2));
+            float twinkle = 0.4f + 0.6f * (float) Math.sin(t * 0.05f + i);
+            int a = Math.min(200, (int) (twinkle * 200));
+            int argb = (a << 24) | 0x00ffd88a;
+            g.fill(mx, my, mx + 1, my + 1, argb);
+            if (twinkle > 0.85f) {
+                int halo = ((a / 3) << 24) | 0x00ffd88a;
+                g.fill(mx - 1, my, mx + 2, my + 1, halo);
+                g.fill(mx, my - 1, mx + 1, my + 2, halo);
+            }
+        }
+    }
+
+    /**
+     * Textured hanging crest banner rendered from the HUD atlas. The banner
+     * gently sways with a sine-wave x-offset driven by the render tick so it
+     * feels alive without ever leaving the header rail.
      */
     private void drawCrestBanner(GuiGraphics g, int x, int y) {
-        int w = 24, h = 30;
-        // Rope hanger.
-        g.fill(x + w / 2, y - 4, x + w / 2 + 1, y, CommandPalette.BEVEL_DARK);
-        // Banner cloth.
-        g.fill(x, y, x + w, y + h - 4, CommandPalette.HEADER_TOP);
-        g.fillGradient(x + 1, y + 1, x + w - 1, y + h - 5,
-                0xff3f4a6a, 0xff222839);
-        // Gold trim.
-        int gold = CommandPalette.ACCENT_GOLD;
-        g.fill(x, y, x + w, y + 1, gold);
-        g.fill(x, y, x + 1, y + h - 4, gold);
-        g.fill(x + w - 1, y, x + w, y + h - 4, gold);
-        // Swallow-tail bottom (two triangles).
-        for (int i = 0; i < 4; i++) {
-            int cutY = y + h - 4 + i;
-            g.fill(x + i, cutY, x + w / 2 - i, cutY + 1, CommandPalette.HEADER_TOP);
-            g.fill(x + w / 2 + i, cutY, x + w - i, cutY + 1, CommandPalette.HEADER_TOP);
-            g.fill(x + i, cutY, x + i + 1, cutY + 1, gold);
-            g.fill(x + w - i - 1, cutY, x + w - i, cutY + 1, gold);
-        }
-        // Crown emblem centred on the banner.
-        CommandIcon.CROWN.draw(g, x + w / 2 - 6, y + 8, 12);
+        long tick = minecraft != null ? minecraft.level != null
+                ? minecraft.level.getGameTime() : 0 : 0;
+        float phase = (tick + (minecraft != null ? minecraft.getFrameTime() : 0)) * 0.04f;
+        int sway = (int) Math.round(Math.sin(phase) * 1.4);
+        HudAtlas.blit(g, HudAtlas.CREST_BANNER, x + sway, y - 4);
     }
 
     /**
@@ -410,11 +464,20 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // Sub-tab strip
         String[] labels = {"Units", "Enemy Lore", "How to Play"};
         int segW = w / 3;
+        // Under-glow behind the active sub-tab.
+        int activeSx = x + intelSection * segW;
+        HudAtlas.enableAdditive();
+        HudAtlas.blitTinted(g, HudAtlas.GLOW_SOFT,
+                activeSx - 8, y - 6, segW + 16, 32, 0x40ffd08a);
+        HudAtlas.disableAdditive();
         for (int i = 0; i < 3; i++) {
             int sx = x + i * segW;
             boolean active = intelSection == i;
             int bg = active ? CommandPalette.CARD_TOP : CommandPalette.CARD_TOP_DIM;
             g.fill(sx, y, sx + segW - 2, y + 18, bg);
+            // Top hairline + bottom accent for a struck-metal tab feel.
+            g.fill(sx, y, sx + segW - 2, y + 1,
+                    active ? CommandPalette.ACCENT_GOLD : CommandPalette.CARD_BORDER);
             g.fill(sx, y + 17, sx + segW - 2, y + 18,
                     active ? CommandPalette.ACCENT_GOLD : CommandPalette.BEVEL_DARK);
             int labelW = font.width(labels[i]);
@@ -540,6 +603,21 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 : "Bank +" + menu.nextReward() + " on next wave clear";
 
         int ribbonY = y + 42;
+
+        // While a siege is active the ribbon pulses with a hot red glow behind
+        // it; peacetime uses a neutral steel accent card.
+        if (siege) {
+            long tick = minecraft != null && minecraft.level != null
+                    ? minecraft.level.getGameTime() : 0;
+            float pulse = 0.55f + 0.45f * (float) Math.sin(tick * 0.15f);
+            int alpha = Math.min(255, (int) (pulse * 220));
+            int glowArgb = (alpha << 24) | 0x00ff5a3c;
+            HudAtlas.enableAdditive();
+            HudAtlas.blitTinted(g, HudAtlas.GLOW_HOT,
+                    x + w / 2 - 96, ribbonY - 24, 192, 64, glowArgb);
+            HudAtlas.disableAdditive();
+        }
+
         CommandFrame.card(g, x + 10, ribbonY, w - 20, 16, accent);
         icon.draw(g, x + 14, ribbonY + 2, 12);
         text(g, status, x + 30, ribbonY + 4, w / 2, accent);
@@ -721,8 +799,15 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // Bank summary card up top: bank icon + name/balance on the left,
         // wave payout + vote/countdown on the right.
         CommandFrame.card(g, x + 10, y + 62, w - 20, 34, CommandPalette.ACCENT_GOLD);
-        CommandFrame.chip(g, x + 14, y + 66, 26, 26, CommandPalette.ACCENT_GOLD);
-        CommandIcon.BANK.draw(g, x + 18, y + 70, 18);
+
+        // Textured bank coin-stack icon with a soft glow. Scales in size with
+        // the treasury balance so a rich treasury reads as a taller stack.
+        int coinX = x + 14, coinY = y + 66;
+        HudAtlas.enableAdditive();
+        HudAtlas.blitTinted(g, HudAtlas.GLOW_SOFT,
+                coinX - 8, coinY - 4, 42, 34, 0x80ffdd8a);
+        HudAtlas.disableAdditive();
+        HudAtlas.blit(g, HudAtlas.ICON_BANK, coinX, coinY);
 
         text(g, menu.factionName(), x + 46, y + 66, w / 2 - 52, CommandPalette.TEXT);
         text(g, String.format(Locale.ROOT, "Treasury: %,d emeralds", menu.bank()),

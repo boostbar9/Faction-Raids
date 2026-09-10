@@ -34,11 +34,23 @@ public final class CommandFrame {
         g.fillGradient(x, y, x + w, y + h,
                 CommandPalette.PANEL_TOP, CommandPalette.PANEL_BOTTOM);
 
-        // Corner brackets (aged gold L-brackets like a heraldic frame).
-        cornerBracket(g, x + 2, y + 2, +1, +1);
-        cornerBracket(g, x + w - 3, y + 2, -1, +1);
-        cornerBracket(g, x + 2, y + h - 3, +1, -1);
-        cornerBracket(g, x + w - 3, y + h - 3, -1, -1);
+        // Candlelit backdrop tiled across the body (subtle vellum + glow).
+        // The atlas region is 128x64; tile it enough to cover the body.
+        for (int by = 0; by < h; by += 64) {
+            for (int bx = 0; bx < w; bx += 128) {
+                int tw = Math.min(128, w - bx);
+                int th = Math.min(64, h - by);
+                g.blit(HudAtlas.TEXTURE, x + bx, y + by, tw, th,
+                        HudAtlas.BACKDROP[0], HudAtlas.BACKDROP[1],
+                        tw, th, HudAtlas.ATLAS, HudAtlas.ATLAS);
+            }
+        }
+
+        // Ornate gold corner ornaments (24x24 each) from the atlas.
+        HudAtlas.blit(g, HudAtlas.CORNER_TL, x - 4, y - 4);
+        HudAtlas.blit(g, HudAtlas.CORNER_TR, x + w - 20, y - 4);
+        HudAtlas.blit(g, HudAtlas.CORNER_BL, x - 4, y + h - 20);
+        HudAtlas.blit(g, HudAtlas.CORNER_BR, x + w - 20, y + h - 20);
     }
 
     /**
@@ -67,8 +79,12 @@ public final class CommandFrame {
      * cluster on the left plus a treasury chip on the right.
      */
     public static void header(GuiGraphics g, int x, int y, int w, int height) {
+        // Base header gradient stays as a fallback under the ribbon tiles so
+        // partially transparent tiling still reads as dark navy.
         g.fillGradient(x + 4, y + 4, x + w - 4, y + 4 + height,
                 CommandPalette.HEADER_TOP, CommandPalette.HEADER_BOTTOM);
+        // Tile the header ribbon texture across the strip.
+        HudAtlas.tileHoriz(g, HudAtlas.TILE_HEADER_RIBBON, x + 4, y + 4, w - 8);
         // Twin separator lines: bronze over shadow for a struck-metal look.
         g.fill(x + 4, y + 4 + height, x + w - 4, y + 5 + height, CommandPalette.HAIRLINE);
         g.fill(x + 4, y + 5 + height, x + w - 4, y + 6 + height, CommandPalette.PANEL_BOTTOM);
