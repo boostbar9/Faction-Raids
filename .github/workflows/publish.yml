@@ -57,19 +57,28 @@ jobs:
           files: build/libs/siegeoverhaul-*.jar
           name: ${{ github.event.release.name || inputs.tag }}
           version: ${{ github.event.release.tag_name || inputs.tag }}
-          version-type: release
+          # Beta prereleases get uploaded as CurseForge "beta" so testers
+          # can opt in without breaking modpacks pinned to stable.
+          # Anything else ships as a full release.
+          version-type: ${{ github.event.release.prerelease && 'beta' || 'release' }}
           changelog: ${{ github.event.release.body }}
           loaders: forge
           game-versions: 1.20.1
           java: 17
 
-          # Declared as they appear in mods.toml so CurseForge shows the
-          # correct dependency badges on the file listing.
+          # Canonical dependency set for every uploaded jar. CurseForge
+          # shows these as required / optional badges on the file listing
+          # and gates the download page's compatibility checks on them.
+          # Slugs use CurseForge project slugs (not mods.toml ids) so the
+          # badges link to the right project pages.
           dependencies: |
+            siegeweapons(required)
+            small-ships(required)
+            workers(required)
             recruits(required)
-            workers(optional)
-            smallships(optional)
-            siegeweapons(optional)
+            ewewukeks-musket-mod(optional)
+            epic-knights-armor-and-weapons(optional)
+            corpse(optional)
 
           # Fail loudly if the jar glob matched nothing.
           fail-mode: fail
