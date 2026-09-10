@@ -55,6 +55,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private final Button[] boxes = new Button[3];
     private final Button[] buffs = new Button[3];
     private final Button[] bank = new Button[4];
+    private final TerritoryPanel territory = new TerritoryPanel();
+    private Button recenterButton;
+    private Button zoomInButton;
+    private Button zoomOutButton;
 
     public CoreHireScreen(CoreHireMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -79,14 +83,15 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         super.init();
 
         // Tab rail across the top: icon + label, evenly spaced.
-        String[] tabLabels = {"Army & Heroes", "Loot & Blessings", "Bank & Faction"};
-        CommandIcon[] tabIcons = {CommandIcon.SWORDS, CommandIcon.CHEST, CommandIcon.BANK};
-        int tabWidth = (layout.width() - 28) / 3;
-        for (int i = 0; i < 3; i++) {
+        String[] tabLabels = {"Army & Heroes", "Loot & Blessings", "Bank & Faction", "Territory"};
+        CommandIcon[] tabIcons = {CommandIcon.SWORDS, CommandIcon.CHEST, CommandIcon.BANK, CommandIcon.MAP};
+        int tabCount = tabLabels.length;
+        int tabWidth = (layout.width() - 28 - 4 * (tabCount - 1)) / tabCount;
+        for (int i = 0; i < tabCount; i++) {
             final int index = i;
             addRenderableWidget(new CoreButton(
                     Component.literal(tabLabels[i]),
-                    b -> { tab = index; confirmBox = -1; },
+                    b -> { tab = index; confirmBox = -1; territory.reset(); },
                     layout.x() + 10 + i * (tabWidth + 4),
                     layout.y() + 32,
                     tabWidth, 22,
@@ -116,6 +121,23 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     bw, 18,
                     false, () -> false));
         }
+
+        // Territory tab helper keys: recenter + zoom in / out.
+        recenterButton = addRenderableWidget(new CoreButton(
+                Component.literal("Recenter"),
+                b -> territory.recenter(),
+                layout.x() + 10, layout.y() + layout.height() - 32,
+                80, 18, false, () -> false, CommandIcon.FLAG));
+        zoomInButton = addRenderableWidget(new CoreButton(
+                Component.literal("Zoom in"),
+                b -> territory.zoomIn(),
+                layout.x() + 96, layout.y() + layout.height() - 32,
+                80, 18, false, () -> false, CommandIcon.SCROLL));
+        zoomOutButton = addRenderableWidget(new CoreButton(
+                Component.literal("Zoom out"),
+                b -> territory.zoomOut(),
+                layout.x() + 182, layout.y() + layout.height() - 32,
+                80, 18, false, () -> false, CommandIcon.MAP));
 
         // Loot boxes and blessing keys.
         for (int i = 0; i < 3; i++) {
@@ -189,6 +211,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             bank[i].active = i < 2 ? menu.emeralds() > 0 : menu.canWithdraw() && menu.bank() > 0;
         }
         for (int i = 0; i < 3; i++) {
+            recenterButton.visible = tab == 3;
+            zoomInButton.visible = tab == 3;
+            zoomOutButton.visible = tab == 3;
             boxes[i].visible = buffs[i].visible = tab == 1;
             boxes[i].active = waitingTicks == 0 && revealTicks == 0
                     && menu.emeralds() >= CoreLoot.price(i);
@@ -289,8 +314,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             for (int i = 0; i < 4; i++) drawHire(g, i);
         } else if (tab == 1) {
             for (int i = 0; i < 3; i++) { drawLoot(g, i); drawBuff(g, i); }
-        } else {
+        } else if (tab == 2) {
             drawFaction(g);
+        } else {
+            drawTerritory(g);
         }
 
         // Footer contextual hint.
@@ -299,10 +326,23 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     "Shared stock  |  Refresh in %d:%02d",
                     menu.seconds() / 60, menu.seconds() % 60);
             case 1 -> "Mystery loot & five-minute blessings  |  Personal emeralds";
-            default -> "Interest " + menu.interestRate() / 100.0
+            case 2 -> "Interest " + menu.interestRate() / 100.0
                     + "% /24h  |  Leader withdrawals  |  Scroll roster";
+            default -> "";
         };
-        text(g, footer, x + 12, y + h - 13, w - 24, CommandPalette.TEXT_DIM);
+        if (tab != 3) text(g, footer, x + 12, y + h - 13, w - 24, CommandPalette.TEXT_DIM);
+    }
+
+    /** Dimensions of the map body inside the Territory tab. */
+    private int mapX() { return layout.x() + 10; }
+    private int mapY() { return layout.y() + 62; }
+    private int mapW() { return layout.width() - 20; }
+    private int mapH() { return layout.height() - 62 - 40; }
+
+    private void drawTerritory(GuiGraphics g) {
+        int mx = mapX(), my = mapY(), mw = mapW(), mh = mapH();
+        CommandFrame.card(g, mx, my, mw, mh, CommandPalette.ACCENT_STEEL);
+        territory.draw(g, mx + 2, my + 2, mw - 4, mh - 4);
     }
 
     /** Contextual band below the header: shows wave state or peacetime hint. */
@@ -492,6 +532,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     @Override
     public boolean mouseScrolled(double x, double y, double delta) {
+        if (tab == 3) {
+            if (territory.mouseScrolled(delta, x, y,
+                    mapX() + 2, mapY() + 2, mapW() - 4, mapH() - 4)) return true;
+        }
         if (tab == 2) {
             int count = menu.members().size();
             int rosterH = layout.height() - (118 - 0) - 22;
@@ -502,5 +546,38 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             return true;
         }
         return super.mouseScrolled(x, y, delta);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (tab == 3) {
+            if (button == 1 && mouseX >= mapX() && mouseX < mapX() + mapW()
+                    && mouseY >= mapY() && mouseY < mapY() + mapH()) {
+                territory.recenter();
+                return true;
+            }
+            if (territory.mouseClicked(mouseX, mouseY, button,
+                    mapX() + 2, mapY() + 2, mapW() - 4, mapH() - 4)) return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (tab == 3 && territory.mouseReleased(mouseX, mouseY, button)) return true;
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button,
+                                double dx, double dy) {
+        if (tab == 3 && territory.mouseDragged(mouseX, mouseY, dx, dy)) return true;
+        return super.mouseDragged(mouseX, mouseY, button, dx, dy);
+    }
+
+    @Override
+    public void onClose() {
+        territory.reset();
+        super.onClose();
     }
 }
