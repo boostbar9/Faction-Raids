@@ -311,7 +311,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
         // Tab body.
         if (tab == 0) {
-            for (int i = 0; i < 4; i++) drawHire(g, i);
+            for (int i = 0; i < 4; i++) drawHire(g, i, mx, my);
         } else if (tab == 1) {
             for (int i = 0; i < 3; i++) { drawLoot(g, i); drawBuff(g, i); }
         } else if (tab == 2) {
@@ -384,7 +384,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
     }
 
-    private void drawHire(GuiGraphics g, int i) {
+    private void drawHire(GuiGraphics g, int i, int mouseX, int mouseY) {
         int x = layout.cardX(i), y = layout.cardY(i);
         int w = layout.cardWidth(), h = layout.cardHeight();
         int role = menu.role(i);
@@ -401,7 +401,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // Avatar portrait tile on the left. Size scales with card height so
         // the layout stays readable on the compact 350-tall window.
         int portrait = Math.min(Math.max(36, h - 24), 66);
-        RolePortrait.draw(g, role, x + 6, y + 6, portrait);
+        EntityPortrait.draw(g, role, x + 6, y + 6, portrait, mouseX, mouseY);
 
         int textLeft = x + 10 + portrait;
         int textAreaWidth = w - textLeft + x - 6;
@@ -598,6 +598,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     @Override
     public void onClose() {
         territory.reset();
+        EntityPortrait.clear();
         super.onClose();
     }
 }
