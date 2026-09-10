@@ -103,12 +103,15 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // Hire keys and bank keys share the same iteration to stay compact.
         for (int i = 0; i < 4; i++) {
             final int index = i;
+            // Portrait occupies the left ~80px of the card; the hire button
+            // sits under the info column on the right.
+            int hirePortrait = Math.min(layout.cardHeight() - 12, 88);
             hire[i] = addRenderableWidget(new CoreButton(
-                    Component.literal("Recruit"),
+                    Component.literal("Hire"),
                     b -> RaidNetwork.purchaseCoreOffer(menu.containerId, index, menu.rotation()),
-                    layout.cardX(i) + 8,
-                    layout.cardY(i) + layout.cardHeight() - 23,
-                    layout.cardWidth() - 16, 18,
+                    layout.cardX(i) + hirePortrait + 14,
+                    layout.cardY(i) + layout.cardHeight() - 25,
+                    layout.cardWidth() - hirePortrait - 22, 20,
                     false, () -> false));
 
             String[] bankLabels = {"Store 8", "Store 64", "Take 8", "Take 64"};
@@ -201,10 +204,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             hire[i].active = menu.role(i) >= 0 && menu.cost(i) >= 0
                     && !menu.sold(i) && menu.rotation() > 0;
             String cost = menu.sold(i)
-                    ? "Recruited"
+                    ? "Hired"
                     : menu.cost(i) < 0
                             ? "Unavailable"
-                            : "Recruit  " + menu.cost(i);
+                            : menu.cost(i) + "  Hire";
             hire[i].setMessage(Component.literal(cost));
 
             bank[i].visible = tab == 2;
@@ -398,35 +401,82 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
         if (role < 0 || role >= CoreHiring.NAMES.length) return;
 
-        // Avatar portrait tile on the left. Size scales with card height so
-        // the layout stays readable on the compact 350-tall window.
-        int portrait = Math.min(Math.max(36, h - 24), 66);
-        EntityPortrait.draw(g, role, x + 6, y + 6, portrait, mouseX, mouseY);
+        // Portrait tile on the left with heraldic corner brackets around it,
+        // matching the reference kingdom-command mockup.
+        int portrait = Math.min(h - 12, 88);
+        int px = x + 6, py = y + 6;
+        EntityPortrait.draw(g, role, px, py, portrait, mouseX, mouseY);
+        // Heraldic bracket ornaments at each corner of the portrait.
+        CommandFrame.cornerBracket(g, px + 1, py + 1, +1, +1);
+        CommandFrame.cornerBracket(g, px + portrait - 2, py + 1, -1, +1);
+        CommandFrame.cornerBracket(g, px + 1, py + portrait - 2, +1, -1);
+        CommandFrame.cornerBracket(g, px + portrait - 2, py + portrait - 2, -1, -1);
 
-        int textLeft = x + 10 + portrait;
-        int textAreaWidth = w - textLeft + x - 6;
-        String prefix = i == 3 ? "HERO" : i == 2 ? "WORKER" : "SOLDIER";
-        text(g, prefix, textLeft, y + 8, textAreaWidth, accent);
-        text(g, CoreHiring.NAMES[role], textLeft, y + 18, textAreaWidth,
-                CommandPalette.TEXT);
-        text(g, CoreHiring.rarity(role), textLeft, y + 30, textAreaWidth,
-                CommandPalette.TEXT_MUTED);
+        // Info column to the right of the portrait.
+        int infoLeft = px + portrait + 8;
+        int infoWidth = w - portrait - 18;
+        // Character name in white.
+        String name = CoreHiring.NAMES[role];
+        text(g, name, infoLeft, y + 8, infoWidth, CommandPalette.TEXT);
+        // Role/class line in muted gold-brown.
+        String roleLabel = i == 3 ? "Hero"
+                : i == 2 ? "Worker " + CoreHiring.NAMES[role]
+                : shortRole(role);
+        text(g, roleLabel, infoLeft, y + 20, infoWidth, CommandPalette.TEXT_MUTED);
 
-        if (h > 80) {
-            CommandFrame.divider(g, textLeft, y + 43, textAreaWidth);
-            String blurb = i == 3
-                    ? HeroTraits.description(role)
-                    : "Ready to join your faction";
-            text(g, blurb, textLeft, y + 47, textAreaWidth, CommandPalette.TEXT_MUTED);
-            // Signature item chip with cost on the right, portrait side already used.
-            String currency = menu.getSlot(4).getItem().getHoverName().getString();
-            String costLine = "Cost " + menu.cost(i) + " " + currency;
-            CommandFrame.chip(g, textLeft, y + h - 32, textAreaWidth - 2, 14,
-                    CommandPalette.ACCENT_EMERALD);
-            g.renderItem(menu.getSlot(i).getItem(), textLeft + 2, y + h - 34);
-            text(g, costLine, textLeft + 22, y + h - 29,
-                    textAreaWidth - 24, CommandPalette.ACCENT_EMERALD);
+        // Equipment glyphs row (three or four small icons) hinting at loadout.
+        CommandIcon[] gear = gearGlyphs(role);
+        int glyphY = y + 32;
+        int glyphSize = 12;
+        int glyphGap = 6;
+        for (int g_i = 0; g_i < gear.length && g_i < 4; g_i++) {
+            int gx = infoLeft + g_i * (glyphSize + glyphGap);
+            gear[g_i].draw(g, gx, glyphY, glyphSize);
         }
+
+        // Item chip below the gear glyphs: shows the recruit's signature item
+        // (bread, arrows, tool) so players know what loadout they get.
+        int chipY = y + h - 48;
+        if (chipY > y + 48) {
+            g.renderItem(menu.getSlot(i).getItem(), infoLeft, chipY);
+        }
+    }
+
+    private static String shortRole(int role) {
+        return switch (role) {
+            case 0 -> "Recruit";
+            case 1 -> "Shieldman";
+            case 2 -> "Archer";
+            case 3 -> "Crossbowman";
+            case 4 -> "Farmer";
+            case 5 -> "Lumberjack";
+            case 6 -> "Miner";
+            case 7 -> "Builder";
+            case 8 -> "Cook";
+            case 9 -> "Courier";
+            case 10, 11, 12, 13 -> "Hero";
+            default -> "Unit";
+        };
+    }
+
+    private static CommandIcon[] gearGlyphs(int role) {
+        return switch (role) {
+            case 0 -> new CommandIcon[]{CommandIcon.SWORDS, CommandIcon.SHIELD};
+            case 1 -> new CommandIcon[]{CommandIcon.SHIELD, CommandIcon.SWORDS, CommandIcon.SHIELD};
+            case 2 -> new CommandIcon[]{CommandIcon.SWORDS, CommandIcon.SCROLL};
+            case 3 -> new CommandIcon[]{CommandIcon.SWORDS, CommandIcon.SCROLL, CommandIcon.SHIELD};
+            case 4 -> new CommandIcon[]{CommandIcon.WIND, CommandIcon.SCROLL};
+            case 5 -> new CommandIcon[]{CommandIcon.SWORDS, CommandIcon.SCROLL};
+            case 6 -> new CommandIcon[]{CommandIcon.POWER, CommandIcon.SCROLL};
+            case 7 -> new CommandIcon[]{CommandIcon.SHIELD, CommandIcon.SCROLL};
+            case 8 -> new CommandIcon[]{CommandIcon.SCROLL, CommandIcon.EMERALD};
+            case 9 -> new CommandIcon[]{CommandIcon.SCROLL, CommandIcon.FLAG};
+            case 10 -> new CommandIcon[]{CommandIcon.SWORDS, CommandIcon.POWER, CommandIcon.SHIELD, CommandIcon.CROWN};
+            case 11 -> new CommandIcon[]{CommandIcon.AEGIS, CommandIcon.SHIELD, CommandIcon.CROWN};
+            case 12 -> new CommandIcon[]{CommandIcon.SWORDS, CommandIcon.WIND, CommandIcon.CROWN};
+            case 13 -> new CommandIcon[]{CommandIcon.POWER, CommandIcon.AEGIS, CommandIcon.CROWN};
+            default -> new CommandIcon[]{CommandIcon.SHIELD};
+        };
     }
 
     private void drawLoot(GuiGraphics g, int i) {

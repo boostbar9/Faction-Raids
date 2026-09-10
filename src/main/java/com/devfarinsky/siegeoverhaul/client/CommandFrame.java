@@ -26,26 +26,39 @@ public final class CommandFrame {
         g.fill(x - 6, y + 4, x + w + 6, y + h + 8, CommandPalette.SHADOW_OUTER);
         g.fill(x - 4, y + 2, x + w + 4, y + h + 6, CommandPalette.SHADOW_INNER);
 
-        // Aged-bronze outer bevel.
+        // Aged-gold outer bevel.
         g.fill(x - 2, y - 2, x + w + 2, y + h + 2, CommandPalette.BEVEL_LIGHT);
         g.fill(x - 1, y - 1, x + w + 1, y + h + 1, CommandPalette.BEVEL_DARK);
 
-        // Deep parchment body with a subtle vertical gradient.
+        // Midnight-navy body with a subtle vertical gradient.
         g.fillGradient(x, y, x + w, y + h,
                 CommandPalette.PANEL_TOP, CommandPalette.PANEL_BOTTOM);
 
-        // Inner thin gold hairline for a polished feel.
-        int hair = CommandPalette.HAIRLINE;
-        g.fill(x + 3, y + 3, x + w - 3, y + 4, hair);
-        g.fill(x + 3, y + h - 4, x + w - 3, y + h - 3, hair);
-        g.fill(x + 3, y + 3, x + 4, y + h - 3, hair);
-        g.fill(x + w - 4, y + 3, x + w - 3, y + h - 3, hair);
+        // Corner brackets (aged gold L-brackets like a heraldic frame).
+        cornerBracket(g, x + 2, y + 2, +1, +1);
+        cornerBracket(g, x + w - 3, y + 2, -1, +1);
+        cornerBracket(g, x + 2, y + h - 3, +1, -1);
+        cornerBracket(g, x + w - 3, y + h - 3, -1, -1);
+    }
 
-        // Forged-iron rivet in each corner.
-        rivet(g, x + 2, y + 2);
-        rivet(g, x + w - 5, y + 2);
-        rivet(g, x + 2, y + h - 5);
-        rivet(g, x + w - 5, y + h - 5);
+    /**
+     * Draw a small ornamental L-bracket at ({@code x},{@code y}) in the given
+     * direction. Used as a corner ornament on the outer window and around
+     * portrait tiles for a heraldic frame feel.
+     */
+    public static void cornerBracket(GuiGraphics g, int x, int y, int dx, int dy) {
+        int light = CommandPalette.BEVEL_LIGHT;
+        int dark = CommandPalette.BEVEL_DARK;
+        // Long arms
+        g.fill(x, y, x + 14 * (dx > 0 ? 1 : 0) + (dx < 0 ? 0 : 0), y + 1, dark);
+        int ax = dx > 0 ? x : x - 13;
+        int ay = dy > 0 ? y : y - 13;
+        g.fill(ax, y, ax + 14, y + 1, dark);
+        g.fill(x, ay, x + 1, ay + 14, dark);
+        g.fill(ax, y + (dy > 0 ? 1 : -1), ax + 14, y + (dy > 0 ? 2 : 0), light);
+        g.fill(x + (dx > 0 ? 1 : -1), ay, x + (dx > 0 ? 2 : 0), ay + 14, light);
+        // Corner cap dot
+        g.fill(x, y, x + 1, y + 1, light);
     }
 
     /**
@@ -71,7 +84,14 @@ public final class CommandFrame {
         g.fill(x + 1, y, x + w - 1, y + h, CommandPalette.CARD_BORDER);
         g.fillGradient(x + 1, y + 1, x + w - 1, y + h - 1,
                 CommandPalette.CARD_TOP, CommandPalette.CARD_BOTTOM);
-        // Accent stripe: a bright band top-left that fades into the card.
+    }
+
+    /**
+     * Card variant that draws an accent top stripe. Used for status ribbons
+     * where the color coding is important (siege active vs peace, etc.).
+     */
+    public static void cardStriped(GuiGraphics g, int x, int y, int w, int h, int accent) {
+        card(g, x, y, w, h, accent);
         g.fill(x + 4, y + 1, x + w - 4, y + 2, accent);
     }
 

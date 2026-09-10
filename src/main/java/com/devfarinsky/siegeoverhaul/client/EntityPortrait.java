@@ -70,13 +70,24 @@ public final class EntityPortrait {
             }
         }
 
+        // Position the entity so its full body (head to feet) fits inside the
+        // tile with a small margin. The vanilla renderer uses cy as the FOOT
+        // position and scale as pixels-per-block-height, so a 1.95-block-tall
+        // mob rendered at scale S occupies ~1.95*S pixels vertically. Keep
+        // 6 px of padding top and bottom.
+        int padding = Math.max(3, size / 12);
         int cx = x + size / 2;
-        int cy = y + size - Math.max(4, size / 12);
-        // Scale so a two-block-tall mob fits comfortably inside the tile.
-        int scale = Math.max(12, (int) (size / 2.6));
+        int cy = y + size - padding;
+        int usableHeight = size - padding * 2;
+        // 1.95 blocks tall (player-height) -> divide by ~2 for scale.
+        int scale = Math.max(8, (int) (usableHeight / 2.05f));
         try {
+            // Cap head-tracking offset so mice at screen edges do not spin the
+            // model wildly; only track when the cursor is near the portrait.
+            float lookX = Math.max(-40f, Math.min(40f, cx - mouseX));
+            float lookY = Math.max(-40f, Math.min(40f, cy - size * 0.7f - mouseY));
             InventoryScreen.renderEntityInInventoryFollowsMouse(g, cx, cy, scale,
-                    (cx - mouseX), (cy - size * 0.6f - mouseY), entity);
+                    lookX, lookY, entity);
         } catch (Throwable t) {
             // Any renderer NPE from a mod with strict client init: fall back.
             FAILED.add(role);
