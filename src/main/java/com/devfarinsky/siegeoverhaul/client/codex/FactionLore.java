@@ -81,6 +81,11 @@ public final class FactionLore {
         LORE.put(factionId, List.copyOf(lines));
     }
 
+    /** Snapshot of the whole registry in insertion order, for the Intel HUD. */
+    public static Map<String, List<String>> all() {
+        return java.util.Collections.unmodifiableMap(LORE);
+    }
+
     public static List<String> get(String factionId) {
         List<String> lines = LORE.get(factionId);
         if (lines != null) return lines;

@@ -25,7 +25,10 @@ public final class StarterBagItem extends Item {
     List<ItemStack> contents() throws ReflectiveOperationException {
         List<ItemStack> out=new ArrayList<>();
         if(settlement) {
-            add(out,ModItems.GUIDEBOOK.get(),1);add(out,ModItems.SIEGE_CORE.get(),1);add(out,Items.LOOM,1);
+            // v4.13.0: guidebook removed from the starter bag; the Codex content
+            // is baked into the Command Center HUD's Intel tab, so no book is
+            // needed. Existing books still work but no new copies are handed out.
+            add(out,ModItems.SIEGE_CORE.get(),1);add(out,Items.LOOM,1);
             add(out,Items.WHITE_BANNER,2);add(out,Items.BLUE_DYE,16);add(out,Items.WHITE_DYE,16);add(out,Items.BLACK_DYE,16);
             add(out,CoreHiring.currency(),budget(configured("FactionCreationCost"),configured("ClaimingCost"),CoreHiring.cost(1),CoreHiring.cost(2)));
         } else out.addAll(survivalContents());
@@ -83,7 +86,7 @@ public final class StarterBagItem extends Item {
         return InteractionResultHolder.sidedSuccess(bag,false);
     }
     @Override public void appendHoverText(ItemStack stack,Level level,List<Component> tooltip,TooltipFlag flag) {
-        tooltip.add(Component.literal(settlement?"Faction setup, core, Codex and hiring funds":"Iron gear, food and a small stone-brick shelter"));
+        tooltip.add(Component.literal(settlement?"Faction setup, core and hiring funds":"Iron gear, food and a small stone-brick shelter"));
         tooltip.add(Component.literal("Right-click to unpack. Overflow stays inside."));
         if(stack.hasTag() && stack.getTag().contains("Supplies"))tooltip.add(Component.literal(stack.getTag().getList("Supplies",Tag.TAG_COMPOUND).size()+" stacks remaining"));
     }

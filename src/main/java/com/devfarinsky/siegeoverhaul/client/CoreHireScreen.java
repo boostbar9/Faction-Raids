@@ -48,6 +48,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private int revealTicks;
     private int waitingTicks;
     private int rosterOffset;
+    /** Intel tab: 0 = Units, 1 = Enemy Lore, 2 = How to Play. */
+    private int intelSection;
+    private int intelOffset;
     private ItemStack revealed = ItemStack.EMPTY;
     private int revealedTier;
 
@@ -83,8 +86,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         super.init();
 
         // Tab rail across the top: icon + label, evenly spaced.
-        String[] tabLabels = {"Army & Heroes", "Loot & Blessings", "Bank & Faction", "Territory"};
-        CommandIcon[] tabIcons = {CommandIcon.SWORDS, CommandIcon.CHEST, CommandIcon.BANK, CommandIcon.MAP};
+        String[] tabLabels = {"Army", "Loot", "Bank", "Territory", "Intel"};
+        CommandIcon[] tabIcons = {CommandIcon.SWORDS, CommandIcon.CHEST, CommandIcon.BANK, CommandIcon.MAP, CommandIcon.BOOK};
         int tabCount = tabLabels.length;
         int tabWidth = (layout.width() - 28 - 4 * (tabCount - 1)) / tabCount;
         for (int i = 0; i < tabCount; i++) {
@@ -324,8 +327,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             for (int i = 0; i < 3; i++) { drawLoot(g, i); drawBuff(g, i); }
         } else if (tab == 2) {
             drawFaction(g);
-        } else {
+        } else if (tab == 3) {
             drawTerritory(g);
+        } else if (tab == 4) {
+            drawIntel(g);
         }
 
         // Footer stats strip: faction size + contextual tab hint.
@@ -390,6 +395,117 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             int tw = font.width(timer);
             text(g, timer, x + w - tw - 12, y + 3, tw + 4, CommandPalette.TEXT_MUTED);
         }
+    }
+
+    /**
+     * Intel tab: three sub-sections (Units, Enemy Lore, How to Play) that
+     * bake in the old Warlord's Codex content so the player no longer needs
+     * to spawn a book.
+     */
+    private void drawIntel(GuiGraphics g) {
+        int x = layout.x() + 10, y = layout.y() + 62;
+        int w = layout.width() - 20;
+        int h = layout.height() - (y - layout.y()) - 22;
+
+        // Sub-tab strip
+        String[] labels = {"Units", "Enemy Lore", "How to Play"};
+        int segW = w / 3;
+        for (int i = 0; i < 3; i++) {
+            int sx = x + i * segW;
+            boolean active = intelSection == i;
+            int bg = active ? CommandPalette.CARD_TOP : CommandPalette.CARD_TOP_DIM;
+            g.fill(sx, y, sx + segW - 2, y + 18, bg);
+            g.fill(sx, y + 17, sx + segW - 2, y + 18,
+                    active ? CommandPalette.ACCENT_GOLD : CommandPalette.BEVEL_DARK);
+            int labelW = font.width(labels[i]);
+            text(g, labels[i], sx + (segW - labelW) / 2, y + 5, segW,
+                    active ? CommandPalette.ACCENT_GOLD : CommandPalette.TEXT_MUTED);
+        }
+
+        // Body panel
+        int bodyY = y + 22;
+        int bodyH = h - 24;
+        CommandFrame.card(g, x, bodyY, w, bodyH, CommandPalette.ACCENT_ARCANE);
+
+        // Use scissor so long content clips at the panel edges.
+        g.enableScissor(x + 2, bodyY + 2, x + w - 2, bodyY + bodyH - 2);
+        int cursorY = bodyY + 8 - intelOffset;
+        int textX = x + 10;
+        int textW = w - 20;
+
+        int drawn = switch (intelSection) {
+            case 0 -> drawUnitsSection(g, textX, cursorY, textW);
+            case 1 -> drawLoreSection(g, textX, cursorY, textW);
+            default -> drawHowToPlaySection(g, textX, cursorY, textW);
+        };
+        g.disableScissor();
+
+        // Clamp scroll so we can't drag past the end.
+        int maxOffset = Math.max(0, drawn - bodyH + 16);
+        if (intelOffset > maxOffset) intelOffset = maxOffset;
+    }
+
+    private int drawUnitsSection(GuiGraphics g, int x, int startY, int w) {
+        int y = startY;
+        for (var entry : com.devfarinsky.siegeoverhaul.client.codex.UnitCodex.ENTRIES) {
+            text(g, entry.name(), x, y, w, CommandPalette.ACCENT_GOLD); y += 12;
+            text(g, entry.tagline(), x, y, w, CommandPalette.TEXT); y += 10;
+            text(g, entry.stats(), x, y, w, CommandPalette.ACCENT_TEAL); y += 10;
+            y += drawWrapped(g, entry.behavior(), x, y, w, CommandPalette.TEXT_MUTED);
+            y += drawWrapped(g, "Counter: " + entry.counter(), x, y, w, CommandPalette.TEXT);
+            y += drawWrapped(g, "Drops: " + entry.drops(), x, y, w, CommandPalette.ACCENT_EMERALD);
+            text(g, entry.availability(), x, y, w, CommandPalette.TEXT_DIM); y += 10;
+            y += 4;
+            g.fill(x, y, x + w, y + 1, CommandPalette.BEVEL_DARK);
+            y += 6;
+        }
+        return y - startY;
+    }
+
+    private int drawLoreSection(GuiGraphics g, int x, int startY, int w) {
+        int y = startY;
+        for (var entry : com.devfarinsky.siegeoverhaul.client.codex.FactionLore.all().entrySet()) {
+            String name = entry.getKey().replace('_', ' ');
+            // Simple title case.
+            StringBuilder title = new StringBuilder(name.length());
+            boolean cap = true;
+            for (char c : name.toCharArray()) {
+                title.append(cap ? Character.toUpperCase(c) : c);
+                cap = c == ' ';
+            }
+            text(g, title.toString(), x, y, w, CommandPalette.ACCENT_GOLD); y += 12;
+            for (String line : entry.getValue()) {
+                text(g, line, x, y, w, CommandPalette.TEXT_MUTED); y += 10;
+            }
+            y += 4;
+            g.fill(x, y, x + w, y + 1, CommandPalette.BEVEL_DARK);
+            y += 6;
+        }
+        return y - startY;
+    }
+
+    private int drawHowToPlaySection(GuiGraphics g, int x, int startY, int w) {
+        int y = startY;
+        for (var tip : com.devfarinsky.siegeoverhaul.client.codex.DefensePlaybook.TIPS) {
+            text(g, "[" + tip.tag() + "] " + tip.title(), x, y, w, CommandPalette.ACCENT_GOLD);
+            y += 12;
+            y += drawWrapped(g, tip.body(), x, y, w, CommandPalette.TEXT_MUTED);
+            y += 4;
+            g.fill(x, y, x + w, y + 1, CommandPalette.BEVEL_DARK);
+            y += 6;
+        }
+        return y - startY;
+    }
+
+    /** Word-wrap helper. Returns the total height consumed. */
+    private int drawWrapped(GuiGraphics g, String s, int x, int y, int w, int colour) {
+        var lines = font.split(net.minecraft.network.chat.Component.literal(s), w);
+        int used = 0;
+        for (var line : lines) {
+            g.drawString(font, line, x, y + used, colour, false);
+            used += 10;
+        }
+        return used;
     }
 
     /** Dimensions of the map body inside the Territory tab. */
@@ -676,11 +792,30 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             rosterOffset = Math.max(0, Math.min(maxOffset, rosterOffset + step));
             return true;
         }
+        if (tab == 4) {
+            int step = (int) -Math.signum(delta) * 12;
+            intelOffset = Math.max(0, intelOffset + step);
+            return true;
+        }
         return super.mouseScrolled(x, y, delta);
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (tab == 4 && button == 0) {
+            // Sub-tab strip at the top of the Intel panel: hit-test one of
+            // three equal segments and switch section.
+            int x = layout.x() + 10, y = layout.y() + 62, w = layout.width() - 20;
+            int segW = w / 3;
+            for (int i = 0; i < 3; i++) {
+                int sx = x + i * segW;
+                if (mouseX >= sx && mouseX < sx + segW
+                        && mouseY >= y && mouseY < y + 18) {
+                    if (intelSection != i) { intelSection = i; intelOffset = 0; }
+                    return true;
+                }
+            }
+        }
         if (tab == 3) {
             if (button == 1 && mouseX >= mapX() && mouseX < mapX() + mapW()
                     && mouseY >= mapY() && mouseY < mapY() + mapH()) {
