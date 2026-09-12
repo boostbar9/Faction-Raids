@@ -19,7 +19,7 @@ import java.util.Map;
  * <p>Walks the {@link ForgeConfigSpec} tree once at construction and builds
  * one entry widget per leaf: a click-to-toggle button for booleans, a text
  * field with numeric validation for ints and doubles, a cycle button for
- * enums, and a text field for everything else. Scrolls a viewport instead
+ * enums, and a comma-separated text field for string lists. Scrolls a viewport instead
  * of trying to render 150+ rows onto one screen. Writes changes back to the
  * spec immediately so nothing gets lost if the player alt-tabs out.
  */
@@ -122,7 +122,7 @@ public final class SiegeOverhaulConfigScreen extends Screen {
         if (v instanceof Enum<?>) {
             return new EnumRow(e, x, y, WIDGET_WIDTH, ROW_HEIGHT);
         }
-        // Numbers, strings, and lists all handled by TextRow with a validator.
+        // Numbers, strings, and string lists all use a type-preserving text row.
         return new TextRow(this.font, e, x, y, WIDGET_WIDTH, ROW_HEIGHT);
     }
 
@@ -302,21 +302,19 @@ public final class SiegeOverhaulConfigScreen extends Screen {
         TextRow(net.minecraft.client.gui.Font font, Entry entry, int x, int y, int w, int h) {
             super(entry, x, y, w, h);
             this.box = new EditBox(font, x + 1, y + 2, w - 2, h - 4, Component.literal(entry.path));
-            this.box.setValue(String.valueOf(entry.pending));
-            this.box.setMaxLength(64);
+            if (entry.value instanceof List<?>) {
+                this.box.setMaxLength(512);
+                this.box.setHint(Component.literal("comma-separated; blank = none"));
+            } else {
+                this.box.setMaxLength(64);
+            }
+            // Raise the limit before loading the value: EditBox otherwise
+            // truncates long existing lists to its vanilla default length.
+            this.box.setValue(ConfigTextCodec.format(entry.pending));
             this.box.setResponder(v -> {
-                Object parsed = parse(v, entry.value);
+                Object parsed = ConfigTextCodec.parse(v, entry.value);
                 if (parsed != null) entry.pending = parsed;
             });
-        }
-        private static Object parse(String s, Object template) {
-            try {
-                if (template instanceof Integer) return Integer.parseInt(s.trim());
-                if (template instanceof Long) return Long.parseLong(s.trim());
-                if (template instanceof Double) return Double.parseDouble(s.trim());
-                if (template instanceof Float) return Float.parseFloat(s.trim());
-                return s;
-            } catch (NumberFormatException nfe) { return null; }
         }
         @Override
         protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {

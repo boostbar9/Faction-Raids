@@ -1,3 +1,9 @@
+# 4.21.2 beta
+
+- Fix the in-game configuration editor saving list settings as one string, which could reject the change or corrupt the setting type. String lists now use a readable comma-separated editor; blank input produces an empty list and the prior bracketed display remains accepted during upgrades.
+- Increase list-field input capacity while preserving boolean, enum, string and numeric editing behavior. No gameplay balance, save data or dependency changes.
+- Automated regression coverage; no interactive Minecraft playtesting.
+
 # 4.21.1 beta
 
 - Make the Siege Core HUD size itself from the actual Minecraft-scaled viewport. Wide, tall, short and narrow aspect ratios now select detailed or compact cards from their usable geometry, while unusually small modded/resizable windows uniformly scale the complete HUD and its mouse hitboxes instead of collapsing sections together.
