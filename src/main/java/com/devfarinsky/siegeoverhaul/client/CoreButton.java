@@ -89,14 +89,19 @@ public final class CoreButton extends Button {
 
         int iconSize = Math.min(h - 4, 12);
         int textLeft = x + 6;
-        if (icon != null) {
+        // At high GUI scales some buttons become too narrow for both their
+        // glyph and complete label. Drop the decorative glyph first instead
+        // of crushing or overlapping the actionable text.
+        boolean showIcon = icon != null
+                && w >= iconSize + font.width(getMessage()) + 18;
+        if (showIcon) {
             icon.draw(g, x + 4, y + (h - iconSize) / 2, iconSize);
             textLeft = x + 6 + iconSize + 4;
         }
         int textAreaWidth = Math.max(1, x + w - 6 - textLeft);
         String label = font.plainSubstrByWidth(getMessage().getString(), textAreaWidth);
         int labelWidth = font.width(label);
-        int labelX = icon != null
+        int labelX = showIcon
                 ? textLeft + Math.max(0, (textAreaWidth - labelWidth) / 2)
                 : x + (w - labelWidth) / 2;
         g.drawString(font, label, labelX, y + (h - 8) / 2, textColor, false);

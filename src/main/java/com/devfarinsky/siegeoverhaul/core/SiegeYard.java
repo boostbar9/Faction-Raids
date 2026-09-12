@@ -1,6 +1,7 @@
 package com.devfarinsky.siegeoverhaul.core;
 
 import com.devfarinsky.siegeoverhaul.FactionLogger;
+import com.devfarinsky.siegeoverhaul.items.ModItems;
 import com.devfarinsky.siegeoverhaul.siege.SiegeEngineType;
 import com.devfarinsky.siegeoverhaul.siege.SiegeIntegration;
 import net.minecraft.core.BlockPos;
@@ -14,15 +15,18 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.Optional;
 
 /**
- * v4.18.0 Army-tab Siege Yard: hires a friendly Recruits Siege Engineer
- * pre-mounted on a fresh Siege Weapons vehicle (catapult or ballista).
- * Charged like a normal recruit: bank first, then the player's inventory.
+ * Army-tab Siege Yard: buys a placement kit for a friendly Recruits Siege
+ * Engineer pre-mounted on a fresh Siege Weapons vehicle (catapult or
+ * ballista). Charged like a normal recruit: bank first, then the player's
+ * inventory. The actual crew is deployed where the player uses the kit, so
+ * an indoor or crowded Core can no longer block the purchase.
  * <p>Both mods must be present. When either is missing, the button rejects
  * with an ingame message and no emeralds are consumed.</p>
  */
@@ -63,13 +67,45 @@ public final class SiegeYard {
                     "You need " + price + " emeralds (bank + inventory) for a " + LABELS[index] + "."));
             return false;
         }
-        ServerLevel level = player.serverLevel();
-        BlockPos deployPos = findDeploySpot(level, core);
-        if (deployPos == null) {
+
+        ItemStack kit = new ItemStack(index == 0
+                ? ModItems.CATAPULT_CREW_KIT.get()
+                : ModItems.BALLISTA_CREW_KIT.get());
+        if (!player.isCreative() && !PaymentSource.consume(player, price)) return false;
+
+        boolean stored = player.getInventory().add(kit);
+        if (!stored && !kit.isEmpty()) player.drop(kit, false);
+        player.getInventory().setChanged();
+        player.inventoryMenu.broadcastChanges();
+        player.sendSystemMessage(Component.literal(
+                "Purchased a " + LABELS[index] + " deployment kit for " + price
+                        + " emeralds. Right-click the top of a clear flat 3x3 area to deploy it."
+                        + (stored ? "" : " Your inventory was full, so the kit was dropped at your feet.")));
+        return true;
+    }
+
+    /**
+     * Deploy a previously purchased kit at the player's chosen position.
+     * Payment is intentionally not handled here; failed deployment leaves the
+     * item in hand so the player can select a different area without paying
+     * twice.
+     */
+    public static boolean deploy(ServerPlayer player, BlockPos deployPos, int index) {
+        if (player == null || deployPos == null) return false;
+        if (index < 0 || index >= PRICES.length) return false;
+        if (!available()) {
             player.sendSystemMessage(Component.literal(
-                    "Clear an open flat area of at least 3x3 near the core to deploy a siege crew."));
+                    "Requires Recruits and Siege Weapons mods to deploy this siege crew."));
             return false;
         }
+
+        ServerLevel level = player.serverLevel();
+        if (!isFlat3x3(level, deployPos)) {
+            player.sendSystemMessage(Component.literal(
+                    "That deployment is blocked. Right-click the top of a clear, solid, flat 3x3 area."));
+            return false;
+        }
+
         SiegeEngineType type = TYPES[index];
         Vec3 spawn = Vec3.atCenterOf(deployPos);
         float yaw = player.getYRot();
@@ -87,31 +123,12 @@ public final class SiegeYard {
                     "Could not summon a Siege Engineer. Check that the Recruits mod is fully loaded."));
             return false;
         }
-        if (!player.isCreative() && !PaymentSource.consume(player, price)) {
-            engineerOpt.get().discard();
-            vehicle.discard();
-            return false;
-        }
         player.sendSystemMessage(Component.literal(
-                "Hired a " + LABELS[index] + " for " + price + " emeralds."));
+                "Deployed your " + LABELS[index] + "."));
         return true;
     }
 
-    private static BlockPos findDeploySpot(ServerLevel level, BlockPos core) {
-        // Look outward from the core for an unobstructed 3x3 flat patch.
-        for (int radius = 3; radius <= 6; radius++) {
-            for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
-                if (Math.abs(dx) != radius && Math.abs(dz) != radius) continue;
-                for (int dy = -2; dy <= 2; dy++) {
-                    BlockPos p = core.offset(dx, dy, dz);
-                    if (isFlat3x3(level, p)) return p;
-                }
-            }
-        }
-        return null;
-    }
-
-    private static boolean isFlat3x3(ServerLevel level, BlockPos center) {
+    static boolean isFlat3x3(ServerLevel level, BlockPos center) {
         for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
             BlockPos p = center.offset(dx, 0, dz);
             if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)) return false;
@@ -120,6 +137,8 @@ public final class SiegeYard {
             if (!level.getBlockState(p.below()).isFaceSturdy(level, p.below(), Direction.UP)) return false;
             if (!level.getBlockState(p).isAir() && !level.getBlockState(p).canBeReplaced()) return false;
             if (!level.getBlockState(p.above()).isAir() && !level.getBlockState(p.above()).canBeReplaced()) return false;
+            if (!level.getBlockState(p.above(2)).isAir()
+                    && !level.getBlockState(p.above(2)).canBeReplaced()) return false;
         }
         return true;
     }

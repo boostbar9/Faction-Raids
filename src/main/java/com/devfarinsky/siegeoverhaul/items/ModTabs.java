@@ -56,6 +56,8 @@ public final class ModTabs {
                         output.accept(ModItems.SIEGE_CORE.get());
                         output.accept(ModItems.SETTLEMENT_BAG.get());
                         output.accept(ModItems.SURVIVAL_BAG.get());
+                        output.accept(ModItems.CATAPULT_CREW_KIT.get());
+                        output.accept(ModItems.BALLISTA_CREW_KIT.get());
 
                         // ---- 2. Spawn eggs for vanilla raider units ----
                         // These are the mob types the raid system actually

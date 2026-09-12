@@ -14,13 +14,15 @@ Enemy factions claim a foothold near your territory, build a fortified war camp,
 
 Create or join a [Villager Recruits](https://www.curseforge.com/minecraft/mc-mods/recruits) faction, claim land, and place a **Siege Core inside your faction's Overworld claim**. One active core per faction becomes the siege objective and your recruitment hub.
 
-The core opens a responsive menu with three tabs:
+The core opens a responsive five-tab command center:
 
-- **Army:** two recruit offers and one worker offer, rotating every **15 minutes of server runtime**. Each offer can be purchased once per rotation across your faction.
-- **Heroes:** a featured hero with enhanced equipment and a signature magical skill.
-- **Loot boxes:** spend emeralds on equipment and supplies. Sealed boxes hide their contents until a short animated reveal. Prices and rarity odds are visible before purchase.
+- **Army:** two recruit offers, one worker offer, and a featured hero, rotating every **15 minutes of server runtime**. Each offer can be purchased once per rotation across your faction. Catapult and ballista crews are delivered as deployment kits so you can place them on a clear flat 3x3 area away from an indoor Core.
+- **Loot:** spend emeralds on hidden equipment and supply rewards, or activate short personal blessings.
+- **Bank:** manage the shared faction treasury and review the member roster and recent activity.
+- **Territory:** purchase permanent faction-wide upgrades.
+- **Intel:** browse unit reference cards, enemy lore, and field guidance.
 
-The menu includes selected-tab highlighting, an emerald balance, offer refresh progress, and compact layouts for smaller screens or larger GUI scales.
+The menu includes selected-tab highlighting, an emerald balance, offer refresh progress, a compact layout for larger GUI scales, and a **Leave Feedback** button that opens the mod's CurseForge comments page through Minecraft's normal link confirmation.
 
 ## Heroes With a Purpose
 
@@ -120,7 +122,7 @@ This override changes **victory loot**, not the core menu's equipment-box reward
 
 ## Links and Credits
 
-[Source Code](https://github.com/boostbar9/Faction-Raids) | [Report an Issue](https://github.com/boostbar9/Faction-Raids/issues) | [GPL-3.0-only](https://spdx.org/licenses/GPL-3.0-only.html)
+[Share Feedback](https://www.curseforge.com/minecraft/mc-mods/siege-overhaul/comments) | [Source Code](https://github.com/boostbar9/Faction-Raids) | [Report an Issue](https://github.com/boostbar9/Faction-Raids/issues) | [GPL-3.0-only](https://spdx.org/licenses/GPL-3.0-only.html)
 
 **Author:** boostbar9
 
