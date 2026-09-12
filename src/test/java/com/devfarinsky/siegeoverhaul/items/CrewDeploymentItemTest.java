@@ -6,6 +6,8 @@ import net.minecraft.core.Direction;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CrewDeploymentItemTest extends MinecraftTestSupport {
     @Test
@@ -15,5 +17,15 @@ class CrewDeploymentItemTest extends MinecraftTestSupport {
                 CrewDeploymentItem.deploymentCenter(clicked, Direction.UP));
         assertEquals(new BlockPos(11, 64, -4),
                 CrewDeploymentItem.deploymentCenter(clicked, Direction.EAST));
+    }
+
+    @Test
+    void onlyTheTopFaceCanAnchorADeployment() {
+        assertTrue(CrewDeploymentItem.isPlacementFace(Direction.UP));
+        for (Direction direction : Direction.values()) {
+            if (direction != Direction.UP) {
+                assertFalse(CrewDeploymentItem.isPlacementFace(direction), direction.getName());
+            }
+        }
     }
 }

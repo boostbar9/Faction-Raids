@@ -1,3 +1,11 @@
+# 4.21.1 beta
+
+- Make the Siege Core HUD size itself from the actual Minecraft-scaled viewport. Wide, tall, short and narrow aspect ratios now select detailed or compact cards from their usable geometry, while unusually small modded/resizable windows uniformly scale the complete HUD and its mouse hitboxes instead of collapsing sections together.
+- Let the command panel grow farther on larger resolutions, use adaptive tab/card/control gaps, ellipsize genuinely clipped labels, and replace the cramped compact Bank columns with a readable summary plus complete hover details.
+- Show whether Army offers are affordable at a glance and explain exact emerald shortfalls in hover text. Creative players can use the siege deployment buttons without carrying emeralds.
+- Require siege kits to be used on the top face of the center ground block, retain the item after every failed attempt, and add restrained purchase/deployment sound and particle feedback.
+- Save format, prices, faction-bank payment order, dependencies and existing worlds remain unchanged.
+
 # 4.21.0 beta
 
 - Reworked the Siege Core command center into fixed header, tab, status, content, Army-action, and footer bands so controls no longer overlap at any supported Minecraft GUI scale.

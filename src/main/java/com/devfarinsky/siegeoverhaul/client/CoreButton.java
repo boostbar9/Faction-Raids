@@ -99,7 +99,12 @@ public final class CoreButton extends Button {
             textLeft = x + 6 + iconSize + 4;
         }
         int textAreaWidth = Math.max(1, x + w - 6 - textLeft);
-        String label = font.plainSubstrByWidth(getMessage().getString(), textAreaWidth);
+        String fullLabel = getMessage().getString();
+        String label = font.plainSubstrByWidth(fullLabel, textAreaWidth);
+        if (!label.equals(fullLabel) && textAreaWidth > font.width("…")) {
+            label = font.plainSubstrByWidth(fullLabel,
+                    textAreaWidth - font.width("…")) + "…";
+        }
         int labelWidth = font.width(label);
         int labelX = showIcon
                 ? textLeft + Math.max(0, (textAreaWidth - labelWidth) / 2)

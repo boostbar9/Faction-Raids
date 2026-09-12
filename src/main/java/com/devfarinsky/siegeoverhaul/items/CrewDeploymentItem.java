@@ -33,6 +33,13 @@ public final class CrewDeploymentItem extends Item {
 
     @Override
     public InteractionResult useOn(UseOnContext context) {
+        if (!isPlacementFace(context.getClickedFace())) {
+            if (context.getPlayer() instanceof ServerPlayer player) {
+                player.sendSystemMessage(Component.literal(
+                        "Aim at the top face of the center ground block, then use the kit again."));
+            }
+            return InteractionResult.FAIL;
+        }
         if (!(context.getPlayer() instanceof ServerPlayer player)) {
             return context.getLevel().isClientSide
                     ? InteractionResult.SUCCESS
@@ -55,6 +62,11 @@ public final class CrewDeploymentItem extends Item {
     /** The vehicle's center occupies the block immediately beyond the clicked face. */
     public static BlockPos deploymentCenter(BlockPos clicked, Direction face) {
         return clicked.relative(face);
+    }
+
+    /** Deployment is intentionally anchored to the top of a ground block. */
+    public static boolean isPlacementFace(Direction face) {
+        return face == Direction.UP;
     }
 
     @Override

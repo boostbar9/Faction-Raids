@@ -22,7 +22,7 @@ The core opens a responsive five-tab command center:
 - **Territory:** purchase permanent faction-wide upgrades.
 - **Intel:** browse unit reference cards, enemy lore, and field guidance.
 
-The menu includes selected-tab highlighting, an emerald balance, offer refresh progress, a compact layout for larger GUI scales, and a **Leave Feedback** button that opens the mod's CurseForge comments page through Minecraft's normal link confirmation.
+The menu sizes itself from the player's Minecraft-scaled viewport, selects detailed or compact cards from the space actually available, and uniformly scales down for unusually small windows so controls and mouse hitboxes stay aligned. It also includes selected-tab highlighting, an emerald balance, offer refresh progress, affordability cues, and a **Leave Feedback** button that opens the mod's CurseForge comments page through Minecraft's normal link confirmation.
 
 ## Heroes With a Purpose
 

@@ -23,6 +23,6 @@
   "item.siegeoverhaul.survival_bag": "Survival & Building Bag",
   "item.siegeoverhaul.catapult_crew_deployment_kit": "Catapult Crew Deployment Kit",
   "item.siegeoverhaul.ballista_crew_deployment_kit": "Ballista Crew Deployment Kit",
-  "item.siegeoverhaul.crew_deployment_kit.tooltip.line1": "Right-click a clear flat 3x3 area to deploy",
-  "item.siegeoverhaul.crew_deployment_kit.tooltip.line2": "Consumed only after the crew deploys successfully"
+  "item.siegeoverhaul.crew_deployment_kit.tooltip.line1": "Use on the top face of a clear, flat 3x3 area",
+  "item.siegeoverhaul.crew_deployment_kit.tooltip.line2": "The kit is consumed only after a successful deployment"
 }
