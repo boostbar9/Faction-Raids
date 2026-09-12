@@ -178,6 +178,36 @@ public final class WorkersBridge {
     }
 
     /**
+     * Check whether a Workers 2 storagearea has the BUILDERS storage type
+     * enabled. StorageArea.canWorkHere(builder) requires this bit before it
+     * will accept a builder, and if it isn't set the builder silently reports
+     * "No available storage found nearby" even though our area is right next
+     * to it.
+     *
+     * @return true when the BUILDERS bit is set, false otherwise (including
+     *         when the field cannot be read at all, so we stay permissive)
+     */
+    public static boolean hasBuilderStorage(Entity storageArea) {
+        if (storageArea == null) return false;
+        try {
+            // StorageArea exposes getStorageTypes(): EnumSet<StorageType>.
+            // Rather than depend on the enum class we read the raw mask off
+            // the entity data via the getter and check bit 2 (BUILDERS).
+            Object set = storageArea.getClass().getMethod("getStorageTypes").invoke(storageArea);
+            if (set instanceof java.util.EnumSet<?> es) {
+                for (Object v : es) {
+                    if ("BUILDERS".equals(v.toString())) return true;
+                }
+                return false;
+            }
+            return false;
+        } catch (ReflectiveOperationException ex) {
+            warn("storage type read", ex);
+            return true;
+        }
+    }
+
+    /**
      * Read the PlayerUUID field from a Workers 2 area entity (buildarea,
      * storagearea, etc). Uses reflection and swallows failures so callers can
      * treat the result as optional.

@@ -116,12 +116,25 @@ public final class TerritoryFortification {
 
         // The player must have set up a Workers 2 storagearea inside their
         // claim already, owned by them. We reuse it instead of creating one.
-        Entity playerStorage = findPlayerStorageArea(level, player, builder.blockPosition(), chunks);
+        // Anchor the search on the core, not the builder, because Workers 2
+        // searches from the builder's current position (which moves) and the
+        // core is the stable centre of the perimeter. This keeps the initial
+        // check in sync with where the builder will spend most of its time.
+        Entity playerStorage = findPlayerStorageArea(level, player, corePos, chunks);
         if (playerStorage == null) {
             player.sendSystemMessage(Component.literal(
                     "Place a Workers 2 storage area inside your claim (within "
                             + STORAGE_SEARCH_RADIUS + " blocks of the builder) and fill it with "
                             + mat.label() + ". Then commission again."));
+            return false;
+        }
+        // Workers 2 storageareas gate access by job type. If the player never
+        // toggled BUILDERS on inside the storagearea GUI the builder will
+        // silently report "No available storage found nearby" even though
+        // ours is right there. Catch this early with a clear message.
+        if (!WorkersBridge.hasBuilderStorage(playerStorage)) {
+            player.sendSystemMessage(Component.literal(
+                    "Your storage area does not have Builders enabled. Right-click the storage area and turn on the Builders job, then commission again."));
             return false;
         }
 
@@ -310,24 +323,37 @@ public final class TerritoryFortification {
 
     /**
      * Find a Workers 2 storagearea entity owned by this player, sitting inside
-     * one of the claimed chunks and within {@link #STORAGE_SEARCH_RADIUS} of
-     * the builder. Ownership is read from the area's PlayerUUID field via the
-     * WorkersBridge reflection layer.
+     * the claim.
+     *
+     * <p>The area must be alive, owned by the player, inside a claimed chunk
+     * and within {@link #STORAGE_SEARCH_RADIUS} blocks of {@code anchor}
+     * (typically the core so the storage sits near the middle of the
+     * perimeter). We prefer areas that already have the BUILDERS bit toggled
+     * on because Workers 2's StorageArea.canWorkHere rejects builders on any
+     * other type mask.</p>
      */
     private static Entity findPlayerStorageArea(ServerLevel level, ServerPlayer player,
                                                 BlockPos anchor, Set<ChunkPos> claim) {
         AABB box = new AABB(anchor).inflate(STORAGE_SEARCH_RADIUS);
         ResourceLocation wanted = new ResourceLocation("workers", "storagearea");
         UUID playerId = player.getUUID();
+        Entity fallback = null;
         for (Entity e : level.getEntitiesOfClass(Entity.class, box, ent -> ent.isAlive())) {
             ResourceLocation id = ForgeRegistries.ENTITY_TYPES.getKey(e.getType());
             if (!wanted.equals(id)) continue;
             ChunkPos c = new ChunkPos(e.blockPosition());
             if (!claim.contains(c)) continue;
             UUID areaOwner = WorkersBridge.readOwner(e);
-            if (areaOwner != null && areaOwner.equals(playerId)) return e;
+            if (areaOwner == null || !areaOwner.equals(playerId)) continue;
+            if (WorkersBridge.hasBuilderStorage(e)) {
+                return e;
+            }
+            if (fallback == null) fallback = e;
         }
-        return null;
+        // Fall back to a storagearea without the BUILDERS bit so the caller
+        // can emit a specific "turn on Builders" message instead of a generic
+        // "nothing found" one.
+        return fallback;
     }
 
     /** Same shape as NativeCampConstruction.blueprint. */

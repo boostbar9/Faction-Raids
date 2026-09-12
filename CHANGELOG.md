@@ -1,3 +1,10 @@
+# 4.25.0 beta
+
+- Audited how Workers 2 builders actually pull materials from a storagearea. Found one silent failure mode that ate Fortify Perimeter commissions if the player's storagearea wasn't configured right, plus a subtle mismatch between where we searched for the storagearea and where the builder searches at runtime.
+- Fortify Perimeter now checks that your storagearea has Builders enabled in its GUI before it accepts your commission. Workers 2 gates every storagearea by job type, and if Builders isn't ticked the builder silently reports "No available storage found nearby" even though your storagearea is sitting right there. You now get a specific message telling you to open the storagearea and turn Builders on.
+- The storagearea search now anchors on your Core instead of on the builder. Workers 2 searches for storageareas from the builder's current position (which moves), and the Core is the stable centre of your perimeter, so this matches where the builder will actually spend most of its time working the wall.
+- If a storagearea in range doesn't have Builders enabled we still surface it (as a fallback candidate) instead of silently returning "not found", so you always get the actionable message.
+
 # 4.24.0 beta
 
 - Audited Fortify Perimeter against the actual Workers 2 source. Two more real problems came out of it and are fixed here.
