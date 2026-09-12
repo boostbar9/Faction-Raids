@@ -142,6 +142,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         else if(button>=40 && button<=43) changed=FactionBank.transact(owner,new int[]{8,64,-8,-64}[button-40]);
         else if(button>=50 && button<=51) changed=SiegeYard.hire(owner, pos, button-50);
         else if(button>=60 && button<=63) changed=TerritoryBuffs.purchase(owner, pos, button-60);
+        else if(button>=70 && button<=72) changed=TerritoryFortification.commission(owner, pos, button-70);
         if(!changed)return false;
         owner.inventoryMenu.broadcastChanges();refresh();super.broadcastChanges();return true;
     }

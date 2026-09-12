@@ -71,6 +71,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private final Button[] hire = new Button[4];
     private final Button[] siegeYard = new Button[2];
     private final Button[] territoryBuffs = new Button[4];
+    private final Button[] fortifyButtons = new Button[TerritoryFortification.MATERIALS.length];
     private final Button[] boxes = new Button[3];
     private final Button[] buffs = new Button[3];
     private final Button[] bank = new Button[4];
@@ -192,7 +193,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int tbCols = 2;
         int tbRows = (TerritoryBuffs.COUNT + tbCols - 1) / tbCols;
         int tbGridTop = layout.contentY();
-        int tbGridBottom = layout.contentBottom();
+        // Reserve a bottom strip for the Fortify Perimeter material buttons.
+        int fortifyStripH = 26;
+        int tbGridBottom = layout.contentBottom() - fortifyStripH - 6;
         int tbCellW = (layout.width() - 20 - (tbCols - 1) * 8) / tbCols;
         int tbCellH = (tbGridBottom - tbGridTop - (tbRows - 1) * 8) / tbRows;
         // Purchase button lives inside its card, near the bottom-right.
@@ -211,6 +214,26 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     btnW, btnH,
                     false, () -> false, CommandIcon.FLAG));
         }
+        // Fortify Perimeter strip: 3 side-by-side material buttons that
+        // commission a Villager Recruits Builder to wall off the territory
+        // in the chosen material. Bank + inventory pay 1200 emeralds per job.
+        int stripY = tbGridBottom + 8;
+        int stripH = 22;
+        int stripW = layout.width() - 20;
+        int fbGap = 6;
+        int fbW = (stripW - (fortifyButtons.length - 1) * fbGap) / fortifyButtons.length;
+        for (int i = 0; i < fortifyButtons.length; i++) {
+            final int index = i;
+            String label = TerritoryFortification.material(i).label();
+            fortifyButtons[i] = addRenderableWidget(new CoreButton(
+                    Component.literal(label + "  " + TerritoryFortification.PRICE + "e"),
+                    b -> action(70 + index),
+                    layout.x() + 10 + i * (fbW + fbGap),
+                    stripY,
+                    fbW, stripH,
+                    false, () -> false, CommandIcon.FLAG));
+        }
+
         // Recenter/zoom buttons removed; the Territory tab is now a pure
         // upgrade shop. Keep the button fields non-null for the render loop
         // by pointing them at hidden placeholders that render nothing.
@@ -329,6 +352,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                             ? (owned ? "Active" : "Buy  ·  " + TerritoryBuffs.PRICES[i] + "e")
                             : (owned ? TerritoryBuffs.LABELS[i] + " (active)"
                                     : TerritoryBuffs.LABELS[i] + "  ·  " + TerritoryBuffs.PRICES[i] + "e")));
+        }
+        for (int i = 0; i < fortifyButtons.length; i++) {
+            fortifyButtons[i].visible = tab == 3;
+            fortifyButtons[i].active = canAfford(TerritoryFortification.PRICE);
+            String label = TerritoryFortification.material(i).label();
+            fortifyButtons[i].setMessage(Component.literal(
+                    layout.compact() ? label
+                            : "Fortify  " + label + "  " + TerritoryFortification.PRICE + "e"));
         }
         for (int i = 0; i < 3; i++) {
             recenterButton.visible = tab == 3;
