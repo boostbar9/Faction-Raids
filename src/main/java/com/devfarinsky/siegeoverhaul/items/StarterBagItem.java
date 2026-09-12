@@ -2,6 +2,7 @@ package com.devfarinsky.siegeoverhaul.items;
 
 import com.devfarinsky.siegeoverhaul.core.CoreHiring;
 import net.minecraft.nbt.*;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.*;
@@ -124,6 +125,11 @@ public final class StarterBagItem extends Item {
         }
         flags.putBoolean("SiegeStarterBagsGiven",true);flags.putBoolean("SiegeCoreGiven",true);flags.putBoolean("FactionRaidsGuidebookGiven",true);
         player.getPersistentData().put(Player.PERSISTED_NBT_TAG,flags);
-        player.sendSystemMessage(Component.literal("Your two starter bags contain faction supplies and survival gear. Open them when ready; claim land before placing your Siege Core."));
+        player.sendSystemMessage(Component.literal("Welcome, commander. You received starter bags for settlement and survival.")
+                .withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal("Open the Settlement Bag first, follow the setup guide, then place your Siege Core inside your claim.")
+                .withStyle(ChatFormatting.GRAY));
+        player.sendSystemMessage(Component.literal("Tip: Right-click your Siege Core to open Army, Bank, Territory and Intel controls.")
+                .withStyle(ChatFormatting.GRAY));
     }
 }
