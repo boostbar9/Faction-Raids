@@ -41,6 +41,12 @@ public final class TerritoryBuffs {
             "+50% bank interest yield",
             "Recruits gain +2 hearts of max health"
     };
+    public static final String[] COMPACT_SUMMARIES = {
+            "Structure damage -25%",
+            "Earlier raid warning",
+            "Bank interest +50%",
+            "Recruits +2 hearts"
+    };
     public static final int COUNT = PRICES.length;
     private static final String TAG = "TerritoryBuffs";
 
@@ -75,6 +81,11 @@ public final class TerritoryBuffs {
     public static String description(int index) {
         if (index < 0 || index >= COUNT) return "";
         return DESCRIPTIONS[index];
+    }
+
+    public static String compactSummary(int index) {
+        if (index < 0 || index >= COUNT) return "";
+        return COMPACT_SUMMARIES[index];
     }
 
     /**
