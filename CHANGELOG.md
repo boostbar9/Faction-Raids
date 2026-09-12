@@ -1,3 +1,10 @@
+# 4.24.0 beta
+
+- Audited Fortify Perimeter against the actual Workers 2 source. Two more real problems came out of it and are fixed here.
+- The buildarea was being wired up before it was spawned into the world. Workers 2 always expects the reverse order (place the area, then push the blueprint), and its own setStartBuild reads live block state at the target positions to compute what still needs to be placed. Fortify now spawns the buildarea first and then hands it the blueprint, matching the built-in flow.
+- The buildarea was being tagged with the RAIDERS faction and team access off, which was harmless for the player-UUID access check but wrong on paper and could interact poorly with other systems that filter by faction. A new player-area path creates the buildarea with no team gating so it looks and behaves like any manually placed one.
+- Also passes the player's actual game name through to the area's owner label so the tooltip reads as your player instead of "Siege camp".
+
 # 4.23.1 beta
 
 - Fortify Perimeter now attaches your builder to the job the same way any native Workers 2 job does, instead of forcing our raider night-shift goal onto them. The raider goal only fires when the worker has a raid team tag and an active enemy camp, so installing it on your builder actually disabled their AI. v4.23.1 uses a player-safe attachment that sets ownership and work state and leaves every native goal in place, so the builder walks to the buildarea, pulls blocks from your storagearea, and places them like any Workers 2 build.

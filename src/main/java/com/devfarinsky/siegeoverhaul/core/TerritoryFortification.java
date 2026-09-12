@@ -196,20 +196,27 @@ public final class TerritoryFortification {
         // storagearea (owned by the same player) grants access naturally.
         UUID owner = player.getUUID();
         try {
-            build = WorkersBridge.createArea(level, "buildarea",
+            build = WorkersBridge.createPlayerArea(level, "buildarea",
                     new BlockPos(max.getX(), min.getY(), min.getZ()), owner,
+                    player.getGameProfile().getName(),
                     max.getX() - min.getX() + 1,
                     max.getZ() - min.getZ() + 1,
                     max.getY() - min.getY() + 1);
-            CompoundTag blueprint = blueprint(blocks, min);
-            WorkersBridge.startBlueprint(build, blueprint);
 
             build.getPersistentData().putString(
                     com.devfarinsky.siegeoverhaul.ModConstants.Tags.CAMP_AREA_TEAM,
                     coreKey);
+
+            // Spawn the buildarea into the level BEFORE calling setStartBuild.
+            // setStartBuild reads world block state at each target position to
+            // decide which blocks belong in stackToPlace, and Workers 2's
+            // built-in flow always spawns the area first (via item placement)
+            // and only then wires up the blueprint through its GUI.
             if (!level.addFreshEntity(build)) {
                 throw new IllegalStateException("Cannot register buildarea entity");
             }
+            CompoundTag blueprint = blueprint(blocks, min);
+            WorkersBridge.startBlueprint(build, blueprint);
 
             // Report the exact material requirement to the player before we
             // charge, so an empty or wrong-material storage area produces an
