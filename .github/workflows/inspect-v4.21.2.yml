@@ -1,0 +1,118 @@
+name: Inspect tested 4.21.2 artifact
+
+on:
+  push:
+    branches: [verify/artifact-v4.21.2]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify successful merged-main build and source identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          import json, os, urllib.request
+
+          def get(path):
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={
+                      'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                      'Accept': 'application/vnd.github+json',
+                  },
+              )
+              with urllib.request.urlopen(request) as response:
+                  return json.load(response)
+
+          source_sha = '0ac533c26905e231ae3bf34e2dd452e1694ba592'
+          source_tree = '04984df7c001070fdf673196c863ea0db7a7c3e6'
+          pr_head_sha = '16192ae89ca90eb15ff9bbc71e56ec7799f894b5'
+          run_id = 34702475400
+
+          run = get(f'actions/runs/{run_id}')
+          assert run['status'] == 'completed' and run['conclusion'] == 'success'
+          assert run['event'] == 'push' and run['head_branch'] == 'main'
+          assert run['head_sha'] == source_sha
+
+          pr = get('pulls/108')
+          assert pr['merged'] and pr['merge_commit_sha'] == source_sha
+          assert pr['head']['sha'] == pr_head_sha
+
+          for sha in (run['head_sha'], pr['merge_commit_sha'], pr_head_sha):
+              assert get('git/commits/' + sha)['tree']['sha'] == source_tree
+
+          artifacts = {a['name']: a for a in get(f'actions/runs/{run_id}/artifacts')['artifacts']}
+          jar = artifacts['Faction-Raids-Forge-1.20.1']
+          tests = artifacts['regression-test-results']
+          assert jar['id'] == 10300229851
+          assert jar['digest'] == 'sha256:f075a685e3b4122af0be9f798f20dedb7766ca25411f87baf71d947120048c86'
+          assert tests['id'] == 10300444420
+          assert tests['digest'] == 'sha256:1e88328ddfd6e273009985fe1ca7a76ba3f265135ff75e0af84aa48890590375'
+          CHECK
+
+      - name: Download exact tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34702475400
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Download regression results
+        uses: actions/download-artifact@v4
+        with:
+          name: regression-test-results
+          run-id: 34702475400
+          github-token: ${{ github.token }}
+          path: regression
+
+      - name: Inspect tested bytes, metadata, dependencies, and regressions
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, json, zipfile, tomllib
+          import xml.etree.ElementTree as ET
+
+          jar = Path('dist/siegeoverhaul-4.21.2.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+
+          with zipfile.ZipFile(jar) as archive:
+              data = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+          mod = data['mods'][0]
+          assert mod['modId'] == 'siegeoverhaul' and mod['version'] == '4.21.2'
+          assert mod['displayTest'] == 'MATCH_VERSION'
+
+          dependencies = {entry['modId']: entry for entry in data['dependencies']['siegeoverhaul']}
+          for mod_id in ('recruits', 'workers', 'smallships', 'siegeweapons'):
+              assert dependencies[mod_id]['mandatory'] and dependencies[mod_id]['side'] == 'BOTH', mod_id
+          assert dependencies['recruits']['versionRange'] == '[1.15.2,)'
+          assert dependencies['workers']['versionRange'] == '[2.0.3,)'
+          for mod_id in ('corpse', 'magistuarmory', 'musketmod'):
+              assert not dependencies[mod_id]['mandatory'], mod_id
+
+          totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0)
+          reports = list(Path('regression').rglob('TEST-*.xml'))
+          assert reports, 'No regression reports found'
+          for report in reports:
+              result = ET.parse(report).getroot()
+              for key in totals:
+                  totals[key] += int(result.get(key, 0))
+          assert totals == {'tests': 240, 'failures': 0, 'errors': 0, 'skipped': 0}, totals
+
+          receipt = {
+              'source': '0ac533c26905e231ae3bf34e2dd452e1694ba592',
+              'source_tree': '04984df7c001070fdf673196c863ea0db7a7c3e6',
+              'build_run': 34702475400,
+              'jar': jar.name,
+              'sha256': digest,
+              'tests': totals,
+          }
+          print('ARTIFACT_RECEIPT=' + json.dumps(receipt, sort_keys=True))
+          CHECK
