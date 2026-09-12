@@ -6,6 +6,7 @@ import com.devfarinsky.siegeoverhaul.siege.SiegeEngineType;
 import com.devfarinsky.siegeoverhaul.siege.SiegeIntegration;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -17,6 +18,8 @@ import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.Optional;
@@ -81,6 +84,8 @@ public final class SiegeYard {
                 "Purchased a " + LABELS[index] + " deployment kit for " + price
                         + " emeralds. Right-click the top of a clear flat 3x3 area to deploy it."
                         + (stored ? "" : " Your inventory was full, so the kit was dropped at your feet.")));
+        player.playNotifySound(SoundEvents.EXPERIENCE_ORB_PICKUP,
+                SoundSource.PLAYERS, 0.7F, 1.15F);
         return true;
     }
 
@@ -123,8 +128,13 @@ public final class SiegeYard {
                     "Could not summon a Siege Engineer. Check that the Recruits mod is fully loaded."));
             return false;
         }
+        level.playSound(null, deployPos, SoundEvents.ANVIL_LAND,
+                SoundSource.PLAYERS, 0.65F, 1.35F);
+        level.sendParticles(ParticleTypes.HAPPY_VILLAGER,
+                spawn.x, spawn.y + 0.6D, spawn.z,
+                10, 1.0D, 0.35D, 1.0D, 0.02D);
         player.sendSystemMessage(Component.literal(
-                "Deployed your " + LABELS[index] + "."));
+                "Deployed your " + LABELS[index] + ". The crew is ready for orders."));
         return true;
     }
 

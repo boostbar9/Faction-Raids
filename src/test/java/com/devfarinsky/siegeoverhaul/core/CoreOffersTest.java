@@ -100,11 +100,25 @@ class CoreOffersTest extends MinecraftTestSupport {
         assertTrue(commons>legendaries,"commons("+commons+") should outweigh legendaries("+legendaries+")");
     }
     @Test void hiringLayoutFitsGuiScalesAndResizes() {
-        for (int[] size : new int[][]{{320,240},{480,270},{600,260},{854,480},{1920,1080}}) {
+        for (int[] size : new int[][]{
+                {1,1},{213,120},{256,144},{320,180},
+                {320,240},{480,270},{600,260},{854,480},
+                {1920,1080},{3440,1440}
+        }) {
             var layout = CoreHireLayout.fit(size[0],size[1]);
+            assertTrue(layout.scale() > 0.0F && layout.scale() <= 1.0F);
+            assertTrue(layout.viewportWidth() >= CoreHireLayout.MIN_VIEWPORT_WIDTH);
+            assertTrue(layout.viewportHeight() >= CoreHireLayout.MIN_VIEWPORT_HEIGHT);
             assertTrue(layout.x() >= 0 && layout.y() >= 0);
+            assertTrue((layout.x() + layout.width()) * layout.scale() <= size[0] + 0.01F);
+            assertTrue((layout.y() + layout.height()) * layout.scale() <= size[1] + 0.01F);
             assertTrue(layout.tabY() + CoreHireLayout.TAB_HEIGHT <= layout.ribbonY());
             assertTrue(layout.ribbonY() + CoreHireLayout.RIBBON_HEIGHT <= layout.contentY());
+            for (int tab = 0; tab < 5; tab++) {
+                assertTrue(layout.tabX(tab, 5) >= layout.x());
+                assertTrue(layout.tabX(tab, 5) + layout.tabWidth(5)
+                        <= layout.x() + layout.width());
+            }
             for (int i = 0; i < 4; i++) {
                 assertTrue(layout.cardWidth() > 70 && layout.cardHeight() >= 40);
                 assertTrue(layout.cardX(i) >= layout.x());
@@ -115,8 +129,14 @@ class CoreOffersTest extends MinecraftTestSupport {
             assertTrue(layout.siegeYardY() + CoreHireLayout.ARMY_ACTION_HEIGHT < layout.footerY());
             assertTrue(layout.marketY(2) + layout.marketHeight() <= layout.contentBottom());
         }
+        assertTrue(CoreHireLayout.fit(256,144).scale() < 1.0F);
+        assertEquals(1.0F, CoreHireLayout.fit(320,240).scale(), 0.0001F);
         assertTrue(CoreHireLayout.fit(320,240).compact());
         assertFalse(CoreHireLayout.fit(854,480).compact());
+        assertTrue(CoreHireLayout.fit(854,480).width()
+                > CoreHireLayout.fit(600,480).width());
+        assertTrue(CoreHireLayout.fit(854,480).height()
+                > CoreHireLayout.fit(854,360).height());
     }
     @Test void preparationAndFortificationJobsSurviveRestart() {
         var raid = new RaidSavedData.RaidState("team:test", "siege_core", 0);
