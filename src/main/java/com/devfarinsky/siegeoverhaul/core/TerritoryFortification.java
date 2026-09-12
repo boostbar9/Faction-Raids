@@ -29,11 +29,10 @@ import java.util.*;
  *
  * <p>Commissioned from the Territory tab of the Core menu. Computes the outer
  * edge of the player's Recruits claim, generates a Workers 2 build-area
- * blueprint of walls (3 tall) with 5-tall corner pillars, hands the job to
- * a nearby Workers 2 builder, and drops a barrel at the builder's feet that
- * the player fills with the chosen material. The builder consumes the barrel
- * and walks the perimeter placing blocks. When it runs out the barrel just
- * sits waiting for the player to top it up.</p>
+ * blueprint of walls (3 tall) with 5-tall corner pillars, and hands the job
+ * to a nearby Workers 2 builder. The builder pulls material from a
+ * storagearea the player has already set up in their claim, exactly like any
+ * other Workers 2 job. When the storagearea runs dry the builder waits.</p>
  *
  * <p>Only the commission is charged in emeralds. Every block itself is
  * supplied by the player.</p>
@@ -47,6 +46,8 @@ public final class TerritoryFortification {
     public static final int CORNER_EXTRA = 2;
     /** How far from the core we search for the commissioned builder. */
     public static final int BUILDER_SEARCH_RADIUS = 16;
+    /** How far from the builder we look for a player-placed storagearea. */
+    public static final int STORAGE_SEARCH_RADIUS = 64;
 
     /** Chunk-edge search cap so a runaway claim doesn't melt the server tick. */
     public static final int MAX_PERIMETER_BLOCKS = 4096;
@@ -110,6 +111,17 @@ public final class TerritoryFortification {
             player.sendSystemMessage(Component.literal(
                     "No Villager Recruits builder found within " + BUILDER_SEARCH_RADIUS
                             + " blocks of the core. Bring a builder closer."));
+            return false;
+        }
+
+        // The player must have set up a Workers 2 storagearea inside their
+        // claim already, owned by them. We reuse it instead of creating one.
+        Entity playerStorage = findPlayerStorageArea(level, player, builder.blockPosition(), chunks);
+        if (playerStorage == null) {
+            player.sendSystemMessage(Component.literal(
+                    "Place a Workers 2 storage area inside your claim (within "
+                            + STORAGE_SEARCH_RADIUS + " blocks of the builder) and fill it with "
+                            + mat.label() + ". Then commission again."));
             return false;
         }
 
@@ -179,17 +191,10 @@ public final class TerritoryFortification {
             return false;
         }
 
-        // Place the supply barrel next to the builder.
-        BlockPos supply = findSupplySpot(level, builder.blockPosition());
-        if (supply == null) {
-            player.sendSystemMessage(Component.literal(
-                    "No open air block next to your builder to drop a supply barrel."));
-            return false;
-        }
-
         Entity build = null;
-        Entity storage = null;
-        UUID owner = UUID.randomUUID();
+        // Use the player's UUID as the buildarea owner so their existing
+        // storagearea (owned by the same player) grants access naturally.
+        UUID owner = player.getUUID();
         try {
             build = WorkersBridge.createArea(level, "buildarea",
                     new BlockPos(max.getX(), min.getY(), min.getZ()), owner,
@@ -199,33 +204,15 @@ public final class TerritoryFortification {
             CompoundTag blueprint = blueprint(blocks, min);
             WorkersBridge.startBlueprint(build, blueprint);
 
-            // Storage area over the barrel.
-            storage = WorkersBridge.createArea(level, "storagearea", supply, owner, 1, 1, 1);
-
-            // Place the barrel. Leave it empty - the player fills it.
-            if (!level.getBlockState(supply).isAir() && !level.getBlockState(supply).canBeReplaced()) {
-                throw new IllegalStateException("Supply spot no longer air");
-            }
-            if (!level.setBlock(supply, Blocks.BARREL.defaultBlockState(), 3)) {
-                throw new IllegalStateException("Cannot place supply barrel");
-            }
-            if (level.getBlockEntity(supply) != null) {
-                level.getBlockEntity(supply).getPersistentData().putUUID(
-                        com.devfarinsky.siegeoverhaul.ModConstants.Tags.CAMP_SUPPLY_OWNER, owner);
-                level.getBlockEntity(supply).setChanged();
+            build.getPersistentData().putString(
+                    com.devfarinsky.siegeoverhaul.ModConstants.Tags.CAMP_AREA_TEAM,
+                    coreKey);
+            if (!level.addFreshEntity(build)) {
+                throw new IllegalStateException("Cannot register buildarea entity");
             }
 
-            // Register both work areas.
-            for (Entity area : List.of(build, storage)) {
-                area.getPersistentData().putString(
-                        com.devfarinsky.siegeoverhaul.ModConstants.Tags.CAMP_AREA_TEAM,
-                        coreKey);
-                if (!level.addFreshEntity(area)) {
-                    throw new IllegalStateException("Cannot register work area entity");
-                }
-            }
-
-            // Hand the job to the builder. enableNative already installs the work-shift helper.
+            // Hand the job to the builder under the player's UUID. Workers 2
+            // finds the player's own storagearea via matching ownership.
             WorkersBridge.enableNative(builder, owner, false);
 
             // Charge only after every mutating step succeeded.
@@ -235,21 +222,13 @@ public final class TerritoryFortification {
 
             player.sendSystemMessage(Component.literal(
                     "Fortify Perimeter commissioned: " + blocks.size() + " " + mat.label()
-                            + " blocks queued. Fill the supply barrel and the builder starts work."));
+                            + " blocks queued. The builder will pull from your storage area."));
             FactionLogger.LOG.info("[SiegeOverhaul] Fortify Perimeter: {} blocks, material {}, team {}",
                     blocks.size(), mat.blockId(), coreKey);
             saved.setDirty();
             return true;
         } catch (ReflectiveOperationException | RuntimeException ex) {
             if (build != null) build.discard();
-            if (storage != null) storage.discard();
-            if (level.getBlockState(supply).is(Blocks.BARREL)
-                    && level.getBlockEntity(supply) != null
-                    && level.getBlockEntity(supply).getPersistentData().hasUUID(
-                            com.devfarinsky.siegeoverhaul.ModConstants.Tags.CAMP_SUPPLY_OWNER)) {
-                if (level.getBlockEntity(supply) instanceof Container c) c.clearContent();
-                level.setBlock(supply, Blocks.AIR.defaultBlockState(), 3);
-            }
             player.sendSystemMessage(Component.literal(
                     "Fortify Perimeter failed to start: " + ex.getMessage()));
             FactionLogger.LOG.warn("[SiegeOverhaul] Fortify Perimeter commission failed", ex);
@@ -312,19 +291,24 @@ public final class TerritoryFortification {
         return null;
     }
 
-    private static BlockPos findSupplySpot(ServerLevel level, BlockPos anchor) {
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz = -1; dz <= 1; dz++) {
-                if (dx == 0 && dz == 0) continue;
-                BlockPos p = anchor.offset(dx, 0, dz);
-                if (!level.hasChunkAt(p)) continue;
-                BlockState above = level.getBlockState(p);
-                BlockState below = level.getBlockState(p.below());
-                if ((above.isAir() || above.canBeReplaced())
-                        && below.isFaceSturdy(level, p.below(), net.minecraft.core.Direction.UP)) {
-                    return p;
-                }
-            }
+    /**
+     * Find a Workers 2 storagearea entity owned by this player, sitting inside
+     * one of the claimed chunks and within {@link #STORAGE_SEARCH_RADIUS} of
+     * the builder. Ownership is read from the area's PlayerUUID field via the
+     * WorkersBridge reflection layer.
+     */
+    private static Entity findPlayerStorageArea(ServerLevel level, ServerPlayer player,
+                                                BlockPos anchor, Set<ChunkPos> claim) {
+        AABB box = new AABB(anchor).inflate(STORAGE_SEARCH_RADIUS);
+        ResourceLocation wanted = new ResourceLocation("workers", "storagearea");
+        UUID playerId = player.getUUID();
+        for (Entity e : level.getEntitiesOfClass(Entity.class, box, ent -> ent.isAlive())) {
+            ResourceLocation id = ForgeRegistries.ENTITY_TYPES.getKey(e.getType());
+            if (!wanted.equals(id)) continue;
+            ChunkPos c = new ChunkPos(e.blockPosition());
+            if (!claim.contains(c)) continue;
+            UUID areaOwner = WorkersBridge.readOwner(e);
+            if (areaOwner != null && areaOwner.equals(playerId)) return e;
         }
         return null;
     }

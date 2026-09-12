@@ -17,6 +17,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -105,9 +106,9 @@ public final class SiegeYard {
         }
 
         ServerLevel level = player.serverLevel();
-        if (!isFlat3x3(level, deployPos)) {
-            player.sendSystemMessage(Component.literal(
-                    "That deployment is blocked. Right-click the top of a clear, solid, flat 3x3 area."));
+        String flatIssue = describeFlat3x3(level, deployPos);
+        if (flatIssue != null) {
+            player.sendSystemMessage(Component.literal("Deployment blocked: " + flatIssue));
             return false;
         }
 
@@ -139,18 +140,55 @@ public final class SiegeYard {
     }
 
     static boolean isFlat3x3(ServerLevel level, BlockPos center) {
+        return describeFlat3x3(level, center) == null;
+    }
+
+    /**
+     * Human-readable reason why a 3x3 deployment area at {@code center} is
+     * unsuitable, or null when it is fine. Rules were relaxed: replaceable
+     * blocks like grass and snow layers are treated as clear space, and
+     * sturdy ground is only required at the center and four corners.
+     */
+    static String describeFlat3x3(ServerLevel level, BlockPos center) {
         for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
             BlockPos p = center.offset(dx, 0, dz);
-            if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)) return false;
-            if (!level.getFluidState(p).isEmpty()) return false;
-            if (!level.getFluidState(p.above()).isEmpty()) return false;
-            if (!level.getBlockState(p.below()).isFaceSturdy(level, p.below(), Direction.UP)) return false;
-            if (!level.getBlockState(p).isAir() && !level.getBlockState(p).canBeReplaced()) return false;
-            if (!level.getBlockState(p.above()).isAir() && !level.getBlockState(p.above()).canBeReplaced()) return false;
-            if (!level.getBlockState(p.above(2)).isAir()
-                    && !level.getBlockState(p.above(2)).canBeReplaced()) return false;
+            if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)) {
+                return "Deployment target is outside the loaded world.";
+            }
+            if (!level.getFluidState(p).isEmpty()) return "There is fluid where the crew should stand at " + coord(p) + ".";
+            if (!level.getFluidState(p.above()).isEmpty()) return "There is fluid above the crew at " + coord(p.above()) + ".";
+            BlockState ground = level.getBlockState(p);
+            if (!ground.isAir() && !ground.canBeReplaced()) {
+                return "A solid block is in the way at " + coord(p) + " (" + blockName(ground) + "). Clear a 3x3 space.";
+            }
+            BlockState above1 = level.getBlockState(p.above());
+            if (!above1.isAir() && !above1.canBeReplaced()) {
+                return "Not enough headroom at " + coord(p.above()) + " (" + blockName(above1) + ").";
+            }
+            BlockState above2 = level.getBlockState(p.above(2));
+            if (!above2.isAir() && !above2.canBeReplaced()) {
+                return "Not enough headroom at " + coord(p.above(2)) + " (" + blockName(above2) + ").";
+            }
         }
-        return true;
+        BlockPos[] anchors = {
+                center,
+                center.offset(-1, 0, -1), center.offset(1, 0, -1),
+                center.offset(-1, 0,  1), center.offset(1, 0,  1)
+        };
+        for (BlockPos a : anchors) {
+            if (!level.getBlockState(a.below()).isFaceSturdy(level, a.below(), Direction.UP)) {
+                return "The ground under " + coord(a) + " is not solid. Fill it with any full block.";
+            }
+        }
+        return null;
+    }
+
+    private static String coord(BlockPos p) { return p.getX() + ", " + p.getY() + ", " + p.getZ(); }
+
+    private static String blockName(BlockState state) {
+        net.minecraft.resources.ResourceLocation id =
+                net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(state.getBlock());
+        return id == null ? "unknown" : id.getPath();
     }
 
     /**
