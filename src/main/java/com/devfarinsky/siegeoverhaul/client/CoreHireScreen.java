@@ -324,11 +324,15 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             territoryBuffs[i].visible = tab == 3;
             boolean owned = menu.hasTerritoryBuff(i);
             territoryBuffs[i].active = !owned && canAfford(TerritoryBuffs.PRICES[i]);
-            territoryBuffs[i].setMessage(Component.literal(
-                    layout.compact()
-                            ? (owned ? "Active" : "Buy  ·  " + TerritoryBuffs.PRICES[i] + "e")
-                            : (owned ? TerritoryBuffs.LABELS[i] + " (active)"
-                                    : TerritoryBuffs.LABELS[i] + "  ·  " + TerritoryBuffs.PRICES[i] + "e")));
+            long missing = Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
+            territoryBuffs[i].setMessage(Component.literal(layout.compact()
+                    ? (owned ? "Active"
+                            : (missing == 0L ? "Buy  ·  " + TerritoryBuffs.PRICES[i] + "e"
+                            : "Need  ·  " + missing + "e"))
+                    : (owned ? TerritoryBuffs.LABELS[i] + " (active)"
+                            : (missing == 0L
+                            ? TerritoryBuffs.LABELS[i] + "  ·  " + TerritoryBuffs.PRICES[i] + "e"
+                            : TerritoryBuffs.LABELS[i] + "  ·  need " + missing + "e"))));
         }
         for (int i = 0; i < 3; i++) {
             recenterButton.visible = tab == 3;
@@ -473,12 +477,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 int cx = layout.x() + 10 + (i % cols) * (cellW + 8);
                 int cy = gridTop + (i / cols) * (cellH + 8);
                 if (over(mx, my, cx, cy, cellW, cellH)) {
+                    long missing = Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
                     String state = menu.hasTerritoryBuff(i)
                             ? "Already active for the whole faction."
-                            : canAfford(TerritoryBuffs.PRICES[i])
-                                    ? "Ready to purchase from bank + purse."
-                                    : "Need " + (TerritoryBuffs.PRICES[i] - availableFunds())
-                                            + " more emeralds.";
+                            : missing == 0L
+                                    ? "One-time purchase. Uses faction bank first, then purse."
+                                    : "Need " + missing + " more emeralds (bank + purse).";
                     tooltip(g, TerritoryBuffs.LABELS[i] + "  |  "
                             + TerritoryBuffs.DESCRIPTIONS[i] + "  |  " + state,
                             tooltipX, tooltipY);
@@ -896,9 +900,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             text(g, TerritoryBuffs.LABELS[i], cx + 28, cy + 10, cellW - 34, accent);
 
             // Multi-line description below the label.
+            String desc = TerritoryBuffs.DESCRIPTIONS[i];
             if (!layout.compact()) {
-                String desc = TerritoryBuffs.DESCRIPTIONS[i];
                 drawWrapped(g, desc, cx + 10, cy + 28, cellW - 20, CommandPalette.TEXT);
+            } else {
+                text(g, desc, cx + 10, cy + 28, cellW - 20, CommandPalette.TEXT_MUTED);
             }
 
             // Price / status line just above the purchase button.
@@ -907,13 +913,17 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             if (owned) {
                 status = "Active";
                 statusColor = CommandPalette.ACCENT_EMERALD;
-            } else {
-                status = TerritoryBuffs.PRICES[i] + "e";
+            } else if (canAfford(TerritoryBuffs.PRICES[i])) {
+                status = "Ready to buy";
                 statusColor = CommandPalette.ACCENT_GOLD;
+            } else {
+                long missing = Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
+                status = "Need " + missing + "e";
+                statusColor = CommandPalette.ACCENT_STEEL;
             }
             text(g, status, cx + 10,
                     layout.compact() ? cy + 25 : cy + cellH - 40,
-                    80, statusColor);
+                    Math.max(80, cellW - 24), statusColor);
         }
     }
 
