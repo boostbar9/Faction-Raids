@@ -90,12 +90,30 @@ public final class WorkersBridge {
         }
     }
 
-    /** Configure native work ownership after assigning the raider combat faction. */
+    /**
+     * Configure a raider-camp worker to run our night-shift job. This path is
+     * ONLY for enemy raider construction. It installs the BuilderWorkShift
+     * goal wrapper (which gates on CAMP_WORKER_TEAM + an active raid) and
+     * optionally kits the worker in diamond raider gear.
+     */
     public static void enableNative(Mob worker, java.util.UUID owner, boolean equip) throws ReflectiveOperationException {
         call(worker, "setOwnerUUID", Optional.class, Optional.of(owner));
         call(worker, "setFollowState", int.class, 0);
         if (equip) com.devfarinsky.siegeoverhaul.camp.BuilderSupport.provision(worker);
         com.devfarinsky.siegeoverhaul.camp.BuilderWorkShift.install(worker);
+    }
+
+    /**
+     * Attach a player-owned Workers 2 builder to a job while leaving its
+     * native AI goals untouched. Do NOT install the siege-only BuilderWorkShift
+     * wrapper (that goal only fires for raider camps) and do NOT overwrite the
+     * builder's inventory with raider gear.
+     */
+    public static void enablePlayerJob(Mob worker, java.util.UUID owner) throws ReflectiveOperationException {
+        call(worker, "setOwnerUUID", Optional.class, Optional.of(owner));
+        call(worker, "setIsOwned", boolean.class, true);
+        call(worker, "setFollowState", int.class, 0);
+        call(worker, "setListen", boolean.class, true);
     }
 
     /** Keep the camp crew visible after its job finishes without leaving native jobs running. */

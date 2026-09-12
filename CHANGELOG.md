@@ -1,3 +1,9 @@
+# 4.23.1 beta
+
+- Fortify Perimeter now attaches your builder to the job the same way any native Workers 2 job does, instead of forcing our raider night-shift goal onto them. The raider goal only fires when the worker has a raid team tag and an active enemy camp, so installing it on your builder actually disabled their AI. v4.23.1 uses a player-safe attachment that sets ownership and work state and leaves every native goal in place, so the builder walks to the buildarea, pulls blocks from your storagearea, and places them like any Workers 2 build.
+- Removed the raider gear provisioning path from the player builder attachment. Your builder keeps whatever tools and armor you already gave it.
+- The confirmation message now tells you exactly how many blocks of the chosen material to load into your storage area, so you can stock the right amount before the builder starts.
+
 # 4.23.0 beta
 
 - Fortify Perimeter now reuses the storage area you already built. Instead of dropping a new supply barrel next to the builder, the job discovers a Workers 2 storagearea inside your claim that belongs to you and hands it to the builder as the source of blocks. If no owned storagearea sits within 64 blocks of the builder, the commission is refused with instructions on where to place one.
