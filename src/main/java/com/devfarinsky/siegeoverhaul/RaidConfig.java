@@ -30,17 +30,23 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue AGGRO_RADIUS;
     public static final ForgeConfigSpec.IntValue OFF_AXIS_DRIFT_LIMIT;
     public static final ForgeConfigSpec.BooleanValue BREACHERS_IGNORE_DEFENDERS;
+    public static final ForgeConfigSpec.DoubleValue BREACHER_APPROACH_AGGRO_SCALE;
     // v2.23.0 Press-the-Attack:
     public static final ForgeConfigSpec.BooleanValue STUCK_DETECTION_ENABLED;
     public static final ForgeConfigSpec.IntValue STUCK_ESCALATION_SECONDS;
     public static final ForgeConfigSpec.DoubleValue INNER_AGGRO_MULTIPLIER;
     public static final ForgeConfigSpec.BooleanValue FORCE_REPATH_WHEN_IDLE;
+    public static final ForgeConfigSpec.IntValue FALLBACK_SEARCH_COOLDOWN_SECONDS;
+    public static final ForgeConfigSpec.IntValue FALLBACK_ROUTE_CACHE_SECONDS;
     // v2.24.0 vanilla-style cone-widening fallback:
     public static final ForgeConfigSpec.BooleanValue CONE_FALLBACK_ENABLED;
     public static final ForgeConfigSpec.IntValue CONE_FALLBACK_RADIUS;
     public static final ForgeConfigSpec.IntValue CONE_FALLBACK_VERTICAL;
     public static final ForgeConfigSpec.BooleanValue STUCK_L3_TELEPORT_ENABLED;
     public static final ForgeConfigSpec.IntValue STUCK_L3_TELEPORT_BLOCKS;
+    public static final ForgeConfigSpec.IntValue FINAL_APPROACH_RADIUS;
+    public static final ForgeConfigSpec.DoubleValue FINAL_APPROACH_SPEED_MULTIPLIER;
+    public static final ForgeConfigSpec.IntValue BREACH_TARGET_SCAN_LIMIT;
     // v2.25.0 Parkour + Hazard Avoidance + Shout-to-Allies:
     public static final ForgeConfigSpec.BooleanValue PARKOUR_ENABLED;
     public static final ForgeConfigSpec.IntValue PARKOUR_MAX_FORWARD;
@@ -231,6 +237,8 @@ public final class RaidConfig {
                 .defineInRange("offAxisDriftLimit", 24, 8, 128);
         BREACHERS_IGNORE_DEFENDERS = b.comment("When true (default), breachers and the siege commander ignore defender targets during the approach. Inside the objective area (1.5 times aggroRadius), they engage defenders normally. Other raiders engage defenders throughout the approach.")
                 .define("breachersIgnoreDefenders", true);
+        BREACHER_APPROACH_AGGRO_SCALE = b.comment("Multiplier applied to aggroRadius for breachers/commander while outside the objective area. Keeps objective-pushers focused on getting to the core instead of peel-chasing defenders.")
+                .defineInRange("breacherApproachAggroScale", 0.65, 0.2, 1.0);
         // v2.23.0 Press-the-Attack:
         STUCK_DETECTION_ENABLED = b.comment("When true (default), raiders that stop making progress toward the objective get escalating help: at 5s a forced re-path plus jump plus small speed burst; at 10s a widened aggro radius so they will chase any nearby defender; at 20s the nearest wall block between them and the objective is queued for physical breaching. Fixes the classic 'raiders standing around outside the wall' problem.")
                 .define("stuckDetectionEnabled", true);
@@ -240,6 +248,10 @@ public final class RaidConfig {
                 .defineInRange("innerAggroMultiplier", 2.0, 1.0, 4.0);
         FORCE_REPATH_WHEN_IDLE = b.comment("When true (default), raiders that have no target get a fresh moveTo(objective) call every redirect tick (once per second) instead of only when the pathfinder reports done. Prevents a raider whose path failed against a wall from parking there forever.")
                 .define("forceRepathWhenIdle", true);
+        FALLBACK_SEARCH_COOLDOWN_SECONDS = b.comment("Minimum seconds between expensive flank/cone fallback searches for the same raider while stuck. Reduces pathfinding thrash when many raiders stall at once.")
+                .defineInRange("fallbackSearchCooldownSeconds", 2, 1, 10);
+        FALLBACK_ROUTE_CACHE_SECONDS = b.comment("Seconds to reuse a previously selected fallback route target for a stuck raider before searching again.")
+                .defineInRange("fallbackRouteCacheSeconds", 3, 1, 15);
         CONE_FALLBACK_ENABLED = b.comment("When true (default), an idle stuck raider whose direct path to the objective is failing will try a vanilla-style random reachable point in a narrow cone toward the objective, then widen to a 90-degree cone if that also fails. Matches Mojang's RaiderMoveThroughVillageGoal fallback. Only applies to raiders at stuck escalation level 1 or higher, so healthy raiders keep pushing straight at the objective.")
                 .define("coneFallbackEnabled", true);
         CONE_FALLBACK_RADIUS = b.comment("Horizontal search radius (blocks) for the vanilla cone fallback. Vanilla uses 16 for the narrow attempt and 8 for the wide attempt; we use this value for the narrow attempt and half of it for the wide attempt.")
@@ -250,6 +262,12 @@ public final class RaidConfig {
                 .define("stuckL3TeleportEnabled", true);
         STUCK_L3_TELEPORT_BLOCKS = b.comment("How many blocks forward toward the objective a stuck raider is teleported at stuck escalation Level 3. Keep small so the assist is not a free warp.")
                 .defineInRange("stuckL3TeleportBlocks", 6, 2, 24);
+        FINAL_APPROACH_RADIUS = b.comment("Radius around the objective where unengaged raiders get an additional urgency speed bump to finish entering the base.")
+                .defineInRange("finalApproachRadius", 16, 6, 48);
+        FINAL_APPROACH_SPEED_MULTIPLIER = b.comment("Extra speed multiplier for unengaged raiders inside finalApproachRadius. Applied on top of base and stuck escalation multipliers.")
+                .defineInRange("finalApproachSpeedMultiplier", 1.12, 1.0, 1.6);
+        BREACH_TARGET_SCAN_LIMIT = b.comment("Maximum breach-block candidates evaluated per raider per tick while selecting a physical breach target. Caps CPU cost in dense defenses.")
+                .defineInRange("breachTargetScanLimit", 40, 8, 128);
         // v2.25.0 Parkour + Hazards + Shout:
         PARKOUR_ENABLED = b.comment("When true (default), raiders can leap 1-3 blocks forward when a solid obstacle blocks their path to the objective. Fixes raiders freezing at low walls, fences, and ledges without needing to break blocks or wait for stuck escalation. Adapted from Enhanced AI (LGPL-3.0) by Insane96.")
                 .define("parkourEnabled", true);
