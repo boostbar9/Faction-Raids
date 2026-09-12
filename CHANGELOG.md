@@ -1,3 +1,16 @@
+# 4.22.1 beta
+
+- Complete the Fortify Perimeter feature shipped in 4.22.0. The v4.22.0 tag was published with the new class file but without the Territory tab buttons, the menu action ids, or the version bump, so the feature was dead code. This release wires the three material buttons at the bottom of the Territory tab (Stone Bricks, Cobblestone, Oak Planks), routes menu ids 70 to 72 into TerritoryFortification.commission, and bumps the mod version.
+- No new behavior beyond what 4.22.0 was intended to ship: 1200 emerald commission, 3-block walls along claim edges, 5-block corner pillars, materials pulled from a supply barrel the job drops next to your Villager Recruits builder.
+
+# 4.22.0 beta
+
+- New Territory job: Fortify Perimeter. Commissions a Villager Recruits Builder standing near your Siege Core to wall off the outer edge of your Recruits claim in stone bricks, cobblestone, or oak planks. Three material buttons live at the bottom of the Territory tab.
+- Walls are 3 blocks tall along every chunk edge that borders unclaimed land, with 5-block corner pillars at exterior chunk corners.
+- Costs 1,200 emeralds to commission (bank first, then inventory). The material itself comes from the storage barrel the job drops next to your builder. Fill the barrel with your chosen block and the builder walks the perimeter placing them; leave it empty or run it dry and the builder waits until you refill.
+- Never overwrites existing solid blocks, so a wall that runs into your castle just skips those cells and continues on the other side.
+- Requires both Villager Recruits and Workers 2. Uses the same buildarea, blueprint, and storagearea system the mod already uses for siege camps, so behavior is consistent with what a native Workers 2 job would do.
+
 # 4.21.3 beta
 
 - Raiders now reliably climb the temporary ladders they build against walls. Previously the goal frequently failed to attach because ground pathfinding cannot end a path on the ladder's air block, so raiders would stall a few blocks from the ladder. The goal now paths to the solid stand-on square adjacent to the ladder base and only ascends after touching a ladder anywhere in the column, not just the exact block coordinates.
