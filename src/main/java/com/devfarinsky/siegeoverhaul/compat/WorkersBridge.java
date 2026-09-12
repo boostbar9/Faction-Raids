@@ -133,9 +133,32 @@ public final class WorkersBridge {
         }
     }
 
-    /** Work areas remain unregistered until their ownership and blueprint are complete. */
+    /**
+     * Create a raider-owned work area under the RAIDERS faction. Used for the
+     * enemy siege camp.
+     */
     public static Entity createArea(ServerLevel level, String type, BlockPos origin, java.util.UUID owner,
                                     int width, int depth, int height) throws ReflectiveOperationException {
+        return createAreaInternal(level, type, origin, owner, "Siege camp",
+                RecruitsBridge.RAIDERS_FACTION_ID, false, width, depth, height);
+    }
+
+    /**
+     * Create a player-owned work area with no team gating. Ownership is by
+     * PlayerUUID, so this player's builder will pass canWorkHere the same way
+     * it would on any manually placed buildarea.
+     */
+    public static Entity createPlayerArea(ServerLevel level, String type, BlockPos origin,
+                                          java.util.UUID owner, String playerName,
+                                          int width, int depth, int height) throws ReflectiveOperationException {
+        String label = (playerName == null || playerName.isEmpty()) ? "Player" : playerName;
+        return createAreaInternal(level, type, origin, owner, label, "", false, width, depth, height);
+    }
+
+    private static Entity createAreaInternal(ServerLevel level, String type, BlockPos origin,
+                                             java.util.UUID owner, String playerName, String teamId,
+                                             boolean teamAccess, int width, int depth, int height)
+            throws ReflectiveOperationException {
         EntityType<?> entityType = level.registryAccess().registryOrThrow(Registries.ENTITY_TYPE)
                 .getOptional(new ResourceLocation("workers", type)).orElseThrow();
         Entity area = entityType.create(level);
@@ -143,9 +166,9 @@ public final class WorkersBridge {
         // getOriginPos() delegates to Entity.getOnPos(), i.e. floor(y - 0.2).
         area.moveTo(origin.getX() + 0.5, origin.getY() + 1.0, origin.getZ() + 0.5, 0, 0);
         call(area, "setPlayerUUID", java.util.UUID.class, owner);
-        call(area, "setPlayerName", String.class, "Siege camp");
-        call(area, "setTeamStringID", String.class, RecruitsBridge.RAIDERS_FACTION_ID);
-        call(area, "setTeamAccess", boolean.class, false);
+        call(area, "setPlayerName", String.class, playerName);
+        call(area, "setTeamStringID", String.class, teamId);
+        call(area, "setTeamAccess", boolean.class, teamAccess);
         call(area, "setFacing", net.minecraft.core.Direction.class, net.minecraft.core.Direction.SOUTH);
         call(area, "setWidthSize", int.class, width);
         call(area, "setDepthSize", int.class, depth);
