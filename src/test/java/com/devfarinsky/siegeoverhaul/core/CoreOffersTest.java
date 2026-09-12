@@ -103,12 +103,17 @@ class CoreOffersTest extends MinecraftTestSupport {
         for (int[] size : new int[][]{{320,240},{480,270},{600,260},{854,480},{1920,1080}}) {
             var layout = CoreHireLayout.fit(size[0],size[1]);
             assertTrue(layout.x() >= 0 && layout.y() >= 0);
+            assertTrue(layout.tabY() + CoreHireLayout.TAB_HEIGHT <= layout.ribbonY());
+            assertTrue(layout.ribbonY() + CoreHireLayout.RIBBON_HEIGHT <= layout.contentY());
             for (int i = 0; i < 4; i++) {
                 assertTrue(layout.cardWidth() > 70 && layout.cardHeight() >= 40);
                 assertTrue(layout.cardX(i) >= layout.x());
                 assertTrue(layout.cardX(i) + layout.cardWidth() <= layout.x() + layout.width());
-                assertTrue(layout.cardY(i) + layout.cardHeight() <= layout.y() + layout.height() - 18);
+                assertTrue(layout.cardY(i) + layout.cardHeight() <= layout.armyCardsBottom());
             }
+            assertTrue(layout.siegeYardY() >= layout.armyCardsBottom());
+            assertTrue(layout.siegeYardY() + CoreHireLayout.ARMY_ACTION_HEIGHT < layout.footerY());
+            assertTrue(layout.marketY(2) + layout.marketHeight() <= layout.contentBottom());
         }
         assertTrue(CoreHireLayout.fit(320,240).compact());
         assertFalse(CoreHireLayout.fit(854,480).compact());

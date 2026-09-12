@@ -1,3 +1,11 @@
+# 4.21.0 beta
+
+- Reworked the Siege Core command center into fixed header, tab, status, content, Army-action, and footer bands so controls no longer overlap at any supported Minecraft GUI scale.
+- Added a true compact Army layout for large GUI scales: portrait, name, role, price, and Hire action remain readable while detailed kit and ability text moves to the existing hover tooltip.
+- Catapult and ballista purchases now issue one-use deployment kits. Right-click the top of a clear flat 3x3 area to place the engine and its friendly Siege Engineer; failed placements keep the kit for another attempt.
+- Added an always-visible Leave Feedback action that opens the Siege Overhaul CurseForge comments page through Minecraft's external-link confirmation screen.
+- Added responsive compact layouts for Loot, Bank, Territory, tabs, status ribbon, and footer controls. Save data and existing worlds remain compatible; matching client/server versions are required.
+
 # 4.20.1 beta
 
 - Nightcaller's temporary Shadow Wolves now expire at their saved deadline instead of accumulating permanently. Cleanup also handles already-saved summons and wolves with disabled AI.

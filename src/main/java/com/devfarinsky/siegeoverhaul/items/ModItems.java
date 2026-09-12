@@ -31,6 +31,14 @@ public final class ModItems {
 
     public static final RegistryObject<Item> SETTLEMENT_BAG=ITEMS.register("settlement_bag",()->new StarterBagItem(true));
     public static final RegistryObject<Item> SURVIVAL_BAG=ITEMS.register("survival_bag",()->new StarterBagItem(false));
+    public static final RegistryObject<Item> CATAPULT_CREW_KIT = ITEMS.register(
+            "catapult_crew_deployment_kit",
+            () -> new CrewDeploymentItem(0,
+                    new Item.Properties().stacksTo(1).rarity(Rarity.RARE)));
+    public static final RegistryObject<Item> BALLISTA_CREW_KIT = ITEMS.register(
+            "ballista_crew_deployment_kit",
+            () -> new CrewDeploymentItem(1,
+                    new Item.Properties().stacksTo(1).rarity(Rarity.RARE)));
 
     private ModItems() {}
 
