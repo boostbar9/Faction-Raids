@@ -1,9 +1,3 @@
-# 4.21.3 beta
-
-- Raiders now reliably climb the temporary ladders they build against walls. Previously the goal frequently failed to attach because ground pathfinding cannot end a path on the ladder's air block, so raiders would stall a few blocks from the ladder. The goal now paths to the solid stand-on square adjacent to the ladder base and only ascends after touching a ladder anywhere in the column, not just the exact block coordinates.
-- Widen the touching gate on the way up so slightly off-grid raiders keep climbing instead of dropping back to the ground.
-- No changes to placement rules, ladder counts, save data or dependencies.
-
 # 4.21.2 beta
 
 - Fix the in-game configuration editor saving list settings as one string, which could reject the change or corrupt the setting type. String lists now use a readable comma-separated editor; blank input produces an empty list and the prior bracketed display remains accepted during upgrades.
