@@ -525,6 +525,16 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 : Math.min(layout.cardHeight() - 12, 88);
     }
 
+    private String territoryCompactSummary(int index) {
+        return switch (index) {
+            case 0 -> "Structure damage -25%";
+            case 1 -> "Earlier raid warning";
+            case 2 -> "Bank interest +50%";
+            case 3 -> "Recruits +2 hearts";
+            default -> "";
+        };
+    }
+
     @Override
     protected void renderLabels(GuiGraphics g, int x, int y) {}
 
@@ -904,7 +914,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             if (!layout.compact()) {
                 drawWrapped(g, desc, cx + 10, cy + 28, cellW - 20, CommandPalette.TEXT);
             } else {
-                text(g, desc, cx + 10, cy + 28, cellW - 20, CommandPalette.TEXT_MUTED);
+                text(g, territoryCompactSummary(i), cx + 10, cy + 28, cellW - 20, CommandPalette.TEXT_MUTED);
             }
 
             // Price / status line just above the purchase button.
