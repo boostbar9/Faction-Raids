@@ -14,6 +14,15 @@ final class ConfigTextCodec {
         return String.valueOf(value);
     }
 
+    static int editorLimit(Object template, String formatted) {
+        if (template instanceof List<?>) {
+            // Never truncate an existing allowlist when EditBox loads it;
+            // retain useful headroom for adding another identifier as well.
+            return Math.max(512, formatted.length() + 128);
+        }
+        return Math.max(64, formatted.length());
+    }
+
     static Object parse(String text, Object template) {
         try {
             if (template instanceof Integer) return Integer.parseInt(text.trim());

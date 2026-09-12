@@ -31,6 +31,16 @@ class ConfigTextCodecTest {
         assertEquals(List.of(), ConfigTextCodec.parse("[]", List.of("BALLISTA")));
     }
 
+    @Test void editorLimitCannotTruncateAnExistingLargeList() {
+        List<String> entries = java.util.stream.IntStream.range(0, 80)
+                .mapToObj(i -> "examplemod:entity_" + i)
+                .toList();
+        String formatted = ConfigTextCodec.format(entries);
+        assertTrue(formatted.length() > 512);
+        assertTrue(ConfigTextCodec.editorLimit(entries, formatted) > formatted.length());
+        assertEquals(entries, ConfigTextCodec.parse(formatted, entries));
+    }
+
     @Test void existingScalarParsingBehaviorIsPreserved() {
         assertEquals(42, ConfigTextCodec.parse(" 42 ", 0));
         assertEquals(2.5D, ConfigTextCodec.parse("2.5", 0D));

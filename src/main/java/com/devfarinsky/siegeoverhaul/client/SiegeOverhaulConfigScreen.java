@@ -302,15 +302,14 @@ public final class SiegeOverhaulConfigScreen extends Screen {
         TextRow(net.minecraft.client.gui.Font font, Entry entry, int x, int y, int w, int h) {
             super(entry, x, y, w, h);
             this.box = new EditBox(font, x + 1, y + 2, w - 2, h - 4, Component.literal(entry.path));
+            String formatted = ConfigTextCodec.format(entry.pending);
+            this.box.setMaxLength(ConfigTextCodec.editorLimit(entry.value, formatted));
             if (entry.value instanceof List<?>) {
-                this.box.setMaxLength(512);
                 this.box.setHint(Component.literal("comma-separated; blank = none"));
-            } else {
-                this.box.setMaxLength(64);
             }
             // Raise the limit before loading the value: EditBox otherwise
             // truncates long existing lists to its vanilla default length.
-            this.box.setValue(ConfigTextCodec.format(entry.pending));
+            this.box.setValue(formatted);
             this.box.setResponder(v -> {
                 Object parsed = ConfigTextCodec.parse(v, entry.value);
                 if (parsed != null) entry.pending = parsed;
