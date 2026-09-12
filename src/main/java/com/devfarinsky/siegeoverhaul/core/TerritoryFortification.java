@@ -211,9 +211,18 @@ public final class TerritoryFortification {
                 throw new IllegalStateException("Cannot register buildarea entity");
             }
 
-            // Hand the job to the builder under the player's UUID. Workers 2
-            // finds the player's own storagearea via matching ownership.
-            WorkersBridge.enableNative(builder, owner, false);
+            // Report the exact material requirement to the player before we
+            // charge, so an empty or wrong-material storage area produces an
+            // actionable message instead of a silent stall.
+            java.util.List<net.minecraft.world.item.ItemStack> required =
+                    WorkersBridge.materials(build);
+            int totalRequired = 0;
+            for (net.minecraft.world.item.ItemStack s : required) totalRequired += s.getCount();
+
+            // Hand the job to the builder under the player's UUID using the
+            // player-safe path (does NOT install the raider night-shift goal
+            // and does NOT overwrite the builder's inventory).
+            WorkersBridge.enablePlayerJob(builder, owner);
 
             // Charge only after every mutating step succeeded.
             if (!player.isCreative() && !PaymentSource.consume(player, PRICE)) {
@@ -222,7 +231,8 @@ public final class TerritoryFortification {
 
             player.sendSystemMessage(Component.literal(
                     "Fortify Perimeter commissioned: " + blocks.size() + " " + mat.label()
-                            + " blocks queued. The builder will pull from your storage area."));
+                            + " blocks queued. Put " + totalRequired + " x " + mat.label()
+                            + " in your Workers 2 storage area and the builder starts work."));
             FactionLogger.LOG.info("[SiegeOverhaul] Fortify Perimeter: {} blocks, material {}, team {}",
                     blocks.size(), mat.blockId(), coreKey);
             saved.setDirty();
