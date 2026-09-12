@@ -3269,9 +3269,9 @@ public final class RaidEvents {
         if (orphanedPlayerBlocks > 0 && RaidConfig.ENABLE_EFFORT_BONUS.get()) {
             // Log-only; no chat spam. Players noticed player-owned blocks were
             // preserved because their build is still standing.
-            System.out.println("[SiegeOverhaul] Camp cleanup preserved " + orphanedPlayerBlocks +
-                    " player-replaced position(s) for team " + state.teamKey +
-                    " (restored terrain at " + restoredTerrain + " positions).");
+            FactionLogger.LOG.info(
+                    "[{}] Camp cleanup preserved {} player-replaced position(s) for team {} (restored terrain at {} positions).",
+                    SiegeOverhaul.MOD_ID, orphanedPlayerBlocks, state.teamKey, restoredTerrain);
         }
     }
 
