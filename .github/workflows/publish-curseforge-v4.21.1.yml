@@ -1,0 +1,162 @@
+name: Publish tested 4.21.1 beta to CurseForge
+
+on:
+  push:
+    branches: [publish/curseforge-v4.21.1]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v4.21.1
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify successful merged-main build and identical PR tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          import json, os, urllib.request
+
+          def get(path):
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={
+                      'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                      'Accept': 'application/vnd.github+json',
+                  },
+              )
+              with urllib.request.urlopen(request) as response:
+                  return json.load(response)
+
+          source_sha = 'f074aaeeb8ebf3e9e25ceae51f62cb716457fb72'
+          source_tree = 'e870d0ebd68649eacc972be8b39f7a920501d577'
+          pr_head_sha = 'eb5bec93fa62d98a9a8af456ef948a85f2aef5e8'
+
+          run = get('actions/runs/34677154468')
+          assert run['status'] == 'completed' and run['conclusion'] == 'success'
+          assert run['event'] == 'push' and run['head_branch'] == 'main'
+          assert run['head_sha'] == source_sha
+
+          pr = get('pulls/107')
+          assert pr['merged'] and pr['merge_commit_sha'] == source_sha
+          assert pr['head']['sha'] == pr_head_sha
+
+          for sha in (run['head_sha'], pr['merge_commit_sha'], pr_head_sha):
+              assert get('git/commits/' + sha)['tree']['sha'] == source_tree
+          CHECK
+
+      - name: Download exact tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 34677154468
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Download regression results
+        uses: actions/download-artifact@v4
+        with:
+          name: regression-test-results
+          run-id: 34677154468
+          github-token: ${{ github.token }}
+          path: regression
+
+      - name: Verify tested bytes, metadata, dependencies, and regressions
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          import xml.etree.ElementTree as ET
+
+          jar = Path('dist/siegeoverhaul-4.21.1.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == 'af4f6962d7002b8972769ac2ca3872587585a8b497450ecad4b1aef19fdd61bc'
+
+          with zipfile.ZipFile(jar) as archive:
+              data = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+          mod = data['mods'][0]
+          assert mod['modId'] == 'siegeoverhaul' and mod['version'] == '4.21.1'
+          assert mod['displayTest'] == 'MATCH_VERSION'
+
+          dependencies = {entry['modId']: entry for entry in data['dependencies']['siegeoverhaul']}
+          for mod_id in ('recruits', 'workers', 'smallships', 'siegeweapons'):
+              assert dependencies[mod_id]['mandatory'] and dependencies[mod_id]['side'] == 'BOTH', mod_id
+          assert dependencies['recruits']['versionRange'] == '[1.15.2,)'
+          assert dependencies['workers']['versionRange'] == '[2.0.3,)'
+          for mod_id in ('corpse', 'magistuarmory', 'musketmod'):
+              assert not dependencies[mod_id]['mandatory'], mod_id
+
+          totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0)
+          reports = list(Path('regression').rglob('TEST-*.xml'))
+          assert reports, 'No regression reports found'
+          for report in reports:
+              result = ET.parse(report).getroot()
+              for key in totals:
+                  totals[key] += int(result.get(key, 0))
+          assert totals == {'tests': 234, 'failures': 0, 'errors': 0, 'skipped': 0}, totals
+          print('Verified', jar.name, digest, totals)
+          CHECK
+
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.21.1.jar
+          name: The Siege Overhaul v4.21.1 beta - Dynamic Core HUD Polish
+          version: v4.21.1
+          version-type: beta
+          changelog: |
+            ## 4.21.1 beta
+
+            - The Siege Core HUD now sizes itself from the actual Minecraft-scaled viewport. Wide, tall, short, and narrow aspect ratios select detailed or compact cards from usable space, while unusually small windows uniformly scale the complete HUD and its mouse hitboxes.
+            - Larger resolutions gain more room, tabs and cards use adaptive spacing, genuinely clipped labels ellipsize cleanly, and the compact Bank view uses a readable summary with full hover details.
+            - Army offers show affordability at a glance and hover text explains exact emerald shortfalls. Creative players can use siege deployment controls without carrying emeralds.
+            - Siege kits now require the top face of the center ground block, remain in the inventory after every failed attempt, and provide restrained sound and particle feedback on purchase and deployment.
+            - Save format, prices, faction-bank payment order, dependencies, and existing worlds remain unchanged.
+
+            Minecraft 1.20.1 Forge, Java 17. REQUIRED on server and every client: Villager Recruits 1.15.2+, Villager Workers 2 2.0.3+, Small Ships and Siege Weapons. Corpse, Epic Knights, and ewewukek's Musket Mod remain optional.
+
+            Validation: merged-main Java 17 Forge build, 234 passing regression tests, zero failures/errors/skipped. Exact tested reobfuscated JAR from Build #290 (run 34677154468), SHA-256 af4f6962d7002b8972769ac2ca3872587585a8b497450ecad4b1aef19fdd61bc. No interactive Minecraft playtesting or in-game performance benchmark. Beta.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+          fail-mode: fail
+
+      - name: Record accepted upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os
+
+          result = {
+              'version': '4.21.1',
+              'file_id': os.environ['RELEASE_FILE_ID'],
+              'url': os.environ['RELEASE_URL'],
+              'source': 'f074aaeeb8ebf3e9e25ceae51f62cb716457fb72',
+              'build_run': 34677154468,
+              'sha256': 'af4f6962d7002b8972769ac2ca3872587585a8b497450ecad4b1aef19fdd61bc',
+          }
+          assert result['file_id'] and result['url'], 'CurseForge did not return an upload receipt'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Accepted upload (moderation/public availability separate): ' + json.dumps(result) + '\n')
+          RECEIPT
