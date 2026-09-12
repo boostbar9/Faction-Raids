@@ -1,6 +1,7 @@
 package com.devfarinsky.siegeoverhaul.core;
 
 import com.devfarinsky.siegeoverhaul.FactionLogger;
+import com.devfarinsky.siegeoverhaul.compat.EngineerSpawnCompatibility;
 import com.devfarinsky.siegeoverhaul.items.ModItems;
 import com.devfarinsky.siegeoverhaul.siege.SiegeEngineType;
 import com.devfarinsky.siegeoverhaul.siege.SiegeIntegration;
@@ -14,7 +15,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
@@ -169,8 +169,7 @@ public final class SiegeYard {
             Entity entity = et.create(level);
             if (!(entity instanceof Mob mob)) return Optional.empty();
             mob.moveTo(pos.x, pos.y, pos.z, vehicle.getYRot(), 0F);
-            mob.finalizeSpawn(level, level.getCurrentDifficultyAt(mob.blockPosition()),
-                    MobSpawnType.EVENT, null, null);
+            EngineerSpawnCompatibility.initialize(level, mob);
             // Cost setter so the hire event doesn't refuse.
             try { mob.getClass().getMethod("setCost", int.class).invoke(mob, 0); }
             catch (ReflectiveOperationException ignored) {}
