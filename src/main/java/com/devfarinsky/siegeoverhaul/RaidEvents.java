@@ -3489,7 +3489,7 @@ public final class RaidEvents {
         RaidSavedData.Anchor anchor = data.anchors.get(state.teamKey);
         boolean respectForeignClaims = RaidConfig.RESPECT_FOREIGN_CLAIMS.get()
                 && com.devfarinsky.siegeoverhaul.compat.ClaimBridge.anyProviderAvailable();
-        for (BlockPos candidate : BlockPos.betweenClosed(origin.offset(-4, -1, -4), origin.offset(4, 2, 4))) {
+        for (BlockPos candidate : BlockPos.betweenClosed(origin.offset(-3, -1, -3), origin.offset(3, 1, 3))) {
             if (candidate.distSqr(stronghold) > maximumDistanceSq ||
                     state.campBlocks.containsKey(candidate.asLong())) continue;
             if(!level.hasChunkAt(candidate))continue;
@@ -3804,7 +3804,7 @@ public final class RaidEvents {
                 }
             } else if (!acquired && mob.getNavigation().isDone()) {
                 Vec3 target = null;
-                if (mob instanceof PathfinderMob pmob) {
+                if (stuck != null && stuck.escalationLevel >= 1 && mob instanceof PathfinderMob pmob) {
                     target = com.devfarinsky.siegeoverhaul.raid.FlankRoutes.find(level, pmob, objective);
                     if (target == null && RaidConfig.CONE_FALLBACK_ENABLED.get()) {
                         target = coneFallbackTarget(pmob, objective);

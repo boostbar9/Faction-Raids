@@ -52,6 +52,12 @@ public final class TerritoryBuffs {
 
     private TerritoryBuffs() {}
 
+    static {
+        if (LABELS.length != COUNT || DESCRIPTIONS.length != COUNT || COMPACT_SUMMARIES.length != COUNT) {
+            throw new IllegalStateException("TerritoryBuffs metadata arrays are out of sync.");
+        }
+    }
+
     public static int mask(CompoundTag core) {
         return core == null ? 0 : core.getInt(TAG);
     }
