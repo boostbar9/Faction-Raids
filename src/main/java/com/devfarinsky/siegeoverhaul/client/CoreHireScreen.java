@@ -525,16 +525,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 : Math.min(layout.cardHeight() - 12, 88);
     }
 
-    private String territoryCompactSummary(int index) {
-        return switch (index) {
-            case 0 -> "Structure damage -25%";
-            case 1 -> "Earlier raid warning";
-            case 2 -> "Bank interest +50%";
-            case 3 -> "Recruits +2 hearts";
-            default -> "";
-        };
-    }
-
     @Override
     protected void renderLabels(GuiGraphics g, int x, int y) {}
 
@@ -642,17 +632,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
     }
 
-    /**
-     * Textured hanging crest banner rendered from the HUD atlas. The banner
-     * gently sways with a sine-wave x-offset driven by the render tick so it
-     * feels alive without ever leaving the header rail.
-     */
+    /** Textured hanging crest banner rendered from the HUD atlas. */
     private void drawCrestBanner(GuiGraphics g, int x, int y) {
-        long tick = minecraft != null ? minecraft.level != null
-                ? minecraft.level.getGameTime() : 0 : 0;
-        float phase = (tick + (minecraft != null ? minecraft.getFrameTime() : 0)) * 0.04f;
-        int sway = (int) Math.round(Math.sin(phase) * 1.4);
-        HudAtlas.blit(g, HudAtlas.CREST_BANNER, x + sway, y - 4);
+        HudAtlas.blit(g, HudAtlas.CREST_BANNER, x, y - 4);
     }
 
     /**
@@ -914,7 +896,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             if (!layout.compact()) {
                 drawWrapped(g, desc, cx + 10, cy + 28, cellW - 20, CommandPalette.TEXT);
             } else {
-                text(g, territoryCompactSummary(i), cx + 10, cy + 28, cellW - 20, CommandPalette.TEXT_MUTED);
+                text(g, TerritoryBuffs.compactSummary(i), cx + 10, cy + 28, cellW - 20, CommandPalette.TEXT_MUTED);
             }
 
             // Price / status line just above the purchase button.

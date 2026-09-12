@@ -1573,6 +1573,17 @@ public final class RaidEvents {
         return best;
     }
 
+    private static boolean isValidBreacherStandPos(ServerLevel level, BlockPos candidate, Mob mob) {
+        if (!level.getBlockState(candidate).isAir()) return false;
+        if (!level.getBlockState(candidate.above()).isAir()) return false;
+        BlockPos below = candidate.below();
+        BlockState ground = level.getBlockState(below);
+        if (!ground.isFaceSturdy(level, below, Direction.UP)) return false;
+        AABB bounds = mob.getType().getDimensions().makeBoundingBox(
+                candidate.getX() + 0.5D, candidate.getY(), candidate.getZ() + 0.5D);
+        return level.noCollision(mob, bounds);
+    }
+
     private static boolean beginRaid(MinecraftServer server, RaidSavedData data, RaidSavedData.Anchor anchor,
                                      RaidSavedData.DefensePoint point, boolean rewardEligible) {
         if (data.raids.size() >= RaidConfig.MAX_CONCURRENT_RAIDS.get()) return false;
@@ -3449,10 +3460,7 @@ public final class RaidEvents {
                 target.north(), target.south(), target.east(), target.west()
         };
         for (BlockPos candidate : neighbors) {
-            // Feet air, head air, block below solid enough to stand on.
-            if (!level.getBlockState(candidate).isAir()) continue;
-            if (!level.getBlockState(candidate.above()).isAir()) continue;
-            if (!level.getBlockState(candidate.below()).isSolid()) continue;
+            if (!isValidBreacherStandPos(level, candidate, leader)) continue;
             double distSq = leader.distanceToSqr(
                     candidate.getX() + 0.5, candidate.getY(), candidate.getZ() + 0.5);
             if (distSq < bestDistSq) {
@@ -3481,7 +3489,7 @@ public final class RaidEvents {
         RaidSavedData.Anchor anchor = data.anchors.get(state.teamKey);
         boolean respectForeignClaims = RaidConfig.RESPECT_FOREIGN_CLAIMS.get()
                 && com.devfarinsky.siegeoverhaul.compat.ClaimBridge.anyProviderAvailable();
-        for (BlockPos candidate : BlockPos.betweenClosed(origin.offset(-3, 0, -3), origin.offset(3, 1, 3))) {
+        for (BlockPos candidate : BlockPos.betweenClosed(origin.offset(-4, -1, -4), origin.offset(4, 2, 4))) {
             if (candidate.distSqr(stronghold) > maximumDistanceSq ||
                     state.campBlocks.containsKey(candidate.asLong())) continue;
             if(!level.hasChunkAt(candidate))continue;
@@ -3498,11 +3506,15 @@ public final class RaidEvents {
                     && com.devfarinsky.siegeoverhaul.compat.ClaimBridge.isForeignClaim(level, candidate, anchor)) {
                 continue;
             }
+            BlockPos standPos = pickBreacherStandPos(level, candidate, mob);
+            if (standPos == null) continue;
             double mobDistance = candidate.distSqr(origin);
+            double standDistance = standPos.distSqr(origin);
             double objectiveDistance = Vec3.atCenterOf(candidate).distanceToSqr(objective);
-            double score = mobDistance * 4.0D + objectiveDistance * 0.02D
+            double score = mobDistance * 2.5D + standDistance * 1.5D + objectiveDistance * 0.03D
                     + (candidate.getY()==origin.getY()+1 && level.getBlockState(candidate.below()).isAir()?-20:0)
-                    + (state.blockBreachProgress.containsKey(candidate.asLong())?-8:0);
+                    + (state.blockBreachProgress.containsKey(candidate.asLong())?-8:0)
+                    + (candidate.equals(state.currentBreachBlock) ? -12 : 0);
             if (score < bestScore) {
                 best = candidate.immutable();
                 bestScore = score;
@@ -3791,7 +3803,15 @@ public final class RaidEvents {
                     mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
                 }
             } else if (!acquired && mob.getNavigation().isDone()) {
-                mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
+                Vec3 target = null;
+                if (mob instanceof PathfinderMob pmob) {
+                    target = com.devfarinsky.siegeoverhaul.raid.FlankRoutes.find(level, pmob, objective);
+                    if (target == null && RaidConfig.CONE_FALLBACK_ENABLED.get()) {
+                        target = coneFallbackTarget(pmob, objective);
+                    }
+                }
+                if (target != null) mob.getNavigation().moveTo(target.x, target.y, target.z, speed);
+                else mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
             }
 
             // v2.23.0 stuck detection. We only care about raiders that are

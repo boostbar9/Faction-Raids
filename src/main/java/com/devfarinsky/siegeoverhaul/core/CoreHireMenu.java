@@ -160,8 +160,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
 
     private static void maybeSendCoreHudIntro(ServerPlayer player) {
         CompoundTag flags = player.getPersistentData().getCompound(Player.PERSISTED_NBT_TAG);
-        if (flags.getBoolean(CORE_HUD_INTRO_SEEN)) return;
-        flags.putBoolean(CORE_HUD_INTRO_SEEN, true);
+        if (!markCoreHudIntroSeen(flags)) return;
         player.getPersistentData().put(Player.PERSISTED_NBT_TAG, flags);
 
         player.sendSystemMessage(Component.literal("Command Center quick start:")
@@ -172,5 +171,11 @@ public final class CoreHireMenu extends AbstractContainerMenu {
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal("/siegeoverhaul help").withStyle(ChatFormatting.AQUA))
                 .append(Component.literal(" or open the Intel tab.").withStyle(ChatFormatting.GRAY)));
+    }
+
+    static boolean markCoreHudIntroSeen(CompoundTag flags) {
+        if (flags == null || flags.getBoolean(CORE_HUD_INTRO_SEEN)) return false;
+        flags.putBoolean(CORE_HUD_INTRO_SEEN, true);
+        return true;
     }
 }
