@@ -136,6 +136,26 @@ public final class WorkersBridge {
         return area;
     }
 
+    /**
+     * Read the PlayerUUID field from a Workers 2 area entity (buildarea,
+     * storagearea, etc). Uses reflection and swallows failures so callers can
+     * treat the result as optional.
+     *
+     * @return the owner UUID, or null when the field or the entity is missing
+     */
+    public static java.util.UUID readOwner(Entity area) {
+        if (area == null) return null;
+        try {
+            Object result = area.getClass().getMethod("getPlayerUUID").invoke(area);
+            if (result instanceof java.util.UUID uuid) return uuid;
+            if (result instanceof java.util.Optional<?> opt && opt.isPresent()
+                    && opt.get() instanceof java.util.UUID uuid) return uuid;
+        } catch (ReflectiveOperationException ex) {
+            warn("readOwner", ex);
+        }
+        return null;
+    }
+
     public static void startBlueprint(Entity area, net.minecraft.nbt.CompoundTag blueprint) throws ReflectiveOperationException {
         call(area, "setStructureNBT", net.minecraft.nbt.CompoundTag.class, blueprint);
         call(area, "setFreeArea", boolean.class, false);

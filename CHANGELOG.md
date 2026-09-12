@@ -1,3 +1,10 @@
+# 4.23.0 beta
+
+- Fortify Perimeter now reuses the storage area you already built. Instead of dropping a new supply barrel next to the builder, the job discovers a Workers 2 storagearea inside your claim that belongs to you and hands it to the builder as the source of blocks. If no owned storagearea sits within 64 blocks of the builder, the commission is refused with instructions on where to place one.
+- The buildarea for the wall is now created under your player UUID as well, so ownership matches your existing Workers 2 setup and the builder can access the storagearea without extra configuration.
+- Removed the auto-placed barrel and its cleanup path. Nothing new is placed in the world when you commission Fortify Perimeter beyond the wall blocks themselves.
+- Siege crew kits give a clear reason when a deployment is rejected instead of the generic "blocked" message. You now see the exact coordinate and block name of the cell that fails, which cell has fluid or missing headroom, and which of the anchor points has non-solid ground. Sturdy ground is only checked at the center and four corners now, so replaceable ground cover like grass and snow no longer forces a false rejection.
+
 # 4.22.1 beta
 
 - Complete the Fortify Perimeter feature shipped in 4.22.0. The v4.22.0 tag was published with the new class file but without the Territory tab buttons, the menu action ids, or the version bump, so the feature was dead code. This release wires the three material buttons at the bottom of the Territory tab (Stone Bricks, Cobblestone, Oak Planks), routes menu ids 70 to 72 into TerritoryFortification.commission, and bumps the mod version.
