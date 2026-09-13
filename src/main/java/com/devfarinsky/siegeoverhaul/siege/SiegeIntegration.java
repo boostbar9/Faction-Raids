@@ -81,6 +81,34 @@ public final class SiegeIntegration {
     }
 
     /**
+     * Ground-clearance dimensions for a siege engine. Both fields are in
+     * block units and always at least 1. The horizontal radius is the number
+     * of columns to inspect on each side of the deployment center, so a
+     * catapult (4-wide) reports radius 2, and a ballista (2-wide) reports
+     * radius 1. Block height is the number of vertical blocks the vehicle
+     * needs above the deployment surface.
+     */
+    public record Footprint(int horizontalRadius, int blockHeight) {}
+
+    /**
+     * Read the actual {@link net.minecraft.world.entity.EntityDimensions} of
+     * the registered siege vehicle and translate it into a block-space
+     * clearance footprint. Falls back to a 3x3x3 default when the entity
+     * type is unavailable (Siege Weapons not installed, or a non-vehicle
+     * type like SAPPER_CHARGE).
+     */
+    public static Footprint footprintOf(SiegeEngineType type) {
+        Optional<EntityType<?>> et = siegeEntityType(type);
+        if (et.isEmpty()) return new Footprint(1, 3);
+        var dims = et.get().getDimensions();
+        // Half-width -> full-block radius on each side. Round up so a
+        // 2.5-wide vehicle still gets a solid 3-column pad on each axis.
+        int radius = (int) Math.ceil(dims.width / 2.0F);
+        int height = (int) Math.ceil(dims.height);
+        return new Footprint(Math.max(1, radius), Math.max(1, height));
+    }
+
+    /**
      * Spawn a siege-weapons vehicle at {@code pos} facing the given yaw.
      * The entity is server-side ready but has no passenger.
      * @return the spawned entity, or empty on failure.

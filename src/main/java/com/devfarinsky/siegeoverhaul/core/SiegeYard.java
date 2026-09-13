@@ -106,13 +106,22 @@ public final class SiegeYard {
         }
 
         ServerLevel level = player.serverLevel();
-        String flatIssue = describeFlat3x3(level, deployPos);
+
+        // Size the ground-clearance check to the actual vehicle. The catapult
+        // is 4x4 blocks so a fixed 3x3 clearance was too small: the vehicle's
+        // corners fell outside the checked columns, level.noCollision saw a
+        // block inside the bbox, and the deploy failed with the misleading
+        // "Siege Weapons rejected the deployment spot" message. Ballista is
+        // 2x2 and fits inside 3x3 already. We ceil the width so a 2.5-wide
+        // vehicle still gets a full 3-column pad on each side.
+        SiegeEngineType type = TYPES[index];
+        SiegeIntegration.Footprint fp = SiegeIntegration.footprintOf(type);
+        String flatIssue = describeClearance(level, deployPos, fp.horizontalRadius(), fp.blockHeight());
         if (flatIssue != null) {
             player.sendSystemMessage(Component.literal("Deployment blocked: " + flatIssue));
             return false;
         }
 
-        SiegeEngineType type = TYPES[index];
         Vec3 spawn = Vec3.atCenterOf(deployPos);
         float yaw = player.getYRot();
         Optional<Entity> vehicleOpt = SiegeIntegration.spawnSiegeVehicle(level, type, spawn, yaw);
@@ -141,6 +150,50 @@ public final class SiegeYard {
 
     static boolean isFlat3x3(ServerLevel level, BlockPos center) {
         return describeFlat3x3(level, center) == null;
+    }
+
+    /**
+     * Footprint-aware clearance check.
+     *
+     * <p>Verifies that the square from {@code center-radius} to
+     * {@code center+radius} on each horizontal axis is free of solid blocks
+     * and fluids for {@code height} vertical blocks starting at
+     * {@code center}, and that the ring of ground blocks immediately below
+     * that square is sturdy. This matches the actual footprint the spawned
+     * vehicle will occupy, so vanilla noCollision won't reject the spawn
+     * because of a block outside the previously fixed 3x3 window.</p>
+     *
+     * @return a human-readable reason the site is unsuitable, or null when
+     *         it is fine.
+     */
+    static String describeClearance(ServerLevel level, BlockPos center, int radius, int height) {
+        int h = Math.max(1, height);
+        int r = Math.max(1, radius);
+        for (int dx = -r; dx <= r; dx++) for (int dz = -r; dz <= r; dz++) {
+            BlockPos p = center.offset(dx, 0, dz);
+            if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)) {
+                return "Deployment target is outside the loaded world.";
+            }
+            for (int dy = 0; dy < h; dy++) {
+                BlockPos q = p.above(dy);
+                if (!level.getFluidState(q).isEmpty()) {
+                    return "There is fluid at " + coord(q) + ".";
+                }
+                BlockState state = level.getBlockState(q);
+                if (!state.isAir() && !state.canBeReplaced()) {
+                    return "A block is in the way at " + coord(q) + " (" + blockName(state) + "). Clear a "
+                            + (2 * r + 1) + "x" + (2 * r + 1) + " space " + h + " blocks tall.";
+                }
+            }
+            // The whole footprint needs sturdy ground: a catapult that
+            // straddles a 1-block hole spawns fine but immediately rolls
+            // into it, so we require every column below to be solid.
+            BlockState below = level.getBlockState(p.below());
+            if (!below.isFaceSturdy(level, p.below(), Direction.UP)) {
+                return "The ground under " + coord(p) + " is not solid. Fill it with any full block.";
+            }
+        }
+        return null;
     }
 
     /**
