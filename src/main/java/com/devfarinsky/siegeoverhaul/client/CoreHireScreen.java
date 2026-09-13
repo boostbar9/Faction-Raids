@@ -216,7 +216,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
         // Fortify Perimeter strip: 3 side-by-side material buttons that
         // commission a Villager Recruits Builder to wall off the territory
-        // in the chosen material. Bank + inventory pay 1200 emeralds per job.
+        // in the chosen material. Bank + inventory pay 900 emeralds per job.
         int stripY = tbGridBottom + 8;
         int stripH = 22;
         int stripW = layout.width() - 20;
