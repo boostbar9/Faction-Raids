@@ -464,19 +464,43 @@ public final class RaidEvents {
         // v4.27.0 combat bounties: pay the treasury for each raider the
         // faction kills. Manual raids are excluded when reward farming is
         // disabled so the config toggle matches wave payouts. Commander pays
-        // a larger lump-sum on top of the per-raider tick.
+        // a larger lump-sum on top of the per-raider tick. v4.27.1 tightens
+        // this with lower defaults and a per-raid bounty cap enforced via
+        // state.campaign so a single mega-raid can't dump thousands of
+        // emeralds into the bank.
         if (state.rewardEligible) {
             CompoundTag core = data.siegeCores.get(victimTeamKey);
             if (core != null) {
                 int raiderBounty = RaidConfig.RAIDER_BOUNTY_EMERALDS.get();
-                if (raiderBounty > 0) FactionBank.deposit(core, raiderBounty);
+                if (raiderBounty > 0) payBountyCapped(core, state, raiderBounty);
                 if (isCommander) {
                     int cmdBounty = RaidConfig.COMMANDER_BOUNTY_EMERALDS.get();
-                    if (cmdBounty > 0) FactionBank.deposit(core, cmdBounty);
+                    if (cmdBounty > 0) payBountyCapped(core, state, cmdBounty);
                 }
             }
         }
         data.setDirty();
+    }
+
+    /**
+     * v4.27.1: pay a bounty into the treasury but honor the per-raid cap
+     * stored on state.campaign so a single mega-raid can't inflate the bank.
+     * A cap of 0 disables the cap. Bookkeeping key is a plain int so it
+     * fits alongside the existing PaidWave / Deposited fields already on
+     * the campaign NBT.
+     */
+    private static void payBountyCapped(CompoundTag core, RaidSavedData.RaidState state, int amount) {
+        int cap = RaidConfig.MAX_BOUNTY_EMERALDS_PER_RAID.get();
+        int already = state.campaign.getInt("BountyPaid");
+        int payable = amount;
+        if (cap > 0) {
+            int remaining = Math.max(0, cap - already);
+            payable = Math.min(payable, remaining);
+        }
+        if (payable <= 0) return;
+        long paid = FactionBank.deposit(core, payable);
+        if (paid > 0) state.campaign.putInt("BountyPaid",
+                (int) Math.min(Integer.MAX_VALUE, (long) already + paid));
     }
 
     /**

@@ -180,6 +180,7 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue RAIDER_BOUNTY_EMERALDS;
     public static final ForgeConfigSpec.IntValue COMMANDER_BOUNTY_EMERALDS;
     public static final ForgeConfigSpec.IntValue SCOUT_BOUNTY_EMERALDS;
+    public static final ForgeConfigSpec.IntValue MAX_BOUNTY_EMERALDS_PER_RAID;
     public static final ForgeConfigSpec.BooleanValue MANUAL_RAIDS_GRANT_REWARDS;
     public static final ForgeConfigSpec.BooleanValue ENABLE_WORKERS_COMPAT;
     public static final ForgeConfigSpec.BooleanValue PROTECT_WORKERS;
@@ -518,12 +519,14 @@ public final class RaidConfig {
                 .defineInRange("victoryEmeraldsPerWave", 4, 0, 64);
         COMMANDER_EMERALD_BONUS = b.comment("Additional guaranteed emeralds when the faction defeats the siege commander.")
                 .defineInRange("commanderEmeraldBonus", 12, 0, 256);
-        RAIDER_BOUNTY_EMERALDS = b.comment("Emeralds deposited into the faction treasury for each raider the faction defeats. Set to 0 to disable raider bounties.")
-                .defineInRange("raiderBountyEmeralds", 1, 0, 64);
+        RAIDER_BOUNTY_EMERALDS = b.comment("Emeralds deposited into the faction treasury for each raider the faction defeats. Default 0 keeps combat rewards from stacking on top of the wave-clear payout. Set to 1 or higher for per-kill bounties.")
+                .defineInRange("raiderBountyEmeralds", 0, 0, 64);
         COMMANDER_BOUNTY_EMERALDS = b.comment("Emeralds deposited into the faction treasury when the siege commander is defeated. Paid in addition to the per-player commanderEmeraldBonus. Set to 0 to disable.")
-                .defineInRange("commanderBountyEmeralds", 24, 0, 512);
+                .defineInRange("commanderBountyEmeralds", 8, 0, 512);
         SCOUT_BOUNTY_EMERALDS = b.comment("Emeralds deposited into the faction treasury for each enemy scout the faction defeats before the raid arrives. Set to 0 to disable scout bounties.")
-                .defineInRange("scoutBountyEmeralds", 4, 0, 128);
+                .defineInRange("scoutBountyEmeralds", 2, 0, 128);
+        MAX_BOUNTY_EMERALDS_PER_RAID = b.comment("Hard cap on the total bounty emeralds (raider + commander + scout combined) a single raid can deposit into the treasury. Wave-clear payouts are unaffected. Set to 0 to remove the cap.")
+                .defineInRange("maxBountyEmeraldsPerRaid", 32, 0, 10_000);
         MANUAL_RAIDS_GRANT_REWARDS = b.comment("Allow raids started manually with /siegeoverhaul start to grant rewards. Disabled by default to prevent reward farming.")
                 .define("manualRaidsGrantRewards", false);
         b.pop();
