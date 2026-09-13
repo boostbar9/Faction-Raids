@@ -134,11 +134,11 @@ public final class SiegeYard {
             return false;
         }
         Entity vehicle = vehicleOpt.get();
-        Optional<Mob> engineerOpt = spawnFriendlyEngineer(player, level, spawn, vehicle, type);
-        if (engineerOpt.isEmpty()) {
+        EngineerSpawn engineerResult = spawnFriendlyEngineer(player, level, spawn, vehicle, type);
+        if (engineerResult.mob == null) {
             vehicle.discard();
             player.sendSystemMessage(Component.literal(
-                    "Could not summon a Siege Engineer. Check that the Recruits mod is fully loaded."));
+                    "Could not summon a Siege Engineer: " + engineerResult.reason));
             return false;
         }
         level.playSound(null, deployPos, SoundEvents.ANVIL_LAND,
@@ -263,23 +263,49 @@ public final class SiegeYard {
      * hire path the CoreHiring class uses so ownership, faction, and unit
      * count all stay consistent with a normal recruit hire.
      */
-    private static Optional<Mob> spawnFriendlyEngineer(ServerPlayer player, ServerLevel level,
+    /** Small result carrier so the caller can surface which step failed. */
+    private static final class EngineerSpawn {
+        final Mob mob;
+        final String reason;
+        EngineerSpawn(Mob mob, String reason) { this.mob = mob; this.reason = reason; }
+        static EngineerSpawn ok(Mob m) { return new EngineerSpawn(m, ""); }
+        static EngineerSpawn fail(String r) { return new EngineerSpawn(null, r); }
+    }
+
+    private static EngineerSpawn spawnFriendlyEngineer(ServerPlayer player, ServerLevel level,
                                                        Vec3 pos, Entity vehicle, SiegeEngineType type) {
         try {
             ResourceLocation id = new ResourceLocation("recruits", "siege_engineer");
-            if (!ForgeRegistries.ENTITY_TYPES.containsKey(id)) return Optional.empty();
+            if (!ForgeRegistries.ENTITY_TYPES.containsKey(id))
+                return EngineerSpawn.fail("Recruits entity type 'siege_engineer' is not registered. Update or reinstall Recruits.");
             EntityType<?> et = ForgeRegistries.ENTITY_TYPES.getValue(id);
-            if (et == null) return Optional.empty();
-            Entity entity = et.create(level);
-            if (!(entity instanceof Mob mob)) return Optional.empty();
+            if (et == null)
+                return EngineerSpawn.fail("Recruits siege_engineer entity type is registered but returned null.");
+            Entity entity;
+            try {
+                entity = et.create(level);
+            } catch (RuntimeException ex) {
+                FactionLogger.LOG.warn("siege_engineer create() threw", ex);
+                return EngineerSpawn.fail("Recruits siege_engineer constructor threw: " + ex.getClass().getSimpleName());
+            }
+            if (entity == null)
+                return EngineerSpawn.fail("Recruits siege_engineer create() returned null.");
+            if (!(entity instanceof Mob mob))
+                return EngineerSpawn.fail("Recruits siege_engineer is not a Mob (class: " + entity.getClass().getSimpleName() + ").");
             mob.moveTo(pos.x, pos.y, pos.z, vehicle.getYRot(), 0F);
-            mob.finalizeSpawn(level, level.getCurrentDifficultyAt(mob.blockPosition()),
-                    MobSpawnType.EVENT, null, null);
+            try {
+                mob.finalizeSpawn(level, level.getCurrentDifficultyAt(mob.blockPosition()),
+                        MobSpawnType.EVENT, null, null);
+            } catch (RuntimeException ex) {
+                FactionLogger.LOG.warn("siege_engineer finalizeSpawn threw", ex);
+                return EngineerSpawn.fail("finalizeSpawn threw: " + ex.getClass().getSimpleName() + " " + String.valueOf(ex.getMessage()));
+            }
             // Cost setter so the hire event doesn't refuse.
             try { mob.getClass().getMethod("setCost", int.class).invoke(mob, 0); }
             catch (ReflectiveOperationException ignored) {}
             mob.setPersistenceRequired();
-            if (!level.addFreshEntity(mob)) return Optional.empty();
+            if (!level.addFreshEntity(mob))
+                return EngineerSpawn.fail("Level rejected addFreshEntity for siege_engineer (spot may be blocked).");
             // Hand ownership directly rather than going through Recruits' hire()
             // path. hire() enforces the player's global recruit cap and returns
             // false with an "INFO_RECRUITING_MAX" message when the player is at
@@ -308,7 +334,8 @@ public final class SiegeYard {
                 } catch (RuntimeException ignored) {}
             } catch (ReflectiveOperationException e) {
                 mob.discard();
-                return Optional.empty();
+                FactionLogger.LOG.warn("siege_engineer ownership reflection failed", e);
+                return EngineerSpawn.fail("Ownership setters missing on Recruits siege_engineer (" + e.getClass().getSimpleName() + "). Recruits API may have changed.");
             }
             // Give the engineer their ammunition so they actually fire.
             try {
@@ -331,10 +358,10 @@ public final class SiegeYard {
                 // is a soft degradation rather than a failure.
                 FactionLogger.LOG.debug("Friendly siege engineer could not mount natively; standing by beside the vehicle");
             }
-            return Optional.of(mob);
+            return EngineerSpawn.ok(mob);
         } catch (RuntimeException ex) {
             FactionLogger.LOG.warn("Friendly siege crew spawn failed", ex);
-            return Optional.empty();
+            return EngineerSpawn.fail("Unexpected " + ex.getClass().getSimpleName() + " during spawn. See latest.log for stack trace.");
         }
     }
 }
