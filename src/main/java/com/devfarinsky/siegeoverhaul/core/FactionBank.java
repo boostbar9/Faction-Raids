@@ -77,6 +77,19 @@ public final class FactionBank {
         var anchor = RaidSavedData.get(player.server).anchors.get(SiegeCore.key(player));
         return RecruitsBridge.factionLeader(player).orElse(anchor == null ? RaidSavedData.UNKNOWN_OWNER : anchor.ownerUuid()).equals(player.getUUID());
     }
+    /**
+     * v4.27.0 bounty helper: credit the treasury and log the delta on the
+     * bank ledger in one call, so combat rewards show up on the Bank tab
+     * graph the same way wave payouts do. Returns the accepted amount so
+     * callers can decide whether to surface a chat notice.
+     */
+    public static long deposit(CompoundTag core, int amount) {
+        if (core == null || amount <= 0) return 0;
+        long paid = credit(core, amount);
+        if (paid > 0) record(core, (int) Math.min(Integer.MAX_VALUE, paid));
+        return paid;
+    }
+
     /** Positive amount deposits, negative withdraws; requests are capped at 64 and fill partially when inventory or balance is limited. */
     public static boolean transact(ServerPlayer player, int amount) {
         String key = SiegeCore.key(player); var data = RaidSavedData.get(player.server);

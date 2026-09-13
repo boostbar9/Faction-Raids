@@ -456,9 +456,25 @@ public final class RaidEvents {
         if (state == null || !state.raiders.remove(event.getEntity().getUUID())) return;
         state.missingTicks.remove(event.getEntity().getUUID());
         state.totalDefeated++;
-        if (event.getEntity().getUUID().equals(state.commanderUuid) && !state.commanderDefeated) {
+        boolean isCommander = event.getEntity().getUUID().equals(state.commanderUuid) && !state.commanderDefeated;
+        if (isCommander) {
             RaidSavedData.Anchor anchor = data.anchors.get(victimTeamKey);
             if (anchor != null) markCommanderDefeated(level.getServer(), anchor, state);
+        }
+        // v4.27.0 combat bounties: pay the treasury for each raider the
+        // faction kills. Manual raids are excluded when reward farming is
+        // disabled so the config toggle matches wave payouts. Commander pays
+        // a larger lump-sum on top of the per-raider tick.
+        if (state.rewardEligible) {
+            CompoundTag core = data.siegeCores.get(victimTeamKey);
+            if (core != null) {
+                int raiderBounty = RaidConfig.RAIDER_BOUNTY_EMERALDS.get();
+                if (raiderBounty > 0) FactionBank.deposit(core, raiderBounty);
+                if (isCommander) {
+                    int cmdBounty = RaidConfig.COMMANDER_BOUNTY_EMERALDS.get();
+                    if (cmdBounty > 0) FactionBank.deposit(core, cmdBounty);
+                }
+            }
         }
         data.setDirty();
     }

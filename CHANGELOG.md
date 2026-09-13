@@ -1,3 +1,9 @@
+# 4.27.0 beta
+
+- Combat now fills the faction treasury directly. Every raider your faction defeats deposits 1 emerald into the bank, the siege commander deposits 24 on top of the existing per-player bonus, and every enemy scout your faction kills before the raid deposits 4. These are on top of the guaranteed wave payouts, and they show up on the Bank tab activity graph the same way wave payouts do so you can watch the treasury fill in real time during a big fight.
+- All three bounty amounts are individually configurable and can be set to 0 to disable. Manual raids started with /siegeoverhaul start still respect the manualRaidsGrantRewards toggle, so bounty farming is off by default.
+- Rough scale at defaults: a 30-raider wave with a commander is worth about 54 emeralds in bounties on top of the normal wave reward, and a scouted raid adds another 4 to 8 for cleaning up scouts.
+
 # 4.26.0 beta
 
 - Fortify Perimeter now fills gaps under the wall. If a wall column runs over a pit, ravine, or ledge, the wall extends downward through the air until it hits solid ground (up to 8 blocks). This closes the hole with wall material and gives the Workers 2 builder ground to stand on for the next column, so a single pit no longer stalls the whole perimeter.
