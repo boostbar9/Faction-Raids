@@ -91,14 +91,6 @@ public final class PaymentSource {
             }
             player.getInventory().setChanged();
         }
-        // Toast the player so they see the split.
-        if (fromBank > 0 && fromInv > 0) {
-            player.displayClientMessage(Component.literal(
-                    "Paid " + price + "e (" + fromBank + " from bank + " + fromInv + " from pack)"), true);
-        } else if (fromBank > 0) {
-            player.displayClientMessage(Component.literal(
-                    "Paid " + price + "e from faction bank"), true);
-        }
         return true;
     }
 
