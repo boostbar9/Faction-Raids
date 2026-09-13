@@ -516,7 +516,7 @@ public final class RaidConfig {
         VICTORY_EMERALDS_BASE = b.comment("Guaranteed emeralds awarded to each online faction member after an eligible victory.")
                 .defineInRange("victoryEmeraldsBase", 16, 0, 512);
         VICTORY_EMERALDS_PER_WAVE = b.comment("Additional guaranteed emeralds per completed wave for each online faction member.")
-                .defineInRange("victoryEmeraldsPerWave", 4, 0, 64);
+                .defineInRange("victoryEmeraldsPerWave", 5, 0, 64);
         COMMANDER_EMERALD_BONUS = b.comment("Additional guaranteed emeralds when the faction defeats the siege commander.")
                 .defineInRange("commanderEmeraldBonus", 12, 0, 256);
         RAIDER_BOUNTY_EMERALDS = b.comment("Emeralds deposited into the faction treasury for each raider the faction defeats. Default 0 keeps combat rewards from stacking on top of the wave-clear payout. Set to 1 or higher for per-kill bounties.")

@@ -40,7 +40,7 @@ import java.util.*;
  */
 public final class TerritoryFortification {
 
-    public static final int PRICE = 1200;
+    public static final int PRICE = 900;
     /** Height of the wall segments. */
     public static final int WALL_HEIGHT = 3;
     /** Additional pillar height above the wall at chunk corners. */
