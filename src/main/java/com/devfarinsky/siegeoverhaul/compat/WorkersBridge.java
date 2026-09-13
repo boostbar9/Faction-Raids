@@ -116,6 +116,36 @@ public final class WorkersBridge {
         call(worker, "setListen", boolean.class, true);
     }
 
+    /**
+     * Snap a builder directly onto a specific buildarea instead of relying on
+     * Workers 2's 64-block auto-discovery from the builder's current position.
+     *
+     * <p>The stock BuilderWorkGoal scans for BuildArea entities inside
+     * {@code builder.getBoundingBox().inflate(64)}. When we commission a
+     * Fortify Perimeter job from the SiegeCore, the builder can be well
+     * outside that radius, so it never sees the new area and just wanders.
+     * Teleporting it near the area origin and writing {@code currentBuildArea}
+     * directly kicks it straight into MOVE_TO_WORK_AREA / BUILD.</p>
+     *
+     * <p>Also sets follow state to 6 ("working") so the goal's shouldWork()
+     * gate passes without waiting for the builder to happen through state 0.</p>
+     */
+    public static boolean assignBuildAreaDirectly(Mob worker, Entity buildArea) {
+        if (worker == null || buildArea == null) return false;
+        try {
+            // Teleport builder to the buildarea origin so path discovery, chest
+            // scans, and free-area scans start from within the work zone.
+            worker.teleportTo(buildArea.getX(), buildArea.getY(), buildArea.getZ());
+            worker.getNavigation().stop();
+            worker.getClass().getField("currentBuildArea").set(worker, buildArea);
+            call(worker, "setFollowState", int.class, 6);
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            warn("assign build area", ex);
+            return false;
+        }
+    }
+
     /** Keep the camp crew visible after its job finishes without leaving native jobs running. */
     public static boolean parkBuilder(Mob worker) {
         try {
