@@ -117,25 +117,26 @@ public final class WorkersBridge {
     }
 
     /**
-     * Snap a builder directly onto a specific buildarea instead of relying on
-     * Workers 2's 64-block auto-discovery from the builder's current position.
+     * Wire a builder onto a specific buildarea without relying on Workers 2's
+     * 64-block auto-discovery from the builder's current position.
      *
-     * <p>The stock BuilderWorkGoal scans for BuildArea entities inside
+     * <p>The stock BuilderWorkGoal only scans for BuildArea entities inside
      * {@code builder.getBoundingBox().inflate(64)}. When we commission a
-     * Fortify Perimeter job from the SiegeCore, the builder can be well
-     * outside that radius, so it never sees the new area and just wanders.
-     * Teleporting it near the area origin and writing {@code currentBuildArea}
-     * directly kicks it straight into MOVE_TO_WORK_AREA / BUILD.</p>
+     * Fortify Perimeter job from the SiegeCore, the builder is often well
+     * outside that radius, so it never finds the new area and just wanders.
+     * Writing {@code currentBuildArea} directly and forcing follow state 6
+     * ("Working") kicks the goal straight into MOVE_TO_WORK_AREA / BUILD.</p>
      *
-     * <p>Also sets follow state to 6 ("working") so the goal's shouldWork()
-     * gate passes without waiting for the builder to happen through state 0.</p>
+     * <p>This does NOT teleport the builder. Teleporting is a separate
+     * decision because the buildarea entity itself sits above the wall
+     * footprint (in the air over the top of the wall) and dropping the
+     * builder onto that position risks a fall or a stuck-in-terrain spawn.
+     * Use {@link #teleportBuilderNear(Mob, ServerLevel, BlockPos)} for a
+     * safe surface teleport when the builder is too far from the anchor.</p>
      */
     public static boolean assignBuildAreaDirectly(Mob worker, Entity buildArea) {
         if (worker == null || buildArea == null) return false;
         try {
-            // Teleport builder to the buildarea origin so path discovery, chest
-            // scans, and free-area scans start from within the work zone.
-            worker.teleportTo(buildArea.getX(), buildArea.getY(), buildArea.getZ());
             worker.getNavigation().stop();
             worker.getClass().getField("currentBuildArea").set(worker, buildArea);
             call(worker, "setFollowState", int.class, 6);
@@ -143,6 +144,30 @@ public final class WorkersBridge {
         } catch (ReflectiveOperationException | RuntimeException ex) {
             warn("assign build area", ex);
             return false;
+        }
+    }
+
+    /**
+     * Teleport a builder to a safe standing surface near a known-good anchor
+     * (typically the player's own position at commission time).
+     *
+     * <p>Uses Heightmap.MOTION_BLOCKING_NO_LEAVES so the drop-point is the
+     * top surface block: never inside a cave, never suspended in leaves,
+     * never on top of water. Only teleports when the builder is further than
+     * 24 blocks from the anchor, so short walks are left to the builder's
+     * own pathfinder (which is generally fine at close range).</p>
+     */
+    public static void teleportBuilderNear(Mob worker, ServerLevel level, BlockPos anchor) {
+        if (worker == null || level == null || anchor == null) return;
+        if (worker.blockPosition().distSqr(anchor) < 24 * 24) return;
+        try {
+            int surfaceY = level.getHeight(
+                    net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    anchor.getX(), anchor.getZ());
+            worker.teleportTo(anchor.getX() + 0.5, surfaceY, anchor.getZ() + 0.5);
+            worker.getNavigation().stop();
+        } catch (RuntimeException ex) {
+            warn("teleport builder", ex);
         }
     }
 
