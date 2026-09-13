@@ -45,10 +45,19 @@ public final class TreasuryNotifications {
         PENDING.clear();
         for (var player : event.getServer().getPlayerList().getPlayers()) {
             String faction = SiegeCore.key(player);
+            long gained = 0, spent = 0;
             for (var notice : notices) if (notice.faction().equals(faction)) {
                 var text = message(notice.delta());
                 player.sendSystemMessage(text);
-                player.displayClientMessage(text, true);
+                if (notice.delta() > 0) gained += notice.delta();
+                else spent += notice.delta();
+            }
+            if (gained != 0 || spent != 0) {
+                var summary = Component.empty();
+                if (gained != 0) summary.append(message(gained));
+                if (gained != 0 && spent != 0) summary.append(Component.literal(" | ").withStyle(ChatFormatting.GRAY));
+                if (spent != 0) summary.append(message(spent));
+                player.displayClientMessage(summary, true);
             }
         }
     }
