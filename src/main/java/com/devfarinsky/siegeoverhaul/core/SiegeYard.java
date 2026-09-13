@@ -280,14 +280,32 @@ public final class SiegeYard {
             catch (ReflectiveOperationException ignored) {}
             mob.setPersistenceRequired();
             if (!level.addFreshEntity(mob)) return Optional.empty();
-            // Hire the recruit under the player's ownership.
+            // Hand ownership directly rather than going through Recruits' hire()
+            // path. hire() enforces the player's global recruit cap and returns
+            // false with an "INFO_RECRUITING_MAX" message when the player is at
+            // the limit, which surfaced as a misleading "make sure Recruits is
+            // fully loaded" error from the SiegeYard. Siege engineers are
+            // bought via the SiegeYard, not the vanilla Recruits menu, so they
+            // do not need to count against that cap.
             try {
-                Class<?> group = Class.forName("com.talhanation.recruits.world.RecruitsGroup");
-                var hire = mob.getClass().getMethod("hire", Player.class, group, boolean.class);
-                if (!Boolean.TRUE.equals(hire.invoke(mob, player, null, true))) {
-                    mob.discard();
-                    return Optional.empty();
-                }
+                mob.getClass().getMethod("setOwnerUUID", Optional.class)
+                        .invoke(mob, Optional.of(player.getUUID()));
+                mob.getClass().getMethod("setIsOwned", boolean.class).invoke(mob, true);
+                try { mob.getClass().getMethod("setFollowState", int.class).invoke(mob, 2); }
+                catch (ReflectiveOperationException ignored) {}
+                try { mob.getClass().getMethod("setAggroState", int.class).invoke(mob, 0); }
+                catch (ReflectiveOperationException ignored) {}
+                try { mob.getClass().getMethod("resetPaymentTimer").invoke(mob); }
+                catch (ReflectiveOperationException ignored) {}
+                // Assign to the player's scoreboard team if they have one, so
+                // the engineer inherits faction ownership visuals and doesn't
+                // get shot by friendly recruits.
+                try {
+                    net.minecraft.world.scores.Team team = player.getTeam();
+                    if (team instanceof net.minecraft.world.scores.PlayerTeam pt) {
+                        level.getScoreboard().addPlayerToTeam(mob.getStringUUID(), pt);
+                    }
+                } catch (RuntimeException ignored) {}
             } catch (ReflectiveOperationException e) {
                 mob.discard();
                 return Optional.empty();

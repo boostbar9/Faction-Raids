@@ -264,6 +264,12 @@ public final class TerritoryFortification {
             // and does NOT overwrite the builder's inventory).
             WorkersBridge.enablePlayerJob(builder, owner);
 
+            // Bypass Workers 2's 64-block auto-discovery: teleport the builder
+            // to the buildarea origin and wire currentBuildArea directly, so it
+            // starts work immediately instead of wandering (and falling into
+            // caves) hoping to stumble across the area on its own.
+            WorkersBridge.assignBuildAreaDirectly(builder, build);
+
             // Charge only after every mutating step succeeded.
             if (!player.isCreative() && !PaymentSource.consume(player, PRICE)) {
                 throw new IllegalStateException("Payment rejected");
