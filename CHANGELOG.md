@@ -1,3 +1,9 @@
+# 4.27.1 beta
+
+- Toned down the combat bounties added in 4.27.0 after they filled the treasury too fast on longer raids. Per-raider bounty is now 0 by default so a 30-raider wave no longer stacks another 30 emeralds on top of the wave-clear reward. Turn raiderBountyEmeralds up if you want per-kill bounties back.
+- Commander bounty lowered from 24 to 8 emeralds. Scout bounty lowered from 4 to 2.
+- Added maxBountyEmeraldsPerRaid, a hard cap on the total bounty a single raid can deposit into the treasury (default 32). Wave-clear payouts are not counted against it. Set to 0 to remove the cap.
+
 # 4.27.0 beta
 
 - Combat now fills the faction treasury directly. Every raider your faction defeats deposits 1 emerald into the bank, the siege commander deposits 24 on top of the existing per-player bonus, and every enemy scout your faction kills before the raid deposits 4. These are on top of the guaranteed wave payouts, and they show up on the Bank tab activity graph the same way wave payouts do so you can watch the treasury fill in real time during a big fight.
