@@ -352,14 +352,29 @@ public final class SiegeYard {
                 return EngineerSpawn.fail("Ownership setters missing on Recruits siege_engineer (" + e.getClass().getSimpleName() + "). Recruits API may have changed.");
             }
             // Give the engineer their ammunition so they actually fire.
+            // Catapults take Cobble Cluster Shot (siegeweapons:cobble_cluster_item)
+            // as their primary projectile. Plain cobblestone works as a fallback
+            // for the catapult AI, but cluster shot is what the mod expects and
+            // what the engineer's targeting logic prefers, so we stock that.
+            // Cobblestone goes in as backup so the catapult never runs dry.
             try {
                 Object inventory = mob.getClass().getMethod("getInventory").invoke(mob);
                 if (inventory instanceof net.minecraft.world.SimpleContainer container) {
-                    net.minecraft.world.item.Item ammo = type == SiegeEngineType.BALLISTA
-                            ? ForgeRegistries.ITEMS.getValue(new ResourceLocation("siegeweapons", "ballista_projectile_item"))
-                            : net.minecraft.world.item.Items.COBBLESTONE;
-                    if (ammo != null && ammo != net.minecraft.world.item.Items.AIR) {
-                        container.addItem(new net.minecraft.world.item.ItemStack(ammo, 64));
+                    if (type == SiegeEngineType.BALLISTA) {
+                        net.minecraft.world.item.Item bolt = ForgeRegistries.ITEMS.getValue(
+                                new ResourceLocation("siegeweapons", "ballista_projectile_item"));
+                        if (bolt != null && bolt != net.minecraft.world.item.Items.AIR) {
+                            container.addItem(new net.minecraft.world.item.ItemStack(bolt, 64));
+                        }
+                    } else {
+                        net.minecraft.world.item.Item cluster = ForgeRegistries.ITEMS.getValue(
+                                new ResourceLocation("siegeweapons", "cobble_cluster_item"));
+                        if (cluster != null && cluster != net.minecraft.world.item.Items.AIR) {
+                            container.addItem(new net.minecraft.world.item.ItemStack(cluster, 32));
+                        }
+                        // Cobblestone as fallback in case cluster runs out.
+                        container.addItem(new net.minecraft.world.item.ItemStack(
+                                net.minecraft.world.item.Items.COBBLESTONE, 32));
                     }
                     container.addItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 16));
                 }
