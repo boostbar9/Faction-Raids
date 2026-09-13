@@ -293,13 +293,27 @@ public final class SiegeYard {
             if (!(entity instanceof Mob mob))
                 return EngineerSpawn.fail("Recruits siege_engineer is not a Mob (class: " + entity.getClass().getSimpleName() + ").");
             mob.moveTo(pos.x, pos.y, pos.z, vehicle.getYRot(), 0F);
+            // We do not call mob.finalizeSpawn here. Recruits' SiegeEngineerEntity
+            // overrides finalizeSpawn with a hard cast:
+            //   ((GroundPathNavigation) this.getNavigation()).setCanOpenDoors(true);
+            // but AbstractRecruitEntity's createNavigation returns a
+            // RecruitPathNavigation, which does not extend GroundPathNavigation,
+            // so the cast throws ClassCastException on every non-hire spawn.
+            // Their in-game hire flow avoids the issue only because hire()
+            // routes through a different code path. We do the useful side
+            // effects of finalizeSpawn manually instead.
             try {
-                mob.finalizeSpawn(level, level.getCurrentDifficultyAt(mob.blockPosition()),
-                        MobSpawnType.EVENT, null, null);
-            } catch (RuntimeException ex) {
-                FactionLogger.LOG.warn("siege_engineer finalizeSpawn threw", ex);
-                return EngineerSpawn.fail("finalizeSpawn threw: " + ex.getClass().getSimpleName() + " " + String.valueOf(ex.getMessage()));
-            }
+                net.minecraft.world.entity.ai.navigation.PathNavigation nav = mob.getNavigation();
+                if (nav instanceof net.minecraft.world.entity.ai.navigation.GroundPathNavigation ground) {
+                    ground.setCanOpenDoors(true);
+                } else {
+                    try {
+                        nav.getClass().getMethod("setCanOpenDoors", boolean.class).invoke(nav, true);
+                    } catch (ReflectiveOperationException ignored) {}
+                }
+            } catch (RuntimeException ignored) {}
+            try { mob.getClass().getMethod("initSpawn").invoke(mob); }
+            catch (ReflectiveOperationException ignored) {}
             // Cost setter so the hire event doesn't refuse.
             try { mob.getClass().getMethod("setCost", int.class).invoke(mob, 0); }
             catch (ReflectiveOperationException ignored) {}
