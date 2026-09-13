@@ -24,5 +24,9 @@
   "item.siegeoverhaul.catapult_crew_deployment_kit": "Catapult Crew Deployment Kit",
   "item.siegeoverhaul.ballista_crew_deployment_kit": "Ballista Crew Deployment Kit",
   "item.siegeoverhaul.crew_deployment_kit.tooltip.line1": "Use on a clear, flat %1$sx%1$s area with %2$s blocks of headroom",
-  "item.siegeoverhaul.crew_deployment_kit.tooltip.line2": "The kit is consumed only after a successful deployment"
+  "item.siegeoverhaul.crew_deployment_kit.tooltip.line2": "The kit is consumed only after a successful deployment",
+  "siegeoverhaul.update.available": "[Siege Overhaul] Update available: %s (installed: %s).",
+  "siegeoverhaul.update.download": "[View updates]",
+  "siegeoverhaul.update.hover": "Open the Siege Overhaul downloads page on CurseForge.",
+  "siegeoverhaul.update.multiplayer": "Multiplayer: update the server and all clients to the same version."
 }

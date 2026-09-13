@@ -1,0 +1,9 @@
+{
+  "homepage": "https://www.curseforge.com/minecraft/mc-mods/siege-overhaul/files",
+  "1.20.1": {
+    "4.21.2": "Fixes the in-game configuration editor's list settings."
+  },
+  "promos": {
+    "1.20.1-latest": "4.21.2"
+  }
+}

@@ -1,3 +1,9 @@
+# 4.28.3 beta
+
+- Notify players in chat when Forge detects a newer Siege Overhaul release, with installed/available versions and a clickable CurseForge download link.
+- Delay the notice until the world has loaded and show it once per game launch, including across reconnects. Failed or disabled checks stay silent and never block gameplay.
+- Remind multiplayer players to update the server and clients together. Add the release update feed and publisher checklist.
+
 # 4.28.1 beta
 
 - Pay raider, commander, and scout bounties only when a member of the defending faction or one of its owned Recruits lands the kill. Environmental deaths and unrelated combatants still count toward normal siege progress but no longer create treasury emeralds.
