@@ -449,7 +449,10 @@ public final class RaidEvents {
         // return before the raid-state handling below.
         if (event.getEntity() instanceof Mob scoutVictim
                 && scoutVictim.getPersistentData().getBoolean(ModConstants.Tags.SCOUT)) {
-            com.devfarinsky.siegeoverhaul.scout.ScoutManager.onScoutKilled(level.getServer(), data, scoutVictim);
+            RaidSavedData.Anchor scoutAnchor = data.anchors.get(victimTeamKey);
+            boolean defeatedByFaction = isFactionDefender(event.getSource().getEntity(), scoutAnchor);
+            com.devfarinsky.siegeoverhaul.scout.ScoutManager.onScoutKilled(
+                    level.getServer(), data, scoutVictim, defeatedByFaction);
             return;
         }
         RaidSavedData.RaidState state = data.raids.get(victimTeamKey);
@@ -457,8 +460,8 @@ public final class RaidEvents {
         state.missingTicks.remove(event.getEntity().getUUID());
         state.totalDefeated++;
         boolean isCommander = event.getEntity().getUUID().equals(state.commanderUuid) && !state.commanderDefeated;
+        RaidSavedData.Anchor anchor = data.anchors.get(victimTeamKey);
         if (isCommander) {
-            RaidSavedData.Anchor anchor = data.anchors.get(victimTeamKey);
             if (anchor != null) markCommanderDefeated(level.getServer(), anchor, state);
         }
         // v4.27.0 combat bounties: pay the treasury for each raider the
@@ -468,7 +471,7 @@ public final class RaidEvents {
         // this with lower defaults and a per-raid bounty cap enforced via
         // state.campaign so a single mega-raid can't dump thousands of
         // emeralds into the bank.
-        if (state.rewardEligible) {
+        if (state.rewardEligible && isFactionDefender(event.getSource().getEntity(), anchor)) {
             CompoundTag core = data.siegeCores.get(victimTeamKey);
             if (core != null) {
                 int raiderBounty = RaidConfig.RAIDER_BOUNTY_EMERALDS.get();
@@ -517,6 +520,17 @@ public final class RaidEvents {
             return RecruitsBridge.belongsTo(mob, anchor.teamKey(), anchor.members());
         }
         return false;
+    }
+
+    /**
+     * A bounty is earned only when the damaging entity is a member of the
+     * defending faction or one of its owned Recruits. Environmental deaths,
+     * unrelated players and unrelated mobs still advance normal raid death
+     * bookkeeping, but cannot mint treasury rewards.
+     */
+    static boolean isFactionDefender(Entity entity, RaidSavedData.Anchor anchor) {
+        return anchor != null && entity instanceof LivingEntity living
+                && isDefenderVictim(living, anchor);
     }
 
     /**
@@ -1649,7 +1663,8 @@ public final class RaidEvents {
         // matches the letter's contents. Falls back to a fresh selection
         // if no scout mission ran or if scouting is disabled.
         com.devfarinsky.siegeoverhaul.narrative.RaidNarrative previewed =
-                com.devfarinsky.siegeoverhaul.scout.ScoutManager.consumePreviewedNarrative(data, anchor.teamKey());
+                com.devfarinsky.siegeoverhaul.scout.ScoutManager.consumePreviewedNarrative(
+                        data, anchor.teamKey(), state);
         state.narrative = previewed != null ? previewed :
                 com.devfarinsky.siegeoverhaul.narrative.RaidNarrativeSelector.select(
                         server.overworld().random, anchor.teamDisplay(), point.name());

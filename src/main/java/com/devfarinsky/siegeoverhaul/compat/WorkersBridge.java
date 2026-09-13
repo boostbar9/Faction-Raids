@@ -184,24 +184,35 @@ public final class WorkersBridge {
      * "No available storage found nearby" even though our area is right next
      * to it.
      *
-     * @return true when the BUILDERS bit is set, false otherwise (including
-     *         when the field cannot be read at all, so we stay permissive)
+     * @return false when the entity is null or a readable type set omits
+     *         BUILDERS; true when BUILDERS is present or the optional API
+     *         cannot be read, preserving fail-open compatibility with an
+     *         otherwise usable Workers 2 version
      */
     public static boolean hasBuilderStorage(Entity storageArea) {
+        return hasBuilderStorageApi(storageArea);
+    }
+
+    /** Package-visible seam for testing the optional API without a Workers entity class. */
+    static boolean hasBuilderStorageApi(Object storageArea) {
         if (storageArea == null) return false;
         try {
             // StorageArea exposes getStorageTypes(): EnumSet<StorageType>.
-            // Rather than depend on the enum class we read the raw mask off
-            // the entity data via the getter and check bit 2 (BUILDERS).
+            // Avoid linking the optional enum class and compare its stable
+            // constant name instead.
             Object set = storageArea.getClass().getMethod("getStorageTypes").invoke(storageArea);
             if (set instanceof java.util.EnumSet<?> es) {
                 for (Object v : es) {
-                    if ("BUILDERS".equals(v.toString())) return true;
+                    if (v instanceof Enum<?> storageType
+                            && "BUILDERS".equals(storageType.name())) return true;
                 }
                 return false;
             }
-            return false;
-        } catch (ReflectiveOperationException ex) {
+            // A changed or unexpected return shape cannot be inspected safely.
+            // Preserve compatibility by failing open just as we do when the
+            // reflective method itself is unavailable.
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException ex) {
             warn("storage type read", ex);
             return true;
         }

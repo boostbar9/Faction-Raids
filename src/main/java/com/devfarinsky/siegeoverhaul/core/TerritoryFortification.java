@@ -123,12 +123,11 @@ public final class TerritoryFortification {
         }
 
         // The player must have set up a Workers 2 storagearea inside their
-        // claim already, owned by them. We reuse it instead of creating one.
-        // Anchor the search on the core, not the builder, because Workers 2
-        // searches from the builder's current position (which moves) and the
-        // core is the stable centre of the perimeter. This keeps the initial
-        // check in sync with where the builder will spend most of its time.
-        Entity playerStorage = findPlayerStorageArea(level, player, corePos, chunks);
+        // claim already, owned by them. Workers 2 performs its live lookup
+        // around the builder, so validate from that same position. Centering
+        // this check on the core could accept a storagearea that was within
+        // 64 blocks of the core but outside the builder's actual search box.
+        Entity playerStorage = findPlayerStorageArea(level, player, builder.blockPosition(), chunks);
         if (playerStorage == null) {
             player.sendSystemMessage(Component.literal(
                     "Place a Workers 2 storage area inside your claim (within "
@@ -185,23 +184,14 @@ public final class TerritoryFortification {
         // gives the builder something to stand on for the next column.
         Map<BlockPos, Integer> foundationBelow = new HashMap<>();
         for (BlockPos base : wallColumns) {
-            int filled = 0;
-            for (int dy = 1; dy <= FOUNDATION_DEPTH; dy++) {
-                BlockPos p = new BlockPos(base.getX(), base.getY() - dy, base.getZ());
-                if (!level.hasChunkAt(p)) break;
-                BlockState state = level.getBlockState(p);
-                if (state.isFaceSturdy(level, p, Direction.UP)) break;
-                filled = dy;
-            }
+            int filled = foundationDepth(level, base);
             if (filled > 0) foundationBelow.put(base, filled);
         }
 
         // Bounds for the build area entity: expand vertically to cover pillar tops.
         BlockPos min = null, max = null;
-        int wallTop = baseY + WALL_HEIGHT - 1;
-        int pillarTop = baseY + WALL_HEIGHT + CORNER_EXTRA - 1;
         for (BlockPos base : wallColumns) {
-            int top = cornerColumns.contains(base.asLong()) ? pillarTop : wallTop;
+            int top = columnTopY(base, cornerColumns.contains(base.asLong()));
             int bottom = base.getY() - foundationBelow.getOrDefault(base, 0);
             for (int y = bottom; y <= top; y++) {
                 BlockPos p = new BlockPos(base.getX(), y, base.getZ());
@@ -217,7 +207,7 @@ public final class TerritoryFortification {
 
         Map<Long, String> blocks = new LinkedHashMap<>();
         for (BlockPos base : wallColumns) {
-            int top = cornerColumns.contains(base.asLong()) ? pillarTop : wallTop;
+            int top = columnTopY(base, cornerColumns.contains(base.asLong()));
             int bottom = base.getY() - foundationBelow.getOrDefault(base, 0);
             for (int y = bottom; y <= top; y++) {
                 BlockPos p = new BlockPos(base.getX(), y, base.getZ());
@@ -324,6 +314,31 @@ public final class TerritoryFortification {
         }
     }
 
+    /**
+     * Count the contiguous replaceable gap below a wall column. A thin but
+     * non-replaceable obstruction such as a torch is a hard boundary even
+     * when it is not sturdy on its upper face; searching through it would
+     * queue wall blocks below the obstruction and create a disconnected
+     * foundation that Workers 2 cannot build continuously.
+     */
+    static int foundationDepth(ServerLevel level, BlockPos base) {
+        int filled = 0;
+        for (int dy = 1; dy <= FOUNDATION_DEPTH; dy++) {
+            BlockPos p = new BlockPos(base.getX(), base.getY() - dy, base.getZ());
+            if (!level.hasChunkAt(p)) break;
+            BlockState state = level.getBlockState(p);
+            if (state.isFaceSturdy(level, p, Direction.UP)) break;
+            if (!state.isAir() && !state.canBeReplaced()) break;
+            filled = dy;
+        }
+        return filled;
+    }
+
+    /** Keep the configured wall height relative to each terrain-adjusted base. */
+    static int columnTopY(BlockPos base, boolean corner) {
+        return base.getY() + WALL_HEIGHT - 1 + (corner ? CORNER_EXTRA : 0);
+    }
+
     private static void addColumn(ServerLevel level, Set<Long> seen, List<BlockPos> out,
                                   int baseY, int x, int z) {
         // Match wall base to actual terrain surface so short cliffs don't leave floating walls.
@@ -356,11 +371,11 @@ public final class TerritoryFortification {
      * the claim.
      *
      * <p>The area must be alive, owned by the player, inside a claimed chunk
-     * and within {@link #STORAGE_SEARCH_RADIUS} blocks of {@code anchor}
-     * (typically the core so the storage sits near the middle of the
-     * perimeter). We prefer areas that already have the BUILDERS bit toggled
-     * on because Workers 2's StorageArea.canWorkHere rejects builders on any
-     * other type mask.</p>
+     * and within {@link #STORAGE_SEARCH_RADIUS} blocks of {@code anchor}.
+     * The caller supplies the builder's current position to match Workers 2's
+     * own runtime search. We prefer areas that already have the BUILDERS bit
+     * toggled on because Workers 2's StorageArea.canWorkHere rejects builders
+     * on any other type mask.</p>
      */
     private static Entity findPlayerStorageArea(ServerLevel level, ServerPlayer player,
                                                 BlockPos anchor, Set<ChunkPos> claim) {

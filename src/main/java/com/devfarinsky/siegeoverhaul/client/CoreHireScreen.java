@@ -2,6 +2,7 @@ package com.devfarinsky.siegeoverhaul.client;
 
 import com.devfarinsky.siegeoverhaul.*;
 import com.devfarinsky.siegeoverhaul.core.*;
+import com.devfarinsky.siegeoverhaul.siege.SiegeIntegration;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.ConfirmLinkScreen;
@@ -438,12 +439,19 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     String info;
                     if (!SiegeYard.available()) {
                         info = "Requires both Villager Recruits and Siege Weapons.";
-                    } else if (!canAfford(SiegeYard.PRICES[i])) {
-                        info = "You need " + (SiegeYard.PRICES[i] - availableFunds())
-                                + " more emeralds (purse + faction bank).";
                     } else {
-                        info = "Buy the kit now, then right-click the top of a clear, solid, flat 3x3 area to deploy your "
-                                + SiegeYard.LABELS[i] + ". A failed placement keeps the kit.";
+                        SiegeIntegration.Footprint footprint =
+                                SiegeIntegration.footprintOf(SiegeYard.TYPES[i]);
+                        String area = SiegeYard.deploymentAreaGuidance(footprint);
+                        if (!canAfford(SiegeYard.PRICES[i])) {
+                            info = "You need " + (SiegeYard.PRICES[i] - availableFunds())
+                                    + " more emeralds (purse + faction bank). Deployment requires a clear, solid, flat "
+                                    + area + ".";
+                        } else {
+                            info = "Buy the kit now, then right-click the top of a clear, solid, flat "
+                                    + area + " to deploy your " + SiegeYard.LABELS[i]
+                                    + ". A failed placement keeps the kit.";
+                        }
                     }
                     tooltip(g, info, tooltipX, tooltipY);
                 }

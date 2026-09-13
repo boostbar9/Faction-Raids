@@ -81,9 +81,11 @@ public final class SiegeYard {
         if (!stored && !kit.isEmpty()) player.drop(kit, false);
         player.getInventory().setChanged();
         player.inventoryMenu.broadcastChanges();
+        SiegeIntegration.Footprint footprint = SiegeIntegration.footprintOf(TYPES[index]);
         player.sendSystemMessage(Component.literal(
                 "Purchased a " + LABELS[index] + " deployment kit for " + price
-                        + " emeralds. Right-click the top of a clear flat 3x3 area to deploy it."
+                        + " emeralds. Right-click the top of a clear flat "
+                        + deploymentAreaGuidance(footprint) + " to deploy it."
                         + (stored ? "" : " Your inventory was full, so the kit was dropped at your feet.")));
         player.playNotifySound(SoundEvents.EXPERIENCE_ORB_PICKUP,
                 SoundSource.PLAYERS, 0.7F, 1.15F);
@@ -112,8 +114,9 @@ public final class SiegeYard {
         // corners fell outside the checked columns, level.noCollision saw a
         // block inside the bbox, and the deploy failed with the misleading
         // "Siege Weapons rejected the deployment spot" message. Ballista is
-        // 2x2 and fits inside 3x3 already. We ceil the width so a 2.5-wide
-        // vehicle still gets a full 3-column pad on each side.
+        // 2x2 and fits inside 3x3 already. footprintOf converts the centered
+        // bounding box to exact occupied columns and also accounts for the
+        // half-block vertical spawn offset.
         SiegeEngineType type = TYPES[index];
         SiegeIntegration.Footprint fp = SiegeIntegration.footprintOf(type);
         String flatIssue = describeClearance(level, deployPos, fp.horizontalRadius(), fp.blockHeight());
@@ -152,13 +155,23 @@ public final class SiegeYard {
         return describeFlat3x3(level, center) == null;
     }
 
+    public static int deploymentDiameter(SiegeIntegration.Footprint footprint) {
+        return 2 * Math.max(1, footprint.horizontalRadius()) + 1;
+    }
+
+    public static String deploymentAreaGuidance(SiegeIntegration.Footprint footprint) {
+        int diameter = deploymentDiameter(footprint);
+        int height = Math.max(1, footprint.blockHeight());
+        return diameter + "x" + diameter + " area with " + height + " blocks of headroom";
+    }
+
     /**
      * Footprint-aware clearance check.
      *
      * <p>Verifies that the square from {@code center-radius} to
      * {@code center+radius} on each horizontal axis is free of solid blocks
      * and fluids for {@code height} vertical blocks starting at
-     * {@code center}, and that the ring of ground blocks immediately below
+     * {@code center}, and that the ground blocks immediately below
      * that square is sturdy. This matches the actual footprint the spawned
      * vehicle will occupy, so vanilla noCollision won't reject the spawn
      * because of a block outside the previously fixed 3x3 window.</p>

@@ -1,3 +1,19 @@
+# 4.28.1 beta
+
+- Pay raider, commander, and scout bounties only when a member of the defending faction or one of its owned Recruits lands the kill. Environmental deaths and unrelated combatants still count toward normal siege progress but no longer create treasury emeralds.
+- Keep scout bounties disabled while a non-rewarding manual raid is active, and carry the scouting payout into the ensuing raid so the configured per-raid cap covers scouts, troops, and commanders together instead of resetting at wave one.
+- Correct Fortify Perimeter's storage validation to search from the commissioned builder, matching Workers 2's actual 64-block runtime lookup. A storage area reachable from the Core but not the builder can no longer be accepted and leave the job stalled.
+- Stop wall-foundation scans at non-replaceable obstructions instead of queuing a disconnected section beneath them. Existing blocks remain protected and Workers 2 receives a continuous build path.
+- Keep each wall segment and corner pillar at its configured height relative to its terrain-adjusted base. Sloped claim edges no longer create empty, buried, or incorrectly tall columns from a top fixed to the Core's Y level.
+- Include the half-block vertical spawn offset in siege-vehicle clearance, so ceilings in the top intersected layer are reported before native collision rejects the deployment.
+- Convert centered non-integral vehicle widths to the block columns they actually intersect instead of rejecting an unnecessarily large pad. Siege-yard help, purchase messages, and item tooltips now report the selected vehicle's actual pad size and required headroom.
+- Added regression coverage for Workers storage masks, wall foundations, vehicle dimension conversion, fallback sizing, top-layer clearance, and player guidance.
+
+# 4.28.0 beta
+
+- Newly generated configs award 5 emeralds per completed wave instead of 4. Forge preserves values already stored in an existing server config, including the former default of 4; set `victoryEmeraldsPerWave` to 5 to adopt the new balance without overwriting intentional custom settings.
+- Reduced major purchase prices: Fortify Perimeter 900 emeralds; Fortified Walls 700; Watchtower 500; Provisioning 900; Iron Levy 600; ballista crew 400; and catapult crew 480. Recruit, worker, hero, loot-box, temporary-buff, bounty, and interest values are unchanged.
+
 # 4.27.1 beta
 
 - Toned down the combat bounties added in 4.27.0 after they filled the treasury too fast on longer raids. Per-raider bounty is now 0 by default so a 30-raider wave no longer stacks another 30 emeralds on top of the wave-clear reward. Turn raiderBountyEmeralds up if you want per-kill bounties back.

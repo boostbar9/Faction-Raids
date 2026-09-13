@@ -1,16 +1,19 @@
 package com.devfarinsky.siegeoverhaul.siege;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import com.devfarinsky.siegeoverhaul.FactionLogger;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -85,8 +88,9 @@ public final class SiegeIntegration {
      * block units and always at least 1. The horizontal radius is the number
      * of columns to inspect on each side of the deployment center, so a
      * catapult (4-wide) reports radius 2, and a ballista (2-wide) reports
-     * radius 1. Block height is the number of vertical blocks the vehicle
-     * needs above the deployment surface.
+     * radius 1. Block height is the number of vertical block layers the
+     * vehicle intersects after spawning at the selected block's center,
+     * including the half-block vertical offset.
      */
     public record Footprint(int horizontalRadius, int blockHeight) {}
 
@@ -101,11 +105,22 @@ public final class SiegeIntegration {
         Optional<EntityType<?>> et = siegeEntityType(type);
         if (et.isEmpty()) return new Footprint(1, 3);
         var dims = et.get().getDimensions();
-        // Half-width -> full-block radius on each side. Round up so a
-        // 2.5-wide vehicle still gets a solid 3-column pad on each axis.
-        int radius = (int) Math.ceil(dims.width / 2.0F);
-        int height = (int) Math.ceil(dims.height);
-        return new Footprint(Math.max(1, radius), Math.max(1, height));
+        return footprint(dims.width, dims.height);
+    }
+
+    /** Translate raw entity dimensions into the clearance grid used at deployment. */
+    static Footprint footprint(float width, float height) {
+        // The spawn is centered at x/z + 0.5 inside the selected block. The
+        // central block already contributes one unit of width, so only the
+        // remaining width must be split and rounded across both sides. A
+        // 2.5-wide vehicle therefore occupies three columns (radius 1), while
+        // a 4-wide catapult occupies five (radius 2).
+        int radius = (int) Math.ceil((width - 1.0F) / 2.0F);
+        // Deployment uses Vec3.atCenterOf, placing the bounding box bottom
+        // at y + 0.5. Include that offset so an exactly 4-block-tall vehicle
+        // checks layers y through y + 4 rather than stopping at y + 3.
+        int blockHeight = (int) Math.ceil(height + 0.5F);
+        return new Footprint(Math.max(1, radius), Math.max(1, blockHeight));
     }
 
     /**
@@ -122,10 +137,7 @@ public final class SiegeIntegration {
         vehicle.moveTo(pos.x, pos.y, pos.z, yaw, 0F);
         {
             var box = vehicle.getBoundingBox();
-            for (var corner : java.util.List.of(net.minecraft.core.BlockPos.containing(box.minX, pos.y, box.minZ),
-                    net.minecraft.core.BlockPos.containing(box.maxX, pos.y, box.maxZ),
-                    net.minecraft.core.BlockPos.containing(box.minX, pos.y, box.maxZ),
-                    net.minecraft.core.BlockPos.containing(box.maxX, pos.y, box.minZ))) {
+            for (BlockPos corner : occupiedGroundCorners(box, pos.y)) {
                 if (!level.hasChunkAt(corner) || !level.getWorldBorder().isWithinBounds(corner)
                         || !level.getFluidState(corner).isEmpty()
                         || !level.getBlockState(corner.below()).isFaceSturdy(level, corner.below(), net.minecraft.core.Direction.UP)) {
@@ -140,6 +152,23 @@ public final class SiegeIntegration {
         }
         if (!level.addFreshEntity(vehicle)) { vehicle.discard(); return Optional.empty(); }
         return Optional.of(vehicle);
+    }
+
+    /**
+     * Ground corners touched by an entity AABB. Minecraft AABBs use an
+     * exclusive maximum boundary, so move exact max coordinates one double
+     * downward before converting them to block positions. This keeps the
+     * native spawn check aligned with {@link #footprint(float, float)} for an
+     * exact three-block-wide vehicle.
+     */
+    static List<BlockPos> occupiedGroundCorners(AABB box, double y) {
+        double maxX = Math.nextDown(box.maxX);
+        double maxZ = Math.nextDown(box.maxZ);
+        return List.of(
+                BlockPos.containing(box.minX, y, box.minZ),
+                BlockPos.containing(maxX, y, maxZ),
+                BlockPos.containing(box.minX, y, maxZ),
+                BlockPos.containing(maxX, y, box.minZ));
     }
 
     /**

@@ -16,7 +16,7 @@ Create or join a [Villager Recruits](https://www.curseforge.com/minecraft/mc-mod
 
 The core opens a responsive five-tab command center:
 
-- **Army:** two recruit offers, one worker offer, and a featured hero, rotating every **15 minutes of server runtime**. Each offer can be purchased once per rotation across your faction. Catapult and ballista crews are delivered as deployment kits so you can place them on a clear flat 3x3 area away from an indoor Core.
+- **Army:** two recruit offers, one worker offer, and a featured hero, rotating every **15 minutes of server runtime**. Each offer can be purchased once per rotation across your faction. Catapult and ballista crews are delivered as deployment kits so you can place them on a clear, flat area sized for the selected engine away from an indoor Core.
 - **Loot:** spend emeralds on hidden equipment and supply rewards, or activate short personal blessings.
 - **Bank:** manage the shared faction treasury and review the member roster and recent activity.
 - **Territory:** purchase permanent faction-wide upgrades.

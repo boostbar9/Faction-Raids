@@ -6,6 +6,7 @@ import com.devfarinsky.siegeoverhaul.RecruitsBridge;
 import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;
 
+import java.util.EnumSet;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -35,6 +36,27 @@ class WorkersBridgeTest extends MinecraftTestSupport {
         assertFalse(WorkersBridge.available());
     }
 
+    @Test
+    void builderEnabledStorageIsAcceptedWithoutLinkingWorkersEnum() {
+        assertTrue(WorkersBridge.hasBuilderStorageApi(
+                new StorageAreaApi(EnumSet.of(StorageType.BUILDERS, StorageType.FARMERS))));
+    }
+
+    @Test
+    void readableStorageWithoutBuilderTypeIsRejected() {
+        assertFalse(WorkersBridge.hasBuilderStorageApi(
+                new StorageAreaApi(EnumSet.of(StorageType.FARMERS))));
+        assertFalse(WorkersBridge.hasBuilderStorageApi(null));
+    }
+
+    @Test
+    void unreadableOptionalStorageApiFailsOpen() {
+        assertTrue(WorkersBridge.hasBuilderStorageApi(new Object()));
+        assertTrue(WorkersBridge.hasBuilderStorageApi(new UnexpectedStorageAreaApi(null)));
+        assertTrue(WorkersBridge.hasBuilderStorageApi(
+                new UnexpectedStorageAreaApi(java.util.List.of(StorageType.FARMERS))));
+    }
+
     /** Public signatures verified against Workers 2 / Recruits upstream. */
     public static class Workers2Api {
         Optional<UUID> owner;
@@ -46,5 +68,19 @@ class WorkersBridgeTest extends MinecraftTestSupport {
         public void setListen(boolean listen) { this.listen = listen; }
         public void setFollowState(int state) { followState = state; }
         public void setHoldPos(Vec3 pos) { hold = pos; }
+    }
+
+    public enum StorageType { BUILDERS, FARMERS }
+
+    public static class StorageAreaApi {
+        private final EnumSet<StorageType> types;
+        StorageAreaApi(EnumSet<StorageType> types) { this.types = types; }
+        public EnumSet<StorageType> getStorageTypes() { return types; }
+    }
+
+    public static class UnexpectedStorageAreaApi {
+        private final Object types;
+        UnexpectedStorageAreaApi(Object types) { this.types = types; }
+        public Object getStorageTypes() { return types; }
     }
 }
