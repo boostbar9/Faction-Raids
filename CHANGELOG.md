@@ -574,3 +574,8 @@ No gameplay changes. Pure internal refactor to make future features easier and s
 - Added abandonment-based defeat instead of villager-based defeat.
 - Added hard per-invasion mob caps for integrated-server performance.
 - Added administrator stop command and player test command.
+# 4.28.3 beta
+
+- Notify players in chat when Forge detects a newer Siege Overhaul release, with installed/available versions and a clickable CurseForge download link.
+- Delay the notice until the world has loaded and show it once per game launch, including across reconnects. Failed or disabled checks stay silent and never block gameplay.
+- Remind multiplayer players to update the server and clients together. Add the release update feed and publisher checklist.
