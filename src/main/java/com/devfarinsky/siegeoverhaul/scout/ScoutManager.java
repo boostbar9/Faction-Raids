@@ -258,6 +258,15 @@ public final class ScoutManager {
         ScoutMission m = data.scoutMissions.get(team);
         if (m == null) return;
         m.scoutUuids.remove(scout.getUUID());
+        // v4.27.0: pay the treasury a scout bounty when the faction defeats
+        // an enemy scout. Small deposit, but scouting appears every raid and
+        // the intel letter reward already exists, so this rounds out the
+        // pre-raid loop as a real earning path.
+        int scoutBounty = RaidConfig.SCOUT_BOUNTY_EMERALDS.get();
+        if (scoutBounty > 0) {
+            net.minecraft.nbt.CompoundTag core = data.siegeCores.get(team);
+            if (core != null) com.devfarinsky.siegeoverhaul.core.FactionBank.deposit(core, scoutBounty);
+        }
         data.setDirty();
         if (!RaidConfig.SCOUT_DROP_INTEL_LETTER.get()) return;
         ItemStack letter = buildIntelLetter(m);
