@@ -5,6 +5,7 @@ import com.devfarinsky.siegeoverhaul.RaidSavedData;
 import com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtUtils;
@@ -44,6 +45,13 @@ public final class TerritoryFortification {
     public static final int WALL_HEIGHT = 3;
     /** Additional pillar height above the wall at chunk corners. */
     public static final int CORNER_EXTRA = 2;
+    /**
+     * Maximum distance the wall extends downward through air to find solid
+     * ground. Prevents wall columns from floating over pits or ledges, and
+     * gives the Workers 2 builder ground to stand on while placing the next
+     * column so a single pit does not stall the whole perimeter build.
+     */
+    public static final int FOUNDATION_DEPTH = 8;
     /** How far from the core we search for the commissioned builder. */
     public static final int BUILDER_SEARCH_RADIUS = 16;
     /** How far from the builder we look for a player-placed storagearea. */
@@ -168,13 +176,34 @@ public final class TerritoryFortification {
             return false;
         }
 
+        // For every wall column, extend the build downward through air until
+        // it hits solid ground (max FOUNDATION_DEPTH blocks). Without this,
+        // any column that sits above a pit or ledge left the builder trying
+        // to walk on missing ground: Workers 2's pathfinder either falls into
+        // the pit or never converges, so the whole wall stalls behind the
+        // gap. Filling the gap with wall material closes the perimeter and
+        // gives the builder something to stand on for the next column.
+        Map<BlockPos, Integer> foundationBelow = new HashMap<>();
+        for (BlockPos base : wallColumns) {
+            int filled = 0;
+            for (int dy = 1; dy <= FOUNDATION_DEPTH; dy++) {
+                BlockPos p = new BlockPos(base.getX(), base.getY() - dy, base.getZ());
+                if (!level.hasChunkAt(p)) break;
+                BlockState state = level.getBlockState(p);
+                if (state.isFaceSturdy(level, p, Direction.UP)) break;
+                filled = dy;
+            }
+            if (filled > 0) foundationBelow.put(base, filled);
+        }
+
         // Bounds for the build area entity: expand vertically to cover pillar tops.
         BlockPos min = null, max = null;
         int wallTop = baseY + WALL_HEIGHT - 1;
         int pillarTop = baseY + WALL_HEIGHT + CORNER_EXTRA - 1;
         for (BlockPos base : wallColumns) {
             int top = cornerColumns.contains(base.asLong()) ? pillarTop : wallTop;
-            for (int y = baseY; y <= top; y++) {
+            int bottom = base.getY() - foundationBelow.getOrDefault(base, 0);
+            for (int y = bottom; y <= top; y++) {
                 BlockPos p = new BlockPos(base.getX(), y, base.getZ());
                 if (min == null) { min = p; max = p; continue; }
                 min = new BlockPos(Math.min(min.getX(), p.getX()),
@@ -189,7 +218,8 @@ public final class TerritoryFortification {
         Map<Long, String> blocks = new LinkedHashMap<>();
         for (BlockPos base : wallColumns) {
             int top = cornerColumns.contains(base.asLong()) ? pillarTop : wallTop;
-            for (int y = baseY; y <= top; y++) {
+            int bottom = base.getY() - foundationBelow.getOrDefault(base, 0);
+            for (int y = bottom; y <= top; y++) {
                 BlockPos p = new BlockPos(base.getX(), y, base.getZ());
                 if (!level.hasChunkAt(p)) continue;
                 BlockState existing = level.getBlockState(p);

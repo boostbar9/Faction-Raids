@@ -1,3 +1,9 @@
+# 4.26.0 beta
+
+- Fortify Perimeter now fills gaps under the wall. If a wall column runs over a pit, ravine, or ledge, the wall extends downward through the air until it hits solid ground (up to 8 blocks). This closes the hole with wall material and gives the Workers 2 builder ground to stand on for the next column, so a single pit no longer stalls the whole perimeter.
+- Siege equipment kits now size the ground-clearance check to the actual vehicle. Catapults are 4 blocks wide, but the old check was a fixed 3 by 3, so the vehicle's corners fell outside the checked columns, the vanilla collision test found a block inside the bounding box, and the deployment failed with the misleading "Siege Weapons rejected the deployment spot" message. The kit now reads the entity's real width and height from Siege Weapons at commission time and inspects every column and vertical layer the vehicle will occupy, with a specific message about which block is in the way.
+- Ballista deployments are unaffected (2 by 2 fits inside the previous 3 by 3 window) but they now get the same accurate error messages when something is in the way.
+
 # 4.25.0 beta
 
 - Audited how Workers 2 builders actually pull materials from a storagearea. Found one silent failure mode that ate Fortify Perimeter commissions if the player's storagearea wasn't configured right, plus a subtle mismatch between where we searched for the storagearea and where the builder searches at runtime.
