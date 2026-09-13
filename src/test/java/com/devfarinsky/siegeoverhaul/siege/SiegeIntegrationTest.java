@@ -110,4 +110,35 @@ public class SiegeIntegrationTest extends MinecraftTestSupport {
         when(engineer.getVehicle()).thenReturn(null);
         assertFalse(attach(engineer,engine,controller));assertNull(engineer.siegeController);
     }
+
+    @Test void footprintIncludesHalfBlockVerticalSpawnOffset() {
+        assertEquals(new SiegeIntegration.Footprint(2, 5), SiegeIntegration.footprint(4.0F, 4.0F));
+        assertEquals(new SiegeIntegration.Footprint(1, 3), SiegeIntegration.footprint(2.0F, 2.5F));
+    }
+
+    @Test void centeredNonIntegralWidthUsesActuallyIntersectedColumns() {
+        assertEquals(new SiegeIntegration.Footprint(1, 4), SiegeIntegration.footprint(2.5F, 3.25F));
+        assertEquals(new SiegeIntegration.Footprint(1, 2), SiegeIntegration.footprint(3.0F, 1.0F));
+        assertEquals(new SiegeIntegration.Footprint(2, 2), SiegeIntegration.footprint(3.01F, 1.0F));
+    }
+
+    @Test void spawnGroundCornersTreatExactAabbMaximumAsExclusive() {
+        var exact = SiegeIntegration.occupiedGroundCorners(
+                new net.minecraft.world.phys.AABB(-1.0, 64.5, -1.0, 2.0, 66.5, 2.0), 64.5);
+        assertEquals(java.util.Set.of(
+                new net.minecraft.core.BlockPos(-1, 64, -1),
+                new net.minecraft.core.BlockPos(1, 64, -1),
+                new net.minecraft.core.BlockPos(-1, 64, 1),
+                new net.minecraft.core.BlockPos(1, 64, 1)), new java.util.HashSet<>(exact));
+
+        var fractional = SiegeIntegration.occupiedGroundCorners(
+                new net.minecraft.world.phys.AABB(-1.005, 64.5, -1.005, 2.005, 66.5, 2.005), 64.5);
+        assertTrue(fractional.contains(new net.minecraft.core.BlockPos(-2, 64, -2)));
+        assertTrue(fractional.contains(new net.minecraft.core.BlockPos(2, 64, 2)));
+    }
+
+    @Test void unavailableVehicleKeepsSafeFallbackFootprint() {
+        assertEquals(new SiegeIntegration.Footprint(1, 3),
+                SiegeIntegration.footprintOf(SiegeEngineType.SAPPER_CHARGE));
+    }
 }

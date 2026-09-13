@@ -1,6 +1,7 @@
 package com.devfarinsky.siegeoverhaul.items;
 
 import com.devfarinsky.siegeoverhaul.core.SiegeYard;
+import com.devfarinsky.siegeoverhaul.siege.SiegeIntegration;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -72,7 +73,10 @@ public final class CrewDeploymentItem extends Item {
     @Override
     public void appendHoverText(ItemStack stack, Level level,
                                 List<Component> tooltip, TooltipFlag flag) {
-        tooltip.add(Component.translatable("item.siegeoverhaul.crew_deployment_kit.tooltip.line1")
+        int index = crewIndex >= 0 && crewIndex < SiegeYard.TYPES.length ? crewIndex : 0;
+        SiegeIntegration.Footprint footprint = SiegeIntegration.footprintOf(SiegeYard.TYPES[index]);
+        tooltip.add(Component.translatable("item.siegeoverhaul.crew_deployment_kit.tooltip.line1",
+                        SiegeYard.deploymentDiameter(footprint), footprint.blockHeight())
                 .withStyle(ChatFormatting.GOLD));
         tooltip.add(Component.translatable("item.siegeoverhaul.crew_deployment_kit.tooltip.line2")
                 .withStyle(ChatFormatting.GRAY));

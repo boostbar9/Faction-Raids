@@ -515,7 +515,9 @@ public final class RaidConfig {
                 .define("spawnArrivalEffects", true);
         VICTORY_EMERALDS_BASE = b.comment("Guaranteed emeralds awarded to each online faction member after an eligible victory.")
                 .defineInRange("victoryEmeraldsBase", 16, 0, 512);
-        VICTORY_EMERALDS_PER_WAVE = b.comment("Additional guaranteed emeralds per completed wave for each online faction member.")
+        VICTORY_EMERALDS_PER_WAVE = b.comment(
+                "Additional guaranteed emeralds per completed wave for each online faction member.",
+                "New configs default to 5. Forge preserves values already stored by an existing server; set this to 5 manually to adopt the v4.28 balance without overwriting a custom value.")
                 .defineInRange("victoryEmeraldsPerWave", 5, 0, 64);
         COMMANDER_EMERALD_BONUS = b.comment("Additional guaranteed emeralds when the faction defeats the siege commander.")
                 .defineInRange("commanderEmeraldBonus", 12, 0, 256);
