@@ -1,3 +1,8 @@
+# 4.28.4 beta
+
+- Show faction Treasury changes in chat and the action bar: green gains, red spending/withdrawals, signed amounts and a gold Treasury label. Only the amount actually credited or debited is shown, including the Treasury portion of mixed payments.
+- Notify online members of the affected faction. Combine interest catch-up into one notice and keep failed/zero transactions silent.
+
 # 4.28.3 beta
 
 - Notify players in chat when Forge detects a newer Siege Overhaul release, with installed/available versions and a clickable CurseForge download link.

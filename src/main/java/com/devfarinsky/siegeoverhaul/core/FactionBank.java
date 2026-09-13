@@ -43,28 +43,37 @@ public final class FactionBank {
     }
     public static long balance(CompoundTag core) { return Math.max(0, Math.min(LIMIT, core.getLong("BankEmeralds"))); }
     public static long credit(CompoundTag core, long amount) {
+        long accepted = creditQuietly(core, amount);
+        TreasuryNotifications.changed(core, accepted);
+        return accepted;
+    }
+    private static long creditQuietly(CompoundTag core, long amount) {
         long accepted = Math.min(Math.max(0, amount), LIMIT - balance(core));
         core.putLong("BankEmeralds", balance(core) + accepted);
         return accepted;
     }
     public static boolean debit(CompoundTag core, long amount) {
         if (amount <= 0 || amount > balance(core)) return false;
-        core.putLong("BankEmeralds", balance(core) - amount); return true;
+        core.putLong("BankEmeralds", balance(core) - amount);
+        TreasuryNotifications.changed(core, -amount);
+        return true;
     }
     public static boolean settle(CompoundTag core, long now, int basisPoints) {
         if (!core.contains("BankInterestAt")) { core.putLong("BankInterestAt", now); return true; }
         long last = core.getLong("BankInterestAt");
         if (now <= last || now - last < DAY) return false;
         long days = (now - last) / DAY;
+        long before = balance(core);
         int rate = Math.max(0, Math.min(1000, basisPoints));
         long remainder = Math.max(0, Math.min(9999, core.getLong("BankInterestRemainder")));
         // Bounded catch-up avoids loops proportional to untrusted or ancient timestamps.
         for (long i = 0; i < Math.min(365, days); i++) {
             long interest = balance(core) * rate + remainder;
-            credit(core, interest / 10000); remainder = interest % 10000;
+            creditQuietly(core, interest / 10000); remainder = interest % 10000;
         }
         core.putLong("BankInterestRemainder", balance(core) == LIMIT ? 0 : remainder);
         core.putLong("BankInterestAt", now - (now - last) % DAY);
+        TreasuryNotifications.changed(core, balance(core) - before);
         return true;
     }
     public static void settle(RaidSavedData data, CompoundTag core) {
@@ -123,7 +132,6 @@ public final class FactionBank {
         long delta=balance(core)-before;
         // v4.18.0: log the delta so the Bank tab graph can plot recent flow.
         record(core, (int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, delta)));
-        player.displayClientMessage(net.minecraft.network.chat.Component.literal((delta>0?"Deposited ":"Withdrew ")+Math.abs(delta)+" emeralds. Faction bank: "+balance(core)+"."),true);
         data.setDirty(); player.getInventory().setChanged(); player.inventoryMenu.broadcastChanges(); return true;
     }
 }
