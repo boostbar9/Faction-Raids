@@ -58,16 +58,11 @@ public final class CampDevelopment {
             for(int sy=ground;sy<y;sy++)plan.put(new BlockPos(p.getX(),sy,p.getZ()).asLong(),"minecraft:cobblestone");
             plan.put(p.asLong(),"minecraft:spruce_planks");
         }
-        // Timber frame, open doorways, contrasting pitched roof. Supports precede roof cells.
-        for(int dy=1;dy<=3;dy++)for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++) {
-            boolean corner=Math.abs(dx)==3 && Math.abs(dz)==3;
-            boolean wall=(Math.abs(dx)==3 || Math.abs(dz)==3) && !(Math.abs(dx)<=1 && Math.abs(dz)==3);
-            if(corner || wall && dy==1) plan.put(center.offset(dx,dy,dz).asLong(),corner?"minecraft:stripped_spruce_log":"minecraft:spruce_planks");
-        }
-        String roof=raid.campUpgradeStage==0?"minecraft:gray_wool":raid.campUpgradeStage==1?"minecraft:red_terracotta":"minecraft:dark_oak_planks";
-        for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++)plan.put(center.offset(dx,4+(3-Math.abs(dx))/2,dz).asLong(),roof);
-        plan.put(center.offset(2,1,2).asLong(),raid.campUpgradeStage==1?"minecraft:crafting_table":"minecraft:composter");
-        plan.put(center.offset(-2,1,2).asLong(),"minecraft:hay_block");
+        // Entrances face the main camp; each upgrade has its own purpose and silhouette.
+        int towardX=raid.campPos.getX()-center.getX(), towardZ=raid.campPos.getZ()-center.getZ();
+        Direction entrance=Math.abs(towardX)>=Math.abs(towardZ)
+                ? (towardX>=0?Direction.EAST:Direction.WEST) : (towardZ>=0?Direction.SOUTH:Direction.NORTH);
+        plan.putAll(CampUpgradeLayout.structure(center, entrance, raid.campUpgradeStage));
         raid.pendingCampBlocks.putAll(plan);
         // Never fall back to remote placement for an upgrade or replace an obstructing player block.
         if(NativeCampConstruction.start(level,raid)) { raid.campUpgradeStage++; return true; }

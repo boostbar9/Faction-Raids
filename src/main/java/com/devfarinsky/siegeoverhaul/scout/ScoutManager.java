@@ -254,10 +254,38 @@ public final class ScoutManager {
      * don't try to despawn a dead entity later.
      */
     public static void onScoutKilled(MinecraftServer server, RaidSavedData data, Mob scout) {
+        onScoutKilled(server, data, scout, false);
+    }
+
+    /**
+     * Handles a scout death while keeping its intel drop independent from
+     * bounty eligibility. {@code defeatedByFaction} must be established from
+     * the death source by the caller; an active non-rewarding manual raid also
+     * suppresses the deposit.
+     */
+    public static void onScoutKilled(MinecraftServer server, RaidSavedData data, Mob scout,
+                                     boolean defeatedByFaction) {
         String team = scout.getPersistentData().getString(ModConstants.Tags.RAID_TEAM);
         ScoutMission m = data.scoutMissions.get(team);
         if (m == null) return;
         m.scoutUuids.remove(scout.getUUID());
+        // v4.27.0: pay the treasury a scout bounty when the faction defeats
+        // an enemy scout. v4.27.1 enforces MAX_BOUNTY_EMERALDS_PER_RAID via
+        // the mission's own bountyPaid counter so scouts can't quietly
+        // exceed the same per-raid cap that raider kills obey.
+        int scoutBounty = RaidConfig.SCOUT_BOUNTY_EMERALDS.get();
+        int cap = RaidConfig.MAX_BOUNTY_EMERALDS_PER_RAID.get();
+        if (scoutBounty > 0 && scoutBountyEligible(data, team, defeatedByFaction)) {
+            int payable = scoutBounty;
+            if (cap > 0) payable = Math.min(payable, Math.max(0, cap - m.bountyPaid));
+            if (payable > 0) {
+                net.minecraft.nbt.CompoundTag core = data.siegeCores.get(team);
+                if (core != null) {
+                    long paid = com.devfarinsky.siegeoverhaul.core.FactionBank.deposit(core, payable);
+                    if (paid > 0) m.bountyPaid = (int) Math.min(Integer.MAX_VALUE, (long) m.bountyPaid + paid);
+                }
+            }
+        }
         data.setDirty();
         if (!RaidConfig.SCOUT_DROP_INTEL_LETTER.get()) return;
         ItemStack letter = buildIntelLetter(m);
@@ -267,6 +295,13 @@ public final class ScoutManager {
             drop.setDefaultPickUpDelay();
             level.addFreshEntity(drop);
         }
+    }
+
+    /** Package-visible seam for reward-gating regression tests. */
+    static boolean scoutBountyEligible(RaidSavedData data, String teamKey, boolean defeatedByFaction) {
+        if (!defeatedByFaction) return false;
+        RaidSavedData.RaidState active = data.raids.get(teamKey);
+        return active == null || active.rewardEligible;
     }
 
     private static ItemStack buildIntelLetter(ScoutMission m) {
@@ -384,8 +419,23 @@ public final class ScoutManager {
      * mission ran for this cooldown.
      */
     public static RaidNarrative consumePreviewedNarrative(RaidSavedData data, String teamKey) {
+        return consumePreviewedNarrative(data, teamKey, null);
+    }
+
+    /**
+     * Consume the mission preview and carry any already-paid scout bounty
+     * into the raid's campaign counter. This makes the configured cap truly
+     * span scouting plus the ensuing raid instead of resetting at wave one.
+     */
+    public static RaidNarrative consumePreviewedNarrative(RaidSavedData data, String teamKey,
+                                                            RaidSavedData.RaidState raid) {
         ScoutMission m = data.scoutMissions.remove(teamKey);
         if (m == null) return null;
+        if (raid != null && m.bountyPaid > 0) {
+            int already = Math.max(0, raid.campaign.getInt("BountyPaid"));
+            long combined = (long) already + m.bountyPaid;
+            raid.campaign.putInt("BountyPaid", (int) Math.min(Integer.MAX_VALUE, combined));
+        }
         // Also despawn any lingering scouts — the raid itself is starting.
         // Do a best-effort discard synchronous here; the caller has the
         // server context if needed.

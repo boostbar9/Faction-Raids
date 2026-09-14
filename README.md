@@ -16,7 +16,7 @@ Create or join a [Villager Recruits](https://www.curseforge.com/minecraft/mc-mod
 
 The core opens a responsive five-tab command center:
 
-- **Army:** two recruit offers, one worker offer, and a featured hero, rotating every **15 minutes of server runtime**. Each offer can be purchased once per rotation across your faction. Catapult and ballista crews are delivered as deployment kits so you can place them on a clear flat 3x3 area away from an indoor Core.
+- **Army:** two recruit offers, one worker offer, and a featured hero, rotating every **15 minutes of server runtime**. Each offer can be purchased once per rotation across your faction. Catapult and ballista crews are delivered as deployment kits so you can place them on a clear, flat area sized for the selected engine away from an indoor Core.
 - **Loot:** spend emeralds on hidden equipment and supply rewards, or activate short personal blessings.
 - **Bank:** manage the shared faction treasury and review the member roster and recent activity.
 - **Territory:** purchase permanent faction-wide upgrades.
@@ -28,7 +28,7 @@ The menu sizes itself from the player's Minecraft-scaled viewport, selects detai
 
 | Hero | Signature skill |
 | --- | --- |
-| **Kael Bloodthorn** | Every third melee hit against siege enemies heals him. At full health, it grants a short shield instead. |
+| **Kael Bloodthorn** | At full health, a melee hit grants a short absorption shield. |
 | **Branna Dawnwarden** | Grants an emergency shield to one nearby wounded ally belonging to her owner. |
 | **Sylva Stormbow** | Every fourth arrow hit can chain magical damage to two additional nearby siege enemies. |
 | **Orin Frostbinder** | Bolts briefly slow up to three nearby siege enemies. |
@@ -173,3 +173,7 @@ Bank withdrawals, buffs, and voting are validated on the server. Matching server
 Later waves can reuse a siege-owned engine when its previous crew is confirmed killed and the vehicle is unoccupied. Replacement engineers deploy at the War Gate and walk to their assigned equipment; vehicles are never teleported. The fleet and population limits still apply. Mounting captured artillery protects it from siege reuse and end-of-siege cleanup. Unknown crew deaths from older saves are preserved rather than guessed.
 
 Assault navigation retries prolonged circling while allowing short detours. Builders try alternative claim-checked upgrade sites if the preferred site is obstructed, without replacing player blocks. Guards retain their stationed aggressive defense. Bank actions report the actual transfer and balance. Eligible members can recover an uncast retreat ballot after reconnecting or reopening the core; the original deadline and one-vote limit remain. Practice sieges show zero upcoming bank payment. Loot-box contents stay hidden.
+
+## Contributing and GitHub Copilot
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for Java/Forge setup, the code map, testing and release handoff. Repository instructions and automatic Copilot setup keep development consistent across contributors.

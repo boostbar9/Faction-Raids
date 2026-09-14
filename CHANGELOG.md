@@ -2,12 +2,141 @@
 
 - Command Center polish pass:
   - Better number readability for prices/reward text and affordability messaging (thousands separators and clearer emerald wording).
-  - Territory compact cards now avoid status/summary overlap on short card heights by adapting what text is shown.
   - Tooltip wrapping now uses the active panel width, improving readability and reducing overflow pressure on scaled/tiny windows.
   - Long unbroken words in wrapped card text are now clipped with ellipsis instead of bleeding outside card bounds.
   - Bank messaging now consistently refers to your **purse** (instead of mixed purse/pack wording).
 - Added responsive layout regression tests for `CoreHireLayout` covering roomy, constrained, and tiny-window scaled-canvas behavior.
 - Added hardened Copilot branch auto-publish workflow for CurseForge beta uploads with branch gating, concurrency lock, token preflight, artifact sanity checks, deterministic version metadata, and manual fallback.
+
+# 4.28.13 beta
+
+- Integrate Copilot HUD, onboarding, pathfinding and hero refinements onto current main, preserving the latest camp, inventory and enemy-hero systems.
+- Stabilize the Command Center crest and clarify upgrade affordability. Align Territory cards, hover regions and purchase controls; prevent compact description/status overlap.
+- Cache expensive fallback searches and add configurable final-approach urgency and pathing diagnostics. Rotate bounded breach scans through all sides and validate loaded, dry, in-border standing positions.
+- Use the native engineer compatibility initializer for player siege crews.
+- Give Bloodthorn absorption on a full-health melee hit, Wildsong a temporary attack-speed attribute bonus on confirmed kills, and Stonehand protection after a successful shield block.
+- Preserve attributed, cooldown-limited Starweaver and Ashenheart damage. Keep Ashenheart's working melee flame burst and describe it accurately instead of requiring a nonexistent fireball attack.
+
+# 4.28.12 beta
+
+- Give enemy waves access to all 20 player heroes with the same rarity weights, native equipment, stats and signature abilities.
+- Default to a 10% chance per wave from wave 2 onward, with at most one hero replacing an ordinary wave slot. Preserve commander, ravager and illusioner slots. Configure enemyHeroChancePercent (0 disables).
+- Save hero selection across squad retries and reloads; announce successful hero arrivals and show an Enemy Hero nameplate.
+- Restrict enemy hero abilities to the defending faction and support to their own invasion. Keep enemy heroes unhireable and shadow summons inside raid population and cleanup tracking.
+
+# 4.28.11 beta
+
+- Give future enemy camp upgrades distinct supply shelter, workshop and command shelter layouts, with reinforced lower walls, timber frames and screened openings.
+- Face upgrade entrances toward the main camp, keep a three-block-wide central access route and support raised roof ridges with continuous eaves.
+- Let camp sentries find safe posts up to two blocks above or below their assigned ground level, while avoiding queued fortifications, water and the world border.
+- Keep existing finite builder supplies, construction limits, claim validation and restoration tracking. Already-built camp structures are not rebuilt.
+
+# 4.28.10 beta
+
+- Make faction Treasury notices easier to scan with a gold [Treasury] prefix, green deposits, red deductions, signed amounts, thousands separators and singular wording for one emerald.
+- Combine same-tick transactions into one chat notice, keeping gains and deductions separate so spending remains visible.
+
+# 4.28.9 beta
+
+- Fix loot rewards, siege crew kits and emerald payments appearing stale or missing outside the hotbar while the Command Center is open. Synchronize changed player inventory slots independently of the Core's display menu, including items picked up while shopping.
+- Preserve use of all 36 inventory slots and existing full-inventory delivery rules.
+
+# 4.28.4 beta
+
+- Show faction Treasury changes in chat and the action bar: green gains, red spending/withdrawals, signed amounts and a gold Treasury label. Only the amount actually credited or debited is shown, including the Treasury portion of mixed payments.
+- Notify online members of the affected faction. Combine interest catch-up into one notice and keep failed/zero transactions silent.
+
+# 4.28.3 beta
+
+- Notify players in chat when Forge detects a newer Siege Overhaul release, with installed/available versions and a clickable CurseForge download link.
+- Delay the notice until the world has loaded and show it once per game launch, including across reconnects. Failed or disabled checks stay silent and never block gameplay.
+- Remind multiplayer players to update the server and clients together. Add the release update feed and publisher checklist.
+
+# 4.28.1 beta
+
+- Pay raider, commander, and scout bounties only when a member of the defending faction or one of its owned Recruits lands the kill. Environmental deaths and unrelated combatants still count toward normal siege progress but no longer create treasury emeralds.
+- Keep scout bounties disabled while a non-rewarding manual raid is active, and carry the scouting payout into the ensuing raid so the configured per-raid cap covers scouts, troops, and commanders together instead of resetting at wave one.
+- Correct Fortify Perimeter's storage validation to search from the commissioned builder, matching Workers 2's actual 64-block runtime lookup. A storage area reachable from the Core but not the builder can no longer be accepted and leave the job stalled.
+- Stop wall-foundation scans at non-replaceable obstructions instead of queuing a disconnected section beneath them. Existing blocks remain protected and Workers 2 receives a continuous build path.
+- Keep each wall segment and corner pillar at its configured height relative to its terrain-adjusted base. Sloped claim edges no longer create empty, buried, or incorrectly tall columns from a top fixed to the Core's Y level.
+- Include the half-block vertical spawn offset in siege-vehicle clearance, so ceilings in the top intersected layer are reported before native collision rejects the deployment.
+- Convert centered non-integral vehicle widths to the block columns they actually intersect instead of rejecting an unnecessarily large pad. Siege-yard help, purchase messages, and item tooltips now report the selected vehicle's actual pad size and required headroom.
+- Added regression coverage for Workers storage masks, wall foundations, vehicle dimension conversion, fallback sizing, top-layer clearance, and player guidance.
+
+# 4.28.0 beta
+
+- Newly generated configs award 5 emeralds per completed wave instead of 4. Forge preserves values already stored in an existing server config, including the former default of 4; set `victoryEmeraldsPerWave` to 5 to adopt the new balance without overwriting intentional custom settings.
+- Reduced major purchase prices: Fortify Perimeter 900 emeralds; Fortified Walls 700; Watchtower 500; Provisioning 900; Iron Levy 600; ballista crew 400; and catapult crew 480. Recruit, worker, hero, loot-box, temporary-buff, bounty, and interest values are unchanged.
+
+# 4.27.1 beta
+
+- Toned down the combat bounties added in 4.27.0 after they filled the treasury too fast on longer raids. Per-raider bounty is now 0 by default so a 30-raider wave no longer stacks another 30 emeralds on top of the wave-clear reward. Turn raiderBountyEmeralds up if you want per-kill bounties back.
+- Commander bounty lowered from 24 to 8 emeralds. Scout bounty lowered from 4 to 2.
+- Added maxBountyEmeraldsPerRaid, a hard cap on the total bounty a single raid can deposit into the treasury (default 32). Wave-clear payouts are not counted against it. Set to 0 to remove the cap.
+
+# 4.27.0 beta
+
+- Combat now fills the faction treasury directly. Every raider your faction defeats deposits 1 emerald into the bank, the siege commander deposits 24 on top of the existing per-player bonus, and every enemy scout your faction kills before the raid deposits 4. These are on top of the guaranteed wave payouts, and they show up on the Bank tab activity graph the same way wave payouts do so you can watch the treasury fill in real time during a big fight.
+- All three bounty amounts are individually configurable and can be set to 0 to disable. Manual raids started with /siegeoverhaul start still respect the manualRaidsGrantRewards toggle, so bounty farming is off by default.
+- Rough scale at defaults: a 30-raider wave with a commander is worth about 54 emeralds in bounties on top of the normal wave reward, and a scouted raid adds another 4 to 8 for cleaning up scouts.
+
+# 4.26.0 beta
+
+- Fortify Perimeter now fills gaps under the wall. If a wall column runs over a pit, ravine, or ledge, the wall extends downward through the air until it hits solid ground (up to 8 blocks). This closes the hole with wall material and gives the Workers 2 builder ground to stand on for the next column, so a single pit no longer stalls the whole perimeter.
+- Siege equipment kits now size the ground-clearance check to the actual vehicle. Catapults are 4 blocks wide, but the old check was a fixed 3 by 3, so the vehicle's corners fell outside the checked columns, the vanilla collision test found a block inside the bounding box, and the deployment failed with the misleading "Siege Weapons rejected the deployment spot" message. The kit now reads the entity's real width and height from Siege Weapons at commission time and inspects every column and vertical layer the vehicle will occupy, with a specific message about which block is in the way.
+- Ballista deployments are unaffected (2 by 2 fits inside the previous 3 by 3 window) but they now get the same accurate error messages when something is in the way.
+
+# 4.25.0 beta
+
+- Audited how Workers 2 builders actually pull materials from a storagearea. Found one silent failure mode that ate Fortify Perimeter commissions if the player's storagearea wasn't configured right, plus a subtle mismatch between where we searched for the storagearea and where the builder searches at runtime.
+- Fortify Perimeter now checks that your storagearea has Builders enabled in its GUI before it accepts your commission. Workers 2 gates every storagearea by job type, and if Builders isn't ticked the builder silently reports "No available storage found nearby" even though your storagearea is sitting right there. You now get a specific message telling you to open the storagearea and turn Builders on.
+- The storagearea search now anchors on your Core instead of on the builder. Workers 2 searches for storageareas from the builder's current position (which moves), and the Core is the stable centre of your perimeter, so this matches where the builder will actually spend most of its time working the wall.
+- If a storagearea in range doesn't have Builders enabled we still surface it (as a fallback candidate) instead of silently returning "not found", so you always get the actionable message.
+
+# 4.24.0 beta
+
+- Audited Fortify Perimeter against the actual Workers 2 source. Two more real problems came out of it and are fixed here.
+- The buildarea was being wired up before it was spawned into the world. Workers 2 always expects the reverse order (place the area, then push the blueprint), and its own setStartBuild reads live block state at the target positions to compute what still needs to be placed. Fortify now spawns the buildarea first and then hands it the blueprint, matching the built-in flow.
+- The buildarea was being tagged with the RAIDERS faction and team access off, which was harmless for the player-UUID access check but wrong on paper and could interact poorly with other systems that filter by faction. A new player-area path creates the buildarea with no team gating so it looks and behaves like any manually placed one.
+- Also passes the player's actual game name through to the area's owner label so the tooltip reads as your player instead of "Siege camp".
+
+# 4.23.1 beta
+
+- Fortify Perimeter now attaches your builder to the job the same way any native Workers 2 job does, instead of forcing our raider night-shift goal onto them. The raider goal only fires when the worker has a raid team tag and an active enemy camp, so installing it on your builder actually disabled their AI. v4.23.1 uses a player-safe attachment that sets ownership and work state and leaves every native goal in place, so the builder walks to the buildarea, pulls blocks from your storagearea, and places them like any Workers 2 build.
+- Removed the raider gear provisioning path from the player builder attachment. Your builder keeps whatever tools and armor you already gave it.
+- The confirmation message now tells you exactly how many blocks of the chosen material to load into your storage area, so you can stock the right amount before the builder starts.
+
+# 4.23.0 beta
+
+- Fortify Perimeter now reuses the storage area you already built. Instead of dropping a new supply barrel next to the builder, the job discovers a Workers 2 storagearea inside your claim that belongs to you and hands it to the builder as the source of blocks. If no owned storagearea sits within 64 blocks of the builder, the commission is refused with instructions on where to place one.
+- The buildarea for the wall is now created under your player UUID as well, so ownership matches your existing Workers 2 setup and the builder can access the storagearea without extra configuration.
+- Removed the auto-placed barrel and its cleanup path. Nothing new is placed in the world when you commission Fortify Perimeter beyond the wall blocks themselves.
+- Siege crew kits give a clear reason when a deployment is rejected instead of the generic "blocked" message. You now see the exact coordinate and block name of the cell that fails, which cell has fluid or missing headroom, and which of the anchor points has non-solid ground. Sturdy ground is only checked at the center and four corners now, so replaceable ground cover like grass and snow no longer forces a false rejection.
+
+# 4.22.1 beta
+
+- Complete the Fortify Perimeter feature shipped in 4.22.0. The v4.22.0 tag was published with the new class file but without the Territory tab buttons, the menu action ids, or the version bump, so the feature was dead code. This release wires the three material buttons at the bottom of the Territory tab (Stone Bricks, Cobblestone, Oak Planks), routes menu ids 70 to 72 into TerritoryFortification.commission, and bumps the mod version.
+- No new behavior beyond what 4.22.0 was intended to ship: 1200 emerald commission, 3-block walls along claim edges, 5-block corner pillars, materials pulled from a supply barrel the job drops next to your Villager Recruits builder.
+
+# 4.22.0 beta
+
+- New Territory job: Fortify Perimeter. Commissions a Villager Recruits Builder standing near your Siege Core to wall off the outer edge of your Recruits claim in stone bricks, cobblestone, or oak planks. Three material buttons live at the bottom of the Territory tab.
+- Walls are 3 blocks tall along every chunk edge that borders unclaimed land, with 5-block corner pillars at exterior chunk corners.
+- Costs 1,200 emeralds to commission (bank first, then inventory). The material itself comes from the storage barrel the job drops next to your builder. Fill the barrel with your chosen block and the builder walks the perimeter placing them; leave it empty or run it dry and the builder waits until you refill.
+- Never overwrites existing solid blocks, so a wall that runs into your castle just skips those cells and continues on the other side.
+- Requires both Villager Recruits and Workers 2. Uses the same buildarea, blueprint, and storagearea system the mod already uses for siege camps, so behavior is consistent with what a native Workers 2 job would do.
+
+# 4.21.3 beta
+
+- Raiders now reliably climb the temporary ladders they build against walls. Previously the goal frequently failed to attach because ground pathfinding cannot end a path on the ladder's air block, so raiders would stall a few blocks from the ladder. The goal now paths to the solid stand-on square adjacent to the ladder base and only ascends after touching a ladder anywhere in the column, not just the exact block coordinates.
+- Widen the touching gate on the way up so slightly off-grid raiders keep climbing instead of dropping back to the ground.
+- No changes to placement rules, ladder counts, save data or dependencies.
+
+# 4.21.2 beta
+
+- Fix the in-game configuration editor saving list settings as one string, which could reject the change or corrupt the setting type. String lists now use a readable comma-separated editor; blank input produces an empty list and the prior bracketed display remains accepted during upgrades.
+- Increase list-field input capacity while preserving boolean, enum, string and numeric editing behavior. No gameplay balance, save data or dependency changes.
+- Automated regression coverage; no interactive Minecraft playtesting.
 
 # 4.21.1 beta
 

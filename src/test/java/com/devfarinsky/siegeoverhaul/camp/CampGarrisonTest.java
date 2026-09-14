@@ -10,6 +10,45 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 class CampGarrisonTest extends MinecraftTestSupport {
+    @Test void postsFollowSmallTerrainStepsWithoutMovingIntoTheCentralApproach() {
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        raid.campPos=new BlockPos(-20,70,-30);
+        for(double angle:new double[]{0,Math.PI/2,Math.PI,3*Math.PI/2}) {
+            raid.approachAngle=angle;
+            for(int slot=0;slot<4;slot++) {
+                var positions=CampGuards.candidates(raid,slot);
+                assertEquals(45,positions.size());
+                assertEquals(positions.size(),new HashSet<>(positions).size());
+                BlockPos preferred=positions.get(0);
+                assertEquals(preferred.above(),positions.get(1));
+                assertEquals(preferred.below(),positions.get(2));
+                assertTrue(positions.contains(preferred.above(2)));
+                assertTrue(positions.contains(preferred.below(2)));
+            }
+        }
+    }
+    @Test void postsRejectQueuedFortificationsWaterAndWorldBorder() {
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        var level=mock(ServerLevel.class);
+        var border=mock(net.minecraft.world.level.border.WorldBorder.class);
+        BlockPos post=new BlockPos(0,70,0);
+        when(level.hasChunkAt(any())).thenReturn(true);
+        when(level.getWorldBorder()).thenReturn(border);
+        when(border.isWithinBounds(any(BlockPos.class))).thenReturn(true);
+        when(level.getBlockState(any())).thenReturn(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+        when(level.getBlockState(post.below())).thenReturn(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+        when(level.getFluidState(any())).thenReturn(net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState());
+        assertTrue(CampGuards.safePost(level,raid,post));
+        raid.pendingFortifications.put(post.above().asLong(),"minecraft:oak_fence");
+        assertFalse(CampGuards.safePost(level,raid,post));
+        raid.pendingFortifications.clear();
+        when(level.getFluidState(post.above())).thenReturn(net.minecraft.world.level.material.Fluids.WATER.defaultFluidState());
+        assertFalse(CampGuards.safePost(level,raid,post));
+        when(level.getFluidState(post.above())).thenReturn(net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState());
+        when(border.isWithinBounds(post)).thenReturn(false);
+        assertFalse(CampGuards.safePost(level,raid,post));
+    }
+
     @Test void claimsUseTheNativeFiveByFiveFootprintAtNegativeCoordinates() {
         var chunks=CampClaims.footprint(new BlockPos(-1,70,-17));
         assertEquals(25,chunks.size());

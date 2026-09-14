@@ -157,6 +157,7 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ALLOWED_RAIDER_FACTIONS;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ALLOWED_CASUS_BELLI;
     public static final ForgeConfigSpec.BooleanValue NARRATIVE_IN_BOSS_BAR;
+    public static final ForgeConfigSpec.IntValue ENEMY_HERO_CHANCE_PERCENT;
     public static final ForgeConfigSpec.BooleanValue ENABLE_WAVE_COMPOSITION;
     public static final ForgeConfigSpec.BooleanValue ENABLE_FORMATIONS;
     public static final ForgeConfigSpec.BooleanValue ANNOUNCE_WAVE_FORMATION;
@@ -183,6 +184,10 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue VICTORY_EMERALDS_BASE;
     public static final ForgeConfigSpec.IntValue VICTORY_EMERALDS_PER_WAVE;
     public static final ForgeConfigSpec.IntValue COMMANDER_EMERALD_BONUS;
+    public static final ForgeConfigSpec.IntValue RAIDER_BOUNTY_EMERALDS;
+    public static final ForgeConfigSpec.IntValue COMMANDER_BOUNTY_EMERALDS;
+    public static final ForgeConfigSpec.IntValue SCOUT_BOUNTY_EMERALDS;
+    public static final ForgeConfigSpec.IntValue MAX_BOUNTY_EMERALDS_PER_RAID;
     public static final ForgeConfigSpec.BooleanValue MANUAL_RAIDS_GRANT_REWARDS;
     public static final ForgeConfigSpec.BooleanValue ENABLE_WORKERS_COMPAT;
     public static final ForgeConfigSpec.BooleanValue PROTECT_WORKERS;
@@ -200,7 +205,7 @@ public final class RaidConfig {
         b.comment("Player-focused faction invasion settings.").push("playerRaids");
         SIEGE_CORPSE_SECONDS = b.comment("Known enemy siege corpses become normal dropped loot after this many seconds. Player and unclassified nonempty corpses are preserved. Zero disables conversion.").defineInRange("siegeCorpseSeconds",120,0,3600);
         EMPTY_CORPSE_SECONDS = b.comment("Remove fully empty corpses after this many seconds. No inventories are deleted. Zero keeps native timing.").defineInRange("emptyCorpseSeconds",60,0,3600);
-        BANK_INTEREST_BASIS_POINTS = b.comment("Faction bank interest per real 24-hour day in basis points (100=1%). Up to 365 days of offline catch-up; no clock rollback payouts.").defineInRange("bankDailyInterestBasisPoints",100,0,1000);
+        BANK_INTEREST_BASIS_POINTS = b.comment("Faction bank interest per in-game day (24000 ticks / 20 real minutes of active play) in basis points (100=1%). Interest is measured in game ticks, so single-player pausing does not rack up payouts. Up to 365 days of catch-up; no clock rollback payouts.").defineInRange("bankDailyInterestBasisPoints",100,0,1000);
         ENABLED = b.comment("Master switch.").define("enabled", true);
         AUTOMATIC_RAIDS = b.comment("Automatically schedule invasions for registered faction anchors.")
                 .define("automaticRaids", true);
@@ -481,6 +486,8 @@ public final class RaidConfig {
                 .defineListAllowEmpty("allowedCasusBelli", List.of(), o -> o instanceof String);
         NARRATIVE_IN_BOSS_BAR = b.comment("Show the raider faction epithet on the boss bar. Disable to keep the generic \"Faction Invasion\" title.")
                 .define("narrativeInBossBar", true);
+        ENEMY_HERO_CHANCE_PERCENT = b.comment("Percent chance per wave, starting at wave 2, for one enemy hero from the player roster. Replaces one ordinary wave slot; 0 disables. Uses the shared hero rarity weights.")
+                .defineInRange("enemyHeroChancePercent", 10, 0, 100);
         ENABLE_WAVE_COMPOSITION = b.comment("Use progressive wave composition: early waves lean shieldman/bowman, later waves add captains, engineers and assassins. Disable to fall back to the classic index-based picker.")
                 .define("enableProgressiveWaveComposition", true);
         ENABLE_FORMATIONS = b.comment("Command Recruits raiders into formations (line, square) while advancing on the objective. Requires the Villager Recruits mod's FormationUtils to be present.")
@@ -529,12 +536,22 @@ public final class RaidConfig {
                 .define("spawnArrivalEffects", true);
         VICTORY_EMERALDS_BASE = b.comment("Guaranteed emeralds awarded to each online faction member after an eligible victory.")
                 .defineInRange("victoryEmeraldsBase", 16, 0, 512);
-        VICTORY_EMERALDS_PER_WAVE = b.comment("Additional guaranteed emeralds per completed wave for each online faction member.")
-                .defineInRange("victoryEmeraldsPerWave", 4, 0, 64);
+        VICTORY_EMERALDS_PER_WAVE = b.comment(
+                "Additional guaranteed emeralds per completed wave for each online faction member.",
+                "New configs default to 5. Forge preserves values already stored by an existing server; set this to 5 manually to adopt the v4.28 balance without overwriting a custom value.")
+                .defineInRange("victoryEmeraldsPerWave", 5, 0, 64);
         COMMANDER_EMERALD_BONUS = b.comment("Additional guaranteed emeralds when the faction defeats the siege commander.")
                 .defineInRange("commanderEmeraldBonus", 12, 0, 256);
-        MANUAL_RAIDS_GRANT_REWARDS = b.comment("Allow raids started manually with /siegeoverhaul start to grant rewards. Disabled by default to prevent reward farming.")
-                .define("manualRaidsGrantRewards", false);
+        RAIDER_BOUNTY_EMERALDS = b.comment("Emeralds deposited into the faction treasury for each raider the faction defeats. Default 0 keeps combat rewards from stacking on top of the wave-clear payout. Set to 1 or higher for per-kill bounties.")
+                .defineInRange("raiderBountyEmeralds", 0, 0, 64);
+        COMMANDER_BOUNTY_EMERALDS = b.comment("Emeralds deposited into the faction treasury when the siege commander is defeated. Paid in addition to the per-player commanderEmeraldBonus. Set to 0 to disable.")
+                .defineInRange("commanderBountyEmeralds", 8, 0, 512);
+        SCOUT_BOUNTY_EMERALDS = b.comment("Emeralds deposited into the faction treasury for each enemy scout the faction defeats before the raid arrives. Set to 0 to disable scout bounties.")
+                .defineInRange("scoutBountyEmeralds", 2, 0, 128);
+        MAX_BOUNTY_EMERALDS_PER_RAID = b.comment("Hard cap on the total bounty emeralds (raider + commander + scout combined) a single raid can deposit into the treasury. Wave-clear payouts are unaffected. Set to 0 to remove the cap.")
+                .defineInRange("maxBountyEmeraldsPerRaid", 32, 0, 10_000);
+        MANUAL_RAIDS_GRANT_REWARDS = b.comment("Allow raids started manually with /siegeoverhaul start to grant rewards. Enabled by default so single-player and small-server testing plays like a real siege; set to false on public servers to prevent reward farming.")
+                .define("manualRaidsGrantRewards", true);
         b.pop();
 
         b.comment("Optional companion-mod integrations. These safely do nothing when the named mod is absent.")

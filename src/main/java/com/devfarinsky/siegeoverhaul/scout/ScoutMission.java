@@ -53,6 +53,14 @@ public final class ScoutMission {
     /** UUIDs of live scout entities. Cleared when scouts die or despawn. */
     public final Set<UUID> scoutUuids = new HashSet<>();
 
+    /**
+     * v4.27.1: cumulative bounty emeralds already paid to the treasury for
+     * scouts killed on this mission. Enforces MAX_BOUNTY_EMERALDS_PER_RAID
+     * during the pre-raid phase (before the RaidState exists) so scout kills
+     * respect the same cap as raider kills.
+     */
+    public int bountyPaid;
+
     public ScoutMission(String teamKey, long spawnGameTime, long expireGameTime,
                         RaidNarrative previewedNarrative) {
         this.teamKey = teamKey;
@@ -71,6 +79,7 @@ public final class ScoutMission {
         net.minecraft.nbt.ListTag list = new net.minecraft.nbt.ListTag();
         scoutUuids.forEach(u -> list.add(net.minecraft.nbt.StringTag.valueOf(u.toString())));
         tag.put("Scouts", list);
+        if (bountyPaid > 0) tag.putInt("BountyPaid", bountyPaid);
         return tag;
     }
 
@@ -80,6 +89,7 @@ public final class ScoutMission {
         ScoutMission m = new ScoutMission(tag.getString("Team"),
                 tag.getLong("SpawnAt"), tag.getLong("ExpireAt"), narrative);
         m.spawned = tag.getBoolean("Spawned");
+        m.bountyPaid = tag.getInt("BountyPaid");
         net.minecraft.nbt.ListTag list = tag.getList("Scouts", net.minecraft.nbt.Tag.TAG_STRING);
         for (int i = 0; i < list.size(); i++) {
             try {

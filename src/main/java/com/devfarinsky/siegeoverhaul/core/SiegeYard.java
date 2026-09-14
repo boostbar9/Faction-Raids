@@ -17,6 +17,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -35,7 +36,7 @@ import java.util.Optional;
  */
 public final class SiegeYard {
     /** Index 0 = catapult crew, 1 = ballista crew. */
-    public static final int[] PRICES = { 560, 480 };
+    public static final int[] PRICES = { 480, 400 };
     public static final String[] LABELS = { "Catapult Crew", "Ballista Crew" };
     public static final SiegeEngineType[] TYPES = { SiegeEngineType.CATAPULT, SiegeEngineType.BALLISTA };
 
@@ -80,9 +81,11 @@ public final class SiegeYard {
         if (!stored && !kit.isEmpty()) player.drop(kit, false);
         player.getInventory().setChanged();
         player.inventoryMenu.broadcastChanges();
+        SiegeIntegration.Footprint footprint = SiegeIntegration.footprintOf(TYPES[index]);
         player.sendSystemMessage(Component.literal(
                 "Purchased a " + LABELS[index] + " deployment kit for " + price
-                        + " emeralds. Right-click the top of a clear flat 3x3 area to deploy it."
+                        + " emeralds. Right-click the top of a clear flat "
+                        + deploymentAreaGuidance(footprint) + " to deploy it."
                         + (stored ? "" : " Your inventory was full, so the kit was dropped at your feet.")));
         player.playNotifySound(SoundEvents.EXPERIENCE_ORB_PICKUP,
                 SoundSource.PLAYERS, 0.7F, 1.15F);
@@ -105,13 +108,23 @@ public final class SiegeYard {
         }
 
         ServerLevel level = player.serverLevel();
-        if (!isFlat3x3(level, deployPos)) {
-            player.sendSystemMessage(Component.literal(
-                    "That deployment is blocked. Right-click the top of a clear, solid, flat 3x3 area."));
+
+        // Size the ground-clearance check to the actual vehicle. The catapult
+        // is 4x4 blocks so a fixed 3x3 clearance was too small: the vehicle's
+        // corners fell outside the checked columns, level.noCollision saw a
+        // block inside the bbox, and the deploy failed with the misleading
+        // "Siege Weapons rejected the deployment spot" message. Ballista is
+        // 2x2 and fits inside 3x3 already. footprintOf converts the centered
+        // bounding box to exact occupied columns and also accounts for the
+        // half-block vertical spawn offset.
+        SiegeEngineType type = TYPES[index];
+        SiegeIntegration.Footprint fp = SiegeIntegration.footprintOf(type);
+        String flatIssue = describeClearance(level, deployPos, fp.horizontalRadius(), fp.blockHeight());
+        if (flatIssue != null) {
+            player.sendSystemMessage(Component.literal("Deployment blocked: " + flatIssue));
             return false;
         }
 
-        SiegeEngineType type = TYPES[index];
         Vec3 spawn = Vec3.atCenterOf(deployPos);
         float yaw = player.getYRot();
         Optional<Entity> vehicleOpt = SiegeIntegration.spawnSiegeVehicle(level, type, spawn, yaw);
@@ -121,11 +134,11 @@ public final class SiegeYard {
             return false;
         }
         Entity vehicle = vehicleOpt.get();
-        Optional<Mob> engineerOpt = spawnFriendlyEngineer(player, level, spawn, vehicle, type);
-        if (engineerOpt.isEmpty()) {
+        EngineerSpawn engineerResult = spawnFriendlyEngineer(player, level, spawn, vehicle, type);
+        if (engineerResult.mob == null) {
             vehicle.discard();
             player.sendSystemMessage(Component.literal(
-                    "Could not summon a Siege Engineer. Check that the Recruits mod is fully loaded."));
+                    "Could not summon a Siege Engineer: " + engineerResult.reason));
             return false;
         }
         level.playSound(null, deployPos, SoundEvents.ANVIL_LAND,
@@ -139,18 +152,109 @@ public final class SiegeYard {
     }
 
     static boolean isFlat3x3(ServerLevel level, BlockPos center) {
+        return describeFlat3x3(level, center) == null;
+    }
+
+    public static int deploymentDiameter(SiegeIntegration.Footprint footprint) {
+        return 2 * Math.max(1, footprint.horizontalRadius()) + 1;
+    }
+
+    public static String deploymentAreaGuidance(SiegeIntegration.Footprint footprint) {
+        int diameter = deploymentDiameter(footprint);
+        int height = Math.max(1, footprint.blockHeight());
+        return diameter + "x" + diameter + " area with " + height + " blocks of headroom";
+    }
+
+    /**
+     * Footprint-aware clearance check.
+     *
+     * <p>Verifies that the square from {@code center-radius} to
+     * {@code center+radius} on each horizontal axis is free of solid blocks
+     * and fluids for {@code height} vertical blocks starting at
+     * {@code center}, and that the ground blocks immediately below
+     * that square is sturdy. This matches the actual footprint the spawned
+     * vehicle will occupy, so vanilla noCollision won't reject the spawn
+     * because of a block outside the previously fixed 3x3 window.</p>
+     *
+     * @return a human-readable reason the site is unsuitable, or null when
+     *         it is fine.
+     */
+    static String describeClearance(ServerLevel level, BlockPos center, int radius, int height) {
+        int h = Math.max(1, height);
+        int r = Math.max(1, radius);
+        for (int dx = -r; dx <= r; dx++) for (int dz = -r; dz <= r; dz++) {
+            BlockPos p = center.offset(dx, 0, dz);
+            if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)) {
+                return "Deployment target is outside the loaded world.";
+            }
+            for (int dy = 0; dy < h; dy++) {
+                BlockPos q = p.above(dy);
+                if (!level.getFluidState(q).isEmpty()) {
+                    return "There is fluid at " + coord(q) + ".";
+                }
+                BlockState state = level.getBlockState(q);
+                if (!state.isAir() && !state.canBeReplaced()) {
+                    return "A block is in the way at " + coord(q) + " (" + blockName(state) + "). Clear a "
+                            + (2 * r + 1) + "x" + (2 * r + 1) + " space " + h + " blocks tall.";
+                }
+            }
+            // The whole footprint needs sturdy ground: a catapult that
+            // straddles a 1-block hole spawns fine but immediately rolls
+            // into it, so we require every column below to be solid.
+            BlockState below = level.getBlockState(p.below());
+            if (!below.isFaceSturdy(level, p.below(), Direction.UP)) {
+                return "The ground under " + coord(p) + " is not solid. Fill it with any full block.";
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Human-readable reason why a 3x3 deployment area at {@code center} is
+     * unsuitable, or null when it is fine. Rules were relaxed: replaceable
+     * blocks like grass and snow layers are treated as clear space, and
+     * sturdy ground is only required at the center and four corners.
+     */
+    static String describeFlat3x3(ServerLevel level, BlockPos center) {
         for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
             BlockPos p = center.offset(dx, 0, dz);
-            if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)) return false;
-            if (!level.getFluidState(p).isEmpty()) return false;
-            if (!level.getFluidState(p.above()).isEmpty()) return false;
-            if (!level.getBlockState(p.below()).isFaceSturdy(level, p.below(), Direction.UP)) return false;
-            if (!level.getBlockState(p).isAir() && !level.getBlockState(p).canBeReplaced()) return false;
-            if (!level.getBlockState(p.above()).isAir() && !level.getBlockState(p.above()).canBeReplaced()) return false;
-            if (!level.getBlockState(p.above(2)).isAir()
-                    && !level.getBlockState(p.above(2)).canBeReplaced()) return false;
+            if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)) {
+                return "Deployment target is outside the loaded world.";
+            }
+            if (!level.getFluidState(p).isEmpty()) return "There is fluid where the crew should stand at " + coord(p) + ".";
+            if (!level.getFluidState(p.above()).isEmpty()) return "There is fluid above the crew at " + coord(p.above()) + ".";
+            BlockState ground = level.getBlockState(p);
+            if (!ground.isAir() && !ground.canBeReplaced()) {
+                return "A solid block is in the way at " + coord(p) + " (" + blockName(ground) + "). Clear a 3x3 space.";
+            }
+            BlockState above1 = level.getBlockState(p.above());
+            if (!above1.isAir() && !above1.canBeReplaced()) {
+                return "Not enough headroom at " + coord(p.above()) + " (" + blockName(above1) + ").";
+            }
+            BlockState above2 = level.getBlockState(p.above(2));
+            if (!above2.isAir() && !above2.canBeReplaced()) {
+                return "Not enough headroom at " + coord(p.above(2)) + " (" + blockName(above2) + ").";
+            }
         }
-        return true;
+        BlockPos[] anchors = {
+                center,
+                center.offset(-1, 0, -1), center.offset(1, 0, -1),
+                center.offset(-1, 0,  1), center.offset(1, 0,  1)
+        };
+        for (BlockPos a : anchors) {
+            if (!level.getBlockState(a.below()).isFaceSturdy(level, a.below(), Direction.UP)) {
+                return "The ground under " + coord(a) + " is not solid. Fill it with any full block.";
+            }
+        }
+        return null;
+    }
+
+    private static String coord(BlockPos p) { return p.getX() + ", " + p.getY() + ", " + p.getZ(); }
+
+    private static String blockName(BlockState state) {
+        net.minecraft.resources.ResourceLocation id =
+                net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(state.getBlock());
+        return id == null ? "unknown" : id.getPath();
     }
 
     /**
@@ -159,43 +263,98 @@ public final class SiegeYard {
      * hire path the CoreHiring class uses so ownership, faction, and unit
      * count all stay consistent with a normal recruit hire.
      */
-    private static Optional<Mob> spawnFriendlyEngineer(ServerPlayer player, ServerLevel level,
+    /** Small result carrier so the caller can surface which step failed. */
+    private static final class EngineerSpawn {
+        final Mob mob;
+        final String reason;
+        EngineerSpawn(Mob mob, String reason) { this.mob = mob; this.reason = reason; }
+        static EngineerSpawn ok(Mob m) { return new EngineerSpawn(m, ""); }
+        static EngineerSpawn fail(String r) { return new EngineerSpawn(null, r); }
+    }
+
+    private static EngineerSpawn spawnFriendlyEngineer(ServerPlayer player, ServerLevel level,
                                                        Vec3 pos, Entity vehicle, SiegeEngineType type) {
         try {
             ResourceLocation id = new ResourceLocation("recruits", "siege_engineer");
-            if (!ForgeRegistries.ENTITY_TYPES.containsKey(id)) return Optional.empty();
+            if (!ForgeRegistries.ENTITY_TYPES.containsKey(id))
+                return EngineerSpawn.fail("Recruits entity type 'siege_engineer' is not registered. Update or reinstall Recruits.");
             EntityType<?> et = ForgeRegistries.ENTITY_TYPES.getValue(id);
-            if (et == null) return Optional.empty();
-            Entity entity = et.create(level);
-            if (!(entity instanceof Mob mob)) return Optional.empty();
+            if (et == null)
+                return EngineerSpawn.fail("Recruits siege_engineer entity type is registered but returned null.");
+            Entity entity;
+            try {
+                entity = et.create(level);
+            } catch (RuntimeException ex) {
+                FactionLogger.LOG.warn("siege_engineer create() threw", ex);
+                return EngineerSpawn.fail("Recruits siege_engineer constructor threw: " + ex.getClass().getSimpleName());
+            }
+            if (entity == null)
+                return EngineerSpawn.fail("Recruits siege_engineer create() returned null.");
+            if (!(entity instanceof Mob mob))
+                return EngineerSpawn.fail("Recruits siege_engineer is not a Mob (class: " + entity.getClass().getSimpleName() + ").");
             mob.moveTo(pos.x, pos.y, pos.z, vehicle.getYRot(), 0F);
             EngineerSpawnCompatibility.initialize(level, mob);
             // Cost setter so the hire event doesn't refuse.
             try { mob.getClass().getMethod("setCost", int.class).invoke(mob, 0); }
             catch (ReflectiveOperationException ignored) {}
             mob.setPersistenceRequired();
-            if (!level.addFreshEntity(mob)) return Optional.empty();
-            // Hire the recruit under the player's ownership.
+            if (!level.addFreshEntity(mob))
+                return EngineerSpawn.fail("Level rejected addFreshEntity for siege_engineer (spot may be blocked).");
+            // Hand ownership directly rather than going through Recruits' hire()
+            // path. hire() enforces the player's global recruit cap and returns
+            // false with an "INFO_RECRUITING_MAX" message when the player is at
+            // the limit, which surfaced as a misleading "make sure Recruits is
+            // fully loaded" error from the SiegeYard. Siege engineers are
+            // bought via the SiegeYard, not the vanilla Recruits menu, so they
+            // do not need to count against that cap.
             try {
-                Class<?> group = Class.forName("com.talhanation.recruits.world.RecruitsGroup");
-                var hire = mob.getClass().getMethod("hire", Player.class, group, boolean.class);
-                if (!Boolean.TRUE.equals(hire.invoke(mob, player, null, true))) {
-                    mob.discard();
-                    return Optional.empty();
-                }
+                mob.getClass().getMethod("setOwnerUUID", Optional.class)
+                        .invoke(mob, Optional.of(player.getUUID()));
+                mob.getClass().getMethod("setIsOwned", boolean.class).invoke(mob, true);
+                try { mob.getClass().getMethod("setFollowState", int.class).invoke(mob, 2); }
+                catch (ReflectiveOperationException ignored) {}
+                try { mob.getClass().getMethod("setAggroState", int.class).invoke(mob, 0); }
+                catch (ReflectiveOperationException ignored) {}
+                try { mob.getClass().getMethod("resetPaymentTimer").invoke(mob); }
+                catch (ReflectiveOperationException ignored) {}
+                // Assign to the player's scoreboard team if they have one, so
+                // the engineer inherits faction ownership visuals and doesn't
+                // get shot by friendly recruits.
+                try {
+                    net.minecraft.world.scores.Team team = player.getTeam();
+                    if (team instanceof net.minecraft.world.scores.PlayerTeam pt) {
+                        level.getScoreboard().addPlayerToTeam(mob.getStringUUID(), pt);
+                    }
+                } catch (RuntimeException ignored) {}
             } catch (ReflectiveOperationException e) {
                 mob.discard();
-                return Optional.empty();
+                FactionLogger.LOG.warn("siege_engineer ownership reflection failed", e);
+                return EngineerSpawn.fail("Ownership setters missing on Recruits siege_engineer (" + e.getClass().getSimpleName() + "). Recruits API may have changed.");
             }
             // Give the engineer their ammunition so they actually fire.
+            // Catapults take Cobble Cluster Shot (siegeweapons:cobble_cluster_item)
+            // as their primary projectile. Plain cobblestone works as a fallback
+            // for the catapult AI, but cluster shot is what the mod expects and
+            // what the engineer's targeting logic prefers, so we stock that.
+            // Cobblestone goes in as backup so the catapult never runs dry.
             try {
                 Object inventory = mob.getClass().getMethod("getInventory").invoke(mob);
                 if (inventory instanceof net.minecraft.world.SimpleContainer container) {
-                    net.minecraft.world.item.Item ammo = type == SiegeEngineType.BALLISTA
-                            ? ForgeRegistries.ITEMS.getValue(new ResourceLocation("siegeweapons", "ballista_projectile_item"))
-                            : net.minecraft.world.item.Items.COBBLESTONE;
-                    if (ammo != null && ammo != net.minecraft.world.item.Items.AIR) {
-                        container.addItem(new net.minecraft.world.item.ItemStack(ammo, 64));
+                    if (type == SiegeEngineType.BALLISTA) {
+                        net.minecraft.world.item.Item bolt = ForgeRegistries.ITEMS.getValue(
+                                new ResourceLocation("siegeweapons", "ballista_projectile_item"));
+                        if (bolt != null && bolt != net.minecraft.world.item.Items.AIR) {
+                            container.addItem(new net.minecraft.world.item.ItemStack(bolt, 64));
+                        }
+                    } else {
+                        net.minecraft.world.item.Item cluster = ForgeRegistries.ITEMS.getValue(
+                                new ResourceLocation("siegeweapons", "cobble_cluster_item"));
+                        if (cluster != null && cluster != net.minecraft.world.item.Items.AIR) {
+                            container.addItem(new net.minecraft.world.item.ItemStack(cluster, 32));
+                        }
+                        // Cobblestone as fallback in case cluster runs out.
+                        container.addItem(new net.minecraft.world.item.ItemStack(
+                                net.minecraft.world.item.Items.COBBLESTONE, 32));
                     }
                     container.addItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 16));
                 }
@@ -208,10 +367,10 @@ public final class SiegeYard {
                 // is a soft degradation rather than a failure.
                 FactionLogger.LOG.debug("Friendly siege engineer could not mount natively; standing by beside the vehicle");
             }
-            return Optional.of(mob);
+            return EngineerSpawn.ok(mob);
         } catch (RuntimeException ex) {
             FactionLogger.LOG.warn("Friendly siege crew spawn failed", ex);
-            return Optional.empty();
+            return EngineerSpawn.fail("Unexpected " + ex.getClass().getSimpleName() + " during spawn. See latest.log for stack trace.");
         }
     }
 }

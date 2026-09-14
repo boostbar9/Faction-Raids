@@ -2,6 +2,7 @@ package com.devfarinsky.siegeoverhaul.client;
 
 import com.devfarinsky.siegeoverhaul.*;
 import com.devfarinsky.siegeoverhaul.core.*;
+import com.devfarinsky.siegeoverhaul.siege.SiegeIntegration;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.ConfirmLinkScreen;
@@ -71,6 +72,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private final Button[] hire = new Button[4];
     private final Button[] siegeYard = new Button[2];
     private final Button[] territoryBuffs = new Button[4];
+    private final Button[] fortifyButtons = new Button[TerritoryFortification.MATERIALS.length];
     private final Button[] boxes = new Button[3];
     private final Button[] buffs = new Button[3];
     private final Button[] bank = new Button[4];
@@ -192,9 +194,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int tbCols = 2;
         int tbRows = (TerritoryBuffs.COUNT + tbCols - 1) / tbCols;
         int tbGridTop = layout.contentY();
-        int tbGridBottom = layout.contentBottom();
-        int tbCellW = (layout.width() - 20 - (tbCols - 1) * 8) / tbCols;
-        int tbCellH = (tbGridBottom - tbGridTop - (tbRows - 1) * 8) / tbRows;
+        // Reserve a bottom strip for the Fortify Perimeter material buttons.
+        int fortifyStripH = 26;
+        int tbGridBottom = layout.contentBottom() - fortifyStripH - 6;
+        int tbCellW = layout.territoryCardWidth();
+        int tbCellH = layout.territoryCardHeight();
         // Purchase button lives inside its card, near the bottom-right.
         int btnH = 18;
         for (int i = 0; i < TerritoryBuffs.COUNT; i++) {
@@ -211,6 +215,26 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     btnW, btnH,
                     false, () -> false, CommandIcon.FLAG));
         }
+        // Fortify Perimeter strip: 3 side-by-side material buttons that
+        // commission a Villager Recruits Builder to wall off the territory
+        // in the chosen material. Bank + inventory pay 900 emeralds per job.
+        int stripY = tbGridBottom + 8;
+        int stripH = 22;
+        int stripW = layout.width() - 20;
+        int fbGap = 6;
+        int fbW = (stripW - (fortifyButtons.length - 1) * fbGap) / fortifyButtons.length;
+        for (int i = 0; i < fortifyButtons.length; i++) {
+            final int index = i;
+            String label = TerritoryFortification.material(i).label();
+            fortifyButtons[i] = addRenderableWidget(new CoreButton(
+                    Component.literal(label + "  " + TerritoryFortification.PRICE + "e"),
+                    b -> action(70 + index),
+                    layout.x() + 10 + i * (fbW + fbGap),
+                    stripY,
+                    fbW, stripH,
+                    false, () -> false, CommandIcon.FLAG));
+        }
+
         // Recenter/zoom buttons removed; the Territory tab is now a pure
         // upgrade shop. Keep the button fields non-null for the render loop
         // by pointing them at hidden placeholders that render nothing.
@@ -324,7 +348,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             territoryBuffs[i].visible = tab == 3;
             boolean owned = menu.hasTerritoryBuff(i);
             territoryBuffs[i].active = !owned && canAfford(TerritoryBuffs.PRICES[i]);
-            long missing = Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
+            long missing = canAfford(TerritoryBuffs.PRICES[i]) ? 0L : Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
             territoryBuffs[i].setMessage(Component.literal(layout.compact()
                     ? (owned ? "Active"
                             : (missing == 0L ? "Buy  ·  " + TerritoryBuffs.PRICES[i] + "e"
@@ -333,6 +357,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                             : (missing == 0L
                             ? TerritoryBuffs.LABELS[i] + "  ·  " + TerritoryBuffs.PRICES[i] + "e"
                             : TerritoryBuffs.LABELS[i] + "  ·  need " + missing + "e"))));
+        }
+        for (int i = 0; i < fortifyButtons.length; i++) {
+            fortifyButtons[i].visible = tab == 3;
+            fortifyButtons[i].active = canAfford(TerritoryFortification.PRICE);
+            String label = TerritoryFortification.material(i).label();
+            fortifyButtons[i].setMessage(Component.literal(
+                    layout.compact() ? label
+                            : "Fortify  " + label + "  " + TerritoryFortification.PRICE + "e"));
         }
         for (int i = 0; i < 3; i++) {
             recenterButton.visible = tab == 3;
@@ -410,12 +442,19 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     String info;
                     if (!SiegeYard.available()) {
                         info = "Requires both Villager Recruits and Siege Weapons.";
-                    } else if (!canAfford(SiegeYard.PRICES[i])) {
-                        info = "You need " + emeralds(SiegeYard.PRICES[i] - availableFunds())
-                                + " more (purse + faction bank).";
                     } else {
-                        info = "Buy the kit now, then right-click the top of a clear, solid, flat 3x3 area to deploy your "
-                                + SiegeYard.LABELS[i] + ". A failed placement keeps the kit.";
+                        SiegeIntegration.Footprint footprint =
+                                SiegeIntegration.footprintOf(SiegeYard.TYPES[i]);
+                        String area = SiegeYard.deploymentAreaGuidance(footprint);
+                        if (!canAfford(SiegeYard.PRICES[i])) {
+                            info = "You need " + emeralds(SiegeYard.PRICES[i] - availableFunds())
+                                    + " more (purse + faction bank). Deployment requires a clear, solid, flat "
+                                    + area + ".";
+                        } else {
+                            info = "Buy the kit now, then right-click the top of a clear, solid, flat "
+                                    + area + " to deploy your " + SiegeYard.LABELS[i]
+                                    + ". A failed placement keeps the kit.";
+                        }
                     }
                     tooltip(g, info, tooltipX, tooltipY);
                 }
@@ -449,8 +488,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     layout.width() - 20, 46)) {
                 long dailyInterest = (long) menu.bank() * menu.interestRate() / 10000L;
                 tooltip(g, String.format(Locale.ROOT,
-                        "Faction treasury: %,d emeralds  |  Next wave: +%,d  |  Daily interest: +%,d (%.2f%%)  |  Purchases use the bank before your purse.",
+                        "Faction treasury: %,d emeralds  |  Next wave: +%,d  |  Interest: +%,d in %s (%.2f%%/day, in-game time)  |  Purchases use the bank before your purse.",
                         menu.bank(), menu.nextReward(), dailyInterest,
+                        formatInterestCountdown(menu.ticksUntilInterest()),
                         menu.interestRate() / 100.0), tooltipX, tooltipY);
             }
             for (int i = 0; i < bank.length; i++) {
@@ -469,14 +509,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             int cols = 2;
             int rows = (TerritoryBuffs.COUNT + cols - 1) / cols;
             int gridTop = layout.contentY();
-            int gridBottom = layout.contentBottom();
-            int cellW = (layout.width() - 20 - (cols - 1) * 8) / cols;
-            int cellH = (gridBottom - gridTop - (rows - 1) * 8) / rows;
+            int gridBottom = layout.contentBottom() - 32;
+            int cellW = layout.territoryCardWidth();
+            int cellH = layout.territoryCardHeight();
             for (int i = 0; i < TerritoryBuffs.COUNT; i++) {
                 int cx = layout.x() + 10 + (i % cols) * (cellW + 8);
                 int cy = gridTop + (i / cols) * (cellH + 8);
                 if (over(mx, my, cx, cy, cellW, cellH)) {
-                    long missing = Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
+                    long missing = canAfford(TerritoryBuffs.PRICES[i]) ? 0L : Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
                     String state = menu.hasTerritoryBuff(i)
                             ? "Already active for the whole faction."
                             : missing == 0L
@@ -502,6 +542,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 wrapWidth), x, y);
     }
 
+    private static String emeralds(long amount) {
+        return String.format(Locale.ROOT, "%,d emeralds", Math.max(0L, amount));
+    }
+
     private void text(GuiGraphics g, String text, int x, int y, int width, int color) {
         int available = Math.max(1, width);
         String fitted = font.plainSubstrByWidth(text, available);
@@ -520,10 +564,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         boolean creative = minecraft != null && minecraft.player != null
                 && minecraft.player.getAbilities().instabuild;
         return creative || availableFunds() >= price;
-    }
-
-    private static String emeralds(long amount) {
-        return String.format(Locale.ROOT, "%,d emeralds", Math.max(0L, amount));
     }
 
     private int hirePortraitSize() {
@@ -878,9 +918,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int cols = 2;
         int rows = (TerritoryBuffs.COUNT + cols - 1) / cols;
         int gridTop = layout.contentY();
-        int gridBottom = layout.contentBottom();
-        int cellW = (layout.width() - 20 - (cols - 1) * 8) / cols;
-        int cellH = (gridBottom - gridTop - (rows - 1) * 8) / rows;
+        int gridBottom = layout.contentBottom() - 32;
+        int cellW = layout.territoryCardWidth();
+        int cellH = layout.territoryCardHeight();
         for (int i = 0; i < TerritoryBuffs.COUNT; i++) {
             int col = i % cols, row = i / cols;
             int cx = layout.x() + 10 + col * (cellW + 8);
@@ -899,11 +939,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
             // Multi-line description below the label.
             String desc = TerritoryBuffs.DESCRIPTIONS[i];
-            boolean compactSummary = layout.compact() && cellH >= 56;
-            if (!layout.compact()) {
-                drawWrapped(g, desc, cx + 10, cy + 28, cellW - 20, CommandPalette.TEXT);
-            } else if (compactSummary) {
-                text(g, TerritoryBuffs.compactSummary(i), cx + 10, cy + 28, cellW - 20, CommandPalette.TEXT_MUTED);
+            if (layout.territoryDescriptionLines() > 0) {
+                drawWrappedText(g, layout.compact() ? TerritoryBuffs.compactSummary(i) : desc,
+                        cx + 10, cy + 28, cellW - 20, layout.territoryDescriptionLines(), CommandPalette.TEXT_MUTED);
             }
 
             // Price / status line just above the purchase button.
@@ -916,16 +954,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 status = "Ready to buy";
                 statusColor = CommandPalette.ACCENT_GOLD;
             } else {
-                long missing = Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
+                long missing = canAfford(TerritoryBuffs.PRICES[i]) ? 0L : Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
                 status = "Need " + String.format(Locale.ROOT, "%,d", missing) + "e";
                 statusColor = CommandPalette.ACCENT_STEEL;
             }
-            int statusY = layout.compact()
-                    ? (compactSummary ? cy + cellH - 16 : cy + 28)
-                    : cy + cellH - 40;
-            text(g, status, cx + 10,
-                    statusY,
-                    Math.max(80, cellW - 24), statusColor);
+            // Compact cards communicate status through the button and tooltip.
+            if (!layout.compact()) text(g, status, cx + 10, cy + cellH - 40, cellW - 20, statusColor);
         }
     }
 
@@ -1317,6 +1351,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
         int leftX = x + 46;
         long dailyInterest = (long) menu.bank() * menu.interestRate() / 10000L;
+        String interestCountdown = formatInterestCountdown(menu.ticksUntilInterest());
         if (layout.compact()) {
             int compactW = w - (leftX - x) - 14;
             text(g, menu.factionName(), leftX, bankY + 6,
@@ -1324,8 +1359,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             text(g, String.format(Locale.ROOT, "Treasury %,de  |  Next +%,de",
                             menu.bank(), menu.nextReward()),
                     leftX, bankY + 18, compactW, CommandPalette.ACCENT_EMERALD);
-            text(g, String.format(Locale.ROOT, "Interest +%,d/day  |  Wave %d",
-                            dailyInterest, menu.nextWave()),
+            text(g, String.format(Locale.ROOT, "Interest +%,d in %s  |  Wave %d",
+                            dailyInterest, interestCountdown, menu.nextWave()),
                     leftX, bankY + 30, compactW, CommandPalette.TEXT_MUTED);
         } else {
             int leftW = w / 2 - 52;
@@ -1344,8 +1379,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             int rightW = w / 2 - 18;
             text(g, "Next wave " + menu.nextWave() + ": +" + menu.nextReward() + " to bank",
                     rightX, bankY + 6, rightW, CommandPalette.ACCENT_TEAL);
-            text(g, String.format(Locale.ROOT, "Interest: +%,d /24h (%.2f%%)",
-                            dailyInterest, menu.interestRate() / 100.0),
+            text(g, String.format(Locale.ROOT, "Interest: +%,d in %s (%.2f%%/day)",
+                            dailyInterest, interestCountdown, menu.interestRate() / 100.0),
                     rightX, bankY + 18, rightW, CommandPalette.ACCENT_GOLD);
             text(g, "Purchases pull from bank first, then your purse",
                     rightX, bankY + 30, rightW, CommandPalette.TEXT_DIM);
@@ -1558,5 +1593,25 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         territory.closeTextures();
         EntityPortrait.clear();
         super.onClose();
+    }
+
+    /**
+     * v4.28.8: format an in-game tick countdown as a short human string.
+     * 20 ticks = 1 second of active play, 24000 ticks = one Minecraft day.
+     * Examples: 24000 -> "1d", 6000 -> "5m", 200 -> "10s", 0 -> "soon".
+     */
+    static String formatInterestCountdown(int ticks) {
+        if (ticks <= 0) return "soon";
+        long seconds = ticks / 20L;
+        if (seconds <= 0) return "soon";
+        long days = seconds / 1200L; // 20 real minutes = 1 in-game day
+        long remSec = seconds - days * 1200L;
+        long minutes = remSec / 60L;
+        long finalSec = remSec - minutes * 60L;
+        StringBuilder sb = new StringBuilder();
+        if (days > 0) sb.append(days).append("d");
+        if (minutes > 0) { if (sb.length() > 0) sb.append(' '); sb.append(minutes).append("m"); }
+        if (sb.length() == 0) sb.append(finalSec).append("s");
+        return sb.toString();
     }
 }

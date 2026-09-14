@@ -90,12 +90,85 @@ public final class WorkersBridge {
         }
     }
 
-    /** Configure native work ownership after assigning the raider combat faction. */
+    /**
+     * Configure a raider-camp worker to run our night-shift job. This path is
+     * ONLY for enemy raider construction. It installs the BuilderWorkShift
+     * goal wrapper (which gates on CAMP_WORKER_TEAM + an active raid) and
+     * optionally kits the worker in diamond raider gear.
+     */
     public static void enableNative(Mob worker, java.util.UUID owner, boolean equip) throws ReflectiveOperationException {
         call(worker, "setOwnerUUID", Optional.class, Optional.of(owner));
         call(worker, "setFollowState", int.class, 0);
         if (equip) com.devfarinsky.siegeoverhaul.camp.BuilderSupport.provision(worker);
         com.devfarinsky.siegeoverhaul.camp.BuilderWorkShift.install(worker);
+    }
+
+    /**
+     * Attach a player-owned Workers 2 builder to a job while leaving its
+     * native AI goals untouched. Do NOT install the siege-only BuilderWorkShift
+     * wrapper (that goal only fires for raider camps) and do NOT overwrite the
+     * builder's inventory with raider gear.
+     */
+    public static void enablePlayerJob(Mob worker, java.util.UUID owner) throws ReflectiveOperationException {
+        call(worker, "setOwnerUUID", Optional.class, Optional.of(owner));
+        call(worker, "setIsOwned", boolean.class, true);
+        call(worker, "setFollowState", int.class, 0);
+        call(worker, "setListen", boolean.class, true);
+    }
+
+    /**
+     * Wire a builder onto a specific buildarea without relying on Workers 2's
+     * 64-block auto-discovery from the builder's current position.
+     *
+     * <p>The stock BuilderWorkGoal only scans for BuildArea entities inside
+     * {@code builder.getBoundingBox().inflate(64)}. When we commission a
+     * Fortify Perimeter job from the SiegeCore, the builder is often well
+     * outside that radius, so it never finds the new area and just wanders.
+     * Writing {@code currentBuildArea} directly and forcing follow state 6
+     * ("Working") kicks the goal straight into MOVE_TO_WORK_AREA / BUILD.</p>
+     *
+     * <p>This does NOT teleport the builder. Teleporting is a separate
+     * decision because the buildarea entity itself sits above the wall
+     * footprint (in the air over the top of the wall) and dropping the
+     * builder onto that position risks a fall or a stuck-in-terrain spawn.
+     * Use {@link #teleportBuilderNear(Mob, ServerLevel, BlockPos)} for a
+     * safe surface teleport when the builder is too far from the anchor.</p>
+     */
+    public static boolean assignBuildAreaDirectly(Mob worker, Entity buildArea) {
+        if (worker == null || buildArea == null) return false;
+        try {
+            worker.getNavigation().stop();
+            worker.getClass().getField("currentBuildArea").set(worker, buildArea);
+            call(worker, "setFollowState", int.class, 6);
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            warn("assign build area", ex);
+            return false;
+        }
+    }
+
+    /**
+     * Teleport a builder to a safe standing surface near a known-good anchor
+     * (typically the player's own position at commission time).
+     *
+     * <p>Uses Heightmap.MOTION_BLOCKING_NO_LEAVES so the drop-point is the
+     * top surface block: never inside a cave, never suspended in leaves,
+     * never on top of water. Only teleports when the builder is further than
+     * 24 blocks from the anchor, so short walks are left to the builder's
+     * own pathfinder (which is generally fine at close range).</p>
+     */
+    public static void teleportBuilderNear(Mob worker, ServerLevel level, BlockPos anchor) {
+        if (worker == null || level == null || anchor == null) return;
+        if (worker.blockPosition().distSqr(anchor) < 24 * 24) return;
+        try {
+            int surfaceY = level.getHeight(
+                    net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    anchor.getX(), anchor.getZ());
+            worker.teleportTo(anchor.getX() + 0.5, surfaceY, anchor.getZ() + 0.5);
+            worker.getNavigation().stop();
+        } catch (RuntimeException ex) {
+            warn("teleport builder", ex);
+        }
     }
 
     /** Keep the camp crew visible after its job finishes without leaving native jobs running. */
@@ -115,9 +188,32 @@ public final class WorkersBridge {
         }
     }
 
-    /** Work areas remain unregistered until their ownership and blueprint are complete. */
+    /**
+     * Create a raider-owned work area under the RAIDERS faction. Used for the
+     * enemy siege camp.
+     */
     public static Entity createArea(ServerLevel level, String type, BlockPos origin, java.util.UUID owner,
                                     int width, int depth, int height) throws ReflectiveOperationException {
+        return createAreaInternal(level, type, origin, owner, "Siege camp",
+                RecruitsBridge.RAIDERS_FACTION_ID, false, width, depth, height);
+    }
+
+    /**
+     * Create a player-owned work area with no team gating. Ownership is by
+     * PlayerUUID, so this player's builder will pass canWorkHere the same way
+     * it would on any manually placed buildarea.
+     */
+    public static Entity createPlayerArea(ServerLevel level, String type, BlockPos origin,
+                                          java.util.UUID owner, String playerName,
+                                          int width, int depth, int height) throws ReflectiveOperationException {
+        String label = (playerName == null || playerName.isEmpty()) ? "Player" : playerName;
+        return createAreaInternal(level, type, origin, owner, label, "", false, width, depth, height);
+    }
+
+    private static Entity createAreaInternal(ServerLevel level, String type, BlockPos origin,
+                                             java.util.UUID owner, String playerName, String teamId,
+                                             boolean teamAccess, int width, int depth, int height)
+            throws ReflectiveOperationException {
         EntityType<?> entityType = level.registryAccess().registryOrThrow(Registries.ENTITY_TYPE)
                 .getOptional(new ResourceLocation("workers", type)).orElseThrow();
         Entity area = entityType.create(level);
@@ -125,15 +221,76 @@ public final class WorkersBridge {
         // getOriginPos() delegates to Entity.getOnPos(), i.e. floor(y - 0.2).
         area.moveTo(origin.getX() + 0.5, origin.getY() + 1.0, origin.getZ() + 0.5, 0, 0);
         call(area, "setPlayerUUID", java.util.UUID.class, owner);
-        call(area, "setPlayerName", String.class, "Siege camp");
-        call(area, "setTeamStringID", String.class, RecruitsBridge.RAIDERS_FACTION_ID);
-        call(area, "setTeamAccess", boolean.class, false);
+        call(area, "setPlayerName", String.class, playerName);
+        call(area, "setTeamStringID", String.class, teamId);
+        call(area, "setTeamAccess", boolean.class, teamAccess);
         call(area, "setFacing", net.minecraft.core.Direction.class, net.minecraft.core.Direction.SOUTH);
         call(area, "setWidthSize", int.class, width);
         call(area, "setDepthSize", int.class, depth);
         call(area, "setHeightSize", int.class, height);
         if (type.equals("storagearea")) call(area, "setStorageTypes", int.class, 1 << 2);
         return area;
+    }
+
+    /**
+     * Check whether a Workers 2 storagearea has the BUILDERS storage type
+     * enabled. StorageArea.canWorkHere(builder) requires this bit before it
+     * will accept a builder, and if it isn't set the builder silently reports
+     * "No available storage found nearby" even though our area is right next
+     * to it.
+     *
+     * @return false when the entity is null or a readable type set omits
+     *         BUILDERS; true when BUILDERS is present or the optional API
+     *         cannot be read, preserving fail-open compatibility with an
+     *         otherwise usable Workers 2 version
+     */
+    public static boolean hasBuilderStorage(Entity storageArea) {
+        return hasBuilderStorageApi(storageArea);
+    }
+
+    /** Package-visible seam for testing the optional API without a Workers entity class. */
+    static boolean hasBuilderStorageApi(Object storageArea) {
+        if (storageArea == null) return false;
+        try {
+            // StorageArea exposes getStorageTypes(): EnumSet<StorageType>.
+            // Avoid linking the optional enum class and compare its stable
+            // constant name instead.
+            Object set = storageArea.getClass().getMethod("getStorageTypes").invoke(storageArea);
+            if (set instanceof java.util.EnumSet<?> es) {
+                for (Object v : es) {
+                    if (v instanceof Enum<?> storageType
+                            && "BUILDERS".equals(storageType.name())) return true;
+                }
+                return false;
+            }
+            // A changed or unexpected return shape cannot be inspected safely.
+            // Preserve compatibility by failing open just as we do when the
+            // reflective method itself is unavailable.
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            warn("storage type read", ex);
+            return true;
+        }
+    }
+
+    /**
+     * Read the PlayerUUID field from a Workers 2 area entity (buildarea,
+     * storagearea, etc). Uses reflection and swallows failures so callers can
+     * treat the result as optional.
+     *
+     * @return the owner UUID, or null when the field or the entity is missing
+     */
+    public static java.util.UUID readOwner(Entity area) {
+        if (area == null) return null;
+        try {
+            Object result = area.getClass().getMethod("getPlayerUUID").invoke(area);
+            if (result instanceof java.util.UUID uuid) return uuid;
+            if (result instanceof java.util.Optional<?> opt && opt.isPresent()
+                    && opt.get() instanceof java.util.UUID uuid) return uuid;
+        } catch (ReflectiveOperationException ex) {
+            warn("readOwner", ex);
+        }
+        return null;
     }
 
     public static void startBlueprint(Entity area, net.minecraft.nbt.CompoundTag blueprint) throws ReflectiveOperationException {

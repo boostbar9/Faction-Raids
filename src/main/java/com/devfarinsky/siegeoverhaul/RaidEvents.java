@@ -127,6 +127,7 @@ public final class RaidEvents {
         long nextFallbackSearchGameTime;
         long fallbackCacheUntilGameTime;
         Vec3 cachedFallbackTarget;
+        Vec3 cachedFallbackObjective;
         // 0 = fresh, 1 = jump+burst, 2 = wide-aggro + cone fallback,
         // 3 = short teleport forward toward objective (v4.17.0).
         int escalationLevel;
@@ -473,18 +474,61 @@ public final class RaidEvents {
         // return before the raid-state handling below.
         if (event.getEntity() instanceof Mob scoutVictim
                 && scoutVictim.getPersistentData().getBoolean(ModConstants.Tags.SCOUT)) {
-            com.devfarinsky.siegeoverhaul.scout.ScoutManager.onScoutKilled(level.getServer(), data, scoutVictim);
+            RaidSavedData.Anchor scoutAnchor = data.anchors.get(victimTeamKey);
+            boolean defeatedByFaction = isFactionDefender(event.getSource().getEntity(), scoutAnchor);
+            com.devfarinsky.siegeoverhaul.scout.ScoutManager.onScoutKilled(
+                    level.getServer(), data, scoutVictim, defeatedByFaction);
             return;
         }
         RaidSavedData.RaidState state = data.raids.get(victimTeamKey);
         if (state == null || !state.raiders.remove(event.getEntity().getUUID())) return;
         state.missingTicks.remove(event.getEntity().getUUID());
         state.totalDefeated++;
-        if (event.getEntity().getUUID().equals(state.commanderUuid) && !state.commanderDefeated) {
-            RaidSavedData.Anchor anchor = data.anchors.get(victimTeamKey);
+        boolean isCommander = event.getEntity().getUUID().equals(state.commanderUuid) && !state.commanderDefeated;
+        RaidSavedData.Anchor anchor = data.anchors.get(victimTeamKey);
+        if (isCommander) {
             if (anchor != null) markCommanderDefeated(level.getServer(), anchor, state);
         }
+        // v4.27.0 combat bounties: pay the treasury for each raider the
+        // faction kills. Manual raids are excluded when reward farming is
+        // disabled so the config toggle matches wave payouts. Commander pays
+        // a larger lump-sum on top of the per-raider tick. v4.27.1 tightens
+        // this with lower defaults and a per-raid bounty cap enforced via
+        // state.campaign so a single mega-raid can't dump thousands of
+        // emeralds into the bank.
+        if (state.rewardEligible && isFactionDefender(event.getSource().getEntity(), anchor)) {
+            CompoundTag core = data.siegeCores.get(victimTeamKey);
+            if (core != null) {
+                int raiderBounty = RaidConfig.RAIDER_BOUNTY_EMERALDS.get();
+                if (raiderBounty > 0) payBountyCapped(core, state, raiderBounty);
+                if (isCommander) {
+                    int cmdBounty = RaidConfig.COMMANDER_BOUNTY_EMERALDS.get();
+                    if (cmdBounty > 0) payBountyCapped(core, state, cmdBounty);
+                }
+            }
+        }
         data.setDirty();
+    }
+
+    /**
+     * v4.27.1: pay a bounty into the treasury but honor the per-raid cap
+     * stored on state.campaign so a single mega-raid can't inflate the bank.
+     * A cap of 0 disables the cap. Bookkeeping key is a plain int so it
+     * fits alongside the existing PaidWave / Deposited fields already on
+     * the campaign NBT.
+     */
+    private static void payBountyCapped(CompoundTag core, RaidSavedData.RaidState state, int amount) {
+        int cap = RaidConfig.MAX_BOUNTY_EMERALDS_PER_RAID.get();
+        int already = state.campaign.getInt("BountyPaid");
+        int payable = amount;
+        if (cap > 0) {
+            int remaining = Math.max(0, cap - already);
+            payable = Math.min(payable, remaining);
+        }
+        if (payable <= 0) return;
+        long paid = FactionBank.deposit(core, payable);
+        if (paid > 0) state.campaign.putInt("BountyPaid",
+                (int) Math.min(Integer.MAX_VALUE, (long) already + paid));
     }
 
     /**
@@ -501,6 +545,17 @@ public final class RaidEvents {
             return RecruitsBridge.belongsTo(mob, anchor.teamKey(), anchor.members());
         }
         return false;
+    }
+
+    /**
+     * A bounty is earned only when the damaging entity is a member of the
+     * defending faction or one of its owned Recruits. Environmental deaths,
+     * unrelated players and unrelated mobs still advance normal raid death
+     * bookkeeping, but cannot mint treasury rewards.
+     */
+    static boolean isFactionDefender(Entity entity, RaidSavedData.Anchor anchor) {
+        return anchor != null && entity instanceof LivingEntity living
+                && isDefenderVictim(living, anchor);
     }
 
     /**
@@ -606,6 +661,8 @@ public final class RaidEvents {
 
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
+        PATHING_TELEMETRY.clear();
+        STUCK_TRACKER.clear();
         RaidBossBars.shutdown();
         com.devfarinsky.siegeoverhaul.raid.CommanderBossBar.shutdown();
         com.devfarinsky.siegeoverhaul.raid.ClaimWaypoints.shutdown();
@@ -1164,6 +1221,20 @@ public final class RaidEvents {
             RaidSavedData.RaidState state = data.raids.get(key);
             source.sendSuccess(() -> MESSAGE_PREFIX.copy().append(Component.literal(anchor.teamDisplay())
                     .withStyle(ChatFormatting.GOLD)), false);
+            // v4.28.8: treasury balance + next interest payout (game-time).
+            var core = data.siegeCores.get(key);
+            if (core != null) {
+                long balance = FactionBank.balance(core);
+                int rateBp = RaidConfig.BANK_INTEREST_BASIS_POINTS.get();
+                long dailyInterest = balance * rateBp / 10000L;
+                long ticks = FactionBank.ticksUntilInterest(core, source.getServer().overworld().getGameTime());
+                String countdown = formatInterestCountdown(ticks);
+                source.sendSuccess(() -> Component.literal("Treasury: ").withStyle(ChatFormatting.GRAY)
+                        .append(Component.literal(String.format(java.util.Locale.ROOT,
+                                "%,d emeralds • +%,d interest in %s (in-game time)",
+                                balance, dailyInterest, countdown))
+                                .withStyle(ChatFormatting.GREEN)), false);
+            }
             if (state != null) {
                 RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
                 ServerLevel raidLevel = getLevel(source.getServer(), point);
@@ -1494,7 +1565,11 @@ public final class RaidEvents {
             }
         }
         com.devfarinsky.siegeoverhaul.core.CoreOccupation.tick(server, data);
-        long bankNow = System.currentTimeMillis();
+        // v4.28.8: interest is now measured in game ticks so single-player
+        // pausing doesn't rack up phantom interest. The tick-level settle
+        // uses the base rate; the territory-provisioning buff is applied by
+        // the two-arg settle(data,core) helper on HUD open and wave clears.
+        long bankNow = server.overworld().getGameTime();
         int bankRate = RaidConfig.BANK_INTEREST_BASIS_POINTS.get();
         for (var core : data.siegeCores.values()) if (FactionBank.settle(core, bankNow, bankRate)) data.setDirty();
         // Core ownership follows the placing faction, not an individual changing teams.
@@ -1607,7 +1682,10 @@ public final class RaidEvents {
         return best;
     }
 
-    private static boolean isValidBreacherStandPos(ServerLevel level, BlockPos candidate, Mob mob) {
+    static boolean isValidBreacherStandPos(ServerLevel level, BlockPos candidate, Mob mob) {
+        if (!level.hasChunkAt(candidate) || !level.hasChunkAt(candidate.above()) || !level.hasChunkAt(candidate.below())
+                || !level.getWorldBorder().isWithinBounds(candidate) || !level.getWorldBorder().isWithinBounds(candidate.above())) return false;
+        if (!level.getFluidState(candidate).isEmpty() || !level.getFluidState(candidate.above()).isEmpty()) return false;
         if (!level.getBlockState(candidate).isAir()) return false;
         if (!level.getBlockState(candidate.above()).isAir()) return false;
         BlockPos below = candidate.below();
@@ -1654,7 +1732,8 @@ public final class RaidEvents {
         // matches the letter's contents. Falls back to a fresh selection
         // if no scout mission ran or if scouting is disabled.
         com.devfarinsky.siegeoverhaul.narrative.RaidNarrative previewed =
-                com.devfarinsky.siegeoverhaul.scout.ScoutManager.consumePreviewedNarrative(data, anchor.teamKey());
+                com.devfarinsky.siegeoverhaul.scout.ScoutManager.consumePreviewedNarrative(
+                        data, anchor.teamKey(), state);
         state.narrative = previewed != null ? previewed :
                 com.devfarinsky.siegeoverhaul.narrative.RaidNarrativeSelector.select(
                         server.overworld().random, anchor.teamDisplay(), point.name());
@@ -2083,7 +2162,7 @@ public final class RaidEvents {
             }
         }
 
-        long paid = EndlessSiege.awardClearedWave(data, state, System.currentTimeMillis(), RaidConfig.BANK_INTEREST_BASIS_POINTS.get());
+        long paid = EndlessSiege.awardClearedWave(data, state, server.overworld().getGameTime(), RaidConfig.BANK_INTEREST_BASIS_POINTS.get());
         if (paid > 0) announce(server, teamKey, Component.literal("Wave " + state.wave + " survived: +" + paid + " emeralds deposited in your faction bank.").withStyle(ChatFormatting.GREEN), false);
         if (com.devfarinsky.siegeoverhaul.core.EnemyCore.tick(level, data, state, anchor)) {
             finishRaid(server, data, teamKey, true, true, "Your faction captured the enemy Siege Core. The invasion is defeated!");
@@ -2305,6 +2384,11 @@ public final class RaidEvents {
         state.waveStartingCount = 0;
         state.pendingWaveSpawns = wanted;
         state.squadsSpawned = 0;
+        com.devfarinsky.siegeoverhaul.core.EnemyHeroes.plan(state,
+                EndlessSiege.active(state) ? EndlessSiege.chapterWave(nextWave) : nextWave,
+                EndlessSiege.active(state) ? 5 : RaidConfig.WAVES.get(), wanted,
+                RaidConfig.USE_RECRUIT_INVADERS.get(), RaidConfig.ENEMY_HERO_CHANCE_PERCENT.get(),
+                RaidConfig.ENABLE_COMMANDER.get(), RaidConfig.ENABLE_ILLUSIONERS.get(), level.random);
 
         // Build the progressive composition for this wave. This picks role
         // counts (shieldmen/bowmen/captains/etc.) and a formation shape the
@@ -2392,6 +2476,8 @@ public final class RaidEvents {
                 if(pad==null){raider.discard();continue;}
                 raider.moveTo(pad.getX()+.5,pad.getY(),pad.getZ()+.5,raider.getYRot(),0);
             }
+            int heroRole = com.devfarinsky.siegeoverhaul.core.EnemyHeroes.roleAt(state, waveIndex);
+            if (!com.devfarinsky.siegeoverhaul.core.EnemyHeroes.prepare(raider, heroRole)) continue;
             boolean squadLeader = spawned == 0;
             if (squadLeader && raider instanceof Raider vanillaRaider) vanillaRaider.setPatrolLeader(true);
             RecruitsBridge.configureHostileRaidRecruit(raider);
@@ -2407,6 +2493,9 @@ public final class RaidEvents {
                 assignSiegeRole(raider, state, waveIndex, squadLeader);
                 state.raiders.add(raider.getUUID());
                 state.totalSpawned++;
+                if (com.devfarinsky.siegeoverhaul.core.EnemyHeroes.active(raider)) {
+                    announce(server, anchor.teamKey(), Component.literal("Enemy hero: " + com.devfarinsky.siegeoverhaul.core.CoreHiring.NAMES[heroRole] + " has joined the assault.").withStyle(ChatFormatting.LIGHT_PURPLE), false);
+                }
                 if (asNaval) {
                     // Hand the raider off to NavalFleet, which picks a Small
                     // Ships warship when the mod is installed and falls back
@@ -2423,7 +2512,7 @@ public final class RaidEvents {
                 }
                 // Roll for sapper promotion. Cheap, capped, non-leaders only
                 // so squad leaders keep their role.
-                if (!squadLeader && "recruit".equals(ForgeRegistries.ENTITY_TYPES.getKey(raider.getType()).getPath())
+                if (!com.devfarinsky.siegeoverhaul.core.EnemyHeroes.active(raider) && !squadLeader && "recruit".equals(ForgeRegistries.ENTITY_TYPES.getKey(raider.getType()).getPath())
                         && com.devfarinsky.siegeoverhaul.siege.SiegeConstruction.canPromoteSapper(state)
                         && level.random.nextInt(100) < 15) {
                     com.devfarinsky.siegeoverhaul.siege.SiegeConstruction.assignSapper(state, raider);
@@ -2477,7 +2566,8 @@ public final class RaidEvents {
         String role;
         ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(raider.getType());
         String recruitType = typeId != null && "recruits".equals(typeId.getNamespace()) ? typeId.getPath() : "";
-        if (commander) role = "commander";
+        if (com.devfarinsky.siegeoverhaul.core.EnemyHeroes.active(raider)) role = "hero";
+        else if (commander) role = "commander";
         else if (raider.getType() == EntityType.VINDICATOR || raider.getType() == EntityType.RAVAGER ||
                 recruitType.equals("recruit") || recruitType.equals("recruit_shieldman") ||
                 recruitType.equals("siege_engineer")) role = "breacher";
@@ -2492,7 +2582,7 @@ public final class RaidEvents {
         raider.getPersistentData().putString(RAID_ROLE_TAG, role);
         // v2.15.0: name tag + role-colored glow team membership.
         RaiderLabels.applyRole(raider, role);
-        com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(raider,state.factionId,role);
+        if (!"hero".equals(role)) com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(raider,state.factionId,role);
         // Mark this raider's unit id as discovered for the defending team.
         // We use the codex id, which for commander is fixed and for everyone
         // else is the entity type path (matches UnitCodex.Entry.id). This
@@ -2640,6 +2730,8 @@ public final class RaidEvents {
             else recruitType = "recruit";
         }
 
+        int heroRole = com.devfarinsky.siegeoverhaul.core.EnemyHeroes.roleAt(campaignState, index);
+        if (heroRole >= 0) recruitType = com.devfarinsky.siegeoverhaul.core.CoreHiring.IDS[com.devfarinsky.siegeoverhaul.core.CoreHiring.heroBase(heroRole)];
         EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("recruits", recruitType));
         Entity created = type == null ? null : type.create(level);
         if (created instanceof Mob mob && isAllowedRaiderType(mob.getType())) return mob;
@@ -3493,7 +3585,8 @@ public final class RaidEvents {
         BlockPos[] neighbors = {
                 target.north(), target.south(), target.east(), target.west()
         };
-        for (BlockPos candidate : neighbors) {
+        for (BlockPos neighbor : neighbors) for (int dy = 0; dy >= -1; dy--) {
+            BlockPos candidate = neighbor.offset(0, dy, 0);
             if (!isValidBreacherStandPos(level, candidate, leader)) continue;
             double distSq = leader.distanceToSqr(
                     candidate.getX() + 0.5, candidate.getY(), candidate.getZ() + 0.5);
@@ -3526,8 +3619,8 @@ public final class RaidEvents {
         int scanLimit = Math.max(8, RaidConfig.BREACH_TARGET_SCAN_LIMIT.get());
         int scanned = 0;
         PathingTelemetry telemetry = pathingTelemetry(state.teamKey);
-        for (BlockPos candidate : BlockPos.betweenClosed(origin.offset(-3, -1, -3), origin.offset(3, 1, 3))) {
-            if (++scanned > scanLimit) break;
+        for (BlockPos candidate : breachScanPositions(origin, level.getGameTime(), scanLimit)) {
+            scanned++;
             if (candidate.distSqr(stronghold) > maximumDistanceSq ||
                     state.campBlocks.containsKey(candidate.asLong())) continue;
             if(!level.hasChunkAt(candidate))continue;
@@ -3911,6 +4004,18 @@ public final class RaidEvents {
      * <p>Called only for raiders whose {@link StuckEntry#escalationLevel}
      * is >= 1, so healthy raiders keep their fast direct path.
      */
+    /** Rotate a bounded scan through the complete neighborhood instead of starving one side forever. */
+    static java.util.List<BlockPos> breachScanPositions(BlockPos origin, long gameTime, int limit) {
+        var positions = new java.util.ArrayList<BlockPos>(147);
+        for (BlockPos pos : BlockPos.betweenClosed(origin.offset(-3, -1, -3), origin.offset(3, 1, 3)))
+            positions.add(pos.immutable());
+        int count = Math.max(1, Math.min(positions.size(), limit));
+        int start = (int) Math.floorMod(Math.floorDiv(gameTime, 20) * count, positions.size());
+        var batch = new java.util.ArrayList<BlockPos>(count);
+        for (int i = 0; i < count; i++) batch.add(positions.get((start + i) % positions.size()));
+        return batch;
+    }
+
     static double applyObjectivePusherAggroScale(double rangeSq, String role,
                                                  boolean atObjective, double approachScale) {
         if (atObjective) return rangeSq;
@@ -3935,11 +4040,16 @@ public final class RaidEvents {
                                             StuckEntry stuck, long gameTime,
                                             PathingTelemetry telemetry) {
         if (stuck == null || stuck.escalationLevel < 1 || !(mob instanceof PathfinderMob pmob)) return null;
-        if (stuck.cachedFallbackTarget != null && gameTime <= stuck.fallbackCacheUntilGameTime) {
+        if (stuck.cachedFallbackTarget != null && objective.equals(stuck.cachedFallbackObjective)
+                && gameTime <= stuck.fallbackCacheUntilGameTime && gameTime >= stuck.fallbackCacheUntilGameTime - 300
+                && mob.distanceToSqr(stuck.cachedFallbackTarget) > 4.0
+                && level.hasChunkAt(BlockPos.containing(stuck.cachedFallbackTarget))
+                && level.getWorldBorder().isWithinBounds(BlockPos.containing(stuck.cachedFallbackTarget))) {
             telemetry.fallbackCacheHits++;
             return stuck.cachedFallbackTarget;
         }
-        if (gameTime < stuck.nextFallbackSearchGameTime) return null;
+        stuck.cachedFallbackTarget = null;
+        if (gameTime < stuck.nextFallbackSearchGameTime && stuck.nextFallbackSearchGameTime <= gameTime + 200) return null;
 
         Vec3 target = com.devfarinsky.siegeoverhaul.raid.FlankRoutes.find(level, pmob, objective);
         if (target == null && RaidConfig.CONE_FALLBACK_ENABLED.get()) {
@@ -3952,6 +4062,7 @@ public final class RaidEvents {
         if (target != null) {
             long cacheTicks = Math.max(20L, RaidConfig.FALLBACK_ROUTE_CACHE_SECONDS.get() * 20L);
             stuck.cachedFallbackTarget = target;
+            stuck.cachedFallbackObjective = objective;
             stuck.fallbackCacheUntilGameTime = gameTime + cacheTicks;
         } else {
             stuck.cachedFallbackTarget = null;
@@ -5592,6 +5703,26 @@ public final class RaidEvents {
         long minutes = seconds / 60;
         long remainder = seconds % 60;
         return remainder == 0 ? minutes + " minutes" : minutes + "m " + remainder + "s";
+    }
+
+    /**
+     * v4.28.8: format an in-game tick countdown for chat. 20 ticks = 1 second
+     * of active play, 24000 ticks = one Minecraft day (20 real minutes).
+     */
+    private static String formatInterestCountdown(long ticks) {
+        if (ticks <= 0) return "less than a minute";
+        long seconds = ticks / 20L;
+        long days = seconds / 1200L;
+        long remSec = seconds - days * 1200L;
+        long minutes = remSec / 60L;
+        StringBuilder sb = new StringBuilder();
+        if (days > 0) sb.append(days).append(" in-game day").append(days == 1 ? "" : "s");
+        if (minutes > 0) {
+            if (sb.length() > 0) sb.append(" ");
+            sb.append(minutes).append("m");
+        }
+        if (sb.length() == 0) sb.append("less than a minute");
+        return sb.toString();
     }
 
     private RaidEvents() {}

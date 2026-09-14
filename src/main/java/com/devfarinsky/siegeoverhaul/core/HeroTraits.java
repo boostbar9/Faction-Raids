@@ -20,7 +20,7 @@ import net.minecraftforge.fml.common.Mod;
 
 import java.util.UUID;
 
-/** Four readable specializations. Native AI, finite equipment, visible effects and bounded cooldowns. */
+/** Shared player and enemy hero specializations. Native AI, finite equipment, visible effects and bounded cooldowns. */
 @Mod.EventBusSubscriber(modid=SiegeOverhaul.MOD_ID)
 public final class HeroTraits {
     private HeroTraits() {}
@@ -42,8 +42,8 @@ public final class HeroTraits {
             case 20 -> "Grimwatch: bolts burst in a piercing impact zone";
             case 21 -> "Wildsong: kills grant +20% attack speed for 6s";
             case 22 -> "Voidweaver mage: casts a void nova every 15s";
-            case 23 -> "Starweaver mage: every hit summons a homing star";
-            case 24 -> "Ashenheart mage: fireball attacks explode on impact";
+            case 23 -> "Starweaver mage: melee hits arc starlight to a nearby foe";
+            case 24 -> "Ashenheart mage: melee hits trigger a flame burst (3s)";
             case 25 -> "Ironclad: Resistance II aura to nearby allies";
             case 26 -> "Skyrender: arrows split into three tracers on hit";
             case 27 -> "Solmyra the Radiant: sunlight burns all foes within 8 blocks every 20s";
@@ -163,6 +163,7 @@ public final class HeroTraits {
     static boolean ready(long now,long next) { return next<=now || next>now+1200; }
     private static int role(Mob mob) {
         var tag=mob.getPersistentData();
+        if (EnemyHeroes.active(mob)) return tag.getInt("SiegeHeroRole");
         if(!tag.getBoolean("SiegeHiredHero") || EnemyHiringProtection.enemy(mob))return -1;
         if(!tag.contains("SiegeHeroRole")) {
             var id=net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(mob.getType());
@@ -170,10 +171,12 @@ public final class HeroTraits {
             int role=switch(id.getPath()){case "recruit"->10;case "recruit_shieldman"->11;case "bowman"->12;case "crossbowman"->13;default->-1;};
             tag.putInt("SiegeHeroRole",role);
         }
-        return tag.getInt("SiegeHeroRole");
+        int role = tag.getInt("SiegeHeroRole");
+        return CoreHiring.isHero(role) ? role : -1;
     }
-    private static boolean hostile(Mob hero,LivingEntity target) {
-        return target.isAlive() && EnemyHiringProtection.enemy(target) && !hero.isAlliedTo(target) && hero.hasLineOfSight(target);
+    static boolean hostile(Mob hero,LivingEntity target) {
+        return target != hero && target.isAlive() && !hero.isAlliedTo(target) && hero.hasLineOfSight(target)
+                && (EnemyHeroes.active(hero) ? EnemyHeroes.defender(hero, target) : EnemyHiringProtection.enemy(target));
     }
     static boolean charged(CompoundTag tag,String key,int interval) {
         int hits=Math.min(interval,Math.max(0,tag.getInt(key))+1);
@@ -193,12 +196,12 @@ public final class HeroTraits {
         }
         mob.getPersistentData().putLong(WILDSONG_ATTACK_SPEED_TAG, now + 120);
     }
-    private static void refreshWildsongAttackSpeed(ServerLevel level, Mob mob, long now) {
+    static void refreshWildsongAttackSpeed(ServerLevel level, Mob mob, long now) {
         var attribute = mob.getAttribute(Attributes.ATTACK_SPEED);
         if (attribute == null) return;
         var tag = mob.getPersistentData();
         long until = tag.getLong(WILDSONG_ATTACK_SPEED_TAG);
-        if (until > now) {
+        if (until > now && until <= now + 120) {
             if (attribute.getModifier(WILDSONG_ATTACK_SPEED_ID) == null) {
                 attribute.addTransientModifier(new AttributeModifier(WILDSONG_ATTACK_SPEED_ID, "SiegeWildsongAttackSpeed", 0.20, AttributeModifier.Operation.MULTIPLY_TOTAL));
             }
@@ -210,6 +213,8 @@ public final class HeroTraits {
     }
     /** Same-owner friendly living entities in a radius, excluding the hero itself. */
     private static java.util.List<LivingEntity> allies(ServerLevel level, Mob hero, double radius) {
+        if (EnemyHeroes.active(hero)) return level.getEntitiesOfClass(LivingEntity.class, hero.getBoundingBox().inflate(radius),
+                other -> other != hero && other.isAlive() && hero.hasLineOfSight(other) && EnemyHeroes.ally(hero, other));
         var owner = RecruitsBridge.ownerUuid(hero);
         if (owner.isEmpty()) return java.util.List.of();
         return level.getEntitiesOfClass(LivingEntity.class, hero.getBoundingBox().inflate(radius), other -> other != hero && other.isAlive()
@@ -223,8 +228,10 @@ public final class HeroTraits {
     }
     @SubscribeEvent
     public static void tick(LivingEvent.LivingTickEvent event) {
-        if(!(event.getEntity() instanceof Mob mob) || !(mob.level() instanceof ServerLevel level)
-                || mob.tickCount%20!=0) return;
+        if(!(event.getEntity() instanceof Mob mob) || !(mob.level() instanceof ServerLevel level)) return;
+        if (mob.getPersistentData().contains(WILDSONG_ATTACK_SPEED_TAG))
+            refreshWildsongAttackSpeed(level, mob, level.getGameTime());
+        if (mob.tickCount % 20 != 0) return;
         // Summons are not recruit heroes. Process their saved deadline before hero/AI gates,
         // including legacy wolves incorrectly stamped as hired heroes in 4.19/4.20.
         if (mob instanceof net.minecraft.world.entity.animal.Wolf
@@ -242,7 +249,6 @@ public final class HeroTraits {
         int r = role(mob); if (r < 0) return;
         long now = level.getGameTime();
         var tag = mob.getPersistentData();
-        if (r == 21) refreshWildsongAttackSpeed(level, mob, now);
         // Dawnwarden (15): shield the most-hurt ally in a 6-block bubble every 30s.
         if (r == 15 && ready(now, tag.getLong("SiegeHeroNext"))) {
             var candidates = allies(level, mob, 6).stream()
@@ -296,7 +302,8 @@ public final class HeroTraits {
                 wolf.getPersistentData().putLong("SiegeShadowDespawn", now + 600);
                 wolf.setCustomName(Component.literal("Shadow Wolf").withStyle(ChatFormatting.DARK_PURPLE));
                 if (mob.getTarget() != null) wolf.setTarget(mob.getTarget());
-                level.addFreshEntity(wolf);
+                if (!EnemyHeroes.prepareShadow(level, mob, wolf)) { wolf.discard(); continue; }
+                if (!level.addFreshEntity(wolf)) { wolf.discard(); continue; }
                 burst(level, wolf.getX(), wolf.getY() + 0.5, wolf.getZ(), net.minecraft.core.particles.ParticleTypes.SOUL, 30, 0.5, 0.05);
             }
             level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.WOLF_HOWL, net.minecraft.sounds.SoundSource.HOSTILE, 1.5F, 0.5F);
@@ -343,16 +350,12 @@ public final class HeroTraits {
                 target.setSecondsOnFire(4); tag.putLong("SiegeHeroNext", now + 20);
                 burst(level, target.getX(), target.getY() + 1, target.getZ(), net.minecraft.core.particles.ParticleTypes.FLAME, 20, 0.4, 0.06);
             }
-            // 21 Wildsong: kills grant +20% attack speed for 6s (rider effect at kill time).
-            if (r == 21 && target.getHealth() - event.getAmount() <= 0) {
-                applyWildsongAttackSpeed(mob, now);
-                burst(level, mob.getX(), mob.getY() + 1, mob.getZ(), net.minecraft.core.particles.ParticleTypes.HAPPY_VILLAGER, 20, 0.3, 0.1);
-                level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP, net.minecraft.sounds.SoundSource.HOSTILE, 0.8F, 1.2F);
-            }
             // 23 Starweaver (mage): every hit summons a homing star to a nearby second enemy for 4 magic damage.
-            if (r == 23) {
-                var starTarget = enemies(level, mob, 6).stream().filter(e -> e != target).findFirst().orElse(target);
-                starTarget.hurt(level.damageSources().magic(), 4);
+            if (r == 23 && ready(now, tag.getLong("SiegeHeroNext"))) {
+                var starTarget = enemies(level, mob, 6).stream().filter(e -> e != target).findFirst().orElse(null);
+                if (starTarget == null) return;
+                tag.putLong("SiegeHeroNext", now + 20);
+                starTarget.hurt(level.damageSources().indirectMagic(mob, mob), 4);
                 // Draw a trail of end_rod particles from hero to the star target.
                 double sx = mob.getX(), sy = mob.getY() + 1, sz = mob.getZ();
                 double dx = starTarget.getX() - sx, dy = starTarget.getY() + 1 - sy, dz = starTarget.getZ() - sz;
@@ -363,20 +366,21 @@ public final class HeroTraits {
                 burst(level, starTarget.getX(), starTarget.getY() + 1, starTarget.getZ(), net.minecraft.core.particles.ParticleTypes.GLOW, 8, 0.2, 0.02);
                 level.playSound(null, starTarget.blockPosition(), net.minecraft.sounds.SoundEvents.AMETHYST_CLUSTER_HIT, net.minecraft.sounds.SoundSource.HOSTILE, 0.6F, 1.5F);
             }
+            // Ashenheart uses the native melee/staff attack; no projectile is created by that AI.
+            if (r == 24 && ready(now, tag.getLong("SiegeHeroNext"))) {
+                tag.putLong("SiegeHeroNext", now + 60);
+                var foes = level.getEntitiesOfClass(LivingEntity.class, target.getBoundingBox().inflate(3), e -> hostile(mob, e));
+                for (var enemy : foes) enemy.hurt(level.damageSources().indirectMagic(mob, mob), 4);
+                burst(level, target.getX(), target.getY() + 1, target.getZ(), net.minecraft.core.particles.ParticleTypes.FLAME, 60, 1.5, 0.3);
+                burst(level, target.getX(), target.getY() + 1, target.getZ(), net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE, 24, 1.0, 0.1);
+                burst(level, target.getX(), target.getY() + 1, target.getZ(), net.minecraft.core.particles.ParticleTypes.LAVA, 10, 0.7, 0.05);
+                level.playSound(null, target.blockPosition(), net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE, net.minecraft.sounds.SoundSource.HOSTILE, 0.7F, 1.4F);
+                return;
+            }
             return;
         }
         // === RANGED HEROES (projectile hits) ===
         if (!(event.getSource().getDirectEntity() instanceof Projectile projectile) || projectile.getOwner() != mob) return;
-        // 24 Ashenheart (mage): fireball attacks explode on impact.
-        if (r == 24) {
-            var foes = level.getEntitiesOfClass(LivingEntity.class, target.getBoundingBox().inflate(3), e -> hostile(mob, e));
-            for (var enemy : foes) enemy.hurt(level.damageSources().magic(), 4);
-            burst(level, target.getX(), target.getY() + 1, target.getZ(), net.minecraft.core.particles.ParticleTypes.FLAME, 60, 1.5, 0.3);
-            burst(level, target.getX(), target.getY() + 1, target.getZ(), net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE, 24, 1.0, 0.1);
-            burst(level, target.getX(), target.getY() + 1, target.getZ(), net.minecraft.core.particles.ParticleTypes.LAVA, 10, 0.7, 0.05);
-            level.playSound(null, target.blockPosition(), net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE, net.minecraft.sounds.SoundSource.HOSTILE, 0.7F, 1.4F);
-            return;
-        }
         // 12 Stormbow: every 4th arrow chains lightning to two nearby foes for 4 magic damage.
         if (r == 12) {
             if (!charged(tag, "SiegeHeroHits", 4)) { sparkle(level, mob, net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK); return; }
@@ -453,6 +457,18 @@ public final class HeroTraits {
             }
         }
     }
+    @SubscribeEvent
+    public static void heroKill(LivingDeathEvent event) {
+        if (!(event.getSource().getEntity() instanceof Mob mob) || !(mob.level() instanceof ServerLevel level)
+                || !mob.isAlive() || mob.isNoAi() || role(mob) != 21) return;
+        var target = event.getEntity();
+        // Death events run after lethal damage; the target is no longer alive.
+        boolean enemy = EnemyHeroes.active(mob)
+                ? EnemyHeroes.defenderIdentity(mob, target) : EnemyHiringProtection.enemy(target);
+        if (!enemy || mob.isAlliedTo(target)) return;
+        applyWildsongAttackSpeed(mob, level.getGameTime());
+        burst(level, mob.getX(), mob.getY() + 1, mob.getZ(), net.minecraft.core.particles.ParticleTypes.HAPPY_VILLAGER, 20, 0.3, 0.1);
+    }
     /** Bonus damage rider: consume Hollowveil mark for +30% damage on next hit. */
     @SubscribeEvent
     public static void markedDamage(LivingHurtEvent event) {
@@ -476,13 +492,14 @@ public final class HeroTraits {
      * knocks back and staggers enemies (Slowness III for 1.5s).
      */
     @SubscribeEvent
-    public static void shieldBlock(net.minecraftforge.event.entity.living.LivingAttackEvent event) {
+    public static void shieldBlock(net.minecraftforge.event.entity.living.ShieldBlockEvent event) {
         if (!(event.getEntity() instanceof Mob mob) || !(mob.level() instanceof ServerLevel level)) return;
+        if (event.isCanceled() || event.getBlockedDamage() <= 0 || !mob.isAlive() || mob.isNoAi()) return;
         int r = role(mob); if (r < 0) return;
         long now = level.getGameTime();
         var tag = mob.getPersistentData();
         // Warbell (18): passive shockwave on block. Uses cooldown to avoid spam.
-        if (r == 18 && mob.isBlocking() && ready(now, tag.getLong("SiegeHeroNext"))) {
+        if (r == 18 && ready(now, tag.getLong("SiegeHeroNext"))) {
             tag.putLong("SiegeHeroNext", now + 40);
             burst(level, mob.getX(), mob.getY() + 1, mob.getZ(), net.minecraft.core.particles.ParticleTypes.EXPLOSION, 6, 1.0, 0.05);
             for (var enemy : enemies(level, mob, 4)) {
@@ -493,7 +510,7 @@ public final class HeroTraits {
             return;
         }
         // Stonehand (11): on block, allies within 4 blocks get 25% damage reduction for 3s.
-        if (r == 11 && mob.isBlocking() && ready(now, tag.getLong("SiegeHeroNext"))) {
+        if (r == 11 && ready(now, tag.getLong("SiegeHeroNext"))) {
             tag.putLong("SiegeHeroNext", now + 40);
             for (var a : allies(level, mob, 4)) a.getPersistentData().putLong("SiegeStoneguardUntil", now + 60);
             burst(level, mob.getX(), mob.getY() + 1, mob.getZ(), net.minecraft.core.particles.ParticleTypes.CLOUD, 10, 0.6, 0.02);

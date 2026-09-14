@@ -7,6 +7,23 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 class CoreLootTest extends MinecraftTestSupport {
+    @Test void fullHotbarStillDeliversEveryLootOutcomeToStorage() {
+        for (int box=0;box<3;box++) for (int roll:new int[]{0,50,80,95}) {
+            var player=mock(ServerPlayer.class);var level=mock(ServerLevel.class);var inv=new Inventory(player);
+            var random=mock(net.minecraft.util.RandomSource.class);
+            when(player.getInventory()).thenReturn(inv);when(player.serverLevel()).thenReturn(level);
+            when(player.getPersistentData()).thenReturn(new net.minecraft.nbt.CompoundTag());
+            when(player.getRandom()).thenReturn(random);when(random.nextInt(100)).thenReturn(roll);
+            for(int i=0;i<35;i++)inv.items.set(i,new ItemStack(Items.STONE,64));
+            inv.items.set(10,new ItemStack(Items.EMERALD,64));
+            inv.items.set(11,new ItemStack(Items.EMERALD,64));
+            var receipt=CoreLoot.purchaseWithReceipt(player,box);
+            assertNotNull(receipt);
+            assertTrue(ItemStack.matches(receipt.prize(),inv.items.get(box==2?10:35)));
+            assertEquals(128-CoreLoot.price(box),inv.countItem(Items.EMERALD));
+            for(int i=0;i<9;i++)assertTrue(inv.items.get(i).is(Items.STONE));
+        }
+    }
     @Test void purchaseChatDoesNotSpoilAnyRewardBeforeTheReveal() {
         for (int box=0;box<3;box++) for (int roll:new int[]{0,50,80,95}) {
             var player=mock(ServerPlayer.class);var level=mock(ServerLevel.class);var inv=new Inventory(player);

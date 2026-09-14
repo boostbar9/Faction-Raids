@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class RaidPathingHeuristicsTest {
+class RaidPathingHeuristicsTest extends MinecraftTestSupport {
 
     @Test
     void objectivePusherAggroIsReducedOutsideObjective() {
@@ -31,5 +31,19 @@ class RaidPathingHeuristicsTest {
                 false, false, 16.0 * 16.0, 1.12);
         assertEquals(1.30, speed, 1.0e-6);
     }
+    @Test void boundedBreachScanEventuallyCoversEverySideAndHeight() {
+        var origin = new net.minecraft.core.BlockPos(-12, 64, 20);
+        var seen = new java.util.HashSet<net.minecraft.core.BlockPos>();
+        for (int second = 0; second < 4; second++) {
+            var batch = RaidEvents.breachScanPositions(origin, second * 20L, 40);
+            assertEquals(40, batch.size());
+            assertEquals(40, new java.util.HashSet<>(batch).size());
+            seen.addAll(batch);
+        }
+        assertEquals(147, seen.size());
+        for (var p : net.minecraft.core.BlockPos.betweenClosed(origin.offset(-3,-1,-3), origin.offset(3,1,3)))
+            assertTrue(seen.contains(p));
+    }
+
 }
 

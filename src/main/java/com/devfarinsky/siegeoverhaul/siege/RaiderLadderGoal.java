@@ -85,8 +85,12 @@ public final class RaiderLadderGoal extends Goal {
                 best = route; nearest = distance;
             }
             if (best == null) continue;
-            var approach=mob.getNavigation().createPath(best.base(),0);
-            if(approach==null || !approach.canReach())continue;
+            // Path to solid ground at the ladder base, not the air block itself.
+            // Vanilla ground navigation refuses to end a path on air, so aiming
+            // directly at base() often produces no path even when a raider is
+            // standing three blocks away with a clear approach.
+            var approach = pathToBase(mob, best);
+            if (approach == null || !approach.canReach()) continue;
             if (goal == null) { goal = new RaiderLadderGoal(mob); mob.goalSelector.addGoal(0, goal); }
             users.merge(best, 1, Integer::sum);
             goal.route = best; goal.deadline = level.getGameTime() + 400; goal.ticks = 0; goal.crestTicks=0; goal.landing=null;
@@ -130,6 +134,35 @@ public final class RaiderLadderGoal extends Goal {
         return true;
     }
     @Override public boolean requiresUpdateEveryTick() { return true; }
+
+    /** Path to a solid stand-on square adjacent to the ladder base, since
+     *  ground navigators cannot end a path on the ladder's air block. */
+    private static net.minecraft.world.level.pathfinder.Path pathToBase(Mob mob, Route route) {
+        if (!(mob.level() instanceof ServerLevel level)) return null;
+        BlockPos stand = standingPos(level, route);
+        if (stand == null) return mob.getNavigation().createPath(route.base(), 1);
+        // Accuracy 0 works because the target is now a solid navigable block.
+        return mob.getNavigation().createPath(stand, 0);
+    }
+
+    /** Find a solid block on the approach side of the ladder base to stand on. */
+    private static BlockPos standingPos(ServerLevel level, Route route) {
+        if (level == null) return null;
+        BlockPos front = route.base().relative(route.intoWall().getOpposite());
+        if (level.hasChunkAt(front)
+                && level.getBlockState(front).isAir()
+                && level.getBlockState(front.below()).isFaceSturdy(level, front.below(), Direction.UP)) {
+            return front;
+        }
+        // Fall back to the block directly below the ladder base if that is standable.
+        BlockPos under = route.base();
+        if (level.hasChunkAt(under)
+                && level.getBlockState(under).isAir()
+                && level.getBlockState(under.below()).isFaceSturdy(level, under.below(), Direction.UP)) {
+            return under;
+        }
+        return null;
+    }
     @Override public void start() { mob.getNavigation().stop(); }
     @Override public void stop() {
         route = null;
@@ -155,9 +188,10 @@ public final class RaiderLadderGoal extends Goal {
             if(landing==null) { stop();return; }
             return;
         }
-        if (mob.onClimbable() && mob.blockPosition().getX() == route.base().getX()
-                && mob.blockPosition().getZ() == route.base().getZ()) {
-            crestTicks=12;
+        // Distance in XZ to the ladder column, ignoring vertical position.
+        double xzDistSq = mob.position().multiply(1, 0, 1).distanceToSqr(base.multiply(1, 0, 1));
+        if (mob.onClimbable() && xzDistSq < 1.5) {
+            crestTicks = 12;
             mob.getNavigation().stop();
             // Upward movement only while touching climbable blocks. Collision still governs movement.
             Vec3 into = Vec3.atLowerCornerOf(route.intoWall().getNormal()).scale(.12);
@@ -170,11 +204,18 @@ public final class RaiderLadderGoal extends Goal {
             mob.getMoveControl().setWantedPosition(exit.x,exit.y+.1,exit.z,1.0);
         } else if (mob.getY() >= exit.y - .1) {
             mob.getMoveControl().setWantedPosition(exit.x, exit.y, exit.z, 1.0);
-        } else if (mob.position().multiply(1,0,1).distanceToSqr(base.multiply(1,0,1)) < 1.0) {
-            // Press onto the bottom rung; ground navigators do not plan vertical ladder routes.
+        } else if (xzDistSq < 2.25) {
+            // Close to the column but not yet touching. Press straight into
+            // the ladder face so collision pushes the mob onto the rungs.
+            mob.getNavigation().stop();
             mob.getMoveControl().setWantedPosition(base.x, base.y, base.z, 1.0);
         } else if (ticks % 10 == 1) {
-            mob.getNavigation().moveTo(base.x, base.y, base.z, RaidConfig.RAIDER_ADVANCE_SPEED.get());
+            // Aim for a solid stand-on block adjacent to the base, not the
+            // air block itself. Ground navigators can actually reach it.
+            BlockPos stand = standingPos(mob.level() instanceof ServerLevel sl ? sl : null, route);
+            if (stand == null) stand = route.base();
+            mob.getNavigation().moveTo(stand.getX() + .5, stand.getY(),
+                    stand.getZ() + .5, RaidConfig.RAIDER_ADVANCE_SPEED.get());
         }
     }
 }
