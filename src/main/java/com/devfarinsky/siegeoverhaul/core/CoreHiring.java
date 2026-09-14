@@ -112,7 +112,8 @@ public final class CoreHiring {
         Item item = id == null ? null : ForgeRegistries.ITEMS.getValue(id);
         return item == null || item == Items.AIR ? Items.EMERALD : item;
     }
-    private static void prepareHero(Mob recruit,int role) throws ReflectiveOperationException {
+    static void prepareHero(Mob recruit,int role,boolean hired) throws ReflectiveOperationException {
+        if (!isHero(role)) throw new IllegalArgumentException("Unknown hero role");
         recruit.getClass().getMethod("setXpLevel",int.class).invoke(recruit,10);
         var health=recruit.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
         if(health!=null) health.setBaseValue(Math.max(health.getBaseValue(),60));
@@ -124,7 +125,7 @@ public final class CoreHiring {
         HeroTraits.equip(recruit,role,container);
         container.addItem(new ItemStack(Items.BREAD,32));
         if(role>=12) container.addItem(new ItemStack(Items.ARROW,64));
-        recruit.getPersistentData().putBoolean("SiegeHiredHero",true);
+        recruit.getPersistentData().putBoolean(hired ? "SiegeHiredHero" : "SiegeEnemyHero",true);
     }
     public static boolean hire(ServerPlayer player, BlockPos core, int role) {
         if (role < 0 || role >= NAMES.length) return false;
@@ -159,7 +160,7 @@ public final class CoreHiring {
                 if (health != null) health.setBaseValue(health.getBaseValue() + 4);
                 recruit.setHealth(recruit.getMaxHealth());
             }
-            if (role>=10) prepareHero(recruit,role);
+            if (role>=10) prepareHero(recruit,role,true);
             else if (role < CoreOffers.WORKER_START) {
                 Object inventory = recruit.getClass().getMethod("getInventory").invoke(recruit);
                 if (!(inventory instanceof net.minecraft.world.SimpleContainer container))

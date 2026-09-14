@@ -151,6 +151,7 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ALLOWED_RAIDER_FACTIONS;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ALLOWED_CASUS_BELLI;
     public static final ForgeConfigSpec.BooleanValue NARRATIVE_IN_BOSS_BAR;
+    public static final ForgeConfigSpec.IntValue ENEMY_HERO_CHANCE_PERCENT;
     public static final ForgeConfigSpec.BooleanValue ENABLE_WAVE_COMPOSITION;
     public static final ForgeConfigSpec.BooleanValue ENABLE_FORMATIONS;
     public static final ForgeConfigSpec.BooleanValue ANNOUNCE_WAVE_FORMATION;
@@ -467,6 +468,8 @@ public final class RaidConfig {
                 .defineListAllowEmpty("allowedCasusBelli", List.of(), o -> o instanceof String);
         NARRATIVE_IN_BOSS_BAR = b.comment("Show the raider faction epithet on the boss bar. Disable to keep the generic \"Faction Invasion\" title.")
                 .define("narrativeInBossBar", true);
+        ENEMY_HERO_CHANCE_PERCENT = b.comment("Percent chance per wave, starting at wave 2, for one enemy hero from the player roster. Replaces one ordinary wave slot; 0 disables. Uses the shared hero rarity weights.")
+                .defineInRange("enemyHeroChancePercent", 10, 0, 100);
         ENABLE_WAVE_COMPOSITION = b.comment("Use progressive wave composition: early waves lean shieldman/bowman, later waves add captains, engineers and assassins. Disable to fall back to the classic index-based picker.")
                 .define("enableProgressiveWaveComposition", true);
         ENABLE_FORMATIONS = b.comment("Command Recruits raiders into formations (line, square) while advancing on the objective. Requires the Villager Recruits mod's FormationUtils to be present.")

@@ -1,3 +1,10 @@
+# 4.28.12 beta
+
+- Give enemy waves access to all 20 player heroes with the same rarity weights, native equipment, stats and signature abilities.
+- Default to a 10% chance per wave from wave 2 onward, with at most one hero replacing an ordinary wave slot. Preserve commander, ravager and illusioner slots. Configure enemyHeroChancePercent (0 disables).
+- Save hero selection across squad retries and reloads; announce successful hero arrivals and show an Enemy Hero nameplate.
+- Restrict enemy hero abilities to the defending faction and support to their own invasion. Keep enemy heroes unhireable and shadow summons inside raid population and cleanup tracking.
+
 # 4.28.11 beta
 
 - Give future enemy camp upgrades distinct supply shelter, workshop and command shelter layouts, with reinforced lower walls, timber frames and screened openings.

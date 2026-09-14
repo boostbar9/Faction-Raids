@@ -453,6 +453,8 @@ public final class RaidSavedData extends SavedData {
         public int abandonedTicks;
         public int waveStartingCount;
         public int plannedWaveSize;
+        public int enemyHeroRole = -1;
+        public int enemyHeroSlot = -1;
         public int pendingWaveSpawns;
         public int ticksToNextSquad;
         public int squadsSpawned;
@@ -636,6 +638,8 @@ public final class RaidSavedData extends SavedData {
             tag.putInt("Abandoned", abandonedTicks);
             tag.putInt("WaveStartingCount", waveStartingCount);
             tag.putInt("PlannedWaveSize", plannedWaveSize);
+            tag.putInt("EnemyHeroRole", enemyHeroRole);
+            tag.putInt("EnemyHeroSlot", enemyHeroSlot);
             tag.putInt("PendingWaveSpawns", pendingWaveSpawns);
             tag.putInt("NextSquad", ticksToNextSquad);
             tag.putInt("SquadsSpawned", squadsSpawned);
@@ -785,6 +789,8 @@ public final class RaidSavedData extends SavedData {
             state.plannedWaveSize = tag.contains("PlannedWaveSize", Tag.TAG_INT) ?
                     tag.getInt("PlannedWaveSize") : state.waveStartingCount;
             state.pendingWaveSpawns = tag.getInt("PendingWaveSpawns");
+            state.enemyHeroRole = tag.contains("EnemyHeroRole", Tag.TAG_INT) ? tag.getInt("EnemyHeroRole") : -1;
+            state.enemyHeroSlot = tag.contains("EnemyHeroSlot", Tag.TAG_INT) ? tag.getInt("EnemyHeroSlot") : -1;
             state.ticksToNextSquad = tag.getInt("NextSquad");
             state.squadsSpawned = tag.getInt("SquadsSpawned");
             state.captureTicks = tag.getInt("CaptureTicks");

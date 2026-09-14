@@ -2333,6 +2333,11 @@ public final class RaidEvents {
         state.waveStartingCount = 0;
         state.pendingWaveSpawns = wanted;
         state.squadsSpawned = 0;
+        com.devfarinsky.siegeoverhaul.core.EnemyHeroes.plan(state,
+                EndlessSiege.active(state) ? EndlessSiege.chapterWave(nextWave) : nextWave,
+                EndlessSiege.active(state) ? 5 : RaidConfig.WAVES.get(), wanted,
+                RaidConfig.USE_RECRUIT_INVADERS.get(), RaidConfig.ENEMY_HERO_CHANCE_PERCENT.get(),
+                RaidConfig.ENABLE_COMMANDER.get(), RaidConfig.ENABLE_ILLUSIONERS.get(), level.random);
 
         // Build the progressive composition for this wave. This picks role
         // counts (shieldmen/bowmen/captains/etc.) and a formation shape the
@@ -2420,6 +2425,8 @@ public final class RaidEvents {
                 if(pad==null){raider.discard();continue;}
                 raider.moveTo(pad.getX()+.5,pad.getY(),pad.getZ()+.5,raider.getYRot(),0);
             }
+            int heroRole = com.devfarinsky.siegeoverhaul.core.EnemyHeroes.roleAt(state, waveIndex);
+            if (!com.devfarinsky.siegeoverhaul.core.EnemyHeroes.prepare(raider, heroRole)) continue;
             boolean squadLeader = spawned == 0;
             if (squadLeader && raider instanceof Raider vanillaRaider) vanillaRaider.setPatrolLeader(true);
             RecruitsBridge.configureHostileRaidRecruit(raider);
@@ -2435,6 +2442,9 @@ public final class RaidEvents {
                 assignSiegeRole(raider, state, waveIndex, squadLeader);
                 state.raiders.add(raider.getUUID());
                 state.totalSpawned++;
+                if (com.devfarinsky.siegeoverhaul.core.EnemyHeroes.active(raider)) {
+                    announce(server, anchor.teamKey(), Component.literal("Enemy hero: " + com.devfarinsky.siegeoverhaul.core.CoreHiring.NAMES[heroRole] + " has joined the assault.").withStyle(ChatFormatting.LIGHT_PURPLE), false);
+                }
                 if (asNaval) {
                     // Hand the raider off to NavalFleet, which picks a Small
                     // Ships warship when the mod is installed and falls back
@@ -2451,7 +2461,7 @@ public final class RaidEvents {
                 }
                 // Roll for sapper promotion. Cheap, capped, non-leaders only
                 // so squad leaders keep their role.
-                if (!squadLeader && "recruit".equals(ForgeRegistries.ENTITY_TYPES.getKey(raider.getType()).getPath())
+                if (!com.devfarinsky.siegeoverhaul.core.EnemyHeroes.active(raider) && !squadLeader && "recruit".equals(ForgeRegistries.ENTITY_TYPES.getKey(raider.getType()).getPath())
                         && com.devfarinsky.siegeoverhaul.siege.SiegeConstruction.canPromoteSapper(state)
                         && level.random.nextInt(100) < 15) {
                     com.devfarinsky.siegeoverhaul.siege.SiegeConstruction.assignSapper(state, raider);
@@ -2505,7 +2515,8 @@ public final class RaidEvents {
         String role;
         ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(raider.getType());
         String recruitType = typeId != null && "recruits".equals(typeId.getNamespace()) ? typeId.getPath() : "";
-        if (commander) role = "commander";
+        if (com.devfarinsky.siegeoverhaul.core.EnemyHeroes.active(raider)) role = "hero";
+        else if (commander) role = "commander";
         else if (raider.getType() == EntityType.VINDICATOR || raider.getType() == EntityType.RAVAGER ||
                 recruitType.equals("recruit") || recruitType.equals("recruit_shieldman") ||
                 recruitType.equals("siege_engineer")) role = "breacher";
@@ -2520,7 +2531,7 @@ public final class RaidEvents {
         raider.getPersistentData().putString(RAID_ROLE_TAG, role);
         // v2.15.0: name tag + role-colored glow team membership.
         RaiderLabels.applyRole(raider, role);
-        com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(raider,state.factionId,role);
+        if (!"hero".equals(role)) com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(raider,state.factionId,role);
         // Mark this raider's unit id as discovered for the defending team.
         // We use the codex id, which for commander is fixed and for everyone
         // else is the entity type path (matches UnitCodex.Entry.id). This
@@ -2668,6 +2679,8 @@ public final class RaidEvents {
             else recruitType = "recruit";
         }
 
+        int heroRole = com.devfarinsky.siegeoverhaul.core.EnemyHeroes.roleAt(campaignState, index);
+        if (heroRole >= 0) recruitType = com.devfarinsky.siegeoverhaul.core.CoreHiring.IDS[com.devfarinsky.siegeoverhaul.core.CoreHiring.heroBase(heroRole)];
         EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("recruits", recruitType));
         Entity created = type == null ? null : type.create(level);
         if (created instanceof Mob mob && isAllowedRaiderType(mob.getType())) return mob;
