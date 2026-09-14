@@ -117,6 +117,16 @@ public record CoreHireLayout(int x, int y, int width, int height,
         return contentY() + (i / 2) * (cardHeight() + rowGap());
     }
 
+    /** Shared Territory geometry for cards, buttons and hover regions, above the fortification strip. */
+    public int territoryCardWidth() { return (width - 28) / 2; }
+    public int territoryCardHeight() { return (contentBottom() - 32 - contentY() - 8) / 2; }
+    public int territoryCardX(int i) { return x + 10 + (i % 2) * (territoryCardWidth() + 8); }
+    public int territoryCardY(int i) { return contentY() + (i / 2) * (territoryCardHeight() + 8); }
+    public int territoryButtonY(int i) { return territoryCardY(i) + territoryCardHeight() - 24; }
+    public int territoryDescriptionLines() {
+        return Math.max(0, (territoryCardHeight() - (compact ? 30 : 46) - 28) / 10);
+    }
+
     public int marketHeight() {
         return Math.max(36, (contentBottom() - contentY() - rowGap() * 2) / 3);
     }

@@ -3,6 +3,7 @@ import com.devfarinsky.siegeoverhaul.MinecraftTestSupport;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.item.*;
 import org.junit.jupiter.api.Test;
 import static org.mockito.Mockito.*;
@@ -54,5 +55,35 @@ class HeroTraitsTest extends MinecraftTestSupport {
     }
     @Test void cooldownSurvivesReloadAndRecoversAfterWorldClockReset() {
         assertFalse(HeroTraits.ready(100,500));assertTrue(HeroTraits.ready(500,500));assertTrue(HeroTraits.ready(0,5000));
+    }
+
+    @Test void bloodthornTriggersAbsorptionOnFirstFullHealthMeleeHit() {
+        var level=mock(net.minecraft.server.level.ServerLevel.class);var hero=mock(Mob.class);var victim=mock(Mob.class);
+        var heroTag=new CompoundTag();heroTag.putBoolean("SiegeHiredHero",true);heroTag.putInt("SiegeHeroRole",14);
+        var enemyTag=new CompoundTag();enemyTag.putString(com.devfarinsky.siegeoverhaul.ModConstants.Tags.RAID_TEAM,"test");
+        when(hero.getPersistentData()).thenReturn(heroTag);when(victim.getPersistentData()).thenReturn(enemyTag);
+        when(hero.level()).thenReturn(level);when(hero.isAlive()).thenReturn(true);when(victim.isAlive()).thenReturn(true);
+        when(hero.hasLineOfSight(victim)).thenReturn(true);when(hero.getHealth()).thenReturn(20F);when(hero.getMaxHealth()).thenReturn(20F);
+        var type=net.minecraft.core.Holder.direct(new net.minecraft.world.damagesource.DamageType("test",0));
+        var source=new net.minecraft.world.damagesource.DamageSource(type,hero);
+        var event=new net.minecraftforge.event.entity.living.LivingDamageEvent(victim,source,2);
+
+        HeroTraits.hit(event);
+
+        verify(hero).addEffect(any(net.minecraft.world.effect.MobEffectInstance.class));
+    }
+
+    @Test void wildsongAppliesAttackSpeedModifierAndDurationTag() {
+        Mob hero=mock(Mob.class);
+        CompoundTag tag=new CompoundTag();
+        AttributeInstance attackSpeed=mock(AttributeInstance.class);
+        when(hero.getPersistentData()).thenReturn(tag);
+        when(hero.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_SPEED)).thenReturn(attackSpeed);
+        when(attackSpeed.getModifier(any())).thenReturn(null);
+
+        HeroTraits.applyWildsongAttackSpeed(hero, 100L);
+
+        verify(attackSpeed).addTransientModifier(any());
+        assertEquals(220L, tag.getLong("SiegeWildsongAttackSpeedUntil"));
     }
 }

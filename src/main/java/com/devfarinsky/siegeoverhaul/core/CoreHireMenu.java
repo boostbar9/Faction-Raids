@@ -3,6 +3,8 @@ package com.devfarinsky.siegeoverhaul.core;
 import com.devfarinsky.siegeoverhaul.RaidSavedData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.*;
@@ -11,6 +13,7 @@ import net.minecraft.world.item.*;
 
 /** Read-only offer display; server owns stock, prices, permissions and purchases. */
 public final class CoreHireMenu extends AbstractContainerMenu {
+    private static final String CORE_HUD_INTRO_SEEN = "SiegeCoreHudIntroSeen";
     private final ServerPlayer owner;
     private final CoreInventorySync inventorySync = new CoreInventorySync();
     private final BlockPos pos;
@@ -59,7 +62,12 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         });
         for (int i = 0; i < 4; i++) { data.set(i, -1); data.set(i + 4, -1); }
         addDataSlots(data);
-        if (owner != null) { refresh(); sentRoster=""; EndlessSiege.remind(owner,RaidSavedData.get(owner.server).raids.get(SiegeCore.key(owner))); }
+        if (owner != null) {
+            refresh();
+            sentRoster = "";
+            EndlessSiege.remind(owner, RaidSavedData.get(owner.server).raids.get(SiegeCore.key(owner)));
+            maybeSendCoreHudIntro(owner);
+        }
     }
     public int lootSequence() { return data.get(16); }
     public int lootBox() { return data.get(15)-1; }
@@ -160,5 +168,26 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         if (owner != null) inventorySync.broadcast(owner);
         if (owner != null && owner.server.overworld().getGameTime() - shownAt >= 20) refresh();
         super.broadcastChanges();
+    }
+
+    private static void maybeSendCoreHudIntro(ServerPlayer player) {
+        CompoundTag flags = player.getPersistentData().getCompound(Player.PERSISTED_NBT_TAG);
+        if (!markCoreHudIntroSeen(flags)) return;
+        player.getPersistentData().put(Player.PERSISTED_NBT_TAG, flags);
+
+        player.sendSystemMessage(Component.literal("Command Center quick start:")
+                .withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal("Army hires defenders, Bank shares emeralds, Territory unlocks faction upgrades.")
+                .withStyle(ChatFormatting.GRAY));
+        player.sendSystemMessage(Component.literal("Need help later? Run ")
+                .withStyle(ChatFormatting.GRAY)
+                .append(Component.literal("/siegeoverhaul help").withStyle(ChatFormatting.AQUA))
+                .append(Component.literal(" or open the Intel tab.").withStyle(ChatFormatting.GRAY)));
+    }
+
+    static boolean markCoreHudIntroSeen(CompoundTag flags) {
+        if (flags == null || flags.getBoolean(CORE_HUD_INTRO_SEEN)) return false;
+        flags.putBoolean(CORE_HUD_INTRO_SEEN, true);
+        return true;
     }
 }

@@ -59,13 +59,19 @@ public final class EnemyHeroes {
         return !team.isBlank() && team.equals(defendedTeam(other)) && EnemyHiringProtection.enemy(other);
     }
     static boolean defender(Mob hero, LivingEntity other) {
+        return other.isAlive() && defenderIdentity(hero, other);
+    }
+    static boolean defenderIdentity(Mob hero, LivingEntity other) {
         if (!(hero.level() instanceof ServerLevel level)) return false;
         String team = defendedTeam(hero);
         var anchor = RaidSavedData.get(level.getServer()).anchors.get(team);
-        return anchor != null && defender(other, team, anchor.members());
+        return anchor != null && defenderIdentity(other, team, anchor.members());
     }
     static boolean defender(LivingEntity other, String team, Iterable<UUID> members) {
-        if (!other.isAlive() || other.isSpectator() || EnemyHiringProtection.enemy(other)) return false;
+        return other.isAlive() && defenderIdentity(other, team, members);
+    }
+    private static boolean defenderIdentity(LivingEntity other, String team, Iterable<UUID> members) {
+        if (other.isSpectator() || EnemyHiringProtection.enemy(other)) return false;
         if (other instanceof Player player) {
             if (player.isCreative()) return false;
             for (UUID member : members) if (member.equals(player.getUUID())) return true;

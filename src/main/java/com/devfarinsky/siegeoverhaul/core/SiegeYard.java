@@ -1,6 +1,7 @@
 package com.devfarinsky.siegeoverhaul.core;
 
 import com.devfarinsky.siegeoverhaul.FactionLogger;
+import com.devfarinsky.siegeoverhaul.compat.EngineerSpawnCompatibility;
 import com.devfarinsky.siegeoverhaul.items.ModItems;
 import com.devfarinsky.siegeoverhaul.siege.SiegeEngineType;
 import com.devfarinsky.siegeoverhaul.siege.SiegeIntegration;
@@ -14,7 +15,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
@@ -293,27 +293,7 @@ public final class SiegeYard {
             if (!(entity instanceof Mob mob))
                 return EngineerSpawn.fail("Recruits siege_engineer is not a Mob (class: " + entity.getClass().getSimpleName() + ").");
             mob.moveTo(pos.x, pos.y, pos.z, vehicle.getYRot(), 0F);
-            // We do not call mob.finalizeSpawn here. Recruits' SiegeEngineerEntity
-            // overrides finalizeSpawn with a hard cast:
-            //   ((GroundPathNavigation) this.getNavigation()).setCanOpenDoors(true);
-            // but AbstractRecruitEntity's createNavigation returns a
-            // RecruitPathNavigation, which does not extend GroundPathNavigation,
-            // so the cast throws ClassCastException on every non-hire spawn.
-            // Their in-game hire flow avoids the issue only because hire()
-            // routes through a different code path. We do the useful side
-            // effects of finalizeSpawn manually instead.
-            try {
-                net.minecraft.world.entity.ai.navigation.PathNavigation nav = mob.getNavigation();
-                if (nav instanceof net.minecraft.world.entity.ai.navigation.GroundPathNavigation ground) {
-                    ground.setCanOpenDoors(true);
-                } else {
-                    try {
-                        nav.getClass().getMethod("setCanOpenDoors", boolean.class).invoke(nav, true);
-                    } catch (ReflectiveOperationException ignored) {}
-                }
-            } catch (RuntimeException ignored) {}
-            try { mob.getClass().getMethod("initSpawn").invoke(mob); }
-            catch (ReflectiveOperationException ignored) {}
+            EngineerSpawnCompatibility.initialize(level, mob);
             // Cost setter so the hire event doesn't refuse.
             try { mob.getClass().getMethod("setCost", int.class).invoke(mob, 0); }
             catch (ReflectiveOperationException ignored) {}
