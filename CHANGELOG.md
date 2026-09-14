@@ -1,3 +1,13 @@
+# 4.28.14 beta
+
+- Command Center polish pass:
+  - Better number readability for prices/reward text and affordability messaging (thousands separators and clearer emerald wording).
+  - Tooltip wrapping now uses the active panel width, improving readability and reducing overflow pressure on scaled/tiny windows.
+  - Long unbroken words in wrapped card text are now clipped with ellipsis instead of bleeding outside card bounds.
+  - Bank messaging now consistently refers to your **purse** (instead of mixed purse/pack wording).
+- Added responsive layout regression tests for `CoreHireLayout` covering roomy, constrained, and tiny-window scaled-canvas behavior.
+- Added hardened Copilot branch auto-publish workflow for CurseForge beta uploads with branch gating, concurrency lock, token preflight, artifact sanity checks, deterministic version metadata, and manual fallback.
+
 # 4.28.13 beta
 
 - Integrate Copilot HUD, onboarding, pathfinding and hero refinements onto current main, preserving the latest camp, inventory and enemy-hero systems.

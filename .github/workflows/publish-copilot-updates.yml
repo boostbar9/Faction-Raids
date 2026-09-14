@@ -1,0 +1,152 @@
+name: Auto-publish Copilot updates to CurseForge (beta)
+
+on:
+  push:
+    branches:
+      - "copilot/**"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or tag to publish (defaults to current ref)"
+        required: false
+        default: ""
+      version_type:
+        description: "CurseForge release channel"
+        required: false
+        default: "beta"
+        type: choice
+        options:
+          - beta
+          - release
+
+permissions:
+  contents: read
+
+concurrency:
+  group: curseforge-copilot-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+       startsWith(github.ref_name, 'copilot/') &&
+       !contains(github.event.head_commit.message, '[skip publish]'))
+    runs-on: ubuntu-latest
+    env:
+      CURSEFORGE_PROJECT_ID: "1364352"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify CurseForge token
+        run: |
+          if [ -z "${{ secrets.CURSEFORGE_TOKEN }}" ]; then
+            echo "::error::Missing CURSEFORGE_TOKEN repository secret."
+            exit 1
+          fi
+
+      - name: Build mod artifact
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --console=plain clean build -x test
+
+      - name: Select publish artifact
+        id: artifact
+        run: |
+          mapfile -t jars < <(find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar')
+          if [ "${#jars[@]}" -eq 0 ]; then
+            echo "::error::No publishable jar found in build/libs."
+            exit 1
+          fi
+          best=""
+          best_size=0
+          for jar in "${jars[@]}"; do
+            size=$(stat -c%s "$jar")
+            if [ "$size" -gt "$best_size" ]; then
+              best="$jar"
+              best_size="$size"
+            fi
+          done
+          if [ -z "$best" ]; then
+            echo "::error::Could not resolve publish artifact."
+            exit 1
+          fi
+          if [ "$best_size" -lt 100000 ]; then
+            echo "::error::Publish artifact looks too small ($best_size bytes): $best"
+            exit 1
+          fi
+          echo "path=$best" >> "$GITHUB_OUTPUT"
+          echo "size=$best_size" >> "$GITHUB_OUTPUT"
+
+      - name: Build release metadata
+        id: meta
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || '' }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+        run: |
+          base_version="$(awk -F= '/^mod_version=/{print $2}' gradle.properties | tr -d '[:space:]')"
+          short_sha="$(git rev-parse --short=8 HEAD)"
+          branch="$(echo "${SOURCE_BRANCH}" | tr '/' '-')"
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          version="${base_version}-copilot.${{ github.run_number }}+${short_sha}"
+          name="Copilot ${base_version} (${branch} ${short_sha})"
+          version_type="${{ inputs.version_type || 'beta' }}"
+          changelog="$(printf 'Automated Copilot publish from branch `%s`.\n\n- Commit: `%s`\n- Source run: %s\n- Commit message: %s' "$branch" "$short_sha" "$run_url" "$COMMIT_MESSAGE")"
+          {
+            echo "version=$version"
+            echo "display_name=$name"
+            echo "version_type=$version_type"
+            echo "changelog<<EOF"
+            echo "$changelog"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish to CurseForge
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+
+          files: ${{ steps.artifact.outputs.path }}
+          name: ${{ steps.meta.outputs.display_name }}
+          version: ${{ steps.meta.outputs.version }}
+          version-type: ${{ steps.meta.outputs.version_type }}
+          changelog: ${{ steps.meta.outputs.changelog }}
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+
+          dependencies: |
+            siegeweapons(required)
+            small-ships(required)
+            workers(required)
+            recruits(required)
+            ewewukeks-musket-mod(optional)
+            epic-knights-armor-and-weapons(optional)
+            corpse(optional)
+
+          fail-mode: fail
+
+      - name: Publish summary
+        run: |
+          {
+            echo "### CurseForge publish complete"
+            echo ""
+            echo "- Artifact: \`${{ steps.artifact.outputs.path }}\` (${{ steps.artifact.outputs.size }} bytes)"
+            echo "- Version: \`${{ steps.meta.outputs.version }}\`"
+            echo "- Channel: \`${{ steps.meta.outputs.version_type }}\`"
+            echo "- Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
