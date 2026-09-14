@@ -29,7 +29,7 @@ public final class CampGuards {
             boolean placed = false;
             for (BlockPos p : candidates(raid,slot)) {
                 if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)
-                        || raid.pendingCampBlocks.containsKey(p.asLong()) || raid.pendingCampBlocks.containsKey(p.above().asLong())
+                        || planned(raid,p) || planned(raid,p.above())
                         || !level.getFluidState(p).isEmpty() || !level.getBlockState(p.below()).isFaceSturdy(level,p.below(),Direction.UP)) continue;
                 guard.moveTo(p.getX()+.5,p.getY(),p.getZ()+.5,0,0);
                 if (level.noCollision(guard) && level.getEntities(guard,guard.getBoundingBox()).isEmpty()) { placed=true; break; }
@@ -135,15 +135,24 @@ public final class CampGuards {
         Direction front=Math.abs(x)>=Math.abs(z)?(x>=0?Direction.EAST:Direction.WEST):(z>=0?Direction.SOUTH:Direction.NORTH);
         Direction side=front.getClockWise();
         BlockPos ideal=raid.campPos.relative(front,slot<2?7:-5).relative(side,slot%2==0?4:-4);
-        List<BlockPos> positions=new ArrayList<>(); positions.add(ideal);
-        for(int r=1;r<=2;r++) for(Direction d:Direction.Plane.HORIZONTAL) positions.add(ideal.relative(d,r));
+        List<BlockPos> positions=new ArrayList<>();
+        // Prefer the assigned horizontal post, but follow small rises and dips.
+        addElevations(positions,ideal);
+        for(int r=1;r<=2;r++) for(Direction d:Direction.Plane.HORIZONTAL)
+            addElevations(positions,ideal.relative(d,r));
         return positions;
     }
-    private static boolean safePost(ServerLevel level,RaidSavedData.RaidState raid,BlockPos p) {
-        return level.hasChunkAt(p) && level.getBlockState(p).getCollisionShape(level,p).isEmpty()
+    private static void addElevations(List<BlockPos> positions,BlockPos base) {
+        for(int dy:new int[]{0,1,-1,2,-2}) positions.add(base.above(dy));
+    }
+    private static boolean planned(RaidSavedData.RaidState raid,BlockPos pos) {
+        return raid.pendingCampBlocks.containsKey(pos.asLong()) || raid.pendingFortifications.containsKey(pos.asLong());
+    }
+    static boolean safePost(ServerLevel level,RaidSavedData.RaidState raid,BlockPos p) {
+        return level.hasChunkAt(p) && level.getWorldBorder().isWithinBounds(p) && level.getBlockState(p).getCollisionShape(level,p).isEmpty()
                 && level.getBlockState(p.above()).getCollisionShape(level,p.above()).isEmpty()
-                && level.getFluidState(p).isEmpty() && level.getBlockState(p.below()).isFaceSturdy(level,p.below(),Direction.UP)
-                && !raid.pendingCampBlocks.containsKey(p.asLong()) && !raid.pendingCampBlocks.containsKey(p.above().asLong());
+                && level.getFluidState(p).isEmpty() && level.getFluidState(p.above()).isEmpty() && level.getBlockState(p.below()).isFaceSturdy(level,p.below(),Direction.UP)
+                && !planned(raid,p) && !planned(raid,p.above());
     }
     private static void strengthen(Mob guard) {
         if(guard.getPersistentData().getBoolean("SiegeVeteranGuard"))return;

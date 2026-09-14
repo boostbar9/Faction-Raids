@@ -1,3 +1,10 @@
+# 4.28.11 beta
+
+- Give future enemy camp upgrades distinct supply shelter, workshop and command shelter layouts, with reinforced lower walls, timber frames and screened openings.
+- Face upgrade entrances toward the main camp, keep a three-block-wide central access route and support raised roof ridges with continuous eaves.
+- Let camp sentries find safe posts up to two blocks above or below their assigned ground level, while avoiding queued fortifications, water and the world border.
+- Keep existing finite builder supplies, construction limits, claim validation and restoration tracking. Already-built camp structures are not rebuilt.
+
 # 4.28.10 beta
 
 - Make faction Treasury notices easier to scan with a gold [Treasury] prefix, green deposits, red deductions, signed amounts, thousands separators and singular wording for one emerald.
