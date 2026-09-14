@@ -75,4 +75,17 @@ class CopilotReviewRegressionTest extends MinecraftTestSupport {
         assertEquals(60,tag.getLong("SiegeHeroNext"));
         assertFalse(HeroTraits.description(24).contains("fireball"));
     }
+    @Test void shieldAbilitiesRequirePositiveUncancelledBlockDamage() {
+        var mob=mock(Mob.class);var level=mock(ServerLevel.class);var tag=new CompoundTag();
+        tag.putBoolean("SiegeHiredHero",true);tag.putInt("SiegeHeroRole",18);
+        when(mob.level()).thenReturn(level);when(mob.getPersistentData()).thenReturn(tag);
+        when(mob.isAlive()).thenReturn(true);
+        var event=mock(ShieldBlockEvent.class);when(event.getEntity()).thenReturn(mob);
+        when(event.getBlockedDamage()).thenReturn(0F);
+        HeroTraits.shieldBlock(event);
+        assertFalse(tag.contains("SiegeHeroNext"));
+        when(event.getBlockedDamage()).thenReturn(4F);when(event.isCanceled()).thenReturn(true);
+        HeroTraits.shieldBlock(event);
+        assertFalse(tag.contains("SiegeHeroNext"));
+    }
 }

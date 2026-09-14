@@ -246,7 +246,6 @@ public final class HeroTraits {
             return;
         }
         if (!mob.isAlive() || mob.isNoAi()) return;
-        if (event.isCanceled() || event.getBlockedDamage() <= 0 || !mob.isAlive() || mob.isNoAi()) return;
         int r = role(mob); if (r < 0) return;
         long now = level.getGameTime();
         var tag = mob.getPersistentData();
