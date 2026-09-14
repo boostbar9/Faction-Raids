@@ -1,3 +1,12 @@
+# 4.28.13 beta
+
+- Integrate Copilot HUD, onboarding, pathfinding and hero refinements onto current main, preserving the latest camp, inventory and enemy-hero systems.
+- Stabilize the Command Center crest and clarify upgrade affordability. Align Territory cards, hover regions and purchase controls; prevent compact description/status overlap.
+- Cache expensive fallback searches and add configurable final-approach urgency and pathing diagnostics. Rotate bounded breach scans through all sides and validate loaded, dry, in-border standing positions.
+- Use the native engineer compatibility initializer for player siege crews.
+- Give Bloodthorn absorption on a full-health melee hit, Wildsong a temporary attack-speed attribute bonus on confirmed kills, and Stonehand protection after a successful shield block.
+- Preserve attributed, cooldown-limited Starweaver and Ashenheart damage. Keep Ashenheart's working melee flame burst and describe it accurately instead of requiring a nonexistent fireball attack.
+
 # 4.28.12 beta
 
 - Give enemy waves access to all 20 player heroes with the same rarity weights, native equipment, stats and signature abilities.

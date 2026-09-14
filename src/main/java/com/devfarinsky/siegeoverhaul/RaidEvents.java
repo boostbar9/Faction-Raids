@@ -103,9 +103,31 @@ public final class RaidEvents {
     static final java.util.Map<UUID, StuckEntry> STUCK_TRACKER =
             new java.util.concurrent.ConcurrentHashMap<>();
 
+    static final class PathingTelemetry {
+        int fallbackSearches;
+        int fallbackCacheHits;
+        int stuckEscalationsL1;
+        int stuckEscalationsL2;
+        int stuckEscalationsL3;
+        int breachCandidatesScanned;
+        int breachCandidatesRejectedNoStand;
+        int finalApproachBoostTicks;
+    }
+
+    static final java.util.Map<String, PathingTelemetry> PATHING_TELEMETRY =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static PathingTelemetry pathingTelemetry(String teamKey) {
+        return PATHING_TELEMETRY.computeIfAbsent(teamKey, ignored -> new PathingTelemetry());
+    }
+
     static final class StuckEntry {
         double lastDistSq;
         long lastProgressGameTime;
+        long nextFallbackSearchGameTime;
+        long fallbackCacheUntilGameTime;
+        Vec3 cachedFallbackTarget;
+        Vec3 cachedFallbackObjective;
         // 0 = fresh, 1 = jump+burst, 2 = wide-aggro + cone fallback,
         // 3 = short teleport forward toward objective (v4.17.0).
         int escalationLevel;
@@ -113,6 +135,9 @@ public final class RaidEvents {
         StuckEntry(double distSq, long gameTime) {
             this.lastDistSq = distSq;
             this.lastProgressGameTime = gameTime;
+            this.nextFallbackSearchGameTime = gameTime;
+            this.fallbackCacheUntilGameTime = gameTime;
+            this.cachedFallbackTarget = null;
             this.escalationLevel = 0;
         }
     }
@@ -636,6 +661,8 @@ public final class RaidEvents {
 
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
+        PATHING_TELEMETRY.clear();
+        STUCK_TRACKER.clear();
         RaidBossBars.shutdown();
         com.devfarinsky.siegeoverhaul.raid.CommanderBossBar.shutdown();
         com.devfarinsky.siegeoverhaul.raid.ClaimWaypoints.shutdown();
@@ -1458,6 +1485,16 @@ public final class RaidEvents {
                         " | occupation: " + (state.captureTicks / 20) + "s" +
                         (state.commanderUuid != null ? " | commander: " +
                                 (state.commanderDefeated ? "defeated" : "active") : "")), false);
+                PathingTelemetry telemetry = PATHING_TELEMETRY.get(key);
+                if (telemetry != null) {
+                    source.sendSuccess(() -> Component.literal("Pathing telemetry: fallback search/cache " +
+                            telemetry.fallbackSearches + "/" + telemetry.fallbackCacheHits +
+                            " | stuck L1/L2/L3 " + telemetry.stuckEscalationsL1 + "/" +
+                            telemetry.stuckEscalationsL2 + "/" + telemetry.stuckEscalationsL3 +
+                            " | breach scan/reject " + telemetry.breachCandidatesScanned + "/" +
+                            telemetry.breachCandidatesRejectedNoStand +
+                            " | final-approach boost ticks " + telemetry.finalApproachBoostTicks), false);
+                }
             }
             return 1;
         } catch (Exception e) {
@@ -1643,6 +1680,20 @@ public final class RaidEvents {
             }
         }
         return best;
+    }
+
+    static boolean isValidBreacherStandPos(ServerLevel level, BlockPos candidate, Mob mob) {
+        if (!level.hasChunkAt(candidate) || !level.hasChunkAt(candidate.above()) || !level.hasChunkAt(candidate.below())
+                || !level.getWorldBorder().isWithinBounds(candidate) || !level.getWorldBorder().isWithinBounds(candidate.above())) return false;
+        if (!level.getFluidState(candidate).isEmpty() || !level.getFluidState(candidate.above()).isEmpty()) return false;
+        if (!level.getBlockState(candidate).isAir()) return false;
+        if (!level.getBlockState(candidate.above()).isAir()) return false;
+        BlockPos below = candidate.below();
+        BlockState ground = level.getBlockState(below);
+        if (!ground.isFaceSturdy(level, below, Direction.UP)) return false;
+        AABB bounds = mob.getType().getDimensions().makeBoundingBox(
+                candidate.getX() + 0.5D, candidate.getY(), candidate.getZ() + 0.5D);
+        return level.noCollision(mob, bounds);
     }
 
     private static boolean beginRaid(MinecraftServer server, RaidSavedData data, RaidSavedData.Anchor anchor,
@@ -3355,9 +3406,9 @@ public final class RaidEvents {
         if (orphanedPlayerBlocks > 0 && RaidConfig.ENABLE_EFFORT_BONUS.get()) {
             // Log-only; no chat spam. Players noticed player-owned blocks were
             // preserved because their build is still standing.
-            System.out.println("[SiegeOverhaul] Camp cleanup preserved " + orphanedPlayerBlocks +
-                    " player-replaced position(s) for team " + state.teamKey +
-                    " (restored terrain at " + restoredTerrain + " positions).");
+            FactionLogger.LOG.info(
+                    "[{}] Camp cleanup preserved {} player-replaced position(s) for team {} (restored terrain at {} positions).",
+                    SiegeOverhaul.MOD_ID, orphanedPlayerBlocks, state.teamKey, restoredTerrain);
         }
     }
 
@@ -3534,11 +3585,9 @@ public final class RaidEvents {
         BlockPos[] neighbors = {
                 target.north(), target.south(), target.east(), target.west()
         };
-        for (BlockPos candidate : neighbors) {
-            // Feet air, head air, block below solid enough to stand on.
-            if (!level.getBlockState(candidate).isAir()) continue;
-            if (!level.getBlockState(candidate.above()).isAir()) continue;
-            if (!level.getBlockState(candidate.below()).isSolid()) continue;
+        for (BlockPos neighbor : neighbors) for (int dy = 0; dy >= -1; dy--) {
+            BlockPos candidate = neighbor.offset(0, dy, 0);
+            if (!isValidBreacherStandPos(level, candidate, leader)) continue;
             double distSq = leader.distanceToSqr(
                     candidate.getX() + 0.5, candidate.getY(), candidate.getZ() + 0.5);
             if (distSq < bestDistSq) {
@@ -3567,7 +3616,11 @@ public final class RaidEvents {
         RaidSavedData.Anchor anchor = data.anchors.get(state.teamKey);
         boolean respectForeignClaims = RaidConfig.RESPECT_FOREIGN_CLAIMS.get()
                 && com.devfarinsky.siegeoverhaul.compat.ClaimBridge.anyProviderAvailable();
-        for (BlockPos candidate : BlockPos.betweenClosed(origin.offset(-3, 0, -3), origin.offset(3, 1, 3))) {
+        int scanLimit = Math.max(8, RaidConfig.BREACH_TARGET_SCAN_LIMIT.get());
+        int scanned = 0;
+        PathingTelemetry telemetry = pathingTelemetry(state.teamKey);
+        for (BlockPos candidate : breachScanPositions(origin, level.getGameTime(), scanLimit)) {
+            scanned++;
             if (candidate.distSqr(stronghold) > maximumDistanceSq ||
                     state.campBlocks.containsKey(candidate.asLong())) continue;
             if(!level.hasChunkAt(candidate))continue;
@@ -3584,16 +3637,24 @@ public final class RaidEvents {
                     && com.devfarinsky.siegeoverhaul.compat.ClaimBridge.isForeignClaim(level, candidate, anchor)) {
                 continue;
             }
+            BlockPos standPos = pickBreacherStandPos(level, candidate, mob);
+            if (standPos == null) {
+                telemetry.breachCandidatesRejectedNoStand++;
+                continue;
+            }
             double mobDistance = candidate.distSqr(origin);
+            double standDistance = standPos.distSqr(origin);
             double objectiveDistance = Vec3.atCenterOf(candidate).distanceToSqr(objective);
-            double score = mobDistance * 4.0D + objectiveDistance * 0.02D
+            double score = mobDistance * 2.5D + standDistance * 1.5D + objectiveDistance * 0.03D
                     + (candidate.getY()==origin.getY()+1 && level.getBlockState(candidate.below()).isAir()?-20:0)
-                    + (state.blockBreachProgress.containsKey(candidate.asLong())?-8:0);
+                    + (state.blockBreachProgress.containsKey(candidate.asLong())?-8:0)
+                    + (candidate.equals(state.currentBreachBlock) ? -12 : 0);
             if (score < bestScore) {
                 best = candidate.immutable();
                 bestScore = score;
             }
         }
+        telemetry.breachCandidatesScanned += Math.min(scanned, scanLimit);
         return best;
     }
 
@@ -3756,7 +3817,11 @@ public final class RaidEvents {
         double innerRangeSq = (aggroRange * 1.5) * (aggroRange * 1.5); // "at the objective" band
         double widenedAggroRangeSq = (aggroRange * innerMultiplier) * (aggroRange * innerMultiplier);
         boolean forceRepath = RaidConfig.FORCE_REPATH_WHEN_IDLE.get();
+        double breacherApproachAggroScale = RaidConfig.BREACHER_APPROACH_AGGRO_SCALE.get();
+        double finalApproachRangeSq = Math.pow(RaidConfig.FINAL_APPROACH_RADIUS.get(), 2);
+        double finalApproachSpeedMultiplier = RaidConfig.FINAL_APPROACH_SPEED_MULTIPLIER.get();
         long gameTime = level.getGameTime();
+        PathingTelemetry telemetry = pathingTelemetry(state.teamKey);
 
         for (UUID id : state.raiders) {
             Entity entity = level.getEntity(id);
@@ -3786,6 +3851,8 @@ public final class RaidEvents {
                     .pushPastDefenders(role, breachersIgnore, atObjective);
             boolean wideAggro = atObjective || (stuck != null && stuck.escalationLevel >= 2);
             double effectiveAggroRangeSq = wideAggro ? widenedAggroRangeSq : aggroRangeSq;
+            effectiveAggroRangeSq = applyObjectivePusherAggroScale(
+                    effectiveAggroRangeSq, role, atObjective, breacherApproachAggroScale);
 
             LivingEntity closest = null;
             double closestDistance = Double.MAX_VALUE;
@@ -3856,28 +3923,24 @@ public final class RaidEvents {
             }
 
             // 2.10.1 aggression pass: ALWAYS keep the objective nav goal alive.
-            double speed = distToObjectiveSq < burstRangeSq ? baseSpeed * burstMultiplier : baseSpeed;
-            // v2.23.0 stuck-escalation speed bump on top of the burst
-            // multiplier so escalated raiders visibly push harder.
-            if (stuck != null && stuck.escalationLevel >= 1) speed *= 1.15;
+            double speed = computeAdvanceSpeed(baseSpeed, distToObjectiveSq, burstRangeSq, burstMultiplier,
+                    stuck != null && stuck.escalationLevel >= 1, !acquired,
+                    finalApproachRangeSq, finalApproachSpeedMultiplier);
+            if (!acquired && distToObjectiveSq <= finalApproachRangeSq) telemetry.finalApproachBoostTicks++;
 
             // Preserve progressing paths, including detours around walls. A finished
             // route or two seconds without movement may request a fresh path.
             if (!acquired && forceRepath && com.devfarinsky.siegeoverhaul.raid.MarchProgress.shouldRepath(mob,objective,gameTime)) {
-                Vec3 target = null;
-                if (RaidConfig.CONE_FALLBACK_ENABLED.get()
-                        && stuck != null && stuck.escalationLevel >= 1
-                        && mob instanceof PathfinderMob pmob) {
-                    target = com.devfarinsky.siegeoverhaul.raid.FlankRoutes.find(level, pmob, objective);
-                    if (target == null) target = coneFallbackTarget(pmob, objective);
-                }
+                Vec3 target = fallbackRouteTarget(level, mob, objective, stuck, gameTime, telemetry);
                 if (target != null) {
                     mob.getNavigation().moveTo(target.x, target.y, target.z, speed);
                 } else {
                     mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
                 }
             } else if (!acquired && mob.getNavigation().isDone()) {
-                mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
+                Vec3 target = fallbackRouteTarget(level, mob, objective, stuck, gameTime, telemetry);
+                if (target != null) mob.getNavigation().moveTo(target.x, target.y, target.z, speed);
+                else mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
             }
 
             // v2.23.0 stuck detection. We only care about raiders that are
@@ -3886,7 +3949,7 @@ public final class RaidEvents {
             // aren't stuck, they've won). Progress is measured as a
             // meaningful reduction in distanceToObjectiveSq over the window.
             if (stuckEnabled && !acquired && distToObjectiveSq > 25.0) {
-                updateStuckTracker(mob, id, objective, distToObjectiveSq, gameTime,
+                updateStuckTracker(mob, id, state.teamKey, objective, distToObjectiveSq, gameTime,
                         stuckTicksL1, stuckTicksL2, stuckTicksL3);
             } else if (stuckEnabled) {
                 // Either engaged in melee, or we've reached the objective:
@@ -3941,6 +4004,73 @@ public final class RaidEvents {
      * <p>Called only for raiders whose {@link StuckEntry#escalationLevel}
      * is >= 1, so healthy raiders keep their fast direct path.
      */
+    /** Rotate a bounded scan through the complete neighborhood instead of starving one side forever. */
+    static java.util.List<BlockPos> breachScanPositions(BlockPos origin, long gameTime, int limit) {
+        var positions = new java.util.ArrayList<BlockPos>(147);
+        for (BlockPos pos : BlockPos.betweenClosed(origin.offset(-3, -1, -3), origin.offset(3, 1, 3)))
+            positions.add(pos.immutable());
+        int count = Math.max(1, Math.min(positions.size(), limit));
+        int start = (int) Math.floorMod(Math.floorDiv(gameTime, 20) * count, positions.size());
+        var batch = new java.util.ArrayList<BlockPos>(count);
+        for (int i = 0; i < count; i++) batch.add(positions.get((start + i) % positions.size()));
+        return batch;
+    }
+
+    static double applyObjectivePusherAggroScale(double rangeSq, String role,
+                                                 boolean atObjective, double approachScale) {
+        if (atObjective) return rangeSq;
+        if (!"breacher".equals(role) && !"commander".equals(role)) return rangeSq;
+        double scaleSq = approachScale * approachScale;
+        return rangeSq * scaleSq;
+    }
+
+    static double computeAdvanceSpeed(double baseSpeed, double distToObjectiveSq,
+                                      double burstRangeSq, double burstMultiplier,
+                                      boolean stuckEscalated, boolean objectiveFocused,
+                                      double finalApproachRangeSq, double finalApproachSpeedMultiplier) {
+        double speed = distToObjectiveSq < burstRangeSq ? baseSpeed * burstMultiplier : baseSpeed;
+        if (stuckEscalated) speed *= 1.15;
+        if (objectiveFocused && distToObjectiveSq <= finalApproachRangeSq) {
+            speed *= finalApproachSpeedMultiplier;
+        }
+        return speed;
+    }
+
+    private static Vec3 fallbackRouteTarget(ServerLevel level, Mob mob, Vec3 objective,
+                                            StuckEntry stuck, long gameTime,
+                                            PathingTelemetry telemetry) {
+        if (stuck == null || stuck.escalationLevel < 1 || !(mob instanceof PathfinderMob pmob)) return null;
+        if (stuck.cachedFallbackTarget != null && objective.equals(stuck.cachedFallbackObjective)
+                && gameTime <= stuck.fallbackCacheUntilGameTime && gameTime >= stuck.fallbackCacheUntilGameTime - 300
+                && mob.distanceToSqr(stuck.cachedFallbackTarget) > 4.0
+                && level.hasChunkAt(BlockPos.containing(stuck.cachedFallbackTarget))
+                && level.getWorldBorder().isWithinBounds(BlockPos.containing(stuck.cachedFallbackTarget))) {
+            telemetry.fallbackCacheHits++;
+            return stuck.cachedFallbackTarget;
+        }
+        stuck.cachedFallbackTarget = null;
+        if (gameTime < stuck.nextFallbackSearchGameTime && stuck.nextFallbackSearchGameTime <= gameTime + 200) return null;
+
+        Vec3 target = com.devfarinsky.siegeoverhaul.raid.FlankRoutes.find(level, pmob, objective);
+        if (target == null && RaidConfig.CONE_FALLBACK_ENABLED.get()) {
+            target = coneFallbackTarget(pmob, objective);
+        }
+
+        long searchCooldownTicks = Math.max(20L, RaidConfig.FALLBACK_SEARCH_COOLDOWN_SECONDS.get() * 20L);
+        stuck.nextFallbackSearchGameTime = gameTime + searchCooldownTicks;
+        telemetry.fallbackSearches++;
+        if (target != null) {
+            long cacheTicks = Math.max(20L, RaidConfig.FALLBACK_ROUTE_CACHE_SECONDS.get() * 20L);
+            stuck.cachedFallbackTarget = target;
+            stuck.cachedFallbackObjective = objective;
+            stuck.fallbackCacheUntilGameTime = gameTime + cacheTicks;
+        } else {
+            stuck.cachedFallbackTarget = null;
+            stuck.fallbackCacheUntilGameTime = gameTime;
+        }
+        return target;
+    }
+
     private static Vec3 coneFallbackTarget(PathfinderMob mob, Vec3 objective) {
         int radius = RaidConfig.CONE_FALLBACK_RADIUS.get();
         int vertical = RaidConfig.CONE_FALLBACK_VERTICAL.get();
@@ -3957,7 +4087,8 @@ public final class RaidEvents {
                 objective, 1.5707963705062866);
     }
 
-    private static void updateStuckTracker(Mob mob, UUID id, Vec3 objective, double distToObjectiveSq,
+    private static void updateStuckTracker(Mob mob, UUID id, String teamKey,
+                                           Vec3 objective, double distToObjectiveSq,
                                            long gameTime, long ticksL1, long ticksL2, long ticksL3) {
         StuckEntry entry = STUCK_TRACKER.get(id);
         if (entry == null) {
@@ -3972,6 +4103,8 @@ public final class RaidEvents {
             entry.lastDistSq = distToObjectiveSq;
             entry.lastProgressGameTime = gameTime;
             entry.escalationLevel = 0;
+            entry.cachedFallbackTarget = null;
+            entry.fallbackCacheUntilGameTime = gameTime;
             return;
         }
         long stalledFor = gameTime - entry.lastProgressGameTime;
@@ -3980,11 +4113,13 @@ public final class RaidEvents {
             // Level 1: jump + fresh path.
             mob.getJumpControl().jump();
             entry.escalationLevel = 1;
+            pathingTelemetry(teamKey).stuckEscalationsL1++;
         }
         if (entry.escalationLevel < 2 && stalledFor >= ticksL2) {
             // Level 2: main loop consults escalationLevel to widen aggro
             // on the next tick. No direct action needed here.
             entry.escalationLevel = 2;
+            pathingTelemetry(teamKey).stuckEscalationsL2++;
         }
         if (entry.escalationLevel < 3 && stalledFor >= ticksL3) {
             // Level 3 (v4.17.0): short teleport forward. Fires only if the
@@ -3998,11 +4133,14 @@ public final class RaidEvents {
                 teleportStuckRaiderForward(serverLevel, mob, objective);
             }
             entry.escalationLevel = 3;
+            pathingTelemetry(teamKey).stuckEscalationsL3++;
             // Reset the progress clock so we don't re-teleport on the very
             // next tick if the teleport itself didn't close the gap far
             // enough to trip the progress threshold.
             entry.lastDistSq = mob.distanceToSqr(objective);
             entry.lastProgressGameTime = gameTime;
+            entry.cachedFallbackTarget = null;
+            entry.fallbackCacheUntilGameTime = gameTime;
         }
     }
 
@@ -4331,6 +4469,7 @@ public final class RaidEvents {
         if (finishingState != null) {
             for (UUID rid : finishingState.raiders) STUCK_TRACKER.remove(rid);
         }
+        PATHING_TELEMETRY.remove(teamKey);
         RaidSavedData.RaidState state = data.raids.remove(teamKey);
         RaidSavedData.Anchor anchor = data.anchors.get(teamKey);
         if (state != null && anchor != null) {

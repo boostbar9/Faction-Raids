@@ -197,8 +197,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // Reserve a bottom strip for the Fortify Perimeter material buttons.
         int fortifyStripH = 26;
         int tbGridBottom = layout.contentBottom() - fortifyStripH - 6;
-        int tbCellW = (layout.width() - 20 - (tbCols - 1) * 8) / tbCols;
-        int tbCellH = (tbGridBottom - tbGridTop - (tbRows - 1) * 8) / tbRows;
+        int tbCellW = layout.territoryCardWidth();
+        int tbCellH = layout.territoryCardHeight();
         // Purchase button lives inside its card, near the bottom-right.
         int btnH = 18;
         for (int i = 0; i < TerritoryBuffs.COUNT; i++) {
@@ -348,11 +348,15 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             territoryBuffs[i].visible = tab == 3;
             boolean owned = menu.hasTerritoryBuff(i);
             territoryBuffs[i].active = !owned && canAfford(TerritoryBuffs.PRICES[i]);
-            territoryBuffs[i].setMessage(Component.literal(
-                    layout.compact()
-                            ? (owned ? "Active" : "Buy  ·  " + TerritoryBuffs.PRICES[i] + "e")
-                            : (owned ? TerritoryBuffs.LABELS[i] + " (active)"
-                                    : TerritoryBuffs.LABELS[i] + "  ·  " + TerritoryBuffs.PRICES[i] + "e")));
+            long missing = canAfford(TerritoryBuffs.PRICES[i]) ? 0L : Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
+            territoryBuffs[i].setMessage(Component.literal(layout.compact()
+                    ? (owned ? "Active"
+                            : (missing == 0L ? "Buy  ·  " + TerritoryBuffs.PRICES[i] + "e"
+                            : "Need  ·  " + missing + "e"))
+                    : (owned ? TerritoryBuffs.LABELS[i] + " (active)"
+                            : (missing == 0L
+                            ? TerritoryBuffs.LABELS[i] + "  ·  " + TerritoryBuffs.PRICES[i] + "e"
+                            : TerritoryBuffs.LABELS[i] + "  ·  need " + missing + "e"))));
         }
         for (int i = 0; i < fortifyButtons.length; i++) {
             fortifyButtons[i].visible = tab == 3;
@@ -506,19 +510,19 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             int cols = 2;
             int rows = (TerritoryBuffs.COUNT + cols - 1) / cols;
             int gridTop = layout.contentY();
-            int gridBottom = layout.contentBottom();
-            int cellW = (layout.width() - 20 - (cols - 1) * 8) / cols;
-            int cellH = (gridBottom - gridTop - (rows - 1) * 8) / rows;
+            int gridBottom = layout.contentBottom() - 32;
+            int cellW = layout.territoryCardWidth();
+            int cellH = layout.territoryCardHeight();
             for (int i = 0; i < TerritoryBuffs.COUNT; i++) {
                 int cx = layout.x() + 10 + (i % cols) * (cellW + 8);
                 int cy = gridTop + (i / cols) * (cellH + 8);
                 if (over(mx, my, cx, cy, cellW, cellH)) {
+                    long missing = canAfford(TerritoryBuffs.PRICES[i]) ? 0L : Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
                     String state = menu.hasTerritoryBuff(i)
                             ? "Already active for the whole faction."
-                            : canAfford(TerritoryBuffs.PRICES[i])
-                                    ? "Ready to purchase from bank + purse."
-                                    : "Need " + (TerritoryBuffs.PRICES[i] - availableFunds())
-                                            + " more emeralds.";
+                            : missing == 0L
+                                    ? "One-time purchase. Uses faction bank first, then purse."
+                                    : "Need " + missing + " more emeralds (bank + purse).";
                     tooltip(g, TerritoryBuffs.LABELS[i] + "  |  "
                             + TerritoryBuffs.DESCRIPTIONS[i] + "  |  " + state,
                             tooltipX, tooltipY);
@@ -668,17 +672,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
     }
 
-    /**
-     * Textured hanging crest banner rendered from the HUD atlas. The banner
-     * gently sways with a sine-wave x-offset driven by the render tick so it
-     * feels alive without ever leaving the header rail.
-     */
+    /** Textured hanging crest banner rendered from the HUD atlas. */
     private void drawCrestBanner(GuiGraphics g, int x, int y) {
-        long tick = minecraft != null ? minecraft.level != null
-                ? minecraft.level.getGameTime() : 0 : 0;
-        float phase = (tick + (minecraft != null ? minecraft.getFrameTime() : 0)) * 0.04f;
-        int sway = (int) Math.round(Math.sin(phase) * 1.4);
-        HudAtlas.blit(g, HudAtlas.CREST_BANNER, x + sway, y - 4);
+        HudAtlas.blit(g, HudAtlas.CREST_BANNER, x, y - 4);
     }
 
     /**
@@ -916,9 +912,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int cols = 2;
         int rows = (TerritoryBuffs.COUNT + cols - 1) / cols;
         int gridTop = layout.contentY();
-        int gridBottom = layout.contentBottom();
-        int cellW = (layout.width() - 20 - (cols - 1) * 8) / cols;
-        int cellH = (gridBottom - gridTop - (rows - 1) * 8) / rows;
+        int gridBottom = layout.contentBottom() - 32;
+        int cellW = layout.territoryCardWidth();
+        int cellH = layout.territoryCardHeight();
         for (int i = 0; i < TerritoryBuffs.COUNT; i++) {
             int col = i % cols, row = i / cols;
             int cx = layout.x() + 10 + col * (cellW + 8);
@@ -936,9 +932,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             text(g, TerritoryBuffs.LABELS[i], cx + 28, cy + 10, cellW - 34, accent);
 
             // Multi-line description below the label.
-            if (!layout.compact()) {
-                String desc = TerritoryBuffs.DESCRIPTIONS[i];
-                drawWrapped(g, desc, cx + 10, cy + 28, cellW - 20, CommandPalette.TEXT);
+            String desc = TerritoryBuffs.DESCRIPTIONS[i];
+            if (layout.territoryDescriptionLines() > 0) {
+                drawWrappedText(g, layout.compact() ? TerritoryBuffs.compactSummary(i) : desc,
+                        cx + 10, cy + 28, cellW - 20, layout.territoryDescriptionLines(), CommandPalette.TEXT_MUTED);
             }
 
             // Price / status line just above the purchase button.
@@ -947,13 +944,16 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             if (owned) {
                 status = "Active";
                 statusColor = CommandPalette.ACCENT_EMERALD;
-            } else {
-                status = TerritoryBuffs.PRICES[i] + "e";
+            } else if (canAfford(TerritoryBuffs.PRICES[i])) {
+                status = "Ready to buy";
                 statusColor = CommandPalette.ACCENT_GOLD;
+            } else {
+                long missing = canAfford(TerritoryBuffs.PRICES[i]) ? 0L : Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
+                status = "Need " + missing + "e";
+                statusColor = CommandPalette.ACCENT_STEEL;
             }
-            text(g, status, cx + 10,
-                    layout.compact() ? cy + 25 : cy + cellH - 40,
-                    80, statusColor);
+            // Compact cards communicate status through the button and tooltip.
+            if (!layout.compact()) text(g, status, cx + 10, cy + cellH - 40, cellW - 20, statusColor);
         }
     }
 

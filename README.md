@@ -28,7 +28,7 @@ The menu sizes itself from the player's Minecraft-scaled viewport, selects detai
 
 | Hero | Signature skill |
 | --- | --- |
-| **Kael Bloodthorn** | Every third melee hit against siege enemies heals him. At full health, it grants a short shield instead. |
+| **Kael Bloodthorn** | At full health, a melee hit grants a short absorption shield. |
 | **Branna Dawnwarden** | Grants an emergency shield to one nearby wounded ally belonging to her owner. |
 | **Sylva Stormbow** | Every fourth arrow hit can chain magical damage to two additional nearby siege enemies. |
 | **Orin Frostbinder** | Bolts briefly slow up to three nearby siege enemies. |
