@@ -4,7 +4,6 @@ This repository now includes an automatic CurseForge publish workflow for Copilo
 
 - Workflow file: `.github/workflows/publish-copilot-updates.yml`
 - Trigger: pushes to `copilot/**`
-- Trigger: successful completion of **Running Copilot cloud agent** on `copilot/**`
 - Default channel: `beta`
 
 ## What it does
@@ -29,6 +28,5 @@ On each qualifying push, the workflow:
 ## How to use
 
 - Normal path: merge/push Copilot updates to a `copilot/**` branch and let automation publish.
-- Preferred path: once the Copilot run succeeds, the follow-up `workflow_run` trigger publishes the exact `head_sha`.
 - Skip once: add `[skip publish]` to commit message.
 - Manual publish: run **Auto-publish Copilot updates to CurseForge (beta)** from Actions and provide a ref if needed.
