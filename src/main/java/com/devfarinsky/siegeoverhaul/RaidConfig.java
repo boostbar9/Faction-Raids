@@ -139,6 +139,7 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue ENABLE_BRIDGE_BUILDING;
     public static final ForgeConfigSpec.IntValue MAX_BRIDGE_SPAN;
     public static final ForgeConfigSpec.IntValue MAX_BRIDGES_PER_RAID;
+    public static final ForgeConfigSpec.IntValue MAX_BRIDGE_BLOCKS_PER_RAID;
     public static final ForgeConfigSpec.BooleanValue ENABLE_SIEGE_ENGINES;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> FIRST_WAVE_ENGINES;
     public static final ForgeConfigSpec.IntValue LATER_WAVE_ENGINE_CHANCE;
@@ -441,12 +442,14 @@ public final class RaidConfig {
                 .defineInRange("navalWaveSharePercent", 40, 0, 100);
         NAVAL_BOAT_SPEED = b.comment("Steering speed for raider boats, as a percentage. 100 = one block per second in still water.")
                 .defineInRange("navalBoatSpeed", 10, 1, 100);
-        ENABLE_BRIDGE_BUILDING = b.comment("Let stalled raider groups drop a temporary planks bridge across narrow water spans they can't wade.")
+        ENABLE_BRIDGE_BUILDING = b.comment("Promote an ordinary enemy raider to a bridge builder when no objective path is reachable. Builders walk to the edge and lay temporary floor-level planks across air or water gaps.")
                 .define("enableBridgeBuilding", true);
-        MAX_BRIDGE_SPAN = b.comment("Maximum water span (in blocks) the bridge builder will attempt to cross. Wider water is left for the naval convoy.")
-                .defineInRange("maxBridgeSpan", 8, 2, 24);
-        MAX_BRIDGES_PER_RAID = b.comment("Maximum bridge segments a single raid can build.")
+        MAX_BRIDGE_SPAN = b.comment("Maximum air or water gap length, excluding the shores. Wider water is left for the naval convoy.")
+                .defineInRange("maxBridgeSpan", 24, 2, 64);
+        MAX_BRIDGES_PER_RAID = b.comment("Maximum saved bridge attempts per raid. Cancelled or interrupted attempts are not refunded.")
                 .defineInRange("maxBridgesPerRaid", 4, 0, 32);
+        MAX_BRIDGE_BLOCKS_PER_RAID = b.comment("Total temporary bridge planks available per raid. Spent materials survive reloads and builder deaths.")
+                .defineInRange("maxBridgeBlocksPerRaid", 96, 0, 2048);
         ENABLE_SIEGE_ENGINES = b.comment("Master toggle for siege engines (catapult, ballista, battering ram, siege tower). Requires the Siege Weapons mod to be installed; without it, only sappers spawn.")
                 .define("enableSiegeEngines", true);
         FIRST_WAVE_ENGINES = b.comment("Engine types spawned prefab at the war camp when wave 1 kicks off. Native operators support CATAPULT and BALLISTA. Legacy BATTERING_RAM and SIEGE_TOWER selections deploy a supplied ballista.")

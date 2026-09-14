@@ -61,12 +61,12 @@ public final class FormationDirector {
         boolean dispatched=false;
         for(var entry:groups.entrySet()) {
             List<Mob> group=entry.getValue();
-            if(group.size()<2) { group.forEach(RecruitsFormationBridge::release);continue; }
+            String role=entry.getKey().split(":")[0];
+            if(group.size()<2 && !role.equals("leadership")) { group.forEach(RecruitsFormationBridge::release);continue; }
             Vec3 centroid=centroidOf(group),delta=Vec3.atCenterOf(objective).subtract(centroid).multiply(1,0,1);
             if(delta.length()<DISSOLVE_DISTANCE) { group.forEach(RecruitsFormationBridge::release);continue; }
-            Vec3 forward=delta.normalize(),waypoint=centroid.add(forward.scale(WAYPOINT_LEAD));
-            String role=entry.getKey().split(":")[0];
-            if(role.equals("ranged") || role.equals("support")) waypoint=waypoint.subtract(forward.scale(2));
+            Vec3 forward=delta.normalize(),waypoint=centroid.add(forward.scale(
+                    Math.min(delta.length(), FormationTactics.waypointLead(role))));
             boolean narrow=false;
             for(int side:new int[]{-3,3}) {
                 var p=BlockPos.containing(waypoint.add(-forward.z*side,0,forward.x*side));
@@ -90,7 +90,10 @@ public final class FormationDirector {
 
     public static boolean shouldMarch(Mob mob, BlockPos objective) {
         return RaidConfig.ENABLE_FORMATIONS.get() && !mob.isPassenger()
+                && !mob.getPersistentData().getBoolean(
+                        com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal.CHARGING)
                 && !com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)
+                && !com.devfarinsky.siegeoverhaul.naval.BridgeBuilder.assigned(mob)
                 && !mob.horizontalCollision && !mob.onClimbable()
                 && (mob.getTarget() == null || !mob.getTarget().isAlive())
                 && mob.distanceToSqr(Vec3.atCenterOf(objective)) > DISSOLVE_DISTANCE * DISSOLVE_DISTANCE;

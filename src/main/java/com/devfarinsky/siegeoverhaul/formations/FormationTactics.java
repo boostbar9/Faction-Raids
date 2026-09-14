@@ -5,12 +5,31 @@ import net.minecraft.world.phys.Vec3;
 /** Role and terrain policy, independent of entity AI. */
 public final class FormationTactics {
     private FormationTactics() {}
+    public static String normalizeRole(String type) {
+        if (type == null) return "";
+        String role = type.substring(type.indexOf(':') + 1);
+        return role.startsWith("recruit_") ? role.substring("recruit_".length()) : role;
+    }
+    public static boolean isLeader(String type) {
+        return switch (normalizeRole(type)) {
+            case "captain", "patrol_leader", "commander" -> true;
+            default -> false;
+        };
+    }
     public static String group(String type) {
-        return switch(type) {
+        return switch(normalizeRole(type)) {
             case "bowman","crossbowman","scout" -> "ranged";
             case "assassin","assassin_leader","horseman","nomad" -> "mobile";
-            case "captain","patrol_leader","siege_engineer" -> "support";
+            case "captain","patrol_leader","commander" -> "leadership";
+            case "siege_engineer" -> "support";
             default -> "front";
+        };
+    }
+    public static double waypointLead(String group) {
+        return switch (group) {
+            case "leadership" -> FormationDirector.WAYPOINT_LEAD + 4;
+            case "ranged", "support" -> FormationDirector.WAYPOINT_LEAD - 2;
+            default -> FormationDirector.WAYPOINT_LEAD;
         };
     }
     public static Formation choose(String group,boolean narrow,boolean underFire) {

@@ -93,18 +93,22 @@ jobs:
 
       - name: Build release metadata
         id: meta
-        env:
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message || '' }}
-          SOURCE_BRANCH: ${{ github.ref_name }}
         run: |
           base_version="$(awk -F= '/^mod_version=/{print $2}' gradle.properties | tr -d '[:space:]')"
           short_sha="$(git rev-parse --short=8 HEAD)"
-          branch="$(echo "${SOURCE_BRANCH}" | tr '/' '-')"
-          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           version="${base_version}-copilot.${{ github.run_number }}+${short_sha}"
-          name="Copilot ${base_version} (${branch} ${short_sha})"
           version_type="${{ inputs.version_type || 'beta' }}"
-          changelog="$(printf 'Automated Copilot publish from branch `%s`.\n\n- Commit: `%s`\n- Source run: %s\n- Commit message: %s' "$branch" "$short_sha" "$run_url" "$COMMIT_MESSAGE")"
+          name="The Siege Overhaul ${base_version} (${version_type})"
+          changelog="$(
+            awk -v ver="${base_version}" '
+              $0 ~ ("^# " ver "([[:space:]]|$)") { capture=1; found=1; next }
+              capture && /^# / { capture=0 }
+              capture { print }
+            ' CHANGELOG.md | sed -e '1{/^[[:space:]]*$/d;}'
+          )"
+          if [ -z "${changelog}" ]; then
+            changelog="- Gameplay updates and fixes."
+          fi
           {
             echo "version=$version"
             echo "display_name=$name"

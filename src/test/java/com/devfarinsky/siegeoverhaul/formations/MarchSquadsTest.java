@@ -8,6 +8,27 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 class MarchSquadsTest extends MinecraftTestSupport {
+    @Test void oldSupportCaptainBecomesStableIndependentAssaultLeader() {
+        Mob captain = unit(1, 0), soldier = unit(2, 1);
+        captain.getPersistentData().putString(com.devfarinsky.siegeoverhaul.ModConstants.Tags.RAID_ROLE, "captain");
+        captain.getPersistentData().putString("SiegeMarchSquad", "support:old");
+        var first = MarchSquads.group(List.of(soldier, captain));
+        String key = captain.getPersistentData().getString("SiegeMarchSquad");
+        assertTrue(key.startsWith("leadership:"));
+        assertEquals(List.of(captain), first.get(key));
+        assertEquals(first, MarchSquads.group(List.of(captain, soldier)));
+    }
+    @Test void patrolLeaderAndCommanderRetainStableFrontRankWithoutInfantryOrSupport() {
+        Mob captain = unit(3, 0), patrol = unit(1, 1), commander = unit(2, 2), soldier = unit(4, 3);
+        captain.getPersistentData().putString(com.devfarinsky.siegeoverhaul.ModConstants.Tags.RAID_ROLE, "captain");
+        patrol.getPersistentData().putString(com.devfarinsky.siegeoverhaul.ModConstants.Tags.RAID_ROLE, "recruits:patrol_leader");
+        commander.getPersistentData().putString(com.devfarinsky.siegeoverhaul.ModConstants.Tags.RAID_ROLE, "commander");
+        var squads = MarchSquads.group(List.of(captain, soldier, commander, patrol));
+        assertEquals(2, squads.size());
+        String key = captain.getPersistentData().getString("SiegeMarchSquad");
+        assertEquals(List.of(patrol, commander, captain), squads.get(key));
+        assertEquals(squads, MarchSquads.group(List.of(patrol, commander, soldier, captain)));
+    }
     @Test void squadAndSlotsSurviveChunkCrossingAndReorderedInput() {
         Mob a=unit(1,15),b=unit(2,16),c=unit(3,18);
         var first=MarchSquads.group(List.of(c,a,b));assertEquals(1,first.size());

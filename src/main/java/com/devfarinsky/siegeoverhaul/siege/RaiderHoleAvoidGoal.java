@@ -67,6 +67,7 @@ public class RaiderHoleAvoidGoal extends Goal {
 
     @Override
     public void tick() {
+        if (com.devfarinsky.siegeoverhaul.naval.BridgeBuilder.assigned(mob)) return;
         Level level = mob.level();
 
         // ---------- Cave-escape check (runs even when standing still) --------

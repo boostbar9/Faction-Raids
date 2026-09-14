@@ -82,6 +82,7 @@ public final class LadderBuilder {
         int checked=0;
         for(UUID id:state.raiders) {
             if(!(level.getEntity(id) instanceof Mob mob) || !mob.isAlive() || mob.isPassenger() || !mob.onGround()
+                    || com.devfarinsky.siegeoverhaul.naval.BridgeBuilder.assigned(mob)
                     || RaiderLadderGoal.assigned(mob))continue;
             if(!mob.horizontalCollision && !mob.getNavigation().isDone())continue;
             if(++checked>8)break;

@@ -55,6 +55,20 @@ class StragglerTrackerTest extends MinecraftTestSupport {
     }
 
     @Test
+    void workingBridgeBuilderIsNotRedirectedOrRetired() {
+        stationaryRaider(10000.0);
+        try (var builders = mockStatic(com.devfarinsky.siegeoverhaul.naval.BridgeBuilder.class)) {
+            builders.when(() -> com.devfarinsky.siegeoverhaul.naval.BridgeBuilder.assigned(mob)).thenReturn(true);
+            for (int i = 0; i < 5; i++) assertEquals(0, StragglerTracker.tick(level, raid, BlockPos.ZERO));
+            verify(mob, never()).discard();
+            verify(mob.getNavigation(), never()).stop();
+            verify(mob.getNavigation(), never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+            assertTrue(raid.raiders.contains(id));
+            assertEquals(0, raid.totalEscaped);
+        }
+    }
+
+    @Test
     void lateralMovementAroundWallsIsProgress() {
         stationaryRaider(10000.0);
         when(mob.position()).thenReturn(new Vec3(100, 0, 0), new Vec3(100, 0, 5),

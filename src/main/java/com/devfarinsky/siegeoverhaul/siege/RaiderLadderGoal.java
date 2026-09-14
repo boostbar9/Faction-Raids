@@ -70,7 +70,8 @@ public final class RaiderLadderGoal extends Goal {
             if (active != null && active.route != null) users.merge(active.route, 1, Integer::sum);
         }
         for (UUID id : state.raiders) {
-            if (!(level.getEntity(id) instanceof Mob mob) || !mob.isAlive() || mob.isPassenger() || assigned(mob)) continue;
+            if (!(level.getEntity(id) instanceof Mob mob) || !mob.isAlive() || mob.isPassenger() || assigned(mob)
+                    || com.devfarinsky.siegeoverhaul.naval.BridgeBuilder.assigned(mob)) continue;
             var goal = find(mob);
             if (goal != null && level.getGameTime() < goal.retryAfter) continue;
             Route best = null; double nearest = 256;

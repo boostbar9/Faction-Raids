@@ -22,7 +22,7 @@ public final class MarchSquads {
         var iterator=groups.entrySet().iterator();
         while(iterator.hasNext()) {
             var entry=iterator.next();
-            if(entry.getValue().size()<2) {
+            if(entry.getValue().size()<2 && !entry.getKey().startsWith("leadership:")) {
                 unassigned.addAll(entry.getValue());iterator.remove();
             }
         }
@@ -42,6 +42,8 @@ public final class MarchSquads {
         return groups;
     }
     private static String role(Mob mob) {
+        if (FormationTactics.isLeader(mob.getPersistentData().getString(
+                com.devfarinsky.siegeoverhaul.ModConstants.Tags.RAID_ROLE))) return "leadership";
         var id=ForgeRegistries.ENTITY_TYPES.getKey(mob.getType());return FormationTactics.group(id==null?"":id.getPath());
     }
 }
