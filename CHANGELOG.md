@@ -1,3 +1,14 @@
+# 4.28.14 beta
+
+- Command Center polish pass:
+  - Better number readability for prices/reward text and affordability messaging (thousands separators and clearer emerald wording).
+  - Territory compact cards now avoid status/summary overlap on short card heights by adapting what text is shown.
+  - Tooltip wrapping now uses the active panel width, improving readability and reducing overflow pressure on scaled/tiny windows.
+  - Long unbroken words in wrapped card text are now clipped with ellipsis instead of bleeding outside card bounds.
+  - Bank messaging now consistently refers to your **purse** (instead of mixed purse/pack wording).
+- Added responsive layout regression tests for `CoreHireLayout` covering roomy, constrained, and tiny-window scaled-canvas behavior.
+- Added hardened Copilot branch auto-publish workflow for CurseForge beta uploads with branch gating, concurrency lock, token preflight, artifact sanity checks, deterministic version metadata, and manual fallback.
+
 # 4.21.1 beta
 
 - Make the Siege Core HUD size itself from the actual Minecraft-scaled viewport. Wide, tall, short and narrow aspect ratios now select detailed or compact cards from their usable geometry, while unusually small modded/resizable windows uniformly scale the complete HUD and its mouse hitboxes instead of collapsing sections together.

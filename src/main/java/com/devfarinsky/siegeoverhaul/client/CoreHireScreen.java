@@ -395,8 +395,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                                     ? "This offer is unavailable."
                                     : canAfford(menu.cost(i))
                                             ? "Ready to hire."
-                                            : "Need " + (menu.cost(i) - availableFunds())
-                                                    + " more emeralds.";
+                                            : "Need " + emeralds(menu.cost(i) - availableFunds()) + " more.";
                     String info = CoreHiring.NAMES[role]
                             + "  |  " + CoreHiring.rarity(role)
                             + "  |  " + (i == 3 ? HeroTraits.description(role) : roleBlurb(role))
@@ -412,8 +411,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     if (!SiegeYard.available()) {
                         info = "Requires both Villager Recruits and Siege Weapons.";
                     } else if (!canAfford(SiegeYard.PRICES[i])) {
-                        info = "You need " + (SiegeYard.PRICES[i] - availableFunds())
-                                + " more emeralds (purse + faction bank).";
+                        info = "You need " + emeralds(SiegeYard.PRICES[i] - availableFunds())
+                                + " more (purse + faction bank).";
                     } else {
                         info = "Buy the kit now, then right-click the top of a clear, solid, flat 3x3 area to deploy your "
                                 + SiegeYard.LABELS[i] + ". A failed placement keeps the kit.";
@@ -482,7 +481,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                             ? "Already active for the whole faction."
                             : missing == 0L
                                     ? "One-time purchase. Uses faction bank first, then purse."
-                                    : "Need " + missing + " more emeralds (bank + purse).";
+                                    : "Need " + emeralds(missing) + " more (bank + purse).";
                     tooltip(g, TerritoryBuffs.LABELS[i] + "  |  "
                             + TerritoryBuffs.DESCRIPTIONS[i] + "  |  " + state,
                             tooltipX, tooltipY);
@@ -496,8 +495,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     }
 
     private void tooltip(GuiGraphics g, String text, int x, int y) {
+        int maxByViewport = Math.max(1, width - 24);
+        int maxByPanel = layout == null ? maxByViewport : Math.max(1, layout.width() - 24);
+        int wrapWidth = Math.max(1, Math.min(300, Math.min(maxByViewport, maxByPanel)));
         g.renderTooltip(font, font.split(Component.literal(text),
-                Math.max(1, Math.min(300, width - 24))), x, y);
+                wrapWidth), x, y);
     }
 
     private void text(GuiGraphics g, String text, int x, int y, int width, int color) {
@@ -518,6 +520,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         boolean creative = minecraft != null && minecraft.player != null
                 && minecraft.player.getAbilities().instabuild;
         return creative || availableFunds() >= price;
+    }
+
+    private static String emeralds(long amount) {
+        return String.format(Locale.ROOT, "%,d emeralds", Math.max(0L, amount));
     }
 
     private int hirePortraitSize() {
@@ -893,9 +899,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
             // Multi-line description below the label.
             String desc = TerritoryBuffs.DESCRIPTIONS[i];
+            boolean compactSummary = layout.compact() && cellH >= 56;
             if (!layout.compact()) {
                 drawWrapped(g, desc, cx + 10, cy + 28, cellW - 20, CommandPalette.TEXT);
-            } else {
+            } else if (compactSummary) {
                 text(g, TerritoryBuffs.compactSummary(i), cx + 10, cy + 28, cellW - 20, CommandPalette.TEXT_MUTED);
             }
 
@@ -910,11 +917,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 statusColor = CommandPalette.ACCENT_GOLD;
             } else {
                 long missing = Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
-                status = "Need " + missing + "e";
+                status = "Need " + String.format(Locale.ROOT, "%,d", missing) + "e";
                 statusColor = CommandPalette.ACCENT_STEEL;
             }
+            int statusY = layout.compact()
+                    ? (compactSummary ? cy + cellH - 16 : cy + 28)
+                    : cy + cellH - 40;
             text(g, status, cx + 10,
-                    layout.compact() ? cy + 25 : cy + cellH - 40,
+                    statusY,
                     Math.max(80, cellW - 24), statusColor);
         }
     }
@@ -934,7 +944,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 ? (voting ? "RETREAT VOTE" : siege ? "WAVE " + wave : "KINGDOM WATCH")
                 : (voting ? "RETREAT VOTE" : siege ? "SIEGE ACTIVE  |  Wave " + wave : "KINGDOM WATCH");
         String detail = layout.compact()
-                ? (voting ? vote + "s left" : "Reward +" + menu.nextReward() + "e")
+                ? (voting ? vote + "s left" : "Reward +" + String.format(Locale.ROOT, "%,d", menu.nextReward()) + "e")
                 : (voting ? vote + "s remaining"
                         : siege ? "Next reward +" + menu.nextReward() + " to bank"
                         : "Bank +" + menu.nextReward() + " on next wave clear");
@@ -1056,7 +1066,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // Cost readout next to the item so the player sees the price at a
         // glance without hovering.
         String price = menu.sold(i) ? "Hired"
-                : menu.cost(i) < 0 ? "--" : menu.cost(i) + "e";
+                : menu.cost(i) < 0 ? "--" : String.format(Locale.ROOT, "%,d", menu.cost(i)) + "e";
         int priceColor = menu.sold(i) || menu.cost(i) < 0
                 ? CommandPalette.TEXT_DIM
                 : canAfford(menu.cost(i))
@@ -1088,7 +1098,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
         String price = menu.sold(slot) ? "Hired"
                 : menu.cost(slot) < 0 ? "--"
-                : menu.cost(slot) + "e";
+                : String.format(Locale.ROOT, "%,d", menu.cost(slot)) + "e";
         int priceRight = hire[slot].getX() - 3;
         text(g, price, infoLeft, y + h - 14,
                 Math.max(1, priceRight - infoLeft),
@@ -1111,7 +1121,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         StringBuilder line = new StringBuilder();
         int drawn = 0;
         for (int w = 0; w < words.length; w++) {
-            String candidate = line.length() == 0 ? words[w] : line + " " + words[w];
+            String word = words[w];
+            if (font.width(word) > width) {
+                String clipped = font.plainSubstrByWidth(word, Math.max(1, width - font.width("…")));
+                word = clipped + "…";
+            }
+            String candidate = line.length() == 0 ? word : line + " " + word;
             if (font.width(candidate) <= width) {
                 line.setLength(0);
                 line.append(candidate);
@@ -1122,7 +1137,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     if (drawn >= maxLines) return drawn;
                 }
                 line.setLength(0);
-                line.append(words[w]);
+                line.append(word);
             }
         }
         if (line.length() > 0 && drawn < maxLines) {
@@ -1332,7 +1347,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             text(g, String.format(Locale.ROOT, "Interest: +%,d /24h (%.2f%%)",
                             dailyInterest, menu.interestRate() / 100.0),
                     rightX, bankY + 18, rightW, CommandPalette.ACCENT_GOLD);
-            text(g, "Purchases pull from bank first, then your pack",
+            text(g, "Purchases pull from bank first, then your purse",
                     rightX, bankY + 30, rightW, CommandPalette.TEXT_DIM);
         }
 
