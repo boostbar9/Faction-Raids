@@ -124,6 +124,16 @@ This override changes **victory loot**, not the core menu's equipment-box reward
 
 [Share Feedback](https://www.curseforge.com/minecraft/mc-mods/siege-overhaul/comments) | [Source Code](https://github.com/boostbar9/Faction-Raids) | [Report an Issue](https://github.com/boostbar9/Faction-Raids/issues) | [GPL-3.0-only](https://spdx.org/licenses/GPL-3.0-only.html)
 
+## Release automation
+
+Copilot update branches can now auto-publish beta artifacts to CurseForge through `.github/workflows/publish-copilot-updates.yml`.
+
+- Trigger: pushes to `copilot/**`
+- Skip switch: include `[skip publish]` in the commit message
+- Manual fallback: run the workflow from Actions with an explicit ref
+
+Operational details and safeguards are documented in `docs/automation-publishing.md`.
+
 **Author:** boostbar9
 
 Built with **Villager Recruits, Villager Workers 2, Small Ships, and Siege Weapons** by **Talhanation**.
