@@ -1,3 +1,8 @@
+# 4.28.10 beta
+
+- Make faction Treasury notices easier to scan with a gold [Treasury] prefix, green deposits, red deductions, signed amounts, thousands separators and singular wording for one emerald.
+- Combine same-tick transactions into one chat notice, keeping gains and deductions separate so spending remains visible.
+
 # 4.28.9 beta
 
 - Fix loot rewards, siege crew kits and emerald payments appearing stale or missing outside the hotbar while the Command Center is open. Synchronize changed player inventory slots independently of the Core's display menu, including items picked up while shopping.

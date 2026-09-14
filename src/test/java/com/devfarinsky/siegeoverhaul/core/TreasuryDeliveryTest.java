@@ -46,10 +46,12 @@ class TreasuryDeliveryTest extends MinecraftTestSupport {
             TreasuryNotifications.flush(start);
             verifyNoInteractions(member, stranger);
             TreasuryNotifications.flush(end);
-            verify(member, times(3)).sendSystemMessage(any(Component.class));
+            var chat = ArgumentCaptor.forClass(Component.class);
+            verify(member).sendSystemMessage(chat.capture());
             var screen = ArgumentCaptor.forClass(Component.class);
             verify(member).displayClientMessage(screen.capture(), eq(true));
-            assertEquals("+30 emeralds deposited to Treasury | -10 emeralds removed from Treasury", screen.getValue().getString());
+            assertEquals("[Treasury] +30 emeralds deposited | [Treasury] -10 emeralds removed", screen.getValue().getString());
+            assertEquals(screen.getValue(), chat.getValue());
             verifyNoInteractions(stranger);
             clearInvocations(member);
             TreasuryNotifications.flush(end);
