@@ -12,6 +12,7 @@ import net.minecraft.world.item.*;
 /** Read-only offer display; server owns stock, prices, permissions and purchases. */
 public final class CoreHireMenu extends AbstractContainerMenu {
     private final ServerPlayer owner;
+    private final CoreInventorySync inventorySync = new CoreInventorySync();
     private final BlockPos pos;
     private final SimpleContainer display = new SimpleContainer(6);
     private final ContainerData data = new SimpleContainerData(32);
@@ -134,7 +135,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
             saved.setDirty();
         }
         refresh();
-        super.broadcastChanges();
+        broadcastChanges();
     }
     @Override public boolean clickMenuButton(Player player,int button) {
         if(owner==null || player!=owner || !stillValid(player))return false;
@@ -153,9 +154,10 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         else if(button>=60 && button<=63) changed=TerritoryBuffs.purchase(owner, pos, button-60);
         else if(button>=70 && button<=72) changed=TerritoryFortification.commission(owner, pos, button-70);
         if(!changed)return false;
-        owner.inventoryMenu.broadcastChanges();refresh();super.broadcastChanges();return true;
+        owner.inventoryMenu.broadcastChanges();refresh();broadcastChanges();return true;
     }
     @Override public void broadcastChanges() {
+        if (owner != null) inventorySync.broadcast(owner);
         if (owner != null && owner.server.overworld().getGameTime() - shownAt >= 20) refresh();
         super.broadcastChanges();
     }

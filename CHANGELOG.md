@@ -1,3 +1,8 @@
+# 4.28.9 beta
+
+- Fix loot rewards, siege crew kits and emerald payments appearing stale or missing outside the hotbar while the Command Center is open. Synchronize changed player inventory slots independently of the Core's display menu, including items picked up while shopping.
+- Preserve use of all 36 inventory slots and existing full-inventory delivery rules.
+
 # 4.28.4 beta
 
 - Show faction Treasury changes in chat and the action bar: green gains, red spending/withdrawals, signed amounts and a gold Treasury label. Only the amount actually credited or debited is shown, including the Treasury portion of mixed payments.
