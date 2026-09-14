@@ -14,8 +14,9 @@ On each qualifying push, the workflow:
 2. Verifies `CURSEFORGE_TOKEN` exists
 3. Selects a publishable jar from `build/libs` (skips `-sources`/`-javadoc`)
 4. Validates artifact size to catch malformed outputs
-5. Publishes to CurseForge project `1364352`
-6. Writes a run summary with artifact path, version, channel, and run link
+5. Pulls CurseForge patch notes from the current `mod_version` section in `CHANGELOG.md`
+6. Publishes to CurseForge project `1364352`
+7. Writes a run summary with artifact path, version, channel, and run link
 
 ## Reliability and safety guardrails
 
