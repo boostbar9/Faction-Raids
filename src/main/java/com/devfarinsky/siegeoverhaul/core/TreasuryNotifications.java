@@ -31,11 +31,11 @@ public final class TreasuryNotifications {
     }
 
     public static Component message(long delta) {
-        return Component.literal((delta > 0 ? "+" : "") + delta)
-                .withStyle(delta > 0 ? ChatFormatting.GREEN : ChatFormatting.RED)
-                .append(Component.literal(delta > 0 ? " emeralds deposited to " : " emeralds removed from ")
-                        .withStyle(delta > 0 ? ChatFormatting.GREEN : ChatFormatting.RED))
-                .append(Component.literal("Treasury").withStyle(ChatFormatting.GOLD));
+        String amount = String.format(java.util.Locale.ROOT, "%+,d", delta);
+        String unit = delta == 1 || delta == -1 ? " emerald " : " emeralds ";
+        return Component.literal("[Treasury] ").withStyle(ChatFormatting.GOLD)
+                .append(Component.literal(amount + unit + (delta > 0 ? "deposited" : "removed"))
+                        .withStyle(delta > 0 ? ChatFormatting.GREEN : ChatFormatting.RED));
     }
 
     @SubscribeEvent
@@ -47,8 +47,6 @@ public final class TreasuryNotifications {
             String faction = SiegeCore.key(player);
             long gained = 0, spent = 0;
             for (var notice : notices) if (notice.faction().equals(faction)) {
-                var text = message(notice.delta());
-                player.sendSystemMessage(text);
                 if (notice.delta() > 0) gained += notice.delta();
                 else spent += notice.delta();
             }
@@ -57,6 +55,7 @@ public final class TreasuryNotifications {
                 if (gained != 0) summary.append(message(gained));
                 if (gained != 0 && spent != 0) summary.append(Component.literal(" | ").withStyle(ChatFormatting.GRAY));
                 if (spent != 0) summary.append(message(spent));
+                player.sendSystemMessage(summary);
                 player.displayClientMessage(summary, true);
             }
         }
