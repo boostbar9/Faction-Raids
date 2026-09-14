@@ -198,7 +198,7 @@ public final class RaidConfig {
         b.comment("Player-focused faction invasion settings.").push("playerRaids");
         SIEGE_CORPSE_SECONDS = b.comment("Known enemy siege corpses become normal dropped loot after this many seconds. Player and unclassified nonempty corpses are preserved. Zero disables conversion.").defineInRange("siegeCorpseSeconds",120,0,3600);
         EMPTY_CORPSE_SECONDS = b.comment("Remove fully empty corpses after this many seconds. No inventories are deleted. Zero keeps native timing.").defineInRange("emptyCorpseSeconds",60,0,3600);
-        BANK_INTEREST_BASIS_POINTS = b.comment("Faction bank interest per real 24-hour day in basis points (100=1%). Up to 365 days of offline catch-up; no clock rollback payouts.").defineInRange("bankDailyInterestBasisPoints",100,0,1000);
+        BANK_INTEREST_BASIS_POINTS = b.comment("Faction bank interest per in-game day (24000 ticks / 20 real minutes of active play) in basis points (100=1%). Interest is measured in game ticks, so single-player pausing does not rack up payouts. Up to 365 days of catch-up; no clock rollback payouts.").defineInRange("bankDailyInterestBasisPoints",100,0,1000);
         ENABLED = b.comment("Master switch.").define("enabled", true);
         AUTOMATIC_RAIDS = b.comment("Automatically schedule invasions for registered faction anchors.")
                 .define("automaticRaids", true);
@@ -529,8 +529,8 @@ public final class RaidConfig {
                 .defineInRange("scoutBountyEmeralds", 2, 0, 128);
         MAX_BOUNTY_EMERALDS_PER_RAID = b.comment("Hard cap on the total bounty emeralds (raider + commander + scout combined) a single raid can deposit into the treasury. Wave-clear payouts are unaffected. Set to 0 to remove the cap.")
                 .defineInRange("maxBountyEmeraldsPerRaid", 32, 0, 10_000);
-        MANUAL_RAIDS_GRANT_REWARDS = b.comment("Allow raids started manually with /siegeoverhaul start to grant rewards. Disabled by default to prevent reward farming.")
-                .define("manualRaidsGrantRewards", false);
+        MANUAL_RAIDS_GRANT_REWARDS = b.comment("Allow raids started manually with /siegeoverhaul start to grant rewards. Enabled by default so single-player and small-server testing plays like a real siege; set to false on public servers to prevent reward farming.")
+                .define("manualRaidsGrantRewards", true);
         b.pop();
 
         b.comment("Optional companion-mod integrations. These safely do nothing when the named mod is absent.")

@@ -14,7 +14,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     private final ServerPlayer owner;
     private final BlockPos pos;
     private final SimpleContainer display = new SimpleContainer(6);
-    private final ContainerData data = new SimpleContainerData(30);
+    private final ContainerData data = new SimpleContainerData(32);
     private long shownAt = Long.MIN_VALUE;
     private long lastActionAt = -1;
     private String sentRoster = "";
@@ -42,6 +42,11 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     /** v4.18.0 Territory buff ownership bitmask replicated to the client. */
     public int territoryBuffMask() { return data.get(29); }
     public boolean hasTerritoryBuff(int index) { return (data.get(29) & (1 << index)) != 0; }
+    /**
+     * v4.28.8: game ticks until this faction's next bank interest payout.
+     * Zero means the next server tick will pay out. Wide-packed at 30-31.
+     */
+    public int ticksUntilInterest() { return wide(30); }
     public CoreHireMenu(int id, Inventory inventory) { this(id, inventory, null); }
     public CoreHireMenu(int id, Inventory inventory, BlockPos pos) {
         super(CoreMenus.HIRING.get(), id);
@@ -97,6 +102,10 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         wide(21,next); wide(23,raid!=null && !raid.rewardEligible ? 0 : EndlessSiege.reward(next)); data.set(25,FactionBank.canWithdraw(owner)?1:0);
         wide(26,raid==null?0:raid.wave); data.set(28,raid==null?0:(raid.campaign.getInt("VoteTicks")+19)/20);
         data.set(29, com.devfarinsky.siegeoverhaul.core.TerritoryBuffs.mask(core));
+        // v4.28.8: interest countdown in game ticks (24000 = 1 in-game day).
+        long gameTime = owner.server.overworld().getGameTime();
+        long ticks = FactionBank.ticksUntilInterest(core, gameTime);
+        wide(30, (int) Math.min(Integer.MAX_VALUE, Math.max(0, ticks)));
         String faction=owner.getTeam() instanceof net.minecraft.world.scores.PlayerTeam team?team.getDisplayName().getString():"Faction";
         java.util.List<String> roster = owner.getTeam()==null?java.util.List.of():owner.getTeam().getPlayers().stream()
                 .filter(name -> !name.startsWith("#"))
