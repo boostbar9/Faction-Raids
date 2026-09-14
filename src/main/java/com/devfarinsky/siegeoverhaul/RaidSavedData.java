@@ -484,6 +484,11 @@ public final class RaidSavedData extends SavedData {
         public BlockPos navalStagingPos;
         /** Landing beach the naval convoy steers toward. Null when no naval staging. */
         public BlockPos navalBeachPos;
+        public int bridgeAttempts;
+        public int bridgeBlocksSpent;
+        public long bridgeNextAttempt;
+        public boolean bridgeCompletionPending;
+        public com.devfarinsky.siegeoverhaul.naval.BridgePlan bridgePlan;
         /**
          * Camp block ledger. Key: packed BlockPos. Value: CompoundTag holding two entries:
          * <ul>
@@ -619,6 +624,11 @@ public final class RaidSavedData extends SavedData {
             CompoundTag tag = new CompoundTag();
             tag.putString("Team", teamKey);
             tag.putString("DefensePoint", defensePointName);
+            tag.putInt("BridgeAttempts", bridgeAttempts);
+            tag.putInt("BridgeBlocksSpent", bridgeBlocksSpent);
+            tag.putLong("BridgeNextAttempt", bridgeNextAttempt);
+            tag.putBoolean("BridgeCompletionPending", bridgeCompletionPending);
+            if (bridgePlan != null) tag.put("BridgePlan", bridgePlan.save());
             if (campClaimId != null) tag.putUUID("CampClaimId", campClaimId);
             tag.put("Campaign",campaign.copy());
             tag.put("WarGate",warGate.copy());tag.putInt("WarGateWaitTicks",warGateWaitTicks);
@@ -768,6 +778,11 @@ public final class RaidSavedData extends SavedData {
             String point = tag.getString("DefensePoint");
             if (point.isBlank()) point = HOME_POINT;
             RaidState state = new RaidState(tag.getString("Team"), point, tag.getInt("NextWave"));
+            state.bridgeAttempts = Math.max(0, tag.getInt("BridgeAttempts"));
+            state.bridgeBlocksSpent = Math.max(0, tag.getInt("BridgeBlocksSpent"));
+            state.bridgeNextAttempt = tag.getLong("BridgeNextAttempt");
+            state.bridgeCompletionPending = tag.getBoolean("BridgeCompletionPending");
+            state.bridgePlan = com.devfarinsky.siegeoverhaul.naval.BridgePlan.load(tag.getCompound("BridgePlan"));
             state.wave = tag.getInt("Wave");
             state.campClaimId = tag.hasUUID("CampClaimId") ? tag.getUUID("CampClaimId") : null;
             state.campaign=tag.getCompound("Campaign").copy();

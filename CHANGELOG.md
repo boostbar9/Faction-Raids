@@ -1,3 +1,13 @@
+# 4.28.15 beta
+
+- Give blocked enemy assaults a dedicated bridge-builder role, using an existing soldier rather than unlimited extra reinforcements.
+- Build temporary crossings progressively across water and dry gaps toward the defending territory, with a configurable span limit, saved construction budgets, and restoration tracking.
+  - New configs default to 24-block spans (`maxBridgeSpan`, configurable up to 64), four attempts, and 96 planks per raid (`maxBridgeBlocksPerRaid`). Existing configured span limits are retained.
+- Keep bridge workers out of competing formation, ladder, breach, and straggler orders while they work; require safe, loaded construction routes and respect unrelated claims and later player edits.
+- Move enemy captains and patrol leaders into the assault leadership instead of rear support positioning, while preserving ranged and siege support behavior.
+  - Prevent the native captain land-army controller from overriding siege orders with regroup/retreat commands; retain native individual combat and ship controls.
+- Add regressions for bridge construction safety, persistence, work-order isolation, and captain movement.
+
 # 4.28.14 beta
 
 - Command Center polish pass:

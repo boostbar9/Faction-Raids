@@ -57,6 +57,7 @@ public final class RaiderLabels {
      * uncolored "Raider" tag.
      */
     private static final Map<String, RoleStyle> ROLES = Map.of(
+            "bridge_builder", new RoleStyle("Enemy Bridge Builder", ChatFormatting.AQUA),
             "hero",       new RoleStyle("Enemy Hero", ChatFormatting.LIGHT_PURPLE),
             "commander",  new RoleStyle("Siege Commander", ChatFormatting.DARK_RED),
             "breacher",   new RoleStyle("Breacher",         ChatFormatting.RED),
@@ -75,6 +76,8 @@ public final class RaiderLabels {
      * role tag is stamped on the raider's persistent data.
      */
     public static void applyRole(Mob raider, String role) {
+        if (raider.getPersistentData().getBoolean(
+                com.devfarinsky.siegeoverhaul.naval.BridgeBuilder.SPECIALIST_TAG)) role = "bridge_builder";
         if (role == null || role.isEmpty()) return;
         RoleStyle style = ROLES.get(role);
         if (style == null) return;
@@ -116,7 +119,9 @@ public final class RaiderLabels {
      * iterating them for other reasons, so this adds no scan cost).
      */
     public static void tick(Mob raider) {
-        String role = raider.getPersistentData().getString(RAID_ROLE_TAG);
+        String role = raider.getPersistentData().getBoolean(
+                com.devfarinsky.siegeoverhaul.naval.BridgeBuilder.SPECIALIST_TAG)
+                ? "bridge_builder" : raider.getPersistentData().getString(RAID_ROLE_TAG);
         if (role.isEmpty()) return;
         if (!ROLES.containsKey(role)) return;
 

@@ -7,6 +7,18 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 class RaidMarchDisciplineTest extends MinecraftTestSupport {
+    @Test void captainsPressObjectiveWithoutLosingNearbyMeleeOrObjectiveCombat() {
+        for (String role : new String[]{"captain", "patrol_leader", "recruits:captain", "recruit_patrol_leader"}) {
+            assertEquals(64, RaidMarchDiscipline.approachAggroRangeSq(32 * 32, role, false, .1));
+            assertEquals(32 * 32, RaidMarchDiscipline.approachAggroRangeSq(32 * 32, role, true, .1));
+            assertEquals(16, RaidMarchDiscipline.approachAggroRangeSq(16, role, false, .1));
+            assertFalse(RaidMarchDiscipline.pushPastDefenders(role, true, false));
+        }
+        assertEquals(32 * 32, RaidMarchDiscipline.approachAggroRangeSq(32 * 32, "marksman", false, .1));
+        assertEquals(32 * 32, RaidMarchDiscipline.approachAggroRangeSq(32 * 32, "siege_engineer", false, .1));
+        assertEquals(256, RaidMarchDiscipline.approachAggroRangeSq(32 * 32, "commander", false, .5));
+        assertEquals(256, RaidMarchDiscipline.approachAggroRangeSq(32 * 32, "breacher", false, .5));
+    }
     @Test void removesAmbientWalkingButPreservesCombatAndClearsOldRestriction() throws ReflectiveOperationException {
         Mob mob=mock(Mob.class);
         var field=Mob.class.getDeclaredField("goalSelector");field.setAccessible(true);
@@ -54,18 +66,50 @@ class RaidMarchDisciplineTest extends MinecraftTestSupport {
         assertFalse(RaidMarchDiscipline.retainTarget(commander,defender,Vec3.ZERO,32));
     }
     public enum Patrol { IDLE, ATTACKING, RETREATING }
+    public interface ArmyController {
+        void tick();
+        void setInitPos(Vec3 pos);
+        boolean isTargetInRange();
+    }
     public static class Leader {
         public byte action = 1;
         public Patrol patrol = Patrol.RETREATING;
         public int follow = 2;
+        public boolean isInFormation = true, holdFormation = true;
+        public ArmyController attackController;
         public void setEnemyAction(byte value) { action = value; }
         public void setPatrolState(Patrol value) { patrol = value; }
         public void setFollowState(int value) { follow = value; }
+    }
+    @Test void captainsCannotRegroupOrRetreatOnLandEvenWhenTheirNativeTickBypassesPatrolState() {
+        Leader captain = new Leader();
+        ArmyController nativeController = mock(ArmyController.class);
+        captain.attackController = nativeController;
+        when(nativeController.isTargetInRange()).thenReturn(true);
+        var embarked = new java.util.concurrent.atomic.AtomicBoolean(false);
+        assertTrue(RaidMarchDiscipline.limitNativeArmyController(captain, embarked::get));
+        captain.attackController.tick();
+        verify(nativeController, never()).tick();
+        captain.attackController.setInitPos(Vec3.ZERO);
+        verify(nativeController).setInitPos(Vec3.ZERO);
+        assertTrue(captain.attackController.isTargetInRange());
+        // Preserve ship combat, then regain siege movement ownership on disembarkation.
+        embarked.set(true);
+        captain.attackController.tick();
+        verify(nativeController).tick();
+        embarked.set(false);
+        captain.attackController.tick();
+        verify(nativeController, times(1)).tick();
+        ArmyController wrapped = captain.attackController;
+        assertTrue(RaidMarchDiscipline.limitNativeArmyController(captain, embarked::get));
+        assertSame(wrapped, captain.attackController);
+        assertFalse(RaidMarchDiscipline.limitNativeArmyController(new Object(), () -> false));
     }
     @Test void nativeLeaderCannotRestartHoldOrRetreatControllerAfterSiegeLoad() {
         Leader leader = new Leader();
         assertTrue(RaidMarchDiscipline.releaseNativePatrol(leader));
         assertEquals(2, leader.action); assertEquals(Patrol.IDLE, leader.patrol); assertEquals(0, leader.follow);
+        assertFalse(leader.isInFormation); assertFalse(leader.holdFormation);
         assertTrue(RaidMarchDiscipline.releaseNativePatrol(leader));
         assertEquals(Patrol.IDLE, leader.patrol);
     }

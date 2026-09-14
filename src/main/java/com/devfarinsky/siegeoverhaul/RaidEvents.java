@@ -2058,22 +2058,19 @@ public final class RaidEvents {
             return;
         }
         if (RaidConfig.MOBILIZE_RECRUITS.get()) mobilizeRecruits(level, recruits, state);
-        com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assignNearby(level, state, point.pos());
-        redirectRaiders(level, state, members, recruits, point);
-
-        // Amphibious support: steer active raider boats toward the beach, and
-        // let stalled ground raiders drop planks over narrow water spans.
-        // Both are no-ops when the raid has no naval staging or the bridge/
-        // convoy has nothing to do.
-        com.devfarinsky.siegeoverhaul.naval.NavalConvoy.recover(level, state);
-        com.devfarinsky.siegeoverhaul.naval.NavalConvoy.tick(teamKey, level,
-                BlockPos.containing(invasionObjective(level, point, state)));
         if (com.devfarinsky.siegeoverhaul.naval.BridgeBuilder.tick(level, state, point.pos())) {
             announce(server, teamKey, Component.literal(
-                    "Raiders have laid a bridge to bypass your defenses.")
+                    "An enemy bridge builder has completed a crossing toward your territory.")
                     .withStyle(ChatFormatting.AQUA), false);
             data.setDirty();
         }
+        com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assignNearby(level, state, point.pos());
+        redirectRaiders(level, state, members, recruits, point);
+
+        // Amphibious support: steer active raider boats toward the beach.
+        com.devfarinsky.siegeoverhaul.naval.NavalConvoy.recover(level, state);
+        com.devfarinsky.siegeoverhaul.naval.NavalConvoy.tick(teamKey, level,
+                BlockPos.containing(invasionObjective(level, point, state)));
 
         // Siege upkeep: steer unmanned engines toward the objective, detect
         // engine kills, and detonate any sappers that reached the wall.
@@ -3432,6 +3429,7 @@ public final class RaidEvents {
         for (UUID id : state.raiders) {
             Entity entity = level.getEntity(id);
             if (!(entity instanceof Mob mob) || !mob.isAlive() || mob.isPassenger()
+                    || com.devfarinsky.siegeoverhaul.naval.BridgeBuilder.assigned(mob)
                     || com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)) continue;
             if(mob.getPersistentData().getBoolean(com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal.CHARGING))continue;
             String role = mob.getPersistentData().getString(RAID_ROLE_TAG);
@@ -3830,7 +3828,10 @@ public final class RaidEvents {
                 continue;
             }
 
-            if (com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)) {
+            if (com.devfarinsky.siegeoverhaul.naval.BridgeBuilder.assigned(mob)
+                    || com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)
+                    || mob.getPersistentData().getBoolean(
+                            com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal.CHARGING)) {
                 com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
                 STUCK_TRACKER.remove(id);
                 continue;
@@ -4018,10 +4019,8 @@ public final class RaidEvents {
 
     static double applyObjectivePusherAggroScale(double rangeSq, String role,
                                                  boolean atObjective, double approachScale) {
-        if (atObjective) return rangeSq;
-        if (!"breacher".equals(role) && !"commander".equals(role)) return rangeSq;
-        double scaleSq = approachScale * approachScale;
-        return rangeSq * scaleSq;
+        return com.devfarinsky.siegeoverhaul.raid.RaidMarchDiscipline.approachAggroRangeSq(
+                rangeSq, role, atObjective, approachScale);
     }
 
     static double computeAdvanceSpeed(double baseSpeed, double distToObjectiveSq,
