@@ -9,6 +9,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.effect.*;
 import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.item.*;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -16,10 +18,14 @@ import net.minecraftforge.event.entity.living.*;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
+import java.util.UUID;
+
 /** Four readable specializations. Native AI, finite equipment, visible effects and bounded cooldowns. */
 @Mod.EventBusSubscriber(modid=SiegeOverhaul.MOD_ID)
 public final class HeroTraits {
     private HeroTraits() {}
+    private static final UUID WILDSONG_ATTACK_SPEED_ID = UUID.fromString("3f68d978-7160-42e3-a81e-5476f362f969");
+    private static final String WILDSONG_ATTACK_SPEED_TAG = "SiegeWildsongAttackSpeedUntil";
     /** Signature-ability description shown on hero cards. Keep concise (fits card). */
     public static String description(int role) {
         return switch(role) {
@@ -33,7 +39,7 @@ public final class HeroTraits {
             case 17 -> "Hollowveil: every third arrow marks target for +30% damage";
             case 18 -> "Warbell: on block, a shockwave staggers nearby enemies";
             case 19 -> "Verdant: arrows root the target for 2s";
-            case 20 -> "Grimwatch: bolts leave a lingering piercing trail";
+            case 20 -> "Grimwatch: bolts burst in a piercing impact zone";
             case 21 -> "Wildsong: kills grant +20% attack speed for 6s";
             case 22 -> "Voidweaver mage: casts a void nova every 15s";
             case 23 -> "Starweaver mage: every hit summons a homing star";
@@ -179,6 +185,29 @@ public final class HeroTraits {
     private static void burst(ServerLevel level, double x, double y, double z, net.minecraft.core.particles.SimpleParticleType particle, int count, double spread, double speed) {
         level.sendParticles(particle, x, y, z, count, spread, spread, spread, speed);
     }
+    static void applyWildsongAttackSpeed(Mob mob, long now) {
+        var attribute = mob.getAttribute(Attributes.ATTACK_SPEED);
+        if (attribute == null) return;
+        if (attribute.getModifier(WILDSONG_ATTACK_SPEED_ID) == null) {
+            attribute.addTransientModifier(new AttributeModifier(WILDSONG_ATTACK_SPEED_ID, "SiegeWildsongAttackSpeed", 0.20, AttributeModifier.Operation.MULTIPLY_TOTAL));
+        }
+        mob.getPersistentData().putLong(WILDSONG_ATTACK_SPEED_TAG, now + 120);
+    }
+    private static void refreshWildsongAttackSpeed(ServerLevel level, Mob mob, long now) {
+        var attribute = mob.getAttribute(Attributes.ATTACK_SPEED);
+        if (attribute == null) return;
+        var tag = mob.getPersistentData();
+        long until = tag.getLong(WILDSONG_ATTACK_SPEED_TAG);
+        if (until > now) {
+            if (attribute.getModifier(WILDSONG_ATTACK_SPEED_ID) == null) {
+                attribute.addTransientModifier(new AttributeModifier(WILDSONG_ATTACK_SPEED_ID, "SiegeWildsongAttackSpeed", 0.20, AttributeModifier.Operation.MULTIPLY_TOTAL));
+            }
+            if (mob.tickCount % 20 == 0) burst(level, mob.getX(), mob.getY() + 1, mob.getZ(), net.minecraft.core.particles.ParticleTypes.HAPPY_VILLAGER, 6, 0.4, 0.02);
+            return;
+        }
+        if (attribute.getModifier(WILDSONG_ATTACK_SPEED_ID) != null) attribute.removeModifier(WILDSONG_ATTACK_SPEED_ID);
+        if (tag.contains(WILDSONG_ATTACK_SPEED_TAG)) tag.remove(WILDSONG_ATTACK_SPEED_TAG);
+    }
     /** Same-owner friendly living entities in a radius, excluding the hero itself. */
     private static java.util.List<LivingEntity> allies(ServerLevel level, Mob hero, double radius) {
         var owner = RecruitsBridge.ownerUuid(hero);
@@ -213,6 +242,7 @@ public final class HeroTraits {
         int r = role(mob); if (r < 0) return;
         long now = level.getGameTime();
         var tag = mob.getPersistentData();
+        if (r == 21) refreshWildsongAttackSpeed(level, mob, now);
         // Dawnwarden (15): shield the most-hurt ally in a 6-block bubble every 30s.
         if (r == 15 && ready(now, tag.getLong("SiegeHeroNext"))) {
             var candidates = allies(level, mob, 6).stream()
@@ -292,14 +322,21 @@ public final class HeroTraits {
         var target = event.getEntity();
         // === MELEE HEROES ===
         if (melee) {
-            // 10 Ironoath / 14 Bloodthorn: every 3rd hit heals 1 heart. Bloodthorn also grants absorption at full HP.
-            if ((r == 10 || r == 14) && ready(now, tag.getLong("SiegeHeroNext"))) {
+            // 10 Ironoath: every 3rd hit heals 1 heart.
+            if (r == 10 && ready(now, tag.getLong("SiegeHeroNext"))) {
                 if (charged(tag, "SiegeHeroHits", 3)) {
                     tag.putInt("SiegeHeroHits", 0); tag.putLong("SiegeHeroNext", now + 40);
                     if (mob.getHealth() < mob.getMaxHealth()) mob.heal(2);
-                    else if (r == 14 && !mob.hasEffect(MobEffects.ABSORPTION)) mob.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, 100, 0));
                     sparkle(level, mob, net.minecraft.core.particles.ParticleTypes.HEART);
                 }
+            }
+            // 14 Bloodthorn: at full health, next melee hit grants absorption.
+            if (r == 14 && ready(now, tag.getLong("SiegeHeroNext"))
+                    && mob.getHealth() >= mob.getMaxHealth() && !mob.hasEffect(MobEffects.ABSORPTION)) {
+                mob.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, 100, 0, false, true, true));
+                tag.putLong("SiegeHeroNext", now + 80);
+                burst(level, mob.getX(), mob.getY() + 1, mob.getZ(), net.minecraft.core.particles.ParticleTypes.CRIMSON_SPORE, 20, 0.4, 0.02);
+                level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE, net.minecraft.sounds.SoundSource.HOSTILE, 0.6F, 1.2F);
             }
             // 16 Emberstep: melee hits ignite target for 4s (with cooldown so it doesn't reapply every tick).
             if (r == 16 && ready(now, tag.getLong("SiegeHeroNext"))) {
@@ -308,37 +345,38 @@ public final class HeroTraits {
             }
             // 21 Wildsong: kills grant +20% attack speed for 6s (rider effect at kill time).
             if (r == 21 && target.getHealth() - event.getAmount() <= 0) {
-                mob.addEffect(new MobEffectInstance(net.minecraft.world.effect.MobEffects.MOVEMENT_SPEED, 120, 1, false, true, true));
-                burst(level, mob.getX(), mob.getY() + 1, mob.getZ(), net.minecraft.core.particles.ParticleTypes.CRIT, 20, 0.3, 0.1);
+                applyWildsongAttackSpeed(mob, now);
+                burst(level, mob.getX(), mob.getY() + 1, mob.getZ(), net.minecraft.core.particles.ParticleTypes.HAPPY_VILLAGER, 20, 0.3, 0.1);
+                level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP, net.minecraft.sounds.SoundSource.HOSTILE, 0.8F, 1.2F);
             }
             // 23 Starweaver (mage): every hit summons a homing star to a nearby second enemy for 4 magic damage.
-            if (r == 23 && ready(now, tag.getLong("SiegeHeroNext"))) {
-                tag.putLong("SiegeHeroNext", now + 20);
-                var second = enemies(level, mob, 6).stream().filter(e -> e != target).findFirst().orElse(null);
-                if (second != null) {
-                    second.hurt(level.damageSources().indirectMagic(mob, mob), 4);
-                    // Draw a trail of end_rod particles from hero to the second enemy.
-                    double sx = mob.getX(), sy = mob.getY() + 1, sz = mob.getZ();
-                    double dx = second.getX() - sx, dy = second.getY() + 1 - sy, dz = second.getZ() - sz;
-                    for (int i = 0; i < 20; i++) {
-                        double t = i / 20.0;
-                        burst(level, sx + dx * t, sy + dy * t, sz + dz * t, net.minecraft.core.particles.ParticleTypes.END_ROD, 1, 0.02, 0.0);
-                    }
+            if (r == 23) {
+                var starTarget = enemies(level, mob, 6).stream().filter(e -> e != target).findFirst().orElse(target);
+                starTarget.hurt(level.damageSources().magic(), 4);
+                // Draw a trail of end_rod particles from hero to the star target.
+                double sx = mob.getX(), sy = mob.getY() + 1, sz = mob.getZ();
+                double dx = starTarget.getX() - sx, dy = starTarget.getY() + 1 - sy, dz = starTarget.getZ() - sz;
+                for (int i = 0; i < 20; i++) {
+                    double t = i / 20.0;
+                    burst(level, sx + dx * t, sy + dy * t, sz + dz * t, net.minecraft.core.particles.ParticleTypes.END_ROD, 1, 0.02, 0.0);
                 }
-            }
-            // 24 Ashenheart (mage): melee hit triggers a small non-block-damaging explosion at the target.
-            if (r == 24 && ready(now, tag.getLong("SiegeHeroNext"))) {
-                tag.putLong("SiegeHeroNext", now + 60);
-                var foes = enemies(level, mob, 3);
-                for (var enemy : foes) enemy.hurt(level.damageSources().indirectMagic(mob, mob), 4);
-                burst(level, target.getX(), target.getY() + 1, target.getZ(), net.minecraft.core.particles.ParticleTypes.FLAME, 60, 1.5, 0.3);
-                burst(level, target.getX(), target.getY() + 1, target.getZ(), net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE, 20, 1.0, 0.1);
-                level.playSound(null, target.blockPosition(), net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE, net.minecraft.sounds.SoundSource.HOSTILE, 0.7F, 1.4F);
+                burst(level, starTarget.getX(), starTarget.getY() + 1, starTarget.getZ(), net.minecraft.core.particles.ParticleTypes.GLOW, 8, 0.2, 0.02);
+                level.playSound(null, starTarget.blockPosition(), net.minecraft.sounds.SoundEvents.AMETHYST_CLUSTER_HIT, net.minecraft.sounds.SoundSource.HOSTILE, 0.6F, 1.5F);
             }
             return;
         }
         // === RANGED HEROES (projectile hits) ===
         if (!(event.getSource().getDirectEntity() instanceof Projectile projectile) || projectile.getOwner() != mob) return;
+        // 24 Ashenheart (mage): fireball attacks explode on impact.
+        if (r == 24) {
+            var foes = level.getEntitiesOfClass(LivingEntity.class, target.getBoundingBox().inflate(3), e -> hostile(mob, e));
+            for (var enemy : foes) enemy.hurt(level.damageSources().magic(), 4);
+            burst(level, target.getX(), target.getY() + 1, target.getZ(), net.minecraft.core.particles.ParticleTypes.FLAME, 60, 1.5, 0.3);
+            burst(level, target.getX(), target.getY() + 1, target.getZ(), net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE, 24, 1.0, 0.1);
+            burst(level, target.getX(), target.getY() + 1, target.getZ(), net.minecraft.core.particles.ParticleTypes.LAVA, 10, 0.7, 0.05);
+            level.playSound(null, target.blockPosition(), net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE, net.minecraft.sounds.SoundSource.HOSTILE, 0.7F, 1.4F);
+            return;
+        }
         // 12 Stormbow: every 4th arrow chains lightning to two nearby foes for 4 magic damage.
         if (r == 12) {
             if (!charged(tag, "SiegeHeroHits", 4)) { sparkle(level, mob, net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK); return; }
@@ -349,9 +387,18 @@ public final class HeroTraits {
                     e -> e != primary && hostile(mob, e) && primary.hasLineOfSight(e));
             foes.sort(java.util.Comparator.comparingDouble(primary::distanceToSqr));
             for (var enemy : foes.stream().limit(2).toList()) {
-                if (enemy.hurt(level.damageSources().indirectMagic(mob, mob), 4)) sparkle(level, enemy, net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK);
+                if (enemy.hurt(level.damageSources().indirectMagic(mob, mob), 4)) {
+                    sparkle(level, enemy, net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK);
+                    double sx = primary.getX(), sy = primary.getY() + 1, sz = primary.getZ();
+                    double dx = enemy.getX() - sx, dy = enemy.getY() + 1 - sy, dz = enemy.getZ() - sz;
+                    for (int i = 0; i < 10; i++) {
+                        double t = i / 10.0;
+                        burst(level, sx + dx * t, sy + dy * t, sz + dz * t, net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK, 1, 0.02, 0.0);
+                    }
+                }
             }
             sparkle(level, primary, net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK);
+            level.playSound(null, primary.blockPosition(), net.minecraft.sounds.SoundEvents.LIGHTNING_BOLT_IMPACT, net.minecraft.sounds.SoundSource.HOSTILE, 0.6F, 1.3F);
             return;
         }
         // 13 Frostbinder: bolt slows up to 3 enemies for 3s.
@@ -384,7 +431,7 @@ public final class HeroTraits {
             burst(level, target.getX(), target.getY(), target.getZ(), net.minecraft.core.particles.ParticleTypes.COMPOSTER, 30, 0.5, 0.02);
             return;
         }
-        // 20 Grimwatch: bolts leave a lingering trail that damages any enemy stepping into it (short + cheap).
+        // 20 Grimwatch: bolts burst into a short piercing impact zone.
         if (r == 20) {
             double px = projectile.getX(), py = projectile.getY(), pz = projectile.getZ();
             burst(level, px, py, pz, net.minecraft.core.particles.ParticleTypes.CRIT, 8, 0.2, 0.05);
@@ -412,6 +459,13 @@ public final class HeroTraits {
         if (!(event.getEntity().level() instanceof ServerLevel level)) return;
         var target = event.getEntity();
         var pd = target.getPersistentData();
+        if (pd.contains("SiegeStoneguardUntil")) {
+            long until = pd.getLong("SiegeStoneguardUntil");
+            if (until > level.getGameTime()) {
+                event.setAmount(event.getAmount() * 0.75F);
+                if (target.tickCount % 5 == 0) burst(level, target.getX(), target.getY() + 1, target.getZ(), net.minecraft.core.particles.ParticleTypes.CLOUD, 4, 0.2, 0.01);
+            } else pd.remove("SiegeStoneguardUntil");
+        }
         if (!pd.contains("SiegeHollowMark") || pd.getLong("SiegeHollowMark") <= level.getGameTime()) return;
         pd.remove("SiegeHollowMark");
         event.setAmount(event.getAmount() * 1.30F);
@@ -438,11 +492,12 @@ public final class HeroTraits {
             level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.ANVIL_LAND, net.minecraft.sounds.SoundSource.HOSTILE, 0.5F, 1.6F);
             return;
         }
-        // Stonehand (11): on block, allies within 4 blocks get Resistance I for 3s (short throttle).
+        // Stonehand (11): on block, allies within 4 blocks get 25% damage reduction for 3s.
         if (r == 11 && mob.isBlocking() && ready(now, tag.getLong("SiegeHeroNext"))) {
             tag.putLong("SiegeHeroNext", now + 40);
-            for (var a : allies(level, mob, 4)) a.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 60, 0, false, true, true));
+            for (var a : allies(level, mob, 4)) a.getPersistentData().putLong("SiegeStoneguardUntil", now + 60);
             burst(level, mob.getX(), mob.getY() + 1, mob.getZ(), net.minecraft.core.particles.ParticleTypes.CLOUD, 10, 0.6, 0.02);
+            level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.SHIELD_BLOCK, net.minecraft.sounds.SoundSource.HOSTILE, 0.8F, 1.1F);
         }
     }
 }
