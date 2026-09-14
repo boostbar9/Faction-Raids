@@ -485,8 +485,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     layout.width() - 20, 46)) {
                 long dailyInterest = (long) menu.bank() * menu.interestRate() / 10000L;
                 tooltip(g, String.format(Locale.ROOT,
-                        "Faction treasury: %,d emeralds  |  Next wave: +%,d  |  Daily interest: +%,d (%.2f%%)  |  Purchases use the bank before your purse.",
+                        "Faction treasury: %,d emeralds  |  Next wave: +%,d  |  Interest: +%,d in %s (%.2f%%/day, in-game time)  |  Purchases use the bank before your purse.",
                         menu.bank(), menu.nextReward(), dailyInterest,
+                        formatInterestCountdown(menu.ticksUntilInterest()),
                         menu.interestRate() / 100.0), tooltipX, tooltipY);
             }
             for (int i = 0; i < bank.length; i++) {
@@ -1339,6 +1340,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
         int leftX = x + 46;
         long dailyInterest = (long) menu.bank() * menu.interestRate() / 10000L;
+        String interestCountdown = formatInterestCountdown(menu.ticksUntilInterest());
         if (layout.compact()) {
             int compactW = w - (leftX - x) - 14;
             text(g, menu.factionName(), leftX, bankY + 6,
@@ -1346,8 +1348,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             text(g, String.format(Locale.ROOT, "Treasury %,de  |  Next +%,de",
                             menu.bank(), menu.nextReward()),
                     leftX, bankY + 18, compactW, CommandPalette.ACCENT_EMERALD);
-            text(g, String.format(Locale.ROOT, "Interest +%,d/day  |  Wave %d",
-                            dailyInterest, menu.nextWave()),
+            text(g, String.format(Locale.ROOT, "Interest +%,d in %s  |  Wave %d",
+                            dailyInterest, interestCountdown, menu.nextWave()),
                     leftX, bankY + 30, compactW, CommandPalette.TEXT_MUTED);
         } else {
             int leftW = w / 2 - 52;
@@ -1366,8 +1368,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             int rightW = w / 2 - 18;
             text(g, "Next wave " + menu.nextWave() + ": +" + menu.nextReward() + " to bank",
                     rightX, bankY + 6, rightW, CommandPalette.ACCENT_TEAL);
-            text(g, String.format(Locale.ROOT, "Interest: +%,d /24h (%.2f%%)",
-                            dailyInterest, menu.interestRate() / 100.0),
+            text(g, String.format(Locale.ROOT, "Interest: +%,d in %s (%.2f%%/day)",
+                            dailyInterest, interestCountdown, menu.interestRate() / 100.0),
                     rightX, bankY + 18, rightW, CommandPalette.ACCENT_GOLD);
             text(g, "Purchases pull from bank first, then your pack",
                     rightX, bankY + 30, rightW, CommandPalette.TEXT_DIM);
@@ -1580,5 +1582,25 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         territory.closeTextures();
         EntityPortrait.clear();
         super.onClose();
+    }
+
+    /**
+     * v4.28.8: format an in-game tick countdown as a short human string.
+     * 20 ticks = 1 second of active play, 24000 ticks = one Minecraft day.
+     * Examples: 24000 -> "1d", 6000 -> "5m", 200 -> "10s", 0 -> "soon".
+     */
+    static String formatInterestCountdown(int ticks) {
+        if (ticks <= 0) return "soon";
+        long seconds = ticks / 20L;
+        if (seconds <= 0) return "soon";
+        long days = seconds / 1200L; // 20 real minutes = 1 in-game day
+        long remSec = seconds - days * 1200L;
+        long minutes = remSec / 60L;
+        long finalSec = remSec - minutes * 60L;
+        StringBuilder sb = new StringBuilder();
+        if (days > 0) sb.append(days).append("d");
+        if (minutes > 0) { if (sb.length() > 0) sb.append(' '); sb.append(minutes).append("m"); }
+        if (sb.length() == 0) sb.append(finalSec).append("s");
+        return sb.toString();
     }
 }

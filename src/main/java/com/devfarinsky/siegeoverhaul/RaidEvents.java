@@ -1194,6 +1194,20 @@ public final class RaidEvents {
             RaidSavedData.RaidState state = data.raids.get(key);
             source.sendSuccess(() -> MESSAGE_PREFIX.copy().append(Component.literal(anchor.teamDisplay())
                     .withStyle(ChatFormatting.GOLD)), false);
+            // v4.28.8: treasury balance + next interest payout (game-time).
+            var core = data.siegeCores.get(key);
+            if (core != null) {
+                long balance = FactionBank.balance(core);
+                int rateBp = RaidConfig.BANK_INTEREST_BASIS_POINTS.get();
+                long dailyInterest = balance * rateBp / 10000L;
+                long ticks = FactionBank.ticksUntilInterest(core, source.getServer().overworld().getGameTime());
+                String countdown = formatInterestCountdown(ticks);
+                source.sendSuccess(() -> Component.literal("Treasury: ").withStyle(ChatFormatting.GRAY)
+                        .append(Component.literal(String.format(java.util.Locale.ROOT,
+                                "%,d emeralds • +%,d interest in %s (in-game time)",
+                                balance, dailyInterest, countdown))
+                                .withStyle(ChatFormatting.GREEN)), false);
+            }
             if (state != null) {
                 RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
                 ServerLevel raidLevel = getLevel(source.getServer(), point);
@@ -1514,7 +1528,11 @@ public final class RaidEvents {
             }
         }
         com.devfarinsky.siegeoverhaul.core.CoreOccupation.tick(server, data);
-        long bankNow = System.currentTimeMillis();
+        // v4.28.8: interest is now measured in game ticks so single-player
+        // pausing doesn't rack up phantom interest. The tick-level settle
+        // uses the base rate; the territory-provisioning buff is applied by
+        // the two-arg settle(data,core) helper on HUD open and wave clears.
+        long bankNow = server.overworld().getGameTime();
         int bankRate = RaidConfig.BANK_INTEREST_BASIS_POINTS.get();
         for (var core : data.siegeCores.values()) if (FactionBank.settle(core, bankNow, bankRate)) data.setDirty();
         // Core ownership follows the placing faction, not an individual changing teams.
@@ -2093,7 +2111,7 @@ public final class RaidEvents {
             }
         }
 
-        long paid = EndlessSiege.awardClearedWave(data, state, System.currentTimeMillis(), RaidConfig.BANK_INTEREST_BASIS_POINTS.get());
+        long paid = EndlessSiege.awardClearedWave(data, state, server.overworld().getGameTime(), RaidConfig.BANK_INTEREST_BASIS_POINTS.get());
         if (paid > 0) announce(server, teamKey, Component.literal("Wave " + state.wave + " survived: +" + paid + " emeralds deposited in your faction bank.").withStyle(ChatFormatting.GREEN), false);
         if (com.devfarinsky.siegeoverhaul.core.EnemyCore.tick(level, data, state, anchor)) {
             finishRaid(server, data, teamKey, true, true, "Your faction captured the enemy Siege Core. The invasion is defeated!");
@@ -5533,6 +5551,26 @@ public final class RaidEvents {
         long minutes = seconds / 60;
         long remainder = seconds % 60;
         return remainder == 0 ? minutes + " minutes" : minutes + "m " + remainder + "s";
+    }
+
+    /**
+     * v4.28.8: format an in-game tick countdown for chat. 20 ticks = 1 second
+     * of active play, 24000 ticks = one Minecraft day (20 real minutes).
+     */
+    private static String formatInterestCountdown(long ticks) {
+        if (ticks <= 0) return "less than a minute";
+        long seconds = ticks / 20L;
+        long days = seconds / 1200L;
+        long remSec = seconds - days * 1200L;
+        long minutes = remSec / 60L;
+        StringBuilder sb = new StringBuilder();
+        if (days > 0) sb.append(days).append(" in-game day").append(days == 1 ? "" : "s");
+        if (minutes > 0) {
+            if (sb.length() > 0) sb.append(" ");
+            sb.append(minutes).append("m");
+        }
+        if (sb.length() == 0) sb.append("less than a minute");
+        return sb.toString();
     }
 
     private RaidEvents() {}
