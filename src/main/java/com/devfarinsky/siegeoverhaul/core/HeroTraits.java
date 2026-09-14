@@ -16,7 +16,7 @@ import net.minecraftforge.event.entity.living.*;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-/** Four readable specializations. Native AI, finite equipment, visible effects and bounded cooldowns. */
+/** Shared player and enemy hero specializations. Native AI, finite equipment, visible effects and bounded cooldowns. */
 @Mod.EventBusSubscriber(modid=SiegeOverhaul.MOD_ID)
 public final class HeroTraits {
     private HeroTraits() {}
@@ -157,6 +157,7 @@ public final class HeroTraits {
     static boolean ready(long now,long next) { return next<=now || next>now+1200; }
     private static int role(Mob mob) {
         var tag=mob.getPersistentData();
+        if (EnemyHeroes.active(mob)) return tag.getInt("SiegeHeroRole");
         if(!tag.getBoolean("SiegeHiredHero") || EnemyHiringProtection.enemy(mob))return -1;
         if(!tag.contains("SiegeHeroRole")) {
             var id=net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(mob.getType());
@@ -164,10 +165,12 @@ public final class HeroTraits {
             int role=switch(id.getPath()){case "recruit"->10;case "recruit_shieldman"->11;case "bowman"->12;case "crossbowman"->13;default->-1;};
             tag.putInt("SiegeHeroRole",role);
         }
-        return tag.getInt("SiegeHeroRole");
+        int role = tag.getInt("SiegeHeroRole");
+        return CoreHiring.isHero(role) ? role : -1;
     }
-    private static boolean hostile(Mob hero,LivingEntity target) {
-        return target.isAlive() && EnemyHiringProtection.enemy(target) && !hero.isAlliedTo(target) && hero.hasLineOfSight(target);
+    static boolean hostile(Mob hero,LivingEntity target) {
+        return target != hero && target.isAlive() && !hero.isAlliedTo(target) && hero.hasLineOfSight(target)
+                && (EnemyHeroes.active(hero) ? EnemyHeroes.defender(hero, target) : EnemyHiringProtection.enemy(target));
     }
     static boolean charged(CompoundTag tag,String key,int interval) {
         int hits=Math.min(interval,Math.max(0,tag.getInt(key))+1);
@@ -181,6 +184,8 @@ public final class HeroTraits {
     }
     /** Same-owner friendly living entities in a radius, excluding the hero itself. */
     private static java.util.List<LivingEntity> allies(ServerLevel level, Mob hero, double radius) {
+        if (EnemyHeroes.active(hero)) return level.getEntitiesOfClass(LivingEntity.class, hero.getBoundingBox().inflate(radius),
+                other -> other != hero && other.isAlive() && hero.hasLineOfSight(other) && EnemyHeroes.ally(hero, other));
         var owner = RecruitsBridge.ownerUuid(hero);
         if (owner.isEmpty()) return java.util.List.of();
         return level.getEntitiesOfClass(LivingEntity.class, hero.getBoundingBox().inflate(radius), other -> other != hero && other.isAlive()
@@ -266,7 +271,8 @@ public final class HeroTraits {
                 wolf.getPersistentData().putLong("SiegeShadowDespawn", now + 600);
                 wolf.setCustomName(Component.literal("Shadow Wolf").withStyle(ChatFormatting.DARK_PURPLE));
                 if (mob.getTarget() != null) wolf.setTarget(mob.getTarget());
-                level.addFreshEntity(wolf);
+                if (!EnemyHeroes.prepareShadow(level, mob, wolf)) { wolf.discard(); continue; }
+                if (!level.addFreshEntity(wolf)) { wolf.discard(); continue; }
                 burst(level, wolf.getX(), wolf.getY() + 0.5, wolf.getZ(), net.minecraft.core.particles.ParticleTypes.SOUL, 30, 0.5, 0.05);
             }
             level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.WOLF_HOWL, net.minecraft.sounds.SoundSource.HOSTILE, 1.5F, 0.5F);

@@ -57,6 +57,7 @@ public final class RaiderLabels {
      * uncolored "Raider" tag.
      */
     private static final Map<String, RoleStyle> ROLES = Map.of(
+            "hero",       new RoleStyle("Enemy Hero", ChatFormatting.LIGHT_PURPLE),
             "commander",  new RoleStyle("Siege Commander", ChatFormatting.DARK_RED),
             "breacher",   new RoleStyle("Breacher",         ChatFormatting.RED),
             "warcaster",  new RoleStyle("Warcaster",        ChatFormatting.DARK_PURPLE),
@@ -83,8 +84,10 @@ public final class RaiderLabels {
         // Name tag: set once. Visibility is toggled per-tick, but the tag
         // has to exist before we can toggle its visibility.
         if (mode != RaidConfig.LabelMode.OFF) {
-            raider.setCustomName(Component.literal(style.displayName)
-                    .withStyle(style.color));
+            if ("hero".equals(role) && com.devfarinsky.siegeoverhaul.core.EnemyHeroes.active(raider)) {
+                int heroRole = raider.getPersistentData().getInt("SiegeHeroRole");
+                raider.setCustomName(Component.literal("Enemy Hero · " + com.devfarinsky.siegeoverhaul.core.CoreHiring.NAMES[heroRole]).withStyle(style.color));
+            } else raider.setCustomName(Component.literal(style.displayName).withStyle(style.color));
             // ALWAYS mode makes the tag visible immediately; PROXIMITY
             // will flip it in tick() based on nearest player distance.
             raider.setCustomNameVisible(mode == RaidConfig.LabelMode.ALWAYS);
