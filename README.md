@@ -163,3 +163,7 @@ Bank withdrawals, buffs, and voting are validated on the server. Matching server
 Later waves can reuse a siege-owned engine when its previous crew is confirmed killed and the vehicle is unoccupied. Replacement engineers deploy at the War Gate and walk to their assigned equipment; vehicles are never teleported. The fleet and population limits still apply. Mounting captured artillery protects it from siege reuse and end-of-siege cleanup. Unknown crew deaths from older saves are preserved rather than guessed.
 
 Assault navigation retries prolonged circling while allowing short detours. Builders try alternative claim-checked upgrade sites if the preferred site is obstructed, without replacing player blocks. Guards retain their stationed aggressive defense. Bank actions report the actual transfer and balance. Eligible members can recover an uncast retreat ballot after reconnecting or reopening the core; the original deadline and one-vote limit remain. Practice sieges show zero upcoming bank payment. Loot-box contents stay hidden.
+
+## Contributing and GitHub Copilot
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for Java/Forge setup, the code map, testing and release handoff. Repository instructions and automatic Copilot setup keep development consistent across contributors.
