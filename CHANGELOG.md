@@ -1,3 +1,11 @@
+# 4.28.16 beta
+
+- Enemy troops no longer march off cliffs and ledges into a lethal fall. A raider that spots a killing drop in front of it stops, kills its forward momentum and steps back, and the assault orders leave it alone until it is back on safe ground.
+- Drops onto lava count as lethal, drops into water do not, and a raider warped forward past broken terrain no longer takes fall damage from the warp.
+- Enemy bridge builders actually show up now. The crew check was looking for troop roles that sieges never assign, so no wave could ever produce a builder. Ordinary line troops are eligible again, and the start of a crossing is written to the server log.
+- Fortify Perimeter is far more reliable. The job now goes to the closest free builder of your own instead of whichever builder happened to be nearby, never to a busy, fleeing or enemy camp builder, and the commission fails with a refund-safe error instead of charging you when the builder will not take the blueprint.
+- Fortify Perimeter only queues wall sections your storage area can actually supply and tells you how many sections were left out, so a wall on a large claim no longer stalls part-way through with no explanation.
+
 # 4.28.15 beta
 
 - Give blocked enemy assaults a dedicated bridge-builder role, using an existing soldier rather than unlimited extra reinforcements.
