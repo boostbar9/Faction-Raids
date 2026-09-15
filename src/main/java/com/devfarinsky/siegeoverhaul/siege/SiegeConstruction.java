@@ -84,6 +84,10 @@ public final class SiegeConstruction {
         for (int distance : new int[]{14, 18, 22}) {
             for (int offset : new int[]{0, 5, -5, 10, -10}) {
                 Vec3 candidate = camp.add(forward.scale(distance)).add(side.scale(offset));
+                // Engines parked inside the palisade block the camp's own
+                // builders and sit on the wall line itself, which stalls every
+                // later construction stage. Artillery always stands outside.
+                if(com.devfarinsky.siegeoverhaul.camp.CampPerimeter.blocksCamp(state,candidate))continue;
                 if(!state.warGate.isEmpty()) {
                     BlockPos gate=com.devfarinsky.siegeoverhaul.camp.WarGate.center(state);
                     if(Math.abs(candidate.x-(gate.getX()+.5))<8 && Math.abs(candidate.z-(gate.getZ()+.5))<8)continue;

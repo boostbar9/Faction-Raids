@@ -2069,6 +2069,7 @@ public final class RaidEvents {
         // camp keeps ticking all the way to the objective.
         com.devfarinsky.siegeoverhaul.raid.MarchLoading.tick(level, state,
                 BlockPos.containing(invasionObjective(level, point, state)));
+        com.devfarinsky.siegeoverhaul.raid.ArmyMap.broadcast(level, state, members);
         redirectRaiders(level, state, members, recruits, point);
 
         // Amphibious support: steer active raider boats toward the beach.

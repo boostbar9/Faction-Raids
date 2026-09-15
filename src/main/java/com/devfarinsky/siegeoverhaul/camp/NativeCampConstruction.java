@@ -294,7 +294,13 @@ public final class NativeCampConstruction {
     }
 
     public static void tick(ServerLevel level, RaidSavedData.RaidState raid) {
-        if (!safeToTick(level, raid)) return;
+        if (!safeToTick(level, raid)) {
+            // A paused job still counts as a job going nowhere. Without this a
+            // single permanently blocked cell keeps the camp on the same
+            // project for the rest of the siege.
+            if (!raid.constructionPauseReason.isEmpty()) stall(level, raid);
+            return;
+        }
         int completed = (int) raid.pendingCampBlocks.keySet().stream().filter(key -> !level.getBlockState(BlockPos.of(key)).isAir()).count();
         if (completed == raid.pendingCampBlocks.size()) {
             FactionLogger.LOG.info("Camp builders for {} completed {} planned cells", raid.teamKey, completed);
@@ -304,11 +310,33 @@ public final class NativeCampConstruction {
         raid.campCompletedBlocks = completed;
         // Native jobs remain valid until completed, sabotaged, or the siege ends. Do not destroy
         // their supplies/work orders just because a builder spent time walking or gathering.
-        if (level.isDay()) {
-            raid.campBuildTicks = Math.min(Integer.MAX_VALUE - 20, raid.campBuildTicks) + 20;
-            if (raid.campBuildTicks == RaidConfig.CAMP_MAX_BUILD_SECONDS.get() * 20)
+        if (level.isDay()) stall(level, raid);
+    }
+
+    /**
+     * Count a pass that made no progress, and abandon the job once it has
+     * clearly stopped moving. Abandoning only releases the work orders and the
+     * unused supplies: everything already placed stays recorded for the normal
+     * siege restoration, and the camp is free to start its next project - the
+     * perimeter wall and its towers, in practice.
+     */
+    private static void stall(ServerLevel level, RaidSavedData.RaidState raid) {
+        int limit = RaidConfig.CAMP_MAX_BUILD_SECONDS.get() * 20;
+        raid.campBuildTicks = Math.min(Integer.MAX_VALUE - 20, raid.campBuildTicks) + 20;
+        if (raid.campBuildTicks < limit) return;
+        if (!RaidConfig.CAMP_ABANDON_STALLED_BUILDS.get()) {
+            if (raid.campBuildTicks == limit)
                 FactionLogger.LOG.info("Camp builders for {} have made no progress for {}s; retaining native jobs and finite supplies", raid.teamKey, RaidConfig.CAMP_MAX_BUILD_SECONDS.get());
+            return;
         }
+        FactionLogger.LOG.info("Camp builders for {} abandoned a stalled job after {}s ({}/{} cells placed, {})",
+                raid.teamKey, RaidConfig.CAMP_MAX_BUILD_SECONDS.get(), raid.campCompletedBlocks,
+                raid.pendingCampBlocks.size(),
+                raid.constructionPauseReason.isEmpty() ? "no progress" : raid.constructionPauseReason);
+        raid.campBuildTicks = 0;
+        raid.campCompletedBlocks = 0;
+        raid.constructionPauseReason = "";
+        stop(level, raid);
     }
 
     public static void stop(ServerLevel level, RaidSavedData.RaidState raid) {

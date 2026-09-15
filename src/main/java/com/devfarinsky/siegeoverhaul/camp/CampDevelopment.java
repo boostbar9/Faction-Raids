@@ -20,7 +20,7 @@ public final class CampDevelopment {
         if(raid.campWorkers.stream().noneMatch(id -> level.getEntity(id) instanceof Mob worker && worker.isAlive())) return;
         raid.campUpgradeTicks+=ModConstants.TICK_INTERVAL;
         RaidSavedData.get(level.getServer()).setDirty();
-        if(raid.campUpgradeTicks<2400)return;
+        if(raid.campUpgradeTicks<RaidConfig.CAMP_UPGRADE_SECONDS.get()*20)return;
         raid.campUpgradeTicks=0;
         if(CampPerimeter.perimeterStage(raid.campUpgradeStage)) { tryPerimeter(level,raid); return; }
         double x=-Math.cos(raid.approachAngle),z=-Math.sin(raid.approachAngle);

@@ -1,3 +1,13 @@
+# 4.28.20 beta
+
+- Hero prices are down to a straightforward ladder. A Common hero costs 50 emeralds and each rarity above it adds another 50, up to 250 for a Legendary, instead of being scaled off recruit prices. Both the starting price and the step per rarity are configurable.
+- Marching enemy armies now show up on the Recruits world map. Soldiers and their siege equipment get their own icons and slide across the map as the army advances, so you can watch a column close on your territory the same way you watch your own marker move.
+- Siege equipment keeps up with the army. Catapults and ballistas are tracked by the loaded corridor alongside the infantry, so an engine that falls behind no longer freezes in an unloaded chunk while the soldiers walk on.
+- Engines that get wedged now work their way out. An engine that stops making progress sweeps its waypoint wider to either side and shortens its steps, and after repeated failed attempts it is set down a few blocks further along its own march line, always forward onto solid, empty ground at its own height.
+- Artillery no longer parks inside the camp wall. Engine slots are kept clear of the wall line and the ground the camp still has to build on, which was the main reason builders were found grinding against a catapult.
+- Camp builders can no longer be stuck on one project forever. A cell a builder cannot fill, such as one a siege engine is standing in, is left out of the plan, and a job that has made no progress at all for the configured time is abandoned so the camp moves on. In practice that is what kept the perimeter wall and its corner towers from ever being started.
+- Camps also wait less between projects: the gap before the next wall section or tower starts is now a minute by default and configurable.
+
 # 4.28.19 beta
 
 - Enemy armies now carry their own loaded ground with them. A column that leaves a distant camp keeps ticking the whole way to your territory instead of freezing in unloaded chunks and never arriving, and an army caught mid-march by a server restart is pulled back into the world instead of being stranded. The corridor is capped and its chunk holds expire on their own, so nothing stays force-loaded after a siege.

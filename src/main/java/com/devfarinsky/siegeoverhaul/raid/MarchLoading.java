@@ -6,7 +6,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.ChunkPos;
 
 import java.util.ArrayList;
@@ -66,10 +65,15 @@ public final class MarchLoading {
             return;
         }
         Map<UUID, Long> tracked = new LinkedHashMap<>();
-        for (UUID id : state.raiders) {
+        // Siege equipment is tracked alongside the infantry: a catapult that
+        // falls behind the column would otherwise stop ticking and never
+        // arrive, even though the soldiers around it kept walking.
+        List<UUID> marching = new ArrayList<>(state.raiders);
+        marching.addAll(state.siegeEngines.keySet());
+        for (UUID id : marching) {
             Entity entity = level.getEntity(id);
-            if (entity instanceof Mob mob && mob.isAlive()) {
-                tracked.put(id, new ChunkPos(mob.blockPosition()).toLong());
+            if (entity != null && entity.isAlive()) {
+                tracked.put(id, new ChunkPos(entity.blockPosition()).toLong());
             } else {
                 // Not loaded (or not loaded yet): keep the last chunk we saw it in
                 // so the ticket below can bring it back into the simulation.

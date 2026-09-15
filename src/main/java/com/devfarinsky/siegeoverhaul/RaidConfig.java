@@ -157,6 +157,11 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue CAMP_BUILDER_MAX;
     public static final ForgeConfigSpec.IntValue CAMP_LUMBERJACK_MAX;
     public static final ForgeConfigSpec.IntValue CAMP_MAX_BUILD_SECONDS;
+    public static final ForgeConfigSpec.BooleanValue CAMP_ABANDON_STALLED_BUILDS;
+    public static final ForgeConfigSpec.IntValue CAMP_UPGRADE_SECONDS;
+    public static final ForgeConfigSpec.BooleanValue SIEGE_ENGINE_UNSTICK;
+    public static final ForgeConfigSpec.IntValue SIEGE_ENGINE_STALL_PASSES;
+    public static final ForgeConfigSpec.BooleanValue SHOW_ARMY_ON_MAP;
     public static final ForgeConfigSpec.BooleanValue ENABLE_NARRATIVE;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ALLOWED_RAIDER_FACTIONS;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ALLOWED_CASUS_BELLI;
@@ -496,6 +501,16 @@ public final class RaidConfig {
                 .defineInRange("campLumberjackMax", 2, 1, 8);
         CAMP_MAX_BUILD_SECONDS = b.comment("Seconds without progress before logging a native builder warning; native jobs remain available. Also bounds fallback scripted construction.")
                 .defineInRange("campMaxBuildSeconds", 180, 30, 900);
+        CAMP_ABANDON_STALLED_BUILDS = b.comment("Let a war camp give up on a construction job that has made no progress for campMaxBuildSeconds and move on to its next project. Without this a single unreachable block can stall a camp for the rest of the siege, so the perimeter wall and towers are never started.")
+                .define("campAbandonStalledBuilds", true);
+        CAMP_UPGRADE_SECONDS = b.comment("Seconds a war camp waits between finishing one construction project and starting the next, such as each side of its perimeter wall.")
+                .defineInRange("campUpgradeSeconds", 60, 10, 600);
+        SIEGE_ENGINE_UNSTICK = b.comment("Allow a siege engine that repeated detours could not free to be set down a few blocks further along its own march line. It only ever moves forward onto solid, empty ground at its own height.")
+                .define("siegeEngineUnstick", true);
+        SIEGE_ENGINE_STALL_PASSES = b.comment("How many five second advance passes a siege engine may make no progress on before it is freed. Higher values let engines struggle longer before being helped.")
+                .defineInRange("siegeEngineStallPasses", 4, 1, 40);
+        SHOW_ARMY_ON_MAP = b.comment("Show marching enemy armies and their siege equipment on the Recruits world map while they are marching on your territory.")
+                .define("showArmyOnMap", true);
         ENABLE_NARRATIVE = b.comment("Attach a themed raider faction and casus belli (reason for war) to every raid. When false, announcements use generic wording and no faction is stored.")
                 .define("enableRaiderNarrative", true);
         ALLOWED_RAIDER_FACTIONS = b.comment("Which raider faction ids may be chosen. Leave empty to allow all built-ins. See RaiderFactionRegistry for ids.")

@@ -19,7 +19,7 @@ public final class RaidNetwork {
     // discovered units/factions, and War Journal rows to DashboardSync.
     // Bump whenever the wire format changes so mismatched builds refuse to connect
     // instead of silently corrupting the dashboard payload.
-    private static final String PROTOCOL = "13";
+    private static final String PROTOCOL = "14";
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(SiegeOverhaul.MOD_ID, "main"))
             .networkProtocolVersion(() -> PROTOCOL)
@@ -54,6 +54,14 @@ public final class RaidNetwork {
                 .decoder(DashboardSync::decode)
                 .consumerMainThread(DashboardSync::handle)
                 .add();
+        CHANNEL.messageBuilder(ArmyMarkers.class, messageId++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(ArmyMarkers::encode)
+                .decoder(ArmyMarkers::decode)
+                .consumerMainThread((packet, supplier) -> {
+                    DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
+                            () -> () -> com.devfarinsky.siegeoverhaul.client.ArmyMapMarkers.accept(packet));
+                    supplier.get().setPacketHandled(true);
+                }).add();
         CHANNEL.messageBuilder(DashboardAction.class, messageId++, NetworkDirection.PLAY_TO_SERVER)
                 .encoder(DashboardAction::encode)
                 .decoder(DashboardAction::decode)
@@ -106,6 +114,48 @@ public final class RaidNetwork {
     }
     public static void coreDetails(ServerPlayer player,int menuId,String faction,java.util.List<String> members,int[] ledger) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),new CoreDetails(menuId,faction,members,ledger));
+    }
+
+    /**
+     * Positions of one marching enemy army, for the world map. Sent only while
+     * a siege is running and only to the faction being attacked, so the map
+     * never becomes a free scouting tool against other people's wars.
+     */
+    public record ArmyMarkers(String faction, java.util.List<Marker> markers) {
+        /** Largest army that will ever be drawn; oversized waves are trimmed. */
+        public static final int LIMIT = 64;
+
+        public record Marker(int id, int x, int z, boolean equipment) {}
+
+        public ArmyMarkers {
+            faction = faction == null ? "" : faction.substring(0, Math.min(faction.length(), 64));
+            markers = markers == null ? java.util.List.of()
+                    : markers.stream().filter(java.util.Objects::nonNull).limit(LIMIT).toList();
+        }
+
+        public void encode(FriendlyByteBuf buffer) {
+            buffer.writeUtf(faction, 64);
+            buffer.writeCollection(markers, (out, marker) -> {
+                out.writeVarInt(marker.id());
+                out.writeVarInt(marker.x());
+                out.writeVarInt(marker.z());
+                out.writeBoolean(marker.equipment());
+            });
+        }
+
+        public static ArmyMarkers decode(FriendlyByteBuf buffer) {
+            String faction = buffer.readUtf(64);
+            int size = buffer.readVarInt();
+            if (size < 0 || size > LIMIT) throw new IllegalArgumentException("Invalid army marker count");
+            var markers = new java.util.ArrayList<Marker>(size);
+            for (int i = 0; i < size; i++)
+                markers.add(new Marker(buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readBoolean()));
+            return new ArmyMarkers(faction, markers);
+        }
+    }
+
+    public static void armyMarkers(ServerPlayer player, ArmyMarkers markers) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), markers);
     }
 
     public static void openDashboard(ServerPlayer player) {
