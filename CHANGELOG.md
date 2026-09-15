@@ -1,3 +1,8 @@
+# 4.28.23 beta
+
+- Rolled the Treasury payment rules back in. The Command Center tab is called Treasury again, and unit, siege kit, wall, upgrade, war chest and blessing purchases all draw from the faction Treasury rather than your own pockets. Recent beta builds had been missing this.
+- War keys work alongside the Treasury. A key earned from fighting still opens any war chest outright, and only when you have no key does the chest fall back to charging the Treasury.
+
 # 4.28.22 beta
 
 - The Loot and Territory pages no longer stretch their panels to fill the screen. Rows and cards are sized to what they actually need, which frees up a clean strip on both pages for future controls.
