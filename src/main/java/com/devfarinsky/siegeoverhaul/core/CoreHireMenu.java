@@ -18,7 +18,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     private final CoreInventorySync inventorySync = new CoreInventorySync();
     private final BlockPos pos;
     private final SimpleContainer display = new SimpleContainer(6);
-    private final ContainerData data = new SimpleContainerData(32);
+    private final ContainerData data = new SimpleContainerData(34);
     private long shownAt = Long.MIN_VALUE;
     private long lastActionAt = -1;
     private String sentRoster = "";
@@ -51,6 +51,10 @@ public final class CoreHireMenu extends AbstractContainerMenu {
      * Zero means the next server tick will pay out. Wide-packed at 30-31.
      */
     public int ticksUntilInterest() { return wide(30); }
+    /** Unspent war keys held by the viewing player (earned from enemy kills). */
+    public int lootKeys() { return data.get(32); }
+    /** Enemy kills banked toward the next war key. */
+    public int lootKeyProgress() { return data.get(33); }
     public CoreHireMenu(int id, Inventory inventory) { this(id, inventory, null); }
     public CoreHireMenu(int id, Inventory inventory, BlockPos pos) {
         super(CoreMenus.HIRING.get(), id);
@@ -104,6 +108,8 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         data.set(9, (int) Math.min(900, Math.max(0, (rotation - now + 19) / 20)));
         for (int i = 0; i < 4; i++) data.set(10 + i, (int) ((rotation >>> (i * 16)) & 0xffff));
         data.set(14,owner.getInventory().items.stream().filter(stack->stack.is(Items.EMERALD)).mapToInt(ItemStack::getCount).sum());
+        data.set(32,Math.min(Short.MAX_VALUE,LootKeys.keys(owner)));
+        data.set(33,Math.min(Short.MAX_VALUE,LootKeys.progress(owner)));
         FactionBank.settle(saved,core);
         wide(18,(int)FactionBank.balance(core)); data.set(20,com.devfarinsky.siegeoverhaul.RaidConfig.BANK_INTEREST_BASIS_POINTS.get());
         var raid = saved.raids.get(SiegeCore.key(owner));

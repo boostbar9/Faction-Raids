@@ -69,6 +69,8 @@ public final class ModConstants {
         public static final String CAMP_JOBS = "CampConstructionJobs";
         public static final String CAMP_CREW = "CampConstructionCrew";
         public static final String CAMP_USES_WORKERS = "CampUsesWorkers";
+        /** Compound on {@code raid.campaign} tracking each purposeful camp structure and whether it still stands. */
+        public static final String CAMP_STRUCTURES = "SiegeCampStructures";
         public static final String CAMP_BUILD_TICKS = "CampBuildTicks";
         public static final String SCOUT = "FactionRaidsScout";
     }

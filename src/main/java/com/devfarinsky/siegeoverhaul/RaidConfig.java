@@ -159,6 +159,9 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue CAMP_MAX_BUILD_SECONDS;
     public static final ForgeConfigSpec.BooleanValue CAMP_ABANDON_STALLED_BUILDS;
     public static final ForgeConfigSpec.IntValue CAMP_UPGRADE_SECONDS;
+    public static final ForgeConfigSpec.IntValue GRANARY_GUARD_REGEN;
+    public static final ForgeConfigSpec.DoubleValue ARMOURY_GUARD_DAMAGE;
+    public static final ForgeConfigSpec.IntValue COMMAND_POST_WAVE_INTERVAL_PERCENT;
     public static final ForgeConfigSpec.BooleanValue SIEGE_ENGINE_UNSTICK;
     public static final ForgeConfigSpec.IntValue SIEGE_ENGINE_STALL_PASSES;
     public static final ForgeConfigSpec.BooleanValue SHOW_ARMY_ON_MAP;
@@ -199,6 +202,8 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue COMMANDER_BOUNTY_EMERALDS;
     public static final ForgeConfigSpec.IntValue SCOUT_BOUNTY_EMERALDS;
     public static final ForgeConfigSpec.IntValue MAX_BOUNTY_EMERALDS_PER_RAID;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_KILL_LOOT_KEYS;
+    public static final ForgeConfigSpec.IntValue LOOT_KEY_KILLS;
     public static final ForgeConfigSpec.BooleanValue MANUAL_RAIDS_GRANT_REWARDS;
     public static final ForgeConfigSpec.BooleanValue ENABLE_WORKERS_COMPAT;
     public static final ForgeConfigSpec.BooleanValue PROTECT_WORKERS;
@@ -505,6 +510,12 @@ public final class RaidConfig {
                 .define("campAbandonStalledBuilds", true);
         CAMP_UPGRADE_SECONDS = b.comment("Seconds a war camp waits between finishing one construction project and starting the next, such as each side of its perimeter wall.")
                 .defineInRange("campUpgradeSeconds", 60, 10, 600);
+        GRANARY_GUARD_REGEN = b.comment("Health the enemy Granary (stage 0 supply depot) restores to each camp guard per bookkeeping pass (~1s) while it stands. Destroying or burning the Granary stops the healing. 0 disables it.")
+                .defineInRange("granaryGuardRegen", 1, 0, 20);
+        ARMOURY_GUARD_DAMAGE = b.comment("Bonus attack damage each camp guard gains while the enemy Armoury (stage 1 forge) stands. Destroying or burning the Armoury removes the bonus. 0 disables it.")
+                .defineInRange("armouryGuardDamageBonus", 2.0, 0.0, 10.0);
+        COMMAND_POST_WAVE_INTERVAL_PERCENT = b.comment("Percent of the normal between-wave delay used while the enemy Command Post (stage 2 war room) stands and coordinates faster waves. 100 disables the effect; lower values shorten the delay.")
+                .defineInRange("commandPostWaveIntervalPercent", 60, 20, 100);
         SIEGE_ENGINE_UNSTICK = b.comment("Allow a siege engine that repeated detours could not free to be set down a few blocks further along its own march line. It only ever moves forward onto solid, empty ground at its own height.")
                 .define("siegeEngineUnstick", true);
         SIEGE_ENGINE_STALL_PASSES = b.comment("How many five second advance passes a siege engine may make no progress on before it is freed. Higher values let engines struggle longer before being helped.")
@@ -587,7 +598,11 @@ public final class RaidConfig {
                 .defineInRange("scoutBountyEmeralds", 2, 0, 128);
         MAX_BOUNTY_EMERALDS_PER_RAID = b.comment("Hard cap on the total bounty emeralds (raider + commander + scout combined) a single raid can deposit into the treasury. Wave-clear payouts are unaffected. Set to 0 to remove the cap.")
                 .defineInRange("maxBountyEmeraldsPerRaid", 32, 0, 10_000);
-        MANUAL_RAIDS_GRANT_REWARDS = b.comment("Allow raids started manually with /siegeoverhaul start to grant rewards. Enabled by default so single-player and small-server testing plays like a real siege; set to false on public servers to prevent reward farming.")
+
+        ENABLE_KILL_LOOT_KEYS = b.comment("Earn free war-chest keys by defeating enemy raiders. A key opens any Command Center war chest without spending emeralds.")
+                .define("enableKillLootKeys", true);
+        LOOT_KEY_KILLS = b.comment("Enemy raiders a player must defeat to earn one war-chest key.")
+                .defineInRange("lootKeyKills", 12, 1, 512);        MANUAL_RAIDS_GRANT_REWARDS = b.comment("Allow raids started manually with /siegeoverhaul start to grant rewards. Enabled by default so single-player and small-server testing plays like a real siege; set to false on public servers to prevent reward farming.")
                 .define("manualRaidsGrantRewards", true);
         b.pop();
 

@@ -496,6 +496,14 @@ public final class RaidEvents {
         // this with lower defaults and a per-raid bounty cap enforced via
         // state.campaign so a single mega-raid can't dump thousands of
         // emeralds into the bank.
+        // v4.29.0: fighting earns war-chest keys. Credit the player who
+        // actually landed the killing blow, so hired recruits do not farm
+        // keys on their owner's behalf.
+        if (event.getSource().getEntity() instanceof ServerPlayer slayer
+                && anchor != null && anchor.members().contains(slayer.getUUID())) {
+            com.devfarinsky.siegeoverhaul.core.LootKeys.credit(slayer,
+                    com.devfarinsky.siegeoverhaul.enchant.EnchantEffects.plundererBonus(slayer));
+        }
         if (state.rewardEligible && isFactionDefender(event.getSource().getEntity(), anchor)) {
             CompoundTag core = data.siegeCores.get(victimTeamKey);
             if (core != null) {
@@ -2026,6 +2034,7 @@ public final class RaidEvents {
             return;
         }
         com.devfarinsky.siegeoverhaul.camp.CampDevelopment.tick(level,state);
+        com.devfarinsky.siegeoverhaul.camp.CampStructures.tick(level,state);
         // Camp progress is persisted even when no wave or breach changed this pass.
         if (!state.pendingCampBlocks.isEmpty()) {
             progressDeferredCampBuilds(level, state);
@@ -2193,10 +2202,13 @@ public final class RaidEvents {
                         anchor.teamDisplay() + " has crushed the enemy invasion!");
                 return;
             }
-            state.ticksToNextWave = RaidConfig.TIME_BETWEEN_WAVES_SECONDS.get() * 20;
+            state.ticksToNextWave = com.devfarinsky.siegeoverhaul.camp.CampStructures.waveIntervalTicks(
+                    RaidConfig.TIME_BETWEEN_WAVES_SECONDS.get() * 20,
+                    com.devfarinsky.siegeoverhaul.camp.CampStructures.standing(state,
+                            com.devfarinsky.siegeoverhaul.camp.CampStructures.Kind.COMMAND_POST));
             state.lastWarningSecond = Integer.MAX_VALUE;
             announce(server, teamKey, Component.literal("Wave " + state.wave + " cleared. Next wave in " +
-                    RaidConfig.TIME_BETWEEN_WAVES_SECONDS.get() + " seconds.").withStyle(ChatFormatting.GREEN), false);
+                    Math.max(1, (state.ticksToNextWave + 19) / 20) + " seconds.").withStyle(ChatFormatting.GREEN), false);
         }
 
         if (state.ticksToNextWave > 0) {

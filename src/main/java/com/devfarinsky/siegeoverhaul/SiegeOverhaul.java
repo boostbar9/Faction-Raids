@@ -39,6 +39,7 @@ public final class SiegeOverhaul {
         com.devfarinsky.siegeoverhaul.core.CoreMenus.MENUS.register(modBus);
         ModItems.register(modBus);
         ModBannerPatterns.register(modBus);
+        com.devfarinsky.siegeoverhaul.enchant.ModEnchantments.register(modBus);
         com.devfarinsky.siegeoverhaul.items.ModTabs.register(modBus);
         RaidNetwork.init();
         MinecraftForge.EVENT_BUS.register(RaidEvents.class);

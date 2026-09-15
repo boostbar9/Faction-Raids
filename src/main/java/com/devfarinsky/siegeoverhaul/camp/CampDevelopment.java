@@ -94,7 +94,7 @@ public final class CampDevelopment {
         plan.putAll(CampUpgradeLayout.structure(center, entrance, raid.campUpgradeStage));
         raid.pendingCampBlocks.putAll(plan);
         // Never fall back to remote placement for an upgrade or replace an obstructing player block.
-        if(NativeCampConstruction.start(level,raid)) { raid.campUpgradeStage++; return true; }
+        if(NativeCampConstruction.start(level,raid)) { CampStructures.record(raid,raid.campUpgradeStage,center,entrance); raid.campUpgradeStage++; return true; }
         raid.pendingCampBlocks.clear(); return false;
     }
 }

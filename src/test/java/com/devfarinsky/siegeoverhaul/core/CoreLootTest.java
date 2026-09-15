@@ -43,10 +43,15 @@ class CoreLootTest extends MinecraftTestSupport {
     @Test void exactAdvertisedOddsAndInvalidRolls() {
         int[] counts=new int[4];
         for(int roll=0;roll<100;roll++) {
-            var item=CoreLoot.reward(0,roll).getItem();counts[item==Items.GOLDEN_APPLE?0:item==Items.ARROW?1:item==Items.DIAMOND?2:3]++;
+            counts[CoreLoot.tier(roll)]++;
             for(int box=0;box<3;box++)assertFalse(CoreLoot.reward(box,roll).isEmpty());
         }
         assertArrayEquals(new int[]{50,30,15,5},counts);
+        for(int box=0;box<3;box++) {
+            assertEquals(3,CoreLoot.topTier(box));
+            for(int roll : new int[]{0,50,80,95})
+                assertFalse(CoreLoot.reward(box,roll).getHoverName().getString().isBlank());
+        }
         assertThrows(IllegalArgumentException.class,()->CoreLoot.reward(3,0));
         assertThrows(IllegalArgumentException.class,()->CoreLoot.reward(0,100));
     }

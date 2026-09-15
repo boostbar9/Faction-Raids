@@ -74,6 +74,7 @@ public final class CampGuards {
             if (!(entity instanceof Mob guard) || !guard.isAlive()) { raid.campGuards.remove(id); continue; }
             com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(guard,raid.factionId,"guard");
             strengthen(guard,raid.wave);
+            applyStructureEffects(raid,guard);
             guard.setNoAi(frozen);
             if (frozen) guard.setTarget(null);
             if (!frozen && raid.campPos != null) {
@@ -194,6 +195,24 @@ public final class CampGuards {
         if (knockback != null)
             knockback.setBaseValue(Math.max(knockback.getBaseValue(), GuardStrength.knockback(ramp)));
         nbt.putInt("SiegeGuardStrengthStep", step);
+    }
+    private static final UUID ARMOURY_DAMAGE_MOD = UUID.fromString("8f3a6b2e-1c4d-4e5f-9a7b-2d6c8e0f1a34");
+    /** Live-and-die camp benefits, reapplied each pass so destroying a building removes them at once. */
+    private static void applyStructureEffects(RaidSavedData.RaidState raid, Mob guard) {
+        int regen = CampStructures.guardRegen(CampStructures.standing(raid, CampStructures.Kind.GRANARY));
+        if (regen > 0 && guard.getHealth() < guard.getMaxHealth()) guard.heal(regen);
+        var damage = guard.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
+        if (damage == null) return;
+        double bonus = CampStructures.armouryDamageBonus(CampStructures.standing(raid, CampStructures.Kind.ARMOURY));
+        var existing = damage.getModifier(ARMOURY_DAMAGE_MOD);
+        if (bonus > 0) {
+            if (existing == null || existing.getAmount() != bonus) {
+                if (existing != null) damage.removeModifier(ARMOURY_DAMAGE_MOD);
+                damage.addTransientModifier(new net.minecraft.world.entity.ai.attributes.AttributeModifier(
+                        ARMOURY_DAMAGE_MOD, "Siege Armoury", bonus,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADDITION));
+            }
+        } else if (existing != null) damage.removeModifier(ARMOURY_DAMAGE_MOD);
     }
     public static void cleanup(ServerLevel level, RaidSavedData.RaidState raid) {
         for (UUID id : raid.campGuards) { Entity guard=level.getEntity(id); if (guard != null) guard.discard(); }

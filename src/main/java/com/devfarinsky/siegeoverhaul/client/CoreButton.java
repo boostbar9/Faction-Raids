@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.function.BooleanSupplier;
 
@@ -22,20 +23,41 @@ public final class CoreButton extends Button {
     private final BooleanSupplier selected;
     private final boolean tab;
     private final CommandIcon icon;
+    private final ItemStack itemIcon;
 
     public CoreButton(Component text, OnPress press,
                       int x, int y, int width, int height,
                       boolean tab, BooleanSupplier selected) {
-        this(text, press, x, y, width, height, tab, selected, null);
+        this(text, press, x, y, width, height, tab, selected, (CommandIcon) null, ItemStack.EMPTY);
     }
 
     public CoreButton(Component text, OnPress press,
                       int x, int y, int width, int height,
                       boolean tab, BooleanSupplier selected, CommandIcon icon) {
+        this(text, press, x, y, width, height, tab, selected, icon, ItemStack.EMPTY);
+    }
+
+
+    /**
+     * Variant that draws a real Minecraft item sprite as the glyph. Used for
+     * currency controls so they show the vanilla emerald instead of a
+     * hand-drawn stand-in.
+     */
+    public CoreButton(Component text, OnPress press,
+                      int x, int y, int width, int height,
+                      boolean tab, BooleanSupplier selected, ItemStack itemIcon) {
+        this(text, press, x, y, width, height, tab, selected, (CommandIcon) null, itemIcon);
+    }
+
+    private CoreButton(Component text, OnPress press,
+                       int x, int y, int width, int height,
+                       boolean tab, BooleanSupplier selected,
+                       CommandIcon icon, ItemStack itemIcon) {
         super(x, y, width, height, text, press, DEFAULT_NARRATION);
         this.tab = tab;
         this.selected = selected;
         this.icon = icon;
+        this.itemIcon = itemIcon == null ? ItemStack.EMPTY : itemIcon;
     }
 
     /**
@@ -92,10 +114,12 @@ public final class CoreButton extends Button {
         // At high GUI scales some buttons become too narrow for both their
         // glyph and complete label. Drop the decorative glyph first instead
         // of crushing or overlapping the actionable text.
-        boolean showIcon = icon != null
+        boolean hasGlyph = icon != null || !itemIcon.isEmpty();
+        boolean showIcon = hasGlyph
                 && w >= iconSize + font.width(getMessage()) + 18;
         if (showIcon) {
-            icon.draw(g, x + 4, y + (h - iconSize) / 2, iconSize);
+            if (icon != null) icon.draw(g, x + 4, y + (h - iconSize) / 2, iconSize);
+            else ItemIcons.draw(g, itemIcon, x + 4, y + (h - iconSize) / 2, iconSize);
             textLeft = x + 6 + iconSize + 4;
         }
         int textAreaWidth = Math.max(1, x + w - 6 - textLeft);
