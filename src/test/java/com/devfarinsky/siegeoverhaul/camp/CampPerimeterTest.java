@@ -176,4 +176,76 @@ class CampPerimeterTest extends MinecraftTestSupport {
         }
     }
 
+
+    @Test
+    void unitsInsideTheWallAreRoutedOutThroughTheGateway() {
+        var raid = camp();
+        raid.warGate.putLong("PerimeterGate", CampPerimeter.mainGateCenter(raid).asLong());
+        raid.warGate.putInt("PerimeterGateFacing", Direction.SOUTH.get2DDataValue());
+        var objective = new net.minecraft.world.phys.Vec3(0, GROUND, 400);
+        // Standing in the middle of camp: head for the gateway mouth.
+        var fromCamp = CampPerimeter.routeOut(raid,
+                net.minecraft.world.phys.Vec3.atBottomCenterOf(raid.campPos), objective);
+        assertNotNull(fromCamp);
+        assertEquals(net.minecraft.world.phys.Vec3.atBottomCenterOf(CampPerimeter.mainGateCenter(raid)), fromCamp);
+        // Already in the gateway: head for the step outside it.
+        var atGate = CampPerimeter.routeOut(raid,
+                net.minecraft.world.phys.Vec3.atBottomCenterOf(CampPerimeter.mainGateCenter(raid)), objective);
+        assertEquals(CampPerimeter.gateExit(raid), atGate);
+        // Outside already: no detour, march straight at the objective.
+        assertNull(CampPerimeter.routeOut(raid, CampPerimeter.gateExit(raid), objective));
+    }
+
+    @Test
+    void gateRoutingOnlyAppliesOnceAGateExistsAndOnlyForObjectivesOutside() {
+        var raid = camp();
+        var inside = net.minecraft.world.phys.Vec3.atBottomCenterOf(raid.campPos);
+        var objective = new net.minecraft.world.phys.Vec3(0, GROUND, 400);
+        // No perimeter commissioned yet: never divert anyone.
+        assertFalse(CampPerimeter.gateBuilt(raid));
+        assertNull(CampPerimeter.routeOut(raid, inside, objective));
+        raid.warGate.putLong("PerimeterGate", CampPerimeter.mainGateCenter(raid).asLong());
+        raid.warGate.putInt("PerimeterGateFacing", Direction.SOUTH.get2DDataValue());
+        // Work inside the camp keeps its own orders.
+        assertNull(CampPerimeter.routeOut(raid, inside,
+                net.minecraft.world.phys.Vec3.atBottomCenterOf(raid.campPos.offset(3, 0, 3))));
+        assertNotNull(CampPerimeter.routeOut(raid, inside, objective));
+    }
+
+    @Test
+    void theGatewayThresholdIsPavedFlatSoNobodyStepsIntoADip() {
+        var level = flatLevel();
+        var raid = camp();
+        // The gate columns sit two blocks below the gate centre.
+        when(level.getHeight(any(), anyInt(), anyInt())).thenAnswer(call ->
+                (int) call.getArgument(1) == 1 ? GROUND - 2 : GROUND);
+        doAnswer(call -> {
+            BlockPos p = call.getArgument(0);
+            if (p == null) return Blocks.AIR.defaultBlockState();
+            int ground = p.getX() == 1 ? GROUND - 2 : GROUND;
+            return p.getY() < ground ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState();
+        }).when(level).getBlockState(any());
+        var plan = withClaims(raid, level, () -> CampPerimeter.plan(level, raid, CampPerimeter.FIRST_STAGE));
+        BlockPos dip = CampPerimeter.mainGateCenter(raid).offset(1, 0, 0);
+        for (int y = GROUND - 2; y < GROUND; y++) {
+            assertEquals(CampPerimeter.WALL, plan.get(dip.atY(y).asLong()),
+                    "gateway dip must be paved up to the threshold at y=" + y);
+        }
+        // The threshold itself stays walkable, not filled in.
+        assertNull(plan.get(dip.atY(GROUND).asLong()));
+    }
+
+    @Test
+    void replacementSiegeCrewsMusterOutsideTheGateInsteadOfInsideTheWall() {
+        var raid = camp();
+        var vehicle = mock(net.minecraft.world.entity.Entity.class);
+        // Without a perimeter the old camp-centre muster point is preserved.
+        assertEquals(net.minecraft.world.phys.Vec3.atBottomCenterOf(raid.campPos),
+                com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.replacementMuster(raid, vehicle));
+        raid.warGate.putLong("PerimeterGate", CampPerimeter.mainGateCenter(raid).asLong());
+        raid.warGate.putInt("PerimeterGateFacing", Direction.SOUTH.get2DDataValue());
+        var muster = com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.replacementMuster(raid, vehicle);
+        assertEquals(CampPerimeter.gateExit(raid), muster);
+        assertFalse(CampPerimeter.inside(raid, muster), "crews must not spawn inside the wall");
+    }
 }

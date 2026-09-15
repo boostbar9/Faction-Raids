@@ -1,3 +1,11 @@
+# 4.28.18 beta
+
+- Enemy troops leaving camp now walk out through the main gate instead of piling up against the inside of the wall. A unit still inside the perimeter heads for the gateway first, steps clear of it, and only then makes for its objective.
+- Formation orders hold off while a squad is still inside the wall, so a formation waypoint can no longer drag troops back into the stonework they were trying to get around.
+- Siege crews are handled the same way. An operator riding or walking with an engine is routed out through the gate before it resumes following its machine.
+- Replacement crews for a damaged engine now muster just outside the main gate rather than in the middle of camp, so they are not spawned behind their own wall.
+- The gateway threshold is paved level with the gate and carried a block past the wall on both sides, so nobody drops into a dip or catches a step on the way through.
+
 # 4.28.17 beta
 
 - Enemy camp builders now raise a defensive wall around the edge of the camp's own territory instead of only putting up a handful of outbuildings. The wall goes up one side at a time so a crew can finish a section before starting the next.

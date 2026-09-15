@@ -24,7 +24,7 @@ import java.util.Map;
  * area. A wall with a gap at a cliff is far better than a camp that can never
  * finish a single wall segment.
  */
-final class CampPerimeter {
+public final class CampPerimeter {
 
     /** Distance from the camp center to the wall line. */
     static final int RADIUS = 12;
@@ -75,7 +75,9 @@ final class CampPerimeter {
      * graded road into camp) always sits on this side, so the opening lines up
      * with the road instead of walling it off.
      */
-    static Direction mainGateSide(RaidSavedData.RaidState raid) {
+    public static Direction mainGateSide(RaidSavedData.RaidState raid) {
+        if (raid.warGate.contains("PerimeterGateFacing", net.minecraft.nbt.Tag.TAG_INT))
+            return Direction.from2DDataValue(raid.warGate.getInt("PerimeterGateFacing"));
         if (raid.warGate.contains("Center", net.minecraft.nbt.Tag.TAG_LONG)) return WarGate.facing(raid);
         double x = -Math.cos(raid.approachAngle), z = -Math.sin(raid.approachAngle);
         return Math.abs(x) >= Math.abs(z)
@@ -91,9 +93,13 @@ final class CampPerimeter {
     }
 
     /** World position of the middle of the main gate opening, or null when unknown. */
-    static BlockPos mainGateCenter(RaidSavedData.RaidState raid) {
+    public static BlockPos mainGateCenter(RaidSavedData.RaidState raid) {
         if (raid.campPos == null) return null;
-        return raid.campPos.relative(mainGateSide(raid), RADIUS);
+        // Prefer the gate recorded when the wall was commissioned: the War
+        // Gate can be rebuilt elsewhere later, but the opening does not move.
+        return raid.warGate.contains("PerimeterGate", net.minecraft.nbt.Tag.TAG_LONG)
+                ? BlockPos.of(raid.warGate.getLong("PerimeterGate"))
+                : raid.campPos.relative(mainGateSide(raid), RADIUS);
     }
 
     private static Map<Long, String> wall(ServerLevel level, RaidSavedData.RaidState raid,
@@ -101,6 +107,10 @@ final class CampPerimeter {
         Map<Long, String> plan = new LinkedHashMap<>();
         Direction along = facing.getClockWise();
         boolean gated = facing == gateSide;
+        // The whole gateway threshold is levelled to the gate centre's ground
+        // so troops, mounts and siege crews walk out over a flat, continuous
+        // surface instead of stepping into a dip beside the road.
+        Integer threshold = gated ? groundFor(level, raid, raid.campPos.relative(facing, RADIUS)) : null;
         for (int lateral = -RADIUS; lateral <= RADIUS; lateral++) {
             BlockPos column = raid.campPos.relative(facing, RADIUS).relative(along, lateral);
             Integer ground = groundFor(level, raid, column);
@@ -110,7 +120,8 @@ final class CampPerimeter {
             if (opening) {
                 // The gate stays open: only the lintel spans the gap, high
                 // enough for mounted units and siege crews to ride through.
-                add(level, plan, column, ground, GATE_CLEARANCE, FRAME);
+                if (threshold != null) pave(level, plan, raid, column, ground, threshold, along);
+                add(level, plan, column, threshold == null ? ground : threshold, GATE_CLEARANCE, FRAME);
                 continue;
             }
             int height = gatePost ? GATE_CLEARANCE : WALL_HEIGHT;
@@ -121,6 +132,71 @@ final class CampPerimeter {
             add(level, plan, column, ground, height, gatePost ? FRAME : CROWN);
         }
         return plan;
+    }
+
+    /**
+     * Fill a gateway column up to the threshold height, and carry that floor
+     * one block either side of the wall line so the approach and the exit meet
+     * the threshold without a step. Columns that already sit at or above the
+     * threshold are left alone — native builders only place, never dig.
+     */
+    private static void pave(ServerLevel level, Map<Long, String> plan, RaidSavedData.RaidState raid,
+                             BlockPos column, int ground, int threshold, Direction along) {
+        Direction outward = along.getCounterClockWise();
+        for (int depth = -1; depth <= 1; depth++) {
+            BlockPos at = column.relative(outward, depth);
+            Integer floor = depth == 0 ? ground : groundFor(level, raid, at);
+            if (floor == null) continue;
+            for (int y = floor; y < threshold; y++) {
+                BlockPos pos = at.atY(y);
+                if (buildable(level, pos)) plan.put(pos.asLong(), WALL);
+            }
+        }
+    }
+
+    /** True when {@code pos} is inside the perimeter wall ring of this camp. */
+    static boolean inside(RaidSavedData.RaidState raid, net.minecraft.world.phys.Vec3 pos) {
+        if (raid.campPos == null) return false;
+        double dx = Math.abs(pos.x - (raid.campPos.getX() + 0.5));
+        double dz = Math.abs(pos.z - (raid.campPos.getZ() + 0.5));
+        return Math.max(dx, dz) <= RADIUS - 0.5 && Math.abs(pos.y - raid.campPos.getY()) <= TOWER_HEIGHT;
+    }
+
+    /** Aim point just outside the main gate: the first safe step out of camp. */
+    public static net.minecraft.world.phys.Vec3 gateExit(RaidSavedData.RaidState raid) {
+        BlockPos gate = mainGateCenter(raid);
+        return gate == null ? null
+                : net.minecraft.world.phys.Vec3.atBottomCenterOf(gate.relative(mainGateSide(raid), 3));
+    }
+
+    /**
+     * Waypoint a unit standing inside the camp should head for next, or null
+     * when it can go straight to its objective. Units inside the ring aim for
+     * the gateway itself; units in the gateway aim for the step outside it, so
+     * nobody tries to path through the wall and wedge against it.
+     *
+     * <p>Only applies when the objective is actually outside the ring: units
+     * working, mustering or guarding inside the camp keep their own orders.
+     */
+    public static net.minecraft.world.phys.Vec3 routeOut(RaidSavedData.RaidState raid,
+                                                         net.minecraft.world.phys.Vec3 from,
+                                                         net.minecraft.world.phys.Vec3 objective) {
+        if (!gateBuilt(raid) || inside(raid, objective)) return null;
+        BlockPos gate = mainGateCenter(raid);
+        net.minecraft.world.phys.Vec3 exit = gateExit(raid);
+        if (gate == null || exit == null) return null;
+        net.minecraft.world.phys.Vec3 mouth = net.minecraft.world.phys.Vec3.atBottomCenterOf(gate);
+        // A unit standing in the gateway itself is not strictly inside the
+        // ring, but it still has to be walked clear of the opening before it
+        // picks its own route, or it turns straight back into a gate post.
+        if (from.distanceToSqr(mouth) <= 4.0) return exit;
+        return inside(raid, from) ? mouth : null;
+    }
+
+    /** True once a perimeter gate has actually been commissioned for this camp. */
+    public static boolean gateBuilt(RaidSavedData.RaidState raid) {
+        return raid.campPos != null
+                && raid.warGate.contains("PerimeterGate", net.minecraft.nbt.Tag.TAG_LONG);
     }
 
     private static Map<Long, String> tower(ServerLevel level, RaidSavedData.RaidState raid, Direction facing) {

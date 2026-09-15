@@ -3903,8 +3903,16 @@ public final class RaidEvents {
                 mob.setTarget(null);
             acquired = mob.getTarget() != null;
 
+            // A unit still inside the camp wall must leave through the main
+            // gate. Pathing it straight at a distant objective walks it into
+            // the palisade and wedges it there, so aim at the gateway first.
+            Vec3 gateRoute = com.devfarinsky.siegeoverhaul.camp.CampPerimeter.routeOut(state, mob.position(), objective);
+
             // Native formations and direct navigation must never issue competing orders.
-            boolean marching = com.devfarinsky.siegeoverhaul.formations.FormationDirector.shouldMarch(
+            // Formations pick their own waypoints, which would steer a squad at
+            // the wall instead of the gateway, so they wait until it is outside.
+            boolean marching = gateRoute == null
+                    && com.devfarinsky.siegeoverhaul.formations.FormationDirector.shouldMarch(
                     level, state.teamKey, mob, BlockPos.containing(objective));
             if (!marching) com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
             if (!mob.isPassenger() && !mob.getPersistentData().getString(
@@ -3916,7 +3924,17 @@ public final class RaidEvents {
                         return engine!=null && engine.isAlive() && engine.getPersistentData().hasUUID("SiegeOperatorUuid")
                                 && engine.getPersistentData().getUUID("SiegeOperatorUuid").equals(mob.getUUID())
                                 && !engine.getPersistentData().getBoolean(com.devfarinsky.siegeoverhaul.siege.SiegeFleet.CAPTURED);
-                    })) { STUCK_TRACKER.remove(id);continue; }
+                    })) {
+                STUCK_TRACKER.remove(id);
+                // A replacement crew provisioned at the camp centre still has
+                // to walk out to its engine in the field. Send it through the
+                // gateway rather than letting it grind against the wall.
+                if (gateRoute != null && (mob.getNavigation().isDone()
+                        || com.devfarinsky.siegeoverhaul.raid.MarchProgress.shouldRepath(mob, gateRoute, gameTime))) {
+                    mob.getNavigation().moveTo(gateRoute.x, gateRoute.y, gateRoute.z, baseSpeed);
+                }
+                continue;
+            }
             com.devfarinsky.siegeoverhaul.raid.RaidCavalry.advance(mob,objective,baseSpeed);
             if (mob.isPassenger() || (marching && mob.getPersistentData().getBoolean(ModConstants.Tags.FORMATION_MARCH))) {
                 STUCK_TRACKER.remove(id);
@@ -3938,6 +3956,11 @@ public final class RaidEvents {
             // route or two seconds without movement may request a fresh path.
             if (edgeHold) {
                 // No new route this tick; the hole-avoid goal owns this raider.
+            } else if (gateRoute != null) {
+                if (mob.getNavigation().isDone()
+                        || com.devfarinsky.siegeoverhaul.raid.MarchProgress.shouldRepath(mob, gateRoute, gameTime)) {
+                    mob.getNavigation().moveTo(gateRoute.x, gateRoute.y, gateRoute.z, speed);
+                }
             } else if (!acquired && forceRepath && com.devfarinsky.siegeoverhaul.raid.MarchProgress.shouldRepath(mob,objective,gameTime)) {
                 Vec3 target = fallbackRouteTarget(level, mob, objective, stuck, gameTime, telemetry);
                 if (target != null) {
