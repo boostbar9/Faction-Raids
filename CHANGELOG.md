@@ -1,3 +1,11 @@
+# 4.28.17 beta
+
+- Enemy camp builders now raise a defensive wall around the edge of the camp's own territory instead of only putting up a handful of outbuildings. The wall goes up one side at a time so a crew can finish a section before starting the next.
+- The wall keeps a wide main gate on the side the War Gate road comes in on. The gateway stays permanently open under a raised beam, so the road, reinforcements and the camp's own builders are never walled in.
+- A guard tower goes up at each corner of the camp's territory, with battlements at the top for archers.
+- Two extra camp sentries now take station either side of the main gate once it exists, and fall back to the wall line if their post is blocked.
+- Wall and tower sections skip any column sitting over a ravine, water or foreign claim rather than abandoning the whole section, and a section that cannot be started at all is retried a few times before the camp moves on.
+
 # 4.28.16 beta
 
 - Enemy troops no longer march off cliffs and ledges into a lethal fall. A raider that spots a killing drop in front of it stops, kills its forward momentum and steps back, and the assault orders leave it alone until it is back on safe ground.

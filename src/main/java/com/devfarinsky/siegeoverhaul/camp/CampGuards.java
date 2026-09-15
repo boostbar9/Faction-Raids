@@ -13,7 +13,8 @@ import java.util.*;
 /** A finite initial garrison, independent of wave completion and never replenished. */
 public final class CampGuards {
     public static final String TEAM_TAG = "SiegeCampGuardTeam";
-    private static final String[] TYPES = {"recruit_shieldman", "recruit_shieldman", "bowman", "recruit"};
+    private static final String[] TYPES = {"recruit_shieldman", "recruit_shieldman", "bowman", "recruit",
+            "recruit_shieldman", "bowman"};
     private CampGuards() {}
     public static void start(ServerLevel level, RaidSavedData data, RaidSavedData.RaidState raid) {
         if (raid.campGuardsStarted || raid.campPos == null || !level.hasChunkAt(raid.campPos)) return;
@@ -83,6 +84,16 @@ public final class CampGuards {
                         BlockPos post=candidates(raid,slot).stream().filter(p -> safePost(level,raid,p)).findFirst().orElse(guard.blockPosition());
                         nbt.putInt("SiegeGuardSlot",slot); nbt.putLong("SiegeGuardPost",post.asLong());
                     }
+                    if(nbt.getInt("SiegeGuardSlot")>=4 && !nbt.getBoolean("SiegeMainGatePost")
+                            && raid.warGate.contains("PerimeterGate",net.minecraft.nbt.Tag.TAG_LONG)) {
+                        Direction facing=Direction.from2DDataValue(raid.warGate.getInt("PerimeterGateFacing"));
+                        BlockPos gate=BlockPos.of(raid.warGate.getLong("PerimeterGate"))
+                                .relative(facing.getOpposite(),2)
+                                .relative(facing.getClockWise(),nbt.getInt("SiegeGuardSlot")%2==0?3:-3);
+                        BlockPos post=null;
+                        for(int dy:new int[]{0,1,-1,2,-2}) if(safePost(level,raid,gate.above(dy))) { post=gate.above(dy); break; }
+                        if(post!=null) { nbt.putLong("SiegeGuardPost",post.asLong());nbt.putBoolean("SiegeMainGatePost",true); }
+                    }
                     if(nbt.getInt("SiegeGuardSlot")<2 && !nbt.getBoolean("SiegeWarGatePost") && WarGate.ready(level,raid)) {
                         BlockPos gate=WarGate.center(raid).relative(WarGate.facing(raid),2)
                                 .relative(WarGate.facing(raid).getClockWise(),nbt.getInt("SiegeGuardSlot")==0?2:-2).above();
@@ -129,12 +140,18 @@ public final class CampGuards {
             nbt.remove("SiegeMusterAggro");
         } catch(ReflectiveOperationException ex) { FactionLogger.LOG.warn("Cannot release mustered unit",ex); }
     }
-    /** Two gate sentries and two rear flank posts; the central approach remains open. */
+    /**
+     * Two War Gate sentries, two rear flank posts and two sentries who take up
+     * station either side of the camp's main gate once the perimeter wall has
+     * one. The central approach itself always stays open.
+     */
     static List<BlockPos> candidates(RaidSavedData.RaidState raid, int slot) {
         double x=-Math.cos(raid.approachAngle), z=-Math.sin(raid.approachAngle);
         Direction front=Math.abs(x)>=Math.abs(z)?(x>=0?Direction.EAST:Direction.WEST):(z>=0?Direction.SOUTH:Direction.NORTH);
         Direction side=front.getClockWise();
-        BlockPos ideal=raid.campPos.relative(front,slot<2?7:-5).relative(side,slot%2==0?4:-4);
+        BlockPos ideal=slot>=4
+                ? raid.campPos.relative(front,CampPerimeter.RADIUS-1).relative(side,slot%2==0?3:-3)
+                : raid.campPos.relative(front,slot<2?7:-5).relative(side,slot%2==0?4:-4);
         List<BlockPos> positions=new ArrayList<>();
         // Prefer the assigned horizontal post, but follow small rises and dips.
         addElevations(positions,ideal);

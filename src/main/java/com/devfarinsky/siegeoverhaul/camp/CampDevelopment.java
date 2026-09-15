@@ -13,7 +13,7 @@ import java.util.*;
 public final class CampDevelopment {
     private CampDevelopment() {}
     public static void tick(ServerLevel level,RaidSavedData.RaidState raid) {
-        if(!WarGate.ready(level,raid) || raid.campPos==null || raid.campClaimId==null || raid.campUpgradeStage>=3 || raid.coreCaptured
+        if(!WarGate.ready(level,raid) || raid.campPos==null || raid.campClaimId==null || raid.campUpgradeStage>CampPerimeter.LAST_STAGE || raid.coreCaptured
                 || !RaidConfig.ENABLE_CAMP_CONSTRUCTION.get() || !RaidConfig.CLEANUP_WAR_CAMPS.get()
                 || !raid.pendingCampBlocks.isEmpty() || !raid.pendingFortifications.isEmpty()
                 || NativeCampConstruction.active(raid) || !CampClaims.owns(level,raid)) return;
@@ -22,6 +22,7 @@ public final class CampDevelopment {
         RaidSavedData.get(level.getServer()).setDirty();
         if(raid.campUpgradeTicks<2400)return;
         raid.campUpgradeTicks=0;
+        if(CampPerimeter.perimeterStage(raid.campUpgradeStage)) { tryPerimeter(level,raid); return; }
         double x=-Math.cos(raid.approachAngle),z=-Math.sin(raid.approachAngle);
         Direction front=Math.abs(x)>=Math.abs(z)?(x>=0?Direction.EAST:Direction.WEST):(z>=0?Direction.SOUTH:Direction.NORTH);
         Direction extension=raid.campUpgradeStage==0?front.getClockWise():raid.campUpgradeStage==1?front.getCounterClockWise():front.getOpposite();
@@ -33,8 +34,36 @@ public final class CampDevelopment {
             sites.add(camp.relative(side,distance));
         return sites;
     }
-    private static boolean trySite(ServerLevel level,RaidSavedData.RaidState raid,BlockPos center) {
-        var anchor=RaidSavedData.get(level.getServer()).anchors.get(raid.teamKey);
+    /**
+     * One wall side or corner tower per pass. Unbuildable columns are simply
+     * left out, and a stage that cannot place anything is retried a bounded
+     * number of times before the camp moves on to the next section.
+     */
+    static void tryPerimeter(ServerLevel level,RaidSavedData.RaidState raid) {
+        var plan=CampPerimeter.plan(level,raid,raid.campUpgradeStage);
+        if(!plan.isEmpty()) {
+            raid.pendingCampBlocks.putAll(plan);
+            if(NativeCampConstruction.start(level,raid)) {
+                if(raid.campUpgradeStage==CampPerimeter.FIRST_STAGE) {
+                    BlockPos gate=CampPerimeter.mainGateCenter(raid);
+                    if(gate!=null) {
+                        raid.warGate.putLong("PerimeterGate",gate.asLong());
+                        raid.warGate.putInt("PerimeterGateFacing",CampPerimeter.mainGateSide(raid).get2DDataValue());
+                    }
+                }
+                raid.campUpgradeStage++;
+                raid.warGate.remove("PerimeterRetries");
+                return;
+            }
+            // Never fall back to remote placement or replace an obstructing player block.
+            plan.keySet().forEach(raid.pendingCampBlocks::remove);
+        }
+        int retries=raid.warGate.getInt("PerimeterRetries")+1;
+        if(retries>=3) { raid.campUpgradeStage++; raid.warGate.remove("PerimeterRetries"); }
+        else raid.warGate.putInt("PerimeterRetries",retries);
+    }
+
+    private static boolean trySite(ServerLevel level,RaidSavedData.RaidState raid,BlockPos center) {        var anchor=RaidSavedData.get(level.getServer()).anchors.get(raid.teamKey);
         if(anchor==null)return false;
         Set<net.minecraft.world.level.ChunkPos> checked=new HashSet<>();
         Map<Long,String> plan=new LinkedHashMap<>();
