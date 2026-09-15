@@ -46,9 +46,9 @@ public final class CoreLoot {
         long now=player.serverLevel().getGameTime();var data=player.getPersistentData();long next=data.getLong("SiegeLootNext");
         if(next>now && next<=now+OPEN_TICKS)return null;
         var inventory=player.getInventory();
-        // Bank-first affordability check via PaymentSource.
+        // Treasury-only affordability check via PaymentSource.
         long combined = PaymentSource.available(player, price);
-        if(combined<price){player.sendSystemMessage(Component.literal("You need "+price+" emeralds (bank + inventory)."));return null;}
+        if(!player.isCreative() && combined<price){player.sendSystemMessage(Component.literal("You need "+price+" emeralds in the faction Treasury."));return null;}
         // Require space for every possible outcome before rolling; full inventories
         // cannot be used to filter unwanted rewards or lose a paid reward.
         for(int roll:new int[]{0,50,80,95})if(!fits(inventory.items,reward(box,roll))) {
@@ -57,7 +57,7 @@ public final class CoreLoot {
         int roll=player.getRandom().nextInt(100);
         ItemStack prize=reward(box,roll);
         if(!PaymentSource.consume(player, price)) return null;
-        // Capacity was checked on this same server thread; payment can only free space.
+        // Capacity was checked on this same server thread; payment does not modify inventory.
         inventory.add(prize.copy());inventory.setChanged();data.putLong("SiegeLootNext",now+OPEN_TICKS);
         // Keep chat free of reward details while the client plays its sealed reveal.
         // Delivery remains immediate, so closing the menu cannot lose a paid prize.

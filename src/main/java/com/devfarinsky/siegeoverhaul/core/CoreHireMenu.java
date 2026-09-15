@@ -177,7 +177,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
 
         player.sendSystemMessage(Component.literal("Command Center quick start:")
                 .withStyle(ChatFormatting.GOLD));
-        player.sendSystemMessage(Component.literal("Army hires defenders, Bank shares emeralds, Territory unlocks faction upgrades.")
+        player.sendSystemMessage(Component.literal("Army hires defenders, Treasury funds all purchases, Territory unlocks faction upgrades.")
                 .withStyle(ChatFormatting.GRAY));
         player.sendSystemMessage(Component.literal("Need help later? Run ")
                 .withStyle(ChatFormatting.GRAY)
