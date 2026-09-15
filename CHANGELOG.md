@@ -1,3 +1,11 @@
+# 4.28.21 beta
+
+- Raiders can actually climb their siege ladders now. A climber holds itself lined up with the rung column instead of drifting along the wall until it slips off the side, and its walk control no longer fights the climb halfway up.
+- A raider that loses its grip grabs the ladder again rather than dropping all the way back to the ground.
+- Reaching the top works. Climbers get the extra lift they need to step over the wall lip onto the walkway instead of bumping against it at the last rung.
+- No more standing in front of a ladder doing nothing. A raider that arrives off to one side squares up with the rungs and walks straight into them, and hops over the small step that used to block it.
+- If a ladder really cannot be climbed, the raider gives up on it after a few seconds and goes back to the assault instead of grinding against the wall for the rest of the siege.
+
 # 4.28.20 beta
 
 - Hero prices are down to a straightforward ladder. A Common hero costs 50 emeralds and each rarity above it adds another 50, up to 250 for a Legendary, instead of being scaled off recruit prices. Both the starting price and the step per rarity are configurable.
