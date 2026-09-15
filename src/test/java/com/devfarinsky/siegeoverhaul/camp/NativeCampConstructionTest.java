@@ -175,10 +175,20 @@ class NativeCampConstructionTest extends MinecraftTestSupport {
             }
             assertFalse(raid.pendingCampBlocks.isEmpty());
             org.mockito.Mockito.when(level.isDay()).thenReturn(true);
+            // Keeping a stalled job is opt-in: nothing is torn down while the
+            // camp is merely slow, and the finite supplies stay where they are.
+            com.devfarinsky.siegeoverhaul.RaidConfig.CAMP_ABANDON_STALLED_BUILDS.set(false);
             raid.campBuildTicks = com.devfarinsky.siegeoverhaul.RaidConfig.CAMP_MAX_BUILD_SECONDS.get()*20-20;
             NativeCampConstruction.tick(level, raid);
             assertTrue(NativeCampConstruction.active(raid));
             assertFalse(raid.pendingCampBlocks.isEmpty());
+            // With the default setting the camp gives up on a job that has made
+            // no progress at all, so it can start its next project instead.
+            com.devfarinsky.siegeoverhaul.RaidConfig.CAMP_ABANDON_STALLED_BUILDS.set(true);
+            NativeCampConstruction.tick(level, raid);
+            assertFalse(NativeCampConstruction.active(raid));
+            assertTrue(raid.pendingCampBlocks.isEmpty());
+            assertEquals(0, raid.campBuildTicks);
             org.mockito.Mockito.verify(level, org.mockito.Mockito.never()).setBlock(
                     org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
         }

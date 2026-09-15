@@ -51,6 +51,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
      * Zero means the next server tick will pay out. Wide-packed at 30-31.
      */
     public int ticksUntilInterest() { return wide(30); }
+
     public CoreHireMenu(int id, Inventory inventory) { this(id, inventory, null); }
     public CoreHireMenu(int id, Inventory inventory, BlockPos pos) {
         super(CoreMenus.HIRING.get(), id);

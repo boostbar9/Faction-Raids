@@ -18,8 +18,13 @@ public final class RaiderLadderGoal extends Goal {
     private final Mob mob;
     private Route route;
     private long deadline, retryAfter;
-    private int ticks, crestTicks;
+    private int ticks, crestTicks, grip, stalledTicks;
+    private double highest = Double.NEGATIVE_INFINITY;
     private BlockPos landing;
+    /** Squared XZ range at which a raider stops pathing and walks into the rungs. */
+    static final double PRESS_RANGE_SQ = 2.25;
+    /** Ticks without gaining height before a raider gives up on a ladder. */
+    static final int STALL_TICKS = 160;
     public record Route(BlockPos base, Direction intoWall, int height) {
         public BlockPos exit() { return base.relative(intoWall).above(height); }
     }
@@ -94,7 +99,8 @@ public final class RaiderLadderGoal extends Goal {
             if (approach == null || !approach.canReach()) continue;
             if (goal == null) { goal = new RaiderLadderGoal(mob); mob.goalSelector.addGoal(0, goal); }
             users.merge(best, 1, Integer::sum);
-            goal.route = best; goal.deadline = level.getGameTime() + 400; goal.ticks = 0; goal.crestTicks=0; goal.landing=null;
+            goal.route = best; goal.deadline = level.getGameTime() + 400; goal.ticks = 0; goal.crestTicks=0; goal.landing=null; goal.grip=0;
+            goal.stalledTicks=0; goal.highest=Double.NEGATIVE_INFINITY;
             RecruitsFormationBridge.release(mob);
         }
     }
@@ -168,9 +174,27 @@ public final class RaiderLadderGoal extends Goal {
     @Override public void stop() {
         route = null;
         landing = null;
+        grip = 0;
+        stalledTicks = 0;
+        highest = Double.NEGATIVE_INFINITY;
         retryAfter = mob.level().getGameTime() + 100;
         mob.getNavigation().stop();
     }
+
+    /**
+     * Square up with the wall and take the mob's own move control out of the
+     * climb. Left running, it keeps feeding sideways walking input while the
+     * body yaw swings, which is exactly what slides a climber off the rungs.
+     */
+    private void holdStill() {
+        mob.getNavigation().stop();
+        mob.getMoveControl().setWantedPosition(mob.getX(), mob.getY(), mob.getZ(), 1.0);
+        float yaw = route.intoWall().toYRot();
+        mob.setYRot(yaw);
+        mob.yBodyRot = yaw;
+        mob.yHeadRot = yaw;
+    }
+
     @Override public void tick() {
         if (route == null) return;
         ticks++;
@@ -189,28 +213,66 @@ public final class RaiderLadderGoal extends Goal {
             if(landing==null) { stop();return; }
             return;
         }
-        // Distance in XZ to the ladder column, ignoring vertical position.
-        double xzDistSq = mob.position().multiply(1, 0, 1).distanceToSqr(base.multiply(1, 0, 1));
-        if (mob.onClimbable() && xzDistSq < 1.5) {
+        // Give up on a ladder nobody is making headway on, so the raider can be
+        // reassigned instead of grinding against the same wall for the whole
+        // siege. Only counted once it has actually reached the ladder, so a long
+        // walk in never looks like a stall.
+        if (!mob.onClimbable() && !LadderClimb.onColumn(mob.position(), base, PRESS_RANGE_SQ)) {
+            stalledTicks = 0;
+        } else if (mob.getY() > highest + .1) {
+            highest = mob.getY();
+            stalledTicks = 0;
+        } else if (++stalledTicks > STALL_TICKS) {
+            stop();
+            return;
+        }
+
+        boolean gripping = mob.onClimbable() && LadderClimb.onColumn(mob.position(), base, LadderClimb.GRIP_RANGE_SQ);
+        if (gripping) {
+            grip = LadderClimb.GRIP_TICKS;
             crestTicks = 12;
-            mob.getNavigation().stop();
-            // Upward movement only while touching climbable blocks. Collision still governs movement.
-            Vec3 into = Vec3.atLowerCornerOf(route.intoWall().getNormal()).scale(.12);
-            mob.setDeltaMovement(into.x, .2, into.z);
-            mob.getMoveControl().setWantedPosition(exit.x, exit.y, exit.z, 1.0);
-        } else if (crestTicks>0 && mob.getY()>=exit.y-.3 && mob.getY()<exit.y+.35) {
+            holdStill();
+            // One velocity, set outright: press into the rungs, slide back onto
+            // the column, and rise. Extra lift near the top carries the climber
+            // over the wall lip, which the rungs alone cannot reach.
+            mob.setDeltaMovement(LadderClimb.cresting(mob.getY(), exit.y)
+                    ? LadderClimb.crest(mob.position(), base, route.intoWall())
+                    : LadderClimb.climb(mob.position(), base, route.intoWall()));
+            return;
+        }
+        if (grip > 0 && !LadderClimb.cresting(mob.getY(), exit.y) && mob.getY() > base.y + .5
+                && LadderClimb.onColumn(mob.position(), base, LadderClimb.REGRIP_RANGE_SQ)) {
+            // Slipped off partway up: recover the column instead of dropping.
+            grip--;
+            holdStill();
+            mob.setDeltaMovement(LadderClimb.regrip(mob.position(), base, route.intoWall(), mob.getDeltaMovement()));
+            return;
+        }
+        if (crestTicks > 0 && mob.getY() >= exit.y - .3 && mob.getY() < exit.y + .35) {
             crestTicks--;
-            Vec3 toward=exit.subtract(mob.position()).multiply(1,0,1).normalize().scale(.16);
-            mob.setDeltaMovement(toward.x,.12,toward.z);
-            mob.getMoveControl().setWantedPosition(exit.x,exit.y+.1,exit.z,1.0);
-        } else if (mob.getY() >= exit.y - .1) {
+            holdStill();
+            mob.setDeltaMovement(LadderClimb.crest(mob.position(), base, route.intoWall()));
+            return;
+        }
+        if (mob.getY() >= exit.y - .1) {
             mob.getMoveControl().setWantedPosition(exit.x, exit.y, exit.z, 1.0);
-        } else if (xzDistSq < 2.25) {
-            // Close to the column but not yet touching. Press straight into
-            // the ladder face so collision pushes the mob onto the rungs.
+            return;
+        }
+        if (LadderClimb.onColumn(mob.position(), base, PRESS_RANGE_SQ)) {
+            // Close enough to mount. Walk straight at the ladder face, lined up
+            // with the column, and hop if the wall is underfoot; a mob that only
+            // brushes the corner of the block never gets a grip and just stands there.
             mob.getNavigation().stop();
-            mob.getMoveControl().setWantedPosition(base.x, base.y, base.z, 1.0);
-        } else if (ticks % 10 == 1) {
+            Vec3 press = LadderClimb.approach(base, route.intoWall(), -.3);
+            mob.getMoveControl().setWantedPosition(press.x, base.y, press.z, 1.0);
+            Vec3 along = LadderClimb.along(route.intoWall());
+            double correction = net.minecraft.util.Mth.clamp(
+                    -LadderClimb.drift(mob.position(), base, route.intoWall()), -.08, .08);
+            mob.setDeltaMovement(mob.getDeltaMovement().add(along.x * correction, 0, along.z * correction));
+            if (mob.horizontalCollision && mob.onGround()) mob.getJumpControl().jump();
+            return;
+        }
+        if (ticks % 10 == 1) {
             // Aim for a solid stand-on block adjacent to the base, not the
             // air block itself. Ground navigators can actually reach it.
             BlockPos stand = standingPos(mob.level() instanceof ServerLevel sl ? sl : null, route);

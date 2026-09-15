@@ -32,10 +32,14 @@ final class CampUpgradeLayout {
         for(int x=-1;x<=1;x++) for(int z=-3;z<=3;z++)
             put(plan,center,entrance,x,5,z,roof);
         // Supplies stay against the rear wall, leaving the center aisle unobstructed.
+        // A named centrepiece keystone at x=0,z=-2 gives each building its identity
+        // and a single block whose loss (broken or burned) ends its camp effect.
         if(stage==0) {
+            put(plan,center,entrance,0,1,-2,"minecraft:hay_block");
             for(int x:new int[]{-2,2}) for(int z=-2;z<=0;z++)
                 put(plan,center,entrance,x,1,z,"minecraft:hay_block");
         } else if(stage==1) {
+            put(plan,center,entrance,0,1,-2,"minecraft:anvil");
             put(plan,center,entrance,-2,1,-2,"minecraft:crafting_table");
             put(plan,center,entrance,2,1,-2,"minecraft:smithing_table");
             put(plan,center,entrance,2,1,-1,"minecraft:hay_block");

@@ -477,6 +477,12 @@ public final class RaidSavedData extends SavedData {
         public boolean campCrewStarted;
         public boolean campGuardsStarted;
         public final Set<UUID> campGuards = new HashSet<>();
+        /**
+         * Last known chunk of each raider, used to keep the marching column
+         * loaded. Rebuilt every pass from live raiders; persisted so a restart
+         * can pull an army that was mid-march back into the simulation.
+         */
+        public final Map<UUID, Long> marchChunks = new LinkedHashMap<>();
         public int campCompletedBlocks;
         public transient String constructionPauseReason = "";
         public boolean campBuildAttempted;
@@ -638,6 +644,14 @@ public final class RaidSavedData extends SavedData {
             ListTag guards = new ListTag();
             campGuards.forEach(id -> { CompoundTag entry = new CompoundTag(); entry.putUUID("Id",id); guards.add(entry); });
             tag.put("CampGuards", guards);
+            ListTag march = new ListTag();
+            marchChunks.forEach((id, chunk) -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putUUID("Id", id);
+                entry.putLong("Chunk", chunk);
+                march.add(entry);
+            });
+            tag.put("MarchChunks", march);
             tag.putInt("Wave", wave);
             tag.putInt("NextWave", ticksToNextWave);
             tag.putInt("PreparationTicks", preparationTicks);
@@ -792,6 +806,11 @@ public final class RaidSavedData extends SavedData {
             state.campCompletedBlocks = tag.getInt("CampCompletedBlocks");
             ListTag guards = tag.getList("CampGuards", Tag.TAG_COMPOUND);
             for (int i=0;i<guards.size();i++) if (guards.getCompound(i).hasUUID("Id")) state.campGuards.add(guards.getCompound(i).getUUID("Id"));
+            ListTag march = tag.getList("MarchChunks", Tag.TAG_COMPOUND);
+            for (int i=0;i<march.size();i++) {
+                CompoundTag entry = march.getCompound(i);
+                if (entry.hasUUID("Id")) state.marchChunks.put(entry.getUUID("Id"), entry.getLong("Chunk"));
+            }
             state.preparationTotalTicks = Math.max(0, tag.getInt("PreparationTotal"));
             state.preparationTicks = Math.max(0, Math.min(state.preparationTotalTicks, tag.getInt("PreparationTicks")));
             CompoundTag forts = tag.getCompound("FortificationJobs");

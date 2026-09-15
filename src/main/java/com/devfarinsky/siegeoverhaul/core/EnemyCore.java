@@ -5,40 +5,88 @@ import com.devfarinsky.siegeoverhaul.camp.*;
 import com.devfarinsky.siegeoverhaul.compat.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraftforge.registries.ForgeRegistries;
 import java.util.*;
 
-/** Capturable command core on the existing protected War Gate pad. */
+/** Capturable command core, raised on a small keep at the centre of the enemy town. */
 public final class EnemyCore {
     private EnemyCore() {}
     public static BlockPos position(RaidSavedData.RaidState raid) {
         return raid.campaign.contains("EnemyCore", Tag.TAG_LONG) ? BlockPos.of(raid.campaign.getLong("EnemyCore")) : null;
     }
+    /**
+     * Keep decoration around the core, relative to the plinth-top centre {@code base}.
+     * A five-wide raised stone-brick plinth with four corner pillars capped by
+     * beacons marks the town centre and stays visible over the camp. The core
+     * sits one block above the plinth centre; the pillars are diagonal and the
+     * plinth top is open, so nothing blocks the horizontal line of sight the
+     * capture ring requires.
+     */
+    public static Map<BlockPos, String> keepBlueprint(BlockPos base) {
+        Map<BlockPos, String> plan = new LinkedHashMap<>();
+        for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++)
+            plan.put(base.offset(dx, 0, dz), "minecraft:stone_bricks");
+        for (int cx : new int[]{-2, 2}) for (int cz : new int[]{-2, 2}) {
+            for (int y = 1; y <= 5; y++) plan.put(base.offset(cx, y, cz), "minecraft:stone_bricks");
+            plan.put(base.offset(cx, 6, cz), "minecraft:sea_lantern");
+        }
+        return plan;
+    }
+    /** The core rests one block above the plinth centre so raiders can stand beside it. */
+    public static BlockPos corePos(BlockPos base) { return base.above(); }
+
     public static boolean ensure(ServerLevel level, RaidSavedData.RaidState raid) {
         BlockPos existing = position(raid);
         if (existing != null) return level.hasChunkAt(existing) && level.getBlockState(existing).is(CoreBlocks.CORE.get());
-        if (!WarGate.ready(level, raid) || !CampClaims.owns(level, raid)) return false;
+        if (raid.campPos == null || raid.campClaimId == null || !CampClaims.owns(level, raid)) return false;
         if (level.getGameTime() % 100 != 0) return false;
-        BlockPos center = WarGate.center(raid);
-        for (int side : new int[]{-1,1}) {
-            BlockPos pos = center.relative(WarGate.facing(raid).getClockWise(), side).relative(WarGate.facing(raid).getOpposite()).above();
-            if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)) continue;
-            var claim = RecruitsClaimsBridge.getClaimAt(level, pos).orElse(null);
-            if (claim == null || !claim.claimId().equals(raid.campClaimId)) continue;
-            var anchor = RaidSavedData.get(level.getServer()).anchors.get(raid.teamKey);
-            // Permit only this camp's native claim while retaining external player-claim exclusions.
-            if (anchor == null || ClaimBridge.isForeignClaim(level, pos,
-                    anchor.withIdentity(claim.ownerFactionStringId(), anchor.teamDisplay()))) continue;
-            var before = level.getBlockState(pos);
-            if (!CampVegetation.replaceable(before) || before.hasBlockEntity() || !before.getFluidState().isEmpty()) continue;
-            var change = new CampTerrain.Change(pos, before, CoreBlocks.CORE.get().defaultBlockState());
-            if (!CampTerrain.apply(level, raid, new CampTerrain.Plan(List.of(change)))) continue;
-            raid.campaign.putLong("EnemyCore", pos.asLong());
-            raid.warGate.getCompound("Blocks").putString(Long.toString(pos.asLong()), "siegeoverhaul:siege_core");
-            RaidSavedData.get(level.getServer()).setDirty(); return true;
+        return build(level, raid);
+    }
+    /** New placements only: erect the keep at the town centre and enshrine the core. */
+    private static boolean build(ServerLevel level, RaidSavedData.RaidState raid) {
+        if (!level.hasChunkAt(raid.campPos)) return false;
+        int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, raid.campPos.getX(), raid.campPos.getZ());
+        if (Math.abs(surface - raid.campPos.getY()) > 3) return false;
+        BlockPos base = new BlockPos(raid.campPos.getX(), surface, raid.campPos.getZ());
+        BlockPos core = corePos(base);
+        var anchor = RaidSavedData.get(level.getServer()).anchors.get(raid.teamKey);
+        if (anchor == null) return false;
+        Map<BlockPos, String> blocks = new LinkedHashMap<>(keepBlueprint(base));
+        blocks.put(core, "siegeoverhaul:siege_core");
+        Set<ChunkPos> checked = new HashSet<>();
+        List<CampTerrain.Change> changes = new ArrayList<>();
+        for (var entry : blocks.entrySet()) {
+            BlockPos pos = entry.getKey();
+            if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)) return false;
+            if (checked.add(new ChunkPos(pos))) {
+                var claim = RecruitsClaimsBridge.getClaimAt(level, pos).orElse(null);
+                if (claim == null || !claim.claimId().equals(raid.campClaimId)
+                        || ClaimBridge.isForeignClaim(level, pos, anchor.withIdentity(claim.ownerFactionStringId(), anchor.teamDisplay())))
+                    return false;
+            }
+            BlockState before = level.getBlockState(pos);
+            if (!CampVegetation.replaceable(before) || before.hasBlockEntity() || !before.getFluidState().isEmpty()) return false;
+            BlockState after = state(entry.getValue());
+            if (after == null) return false;
+            if (!before.equals(after)) changes.add(new CampTerrain.Change(pos, before, after));
         }
-        return false;
+        if (!CampTerrain.apply(level, raid, new CampTerrain.Plan(changes))) return false;
+        raid.campaign.putLong("EnemyCore", core.asLong());
+        raid.warGate.getCompound("Blocks").putString(Long.toString(core.asLong()), "siegeoverhaul:siege_core");
+        RaidSavedData.get(level.getServer()).setDirty();
+        FactionLogger.LOG.info("Enemy Siege Core keep raised at town centre {} for {}", core, raid.teamKey);
+        return true;
+    }
+    private static BlockState state(String id) {
+        if (id.equals("siegeoverhaul:siege_core")) return CoreBlocks.CORE.get().defaultBlockState();
+        var block = ForgeRegistries.BLOCKS.getValue(ResourceLocation.tryParse(id));
+        return block == null ? null : block.defaultBlockState();
     }
     public static boolean tick(ServerLevel level, RaidSavedData data, RaidSavedData.RaidState raid, RaidSavedData.Anchor anchor) {
         if (!EndlessSiege.active(raid) || raid.preparationTicks > 0 || raid.coreCaptured || !ensure(level, raid)) return false;

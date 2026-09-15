@@ -1,8 +1,27 @@
+# 4.29.0
+
+- Marching enemy armies show up on the Recruits map. Press M and you can watch a column close on your territory the same way you watch your own recruits move. Soldiers and their siege engines get their own icons and slide across the map as the army advances.
+- Siege engines that fall behind now catch up. Catapults and ballistas are tracked by the loaded corridor alongside the infantry, so an engine no longer freezes in an unloaded chunk while the soldiers walk on. An engine that gets wedged sweeps its waypoint wider, shortens its steps, and after a few failed attempts is set down a few blocks further along its march line onto solid ground.
+- Artillery no longer parks inside the camp wall. Engine slots stay clear of the wall line and the ground the camp still has to build on, which was the main reason builders were found grinding against a catapult.
+- Camp builders can no longer be stuck on one project forever. A cell a builder cannot fill is left out of the plan, and a job that has made no progress for the configured time is abandoned so the camp moves on. In practice that is what kept the perimeter wall and its corner towers from ever being started. The gap before the next wall section or tower starts is now a minute by default and configurable.
+- Hero prices are down to a straightforward ladder. A Common hero costs 50 emeralds and each rarity above it adds another 50, up to 250 for a Legendary, instead of being scaled off recruit prices. Both the starting price and the step per rarity are configurable.
+- Raiders can actually climb their siege ladders now. A climber holds itself lined up with the rung column, a raider that loses its grip grabs the ladder again rather than dropping to the ground, climbers get the extra lift they need to step onto the walkway, and a ladder that really cannot be climbed is abandoned after a few seconds so the raider goes back to the assault instead of grinding against the wall.
+- War chests are completely rebuilt. Each of the three chests pulls from its own long, hand-picked table with dozens of possible outcomes, so opening the same chest twice rarely gives the same reward. Common rolls hand out supplies and materials, uncommon rolls hand out iron gear and potions, rare rolls hand out trimmed diamond pieces and modest weapons, and epic rolls hand out named trophies with sensible vanilla enchantments. No auto-Mending, no Fire Aspect stacking, no chest-only custom enchants; the gear is meant to feel earned, not to trivialize the rest of the game.
+- Every chest purchase now draws from the faction Treasury only. The war-key system and the three custom enchantments introduced in an earlier beta have been removed; if you have unused war keys from a beta build they will disappear on load without affecting anything else.
+- Command Center Loot page updated to match. The old key counter is replaced with an odds hint, so the panel actually reflects how the chest rolls.
+
 # 4.28.19 beta
 
 - All Command Center purchases use faction Treasury emeralds only. Deposit emeralds before buying units, siege kits, walls, upgrades, loot boxes or blessings; personal inventory is never used as a fallback.
 - Rename the Bank tab to Treasury and align purchase availability and help text with the shared balance.
 - Preserve saved balances, deposits, withdrawals and creative-mode purchases.
+
+# 4.28.19a beta
+
+- Enemy armies now carry their own loaded ground with them. A column that leaves a distant camp keeps ticking the whole way to your territory instead of freezing in unloaded chunks and never arriving, and an army caught mid-march by a server restart is pulled back into the world instead of being stranded. The corridor is capped and its chunk holds expire on their own, so nothing stays force-loaded after a siege.
+- The Siege Core contest is much tighter. The ring is now a low cylinder around the core rather than a wide bubble, the default radius drops from 10 blocks to 6, and combatants must have a clear view of the core, so troops standing on the roof above it or outside the wall no longer count toward capture or recapture. Both the radius and the height band are configurable.
+- Camp guards no longer arrive as full veterans. The garrison starts close to its normal Recruits stat line on the opening wave and earns its extra health, damage and knockback resistance as the siege reaches its later waves. Existing guards keep the stats they already had, and a new setting scales or disables the bonus entirely.
+- Hero hiring is priced by rarity again. A single flat minimum meant every rarity below Legendary cost the same 256 emeralds on ordinary recruit prices; each rarity now has its own minimum, so Commons stay affordable and Legendaries cost what they should.
 
 # 4.28.18 beta
 

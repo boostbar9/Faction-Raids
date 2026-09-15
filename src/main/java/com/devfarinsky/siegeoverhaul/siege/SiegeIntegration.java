@@ -298,10 +298,26 @@ public final class SiegeIntegration {
             if (engineer.getPersistentData().contains("SiegeAdvanceAt")
                     && now - engineer.getPersistentData().getLong("SiegeAdvanceAt") < 100) return;
             engineer.getPersistentData().putLong("SiegeAdvanceAt", now);
-            Vec3 step = engineer.position().add(delta.normalize().scale(Math.min(24, distance - standOff)));
+            // Engines are wide: a waypoint straight ahead wedges them against
+            // terrain they cannot squeeze past. Track progress and sweep the
+            // waypoint sideways until the column is moving again.
+            var data = engineer.getPersistentData();
+            int stalls = EngineRoute.stalls(data.getInt(EngineRoute.STALLS),
+                    data.getDouble(EngineRoute.LAST_DISTANCE), distance);
+            data.putInt(EngineRoute.STALLS, stalls);
+            data.putDouble(EngineRoute.LAST_DISTANCE, distance);
+            Vec3 forward = delta.normalize();
+            Vec3 side = new Vec3(-forward.z, 0, forward.x);
+            Vec3 step = engineer.position()
+                    .add(forward.scale(Math.min(EngineRoute.step(stalls), distance - standOff)))
+                    .add(side.scale(EngineRoute.detour(stalls)));
             net.minecraft.core.BlockPos ground = net.minecraft.core.BlockPos.containing(step);
             if (!(engineer.level() instanceof ServerLevel level) || !level.hasChunkAt(ground)) {
                 EngineerAdvanceOrders.restore(engineer); return;
+            }
+            if (EngineRoute.shouldLift(stalls, com.devfarinsky.siegeoverhaul.RaidConfig.SIEGE_ENGINE_STALL_PASSES.get())
+                    && lift(level, engineer.getVehicle(), forward)) {
+                data.putInt(EngineRoute.STALLS, 0);
             }
             ground = level.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, ground);
             if (!Integer.valueOf(0).equals(engineer.getClass().getMethod("getFollowState").invoke(engineer)))
@@ -315,8 +331,35 @@ public final class SiegeIntegration {
         }
     }
 
-    private static boolean initReflection() {
-        if (reflectionInitialised != null) return reflectionInitialised;
+    /**
+     * Last resort for an engine that repeated detours could not free: set it
+     * down a short way further along its own march line. Only ever moves the
+     * engine forward onto loaded, solid, unoccupied ground at roughly its own
+     * height, so it can never drop a catapult through terrain or into a wall.
+     */
+    static boolean lift(ServerLevel level, Entity vehicle, Vec3 forward) {
+        if (vehicle == null || !com.devfarinsky.siegeoverhaul.RaidConfig.SIEGE_ENGINE_UNSTICK.get()) return false;
+        for (int distance = 12; distance >= 4; distance -= 4) {
+            Vec3 ahead = vehicle.position().add(forward.scale(distance));
+            BlockPos at = BlockPos.containing(ahead);
+            if (!level.hasChunkAt(at) || !level.getWorldBorder().isWithinBounds(at)) continue;
+            BlockPos ground = level.getHeightmapPos(
+                    net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, at);
+            if (Math.abs(ground.getY() - vehicle.blockPosition().getY()) > 3) continue;
+            BlockPos floor = ground.below();
+            if (!level.getFluidState(ground).isEmpty()
+                    || !level.getBlockState(floor).isFaceSturdy(level, floor, net.minecraft.core.Direction.UP)) continue;
+            Vec3 target = new Vec3(ground.getX() + 0.5, ground.getY(), ground.getZ() + 0.5);
+            AABB box = vehicle.getBoundingBox().move(target.subtract(vehicle.position()));
+            if (!level.noCollision(vehicle, box)) continue;
+            vehicle.moveTo(target.x, target.y, target.z, vehicle.getYRot(), vehicle.getXRot());
+            FactionLogger.LOG.debug("Freed a stuck siege engine at {}", ground);
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean initReflection() {        if (reflectionInitialised != null) return reflectionInitialised;
         try {
             Class<?> engineerClass = Class.forName(
                     "com.talhanation.recruits.entities.SiegeEngineerEntity");

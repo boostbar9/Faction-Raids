@@ -47,6 +47,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private static final String FEEDBACK_URL =
             "https://www.curseforge.com/minecraft/mc-mods/siege-overhaul/comments";
 
+
     private CoreHireLayout layout;
     private int tab;
     private int confirmBox = -1;
@@ -158,16 +159,26 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             String[] bankLabels = layout.compact()
                     ? new String[]{"+8", "+64", "-8", "-64"}
                     : new String[]{"Deposit 8", "Deposit 64", "Withdraw 8", "Withdraw 64"};
-            CommandIcon[] bankIcons = {CommandIcon.EMERALD, CommandIcon.EMERALD, CommandIcon.BANK, CommandIcon.BANK};
+            // Deposits show the vanilla emerald sprite; withdrawals keep the
+            // vault glyph so the two directions stay distinguishable.
+            boolean emeraldSide = i < 2;
             int bankGap = layout.controlGap();
             int bw = (layout.width() - layout.outerMargin() * 2 - bankGap * 3) / 4;
-            bank[i] = addRenderableWidget(new CoreButton(
-                    Component.literal(bankLabels[i]),
-                    b -> action(40 + index),
-                    layout.x() + layout.outerMargin() + i * (bw + bankGap),
-                    layout.contentY() + 50,
-                    bw, 20,
-                    false, () -> false, bankIcons[i]));
+            bank[i] = emeraldSide
+                    ? addRenderableWidget(new CoreButton(
+                            Component.literal(bankLabels[i]),
+                            b -> action(40 + index),
+                            layout.x() + layout.outerMargin() + i * (bw + bankGap),
+                            layout.contentY() + 50,
+                            bw, 20,
+                            false, () -> false, ItemIcons.EMERALD))
+                    : addRenderableWidget(new CoreButton(
+                            Component.literal(bankLabels[i]),
+                            b -> action(40 + index),
+                            layout.x() + layout.outerMargin() + i * (bw + bankGap),
+                            layout.contentY() + 50,
+                            bw, 20,
+                            false, () -> false, CommandIcon.BANK));
         }
 
         // Siege Yard buttons issue paid placement kits. The player then
@@ -609,6 +620,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 chipX - 16, y + 4, chipW + 32, 32, 0x60ffe0a0);
         HudAtlas.disableAdditive();
         HudAtlas.blit(g, HudAtlas.TREASURY_PILL, chipX, y + 6, chipW, 24);
+        // Real vanilla emerald sprite so the currency readout always matches
+        // the player's resource pack.
+        ItemIcons.emerald(g, chipX + 7, y + 12, 14);
         // Top-right pill shows the player's personal emeralds (what they can
         // spend right now). The Bank card shows the faction-wide treasury.
         // Two different pools, two clearly different labels.
@@ -630,6 +644,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             for (int i = 0; i < 4; i++) drawHire(g, i, mx, my);
         } else if (tab == 1) {
             for (int i = 0; i < 3; i++) { drawLoot(g, i); drawBuff(g, i); }
+            drawLootReserve(g);
         } else if (tab == 2) {
             drawFaction(g);
         } else if (tab == 3) {
@@ -1266,43 +1281,64 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
         if (layout.compact()) {
             if (done) g.renderItem(revealed, x + 4, y + Math.max(2, (h - 16) / 2));
-            else CommandIcon.CHEST.draw(g, x + 6, y + Math.max(3, (h - 12) / 2), 12);
+            else LootIcons.tier(i).draw(g, x + 6, y + Math.max(3, (h - 12) / 2), 12);
             text(g, CoreLoot.NAMES[i], x + 23, y + 5, w - 29, CommandPalette.TEXT);
             return;
         }
 
-        // Portrait slot: chest icon by default, revealed item after unsealing.
-        CommandFrame.chip(g, x + 6, y + 6, 20, 20, CommandPalette.ACCENT_GOLD);
+        // Portrait slot: tiered box icon by default, revealed item after unsealing.
+        CommandFrame.chip(g, x + 6, y + 5, 20, 20, CommandPalette.ACCENT_GOLD);
         if (done) {
-            g.renderItem(revealed, x + 8, y + 8);
+            g.renderItem(revealed, x + 8, y + 7);
         } else {
-            CommandIcon.CHEST.draw(g, x + 10, y + 10, 12);
+            LootIcons.tier(i).draw(g, x + 10, y + 9, 12);
         }
 
-        text(g, CoreLoot.NAMES[i], x + 30, y + 7, w - 36, CommandPalette.TEXT);
+        text(g, CoreLoot.NAMES[i], x + 30, y + 6, w - 36, CommandPalette.TEXT);
         String subtitle = opening ? "Unsealing the seal..."
                 : done ? revealed.getHoverName().getString()
-                : "Sealed mystery  |  " + CoreLoot.price(i) + " emeralds";
-        text(g, subtitle, x + 30, y + 19, w - 36,
+                : CoreLoot.rarity(CoreLoot.topTier(i)) + " ceiling  |  " + CoreLoot.odds();
+        text(g, subtitle, x + 30, y + 17, w - 36,
                 opening ? CommandPalette.ACCENT_ARCANE
                         : done ? CommandPalette.tier(revealedTier)
                         : CommandPalette.TEXT_MUTED);
 
-        // Progress-style reveal bar or rarity readout in the middle band.
-        if (h > 64) {
-            if (opening) {
-                float progress = 1f - (revealTicks / (float) CoreLoot.OPEN_TICKS);
-                CommandFrame.progress(g, x + 8, y + 32, w - 16, 4,
-                        progress, CommandPalette.ACCENT_ARCANE);
-                text(g, "Common | Uncommon | Rare | Epic",
-                        x + 8, y + 40, w - 16, CommandPalette.TEXT_DIM);
-            } else if (done) {
-                text(g, "Rarity: " + CoreLoot.rarity(revealedTier),
-                        x + 8, y + 34, w - 16, CommandPalette.tier(revealedTier));
-            } else {
-                text(g, "Reveal your reward", x + 8, y + 34, w - 16,
-                        CommandPalette.ACCENT_GOLD);
-            }
+        // Price / progress line sits directly under the subtitle; the Open
+        // button occupies the bottom band of the (now shorter) card.
+        int infoY = y + 28;
+        if (opening) {
+            float progress = 1f - (revealTicks / (float) CoreLoot.OPEN_TICKS);
+            CommandFrame.progress(g, x + 8, infoY, w - 16, 4,
+                    progress, CommandPalette.ACCENT_ARCANE);
+        } else if (done) {
+            text(g, "Rarity: " + CoreLoot.rarity(revealedTier),
+                    x + 8, infoY, w - 16, CommandPalette.tier(revealedTier));
+        } else {
+            ItemIcons.emerald(g, x + 8, infoY - 2, 10);
+            text(g, String.valueOf(CoreLoot.price(i)),
+                    x + 20, infoY, w - 26, CommandPalette.ACCENT_GOLD);
+        }
+    }
+
+    /**
+     * Free band under the three Loot rows. Rows are capped at the height they
+     * need, so this strip is genuine spare room. Displays a static hint about
+     * the chest odds so newcomers understand the rarity spread at a glance.
+     */
+    private void drawLootReserve(GuiGraphics g) {
+        int h = layout.marketFreeHeight();
+        if (h < 16) return;
+        int x = layout.x() + 10;
+        int w = layout.width() - 20;
+        int y = layout.marketFreeTop();
+        int bandH = Math.min(h, 30);
+        CommandFrame.card(g, x, y, w, bandH, CommandPalette.ACCENT_STEEL);
+        CommandIcon.CHEST.draw(g, x + 6, y + 5, 12);
+        text(g, "Every chest rolls independently  ·  " + CoreLoot.odds(),
+                x + 23, y + 6, w - 29, CommandPalette.TEXT_MUTED);
+        if (bandH >= 26) {
+            text(g, "Common finds are frequent, Epic rolls are rare but pack the best gear.",
+                    x + 23, y + 17, w - 29, CommandPalette.TEXT_DIM);
         }
     }
 
@@ -1319,17 +1355,17 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             text(g, CoreBuffs.NAMES[i], x + 23, y + 5, w - 29, CommandPalette.TEXT);
             return;
         }
-        CommandFrame.chip(g, x + 6, y + 6, 20, 20, CommandPalette.ACCENT_TEAL);
-        icon.draw(g, x + 10, y + 10, 12);
+        CommandFrame.chip(g, x + 6, y + 5, 20, 20, CommandPalette.ACCENT_TEAL);
+        icon.draw(g, x + 10, y + 9, 12);
 
-        text(g, CoreBuffs.NAMES[i], x + 30, y + 7, w - 36, CommandPalette.TEXT);
-        text(g, CoreBuffs.DETAILS[i], x + 30, y + 19, w - 36, CommandPalette.TEXT_MUTED);
+        text(g, CoreBuffs.NAMES[i], x + 30, y + 6, w - 36, CommandPalette.TEXT);
+        text(g, CoreBuffs.DETAILS[i], x + 30, y + 17, w - 36, CommandPalette.TEXT_MUTED);
 
-        if (h > 64) {
-            text(g, "Personal blessing  |  5 min",
-                    x + 8, y + 34, w - 16, CommandPalette.ACCENT_TEAL);
-        }
+        ItemIcons.emerald(g, x + 8, y + 26, 10);
+        text(g, CoreBuffs.PRICES[i] + "  |  personal blessing, 5 min",
+                x + 20, y + 28, w - 26, CommandPalette.ACCENT_TEAL);
     }
+
 
     private void drawFaction(GuiGraphics g) {
         int x = layout.x();
