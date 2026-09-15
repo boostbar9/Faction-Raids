@@ -36,7 +36,14 @@ public final class BridgeBuilder {
     private static final int SEARCH_INTERVAL = 400;
     private static final int APPROACH_SCAN = 6;
     private static final int MAX_CANDIDATES = 12;
-    private static final Set<String> ORDINARY_ROLES = Set.of("shieldman", "bowman", "crossbowman");
+    /**
+     * Rank-and-file roles that may be pulled onto a crossing job. These are the
+     * values {@code RaidEvents.assignSiegeRole} actually writes for ordinary
+     * line troops; the legacy codex ids are kept so raiders saved by older
+     * versions stay eligible after a reload.
+     */
+    private static final Set<String> ORDINARY_ROLES = Set.of("marksman", "breacher",
+            "shieldman", "bowman", "crossbowman");
 
     private BridgeBuilder() {}
 
@@ -85,6 +92,9 @@ public final class BridgeBuilder {
             state.bridgePlan = plan;
             mob.getPersistentData().putBoolean(SPECIALIST_TAG, true);
             mob.setCustomName(Component.literal("Enemy Bridge Builder"));
+            com.devfarinsky.siegeoverhaul.FactionLogger.LOG.info(
+                    "[SiegeOverhaul] Bridge crossing started for {}: {} blocks {} from {}",
+                    state.teamKey, plan.span, plan.direction, plan.start);
             // Keep the original combat role, equipment and native enemy ownership/unhireable setup.
             install(level, state, mob);
             data.setDirty();

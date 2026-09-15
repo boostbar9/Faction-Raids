@@ -1,9 +1,12 @@
 package com.devfarinsky.siegeoverhaul.siege;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.tags.FluidTags;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
@@ -42,8 +45,8 @@ import java.util.EnumSet;
  */
 public class RaiderHoleAvoidGoal extends Goal {
 
-    /** Look-ahead in blocks along the mob's velocity heading. */
-    private static final double LOOK_AHEAD = 1.4;
+    /** Look-ahead distances in blocks along the mob's heading. */
+    private static final double[] LOOK_AHEAD = {1.0, 1.8, 2.6};
     /** A drop deeper than this many blocks is treated as lethal. */
     private static final int LETHAL_DROP = 3;
     /** Cool-down between hole backoffs so the goal cannot spam pathing. */
@@ -52,6 +55,14 @@ public class RaiderHoleAvoidGoal extends Goal {
     private static final int CAVE_DEPTH_THRESHOLD = 6;
     /** Cool-down between cave-escape repaths (heavier, so slower cadence). */
     private static final int CAVE_ESCAPE_COOLDOWN_TICKS = 100;
+    /**
+     * How long a detected edge keeps the march loop from handing out a fresh
+     * order toward the objective. Short enough that a raider resumes the
+     * assault as soon as it has stepped back onto safe ground.
+     */
+    private static final int EDGE_HOLD_TICKS = 30;
+    /** Persistent-data key the raid march loop reads to honour an active edge hold. */
+    public static final String EDGE_HOLD = "SiegeEdgeHoldUntil";
 
     private final PathfinderMob mob;
     private int holeCooldown;
@@ -79,39 +90,92 @@ public class RaiderHoleAvoidGoal extends Goal {
         }
 
         // ---------- Cliff / hole look-ahead ---------------------------------
-        if (holeCooldown > 0) { holeCooldown--; return; }
+        if (holeCooldown > 0) holeCooldown--;
 
-        Vec3 velocity = mob.getDeltaMovement();
-        double horizontalSpeed = velocity.x * velocity.x + velocity.z * velocity.z;
-        if (horizontalSpeed < 0.001 || !mob.onGround()) return;
+        if (!mob.onGround()) return;
+        Vec3 heading = heading();
+        if (heading == null) return;
+        if (!lethalDropAhead(level, heading)) return;
 
-        double invMag = 1.0 / Math.sqrt(horizontalSpeed);
-        double dx = velocity.x * invMag * LOOK_AHEAD;
-        double dz = velocity.z * invMag * LOOK_AHEAD;
-        BlockPos aheadFoot = BlockPos.containing(
-                mob.getX() + dx, mob.getY(), mob.getZ() + dz);
-
-        BlockPos aheadBelow = aheadFoot.below();
-        if (level.getBlockState(aheadBelow).isFaceSturdy(level, aheadBelow, net.minecraft.core.Direction.UP)) {
-            return;
-        }
-        int drop = 0;
-        BlockPos probe = aheadFoot.below();
-        while (drop <= LETHAL_DROP + 2) {
-            BlockState state = level.getBlockState(probe);
-            if (!state.getFluidState().isEmpty()) return; // Water below is safe.
-            if (state.isFaceSturdy(level, probe, net.minecraft.core.Direction.UP)) break;
-            probe = probe.below();
-            drop++;
-        }
-        if (drop <= LETHAL_DROP) return;
-
+        // Hold this raider at the edge. Stopping navigation alone is not
+        // enough: the march loop re-issues an objective order as soon as the
+        // path finishes, native move control keeps pushing, and the carried
+        // momentum walks the raider over the lip anyway.
         var nav = mob.getNavigation();
         nav.stop();
-        double backX = mob.getX() - dx * 0.5;
-        double backZ = mob.getZ() - dz * 0.5;
+        Vec3 velocity = mob.getDeltaMovement();
+        mob.setDeltaMovement(0.0, velocity.y, 0.0);
+        double backX = mob.getX() - heading.x;
+        double backZ = mob.getZ() - heading.z;
+        mob.getMoveControl().setWantedPosition(backX, mob.getY(), backZ, 1.0);
+        mob.getPersistentData().putLong(EDGE_HOLD, level.getGameTime() + EDGE_HOLD_TICKS);
+        if (holeCooldown > 0) return;
         nav.moveTo(backX, mob.getY(), backZ, 1.0);
         holeCooldown = BACKOFF_COOLDOWN_TICKS;
+    }
+
+    /**
+     * Is this raider currently being held back from a lethal edge? The raid
+     * march loop uses this to avoid overwriting the backoff with a fresh
+     * order straight toward the objective.
+     */
+    public static boolean holdingEdge(Mob mob) {
+        if (mob == null || mob.level() == null) return false;
+        return mob.getPersistentData().getLong(EDGE_HOLD) > mob.level().getGameTime();
+    }
+
+    /**
+     * Horizontal unit heading: the raider's own movement when it is moving,
+     * otherwise the direction of the next node on its active path. Checking
+     * the path matters because a raider that just received an order is still
+     * stationary on the tick it starts walking toward a ledge.
+     */
+    private Vec3 heading() {
+        Vec3 velocity = mob.getDeltaMovement();
+        double horizontalSpeed = velocity.x * velocity.x + velocity.z * velocity.z;
+        if (horizontalSpeed >= 0.001) {
+            double invMag = 1.0 / Math.sqrt(horizontalSpeed);
+            return new Vec3(velocity.x * invMag, 0, velocity.z * invMag);
+        }
+        var nav = mob.getNavigation();
+        var path = nav == null ? null : nav.getPath();
+        if (path == null || path.isDone()) return null;
+        Vec3 next = path.getNextEntityPos(mob);
+        Vec3 toNext = new Vec3(next.x - mob.getX(), 0, next.z - mob.getZ());
+        if (toNext.lengthSqr() < 1.0e-4) return null;
+        return toNext.normalize();
+    }
+
+    /** Is there a killing drop within the look-ahead window along {@code heading}? */
+    private boolean lethalDropAhead(Level level, Vec3 heading) {
+        for (double distance : LOOK_AHEAD) {
+            BlockPos aheadFoot = BlockPos.containing(
+                    mob.getX() + heading.x * distance, mob.getY(), mob.getZ() + heading.z * distance);
+            BlockPos aheadBelow = aheadFoot.below();
+            if (level.getBlockState(aheadBelow).isFaceSturdy(level, aheadBelow, net.minecraft.core.Direction.UP)) {
+                continue;
+            }
+            int drop = 0;
+            BlockPos probe = aheadBelow;
+            boolean cushioned = false;
+            while (drop <= LETHAL_DROP + 2) {
+                BlockState state = level.getBlockState(probe);
+                // Match the fluid checks used elsewhere in the mod: block id and
+                // fluid state, so waterlogged and flowing columns both count.
+                if (state.is(Blocks.LAVA) || state.getFluidState().is(FluidTags.LAVA)) {
+                    return true; // Lava is never a safe landing.
+                }
+                if (state.is(Blocks.WATER) || !state.getFluidState().isEmpty()) {
+                    cushioned = true; // Water below breaks the fall.
+                    break;
+                }
+                if (state.isFaceSturdy(level, probe, net.minecraft.core.Direction.UP)) break;
+                probe = probe.below();
+                drop++;
+            }
+            if (!cushioned && drop > LETHAL_DROP) return true;
+        }
+        return false;
     }
 
     /**

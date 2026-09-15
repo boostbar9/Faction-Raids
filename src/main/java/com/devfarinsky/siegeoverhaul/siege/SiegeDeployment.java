@@ -113,7 +113,7 @@ public final class SiegeDeployment {
             // Failed initialization may recover after terrain/entity changes. Retry without duplicating successful crews.
             vehicle.getPersistentData().putInt(OPERATOR_ATTEMPTS, attempts + 1);
             boolean replacement=vehicle.getPersistentData().getBoolean(SiegeFleet.REPLACEMENT_CREW);
-            (replacement ? SiegeIntegration.spawnSiegeEngineer(level, state.campPos==null?vehicle.position():Vec3.atBottomCenterOf(state.campPos), state.teamKey, vehicle, type, false)
+            (replacement ? SiegeIntegration.spawnSiegeEngineer(level, replacementMuster(state, vehicle), state.teamKey, vehicle, type, false)
                     : SiegeIntegration.spawnSiegeEngineer(level, vehicle.position(), state.teamKey, vehicle, type)).ifPresent(operator -> {
                 state.raiders.add(operator.getUUID());
                 state.totalSpawned++;
@@ -145,4 +145,17 @@ public final class SiegeDeployment {
         }
         state.siegeEngines.clear();
     }
+    /**
+     * Where a replacement crew musters. Once the camp has a perimeter wall,
+     * mustering at the camp centre leaves the operator walled in and grinding
+     * against the palisade on its way to an engine in the field, so it forms
+     * up just outside the main gate instead.
+     */
+    public static Vec3 replacementMuster(RaidSavedData.RaidState state, net.minecraft.world.entity.Entity vehicle) {
+        if (state.campPos == null) return vehicle.position();
+        Vec3 exit = com.devfarinsky.siegeoverhaul.camp.CampPerimeter.gateBuilt(state)
+                ? com.devfarinsky.siegeoverhaul.camp.CampPerimeter.gateExit(state) : null;
+        return exit != null ? exit : Vec3.atBottomCenterOf(state.campPos);
+    }
+
 }

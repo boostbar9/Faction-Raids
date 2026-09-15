@@ -57,6 +57,37 @@ class WorkersBridgeTest extends MinecraftTestSupport {
                 new UnexpectedStorageAreaApi(java.util.List.of(StorageType.FARMERS))));
     }
 
+    @Test
+    void ownedBusyAndFleeingWorkersAreRecognisedThroughTheOptionalApi() {
+        BuilderApi free = new BuilderApi();
+        UUID player = UUID.randomUUID();
+        free.owner = Optional.of(player);
+        assertEquals(player, WorkersBridge.readWorkerOwnerApi(free));
+        assertFalse(WorkersBridge.hasActiveBuildAreaApi(free));
+        assertFalse(WorkersBridge.isFleeingApi(free));
+
+        free.isFleeing = true;
+        assertTrue(WorkersBridge.isFleeingApi(free));
+    }
+
+    @Test
+    void unreadableWorkerApiNeverClaimsOwnershipOrWork() {
+        assertNull(WorkersBridge.readWorkerOwnerApi(new Object()));
+        assertNull(WorkersBridge.readWorkerOwnerApi(null));
+        assertFalse(WorkersBridge.hasActiveBuildAreaApi(new Object()));
+        assertFalse(WorkersBridge.hasActiveBuildAreaApi(null));
+        assertFalse(WorkersBridge.isFleeingApi(new Object()));
+        assertFalse(WorkersBridge.isFleeingApi(null));
+    }
+
+    /** Public signatures verified against Workers 2 / Recruits upstream. */
+    public static class BuilderApi {
+        public Object currentBuildArea;
+        public boolean isFleeing;
+        Optional<UUID> owner = Optional.empty();
+        public Optional<UUID> getOwnerUUID() { return owner; }
+    }
+
     /** Public signatures verified against Workers 2 / Recruits upstream. */
     public static class Workers2Api {
         Optional<UUID> owner;

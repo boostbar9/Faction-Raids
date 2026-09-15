@@ -15,6 +15,18 @@ class TerritoryFortificationTest extends MinecraftTestSupport {
     private final BlockPos base = new BlockPos(8, 70, 12);
 
     @Test
+    void onlyPerimeterWithinStorageReachIsQueued() {
+        BlockPos storage = new BlockPos(0, 64, 0);
+        BlockPos near = new BlockPos(40, 90, 40);
+        BlockPos edge = new BlockPos(TerritoryFortification.STORAGE_SEARCH_RADIUS, 64, 0);
+        BlockPos far = new BlockPos(TerritoryFortification.STORAGE_SEARCH_RADIUS + 1, 64, 0);
+        assertEquals(java.util.List.of(near, edge),
+                TerritoryFortification.withinStorageRange(java.util.List.of(near, edge, far), storage));
+        assertEquals(java.util.List.of(),
+                TerritoryFortification.withinStorageRange(java.util.List.of(far), storage));
+    }
+
+    @Test
     void foundationFillsContiguousAirUntilSturdyGround() {
         ServerLevel level = mock(ServerLevel.class);
         when(level.hasChunkAt(any())).thenReturn(true);

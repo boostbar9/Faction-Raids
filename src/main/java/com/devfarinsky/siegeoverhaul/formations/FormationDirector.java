@@ -94,6 +94,7 @@ public final class FormationDirector {
                         com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal.CHARGING)
                 && !com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)
                 && !com.devfarinsky.siegeoverhaul.naval.BridgeBuilder.assigned(mob)
+                && !com.devfarinsky.siegeoverhaul.siege.RaiderHoleAvoidGoal.holdingEdge(mob)
                 && !mob.horizontalCollision && !mob.onClimbable()
                 && (mob.getTarget() == null || !mob.getTarget().isAlive())
                 && mob.distanceToSqr(Vec3.atCenterOf(objective)) > DISSOLVE_DISTANCE * DISSOLVE_DISTANCE;
