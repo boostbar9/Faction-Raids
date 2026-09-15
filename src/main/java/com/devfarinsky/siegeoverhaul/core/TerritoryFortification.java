@@ -147,7 +147,7 @@ public final class TerritoryFortification {
         long budget = PaymentSource.available(player, PRICE);
         if (!player.isCreative() && budget < PRICE) {
             player.sendSystemMessage(Component.literal(
-                    "You need " + PRICE + " emeralds (bank + inventory) to commission the wall."));
+                    "You need " + PRICE + " emeralds in the faction Treasury to commission the wall."));
             return false;
         }
 

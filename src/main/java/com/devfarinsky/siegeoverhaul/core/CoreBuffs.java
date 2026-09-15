@@ -18,9 +18,15 @@ public final class CoreBuffs {
         MobEffect effect = effect(index);
         if (effect == null || player.hasEffect(effect) || !player.isAlive() || player.isSpectator()) return false;
         int price = PRICES[index];
-        if (PaymentSource.available(player, price) < price) return false;
+        if (!player.isCreative() && PaymentSource.available(player, price) < price) {
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Deposit emeralds in the Treasury first. This blessing costs " + price + " emeralds."));
+            return false;
+        }
         if (!player.addEffect(new MobEffectInstance(effect, DURATION, 0, false, true, true))) return false;
-        if (!PaymentSource.consume(player, price)) return false;
+        if (!PaymentSource.consume(player, price)) {
+            player.removeEffect(effect);
+            return false;
+        }
         player.getInventory().setChanged(); player.inventoryMenu.broadcastChanges(); return true;
     }
 }

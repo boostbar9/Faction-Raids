@@ -27,6 +27,12 @@
 
 # 4.28.19 beta
 
+- All Command Center purchases use faction Treasury emeralds only. Deposit emeralds before buying units, siege kits, walls, upgrades, loot boxes or blessings; personal inventory is never used as a fallback.
+- Rename the Bank tab to Treasury and align purchase availability and help text with the shared balance.
+- Preserve saved balances, deposits, withdrawals and creative-mode purchases.
+
+# 4.28.19a beta
+
 - Enemy armies now carry their own loaded ground with them. A column that leaves a distant camp keeps ticking the whole way to your territory instead of freezing in unloaded chunks and never arriving, and an army caught mid-march by a server restart is pulled back into the world instead of being stranded. The corridor is capped and its chunk holds expire on their own, so nothing stays force-loaded after a siege.
 - The Siege Core contest is much tighter. The ring is now a low cylinder around the core rather than a wide bubble, the default radius drops from 10 blocks to 6, and combatants must have a clear view of the core, so troops standing on the roof above it or outside the wall no longer count toward capture or recapture. Both the radius and the height band are configurable.
 - Camp guards no longer arrive as full veterans. The garrison starts close to its normal Recruits stat line on the opening wave and earns its extra health, damage and knockback resistance as the siege reaches its later waves. Existing guards keep the stats they already had, and a new setting scales or disables the bonus entirely.
