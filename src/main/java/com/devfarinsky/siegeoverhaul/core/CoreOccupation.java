@@ -21,16 +21,22 @@ public final class CoreOccupation {
     }
     public static boolean inRing(Vec3 entity, BlockPos core) {
         double dx=entity.x-core.getX()-.5, dz=entity.z-core.getZ()-.5;
-        return dx*dx+dz*dz <= (double)RaidConfig.CORE_CAPTURE_RADIUS.get()*RaidConfig.CORE_CAPTURE_RADIUS.get()
-                && Math.abs(entity.y-core.getY()-.5)<=3;
+        return CaptureRing.inside(dx,entity.y-core.getY()-.5,dz,
+                RaidConfig.CORE_CAPTURE_RADIUS.get(),RaidConfig.CORE_CAPTURE_VERTICAL.get());
+    }
+    /** Ring membership plus, when configured, an unobstructed view of the core. */
+    public static boolean contesting(ServerLevel level, Vec3 entity, BlockPos core) {
+        return inRing(entity,core)
+                && (!RaidConfig.CORE_CAPTURE_REQUIRE_SIGHT.get() || CaptureRing.visible(level,core,entity));
     }
     public static int[] counts(ServerLevel level, BlockPos pos, String key, Set<UUID> members) {
         int enemies=0, defenders=0;
         for (var player:level.players()) if (player.isAlive() && !player.isSpectator() && !player.isCreative()
-                && key.equals(SiegeCore.key(player)) && inRing(player.position(),pos)) defenders++;
+                && key.equals(SiegeCore.key(player)) && contesting(level,player.position(),pos)) defenders++;
         int radius=RaidConfig.CORE_CAPTURE_RADIUS.get();
-        for (Mob mob:level.getEntitiesOfClass(Mob.class,new AABB(pos).inflate(radius,3,radius),
-                m -> m.isAlive() && !m.isPassenger() && inRing(m.position(),pos))) {
+        int vertical=RaidConfig.CORE_CAPTURE_VERTICAL.get();
+        for (Mob mob:level.getEntitiesOfClass(Mob.class,new AABB(pos).inflate(radius,vertical,radius),
+                m -> m.isAlive() && !m.isPassenger() && contesting(level,m.position(),pos))) {
             if (RecruitsBridge.isRecruitSoldier(mob) && (key.equals(mob.getPersistentData().getString(ModConstants.Tags.RAID_TEAM))
                     || key.equals(mob.getPersistentData().getString(com.devfarinsky.siegeoverhaul.camp.CampGuards.TEAM_TAG))
                     || (mob.getTeam()!=null && RaiderFactions.enemy(mob.getTeam().getName())))) enemies++;

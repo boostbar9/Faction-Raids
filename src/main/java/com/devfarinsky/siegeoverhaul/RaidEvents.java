@@ -2065,6 +2065,10 @@ public final class RaidEvents {
             data.setDirty();
         }
         com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assignNearby(level, state, point.pos());
+        // Carry a loaded corridor with the column so an army that left a distant
+        // camp keeps ticking all the way to the objective.
+        com.devfarinsky.siegeoverhaul.raid.MarchLoading.tick(level, state,
+                BlockPos.containing(invasionObjective(level, point, state)));
         redirectRaiders(level, state, members, recruits, point);
 
         // Amphibious support: steer active raider boats toward the beach.
@@ -4511,6 +4515,7 @@ public final class RaidEvents {
                 com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,state.campSearchPos);
                 com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,state.campPos);
                 com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,point.pos());
+                state.marchChunks.clear();
                 com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.cleanup(level, state);
                 com.devfarinsky.siegeoverhaul.camp.CampGuards.cleanup(level, state);
                 com.devfarinsky.siegeoverhaul.raid.RaidCavalry.cleanup(level,state.teamKey);

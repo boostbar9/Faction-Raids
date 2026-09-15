@@ -54,7 +54,7 @@ public final class CampGuards {
                     if (id.equals("bowman")) container.addItem(new ItemStack(Items.ARROW,64));
                 }
                 com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(guard,raid.factionId,"guard");
-                strengthen(guard);
+                strengthen(guard,raid.wave);
                 guard.setPersistenceRequired();
                 guard.setCanPickUpLoot(false);
                 guard.getPersistentData().putString(TEAM_TAG,raid.teamKey);
@@ -73,7 +73,7 @@ public final class CampGuards {
             if (entity == null) continue; // unloaded identity is still needed for cleanup
             if (!(entity instanceof Mob guard) || !guard.isAlive()) { raid.campGuards.remove(id); continue; }
             com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(guard,raid.factionId,"guard");
-            strengthen(guard);
+            strengthen(guard,raid.wave);
             guard.setNoAi(frozen);
             if (frozen) guard.setTarget(null);
             if (!frozen && raid.campPos != null) {
@@ -171,18 +171,29 @@ public final class CampGuards {
                 && level.getFluidState(p).isEmpty() && level.getFluidState(p.above()).isEmpty() && level.getBlockState(p.below()).isFaceSturdy(level,p.below(),Direction.UP)
                 && !planned(raid,p) && !planned(raid,p.above());
     }
-    private static void strengthen(Mob guard) {
-        if(guard.getPersistentData().getBoolean("SiegeVeteranGuard"))return;
-        var health=guard.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
-        float oldMax=guard.getMaxHealth(),oldHealth=guard.getHealth();
-        if(health!=null)health.setBaseValue(Math.max(health.getBaseValue(),50));
+    private static void strengthen(Mob guard, int wave) {
+        var nbt = guard.getPersistentData();
+        // Guards from before the ramped profile keep the stats they were given.
+        if (nbt.getBoolean("SiegeVeteranGuard") && !nbt.contains("SiegeGuardStrengthStep")) return;
+        int step = GuardStrength.step(wave, RaidConfig.WAVES.get());
+        if (nbt.contains("SiegeGuardStrengthStep") && nbt.getInt("SiegeGuardStrengthStep") >= step) return;
+        var health = guard.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+        var damage = guard.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
+        var knockback = guard.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.KNOCKBACK_RESISTANCE);
+        // Remember the native stat line once so later steps never stack on themselves.
+        if (!nbt.contains("SiegeGuardNativeHealth"))
+            nbt.putDouble("SiegeGuardNativeHealth", health != null ? health.getBaseValue() : guard.getMaxHealth());
+        if (!nbt.contains("SiegeGuardNativeDamage"))
+            nbt.putDouble("SiegeGuardNativeDamage", damage != null ? damage.getBaseValue() : 0.0D);
+        double ramp = GuardStrength.ramp(wave, RaidConfig.WAVES.get(), RaidConfig.CAMP_GUARD_STRENGTH.get());
+        float oldMax = guard.getMaxHealth(), oldHealth = guard.getHealth();
+        if (health != null) health.setBaseValue(GuardStrength.health(nbt.getDouble("SiegeGuardNativeHealth"), ramp));
         // Preserve damage on existing sentries; never heal or refill equipment every tick.
-        guard.setHealth(oldMax>0?guard.getMaxHealth()*oldHealth/oldMax:oldHealth);
-        var damage=guard.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
-        if(damage!=null)damage.setBaseValue(damage.getBaseValue()+2);
-        var knockback=guard.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.KNOCKBACK_RESISTANCE);
-        if(knockback!=null)knockback.setBaseValue(Math.max(knockback.getBaseValue(),.35));
-        guard.getPersistentData().putBoolean("SiegeVeteranGuard",true);
+        guard.setHealth(oldMax > 0 ? guard.getMaxHealth() * oldHealth / oldMax : oldHealth);
+        if (damage != null) damage.setBaseValue(GuardStrength.damage(nbt.getDouble("SiegeGuardNativeDamage"), ramp));
+        if (knockback != null)
+            knockback.setBaseValue(Math.max(knockback.getBaseValue(), GuardStrength.knockback(ramp)));
+        nbt.putInt("SiegeGuardStrengthStep", step);
     }
     public static void cleanup(ServerLevel level, RaidSavedData.RaidState raid) {
         for (UUID id : raid.campGuards) { Entity guard=level.getEntity(id); if (guard != null) guard.discard(); }

@@ -111,6 +111,8 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue MOBILIZE_RECRUITS;
     public static final ForgeConfigSpec.IntValue RECRUIT_MOBILIZATION_RADIUS;
     public static final ForgeConfigSpec.IntValue CORE_CAPTURE_RADIUS;
+    public static final ForgeConfigSpec.IntValue CORE_CAPTURE_VERTICAL;
+    public static final ForgeConfigSpec.BooleanValue CORE_CAPTURE_REQUIRE_SIGHT;
     public static final ForgeConfigSpec.IntValue CORE_RECAPTURE_SECONDS;
     public static final ForgeConfigSpec.IntValue CAPTURE_RADIUS;
     public static final ForgeConfigSpec.IntValue CAPTURE_TIME_SECONDS;
@@ -131,6 +133,7 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue LEVEL_CAMP_TERRAIN;
     public static final ForgeConfigSpec.BooleanValue CAMP_DESTRUCTIBLE_STRUCTURES;
     public static final ForgeConfigSpec.IntValue CAMP_BONUS_LOOT_EMERALDS;
+    public static final ForgeConfigSpec.DoubleValue CAMP_GUARD_STRENGTH;
     public static final ForgeConfigSpec.BooleanValue ENABLE_AMPHIBIOUS_RAIDS;
     public static final ForgeConfigSpec.IntValue NAVAL_STAGING_RADIUS;
     public static final ForgeConfigSpec.IntValue NAVAL_MIN_WATER_BODY;
@@ -172,6 +175,8 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue RESTORE_BREACHED_BLOCKS;
     public static final ForgeConfigSpec.DoubleValue RAIDER_ADVANCE_SPEED;
     public static final ForgeConfigSpec.BooleanValue ALLOW_WORLD_SPAWN_FALLBACK;
+    public static final ForgeConfigSpec.BooleanValue KEEP_MARCHING_ARMY_LOADED;
+    public static final ForgeConfigSpec.IntValue MAX_MARCH_CHUNKS;
     public static final ForgeConfigSpec.BooleanValue STAGED_SQUADS;
     public static final ForgeConfigSpec.IntValue SQUAD_SIZE;
     public static final ForgeConfigSpec.IntValue SQUAD_INTERVAL_SECONDS;
@@ -392,7 +397,9 @@ public final class RaidConfig {
                 .define("mobilizeRecruits", true);
         RECRUIT_MOBILIZATION_RADIUS = b.comment("Radius around the stronghold in which allied Recruits can join its defense.")
                 .defineInRange("recruitMobilizationRadius", 128, 32, 384);
-        CORE_CAPTURE_RADIUS = b.comment("Horizontal radius of the Siege Core contest; combatants must also be within three vertical blocks.").defineInRange("coreCaptureRadius", 10, 4, 32);
+        CORE_CAPTURE_RADIUS = b.comment("Horizontal radius of the Siege Core contest. v4.28.19 default lowered from 10 to 6 so attackers have to reach the core room instead of pressuring it from outside the walls.").defineInRange("coreCaptureRadius", 6, 2, 32);
+        CORE_CAPTURE_VERTICAL = b.comment("Vertical tolerance of the Siege Core contest, in blocks above and below the core.").defineInRange("coreCaptureVertical", 2, 1, 16);
+        CORE_CAPTURE_REQUIRE_SIGHT = b.comment("Require an unobstructed view between the core and a combatant for them to count toward capture or recapture. Stops attackers from holding a core while standing on the roof above it.").define("coreCaptureRequireLineOfSight", true);
         CORE_RECAPTURE_SECONDS = b.comment("Seconds of numerical superiority required for players or their recruits to reclaim an occupied core. Ties pause, enemy superiority reverses.").defineInRange("coreRecaptureSeconds", 120, 30, 1200);
         CAPTURE_RADIUS = b.comment("Radius around the stronghold that the invaders must occupy to win the siege.")
                 .defineInRange("captureRadius", 18, 6, 64);
@@ -430,6 +437,8 @@ public final class RaidConfig {
                 .define("campDestructibleStructures", true);
         CAMP_BONUS_LOOT_EMERALDS = b.comment("Bonus emeralds dropped when the war camp supply barrel is destroyed by a defender.")
                 .defineInRange("campBonusLootEmeralds", 3, 0, 64);
+        CAMP_GUARD_STRENGTH = b.comment("Scales the veteran bonus camp guards earn as a siege advances. Guards start near their native Recruits stats on the opening wave and reach the full bonus by the configured wave count. 0 keeps them at native strength; values above 1 make late-siege garrisons tougher.")
+                .defineInRange("campGuardStrength", 1.0, 0.0, 3.0);
         CLEANUP_WAR_CAMPS = b.comment("Remove untouched temporary camp blocks when the invasion ends. Player-modified blocks are never removed.")
                 .define("cleanupTemporaryWarCamps", true);
         ENABLE_AMPHIBIOUS_RAIDS = b.comment("Auto-detect water near the objective and stage part of each wave in boats when a large enough water body is found.")
@@ -517,6 +526,10 @@ public final class RaidConfig {
                 .defineInRange("raiderAdvanceSpeed", 1.05, 0.5, 1.5);
         ALLOW_WORLD_SPAWN_FALLBACK = b.comment("Use the overworld spawn when a player has no bed or respawn anchor. Disabled by default to avoid attacking public spawn.")
                 .define("allowWorldSpawnFallback", false);
+        KEEP_MARCHING_ARMY_LOADED = b.comment("Keep the chunks under a marching enemy army loaded while it crosses the gap between its camp and your territory. Without this the army stops ticking as soon as it leaves camp and the last loaded chunk, and never arrives. Tickets are short lived and expire on their own.")
+                .define("keepMarchingArmyLoaded", true);
+        MAX_MARCH_CHUNKS = b.comment("Maximum number of chunks kept loaded for one marching army. Chunks closest to the objective are kept first. Lower this on constrained servers; 0 disables the corridor entirely.")
+                .defineInRange("maximumMarchChunks", 16, 0, 64);
         STAGED_SQUADS = b.comment("Deploy each wave as several marching squads instead of creating the entire wave in one server tick.")
                 .define("stagedSquads", true);
         SQUAD_SIZE = b.comment("Maximum invaders deployed in one squad when stagedSquads is enabled.")

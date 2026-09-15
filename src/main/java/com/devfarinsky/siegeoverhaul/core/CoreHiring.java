@@ -52,6 +52,14 @@ public final class CoreHiring {
     };
     /** Cost multiplier applied to base recruit cost, per rarity tier. */
     public static final double[] TIER_COST_MULT = { 8.0, 12.0, 18.0, 26.0, 40.0 };
+    /**
+     * Minimum price per rarity tier. A single flat floor made every hero cost
+     * the same on servers with a low base recruit price, because the floor was
+     * higher than the tiered price for all but the top rarity. The floors keep
+     * the historic 256e Common minimum and follow {@link #TIER_COST_MULT} from
+     * there, so rarity always changes what a hero costs.
+     */
+    public static final int[] TIER_COST_FLOOR = { 256, 384, 576, 832, 1280 };
     public static final String[] RARITY_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary" };
     public static final int HERO_ID_MIN = 10;
     public static final int HERO_ID_MAX = 29;
@@ -76,13 +84,19 @@ public final class CoreHiring {
         long lifted = Math.max(base, (long) Math.ceil(base * factor));
         return (int) Math.min(Integer.MAX_VALUE, lifted);
     }
-    public static int cost(int role) throws ReflectiveOperationException {
-        if (isHero(role)) {
-            int base = cost(heroBase(role));
-            double mult = TIER_COST_MULT[heroTier(role)];
-            // Floor at the old 256e minimum so heroes never feel disposable
-            // on servers that lowered base recruit cost.
-            return (int) Math.min(32767L, Math.max(256L, Math.round(base * mult)));
+    /**
+     * Price of a hero given the price of its base combat recruit. Rarity drives
+     * both the multiplier and the minimum, so every tier is priced apart even
+     * when the base recruit price is low.
+     */
+    public static int heroPrice(int baseCost, int role) {
+        if (!isHero(role)) return baseCost;
+        int tier = heroTier(role);
+        long scaled = Math.round(Math.max(0, baseCost) * TIER_COST_MULT[tier]);
+        return (int) Math.min(32767L, Math.max(TIER_COST_FLOOR[tier], scaled));
+    }
+    public static int cost(int role) throws ReflectiveOperationException {        if (isHero(role)) {
+            return heroPrice(cost(heroBase(role)), role);
         }
         if (role < CoreOffers.WORKER_START) return applyUplift((Integer) config(COSTS[role]), role);
         int workerBase = (Integer) ((ForgeConfigSpec.ConfigValue<?>) Class.forName("com.talhanation.workers.config.WorkersServerConfig").getField(COSTS[role]).get(null)).get();
