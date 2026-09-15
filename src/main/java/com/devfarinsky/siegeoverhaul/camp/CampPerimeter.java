@@ -251,7 +251,32 @@ public final class CampPerimeter {
     private static boolean buildable(ServerLevel level, BlockPos pos) {
         return CampVegetation.replaceable(level.getBlockState(pos))
                 && level.getFluidState(pos).isEmpty()
-                && level.getBlockEntity(pos) == null;
+                && level.getBlockEntity(pos) == null
+                && !occupied(level, pos);
+    }
+
+    /**
+     * True when something a builder cannot walk through is standing in the
+     * cell. Siege engines are the usual culprit: a catapult parked on the wall
+     * line leaves a cell that can never be filled, and a job that never
+     * completes blocks every later camp project.
+     */
+    private static boolean occupied(ServerLevel level, BlockPos pos) {
+        return !level.getEntities((net.minecraft.world.entity.Entity) null,
+                new net.minecraft.world.phys.AABB(pos),
+                entity -> !entity.isRemoved() && !entity.isSpectator() && entity.canBeCollidedWith()).isEmpty();
+    }
+
+    /**
+     * True when a position sits on or inside the camp's wall line, with a
+     * little margin. Siege equipment and other large props are kept out of
+     * this footprint so the camp's builders always have room to work.
+     */
+    public static boolean blocksCamp(RaidSavedData.RaidState raid, net.minecraft.world.phys.Vec3 pos) {
+        if (raid.campPos == null) return false;
+        double dx = Math.abs(pos.x - (raid.campPos.getX() + 0.5));
+        double dz = Math.abs(pos.z - (raid.campPos.getZ() + 0.5));
+        return Math.max(dx, dz) <= RADIUS + 2;
     }
 
     private static boolean claimed(ServerLevel level, RaidSavedData.RaidState raid, BlockPos pos) {

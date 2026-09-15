@@ -20,7 +20,7 @@ public final class CampDevelopment {
         if(raid.campWorkers.stream().noneMatch(id -> level.getEntity(id) instanceof Mob worker && worker.isAlive())) return;
         raid.campUpgradeTicks+=ModConstants.TICK_INTERVAL;
         RaidSavedData.get(level.getServer()).setDirty();
-        if(raid.campUpgradeTicks<2400)return;
+        if(raid.campUpgradeTicks<RaidConfig.CAMP_UPGRADE_SECONDS.get()*20)return;
         raid.campUpgradeTicks=0;
         if(CampPerimeter.perimeterStage(raid.campUpgradeStage)) { tryPerimeter(level,raid); return; }
         double x=-Math.cos(raid.approachAngle),z=-Math.sin(raid.approachAngle);
@@ -94,7 +94,7 @@ public final class CampDevelopment {
         plan.putAll(CampUpgradeLayout.structure(center, entrance, raid.campUpgradeStage));
         raid.pendingCampBlocks.putAll(plan);
         // Never fall back to remote placement for an upgrade or replace an obstructing player block.
-        if(NativeCampConstruction.start(level,raid)) { raid.campUpgradeStage++; return true; }
+        if(NativeCampConstruction.start(level,raid)) { CampStructures.record(raid,raid.campUpgradeStage,center,entrance); raid.campUpgradeStage++; return true; }
         raid.pendingCampBlocks.clear(); return false;
     }
 }

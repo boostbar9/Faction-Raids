@@ -1,4 +1,7 @@
 {
+  "enchantment.siegeoverhaul.siegebreaker": "Siegebreaker",
+  "enchantment.siegeoverhaul.bulwark": "Bulwark",
+  "enchantment.siegeoverhaul.plunderer": "Plunderer",
   "item.siegeoverhaul.guidebook": "Warlord's Codex",
   "item.siegeoverhaul.guidebook.tooltip.line1": "Right-click to open your Faction Command",
   "item.siegeoverhaul.guidebook.tooltip.line2": "Live siege intel, wave tracker, and defense controls",

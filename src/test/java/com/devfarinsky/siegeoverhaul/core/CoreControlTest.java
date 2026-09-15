@@ -20,10 +20,19 @@ class CoreControlTest extends MinecraftTestSupport {
     }
     @Test void roofAndNearbyOutsideTroopsCannotCount() {
         RaidConfig.CORE_CAPTURE_RADIUS.set(10);
+        RaidConfig.CORE_CAPTURE_VERTICAL.set(2);
         assertTrue(CoreOccupation.inRing(new Vec3(10.5,.5,.5),BlockPos.ZERO));
         assertFalse(CoreOccupation.inRing(new Vec3(10.6,.5,.5),BlockPos.ZERO));
         assertFalse(CoreOccupation.inRing(new Vec3(.5,4,.5),BlockPos.ZERO));
-        assertTrue(CoreOccupation.inRing(new Vec3(.5,3.5,.5),BlockPos.ZERO));
+        assertFalse(CoreOccupation.inRing(new Vec3(.5,3.5,.5),BlockPos.ZERO));
+        assertTrue(CoreOccupation.inRing(new Vec3(.5,2.5,.5),BlockPos.ZERO));
+        assertTrue(CoreOccupation.inRing(new Vec3(.5,-1.5,.5),BlockPos.ZERO));
+    }
+    @Test void captureRingIsACylinderWithAConfigurableVerticalBand() {
+        assertTrue(CaptureRing.inside(6,2,0,6,2));
+        assertFalse(CaptureRing.inside(6,2.01,0,6,2));
+        assertFalse(CaptureRing.inside(6.5,0,0,6,2));
+        assertFalse(CaptureRing.inside(0,0,0,0,2));
     }
     @Test void occupationAndRecaptureSurviveRaidRemovalAndSaveReload() {
         var data=new RaidSavedData(); var core=new CompoundTag();

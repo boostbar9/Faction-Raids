@@ -2026,6 +2026,7 @@ public final class RaidEvents {
             return;
         }
         com.devfarinsky.siegeoverhaul.camp.CampDevelopment.tick(level,state);
+        com.devfarinsky.siegeoverhaul.camp.CampStructures.tick(level,state);
         // Camp progress is persisted even when no wave or breach changed this pass.
         if (!state.pendingCampBlocks.isEmpty()) {
             progressDeferredCampBuilds(level, state);
@@ -2065,6 +2066,11 @@ public final class RaidEvents {
             data.setDirty();
         }
         com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assignNearby(level, state, point.pos());
+        // Carry a loaded corridor with the column so an army that left a distant
+        // camp keeps ticking all the way to the objective.
+        com.devfarinsky.siegeoverhaul.raid.MarchLoading.tick(level, state,
+                BlockPos.containing(invasionObjective(level, point, state)));
+        com.devfarinsky.siegeoverhaul.raid.ArmyMap.broadcast(level, state, members);
         redirectRaiders(level, state, members, recruits, point);
 
         // Amphibious support: steer active raider boats toward the beach.
@@ -2188,10 +2194,13 @@ public final class RaidEvents {
                         anchor.teamDisplay() + " has crushed the enemy invasion!");
                 return;
             }
-            state.ticksToNextWave = RaidConfig.TIME_BETWEEN_WAVES_SECONDS.get() * 20;
+            state.ticksToNextWave = com.devfarinsky.siegeoverhaul.camp.CampStructures.waveIntervalTicks(
+                    RaidConfig.TIME_BETWEEN_WAVES_SECONDS.get() * 20,
+                    com.devfarinsky.siegeoverhaul.camp.CampStructures.standing(state,
+                            com.devfarinsky.siegeoverhaul.camp.CampStructures.Kind.COMMAND_POST));
             state.lastWarningSecond = Integer.MAX_VALUE;
             announce(server, teamKey, Component.literal("Wave " + state.wave + " cleared. Next wave in " +
-                    RaidConfig.TIME_BETWEEN_WAVES_SECONDS.get() + " seconds.").withStyle(ChatFormatting.GREEN), false);
+                    Math.max(1, (state.ticksToNextWave + 19) / 20) + " seconds.").withStyle(ChatFormatting.GREEN), false);
         }
 
         if (state.ticksToNextWave > 0) {
@@ -4511,6 +4520,7 @@ public final class RaidEvents {
                 com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,state.campSearchPos);
                 com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,state.campPos);
                 com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,point.pos());
+                state.marchChunks.clear();
                 com.devfarinsky.siegeoverhaul.siege.SiegeDeployment.cleanup(level, state);
                 com.devfarinsky.siegeoverhaul.camp.CampGuards.cleanup(level, state);
                 com.devfarinsky.siegeoverhaul.raid.RaidCavalry.cleanup(level,state.teamKey);

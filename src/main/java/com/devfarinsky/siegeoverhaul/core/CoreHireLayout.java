@@ -28,6 +28,17 @@ public record CoreHireLayout(int x, int y, int width, int height,
     private static final int MIN_PANEL_HEIGHT = 224;
     private static final int FULL_CARD_WIDTH = 230;
     private static final int FULL_CARD_HEIGHT = 96;
+    /**
+     * Loot and Territory content is capped at the height it actually needs.
+     * Anything beyond these caps is handed back as a free band the tabs can
+     * grow into, instead of inflating every card with dead space.
+     */
+    private static final int FULL_MARKET_HEIGHT = 56;
+    private static final int COMPACT_MARKET_HEIGHT = 26;
+    private static final int MIN_MARKET_HEIGHT = 24;
+    private static final int FULL_TERRITORY_CARD_HEIGHT = 74;
+    private static final int COMPACT_TERRITORY_CARD_HEIGHT = 52;
+    private static final int MIN_TERRITORY_CARD_HEIGHT = 46;
 
     public static CoreHireLayout fit(int screenWidth, int screenHeight) {
         int physicalWidth = Math.max(1, screenWidth);
@@ -119,19 +130,54 @@ public record CoreHireLayout(int x, int y, int width, int height,
 
     /** Shared Territory geometry for cards, buttons and hover regions, above the fortification strip. */
     public int territoryCardWidth() { return (width - 28) / 2; }
-    public int territoryCardHeight() { return (contentBottom() - 32 - contentY() - 8) / 2; }
+
+    /**
+     * Territory cards no longer stretch to fill every spare pixel. They are
+     * capped at the height their own content actually needs, so the leftover
+     * space becomes a reusable band for future Territory features instead of
+     * padding out four half-empty cards.
+     */
+    public int territoryCardHeight() {
+        int available = (contentBottom() - 32 - contentY() - 8) / 2;
+        return Math.max(MIN_TERRITORY_CARD_HEIGHT,
+                Math.min(available, compact
+                        ? COMPACT_TERRITORY_CARD_HEIGHT : FULL_TERRITORY_CARD_HEIGHT));
+    }
     public int territoryCardX(int i) { return x + 10 + (i % 2) * (territoryCardWidth() + 8); }
     public int territoryCardY(int i) { return contentY() + (i / 2) * (territoryCardHeight() + 8); }
     public int territoryButtonY(int i) { return territoryCardY(i) + territoryCardHeight() - 24; }
     public int territoryDescriptionLines() {
-        return Math.max(0, (territoryCardHeight() - (compact ? 30 : 46) - 28) / 10);
+        // Description text starts 28px into the card and must end at least
+        // 6px above the purchase button, which sits 24px from the bottom.
+        return Math.max(0, (territoryCardHeight() - 28 - 30) / 10);
     }
 
+    /** First free pixel row below the Territory card grid. */
+    public int territoryFreeTop() { return territoryCardY(2) + territoryCardHeight() + 8; }
+
+    /** Height of the free Territory band left above the fortification strip. */
+    public int territoryFreeHeight() {
+        return Math.max(0, contentBottom() - 32 - territoryFreeTop());
+    }
+
+    /**
+     * Loot rows are capped the same way. Three compact rows leave a free band
+     * under the Loot grid that new loot features can claim without another
+     * layout pass.
+     */
     public int marketHeight() {
-        return Math.max(36, (contentBottom() - contentY() - rowGap() * 2) / 3);
+        int available = (contentBottom() - contentY() - rowGap() * 2) / 3;
+        return Math.max(MIN_MARKET_HEIGHT,
+                Math.min(available, compact ? COMPACT_MARKET_HEIGHT : FULL_MARKET_HEIGHT));
     }
 
     public int marketY(int i) {
         return contentY() + i * (marketHeight() + rowGap());
     }
+
+    /** First free pixel row below the three Loot rows. */
+    public int marketFreeTop() { return marketY(2) + marketHeight() + rowGap(); }
+
+    /** Height of the free Loot band left above the footer. */
+    public int marketFreeHeight() { return Math.max(0, contentBottom() - marketFreeTop()); }
 }
