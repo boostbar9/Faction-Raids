@@ -3929,9 +3929,16 @@ public final class RaidEvents {
                     finalApproachRangeSq, finalApproachSpeedMultiplier);
             if (!acquired && distToObjectiveSq <= finalApproachRangeSq) telemetry.finalApproachBoostTicks++;
 
+            // A raider backing away from a lethal drop keeps its own movement
+            // until the hold expires. Re-issuing the objective order here is
+            // what used to march the wave straight over the cliff edge.
+            boolean edgeHold = com.devfarinsky.siegeoverhaul.siege.RaiderHoleAvoidGoal.holdingEdge(mob);
+
             // Preserve progressing paths, including detours around walls. A finished
             // route or two seconds without movement may request a fresh path.
-            if (!acquired && forceRepath && com.devfarinsky.siegeoverhaul.raid.MarchProgress.shouldRepath(mob,objective,gameTime)) {
+            if (edgeHold) {
+                // No new route this tick; the hole-avoid goal owns this raider.
+            } else if (!acquired && forceRepath && com.devfarinsky.siegeoverhaul.raid.MarchProgress.shouldRepath(mob,objective,gameTime)) {
                 Vec3 target = fallbackRouteTarget(level, mob, objective, stuck, gameTime, telemetry);
                 if (target != null) {
                     mob.getNavigation().moveTo(target.x, target.y, target.z, speed);
@@ -4176,6 +4183,9 @@ public final class RaidEvents {
         if (level.getBlockState(foot).isSolid() || level.getBlockState(foot.above()).isSolid()) return;
         mob.getNavigation().stop();
         mob.teleportTo(destX + 0.5, destY, destZ + 0.5);
+        // A forward warp must never be charged as a fall: the raider was on
+        // the ground before the teleport and is standing on the surface now.
+        mob.fallDistance = 0;
     }
 
     /**

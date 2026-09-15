@@ -293,6 +293,70 @@ public final class WorkersBridge {
         return null;
     }
 
+    /**
+     * Read the owner UUID of a Workers 2 worker. Workers inherit
+     * {@code getOwnerUUID(): Optional<UUID>} from Recruits.
+     *
+     * @return the owner, or null when the worker is unowned or the optional
+     *         API cannot be read
+     */
+    public static java.util.UUID readWorkerOwner(Mob worker) {
+        return readWorkerOwnerApi(worker);
+    }
+
+    /** Package-visible seam for testing the optional API without a Workers entity class. */
+    static java.util.UUID readWorkerOwnerApi(Object worker) {
+        if (worker == null) return null;
+        try {
+            Object result = worker.getClass().getMethod("getOwnerUUID").invoke(worker);
+            if (result instanceof java.util.UUID uuid) return uuid;
+            if (result instanceof Optional<?> opt && opt.isPresent()
+                    && opt.get() instanceof java.util.UUID uuid) return uuid;
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            warn("readWorkerOwner", ex);
+        }
+        return null;
+    }
+
+    /**
+     * Is this builder already wired to a live build area? Commissioning over a
+     * running job silently discards the work the player previously paid for,
+     * so callers pick a different builder instead.
+     *
+     * @return true only when a build area is positively readable and alive
+     */
+    public static boolean hasActiveBuildArea(Mob worker) {
+        return hasActiveBuildAreaApi(worker);
+    }
+
+    /** Package-visible seam for testing the optional API without a Workers entity class. */
+    static boolean hasActiveBuildAreaApi(Object worker) {
+        if (worker == null) return false;
+        try {
+            Object area = worker.getClass().getField("currentBuildArea").get(worker);
+            return area instanceof Entity entity && entity.isAlive();
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            warn("read build area", ex);
+            return false;
+        }
+    }
+
+    /** Is this worker running away? A fleeing worker ignores hold positions and job orders. */
+    public static boolean isFleeing(Mob worker) {
+        return isFleeingApi(worker);
+    }
+
+    /** Package-visible seam for testing the optional API without a Workers entity class. */
+    static boolean isFleeingApi(Object worker) {
+        if (worker == null) return false;
+        try {
+            return worker.getClass().getField("isFleeing").getBoolean(worker);
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            warn("read fleeing", ex);
+            return false;
+        }
+    }
+
     public static void startBlueprint(Entity area, net.minecraft.nbt.CompoundTag blueprint) throws ReflectiveOperationException {
         call(area, "setStructureNBT", net.minecraft.nbt.CompoundTag.class, blueprint);
         call(area, "setFreeArea", boolean.class, false);

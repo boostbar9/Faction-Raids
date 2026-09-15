@@ -198,9 +198,15 @@ class BridgeBuilderTest extends MinecraftTestSupport {
     @Test void excludesCaptainsHeroesOperatorsGuardsScoutsAndNonMembers() {
         assertTrue(BridgeBuilder.eligible(mob, state));
         var tags = mob.getPersistentData();
-        for (String role : List.of("captain", "commander", "siege_engineer", "ravager", "patrol_leader", "breacher")) {
+        for (String role : List.of("captain", "commander", "hero", "warcaster", "cavalry", "scout", "flanker")) {
             tags.putString(ModConstants.Tags.RAID_ROLE, role);
             assertFalse(BridgeBuilder.eligible(mob, state));
+        }
+        // The roles RaidEvents actually writes for rank-and-file troops must
+        // qualify, otherwise no wave ever produces a bridge builder.
+        for (String role : List.of("marksman", "breacher", "shieldman", "bowman", "crossbowman")) {
+            tags.putString(ModConstants.Tags.RAID_ROLE, role);
+            assertTrue(BridgeBuilder.eligible(mob, state), role);
         }
         tags.putString(ModConstants.Tags.RAID_ROLE, "shieldman");
         for (String marker : List.of("SiegeEnemyHero", "SiegeHeroRole", "SiegeCampGuardTeam",

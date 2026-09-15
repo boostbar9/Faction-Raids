@@ -114,11 +114,10 @@ public final class TerritoryFortification {
             return false;
         }
 
-        Mob builder = findNearbyBuilder(level, corePos);
+        BuilderSearch search = findNearbyBuilder(level, player, corePos);
+        Mob builder = search.builder();
         if (builder == null) {
-            player.sendSystemMessage(Component.literal(
-                    "No Villager Recruits builder found within " + BUILDER_SEARCH_RADIUS
-                            + " blocks of the core. Bring a builder closer."));
+            player.sendSystemMessage(Component.literal(search.reason()));
             return false;
         }
 
@@ -162,6 +161,21 @@ public final class TerritoryFortification {
                     "No exposed perimeter found. Every edge already borders your own claim."));
             return false;
         }
+        // Workers 2 builders only ever fetch material from a storage area near
+        // them. Perimeter columns further away than that search box stall the
+        // job with "No available storage found nearby", which is why a wall on
+        // a large claim used to stop part-way through with no explanation.
+        // Queue only what this storage area can actually supply and tell the
+        // player what was left out.
+        int outOfStorageRange = wallColumns.size();
+        wallColumns = withinStorageRange(wallColumns, playerStorage.blockPosition());
+        outOfStorageRange -= wallColumns.size();
+        if (wallColumns.isEmpty()) {
+            player.sendSystemMessage(Component.literal(
+                    "Your storage area is more than " + STORAGE_SEARCH_RADIUS
+                            + " blocks from every perimeter section. Move it closer to the wall line and commission again."));
+            return false;
+        }
         if (wallColumns.size() > MAX_PERIMETER_BLOCKS) {
             player.sendSystemMessage(Component.literal(
                     "Your claim perimeter is too long to fortify in one job ("
@@ -169,6 +183,7 @@ public final class TerritoryFortification {
             return false;
         }
 
+        final int skippedColumns = outOfStorageRange;
         Block block = ForgeRegistries.BLOCKS.getValue(new ResourceLocation(mat.blockId()));
         if (block == null || block == Blocks.AIR) {
             player.sendSystemMessage(Component.literal("Unknown wall material: " + mat.blockId()));
@@ -273,7 +288,11 @@ public final class TerritoryFortification {
             // stood at the core and clicked commission, so their feet are a
             // safe surface guaranteed to be inside the claim.
             WorkersBridge.teleportBuilderNear(builder, level, player.blockPosition());
-            WorkersBridge.assignBuildAreaDirectly(builder, build);
+            // A builder that never receives the area just wanders: fail the
+            // whole commission instead of charging for a job nobody starts.
+            if (!WorkersBridge.assignBuildAreaDirectly(builder, build)) {
+                throw new IllegalStateException("the builder would not accept the blueprint");
+            }
 
             // Charge only after every mutating step succeeded.
             if (!player.isCreative() && !PaymentSource.consume(player, PRICE)) {
@@ -283,7 +302,9 @@ public final class TerritoryFortification {
             player.sendSystemMessage(Component.literal(
                     "Fortify Perimeter commissioned: " + blocks.size() + " " + mat.label()
                             + " blocks queued. Put " + totalRequired + " x " + mat.label()
-                            + " in your Workers 2 storage area and the builder starts work."));
+                            + " in your Workers 2 storage area and the builder starts work."
+                            + (skippedColumns > 0 ? " " + skippedColumns
+                            + " perimeter columns are out of range of that storage area; add one closer to them and commission again to finish the wall." : "")));
             FactionLogger.LOG.info("[SiegeOverhaul] Fortify Perimeter: {} blocks, material {}, team {}",
                     blocks.size(), mat.blockId(), coreKey);
             saved.setDirty();
@@ -295,6 +316,21 @@ public final class TerritoryFortification {
             FactionLogger.LOG.warn("[SiegeOverhaul] Fortify Perimeter commission failed", ex);
             return false;
         }
+    }
+
+    /**
+     * Keep only the perimeter columns a builder supplied by {@code storage}
+     * can reach. Distance is measured horizontally so a storage area on a
+     * hillside above or below the wall line still counts.
+     */
+    static List<BlockPos> withinStorageRange(List<BlockPos> columns, BlockPos storage) {
+        List<BlockPos> reachable = new ArrayList<>();
+        long limit = (long) STORAGE_SEARCH_RADIUS * STORAGE_SEARCH_RADIUS;
+        for (BlockPos base : columns) {
+            long dx = base.getX() - storage.getX(), dz = base.getZ() - storage.getZ();
+            if (dx * dx + dz * dz <= limit) reachable.add(base);
+        }
+        return reachable;
     }
 
     /** Walk claimed chunks. For each boundary edge, drop wall columns at the outward-facing block line. */
@@ -366,15 +402,53 @@ public final class TerritoryFortification {
         cornerColumns.add(new BlockPos(x, y, z).asLong());
     }
 
-    private static Mob findNearbyBuilder(ServerLevel level, BlockPos center) {
+    /** Outcome of the builder search: the chosen builder, or the reason there is none. */
+    record BuilderSearch(Mob builder, String reason) {}
+
+    /**
+     * Pick the builder that will actually do the work.
+     *
+     * <p>The old search returned whichever builder the entity list happened to
+     * yield first, so a second builder standing by the core, a raider camp
+     * worker or a builder already halfway through another blueprint could win
+     * the job. That is why a commission sometimes built a wall and sometimes
+     * silently did nothing. We now take the closest builder that is free, ours
+     * and able to work, and tell the player precisely what is in the way when
+     * none qualifies.</p>
+     */
+    static BuilderSearch findNearbyBuilder(ServerLevel level, ServerPlayer player, BlockPos center) {
         AABB area = new AABB(center).inflate(BUILDER_SEARCH_RADIUS);
         // Any Villager Recruits Builder counts. We identify by entity registry id.
         ResourceLocation wanted = new ResourceLocation("workers", "builder");
+        Mob best = null;
+        double bestDistance = Double.MAX_VALUE;
+        boolean sawBusy = false, sawForeign = false, sawFleeing = false;
         for (Mob m : level.getEntitiesOfClass(Mob.class, area, mob -> mob.isAlive())) {
             ResourceLocation id = ForgeRegistries.ENTITY_TYPES.getKey(m.getType());
-            if (wanted.equals(id)) return m;
+            if (!wanted.equals(id)) continue;
+            // Never steal the enemy siege camp's construction crew.
+            if (m.getPersistentData().contains(
+                    com.devfarinsky.siegeoverhaul.ModConstants.Tags.CAMP_WORKER_TEAM)) {
+                sawForeign = true;
+                continue;
+            }
+            UUID owner = WorkersBridge.readWorkerOwner(m);
+            if (owner != null && !owner.equals(player.getUUID())) { sawForeign = true; continue; }
+            if (WorkersBridge.hasActiveBuildArea(m)) { sawBusy = true; continue; }
+            if (WorkersBridge.isFleeing(m)) { sawFleeing = true; continue; }
+            double distance = m.distanceToSqr(center.getX() + 0.5, center.getY(), center.getZ() + 0.5);
+            if (distance < bestDistance) { bestDistance = distance; best = m; }
         }
-        return null;
+        if (best != null) return new BuilderSearch(best, "");
+        if (sawBusy) return new BuilderSearch(null,
+                "Every builder near the core is already working on a build area. "
+                        + "Wait for that job to finish or bring another builder.");
+        if (sawFleeing) return new BuilderSearch(null,
+                "Your builder is fleeing. Make the area safe and commission again.");
+        if (sawForeign) return new BuilderSearch(null,
+                "The builders near the core belong to someone else. Bring one of your own builders.");
+        return new BuilderSearch(null, "No Villager Recruits builder found within "
+                + BUILDER_SEARCH_RADIUS + " blocks of the core. Bring a builder closer.");
     }
 
     /**
