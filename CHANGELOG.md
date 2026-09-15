@@ -1,3 +1,12 @@
+# 4.28.22 beta
+
+- The Loot and Territory pages no longer stretch their panels to fill the screen. Rows and cards are sized to what they actually need, which frees up a clean strip on both pages for future controls.
+- Emerald costs across the command screen now use the real emerald item instead of a drawn stand-in, so the purse, chest prices, blessing prices and bank deposit buttons all match what you see in your inventory.
+- Each war chest has its own artwork now. The supply, armory and royal chests are told apart at a glance instead of sharing one generic crate.
+- War chest rewards were rebuilt from scratch. Every chest pulls from its own themed set with named gear, proper lore and signature enchants, so the top rolls are gear you will actually keep rather than a handful of raw materials.
+- Three new signature enchants only found in war chests. Siegebreaker hits enemy raiders harder, Bulwark cuts damage when you are surrounded and outnumbered, and Plunderer speeds up how fast you earn war keys.
+- Fighting now pays out chests. Defeating enemy raiders banks war keys, and a key opens any war chest for free regardless of your emerald balance. The kill count per key and the whole system can be turned off in the config.
+
 # 4.28.21 beta
 
 - Raiders can actually climb their siege ladders now. A climber holds itself lined up with the rung column instead of drifting along the wall until it slips off the side, and its walk control no longer fights the climb halfway up.
