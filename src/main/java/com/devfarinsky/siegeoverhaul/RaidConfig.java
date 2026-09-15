@@ -204,6 +204,8 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue MAX_ASSET_SCALING_ENEMIES;
 
     public static final ForgeConfigSpec.IntValue BANK_INTEREST_BASIS_POINTS;
+    public static final ForgeConfigSpec.IntValue HERO_PRICE_BASE;
+    public static final ForgeConfigSpec.IntValue HERO_PRICE_STEP;
     public static final ForgeConfigSpec.IntValue SIEGE_CORPSE_SECONDS, EMPTY_CORPSE_SECONDS;
 
     static {
@@ -212,6 +214,10 @@ public final class RaidConfig {
         SIEGE_CORPSE_SECONDS = b.comment("Known enemy siege corpses become normal dropped loot after this many seconds. Player and unclassified nonempty corpses are preserved. Zero disables conversion.").defineInRange("siegeCorpseSeconds",120,0,3600);
         EMPTY_CORPSE_SECONDS = b.comment("Remove fully empty corpses after this many seconds. No inventories are deleted. Zero keeps native timing.").defineInRange("emptyCorpseSeconds",60,0,3600);
         BANK_INTEREST_BASIS_POINTS = b.comment("Faction bank interest per in-game day (24000 ticks / 20 real minutes of active play) in basis points (100=1%). Interest is measured in game ticks, so single-player pausing does not rack up payouts. Up to 365 days of catch-up; no clock rollback payouts.").defineInRange("bankDailyInterestBasisPoints",100,0,1000);
+        HERO_PRICE_BASE = b.comment("Emerald price of a Common hero. Each higher rarity adds heroPriceStep on top.")
+                .defineInRange("heroPriceBase", 50, 0, 32767);
+        HERO_PRICE_STEP = b.comment("Emeralds added to the hero price per rarity tier above Common, so the ladder runs base, base+step, base+2*step and so on up to Legendary.")
+                .defineInRange("heroPriceStep", 50, 0, 32767);
         ENABLED = b.comment("Master switch.").define("enabled", true);
         AUTOMATIC_RAIDS = b.comment("Automatically schedule invasions for registered faction anchors.")
                 .define("automaticRaids", true);

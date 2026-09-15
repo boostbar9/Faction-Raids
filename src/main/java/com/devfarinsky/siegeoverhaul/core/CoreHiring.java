@@ -50,16 +50,14 @@ public final class CoreHiring {
         3, 3, 3, 3, 3,
         4, 4, 4
     };
-    /** Cost multiplier applied to base recruit cost, per rarity tier. */
-    public static final double[] TIER_COST_MULT = { 8.0, 12.0, 18.0, 26.0, 40.0 };
     /**
-     * Minimum price per rarity tier. A single flat floor made every hero cost
-     * the same on servers with a low base recruit price, because the floor was
-     * higher than the tiered price for all but the top rarity. The floors keep
-     * the historic 256e Common minimum and follow {@link #TIER_COST_MULT} from
-     * there, so rarity always changes what a hero costs.
+     * Hero prices are a flat rarity ladder rather than a multiple of the base
+     * recruit price: the first tier costs {@code heroPriceBase} and each higher
+     * rarity adds {@code heroPriceStep}. Tying hero prices to the Recruits base
+     * cost produced four-figure prices that no faction bank could reach.
      */
-    public static final int[] TIER_COST_FLOOR = { 256, 384, 576, 832, 1280 };
+    public static final int DEFAULT_PRICE_BASE = 50;
+    public static final int DEFAULT_PRICE_STEP = 50;
     public static final String[] RARITY_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary" };
     public static final int HERO_ID_MIN = 10;
     public static final int HERO_ID_MAX = 29;
@@ -79,24 +77,26 @@ public final class CoreHiring {
      */
     private static int applyUplift(int base, int role) {
         if (base <= 0) return base;
-        // Combat recruits +50%, workers +25%. Heroes already amplify (x12).
+        // Combat recruits +50%, workers +25%. Heroes use their own rarity ladder.
         double factor = role < CoreOffers.WORKER_START ? 1.50 : 1.25;
         long lifted = Math.max(base, (long) Math.ceil(base * factor));
         return (int) Math.min(Integer.MAX_VALUE, lifted);
     }
     /**
-     * Price of a hero given the price of its base combat recruit. Rarity drives
-     * both the multiplier and the minimum, so every tier is priced apart even
-     * when the base recruit price is low.
+     * Price of a hero of the given role: one flat step per rarity tier, so a
+     * Common hero costs {@code priceBase} and every tier above it adds
+     * {@code priceStep}. Rarity is the only input, which keeps the ladder
+     * readable and independent of the Recruits base recruit price.
      */
-    public static int heroPrice(int baseCost, int role) {
-        if (!isHero(role)) return baseCost;
-        int tier = heroTier(role);
-        long scaled = Math.round(Math.max(0, baseCost) * TIER_COST_MULT[tier]);
-        return (int) Math.min(32767L, Math.max(TIER_COST_FLOOR[tier], scaled));
+    public static int heroPrice(int role, int priceBase, int priceStep) {
+        if (!isHero(role)) return 0;
+        long price = Math.max(0, priceBase) + (long) Math.max(0, priceStep) * heroTier(role);
+        return (int) Math.min(32767L, price);
     }
-    public static int cost(int role) throws ReflectiveOperationException {        if (isHero(role)) {
-            return heroPrice(cost(heroBase(role)), role);
+    public static int cost(int role) throws ReflectiveOperationException {
+        if (isHero(role)) {
+            return heroPrice(role, com.devfarinsky.siegeoverhaul.RaidConfig.HERO_PRICE_BASE.get(),
+                    com.devfarinsky.siegeoverhaul.RaidConfig.HERO_PRICE_STEP.get());
         }
         if (role < CoreOffers.WORKER_START) return applyUplift((Integer) config(COSTS[role]), role);
         int workerBase = (Integer) ((ForgeConfigSpec.ConfigValue<?>) Class.forName("com.talhanation.workers.config.WorkersServerConfig").getField(COSTS[role]).get(null)).get();
