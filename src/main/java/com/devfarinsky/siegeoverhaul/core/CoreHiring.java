@@ -177,12 +177,11 @@ public final class CoreHiring {
             // still hard-code their spawn cost, so align the entity with the displayed trade.
             int price = Math.max(0, cost(role));
             recruit.getClass().getMethod("setCost", int.class).invoke(recruit, price);
-            Item currency = currency();
-            // Bank-first payment: check combined bank + inventory funds.
+            // Check shared Treasury funds only.
             long combined = PaymentSource.available(player, price);
             if (!player.isCreative() && combined < price) {
                 recruit.discard();
-                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("You need " + price + " ").append(currency.getDescription()).append(net.minecraft.network.chat.Component.literal(" (bank + inventory)")));
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("You need " + price + " emeralds in the faction Treasury."));
                 return false;
             }
             Class<?> group = Class.forName("com.talhanation.recruits.world.RecruitsGroup");
@@ -191,8 +190,7 @@ public final class CoreHiring {
             recruit.setPersistenceRequired();
             if (!player.serverLevel().addFreshEntity(recruit)) { recruit.discard(); return false; }
             if (!Boolean.TRUE.equals(hire.invoke(recruit, player, null, true))) { recruit.discard(); return false; }
-            // Bank-first debit; PaymentSource handles the shared-treasury draw
-            // before touching the player's own emeralds.
+            // Debit only the shared Treasury.
             if (!PaymentSource.consume(player, price)) {
                 recruit.discard();
                 return false;

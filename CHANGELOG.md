@@ -1,3 +1,9 @@
+# 4.28.19 beta
+
+- All Command Center purchases use faction Treasury emeralds only. Deposit emeralds before buying units, siege kits, walls, upgrades, loot boxes or blessings; personal inventory is never used as a fallback.
+- Rename the Bank tab to Treasury and align purchase availability and help text with the shared balance.
+- Preserve saved balances, deposits, withdrawals and creative-mode purchases.
+
 # 4.28.18 beta
 
 - Enemy troops leaving camp now walk out through the main gate instead of piling up against the inside of the wall. A unit still inside the perimeter heads for the gateway first, steps clear of it, and only then makes for its objective.

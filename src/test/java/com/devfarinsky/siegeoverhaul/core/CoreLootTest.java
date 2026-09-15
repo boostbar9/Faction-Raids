@@ -6,10 +6,28 @@ import net.minecraft.server.level.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
-class CoreLootTest extends MinecraftTestSupport {
+class CoreLootTest extends TreasuryTestSupport {
+    @Test void treasuryCanBuyWithoutPersonalEmeraldsAndShortfallCannotGrantLoot() {
+        var player=mock(ServerPlayer.class); var level=mock(ServerLevel.class);
+        var treasury=fund(player,15); var inv=new Inventory(player);
+        inv.items.set(35,new ItemStack(Items.EMERALD,64));
+        var flags=new net.minecraft.nbt.CompoundTag();
+        when(player.getInventory()).thenReturn(inv); when(player.serverLevel()).thenReturn(level);
+        when(player.getPersistentData()).thenReturn(flags);
+        when(player.getRandom()).thenReturn(net.minecraft.util.RandomSource.create(1));
+        assertNull(CoreLoot.purchaseWithReceipt(player,0));
+        assertEquals(15,FactionBank.balance(treasury));
+        assertEquals(64,inv.countItem(Items.EMERALD));
+        assertFalse(flags.contains("SiegeLootNext"));
+        inv.items.set(35,ItemStack.EMPTY); treasury.putLong("BankEmeralds",16);
+        assertNotNull(CoreLoot.purchaseWithReceipt(player,0));
+        assertEquals(0,FactionBank.balance(treasury));
+        assertEquals(0,inv.countItem(Items.EMERALD));
+    }
+
     @Test void fullHotbarStillDeliversEveryLootOutcomeToStorage() {
         for (int box=0;box<3;box++) for (int roll:new int[]{0,50,80,95}) {
-            var player=mock(ServerPlayer.class);var level=mock(ServerLevel.class);var inv=new Inventory(player);
+            var player=mock(ServerPlayer.class);var treasury=fund(player,128);var level=mock(ServerLevel.class);var inv=new Inventory(player);
             var random=mock(net.minecraft.util.RandomSource.class);
             when(player.getInventory()).thenReturn(inv);when(player.serverLevel()).thenReturn(level);
             when(player.getPersistentData()).thenReturn(new net.minecraft.nbt.CompoundTag());
@@ -19,14 +37,15 @@ class CoreLootTest extends MinecraftTestSupport {
             inv.items.set(11,new ItemStack(Items.EMERALD,64));
             var receipt=CoreLoot.purchaseWithReceipt(player,box);
             assertNotNull(receipt);
-            assertTrue(ItemStack.matches(receipt.prize(),inv.items.get(box==2?10:35)));
-            assertEquals(128-CoreLoot.price(box),inv.countItem(Items.EMERALD));
+            assertTrue(ItemStack.matches(receipt.prize(),inv.items.get(35)));
+            assertEquals(128,inv.countItem(Items.EMERALD));
+            assertEquals(128-CoreLoot.price(box),FactionBank.balance(treasury));
             for(int i=0;i<9;i++)assertTrue(inv.items.get(i).is(Items.STONE));
         }
     }
     @Test void purchaseChatDoesNotSpoilAnyRewardBeforeTheReveal() {
         for (int box=0;box<3;box++) for (int roll:new int[]{0,50,80,95}) {
-            var player=mock(ServerPlayer.class);var level=mock(ServerLevel.class);var inv=new Inventory(player);
+            var player=mock(ServerPlayer.class);var treasury=fund(player,128);var level=mock(ServerLevel.class);var inv=new Inventory(player);
             var random=mock(net.minecraft.util.RandomSource.class);
             when(player.getInventory()).thenReturn(inv);when(player.serverLevel()).thenReturn(level);
             when(player.getPersistentData()).thenReturn(new net.minecraft.nbt.CompoundTag());
@@ -36,7 +55,8 @@ class CoreLootTest extends MinecraftTestSupport {
             var message=org.mockito.ArgumentCaptor.forClass(net.minecraft.network.chat.Component.class);
             verify(player).sendSystemMessage(message.capture());
             assertEquals("Opening "+CoreLoot.NAMES[box]+"... Reward secured in your inventory.",message.getValue().getString());
-            assertEquals(128-CoreLoot.price(box),inv.countItem(Items.EMERALD));
+            assertEquals(128,inv.countItem(Items.EMERALD));
+            assertEquals(128-CoreLoot.price(box),FactionBank.balance(treasury));
             assertTrue(inv.items.stream().anyMatch(s->ItemStack.isSameItemSameTags(s,receipt.prize())));
         }
     }
@@ -51,17 +71,17 @@ class CoreLootTest extends MinecraftTestSupport {
         assertThrows(IllegalArgumentException.class,()->CoreLoot.reward(0,100));
     }
     @Test void paymentAndDeliveryOccurOnceAndFullInventoryIsNotCharged() {
-        var player=mock(ServerPlayer.class);var level=mock(ServerLevel.class);var inv=new Inventory(player);
+        var player=mock(ServerPlayer.class);var treasury=fund(player,128);var level=mock(ServerLevel.class);var inv=new Inventory(player);
         when(player.getInventory()).thenReturn(inv);when(player.serverLevel()).thenReturn(level);
         when(player.getPersistentData()).thenReturn(new net.minecraft.nbt.CompoundTag());
         when(player.getRandom()).thenReturn(net.minecraft.util.RandomSource.create(1));
         inv.items.set(0,new ItemStack(Items.EMERALD,64));
-        assertTrue(CoreLoot.purchase(player,0));assertEquals(48,inv.countItem(Items.EMERALD));
-        assertFalse(CoreLoot.purchase(player,0));assertEquals(48,inv.countItem(Items.EMERALD));
+        assertTrue(CoreLoot.purchase(player,0));assertEquals(64,inv.countItem(Items.EMERALD));assertEquals(112,FactionBank.balance(treasury));
+        assertFalse(CoreLoot.purchase(player,0));assertEquals(64,inv.countItem(Items.EMERALD));assertEquals(112,FactionBank.balance(treasury));
         when(level.getGameTime()).thenReturn(80L);
         for(int i=1;i<36;i++)inv.items.set(i,new ItemStack(Items.STONE,64));
-        assertFalse(CoreLoot.purchase(player,0));assertEquals(48,inv.countItem(Items.EMERALD));
-        assertFalse(CoreLoot.purchase(player,2));assertEquals(48,inv.countItem(Items.EMERALD));
+        assertFalse(CoreLoot.purchase(player,0));assertEquals(64,inv.countItem(Items.EMERALD));assertEquals(112,FactionBank.balance(treasury));
+        assertFalse(CoreLoot.purchase(player,2));assertEquals(64,inv.countItem(Items.EMERALD));assertEquals(112,FactionBank.balance(treasury));
     }
     @Test void cannotFitEnchantedGearIntoFullInventoryOrFilterBadRolls() {
         var inventory=new java.util.ArrayList<ItemStack>();for(int i=0;i<36;i++)inventory.add(new ItemStack(Items.STONE,64));
@@ -69,17 +89,17 @@ class CoreLootTest extends MinecraftTestSupport {
         inventory.set(0,ItemStack.EMPTY);assertTrue(CoreLoot.fits(inventory,CoreLoot.reward(1,95)));
     }
     @Test void receiptMatchesDeliveredRewardAndCannotChargeAgainDuringReveal() {
-        var player=mock(ServerPlayer.class);var level=mock(ServerLevel.class);var inv=new Inventory(player);
+        var player=mock(ServerPlayer.class);var treasury=fund(player,128);var level=mock(ServerLevel.class);var inv=new Inventory(player);
         when(player.getInventory()).thenReturn(inv);when(player.serverLevel()).thenReturn(level);
         when(player.getPersistentData()).thenReturn(new net.minecraft.nbt.CompoundTag());
         when(player.getRandom()).thenReturn(net.minecraft.util.RandomSource.create(7));
         inv.items.set(0,new ItemStack(Items.EMERALD,64));
         var receipt=CoreLoot.purchaseWithReceipt(player,1);assertNotNull(receipt);
-        assertEquals(16,inv.countItem(Items.EMERALD));
+        assertEquals(64,inv.countItem(Items.EMERALD));assertEquals(80,FactionBank.balance(treasury));
         assertEquals(receipt.prize().getCount(),inv.countItem(receipt.prize().getItem()));
         assertTrue(inv.items.stream().anyMatch(s->ItemStack.isSameItemSameTags(s,receipt.prize())));
         assertTrue(receipt.tier()>=0 && receipt.tier()<4);
         when(level.getGameTime()).thenReturn(40L);
-        assertNull(CoreLoot.purchaseWithReceipt(player,0));assertEquals(16,inv.countItem(Items.EMERALD));
+        assertNull(CoreLoot.purchaseWithReceipt(player,0));assertEquals(64,inv.countItem(Items.EMERALD));assertEquals(80,FactionBank.balance(treasury));
     }
 }

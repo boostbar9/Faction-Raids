@@ -27,7 +27,7 @@ public final class DefensePlaybook {
                     "Right-click the Siege Core to open the Command Center. That's the tabbed UI for hiring, banking, checking your roster, viewing territory, and reading intel. Press Escape or click the X in the corner to close."),
             // === Economy ===
             new Tip("Bank","Your Purse vs the Bank",
-                    "Your Purse (top right) is the emeralds in your pocket. The Bank card (Bank tab) is your faction treasury. Deposits go to the bank so any member can spend them. Hire costs pull from the bank first, then from your purse."),
+                    "Your Purse (top right) is the emeralds in your pocket. The Treasury tab holds your faction funds. Deposit emeralds there before shopping. All Command Center purchases use only the Treasury; emeralds in your purse are never spent automatically."),
             new Tip("Bank","Deposit early, deposit often",
                     "The bank earns interest at the start of every siege wave, so emeralds sitting in the bank grow while emeralds in your pocket don't. Drop your loot in as soon as you get back to base."),
             // === Hiring ===

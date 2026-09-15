@@ -106,8 +106,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
         // Tab rail across the top: icon + label, evenly spaced.
         String[] tabLabels = layout.compact()
-                ? new String[]{"Army", "Loot", "Bank", "Land", "Intel"}
-                : new String[]{"Army", "Loot", "Bank", "Territory", "Intel"};
+                ? new String[]{"Army", "Loot", "Treasury", "Land", "Intel"}
+                : new String[]{"Army", "Loot", "Treasury", "Territory", "Intel"};
         CommandIcon[] tabIcons = {CommandIcon.SWORDS, CommandIcon.CHEST, CommandIcon.BANK, CommandIcon.MAP, CommandIcon.BOOK};
         int tabCount = tabLabels.length;
         int tabWidth = layout.tabWidth(tabCount);
@@ -323,7 +323,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         for (int i = 0; i < 4; i++) {
             hire[i].visible = tab == 0;
             hire[i].active = menu.role(i) >= 0 && menu.cost(i) >= 0
-                    && !menu.sold(i) && menu.rotation() > 0;
+                    && !menu.sold(i) && menu.rotation() > 0 && canAfford(menu.cost(i));
             String actionLabel = menu.sold(i)
                     ? "Hired"
                     : menu.cost(i) < 0
@@ -372,7 +372,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             zoomOutButton.visible = tab == 3;
             boxes[i].visible = buffs[i].visible = tab == 1;
             boxes[i].active = waitingTicks == 0 && revealTicks == 0
-                    && menu.emeralds() >= CoreLoot.price(i);
+                    && canAfford(CoreLoot.price(i));
             boxes[i].setMessage(Component.literal(
                     waitingTicks > 0 ? "Waiting..."
                             : revealTicks > 0 ? "Unsealing..."
@@ -381,7 +381,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
             boolean active = minecraft != null && minecraft.player != null
                     && minecraft.player.hasEffect(CoreBuffs.effect(i));
-            buffs[i].active = !active && menu.emeralds() >= CoreBuffs.PRICES[i];
+            buffs[i].active = !active && canAfford(CoreBuffs.PRICES[i]);
             buffs[i].setMessage(Component.literal(
                     active ? "Blessing active" : "Bless  ·  " + CoreBuffs.PRICES[i] + "e"));
         }
@@ -448,7 +448,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                         String area = SiegeYard.deploymentAreaGuidance(footprint);
                         if (!canAfford(SiegeYard.PRICES[i])) {
                             info = "You need " + emeralds(SiegeYard.PRICES[i] - availableFunds())
-                                    + " more (purse + faction bank). Deployment requires a clear, solid, flat "
+                                    + " more (faction Treasury). Deployment requires a clear, solid, flat "
                                     + area + ".";
                         } else {
                             info = "Buy the kit now, then right-click the top of a clear, solid, flat "
@@ -488,7 +488,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     layout.width() - 20, 46)) {
                 long dailyInterest = (long) menu.bank() * menu.interestRate() / 10000L;
                 tooltip(g, String.format(Locale.ROOT,
-                        "Faction treasury: %,d emeralds  |  Next wave: +%,d  |  Interest: +%,d in %s (%.2f%%/day, in-game time)  |  Purchases use the bank before your purse.",
+                        "Faction treasury: %,d emeralds  |  Next wave: +%,d  |  Interest: +%,d in %s (%.2f%%/day, in-game time)  |  Deposit emeralds here before purchasing.",
                         menu.bank(), menu.nextReward(), dailyInterest,
                         formatInterestCountdown(menu.ticksUntilInterest()),
                         menu.interestRate() / 100.0), tooltipX, tooltipY);
@@ -499,8 +499,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     int amount = i % 2 == 0 ? 8 : 64;
                     tooltip(g, (deposit ? "Deposit " : "Withdraw ") + amount
                             + " emeralds " + (deposit
-                                    ? "from your purse into the shared faction bank."
-                                    : "from the shared faction bank into your purse."),
+                                    ? "from your purse into the shared faction Treasury."
+                                    : "from the shared faction Treasury into your purse."),
                             tooltipX, tooltipY);
                 }
             }
@@ -520,8 +520,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     String state = menu.hasTerritoryBuff(i)
                             ? "Already active for the whole faction."
                             : missing == 0L
-                                    ? "One-time purchase. Uses faction bank first, then purse."
-                                    : "Need " + emeralds(missing) + " more (bank + purse).";
+                                    ? "One-time purchase. Paid from the faction Treasury only."
+                                    : "Need " + emeralds(missing) + " more (faction Treasury).";
                     tooltip(g, TerritoryBuffs.LABELS[i] + "  |  "
                             + TerritoryBuffs.DESCRIPTIONS[i] + "  |  " + state,
                             tooltipX, tooltipY);
@@ -557,7 +557,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     }
 
     private long availableFunds() {
-        return (long) menu.emeralds() + menu.bank();
+        return menu.bank();
     }
 
     private boolean canAfford(int price) {
@@ -980,8 +980,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         String detail = layout.compact()
                 ? (voting ? vote + "s left" : "Reward +" + String.format(Locale.ROOT, "%,d", menu.nextReward()) + "e")
                 : (voting ? vote + "s remaining"
-                        : siege ? "Next reward +" + menu.nextReward() + " to bank"
-                        : "Bank +" + menu.nextReward() + " on next wave clear");
+                        : siege ? "Next reward +" + menu.nextReward() + " to Treasury"
+                        : "Treasury +" + menu.nextReward() + " on next wave clear");
 
         int ribbonY = layout.ribbonY();
 
@@ -1377,12 +1377,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
             int rightX = x + w / 2;
             int rightW = w / 2 - 18;
-            text(g, "Next wave " + menu.nextWave() + ": +" + menu.nextReward() + " to bank",
+            text(g, "Next wave " + menu.nextWave() + ": +" + menu.nextReward() + " to Treasury",
                     rightX, bankY + 6, rightW, CommandPalette.ACCENT_TEAL);
             text(g, String.format(Locale.ROOT, "Interest: +%,d in %s (%.2f%%/day)",
                             dailyInterest, interestCountdown, menu.interestRate() / 100.0),
                     rightX, bankY + 18, rightW, CommandPalette.ACCENT_GOLD);
-            text(g, "Purchases pull from bank first, then your purse",
+            text(g, "All purchases use Treasury emeralds",
                     rightX, bankY + 30, rightW, CommandPalette.TEXT_DIM);
         }
 

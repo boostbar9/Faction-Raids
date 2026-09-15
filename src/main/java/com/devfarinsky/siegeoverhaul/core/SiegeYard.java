@@ -28,7 +28,7 @@ import java.util.Optional;
 /**
  * Army-tab Siege Yard: buys a placement kit for a friendly Recruits Siege
  * Engineer pre-mounted on a fresh Siege Weapons vehicle (catapult or
- * ballista). Charged like a normal recruit: bank first, then the player's
+ * ballista). Charged like a normal recruit: only from the faction Treasury, never the player's
  * inventory. The actual crew is deployed where the player uses the kit, so
  * an indoor or crowded Core can no longer block the purchase.
  * <p>Both mods must be present. When either is missing, the button rejects
@@ -68,7 +68,7 @@ public final class SiegeYard {
         long combined = PaymentSource.available(player, price);
         if (!player.isCreative() && combined < price) {
             player.sendSystemMessage(Component.literal(
-                    "You need " + price + " emeralds (bank + inventory) for a " + LABELS[index] + "."));
+                    "You need " + price + " emeralds in the faction Treasury for a " + LABELS[index] + "."));
             return false;
         }
 

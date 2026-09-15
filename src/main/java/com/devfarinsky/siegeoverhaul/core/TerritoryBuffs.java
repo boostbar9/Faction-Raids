@@ -111,7 +111,7 @@ public final class TerritoryBuffs {
         long combined = PaymentSource.available(player, price);
         if (!player.isCreative() && combined < price) {
             player.sendSystemMessage(Component.literal(
-                    "You need " + price + " emeralds for " + LABELS[index] + "."));
+                    "You need " + price + " emeralds in the faction Treasury for " + LABELS[index] + "."));
             return false;
         }
         if (!player.isCreative() && !PaymentSource.consume(player, price)) return false;
