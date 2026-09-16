@@ -118,8 +118,9 @@ public final class FactionBank {
         long last = core.getLong("BankInterestAt");
         long elapsed = now - last;
         if (elapsed <= 0) return DAY_TICKS;
-        long remainder = elapsed % DAY_TICKS;
-        return Math.max(0, DAY_TICKS - remainder);
+        // An unsettled payout stays due, even several days after its deadline.
+        // Settlement advances BankInterestAt; only then does a new countdown begin.
+        return elapsed >= DAY_TICKS ? 0 : DAY_TICKS - elapsed;
     }
     public static boolean canWithdraw(ServerPlayer player) {
         var anchor = RaidSavedData.get(player.server).anchors.get(SiegeCore.key(player));
