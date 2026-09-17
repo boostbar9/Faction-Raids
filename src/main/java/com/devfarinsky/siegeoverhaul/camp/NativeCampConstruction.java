@@ -43,6 +43,8 @@ public final class NativeCampConstruction {
             if(!CampRoad.prepare(level,raid))return false;
             for (long key : raid.pendingCampBlocks.keySet()) {
                 BlockPos p = BlockPos.of(key);
+                if (com.devfarinsky.siegeoverhaul.core.EnemyCoreSite.reserved(raid,p)
+                        && !p.equals(com.devfarinsky.siegeoverhaul.core.EnemyCore.position(raid))) return false;
                 if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)
                         || !CampVegetation.replaceable(level.getBlockState(p)) || !level.getFluidState(p).isEmpty()
                         || level.getBlockEntity(p) != null) return false;

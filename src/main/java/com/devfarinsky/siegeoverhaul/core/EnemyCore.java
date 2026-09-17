@@ -50,13 +50,21 @@ public final class EnemyCore {
     }
     /** New placements only: erect the keep at the town centre and enshrine the core. */
     private static boolean build(ServerLevel level, RaidSavedData.RaidState raid) {
-        if (!level.hasChunkAt(raid.campPos)) return false;
-        int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, raid.campPos.getX(), raid.campPos.getZ());
-        if (Math.abs(surface - raid.campPos.getY()) > 3) return false;
-        BlockPos base = new BlockPos(raid.campPos.getX(), surface, raid.campPos.getZ());
+        for (BlockPos base : EnemyCoreSite.candidates(raid.campPos, CampPerimeter.mainGateSide(raid))) {
+            if (buildAt(level, raid, base)) return true;
+        }
+        return false;
+    }
+    private static boolean buildAt(ServerLevel level, RaidSavedData.RaidState raid, BlockPos base) {
         BlockPos core = corePos(base);
         var anchor = RaidSavedData.get(level.getServer()).anchors.get(raid.teamKey);
         if (anchor == null) return false;
+        if (!EnemyCoreSite.clear(level, raid, base, cell -> {
+            var claim = RecruitsClaimsBridge.getClaimAt(level, cell).orElse(null);
+            return claim != null && claim.claimId().equals(raid.campClaimId)
+                    && !ClaimBridge.isForeignClaim(level, cell,
+                        anchor.withIdentity(claim.ownerFactionStringId(), anchor.teamDisplay()));
+        })) return false;
         Map<BlockPos, String> blocks = new LinkedHashMap<>(keepBlueprint(base));
         blocks.put(core, "siegeoverhaul:siege_core");
         Set<ChunkPos> checked = new HashSet<>();
@@ -78,9 +86,10 @@ public final class EnemyCore {
         }
         if (!CampTerrain.apply(level, raid, new CampTerrain.Plan(changes))) return false;
         raid.campaign.putLong("EnemyCore", core.asLong());
+        raid.campaign.putBoolean("EnemyCoreCourtyard", true);
         raid.warGate.getCompound("Blocks").putString(Long.toString(core.asLong()), "siegeoverhaul:siege_core");
         RaidSavedData.get(level.getServer()).setDirty();
-        FactionLogger.LOG.info("Enemy Siege Core keep raised at town centre {} for {}", core, raid.teamKey);
+        FactionLogger.LOG.info("Enemy Siege Core keep raised at clear camp site {} for {}", core, raid.teamKey);
         return true;
     }
     private static BlockState state(String id) {

@@ -158,6 +158,7 @@ public final class WarGate {
     private static boolean protectedAt(ServerLevel level,BlockPos p) {
         for(var raid:RaidSavedData.get(level.getServer()).raids.values()) {
             if(!raid.warGate.contains("Center",net.minecraft.nbt.Tag.TAG_LONG) || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD))continue;
+            if(com.devfarinsky.siegeoverhaul.core.EnemyCoreSite.reserved(raid,p))return true;
             var road=raid.warGate.getCompound("RoadBlocks");
             for(String key:road.getAllKeys()) {
                 BlockPos floor=savedPosition(key);
