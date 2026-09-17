@@ -1,0 +1,60 @@
+{
+  "parent": "siegeoverhaul:main/commander_down",
+  "display": {
+    "icon": {
+      "item": "minecraft:netherite_sword"
+    },
+    "title": {
+      "translate": "advancement.siegeoverhaul.regicide.title"
+    },
+    "description": {
+      "translate": "advancement.siegeoverhaul.regicide.desc"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": true
+  },
+  "criteria": {
+    "hollowfang": {
+      "trigger": "siegeoverhaul:commander_killed",
+      "conditions": {
+        "faction": "hollowfang_clan"
+      }
+    },
+    "blackbay": {
+      "trigger": "siegeoverhaul:commander_killed",
+      "conditions": {
+        "faction": "blackbay_reavers"
+      }
+    },
+    "emberchant": {
+      "trigger": "siegeoverhaul:commander_killed",
+      "conditions": {
+        "faction": "emberchant_zealots"
+      }
+    },
+    "crownfall": {
+      "trigger": "siegeoverhaul:commander_killed",
+      "conditions": {
+        "faction": "crownfall_exiles"
+      }
+    },
+    "wilds": {
+      "trigger": "siegeoverhaul:commander_killed",
+      "conditions": {
+        "faction": "wilds_marauders"
+      }
+    }
+  },
+  "requirements": [
+    ["hollowfang"],
+    ["blackbay"],
+    ["emberchant"],
+    ["crownfall"],
+    ["wilds"]
+  ],
+  "rewards": {
+    "experience": 1500
+  }
+}

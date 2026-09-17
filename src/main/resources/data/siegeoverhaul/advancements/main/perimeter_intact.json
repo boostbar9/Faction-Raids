@@ -1,0 +1,23 @@
+{
+  "parent": "siegeoverhaul:main/held_the_line",
+  "display": {
+    "icon": {
+      "item": "minecraft:oak_planks"
+    },
+    "title": {
+      "translate": "advancement.siegeoverhaul.perimeter_intact.title"
+    },
+    "description": {
+      "translate": "advancement.siegeoverhaul.perimeter_intact.desc"
+    },
+    "frame": "goal",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "no_breach_victory": {
+      "trigger": "siegeoverhaul:no_breach_victory"
+    }
+  }
+}

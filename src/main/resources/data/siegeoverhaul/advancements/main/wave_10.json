@@ -1,0 +1,29 @@
+{
+  "parent": "siegeoverhaul:main/endless",
+  "display": {
+    "icon": {
+      "item": "minecraft:golden_apple"
+    },
+    "title": {
+      "translate": "advancement.siegeoverhaul.wave_10.title"
+    },
+    "description": {
+      "translate": "advancement.siegeoverhaul.wave_10.desc"
+    },
+    "frame": "goal",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "reached_wave_10": {
+      "trigger": "siegeoverhaul:endless_wave_reached",
+      "conditions": {
+        "wave": 10
+      }
+    }
+  },
+  "rewards": {
+    "experience": 300
+  }
+}

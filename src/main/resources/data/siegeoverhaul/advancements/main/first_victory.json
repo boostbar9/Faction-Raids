@@ -1,0 +1,23 @@
+{
+  "parent": "siegeoverhaul:main/root",
+  "display": {
+    "icon": {
+      "item": "minecraft:emerald"
+    },
+    "title": {
+      "translate": "advancement.siegeoverhaul.first_victory.title"
+    },
+    "description": {
+      "translate": "advancement.siegeoverhaul.first_victory.desc"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "won_a_raid": {
+      "trigger": "siegeoverhaul:raid_won"
+    }
+  }
+}

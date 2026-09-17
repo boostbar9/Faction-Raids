@@ -1,0 +1,29 @@
+{
+  "parent": "siegeoverhaul:main/wave_10",
+  "display": {
+    "icon": {
+      "item": "minecraft:enchanted_golden_apple"
+    },
+    "title": {
+      "translate": "advancement.siegeoverhaul.wave_25.title"
+    },
+    "description": {
+      "translate": "advancement.siegeoverhaul.wave_25.desc"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": true
+  },
+  "criteria": {
+    "reached_wave_25": {
+      "trigger": "siegeoverhaul:endless_wave_reached",
+      "conditions": {
+        "wave": 25
+      }
+    }
+  },
+  "rewards": {
+    "experience": 1000
+  }
+}
