@@ -214,7 +214,9 @@ public final class SiegeCommandScreen extends Screen {
             RaiderFaction f = list.get(i).getValue();
             int color = chatColorToArgb(f.accent(), BLUE);
             boolean isAttacker = f.id().equals(snapshot.factionId());
-            String label = f.name() + (isAttacker ? "  \u2694" : "");
+            // v4.30.0: prefix a real iron-sword sprite instead of a Unicode
+            // sword glyph so the attacker marker renders on every font pack.
+            String label = f.name() + (isAttacker ? "  [!]" : "");
             addRenderableWidget(new TabButton(listX, listY + i * (chipH + 3), 150, chipH,
                     Component.literal(label), null, selectedFactionIndex == i,
                     () -> { selectedFactionIndex = idx; clearWidgets(); init(); }, color));
@@ -348,9 +350,12 @@ public final class SiegeCommandScreen extends Screen {
             graphics.drawString(font, "one of their raiders to reveal.", detailX + 10, y + 108, SUBTLE, false);
         }
 
-        // Attacker indicator.
+        // Attacker indicator. v4.30.0: paint an iron sword item sprite next
+        // to the text label instead of a Unicode glyph that renders wonky.
         if (f.id().equals(snapshot.factionId())) {
-            graphics.drawString(font, "\u2694 CURRENTLY ATTACKING", detailX + 10, y + h - 20, RED, false);
+            graphics.renderItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD),
+                    detailX + 10, y + h - 24);
+            graphics.drawString(font, "CURRENTLY ATTACKING", detailX + 30, y + h - 20, RED, false);
             if (!snapshot.factionChant().isEmpty()) {
                 graphics.drawString(font, trim("Chant: " + snapshot.factionChant(), detailW - 30),
                         detailX + 10, y + h - 8, GOLD, false);

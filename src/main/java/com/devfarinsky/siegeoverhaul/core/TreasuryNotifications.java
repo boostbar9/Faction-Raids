@@ -55,8 +55,9 @@ public final class TreasuryNotifications {
                 if (gained != 0) summary.append(message(gained));
                 if (gained != 0 && spent != 0) summary.append(Component.literal(" | ").withStyle(ChatFormatting.GRAY));
                 if (spent != 0) summary.append(message(spent));
+                // v4.30.0: chat only. The action-bar copy stomped the raid
+                // objective HUD every time a purchase or bounty landed.
                 player.sendSystemMessage(summary);
-                player.displayClientMessage(summary, true);
             }
         }
     }
