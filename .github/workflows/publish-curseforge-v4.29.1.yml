@@ -1,0 +1,163 @@
+name: Publish tested 4.29.1 beta to CurseForge
+
+on:
+  push:
+    branches: [publish/curseforge-v4.29.1]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v4.29.1
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify successful merged-main build and identical PR tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          import json, os, urllib.request
+
+          def get(path):
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={
+                      'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                      'Accept': 'application/vnd.github+json',
+                  },
+              )
+              with urllib.request.urlopen(request) as response:
+                  return json.load(response)
+
+          source_sha = 'e7e8a8f849f73affcc0f91d0ba33686d93036118'
+          source_tree = '6a172bc63e0a244b54371c28e78da2186b19decf'
+          pr_head_sha = '4cd5f29f40a760eeadf5ee1c90f76450c4948d8c'
+
+          run = get('actions/runs/35279640473')
+          assert run['status'] == 'completed' and run['conclusion'] == 'success'
+          assert run['event'] == 'push' and run['head_branch'] == 'main'
+          assert run['head_sha'] == source_sha
+
+          pr = get('pulls/143')
+          assert pr['merged'] and pr['merge_commit_sha'] == source_sha
+          assert pr['head']['sha'] == pr_head_sha
+
+          for sha in (run['head_sha'], pr['merge_commit_sha'], pr_head_sha):
+              assert get('git/commits/' + sha)['tree']['sha'] == source_tree
+          CHECK
+
+      - name: Download exact tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 35279640473
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Download regression results
+        uses: actions/download-artifact@v4
+        with:
+          name: regression-test-results
+          run-id: 35279640473
+          github-token: ${{ github.token }}
+          path: regression
+
+      - name: Verify tested bytes, metadata, dependencies, and regressions
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          import xml.etree.ElementTree as ET
+
+          jar = Path('dist/siegeoverhaul-4.29.1.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          Path('verified-sha256.txt').write_text(digest)
+
+          with zipfile.ZipFile(jar) as archive:
+              assert archive.testzip() is None
+              assert 'com/devfarinsky/siegeoverhaul/core/EnemyHeroes.class' in archive.namelist()
+              data = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+          mod = data['mods'][0]
+          assert mod['modId'] == 'siegeoverhaul' and mod['version'] == '4.29.1'
+          assert mod['displayTest'] == 'MATCH_VERSION'
+
+          dependencies = {entry['modId']: entry for entry in data['dependencies']['siegeoverhaul']}
+          for mod_id in ('recruits', 'workers', 'smallships', 'siegeweapons'):
+              assert dependencies[mod_id]['mandatory'] and dependencies[mod_id]['side'] == 'BOTH', mod_id
+          assert dependencies['recruits']['versionRange'] == '[1.15.2,)'
+          assert dependencies['workers']['versionRange'] == '[2.0.3,)'
+          for mod_id in ('corpse', 'magistuarmory', 'musketmod'):
+              assert not dependencies[mod_id]['mandatory'], mod_id
+
+          totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0)
+          reports = list(Path('regression').rglob('TEST-*.xml'))
+          assert reports, 'No regression reports found'
+          for report in reports:
+              result = ET.parse(report).getroot()
+              for key in totals:
+                  totals[key] += int(result.get(key, 0))
+          assert totals['tests'] >= 357 and all(totals[k] == 0 for k in ('failures', 'errors', 'skipped')), totals
+          print('Verified', jar.name, digest, totals)
+          CHECK
+
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.29.1.jar
+          name: The Siege Overhaul v4.29.1 beta - Enemy Core Keep Placement
+          version: v4.29.1
+          version-type: beta
+          changelog: |
+            # 4.29.1 beta
+            
+            - Keep the enemy command core in its raised keep, preferring a clear camp center and trying interior courtyard sites when the center is blocked.
+            - Require a dry, supported footprint and open headroom; avoid roads, queued buildings, foreign claims and unloaded terrain. Reserve the keep against later obstructions.
+            - Preserve existing active cores and capture progress.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+          fail-mode: fail
+
+      - name: Record accepted upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os, hashlib
+          from pathlib import Path
+
+          digest = hashlib.sha256(Path('dist/siegeoverhaul-4.29.1.jar').read_bytes()).hexdigest()
+          assert digest == Path('verified-sha256.txt').read_text()
+          result = {
+              'version': '4.29.1',
+              'file_id': os.environ['RELEASE_FILE_ID'],
+              'url': os.environ['RELEASE_URL'],
+              'source': 'e7e8a8f849f73affcc0f91d0ba33686d93036118',
+              'build_run': 35279640473,
+              'sha256': digest,
+          }
+          assert result['file_id'] and result['url'], 'CurseForge did not return an upload receipt'
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Accepted upload (moderation/public availability separate): ' + json.dumps(result) + '\n')
+          RECEIPT
+
+
