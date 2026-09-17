@@ -1,3 +1,9 @@
+# 4.30.0
+
+- Raider factions actually declare on your faction now. When a raid starts the attacking clan is marked ENEMY inside Villager Recruits' diplomacy manager, and marked back to NEUTRAL when the raid ends. That makes Recruits' own target selectors, HUD tints, and the vanilla diplomatic-status toast light up correctly instead of treating them as generic neutrals.
+- Treasury deposit and withdrawal notices no longer stomp the raid HUD. The action-bar copy of every purchase or bounty landed on the same row as the current phase and stronghold status, which flickered during a fight; it is chat-only now, so the raid HUD stays put.
+- Warlord's Codex attacker marker uses a real iron sword icon instead of the crossed-swords Unicode character. Font packs without that glyph were rendering a tofu box next to the attacking faction; the new marker reads on every default and modded font.
+
 # 4.29.1 beta
 
 - Keep the enemy command core in its raised keep, preferring a clear camp center and trying interior courtyard sites when the center is blocked.

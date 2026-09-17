@@ -1740,6 +1740,11 @@ public final class RaidEvents {
         if (state.narrative != null && state.narrative.factionId != null && !state.narrative.factionId.isBlank())
             state.factionId = com.devfarinsky.siegeoverhaul.items.FactionBanners.FactionId.byIdOrDefault(state.narrative.factionId).id;
         state.breached = "siege_core".equals(point.name());
+        // v4.30.0: mark the attacking raider faction as ENEMY toward the player
+        // faction inside Recruits' diplomacy manager so its native HUD, target
+        // selectors, and toast messages treat them as hostile.
+        com.devfarinsky.siegeoverhaul.compat.RaiderFactions.ensure(server, state.factionId);
+        com.devfarinsky.siegeoverhaul.compat.RaiderDiplomacy.markEnemy(server, anchor.teamKey(), state.factionId);
         ServerLevel raidLevel = getLevel(server, point);
         if (raidLevel != null && RaidConfig.BUILD_WAR_CAMPS.get()) buildWarCamp(raidLevel, anchor, point, state);
         // Amphibious detection: if a large enough open-water body sits within
@@ -4513,6 +4518,11 @@ public final class RaidEvents {
         PATHING_TELEMETRY.remove(teamKey);
         RaidSavedData.RaidState state = data.raids.remove(teamKey);
         RaidSavedData.Anchor anchor = data.anchors.get(teamKey);
+        // v4.30.0: raid is over - reset the diplomacy relation so Recruits' HUD
+        // and target selectors stop treating this raider faction as hostile.
+        if (state != null && state.factionId != null && !state.factionId.isBlank()) {
+            com.devfarinsky.siegeoverhaul.compat.RaiderDiplomacy.resetRelation(server, teamKey, state.factionId);
+        }
         if (state != null && anchor != null) {
             RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
             ServerLevel level = getLevel(server, point);

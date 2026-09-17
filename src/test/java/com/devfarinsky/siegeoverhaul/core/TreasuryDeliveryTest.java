@@ -48,10 +48,11 @@ class TreasuryDeliveryTest extends MinecraftTestSupport {
             TreasuryNotifications.flush(end);
             var chat = ArgumentCaptor.forClass(Component.class);
             verify(member).sendSystemMessage(chat.capture());
-            var screen = ArgumentCaptor.forClass(Component.class);
-            verify(member).displayClientMessage(screen.capture(), eq(true));
-            assertEquals("[Treasury] +30 emeralds deposited | [Treasury] -10 emeralds removed", screen.getValue().getString());
-            assertEquals(screen.getValue(), chat.getValue());
+            // v4.30.0: Treasury notices are chat-only. Duplicating them onto
+            // the action bar collided with the raid objective HUD every time
+            // a purchase or bounty landed, so the action-bar copy was removed.
+            verify(member, never()).displayClientMessage(any(Component.class), eq(true));
+            assertEquals("[Treasury] +30 emeralds deposited | [Treasury] -10 emeralds removed", chat.getValue().getString());
             verifyNoInteractions(stranger);
             clearInvocations(member);
             TreasuryNotifications.flush(end);
