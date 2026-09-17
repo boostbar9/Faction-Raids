@@ -2270,6 +2270,24 @@ public final class RaidEvents {
                     com.devfarinsky.siegeoverhaul.advancements.SiegeTriggers.ENDLESS_WAVE_REACHED
                             .trigger(p, state.wave);
                 }
+                // v4.33.0: rarity-weighted loot box drop for surviving the
+                // wave. Higher waves shift the distribution toward Rare/
+                // Epic - the exact curve lives in LootBoxItem.rollWaveTier.
+                // One box per online defender per cleared wave; overflow
+                // drops at their feet so a full inventory never eats it.
+                com.devfarinsky.siegeoverhaul.items.LootBoxItem.Tier tier =
+                        com.devfarinsky.siegeoverhaul.items.LootBoxItem.rollWaveTier(
+                                p.getRandom(), state.wave);
+                net.minecraft.world.item.ItemStack box = new net.minecraft.world.item.ItemStack(
+                        com.devfarinsky.siegeoverhaul.items.ModItems.lootBox(tier).get());
+                if (!p.getInventory().add(box.copy())) {
+                    p.drop(box.copy(), false);
+                }
+                p.displayClientMessage(
+                        Component.literal("You received a ")
+                                .append(Component.literal(tier.label + " Loot Box").withStyle(tier.color))
+                                .append(Component.literal(" for surviving wave " + state.wave + ".")),
+                        false);
             }
         }
 
