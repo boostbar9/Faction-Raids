@@ -1,3 +1,9 @@
+# 4.29.1 beta
+
+- Keep the enemy command core in its raised keep, preferring a clear camp center and trying interior courtyard sites when the center is blocked.
+- Require a dry, supported footprint and open headroom; avoid roads, queued buildings, foreign claims and unloaded terrain. Reserve the keep against later obstructions.
+- Preserve existing active cores and capture progress.
+
 # 4.29.0
 
 - Marching enemy armies show up on the Recruits map. Press M and you can watch a column close on your territory the same way you watch your own recruits move. Soldiers and their siege engines get their own icons and slide across the map as the army advances.
