@@ -572,6 +572,9 @@ public final class RaidEvents {
         if (!(event.getEntity() instanceof ServerPlayer sp)) return;
         com.devfarinsky.siegeoverhaul.items.StarterBagItem.giveOnce(sp);
         // v3.2.0: notify player of any spoils queued while they were offline.
+        // v4.31.0: log the failure instead of silently swallowing so a
+        // corrupted pendingSpoils entry surfaces in the server log rather
+        // than manifesting only as "my spoils vanished."
         try {
             RaidSavedData data = RaidSavedData.get(sp.server);
             java.util.List<RaidSavedData.UnclaimedSpoils> queued = data.pendingSpoils.get(sp.getUUID());
@@ -583,7 +586,11 @@ public final class RaidEvents {
                         .append(Component.literal("/siegeoverhaul claim").withStyle(ChatFormatting.AQUA))
                         .append(Component.literal(" to collect.").withStyle(ChatFormatting.GOLD)));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            com.devfarinsky.siegeoverhaul.FactionLogger.LOG.warn(
+                    "[{}] pending spoils lookup failed for {} on login: {}",
+                    SiegeOverhaul.MOD_ID, sp.getGameProfile().getName(), e.toString());
+        }
     }
 
     /**
@@ -2206,6 +2213,11 @@ public final class RaidEvents {
             state.lastWarningSecond = Integer.MAX_VALUE;
             announce(server, teamKey, Component.literal("Wave " + state.wave + " cleared. Next wave in " +
                     Math.max(1, (state.ticksToNextWave + 19) / 20) + " seconds.").withStyle(ChatFormatting.GREEN), false);
+            // v4.31.0: gentle experience-orb ping so the wave-clear beat has
+            // audible weight, not just a chat line. Same sound the game uses
+            // for a small reward, which matches the emerald deposit that
+            // just landed on the previous line.
+            playCue(server, teamKey, SoundEvents.EXPERIENCE_ORB_PICKUP, 1.4F);
         }
 
         if (state.ticksToNextWave > 0) {
@@ -4623,6 +4635,13 @@ public final class RaidEvents {
                 (elapsedTicks > 0 ? "; duration " + formatTime(elapsedTicks / 20) : "") + ".";
         announce(server, teamKey, Component.literal(message + summary)
                 .withStyle(victory ? ChatFormatting.GREEN : ChatFormatting.DARK_RED), victory);
+        // v4.31.0: on defeat, close with a somber tone so the loss lands
+        // audibly. Wither death shout at low pitch reads as a war horn
+        // fading. Victory already fires the raid horn via announce(..., true)
+        // above, so no cue here for the win path.
+        if (!victory) {
+            playCue(server, teamKey, SoundEvents.WITHER_DEATH, 0.6F);
+        }
         // On defender victory, close with the raider faction's parting taunt if
         // one was rolled. Prefix with an em-dash to read as attribution.
         if (victory && state != null && state.narrative != null && state.narrative.victoryTaunt != null) {
@@ -4841,6 +4860,22 @@ public final class RaidEvents {
         } else onlineMembers(server, teamKey).forEach(p -> p.sendSystemMessage(styled));
         if (horn) onlineMembers(server, teamKey).forEach(p ->
                 p.playNotifySound(SoundEvents.RAID_HORN.value(), SoundSource.HOSTILE, 1.0F, 1.0F));
+    }
+
+    /**
+     * v4.31.0 tactical audio cues. Plays a short one-shot to every online
+     * member of {@code teamKey} to punctuate a raid beat that used to be
+     * silent (wave cleared, defeat, commander felled). Kept intentionally
+     * quiet (0.7f) so it complements the chat line without stepping on
+     * ambient music or combat sound. Uses {@link Player#playNotifySound}
+     * so it plays client-side even if the player is not near the source
+     * position.
+     */
+    private static void playCue(MinecraftServer server, String teamKey,
+                                net.minecraft.sounds.SoundEvent sound,
+                                float pitch) {
+        onlineMembers(server, teamKey).forEach(p ->
+                p.playNotifySound(sound, SoundSource.PLAYERS, 0.7F, pitch));
     }
 
     /**
