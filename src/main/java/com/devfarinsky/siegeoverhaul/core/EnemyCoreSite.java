@@ -31,7 +31,9 @@ public final class EnemyCoreSite {
                         || !level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)
                         || !allowed.test(p)) return false;
                 var state=level.getBlockState(p);
-                if (!state.getFluidState().isEmpty() || state.hasBlockEntity()) return false;
+                if (state.is(net.minecraft.world.level.block.Blocks.WATER)
+                        || state.is(net.minecraft.world.level.block.Blocks.LAVA)
+                        || !state.getFluidState().isEmpty() || state.hasBlockEntity()) return false;
                 if (y<0 ? !state.isFaceSturdy(level,p,Direction.UP) : !CampVegetation.replaceable(state)) return false;
             }
             // Do not occupy a planned building, even when its roof is above the clearance box.
