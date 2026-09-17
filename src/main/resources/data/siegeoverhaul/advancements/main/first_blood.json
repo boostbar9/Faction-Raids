@@ -1,0 +1,23 @@
+{
+  "parent": "siegeoverhaul:main/root",
+  "display": {
+    "icon": {
+      "item": "minecraft:iron_sword"
+    },
+    "title": {
+      "translate": "advancement.siegeoverhaul.first_blood.title"
+    },
+    "description": {
+      "translate": "advancement.siegeoverhaul.first_blood.desc"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "killed_a_raider": {
+      "trigger": "siegeoverhaul:raider_killed"
+    }
+  }
+}

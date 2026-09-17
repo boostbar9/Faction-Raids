@@ -1,0 +1,29 @@
+{
+  "parent": "siegeoverhaul:main/first_victory",
+  "display": {
+    "icon": {
+      "item": "minecraft:white_banner"
+    },
+    "title": {
+      "translate": "advancement.siegeoverhaul.warlord.title"
+    },
+    "description": {
+      "translate": "advancement.siegeoverhaul.warlord.desc"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "ten_wins": {
+      "trigger": "siegeoverhaul:raid_won",
+      "conditions": {
+        "count": 10
+      }
+    }
+  },
+  "rewards": {
+    "experience": 800
+  }
+}

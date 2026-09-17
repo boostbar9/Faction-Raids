@@ -1,0 +1,60 @@
+{
+  "parent": "siegeoverhaul:main/faction_scholar",
+  "display": {
+    "icon": {
+      "item": "minecraft:enchanted_book"
+    },
+    "title": {
+      "translate": "advancement.siegeoverhaul.know_thy_enemy.title"
+    },
+    "description": {
+      "translate": "advancement.siegeoverhaul.know_thy_enemy.desc"
+    },
+    "frame": "goal",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "hollowfang": {
+      "trigger": "siegeoverhaul:faction_discovered",
+      "conditions": {
+        "faction": "hollowfang_clan"
+      }
+    },
+    "blackbay": {
+      "trigger": "siegeoverhaul:faction_discovered",
+      "conditions": {
+        "faction": "blackbay_reavers"
+      }
+    },
+    "emberchant": {
+      "trigger": "siegeoverhaul:faction_discovered",
+      "conditions": {
+        "faction": "emberchant_zealots"
+      }
+    },
+    "crownfall": {
+      "trigger": "siegeoverhaul:faction_discovered",
+      "conditions": {
+        "faction": "crownfall_exiles"
+      }
+    },
+    "wilds": {
+      "trigger": "siegeoverhaul:faction_discovered",
+      "conditions": {
+        "faction": "wilds_marauders"
+      }
+    }
+  },
+  "requirements": [
+    ["hollowfang"],
+    ["blackbay"],
+    ["emberchant"],
+    ["crownfall"],
+    ["wilds"]
+  ],
+  "rewards": {
+    "experience": 600
+  }
+}

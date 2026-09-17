@@ -1,0 +1,23 @@
+{
+  "parent": "siegeoverhaul:main/first_blood",
+  "display": {
+    "icon": {
+      "item": "minecraft:shield"
+    },
+    "title": {
+      "translate": "advancement.siegeoverhaul.held_the_line.title"
+    },
+    "description": {
+      "translate": "advancement.siegeoverhaul.held_the_line.desc"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "survived_a_wave": {
+      "trigger": "siegeoverhaul:wave_survived"
+    }
+  }
+}

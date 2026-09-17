@@ -1,0 +1,23 @@
+{
+  "parent": "siegeoverhaul:main/first_victory",
+  "display": {
+    "icon": {
+      "item": "minecraft:diamond_sword"
+    },
+    "title": {
+      "translate": "advancement.siegeoverhaul.commander_down.title"
+    },
+    "description": {
+      "translate": "advancement.siegeoverhaul.commander_down.desc"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "commander_killed": {
+      "trigger": "siegeoverhaul:commander_killed"
+    }
+  }
+}

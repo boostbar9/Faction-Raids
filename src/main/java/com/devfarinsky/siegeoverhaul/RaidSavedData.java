@@ -545,6 +545,14 @@ public final class RaidSavedData extends SavedData {
         public int totalSpawned;
         public int totalDefeated;
         public int totalEscaped;
+        /**
+         * v4.32.0 — count of faction-member player deaths during this raid.
+         * Powers the "Untouchable" advancement (win with zero defender
+         * deaths). Not persisted for offline members because we can't know
+         * whether they died to the raid or unrelated causes. Older saves
+         * without this key deserialize as 0 which is the correct default.
+         */
+        public int defenderDeaths;
         public boolean rewardEligible = true;
         public int lastWarningSecond = Integer.MAX_VALUE;
         public final Set<UUID> raiders = new HashSet<>();
@@ -754,6 +762,7 @@ public final class RaidSavedData extends SavedData {
             tag.putInt("TotalSpawned", totalSpawned);
             tag.putInt("TotalDefeated", totalDefeated);
             tag.putInt("TotalEscaped", totalEscaped);
+            tag.putInt("DefenderDeaths", defenderDeaths);
             tag.putBoolean("RewardEligible", rewardEligible);
             ListTag ids = new ListTag();
             raiders.forEach(id -> ids.add(StringTag.valueOf(id.toString())));
@@ -920,6 +929,7 @@ public final class RaidSavedData extends SavedData {
             state.totalSpawned = tag.getInt("TotalSpawned");
             state.totalDefeated = tag.getInt("TotalDefeated");
             state.totalEscaped = tag.getInt("TotalEscaped");
+            state.defenderDeaths = tag.getInt("DefenderDeaths");
             state.rewardEligible = !tag.contains("RewardEligible", Tag.TAG_BYTE) ||
                     tag.getBoolean("RewardEligible");
             ListTag ids = tag.getList("Raiders", Tag.TAG_STRING);

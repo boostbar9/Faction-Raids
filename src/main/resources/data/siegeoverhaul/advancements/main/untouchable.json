@@ -1,0 +1,26 @@
+{
+  "parent": "siegeoverhaul:main/perimeter_intact",
+  "display": {
+    "icon": {
+      "item": "minecraft:totem_of_undying"
+    },
+    "title": {
+      "translate": "advancement.siegeoverhaul.untouchable.title"
+    },
+    "description": {
+      "translate": "advancement.siegeoverhaul.untouchable.desc"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": true
+  },
+  "criteria": {
+    "no_death_victory": {
+      "trigger": "siegeoverhaul:no_death_victory"
+    }
+  },
+  "rewards": {
+    "experience": 500
+  }
+}

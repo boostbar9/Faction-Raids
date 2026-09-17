@@ -467,6 +467,28 @@ public final class RaidEvents {
             }
         }
 
+        // v4.32.0: track defender-player deaths per active raid so the
+        // Untouchable advancement (win with zero deaths) can check state
+        // in finishRaid. We only count faction-member ServerPlayer deaths
+        // during an active raid on THAT faction; mob deaths and idle-world
+        // deaths don't feed this counter. Wrapped in try to keep a subsystem
+        // problem from breaking the death event for other listeners.
+        if (event.getEntity() instanceof ServerPlayer defenderPlayer) {
+            try {
+                RaidSavedData data0 = RaidSavedData.get(level.getServer());
+                String defenderKey = com.devfarinsky.siegeoverhaul.core.SiegeCore.key(defenderPlayer);
+                if (defenderKey != null && !defenderKey.isBlank()) {
+                    RaidSavedData.RaidState activeRaid = data0.raids.get(defenderKey);
+                    if (activeRaid != null) {
+                        activeRaid.defenderDeaths++;
+                        data0.setDirty();
+                    }
+                }
+            } catch (Throwable t) {
+                FactionLogger.LOG.debug("[SiegeOverhaul] defender death tally skipped: {}", t.toString());
+            }
+        }
+
         if (victimTeamKey.isBlank()) return;
         RaidSavedData data = RaidSavedData.get(level.getServer());
         // v2.26.0 scout death: drop the intel letter and record the removal
@@ -488,6 +510,20 @@ public final class RaidEvents {
         RaidSavedData.Anchor anchor = data.anchors.get(victimTeamKey);
         if (isCommander) {
             if (anchor != null) markCommanderDefeated(level.getServer(), anchor, state);
+        }
+        // v4.32.0: fire advancement triggers for the killer. Only fires if
+        // the killer is a real player (not a hired recruit or wolf) so a
+        // defender who lets the auto-army do all the work does not
+        // accidentally earn kill-based advancements. isFactionDefender
+        // above already ran; we reuse the entity ref here.
+        if (event.getSource().getEntity() instanceof ServerPlayer killerPlayer) {
+            com.devfarinsky.siegeoverhaul.advancements.SiegeTriggers.RAIDER_KILLED.trigger(killerPlayer);
+            if (isCommander) {
+                String factionId = state.narrative != null && state.narrative.factionId != null
+                        ? state.narrative.factionId : "";
+                com.devfarinsky.siegeoverhaul.advancements.SiegeTriggers.COMMANDER_KILLED
+                        .trigger(killerPlayer, factionId);
+            }
         }
         // v4.27.0 combat bounties: pay the treasury for each raider the
         // faction kills. Manual raids are excluded when reward farming is
@@ -2194,6 +2230,12 @@ public final class RaidEvents {
                 updateBossBar(server, anchor, state, false); return;
             }
             announce(server, teamKey, Component.literal("The siege continues. The next five waves pay more into your faction bank.").withStyle(ChatFormatting.GOLD), false);
+            // v4.32.0: Endless commit hooks the "Endless" advancement.
+            // Fires on the CONTINUE decision, not on the offer, so a vote
+            // that gets declined doesn't grant credit for enduring it.
+            for (ServerPlayer p : onlineMembers(server, teamKey)) {
+                com.devfarinsky.siegeoverhaul.advancements.SiegeTriggers.ENDLESS_STARTED.trigger(p);
+            }
         }
         if (state.wave > 0 && state.pendingWaveSpawns <= 0 && state.raiders.isEmpty() &&
                 state.ticksToNextWave <= 0) {
@@ -2218,6 +2260,17 @@ public final class RaidEvents {
             // for a small reward, which matches the emerald deposit that
             // just landed on the previous line.
             playCue(server, teamKey, SoundEvents.EXPERIENCE_ORB_PICKUP, 1.4F);
+            // v4.32.0: advancement hook. Held the Line + endless wave
+            // milestones fire per online member per wave cleared. Fires
+            // after the audio cue so the trigger and cue land on the same
+            // client tick and read as one beat.
+            for (ServerPlayer p : onlineMembers(server, teamKey)) {
+                com.devfarinsky.siegeoverhaul.advancements.SiegeTriggers.WAVE_SURVIVED.trigger(p);
+                if (EndlessSiege.active(state)) {
+                    com.devfarinsky.siegeoverhaul.advancements.SiegeTriggers.ENDLESS_WAVE_REACHED
+                            .trigger(p, state.wave);
+                }
+            }
         }
 
         if (state.ticksToNextWave > 0) {
@@ -4617,6 +4670,46 @@ public final class RaidEvents {
             recordWarJournal(server, data, teamKey, state, victory, eligibleVictory);
             if (state.narrative != null) {
                 markFactionDiscovered(data, teamKey, state.narrative.factionId);
+            }
+        }
+
+        // v4.32.0: fire advancement triggers for every online defender at the
+        // moment the raid ends. We only fire the "victory" family when the
+        // defenders actually won (victory && eligibleVictory) so a manual
+        // /siegeoverhaul admin end doesn't unlock advancements. Faction
+        // discovery fires for both wins and losses because scouting the
+        // enemy costs blood either way.
+        if (state != null) {
+            java.util.List<ServerPlayer> present = onlineMembers(server, teamKey);
+            String factionId = state.narrative != null && state.narrative.factionId != null
+                    ? state.narrative.factionId : "";
+            for (ServerPlayer p : present) {
+                com.devfarinsky.siegeoverhaul.advancements.SiegeTriggers.FACTION_DISCOVERED
+                        .trigger(p, factionId);
+                if (eligibleVictory) {
+                    com.devfarinsky.siegeoverhaul.advancements.SiegeTriggers.RAID_WON.trigger(p);
+                    // Untouchable: this raid ended with zero counted faction
+                    // deaths. Counter is server-side and additive so it stays
+                    // fair across relogs.
+                    if (state.defenderDeaths == 0) {
+                        com.devfarinsky.siegeoverhaul.advancements.SiegeTriggers.NO_DEATH_VICTORY.trigger(p);
+                    }
+                    // Perimeter Intact: zero repair-queued blocks left at
+                    // raid end. state.breachedBlocks is the same list the
+                    // repair notifier reads, so this stays consistent with
+                    // what the player sees in chat.
+                    if (state.breachedBlocks == null || state.breachedBlocks.isEmpty()) {
+                        com.devfarinsky.siegeoverhaul.advancements.SiegeTriggers.NO_BREACH_VICTORY.trigger(p);
+                    }
+                    // Endless-wave milestones: the current wave number at
+                    // finishRaid is the last wave the defenders survived, so
+                    // wave >= 10 fires the wave-10 goal, >= 25 fires the
+                    // wave-25 goal, etc. Only meaningful in Endless mode.
+                    if (EndlessSiege.active(state)) {
+                        com.devfarinsky.siegeoverhaul.advancements.SiegeTriggers.ENDLESS_WAVE_REACHED
+                                .trigger(p, state.wave);
+                    }
+                }
             }
         }
         ServerBossEvent bar = RaidBossBars.remove(teamKey);

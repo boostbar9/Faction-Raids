@@ -1,3 +1,13 @@
+# 4.32.0
+
+- Adds a proper Siege Overhaul tab to the vanilla advancement screen. Open your advancements (default L key) and there is now a full tree tracking your first kill, your first held wave, your first won raid, your first commander down, your first faction met, and every milestone that comes after that.
+- Tracks flawless defense two different ways. Win a raid without a single wall block being breached and you get Perimeter Intact. Win a raid without a single defender dying and you get Untouchable, which is the hidden challenge tier and pays real experience.
+- Tracks the five raiding factions as a set. Meet any faction for the first time and you get Faction Scholar. Meet all five and you get Know Thy Enemy, which is a full goal on the tree.
+- Tracks commanders the same way. Kill any commander and you get Commander Down. Kill a commander from all five factions and you get Regicide, which is hidden until you've done at least one, and drops a fat experience payout when the fifth one falls.
+- Tracks Endless siege progression. Voting to continue past wave 5 unlocks Endless. Reaching wave 10 in Endless gives you Double Digits. Reaching wave 25 in the same Endless push is the hidden long-war challenge.
+- Tracks career wins as Warlord, which unlocks after your tenth won raid. Win counter persists across relogs.
+- No new HUD and no new menu. Everything routes through the vanilla advancement screen so it reads exactly like a base-game achievement tree, just with siege-specific milestones inside it.
+
 # 4.31.0
 
 - Wave clears play a quiet experience-ping so the beat lands with sound, not just chat. Defeats now close on a low wither-death shout that fades like a war horn dying. Victories still get the raid horn they've always had, so the whole raid arc reads audibly whether or not chat is on screen.

@@ -1,0 +1,32 @@
+{
+  "display": {
+    "icon": {
+      "item": "siegeoverhaul:guidebook"
+    },
+    "title": {
+      "translate": "advancement.siegeoverhaul.root.title"
+    },
+    "description": {
+      "translate": "advancement.siegeoverhaul.root.desc"
+    },
+    "frame": "task",
+    "background": "minecraft:textures/block/stone.png",
+    "show_toast": false,
+    "announce_to_chat": false,
+    "hidden": false
+  },
+  "criteria": {
+    "own_codex": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": [
+              "siegeoverhaul:guidebook"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
