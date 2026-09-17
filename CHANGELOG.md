@@ -1,3 +1,8 @@
+# 4.31.0
+
+- Wave clears play a quiet experience-ping so the beat lands with sound, not just chat. Defeats now close on a low wither-death shout that fades like a war horn dying. Victories still get the raid horn they've always had, so the whole raid arc reads audibly whether or not chat is on screen.
+- Pending-spoils lookup on login no longer swallows failures silently. If a saved-data problem ever stops a returning player from being told about their unclaimed rewards, it now shows up in the server log so admins can catch it instead of the reward just seeming to vanish.
+
 # 4.30.0
 
 - Raider factions actually declare on your faction now. When a raid starts the attacking clan is marked ENEMY inside Villager Recruits' diplomacy manager, and marked back to NEUTRAL when the raid ends. That makes Recruits' own target selectors, HUD tints, and the vanilla diplomatic-status toast light up correctly instead of treating them as generic neutrals.
