@@ -40,6 +40,28 @@ public final class ModItems {
             () -> new CrewDeploymentItem(1,
                     new Item.Properties().stacksTo(1).rarity(Rarity.RARE)));
 
+    // v4.33.0: rarity-tiered loot boxes handed out for wave clears. Four
+    // separate registrations rather than NBT-tagged variants so each tier
+    // gets its own model, texture, and vanilla-rarity name color for free.
+    public static final RegistryObject<Item> LOOT_BOX_COMMON = ITEMS.register(
+            "loot_box_common", () -> new LootBoxItem(LootBoxItem.Tier.COMMON));
+    public static final RegistryObject<Item> LOOT_BOX_UNCOMMON = ITEMS.register(
+            "loot_box_uncommon", () -> new LootBoxItem(LootBoxItem.Tier.UNCOMMON));
+    public static final RegistryObject<Item> LOOT_BOX_RARE = ITEMS.register(
+            "loot_box_rare", () -> new LootBoxItem(LootBoxItem.Tier.RARE));
+    public static final RegistryObject<Item> LOOT_BOX_EPIC = ITEMS.register(
+            "loot_box_epic", () -> new LootBoxItem(LootBoxItem.Tier.EPIC));
+
+    /** Resolves a tier to its registered item for wave-drop code paths. */
+    public static RegistryObject<Item> lootBox(LootBoxItem.Tier tier) {
+        return switch (tier) {
+            case COMMON -> LOOT_BOX_COMMON;
+            case UNCOMMON -> LOOT_BOX_UNCOMMON;
+            case RARE -> LOOT_BOX_RARE;
+            case EPIC -> LOOT_BOX_EPIC;
+        };
+    }
+
     private ModItems() {}
 
     public static void register(IEventBus modBus) {
@@ -54,6 +76,10 @@ public final class ModItems {
             // but new copies come from /siegeoverhaul book only.
             event.accept(SIEGE_CORE.get());
             event.accept(SETTLEMENT_BAG.get());event.accept(SURVIVAL_BAG.get());
+            event.accept(LOOT_BOX_COMMON.get());
+            event.accept(LOOT_BOX_UNCOMMON.get());
+            event.accept(LOOT_BOX_RARE.get());
+            event.accept(LOOT_BOX_EPIC.get());
         }
     }
 }

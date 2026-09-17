@@ -1,3 +1,12 @@
+# 4.33.0
+
+- Loot boxes are now real items you get for surviving a wave, instead of automatic emerald deposits alone. Every online defender receives one loot box at the end of every cleared wave, and higher waves shift the odds toward better boxes.
+- Four rarity tiers with their own textures: Common (iron-banded oak), Uncommon (bronze), Rare (silver with a sapphire), and Epic (gold with amethyst). The item name is color-coded by tier, and the tooltip tells you what you're holding.
+- Right-click a box to open it. A chest-open sound plays, a firework-star pop appears above your head, and the contents drop into your inventory (overflow drops at your feet so a full inventory never eats it).
+- Contents scale to the box. Common boxes carry iron, arrows, and basic building materials. Uncommon adds gold and a few emeralds. Rare pulls diamonds, ender pearls, and experience bottles. Epic can drop netherite, enchanted golden apples, and totems of undying.
+- Rough distribution: wave 1 clears are almost all Common with a small shot at anything better, by wave 10 you're seeing Rare boxes regularly and Epics start showing up, and past wave 20 the mix is dominated by Rare and Epic. A lucky wave-1 clear can still pop an Epic; it just isn't the usual outcome.
+- Loot boxes stack up to 16 in a single slot so they don't clog inventory when you're running a long Endless push. They're also listed in the creative Tools tab.
+
 # 4.32.0
 
 - Adds a proper Siege Overhaul tab to the vanilla advancement screen. Open your advancements (default L key) and there is now a full tree tracking your first kill, your first held wave, your first won raid, your first commander down, your first faction met, and every milestone that comes after that.

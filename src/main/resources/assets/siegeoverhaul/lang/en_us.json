@@ -59,5 +59,9 @@
   "advancement.siegeoverhaul.faction_scholar.title": "Faction Scholar",
   "advancement.siegeoverhaul.faction_scholar.desc": "Meet any raiding faction in the field.",
   "advancement.siegeoverhaul.know_thy_enemy.title": "Know Thy Enemy",
-  "advancement.siegeoverhaul.know_thy_enemy.desc": "Discover every raiding faction: Hollowfang, Blackbay, Emberchant, Crownfall, and Wilds."
+  "advancement.siegeoverhaul.know_thy_enemy.desc": "Discover every raiding faction: Hollowfang, Blackbay, Emberchant, Crownfall, and Wilds.",
+  "item.siegeoverhaul.loot_box_common": "Common Loot Box",
+  "item.siegeoverhaul.loot_box_uncommon": "Uncommon Loot Box",
+  "item.siegeoverhaul.loot_box_rare": "Rare Loot Box",
+  "item.siegeoverhaul.loot_box_epic": "Epic Loot Box"
 }
