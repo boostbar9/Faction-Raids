@@ -50,34 +50,32 @@ public final class EnemyCore {
     }
     /** New placements only: erect the keep at the town centre and enshrine the core. */
     private static boolean build(ServerLevel level, RaidSavedData.RaidState raid) {
+        var anchor = RaidSavedData.get(level.getServer()).anchors.get(raid.teamKey);
+        if (anchor == null) return false;
+        Map<ChunkPos, Boolean> allowedChunks = new HashMap<>();
+        java.util.function.Predicate<BlockPos> allowed = cell -> allowedChunks.computeIfAbsent(
+                new ChunkPos(cell), chunk -> {
+                    var claim = RecruitsClaimsBridge.getClaimAt(level, cell).orElse(null);
+                    return claim != null && claim.claimId().equals(raid.campClaimId)
+                            && !ClaimBridge.isForeignClaim(level, cell,
+                            anchor.withIdentity(claim.ownerFactionStringId(), anchor.teamDisplay()));
+                });
         for (BlockPos base : EnemyCoreSite.candidates(raid.campPos, CampPerimeter.mainGateSide(raid))) {
-            if (buildAt(level, raid, base)) return true;
+            if (buildAt(level, raid, base, allowed)) return true;
         }
         return false;
     }
-    private static boolean buildAt(ServerLevel level, RaidSavedData.RaidState raid, BlockPos base) {
+    private static boolean buildAt(ServerLevel level, RaidSavedData.RaidState raid, BlockPos base,
+                                   java.util.function.Predicate<BlockPos> allowed) {
         BlockPos core = corePos(base);
-        var anchor = RaidSavedData.get(level.getServer()).anchors.get(raid.teamKey);
-        if (anchor == null) return false;
-        if (!EnemyCoreSite.clear(level, raid, base, cell -> {
-            var claim = RecruitsClaimsBridge.getClaimAt(level, cell).orElse(null);
-            return claim != null && claim.claimId().equals(raid.campClaimId)
-                    && !ClaimBridge.isForeignClaim(level, cell,
-                        anchor.withIdentity(claim.ownerFactionStringId(), anchor.teamDisplay()));
-        })) return false;
+        if (!EnemyCoreSite.clear(level, raid, base, allowed)) return false;
         Map<BlockPos, String> blocks = new LinkedHashMap<>(keepBlueprint(base));
         blocks.put(core, "siegeoverhaul:siege_core");
-        Set<ChunkPos> checked = new HashSet<>();
         List<CampTerrain.Change> changes = new ArrayList<>();
         for (var entry : blocks.entrySet()) {
             BlockPos pos = entry.getKey();
             if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)) return false;
-            if (checked.add(new ChunkPos(pos))) {
-                var claim = RecruitsClaimsBridge.getClaimAt(level, pos).orElse(null);
-                if (claim == null || !claim.claimId().equals(raid.campClaimId)
-                        || ClaimBridge.isForeignClaim(level, pos, anchor.withIdentity(claim.ownerFactionStringId(), anchor.teamDisplay())))
-                    return false;
-            }
+            if (!allowed.test(pos)) return false;
             BlockState before = level.getBlockState(pos);
             if (!CampVegetation.replaceable(before) || before.hasBlockEntity() || !before.getFluidState().isEmpty()) return false;
             BlockState after = state(entry.getValue());

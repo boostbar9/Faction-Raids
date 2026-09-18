@@ -14,6 +14,16 @@ import static org.junit.jupiter.api.Assertions.*;
 import static com.devfarinsky.siegeoverhaul.ModConstants.Tags.*;
 
 class NativeCampConstructionTest extends MinecraftTestSupport {
+    @Test void constructionRejectsSavedKeepOverlapBeforeProvisioning() {
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        BlockPos core=new BlockPos(8,65,8);
+        raid.campaign.putLong("EnemyCore",core.asLong());
+        raid.campaign.putBoolean("EnemyCoreCourtyard",true);
+        raid.pendingCampBlocks.put(core.asLong(),"siegeoverhaul:siege_core");
+        assertFalse(NativeCampConstruction.overlapsEnemyCoreReservation(raid));
+        raid.pendingCampBlocks.put(core.east().asLong(),"minecraft:stone_bricks");
+        assertTrue(NativeCampConstruction.overlapsEnemyCoreReservation(raid));
+    }
     @Test void upgradeRecoversOnlyEmptyGateCellsOnce() {
         var level=org.mockito.Mockito.mock(net.minecraft.server.level.ServerLevel.class);
         var raid=new RaidSavedData.RaidState("team:test","home",0);

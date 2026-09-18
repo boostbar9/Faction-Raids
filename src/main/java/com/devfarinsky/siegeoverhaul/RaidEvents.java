@@ -2024,6 +2024,14 @@ public final class RaidEvents {
         ServerLevel level = getLevel(server, point);
         if (level == null) return;
 
+        // Recruits diplomacy is player-editable. During a live siege the
+        // synthetic attacking faction must remain hostile in both directions
+        // or native target selection can be bypassed. Check only every five
+        // seconds to keep reflective compatibility work off the hot path.
+        if (level.getGameTime() % 100 == 0)
+            com.devfarinsky.siegeoverhaul.compat.RaiderDiplomacy.maintainEnemy(
+                    server, teamKey, state.factionId);
+
         if ("siege_core".equals(state.defensePointName)) {
             if(RaidConfig.BUILD_WAR_CAMPS.get() && !onlineMembers(server,teamKey).isEmpty())
                 com.devfarinsky.siegeoverhaul.camp.CampLoading.keep(level,point.pos());

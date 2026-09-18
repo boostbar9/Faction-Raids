@@ -157,17 +157,24 @@ public final class WarGate {
     }
     private static boolean protectedAt(ServerLevel level,BlockPos p) {
         for(var raid:RaidSavedData.get(level.getServer()).raids.values()) {
-            if(!raid.warGate.contains("Center",net.minecraft.nbt.Tag.TAG_LONG) || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD))continue;
-            if(com.devfarinsky.siegeoverhaul.core.EnemyCoreSite.reserved(raid,p))return true;
-            var road=raid.warGate.getCompound("RoadBlocks");
-            for(String key:road.getAllKeys()) {
-                BlockPos floor=savedPosition(key);
-                if(floor==null)continue;
-                if(p.getX()==floor.getX() && p.getZ()==floor.getZ() && p.getY()>=floor.getY() && p.getY()<=floor.getY()+4)return true;
-            }
-            BlockPos c=center(raid);
-            if(Math.abs(p.getX()-c.getX())<=3 && Math.abs(p.getZ()-c.getZ())<=3 && p.getY()>=c.getY()-2 && p.getY()<=c.getY()+7)return true;
+            if(!level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD))continue;
+            if(protectedByRaid(raid,p))return true;
         }
+        return false;
+    }
+    static boolean protectedByRaid(RaidSavedData.RaidState raid, BlockPos p) {
+        // The enemy keep can exist even when gate planning failed. Its
+        // persisted reservation is independent of the War Gate centre.
+        if(com.devfarinsky.siegeoverhaul.core.EnemyCoreSite.reserved(raid,p))return true;
+        if(!raid.warGate.contains("Center",net.minecraft.nbt.Tag.TAG_LONG))return false;
+        var road=raid.warGate.getCompound("RoadBlocks");
+        for(String key:road.getAllKeys()) {
+            BlockPos floor=savedPosition(key);
+            if(floor==null)continue;
+            if(p.getX()==floor.getX() && p.getZ()==floor.getZ() && p.getY()>=floor.getY() && p.getY()<=floor.getY()+4)return true;
+        }
+        BlockPos c=center(raid);
+        if(Math.abs(p.getX()-c.getX())<=3 && Math.abs(p.getZ()-c.getZ())<=3 && p.getY()>=c.getY()-2 && p.getY()<=c.getY()+7)return true;
         return false;
     }
     @SubscribeEvent public static void breakBlock(BlockEvent.BreakEvent event) {

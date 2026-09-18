@@ -1,3 +1,10 @@
+# 4.43.1 beta
+
+- Keep enemy command-core courtyards protected even when War Gate planning fails, and reject overlapping Workers 2 construction before gate or road setup can mutate the camp.
+- Keep every alternative five-wide command keep inside the camp palisade and cache queued columns plus claim checks during site searches, avoiding repeated work when terrain blocks placement.
+- Reassert Villager Recruits hostility in both directions during an active siege. A diplomacy change to neutral or ally can no longer disable native enemy targeting mid-battle; the relationship still resets when the siege ends.
+- Preserve existing cores, capture progress, faction claims, loot-box prices, dependency requirements, and save compatibility.
+
 # 4.34.0
 
 - Overhauls the Siege Overhaul creative tab. The generic Recruits spawn eggs are gone, replaced with dedicated spawn eggs for every hireable unit in the mod: the four recruit tiers (Recruit, Shieldman, Archer, Crossbowman) and every one of the twenty heroes across all five rarities.

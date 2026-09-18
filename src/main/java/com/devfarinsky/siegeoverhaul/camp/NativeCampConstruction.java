@@ -35,6 +35,9 @@ public final class NativeCampConstruction {
         if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level, raid)) return false;
         if (raid.campWorkers.isEmpty() || raid.pendingCampBlocks.isEmpty()
                 || raid.pendingCampBlocks.size() > 512 || !RaidConfig.CLEANUP_WAR_CAMPS.get()) return false;
+        // Validate the saved courtyard before GateAssembly or CampRoad can
+        // mutate world/restoration ledgers. A rejected job must be a no-op.
+        if (overlapsEnemyCoreReservation(raid)) return false;
         if (!raid.warGate.isEmpty() && !GateAssembly.install(level,raid)) return false;
         Entity build = null, storage = null;
         BlockPos supply = null;
@@ -43,8 +46,6 @@ public final class NativeCampConstruction {
             if(!CampRoad.prepare(level,raid))return false;
             for (long key : raid.pendingCampBlocks.keySet()) {
                 BlockPos p = BlockPos.of(key);
-                if (com.devfarinsky.siegeoverhaul.core.EnemyCoreSite.reserved(raid,p)
-                        && !p.equals(com.devfarinsky.siegeoverhaul.core.EnemyCore.position(raid))) return false;
                 if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)
                         || !CampVegetation.replaceable(level.getBlockState(p)) || !level.getFluidState(p).isEmpty()
                         || level.getBlockEntity(p) != null) return false;
@@ -116,6 +117,16 @@ public final class NativeCampConstruction {
             FactionLogger.LOG.warn("Native camp construction unavailable; using bounded fallback", ex);
             return false;
         }
+    }
+
+    static boolean overlapsEnemyCoreReservation(RaidSavedData.RaidState raid) {
+        BlockPos core = com.devfarinsky.siegeoverhaul.core.EnemyCore.position(raid);
+        for (long key : raid.pendingCampBlocks.keySet()) {
+            BlockPos pos = BlockPos.of(key);
+            if (com.devfarinsky.siegeoverhaul.core.EnemyCoreSite.reserved(raid, pos)
+                    && !pos.equals(core)) return true;
+        }
+        return false;
     }
 
     /** Workers uses a scanned relative-coordinate blueprint, not a vanilla structure template. */
