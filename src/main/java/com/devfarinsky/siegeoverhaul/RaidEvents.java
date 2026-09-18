@@ -2721,18 +2721,48 @@ public final class RaidEvents {
                     announce(server, anchor.teamKey(), Component.literal("Enemy hero: " + com.devfarinsky.siegeoverhaul.core.CoreHiring.NAMES[heroRole] + " has joined the assault.").withStyle(ChatFormatting.LIGHT_PURPLE), false);
                 }
                 if (asNaval) {
-                    // Hand the raider off to NavalFleet, which picks a Small
-                    // Ships warship when the mod is installed and falls back
-                    // to a vanilla oak boat otherwise. If the vessel fails to
-                    // spawn entirely, the raider is left swimming — valid
-                    // fallback rather than a hard error.
-                    com.devfarinsky.siegeoverhaul.naval.NavalFleet.spawn(level,
-                            raider.blockPosition()).ifPresent(vessel -> {
+                    // v4.42.0 - Hand the raider off to NavalFleet, which
+                    // picks a Small Ships warship when the mod is installed
+                    // and falls back to a vanilla oak boat otherwise. If
+                    // the vessel spawns, teleport the raider onto it AND
+                    // verify the ride actually took hold. If startRiding
+                    // silently fails (a warship rejects mount), we discard
+                    // the empty ship so it doesn't drift toward the beach
+                    // with nobody on board while its intended crew stays
+                    // on shore. If the spawn returns empty (no clear water
+                    // footprint at all), teleport the raider to the naval
+                    // beach so it can join the ground assault instead of
+                    // drowning.
+                    java.util.Optional<net.minecraft.world.entity.Entity> vesselOpt =
+                            com.devfarinsky.siegeoverhaul.naval.NavalFleet.spawn(level,
+                                    raider.blockPosition());
+                    if (vesselOpt.isPresent()) {
+                        net.minecraft.world.entity.Entity vessel = vesselOpt.get();
                         vessel.setYRot(raider.getYRot());
-                        raider.startRiding(vessel, true);
-                        com.devfarinsky.siegeoverhaul.naval.NavalConvoy.enlist(
-                                anchor.teamKey(), vessel, state.navalBeachPos);
-                    });
+                        // Teleport the raider to the ship BEFORE mounting so
+                        // startRiding does not have to bridge a 10-block gap.
+                        raider.teleportTo(vessel.getX(), vessel.getY() + 0.5, vessel.getZ());
+                        boolean mounted = raider.startRiding(vessel, true);
+                        if (!mounted) {
+                            // Ship refused the mount. Discard the empty
+                            // vessel rather than let it drift toward the
+                            // beach carrying no crew.
+                            vessel.discard();
+                            if (state.navalBeachPos != null) {
+                                raider.teleportTo(state.navalBeachPos.getX() + 0.5,
+                                        state.navalBeachPos.getY(), state.navalBeachPos.getZ() + 0.5);
+                            }
+                        } else {
+                            com.devfarinsky.siegeoverhaul.naval.NavalConvoy.enlist(
+                                    anchor.teamKey(), vessel, state.navalBeachPos);
+                        }
+                    } else if (state.navalBeachPos != null) {
+                        // No safe water for a boat here. Put the raider on
+                        // the naval beach instead of drowning them in a
+                        // cliff face.
+                        raider.teleportTo(state.navalBeachPos.getX() + 0.5,
+                                state.navalBeachPos.getY(), state.navalBeachPos.getZ() + 0.5);
+                    }
                 }
                 // Roll for sapper promotion. Cheap, capped, non-leaders only
                 // so squad leaders keep their role.

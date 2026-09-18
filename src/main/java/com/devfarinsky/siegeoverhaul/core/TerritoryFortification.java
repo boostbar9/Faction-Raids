@@ -311,12 +311,38 @@ public final class TerritoryFortification {
                 throw new IllegalStateException("Payment rejected");
             }
 
+            // v4.42.0 - clearer material breakdown so the player knows
+            // exactly what to put in the storage area and roughly how
+            // many stacks that is. Also flag when the required item is
+            // not the display material (some vanilla blocks parse into
+            // an item with a different name, e.g. stone -> cobblestone).
+            int stacks = (totalRequired + 63) / 64;
+            StringBuilder itemLine = new StringBuilder();
+            String primaryItem = null;
+            for (net.minecraft.world.item.ItemStack s : required) {
+                if (itemLine.length() > 0) itemLine.append(", ");
+                String itemName = s.getHoverName().getString();
+                itemLine.append(s.getCount()).append(" x ").append(itemName);
+                if (primaryItem == null) primaryItem = itemName;
+            }
+            boolean materialMismatch = primaryItem != null && !primaryItem.equalsIgnoreCase(mat.label());
             player.sendSystemMessage(Component.literal(
-                    "Fortify Perimeter commissioned: " + blocks.size() + " " + mat.label()
-                            + " blocks queued. Put " + totalRequired + " x " + mat.label()
-                            + " in your Workers 2 storage area and the builder starts work."
-                            + (skippedColumns > 0 ? " " + skippedColumns
-                            + " perimeter columns are out of range of that storage area; add one closer to them and commission again to finish the wall." : "")));
+                    "Fortify Perimeter commissioned. " + blocks.size() + " " + mat.label()
+                            + " blocks queued for the builder."));
+            player.sendSystemMessage(Component.literal(
+                    "Put in your Workers 2 storage area: " + itemLine.toString()
+                            + "  (about " + stacks + " stack" + (stacks == 1 ? "" : "s") + ")."));
+            if (materialMismatch) {
+                player.sendSystemMessage(Component.literal(
+                        "Note: the builder needs \"" + primaryItem + "\" for this material, not the block \"" + mat.label() + "\" itself."));
+            }
+            player.sendSystemMessage(Component.literal(
+                    "The builder will wait at the storage area until it has enough. Every stack added lets it place more of the wall."));
+            if (skippedColumns > 0) {
+                player.sendSystemMessage(Component.literal(
+                        skippedColumns + " perimeter columns are more than " + STORAGE_SEARCH_RADIUS
+                                + " blocks from that storage area and were left out. Add another storage area closer to them and commission again to finish the wall."));
+            }
             FactionLogger.LOG.info("[SiegeOverhaul] Fortify Perimeter: {} blocks, material {}, team {}",
                     blocks.size(), mat.blockId(), coreKey);
             saved.setDirty();
