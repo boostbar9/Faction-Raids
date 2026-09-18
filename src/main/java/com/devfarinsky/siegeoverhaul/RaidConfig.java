@@ -131,6 +131,10 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.BooleanValue BUILD_WAR_CAMPS;
     public static final ForgeConfigSpec.BooleanValue CLEANUP_WAR_CAMPS;
     public static final ForgeConfigSpec.BooleanValue LEVEL_CAMP_TERRAIN;
+    public static final ForgeConfigSpec.BooleanValue CAMP_TERRAFORM;
+    public static final ForgeConfigSpec.IntValue CAMP_TERRAFORM_MAX_DEPTH;
+    public static final ForgeConfigSpec.BooleanValue TERRITORY_SMOOTHING;
+    public static final ForgeConfigSpec.IntValue TERRITORY_SMOOTHING_RADIUS;
     public static final ForgeConfigSpec.BooleanValue CAMP_DESTRUCTIBLE_STRUCTURES;
     public static final ForgeConfigSpec.IntValue CAMP_BONUS_LOOT_EMERALDS;
     public static final ForgeConfigSpec.DoubleValue CAMP_GUARD_STRENGTH;
@@ -445,6 +449,14 @@ public final class RaidConfig {
                 .define("useVillagerRecruitsArmy", true);
         LEVEL_CAMP_TERRAIN = b.comment("Gently level camp soil by up to three blocks, with a three-block blended edge. Reject water, structures, steep sites and excluded claims. Requires cleanupTemporaryWarCamps so all earthworks can be restored.")
                 .define("levelCampTerrain", true);
+        CAMP_TERRAFORM = b.comment("Fallback terraforming when no naturally flat land is found within scouting range. Raiders pave water and level uneven ground with dirt to establish a foothold on hostile terrain (islands, coasts, cliffs). Player-placed blocks are never overwritten.")
+                .define("campTerraform", true);
+        CAMP_TERRAFORM_MAX_DEPTH = b.comment("Maximum vertical variance the terraforming pass will accept when picking a fallback camp site. Larger values let raiders build on rougher terrain but require more dirt fill.")
+                .defineInRange("campTerraformMaxDepth", 12, 4, 32);
+        TERRITORY_SMOOTHING = b.comment("After a war camp is claimed, raider workers gradually fill nearby water and gaps inside the claim over time so their territory becomes buildable. Player-placed blocks are never overwritten.")
+                .define("territorySmoothing", true);
+        TERRITORY_SMOOTHING_RADIUS = b.comment("How far from the camp center, in blocks, the territory smoothing pass will reach.")
+                .defineInRange("territorySmoothingRadius", 24, 12, 64);
         BUILD_WAR_CAMPS = b.comment("Build a small physical temporary war camp at the invasion staging point.")
                 .define("buildTemporaryWarCamps", true);
         CAMP_DESTRUCTIBLE_STRUCTURES = b.comment("When true (default), destroying the war camp's campfire disables reinforcements, breaking the banner scatters the current wave, and breaking the supply barrel drops a stack of emeralds. Set false to keep the camp purely decorative.")

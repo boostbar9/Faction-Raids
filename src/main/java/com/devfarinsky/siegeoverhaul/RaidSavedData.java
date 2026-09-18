@@ -491,6 +491,16 @@ public final class RaidSavedData extends SavedData {
          * scouting forever. Persisted so a save/load doesn't restart the
          * hopeless search. */
         public boolean campSearchAbandoned;
+        /** v4.36.0: rolling cursor for post-camp territory smoothing so
+         * successive smoothing calls cover different columns instead of
+         * always polling the same corner. Transient - resetting to 0 on
+         * save/load just restarts the scan. */
+        public transient int terrainSmoothingCursor;
+        /** v4.36.0: true when the camp was built on hostile terrain that
+         * the raider crew paved with dirt before construction. Signals to
+         * the tick loop to keep the smoothing pass alive; a naturally-flat
+         * camp doesn't need ongoing terrain work. Persisted. */
+        public boolean campTerraformed;
         /** Water-surface staging point when this raid has an amphibious component. Null otherwise. */
         public BlockPos navalStagingPos;
         /** Landing beach the naval convoy steers toward. Null when no naval staging. */
@@ -696,6 +706,7 @@ public final class RaidSavedData extends SavedData {
             if (barrelPos != null) tag.putLong("BarrelPos", barrelPos.asLong());
             tag.putBoolean("CampBuildAttempted", campBuildAttempted);
             tag.putBoolean("CampSearchAbandoned", campSearchAbandoned);
+            tag.putBoolean("CampTerraformed", campTerraformed);
             if (navalStagingPos != null) tag.putLong("NavalStagingPos", navalStagingPos.asLong());
             if (navalBeachPos != null) tag.putLong("NavalBeachPos", navalBeachPos.asLong());
             tag.putInt("SappersDispatched", sappersDispatched);
@@ -867,6 +878,7 @@ public final class RaidSavedData extends SavedData {
                     BlockPos.of(tag.getLong("BarrelPos")) : null;
             state.campBuildAttempted = tag.getBoolean("CampBuildAttempted");
             state.campSearchAbandoned = tag.getBoolean("CampSearchAbandoned");
+            state.campTerraformed = tag.getBoolean("CampTerraformed");
             state.navalStagingPos = tag.contains("NavalStagingPos", Tag.TAG_LONG) ?
                     BlockPos.of(tag.getLong("NavalStagingPos")) : null;
             state.navalBeachPos = tag.contains("NavalBeachPos", Tag.TAG_LONG) ?
