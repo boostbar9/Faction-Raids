@@ -2671,6 +2671,12 @@ public final class RaidEvents {
         int navalShare = amphibious ? (wanted * RaidConfig.NAVAL_WAVE_SHARE_PERCENT.get() + 50) / 100 : 0;
 
         int spawned = 0;
+        // v4.43.0 - batch naval raiders together so a squad of 6 SHARES
+        // a boat / warship rather than each raider self-spawning their
+        // own vessel. The old per-raider spawn produced a boat-parking-lot
+        // effect on shore (6 boats for 6 raiders, most with 1 passenger).
+        // Vanilla boats seat 2, Small Ships warships seat up to shipCrewMax.
+        java.util.List<net.minecraft.world.entity.Mob> pendingNavalCrew = new java.util.ArrayList<>();
         for (int i = 0; i < wanted; i++) {
             int waveIndex = state.waveStartingCount + spawned;
             Mob candidate = createAttackerForWave(level, anchor.teamKey(), state.wave, waveIndex);
@@ -2721,48 +2727,10 @@ public final class RaidEvents {
                     announce(server, anchor.teamKey(), Component.literal("Enemy hero: " + com.devfarinsky.siegeoverhaul.core.CoreHiring.NAMES[heroRole] + " has joined the assault.").withStyle(ChatFormatting.LIGHT_PURPLE), false);
                 }
                 if (asNaval) {
-                    // v4.42.0 - Hand the raider off to NavalFleet, which
-                    // picks a Small Ships warship when the mod is installed
-                    // and falls back to a vanilla oak boat otherwise. If
-                    // the vessel spawns, teleport the raider onto it AND
-                    // verify the ride actually took hold. If startRiding
-                    // silently fails (a warship rejects mount), we discard
-                    // the empty ship so it doesn't drift toward the beach
-                    // with nobody on board while its intended crew stays
-                    // on shore. If the spawn returns empty (no clear water
-                    // footprint at all), teleport the raider to the naval
-                    // beach so it can join the ground assault instead of
-                    // drowning.
-                    java.util.Optional<net.minecraft.world.entity.Entity> vesselOpt =
-                            com.devfarinsky.siegeoverhaul.naval.NavalFleet.spawn(level,
-                                    raider.blockPosition());
-                    if (vesselOpt.isPresent()) {
-                        net.minecraft.world.entity.Entity vessel = vesselOpt.get();
-                        vessel.setYRot(raider.getYRot());
-                        // Teleport the raider to the ship BEFORE mounting so
-                        // startRiding does not have to bridge a 10-block gap.
-                        raider.teleportTo(vessel.getX(), vessel.getY() + 0.5, vessel.getZ());
-                        boolean mounted = raider.startRiding(vessel, true);
-                        if (!mounted) {
-                            // Ship refused the mount. Discard the empty
-                            // vessel rather than let it drift toward the
-                            // beach carrying no crew.
-                            vessel.discard();
-                            if (state.navalBeachPos != null) {
-                                raider.teleportTo(state.navalBeachPos.getX() + 0.5,
-                                        state.navalBeachPos.getY(), state.navalBeachPos.getZ() + 0.5);
-                            }
-                        } else {
-                            com.devfarinsky.siegeoverhaul.naval.NavalConvoy.enlist(
-                                    anchor.teamKey(), vessel, state.navalBeachPos);
-                        }
-                    } else if (state.navalBeachPos != null) {
-                        // No safe water for a boat here. Put the raider on
-                        // the naval beach instead of drowning them in a
-                        // cliff face.
-                        raider.teleportTo(state.navalBeachPos.getX() + 0.5,
-                                state.navalBeachPos.getY(), state.navalBeachPos.getZ() + 0.5);
-                    }
+                    // v4.43.0 - defer vessel spawn until the squad loop
+                    // finishes so we can pool raiders into shared boats
+                    // instead of spawning one boat per raider.
+                    pendingNavalCrew.add(raider);
                 }
                 // Roll for sapper promotion. Cheap, capped, non-leaders only
                 // so squad leaders keep their role.
@@ -2779,6 +2747,63 @@ public final class RaidEvents {
                 spawned++;
             }
         }
+        // v4.43.0 - batch-spawn shared vessels for all naval raiders in
+        // this squad. Vanilla boats seat 2; Small Ships warships seat up
+        // to shipCrewMax (default 6). We spawn one vessel per group and
+        // mount as many raiders as it will hold, then move to the next.
+        if (!pendingNavalCrew.isEmpty()) {
+            boolean smallShipsAvailable = RaidConfig.PREFER_SMALL_SHIPS.get()
+                    && com.devfarinsky.siegeoverhaul.naval.SmallShipsIntegration.hasAnyKnownShip();
+            int perVesselCap = smallShipsAvailable ? RaidConfig.SHIP_CREW_MAX.get() : 2;
+            int idx = 0;
+            while (idx < pendingNavalCrew.size()) {
+                // Try to spawn a vessel at the naval staging point. If
+                // that fails (no clear water footprint), the remaining
+                // raiders are put on the beach and join the ground assault.
+                java.util.Optional<net.minecraft.world.entity.Entity> vesselOpt =
+                        com.devfarinsky.siegeoverhaul.naval.NavalFleet.spawn(level, state.navalStagingPos);
+                if (vesselOpt.isEmpty()) {
+                    // No safe water spawn - teleport remaining crew to
+                    // the naval beach for ground combat.
+                    if (state.navalBeachPos != null) {
+                        for (int j = idx; j < pendingNavalCrew.size(); j++) {
+                            net.minecraft.world.entity.Mob leftover = pendingNavalCrew.get(j);
+                            leftover.teleportTo(state.navalBeachPos.getX() + 0.5,
+                                    state.navalBeachPos.getY(), state.navalBeachPos.getZ() + 0.5);
+                        }
+                    }
+                    break;
+                }
+                net.minecraft.world.entity.Entity vessel = vesselOpt.get();
+                int mounted = 0;
+                for (int c = 0; c < perVesselCap && idx < pendingNavalCrew.size(); c++, idx++) {
+                    net.minecraft.world.entity.Mob crew = pendingNavalCrew.get(idx);
+                    vessel.setYRot(crew.getYRot());
+                    // Teleport crew ONTO the ship so startRiding never has
+                    // to bridge a distance gap. This is the fix for the
+                    // "empty ship on one side, troops on the opposite
+                    // side" bug: crew always arrives at the vessel.
+                    crew.teleportTo(vessel.getX(), vessel.getY() + 0.5, vessel.getZ());
+                    if (crew.startRiding(vessel, true)) {
+                        mounted++;
+                    } else if (state.navalBeachPos != null) {
+                        // Ship rejected this mount specifically. Put this
+                        // raider on the beach; keep trying the rest.
+                        crew.teleportTo(state.navalBeachPos.getX() + 0.5,
+                                state.navalBeachPos.getY(), state.navalBeachPos.getZ() + 0.5);
+                    }
+                }
+                if (mounted == 0) {
+                    // Nobody could board this hull. Discard it so it
+                    // doesn't drift empty toward the beach.
+                    vessel.discard();
+                } else {
+                    com.devfarinsky.siegeoverhaul.naval.NavalConvoy.enlist(
+                            anchor.teamKey(), vessel, state.navalBeachPos);
+                }
+            }
+        }
+
         if (spawned == 0) {
             if(state.preparationTicks<=0)state.reinforcementStallTicks+=RaidConfig.SPAWN_RETRY_SECONDS.get()*20;
             state.ticksToNextSquad = RaidConfig.SPAWN_RETRY_SECONDS.get() * 20;
