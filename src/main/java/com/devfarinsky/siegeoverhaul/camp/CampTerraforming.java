@@ -69,7 +69,11 @@ public final class CampTerraforming {
             state.terraformHalfExtent = halfExtent;
         }
         int floorY = center.getY() - 1;
-        int ceilingY = center.getY() + 4;
+        // v4.40.0: raise the clear-above ceiling from 4 to 10 blocks so a
+        // full-height forest inside the camp footprint gets chopped down.
+        // Trees reach 6-8 blocks tall; the old ceiling left canopy leaves
+        // and upper log segments floating above the palisade.
+        int ceilingY = center.getY() + 10;
         int total = 0;
         // Center-out ring walk: ring 0 is the center column, ring N is the
         // square shell at Chebyshev distance N. v4.36.0 polish: pave one
@@ -274,6 +278,12 @@ public final class CampTerraforming {
         // existing camp helper so both paths agree on what counts as
         // player-owned vs natural.
         if (CampVegetation.replaceable(state)) return true;
+        // v4.40.0: trees are natural terrain the terraformer is allowed
+        // to chop. Without this, queued log / leaf blocks inside the
+        // camp footprint were silently skipped during the drain, so a
+        // camp landing in a forest kept its trees standing through the
+        // palisade.
+        if (isTreeMaterial(state)) return true;
         var block = state.getBlock();
         return block == Blocks.DIRT || block == Blocks.GRASS_BLOCK || block == Blocks.PODZOL
                 || block == Blocks.COARSE_DIRT || block == Blocks.ROOTED_DIRT
@@ -311,21 +321,50 @@ public final class CampTerraforming {
             for (int dz = -r; dz <= r; dz += 3) {
                 BlockPos column = center.offset(dx, 0, dz);
                 if (!level.hasChunkAt(column)) return false;
+                // v4.40.0: MOTION_BLOCKING_NO_LEAVES sits on top of tree
+                // logs, so a dense forest reads as tall terrain. Walk
+                // down through log / leaf blocks to find the true ground
+                // height, and use that for the variance check.
                 int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
                         column.getX(), column.getZ());
+                y = seeThroughTrees(level, column.getX(), column.getZ(), y);
                 if (Math.abs(y - center.getY()) > maxVariance) { if (++used > rejectSlack) return false; continue; }
                 // Reject if a player build sits inside the footprint.
                 BlockState surface = level.getBlockState(new BlockPos(column.getX(), y - 1, column.getZ()));
                 if (!surface.isAir() && !surface.getFluidState().isEmpty()) continue;
                 if (!surface.isAir() && !CampVegetation.replaceable(surface)
-                        && !isNaturalSurface(surface)) return false;
+                        && !isNaturalSurface(surface) && !isTreeMaterial(surface)) return false;
                 // Also make sure the plane column isn't full of a player build.
                 BlockState plane = level.getBlockState(new BlockPos(column.getX(), floorY, column.getZ()));
                 if (!plane.isAir() && plane.getFluidState().isEmpty()
-                        && !CampVegetation.replaceable(plane) && !isNaturalSurface(plane)) return false;
+                        && !CampVegetation.replaceable(plane) && !isNaturalSurface(plane) && !isTreeMaterial(plane)) return false;
             }
         }
         return true;
+    }
+
+    /**
+     * v4.40.0 - trees fool the MOTION_BLOCKING heightmap into reporting a
+     * high ground. Walk down from {@code topY} past any log / leaf
+     * blocks until we hit real terrain, so a forest camp doesn't reject
+     * on 'height variance' when the actual ground below the canopy is
+     * perfectly flat.
+     */
+    private static int seeThroughTrees(ServerLevel level, int x, int z, int topY) {
+        for (int dy = 0; dy < 16; dy++) {
+            int y = topY - dy;
+            BlockState state = level.getBlockState(new BlockPos(x, y - 1, z));
+            if (isTreeMaterial(state)) continue;
+            return y;
+        }
+        return topY;
+    }
+
+    /** v4.40.0 - is this block part of a tree the terraformer should chop? */
+    static boolean isTreeMaterial(BlockState state) {
+        return state.is(net.minecraft.tags.BlockTags.LOGS)
+                || state.is(net.minecraft.tags.BlockTags.LEAVES)
+                || state.is(net.minecraft.tags.BlockTags.SAPLINGS);
     }
 
     private static boolean isNaturalSurface(BlockState s) {
