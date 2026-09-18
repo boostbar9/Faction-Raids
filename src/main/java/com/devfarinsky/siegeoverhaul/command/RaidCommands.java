@@ -113,6 +113,10 @@ public final class RaidCommands {
                         .then(Commands.literal("repair")
                                 .then(Commands.argument("team", StringArgumentType.word())
                                         .executes(ctx -> RaidEvents.adminRepairCmd(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "team")))))
+                        .then(Commands.literal("skipscout")
+                                .then(Commands.argument("team", StringArgumentType.word())
+                                        .executes(ctx -> RaidEvents.adminSkipScoutCmd(ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "team"))))));
 
         LiteralCommandNode<CommandSourceStack> registered = dispatcher.register(tree);

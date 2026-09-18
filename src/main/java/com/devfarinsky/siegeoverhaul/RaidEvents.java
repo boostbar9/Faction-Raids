@@ -346,6 +346,10 @@ public final class RaidEvents {
             com.devfarinsky.siegeoverhaul.scout.ScoutManager.onScoutHurt(victim);
             return;
         }
+        // v4.35.0: flanker cloak. Fires at most once per raider when first
+        // brought below half HP so assassins can reposition instead of
+        // dying in a shield line. No-ops for every other role.
+        com.devfarinsky.siegeoverhaul.raid.EnemyAbilities.onRaiderHurt(victim);
         if (!RaidConfig.SHOUT_TO_ALLIES.get()) return;
         Entity attacker = event.getSource().getEntity();
         if (!(attacker instanceof LivingEntity livingAttacker)) return;
@@ -865,6 +869,7 @@ public final class RaidEvents {
     public static int adminStopCmd(CommandSourceStack s, String k) { return adminStop(s, k); }
     public static int adminRemoveCmd(CommandSourceStack s, String k) { return adminRemove(s, k); }
     public static int adminRepairCmd(CommandSourceStack s, String k) { return adminRepair(s, k); }
+    public static int adminSkipScoutCmd(CommandSourceStack s, String k) { return adminSkipScout(s, k); }
 
     private static int setAnchor(CommandSourceStack source) {
         try {
@@ -1600,6 +1605,45 @@ public final class RaidEvents {
         return 1;
     }
 
+    /**
+     * v4.35.0: unstick a raid that is stuck in the war-camp scouting phase.
+     * Marks the raid as {@code campSearchAbandoned}, releases any pending
+     * search ticket, and kicks the preparation timer so waves can begin
+     * without a fortified camp. Use when island/coastal terrain or dense
+     * player claims prevent any camp candidate from succeeding.
+     */
+    private static int adminSkipScout(CommandSourceStack source, String suppliedKey) {
+        RaidSavedData data = RaidSavedData.get(source.getServer());
+        String key = normalizeTeamKey(data, suppliedKey);
+        RaidSavedData.Anchor anchor = data.anchors.get(key);
+        RaidSavedData.RaidState state = data.raids.get(key);
+        if (anchor == null || state == null) {
+            source.sendFailure(Component.literal("No active invasion found for " + suppliedKey));
+            return 0;
+        }
+        if (state.campPos != null) {
+            source.sendFailure(Component.literal("Invasion " + key + " already has a camp; nothing to skip."));
+            return 0;
+        }
+        RaidSavedData.DefensePoint point = anchor.point(state.defensePointName);
+        ServerLevel level = getLevel(source.getServer(), point);
+        if (state.campSearchPos != null && level != null) {
+            com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level, state.campSearchPos);
+        }
+        state.campSearchPos = null;
+        state.campSearchTicks = 0;
+        state.campSearchAbandoned = true;
+        state.campBuildAttempted = true;
+        state.preparationTotalTicks = RaidConfig.PREPARATION_MINUTES.get() * 1200;
+        state.preparationTicks = state.preparationTotalTicks;
+        state.ticksToNextWave = state.preparationTicks;
+        data.setDirty();
+        source.sendSuccess(() -> Component.literal("Invasion " + key +
+                " scouting abandoned. Waves will spawn without a camp; preparation timer reset.")
+                .withStyle(ChatFormatting.GOLD), true);
+        return 1;
+    }
+
     private static void tick(MinecraftServer server) {
         RaidSavedData data = RaidSavedData.get(server);
         if (RaidConfig.AUTOMATIC_PLAYER_HOMES.get()) {
@@ -1998,7 +2042,33 @@ public final class RaidEvents {
             updateBossBar(server, anchor, state, true);
             return;
         }
-        if (RaidConfig.BUILD_WAR_CAMPS.get() && state.campPos == null && !state.coreCaptured) {
+        if (RaidConfig.BUILD_WAR_CAMPS.get() && state.campPos == null && !state.coreCaptured
+                && !state.campSearchAbandoned) {
+            // v4.35.0 safety valve: after cycling through the full 168-site
+            // spiral without landing a viable camp (island worlds, dense
+            // player claims, mods that reject the terrain), abandon the war
+            // camp for this raid and let waves spawn directly. Without this
+            // fallback the raid sits in "Scouting camp land" forever and no
+            // waves ever run. 200 = one full spiral (168) + a buffer.
+            if (state.campSearchStep >= 200) {
+                state.campSearchAbandoned = true;
+                if (state.campSearchPos != null) {
+                    com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level, state.campSearchPos);
+                    state.campSearchPos = null;
+                }
+                state.campBuildAttempted = true;
+                state.preparationTotalTicks = RaidConfig.PREPARATION_MINUTES.get() * 1200;
+                state.preparationTicks = state.preparationTotalTicks;
+                state.ticksToNextWave = state.preparationTicks;
+                announce(server, teamKey, Component.literal(
+                        "No viable camp land found within scouting range. Raiders will attack directly without a fortified camp. Preparation starts now.")
+                        .withStyle(ChatFormatting.GOLD), true);
+                FactionLogger.LOG.info("Camp search {} abandoned after {} candidates: fallback to camp-less raid",
+                        teamKey, state.campSearchStep);
+                data.setDirty();
+                setRaidMobsFrozen(level, state, false);
+                return;
+            }
             // Previously failed 4.2.0 camps recover here too. No waves run without a foothold.
             if (state.campSearchPos == null) {
                 for(int skip=0;skip<8;skip++) {
@@ -2029,7 +2099,7 @@ public final class RaidEvents {
             }
             if(state.campPos==null) {
                 String reason=com.devfarinsky.siegeoverhaul.compat.CampClaims.unavailableReason(level);
-                state.objectiveStatus=reason.isEmpty()?"Scouting claimable camp land; preparation paused":reason;
+                state.objectiveStatus=reason.isEmpty()?"Scanning "+state.campSearchStep+"/200 sites; preparation paused":reason;
                 if(level.getGameTime()%600==0) FactionLogger.LOG.info("Camp search {}: candidate {}, step {}, status {}",teamKey,state.campSearchPos,state.campSearchStep,state.objectiveStatus);
                 setRaidMobsFrozen(level,state,true);
                 if(level.getGameTime()%600==0) announce(server,teamKey,Component.literal("Enemy camp search: "+state.objectiveStatus+". Preparation remains paused.").withStyle(ChatFormatting.GRAY),false);
@@ -2059,6 +2129,7 @@ public final class RaidEvents {
         // effect so it never flickers between passes but decays if the
         // captain dies.
         tickCaptainAura(level, state);
+        com.devfarinsky.siegeoverhaul.raid.EnemyAbilities.tick(level, state.raiders);
         com.devfarinsky.siegeoverhaul.camp.WarGate.tick(level,state,point.pos());
         if(state.warGateWaitTicks>=20*60*30 && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
             finishRaid(server,data,teamKey,false,false,"The enemy could not establish its War Gate. The siege has withdrawn without rewards.");
@@ -2699,7 +2770,13 @@ public final class RaidEvents {
             raider.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 20 * 60 * 60, 0, false, false));
         } else if ("captain".equals(role)) {
             raider.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 20 * 60 * 60, 0, false, false));
-        } else if (commander) {
+        }
+        // v4.35.0: role-specific ability kits (idempotent). Handles the
+        // roles that aren't commander/hero; captain still applies its own
+        // Resistance above so a captain gets both its buff and any future
+        // ability set added here.
+        com.devfarinsky.siegeoverhaul.raid.EnemyAbilities.apply(raider, role);
+        if (commander) {
             com.devfarinsky.siegeoverhaul.raid.CommanderTraits.equip(raider,state.factionId);
             var health = raider.getAttribute(Attributes.MAX_HEALTH);
             if (health != null) {
@@ -4889,9 +4966,18 @@ public final class RaidEvents {
         String label;
         if (paused) {
             label = com.devfarinsky.siegeoverhaul.chat.ChatStyle.bossbarLabel(epithet, phase, "faction offline");
-        } else if (state.campPos==null && RaidConfig.BUILD_WAR_CAMPS.get() && !state.coreCaptured) {
+        } else if (state.campPos==null && RaidConfig.BUILD_WAR_CAMPS.get() && !state.coreCaptured
+                && !state.campSearchAbandoned) {
             bar.setProgress(0);
-            label = "Scouting camp land | preparation paused until territory is claimed";
+            // v4.35.0: surface the real scouting status so the player knows
+            // whether we're loading chunks, blocked by config, or just
+            // haven't found viable land yet. Falls back to a live progress
+            // hint through the 200-site spiral.
+            String detail = state.objectiveStatus != null && !state.objectiveStatus.isEmpty()
+                    ? state.objectiveStatus
+                    : "scanning " + state.campSearchStep + "/200 sites";
+            label = com.devfarinsky.siegeoverhaul.chat.ChatStyle.bossbarLabel(epithet,
+                    "Scouting camp land", detail);
         } else if (state.coreCaptured) {
             var core = RaidSavedData.get(server).siegeCores.get(state.teamKey);
             int progress = core == null ? 0 : core.getInt("RecaptureTicks");

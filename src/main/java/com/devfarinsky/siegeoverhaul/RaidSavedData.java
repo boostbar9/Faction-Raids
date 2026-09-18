@@ -486,6 +486,11 @@ public final class RaidSavedData extends SavedData {
         public int campCompletedBlocks;
         public transient String constructionPauseReason = "";
         public boolean campBuildAttempted;
+        /** v4.35.0: raid has given up trying to find viable camp land. Waves
+         * spawn without a fortified camp so an island world doesn't stall
+         * scouting forever. Persisted so a save/load doesn't restart the
+         * hopeless search. */
+        public boolean campSearchAbandoned;
         /** Water-surface staging point when this raid has an amphibious component. Null otherwise. */
         public BlockPos navalStagingPos;
         /** Landing beach the naval convoy steers toward. Null when no naval staging. */
@@ -690,6 +695,7 @@ public final class RaidSavedData extends SavedData {
             if (factionId != null) tag.putString("FactionId", factionId);
             if (barrelPos != null) tag.putLong("BarrelPos", barrelPos.asLong());
             tag.putBoolean("CampBuildAttempted", campBuildAttempted);
+            tag.putBoolean("CampSearchAbandoned", campSearchAbandoned);
             if (navalStagingPos != null) tag.putLong("NavalStagingPos", navalStagingPos.asLong());
             if (navalBeachPos != null) tag.putLong("NavalBeachPos", navalBeachPos.asLong());
             tag.putInt("SappersDispatched", sappersDispatched);
@@ -860,6 +866,7 @@ public final class RaidSavedData extends SavedData {
             state.barrelPos = tag.contains("BarrelPos", Tag.TAG_LONG) ?
                     BlockPos.of(tag.getLong("BarrelPos")) : null;
             state.campBuildAttempted = tag.getBoolean("CampBuildAttempted");
+            state.campSearchAbandoned = tag.getBoolean("CampSearchAbandoned");
             state.navalStagingPos = tag.contains("NavalStagingPos", Tag.TAG_LONG) ?
                     BlockPos.of(tag.getLong("NavalStagingPos")) : null;
             state.navalBeachPos = tag.contains("NavalBeachPos", Tag.TAG_LONG) ?
