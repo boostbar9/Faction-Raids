@@ -451,8 +451,8 @@ public final class RaidConfig {
                 .define("levelCampTerrain", true);
         CAMP_TERRAFORM = b.comment("Fallback terraforming when no naturally flat land is found within scouting range. Raiders pave water and level uneven ground with dirt to establish a foothold on hostile terrain (islands, coasts, cliffs). Player-placed blocks are never overwritten.")
                 .define("campTerraform", true);
-        CAMP_TERRAFORM_MAX_DEPTH = b.comment("Maximum vertical variance the terraforming pass will accept when picking a fallback camp site. Larger values let raiders build on rougher terrain but require more dirt fill.")
-                .defineInRange("campTerraformMaxDepth", 12, 4, 32);
+        CAMP_TERRAFORM_MAX_DEPTH = b.comment("Maximum vertical variance the terraforming pass will accept when picking a fallback camp site. Larger values let raiders build on rougher terrain (mountains, ravines, mesa) but require more dirt fill or cutting.")
+                .defineInRange("campTerraformMaxDepth", 20, 4, 32);
         TERRITORY_SMOOTHING = b.comment("After a war camp is claimed, raider workers gradually fill nearby water and gaps inside the claim over time so their territory becomes buildable. Player-placed blocks are never overwritten.")
                 .define("territorySmoothing", true);
         TERRITORY_SMOOTHING_RADIUS = b.comment("How far from the camp center, in blocks, the territory smoothing pass will reach.")

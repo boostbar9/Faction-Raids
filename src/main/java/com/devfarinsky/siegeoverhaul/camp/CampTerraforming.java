@@ -92,7 +92,12 @@ public final class CampTerraforming {
                     // blocks below the plane) so we tuck the border into
                     // the existing terrain instead of laying down an
                     // obvious dirt collar around the camp.
-                    int maxDepth = ring > halfExtent ? 3 : 8;
+                    // v4.41.0: inner rings now fill up to 16 blocks deep
+                    // so ravines, mineshaft holes, and deep pits inside
+                    // the camp footprint get bridged instead of leaving
+                    // an unstable overhang. Outer polish ring stays
+                    // shallow so the border blends in.
+                    int maxDepth = ring > halfExtent ? 3 : 16;
                     int fillFrom = Math.max(floorY - maxDepth, Math.min(surfaceY, floorY));
                     // Fill columns bottom-up so the workers appear to lay
                     // dirt starting from the floor and stack up.
@@ -102,7 +107,13 @@ public final class CampTerraforming {
                     }
                     // Then clear excess terrain above the plane, top-down
                     // (so tall obstacles collapse from the top).
-                    for (int y = ceilingY; y > floorY; y--) {
+                    // v4.41.0: raise the per-column clear ceiling to the
+                    // actual surface for this column, capped at 32
+                    // blocks over the camp floor. Mountains and tall
+                    // outcrops inside the footprint now get flattened
+                    // instead of leaving cliffs standing over the pad.
+                    int columnCeiling = Math.max(ceilingY, Math.min(surfaceY + 1, floorY + 32));
+                    for (int y = columnCeiling; y > floorY; y--) {
                         state.terraformQueue.add(new BlockPos(wx, y, wz).asLong());
                         total++;
                     }
@@ -284,15 +295,12 @@ public final class CampTerraforming {
         // camp landing in a forest kept its trees standing through the
         // palisade.
         if (isTreeMaterial(state)) return true;
-        var block = state.getBlock();
-        return block == Blocks.DIRT || block == Blocks.GRASS_BLOCK || block == Blocks.PODZOL
-                || block == Blocks.COARSE_DIRT || block == Blocks.ROOTED_DIRT
-                || block == Blocks.SAND || block == Blocks.RED_SAND || block == Blocks.GRAVEL
-                || block == Blocks.STONE || block == Blocks.GRANITE || block == Blocks.DIORITE
-                || block == Blocks.ANDESITE || block == Blocks.TUFF || block == Blocks.DEEPSLATE
-                || block == Blocks.CLAY || block == Blocks.MOSS_BLOCK || block == Blocks.MYCELIUM
-                || block == Blocks.SNOW || block == Blocks.SNOW_BLOCK || block == Blocks.ICE
-                || block == Blocks.PACKED_ICE || block == Blocks.BLUE_ICE;
+        // v4.41.0: single source of truth. The drain accepts anything
+        // that would count as a valid camp surface, so ravines,
+        // mountains, cave biomes, mushroom islands, mesa, and swamp
+        // all get bulldozed instead of leaving un-terraformed pockets
+        // inside the finished camp.
+        return isNaturalSurface(state);
     }
 
     /**
@@ -369,6 +377,10 @@ public final class CampTerraforming {
 
     private static boolean isNaturalSurface(BlockState s) {
         var b = s.getBlock();
+        // v4.41.0: broadened natural surface list so mountains, mesa,
+        // cave biomes, mushroom island, mangrove swamp, and snowy
+        // biomes all read as terraform-able instead of rejecting the
+        // whole camp on 'foreign block'.
         return b == Blocks.DIRT || b == Blocks.GRASS_BLOCK || b == Blocks.PODZOL
                 || b == Blocks.COARSE_DIRT || b == Blocks.ROOTED_DIRT
                 || b == Blocks.SAND || b == Blocks.RED_SAND || b == Blocks.GRAVEL
@@ -376,6 +388,28 @@ public final class CampTerraforming {
                 || b == Blocks.ANDESITE || b == Blocks.TUFF || b == Blocks.DEEPSLATE
                 || b == Blocks.CLAY || b == Blocks.MOSS_BLOCK || b == Blocks.MYCELIUM
                 || b == Blocks.SNOW || b == Blocks.SNOW_BLOCK || b == Blocks.ICE
-                || b == Blocks.PACKED_ICE || b == Blocks.BLUE_ICE;
+                || b == Blocks.PACKED_ICE || b == Blocks.BLUE_ICE
+                // Mountains / mesa / peaks
+                || b == Blocks.CALCITE || b == Blocks.SMOOTH_BASALT || b == Blocks.BASALT
+                || b == Blocks.TERRACOTTA || b == Blocks.RED_TERRACOTTA
+                || b == Blocks.WHITE_TERRACOTTA || b == Blocks.ORANGE_TERRACOTTA
+                || b == Blocks.YELLOW_TERRACOTTA || b == Blocks.BROWN_TERRACOTTA
+                || b == Blocks.LIGHT_GRAY_TERRACOTTA
+                // Copper / ore terrain the terraformer will bulldoze
+                || s.is(net.minecraft.tags.BlockTags.BASE_STONE_OVERWORLD)
+                || s.is(net.minecraft.tags.BlockTags.DIRT)
+                || s.is(net.minecraft.tags.BlockTags.SAND)
+                // Mushroom island
+                || b == Blocks.MUSHROOM_STEM || b == Blocks.RED_MUSHROOM_BLOCK
+                || b == Blocks.BROWN_MUSHROOM_BLOCK
+                // Mangrove / swamp
+                || b == Blocks.MANGROVE_ROOTS || b == Blocks.MUDDY_MANGROVE_ROOTS
+                || b == Blocks.MUD || b == Blocks.PACKED_MUD
+                // Snowy biomes / powder snow / cactus
+                || b == Blocks.POWDER_SNOW || b == Blocks.CACTUS || b == Blocks.BAMBOO
+                // Cave biomes
+                || b == Blocks.DRIPSTONE_BLOCK || b == Blocks.POINTED_DRIPSTONE
+                || b == Blocks.SCULK || b == Blocks.SCULK_VEIN || b == Blocks.GLOW_LICHEN
+                || b == Blocks.AZALEA || b == Blocks.FLOWERING_AZALEA;
     }
 }
