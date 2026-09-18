@@ -1,3 +1,11 @@
+# 4.34.0
+
+- Overhauls the Siege Overhaul creative tab. The generic Recruits spawn eggs are gone, replaced with dedicated spawn eggs for every hireable unit in the mod: the four recruit tiers (Recruit, Shieldman, Archer, Crossbowman) and every one of the twenty heroes across all five rarities.
+- Each egg spawns the unit in the exact same gear it would arrive in through a Siege Core hire. Recruits get their trimmed iron and chainmail armor, matching weapon, and a random first name. Heroes get their tier-appropriate gear from HeroTraits, an XP level 10 head start, a 60-hp health floor, +4 attack, bread and arrows where appropriate, and the hero flag so downstream systems recognize them.
+- Each egg has its own texture, colored to match the unit's tier. Recruits are palette-coded by role (gray, blue, green, brown). Heroes are colored by rarity: white Common, green Uncommon, blue Rare, purple Epic, gold Legendary. A weapon glyph on the egg tells you at a glance what the unit fights with, or a sparkle for mage heroes.
+- Egg names show the full hero name in the tooltip in the vanilla rarity color, so a stack of Solmyra the Radiant eggs reads in gold like a legendary should.
+- No hidden dependency: if Villager Recruits isn't installed, the egg politely tells you rather than spawning nothing.
+
 # 4.33.1
 
 - Redraws all four loot box textures in a proper vanilla item style. The originals were too polished and read like mobile-game gacha art next to real Minecraft items. New textures are 32x32 with a flat head-on view, a hard black outline, and a limited palette per tier so they sit next to a vanilla chest item without looking out of place.

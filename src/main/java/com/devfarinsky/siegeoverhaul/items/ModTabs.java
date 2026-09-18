@@ -60,31 +60,21 @@ public final class ModTabs {
                         output.accept(ModItems.BALLISTA_CREW_KIT.get());
 
                         // ---- 2. Spawn eggs for vanilla raider units ----
-                        // These are the mob types the raid system actually
-                        // uses, plus one defender-friendly egg (iron golem)
-                        // for testing base defense loadouts.
-                        // Vanilla eggs for the raider mob palette we spawn.
-                        // (Illusioner and iron golem have no vanilla egg;
-                        // spawn them via /summon or the Recruits eggs
-                        // section below.)
+                        // The mob types the raid system spawns as enemy waves,
+                        // for testing defense loadouts.
                         output.accept(Items.PILLAGER_SPAWN_EGG);
                         output.accept(Items.VINDICATOR_SPAWN_EGG);
                         output.accept(Items.EVOKER_SPAWN_EGG);
                         output.accept(Items.WITCH_SPAWN_EGG);
                         output.accept(Items.RAVAGER_SPAWN_EGG);
 
-                        // ---- 3. Spawn eggs for Recruits mod units (if loaded) ----
-                        // We do not hard-depend on Recruits; if it is absent
-                        // or a given egg is missing, the entry is silently
-                        // skipped. Egg items are named "<entity_id>_spawn_egg"
-                        // in the recruits namespace by convention.
-                        acceptRecruitEgg(output, "recruit_shieldman");
-                        acceptRecruitEgg(output, "bowman");
-                        acceptRecruitEgg(output, "crossbowman");
-                        acceptRecruitEgg(output, "assassin");
-                        acceptRecruitEgg(output, "siege_engineer");
-                        acceptRecruitEgg(output, "patrol_leader");
-                        acceptRecruitEgg(output, "captain");
+                        // ---- 3. Our own recruit + hero spawn eggs ----
+                        // Each egg spawns a fully-outfitted unit in the same
+                        // gear it would arrive in through a Siege Core hire.
+                        // Recruits (0-3) first, then heroes ordered by rarity.
+                        for (RegistryObject<net.minecraft.world.item.Item> egg : ModItems.UNIT_EGGS) {
+                            if (egg.isPresent()) output.accept(egg.get());
+                        }
 
                         // ---- 4. Faction banner loadout ----
                         // One pre-built banner per faction, in canon order.
