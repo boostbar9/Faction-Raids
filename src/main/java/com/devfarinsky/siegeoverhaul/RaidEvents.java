@@ -1840,13 +1840,22 @@ public final class RaidEvents {
         if (raidLevel != null) {
             com.devfarinsky.siegeoverhaul.naval.NavalStagingScanner.NavalStaging naval =
                     com.devfarinsky.siegeoverhaul.naval.NavalStagingScanner.scan(raidLevel, point.pos());
-            if (naval.found() && !RaidConfig.BUILD_WAR_CAMPS.get()) {
+            // v4.38.0: run the naval scan on ALL raids, not only camp-less
+            // ones. When the war camp sits on or near open water (island
+            // or coastal village), route the incoming waves through the
+            // existing naval convoy path so raiders arrive by boat instead
+            // of walking across the seabed. The land-spawn path still runs
+            // in parallel for any wave members that can't fit on ships.
+            boolean campIsCoastal = state.campPos != null && naval.found() && isCoastalCamp(raidLevel, state.campPos);
+            if (naval.found() && (!RaidConfig.BUILD_WAR_CAMPS.get() || state.campPos == null || campIsCoastal)) {
                 state.navalStagingPos = naval.surface();
                 state.navalBeachPos = naval.beach();
-                announce(server, anchor.teamKey(), Component.literal(
-                        "Sails spotted offshore! A raider fleet is staging at " + formatPos(naval.surface()) +
-                        " and will beach near " + formatPos(naval.beach()) + ".")
-                        .withStyle(ChatFormatting.AQUA), false);
+                String flavour = state.campPos != null && campIsCoastal
+                        ? "A raider fleet is anchoring near the water-village camp at " + formatPos(naval.surface()) +
+                          " and will beach near " + formatPos(naval.beach()) + "."
+                        : "Sails spotted offshore! A raider fleet is staging at " + formatPos(naval.surface()) +
+                          " and will beach near " + formatPos(naval.beach()) + ".";
+                announce(server, anchor.teamKey(), Component.literal(flavour).withStyle(ChatFormatting.AQUA), false);
             }
             if (state.campPos != null) startCampCrew(raidLevel,state,point);
             else if (RaidConfig.BUILD_WAR_CAMPS.get()) announce(server,anchor.teamKey(),Component.literal(
@@ -3516,6 +3525,38 @@ public final class RaidEvents {
      */
     private static boolean isWaterOrLava(ServerLevel level, BlockPos pos) {
         return !level.getFluidState(pos).isEmpty();
+    }
+
+    /**
+     * v4.38.0 - true when the war camp footprint sits over significant water.
+     * Samples the ORIGINAL terrain height (heightmap OCEAN_FLOOR, which
+     * ignores the paved dirt the raiders just laid) across the 21x21 pad
+     * plus a 12-block margin. If more than a quarter of samples were water
+     * before terraforming, treat the site as a coastal / island camp so
+     * the naval convoy path takes over for wave transport.
+     */
+    private static boolean isCoastalCamp(ServerLevel level, BlockPos camp) {
+        int waterHits = 0;
+        int samples = 0;
+        int seaLevel = level.getSeaLevel();
+        // Sample a wider ring than the camp itself so cliffside camps
+        // ringed by ocean also register - not just camps directly on
+        // water. Step 3 gives us 11 samples per axis over the 33-block
+        // window, so 121 total.
+        for (int dx = -15; dx <= 15; dx += 3) {
+            for (int dz = -15; dz <= 15; dz += 3) {
+                int x = camp.getX() + dx;
+                int z = camp.getZ() + dz;
+                if (!level.hasChunk(x >> 4, z >> 4)) continue;
+                samples++;
+                // OCEAN_FLOOR ignores fluids and returns the top solid
+                // block below any water - so a column that was ocean
+                // before we paved it still reads as ocean here.
+                int floor = level.getHeight(Heightmap.Types.OCEAN_FLOOR, x, z);
+                if (floor < seaLevel) waterHits++;
+            }
+        }
+        return samples > 0 && waterHits * 4 >= samples;
     }
 
     private static BlockPos surfacePosition(ServerLevel level, int x, int z) {
