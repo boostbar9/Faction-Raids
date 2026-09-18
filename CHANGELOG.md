@@ -1,3 +1,8 @@
+# 4.33.1
+
+- Redraws all four loot box textures in a proper vanilla item style. The originals were too polished and read like mobile-game gacha art next to real Minecraft items. New textures are 32x32 with a flat head-on view, a hard black outline, and a limited palette per tier so they sit next to a vanilla chest item without looking out of place.
+- Common gets iron bands on oak. Uncommon adds bronze bands and a green rarity halo. Rare has silver bands and a sapphire gem on the lid with a blue halo. Epic has gold bands on darker wood and an amethyst gem with a purple halo.
+
 # 4.33.0
 
 - Loot boxes are now real items you get for surviving a wave, instead of automatic emerald deposits alone. Every online defender receives one loot box at the end of every cleared wave, and higher waves shift the odds toward better boxes.
