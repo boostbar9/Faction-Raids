@@ -2044,13 +2044,56 @@ public final class RaidEvents {
         }
         if (RaidConfig.BUILD_WAR_CAMPS.get() && state.campPos == null && !state.coreCaptured
                 && !state.campSearchAbandoned) {
-            // v4.35.0 safety valve: after cycling through the full 168-site
-            // spiral without landing a viable camp (island worlds, dense
-            // player claims, mods that reject the terrain), abandon the war
-            // camp for this raid and let waves spawn directly. Without this
-            // fallback the raid sits in "Scouting camp land" forever and no
-            // waves ever run. 200 = one full spiral (168) + a buffer.
-            if (state.campSearchStep >= 200) {
+            // v4.36.0: after 200 candidates in the natural-terrain spiral,
+            // switch on the terraforming path so the raider crew can pave
+            // a landing pad on hostile terrain (islands, coastal cliffs,
+            // heavy water). If terraforming is disabled the raid falls
+            // back to running without a camp so it doesn't stall forever.
+            if (state.campSearchStep >= 200 && !state.campTerraformed) {
+                if (RaidConfig.CAMP_TERRAFORM.get()) {
+                    // Flip the terraforming flag; the same loop below will
+                    // run findWarCampPosition again but this time the
+                    // buildWarCamp path routes through the terraformer
+                    // before the palisade goes down. Reset the search
+                    // cursor so we sweep the whole ring again with the
+                    // loosened acceptance criteria.
+                    state.campTerraformed = true;
+                    state.campSearchStep = 0;
+                    if (state.campSearchPos != null) {
+                        com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level, state.campSearchPos);
+                        state.campSearchPos = null;
+                    }
+                    announce(server, teamKey, Component.literal(
+                            "No natural camp land found. Raiders will pave a foothold and build on hostile terrain.")
+                            .withStyle(ChatFormatting.GOLD), true);
+                    FactionLogger.LOG.info("Camp search {} switched to terraforming after {} candidates",
+                            teamKey, 200);
+                    data.setDirty();
+                } else {
+                    // Legacy 4.35 behavior: give up and run without a camp.
+                    state.campSearchAbandoned = true;
+                    if (state.campSearchPos != null) {
+                        com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level, state.campSearchPos);
+                        state.campSearchPos = null;
+                    }
+                    state.campBuildAttempted = true;
+                    state.preparationTotalTicks = RaidConfig.PREPARATION_MINUTES.get() * 1200;
+                    state.preparationTicks = state.preparationTotalTicks;
+                    state.ticksToNextWave = state.preparationTicks;
+                    announce(server, teamKey, Component.literal(
+                            "No viable camp land found within scouting range. Raiders will attack directly without a fortified camp. Preparation starts now.")
+                            .withStyle(ChatFormatting.GOLD), true);
+                    FactionLogger.LOG.info("Camp search {} abandoned after {} candidates: fallback to camp-less raid",
+                            teamKey, state.campSearchStep);
+                    data.setDirty();
+                    setRaidMobsFrozen(level, state, false);
+                    return;
+                }
+            }
+            // Once terraforming has run its own 200-candidate sweep with the
+            // loosened criteria and STILL failed, give up (rare - only if
+            // the whole spiral overlaps player claims or another dimension).
+            if (state.campTerraformed && state.campSearchStep >= 200) {
                 state.campSearchAbandoned = true;
                 if (state.campSearchPos != null) {
                     com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level, state.campSearchPos);
@@ -2061,10 +2104,9 @@ public final class RaidEvents {
                 state.preparationTicks = state.preparationTotalTicks;
                 state.ticksToNextWave = state.preparationTicks;
                 announce(server, teamKey, Component.literal(
-                        "No viable camp land found within scouting range. Raiders will attack directly without a fortified camp. Preparation starts now.")
+                        "Terraforming pass also found no viable ground. Raiders will attack directly without a fortified camp.")
                         .withStyle(ChatFormatting.GOLD), true);
-                FactionLogger.LOG.info("Camp search {} abandoned after {} candidates: fallback to camp-less raid",
-                        teamKey, state.campSearchStep);
+                FactionLogger.LOG.info("Camp terraforming search {} exhausted; running camp-less", teamKey);
                 data.setDirty();
                 setRaidMobsFrozen(level, state, false);
                 return;
@@ -2130,6 +2172,14 @@ public final class RaidEvents {
         // captain dies.
         tickCaptainAura(level, state);
         com.devfarinsky.siegeoverhaul.raid.EnemyAbilities.tick(level, state.raiders);
+        // v4.36.0: for terraformed camps, keep smoothing nearby territory
+        // so Workers 2 builders can expand into the paved area. Runs every
+        // 40 ticks (2 seconds) - each call places at most one block.
+        if (state.campTerraformed && RaidConfig.TERRITORY_SMOOTHING.get()
+                && state.campPos != null && level.getGameTime() % 40L == 0L) {
+            com.devfarinsky.siegeoverhaul.camp.CampTerraforming.smoothOnce(
+                    level, state, RaidConfig.TERRITORY_SMOOTHING_RADIUS.get());
+        }
         com.devfarinsky.siegeoverhaul.camp.WarGate.tick(level,state,point.pos());
         if(state.warGateWaitTicks>=20*60*30 && !com.devfarinsky.siegeoverhaul.camp.WarGate.ready(level,state)) {
             finishRaid(server,data,teamKey,false,false,"The enemy could not establish its War Gate. The siege has withdrawn without rewards.");
@@ -3037,6 +3087,13 @@ public final class RaidEvents {
         BlockPos camp = findWarCampPosition(level, anchor, point.pos(), state.approachAngle, state);
         if (camp == null) return;
         state.campPos = camp;
+        // v4.36.0: on hostile terrain, pave the entire 21x21 footprint at
+        // camp.getY() - 1 so the palisade sits on a level plane. Recorded
+        // blocks flow through the normal cleanup ledger so raid end
+        // restores the original water / cliff terrain.
+        if (state.campTerraformed && RaidConfig.CAMP_TERRAFORM.get()) {
+            com.devfarinsky.siegeoverhaul.camp.CampTerraforming.paveFootprint(level, state, camp, 10);
+        }
 
         final int cx = camp.getX();
         final int cz = camp.getZ();
@@ -3365,7 +3422,14 @@ public final class RaidEvents {
             if (remote && RaidConfig.RESPECT_FOREIGN_CLAIMS.get() && anchorRecord!=null
                     && com.devfarinsky.siegeoverhaul.compat.CampClaims.footprint(center).stream().anyMatch(chunk ->
                         com.devfarinsky.siegeoverhaul.compat.ClaimBridge.isForeignClaim(level,chunk,anchorRecord))) continue;
-            if (!validCampSurface(level, center, anchor)) continue;
+            // v4.36.0: on the terraforming fallback path, accept sites
+            // that the paver can normalize (water, cliffs, small height
+            // variance) instead of the strict natural-terrain check.
+            boolean terraformFallback = state != null && state.campTerraformed;
+            if (terraformFallback) {
+                if (!com.devfarinsky.siegeoverhaul.camp.CampTerraforming.acceptableForTerraforming(
+                        level, center, anchor, RaidConfig.CAMP_TERRAFORM_MAX_DEPTH.get())) continue;
+            } else if (!validCampSurface(level, center, anchor)) continue;
             // v2.16.1 - keep the palisade clear of the boat spawn. The
             // camp footprint is 19x19 (9 per side + gate); anything closer
             // than 24 blocks would put boats inside the fence.
