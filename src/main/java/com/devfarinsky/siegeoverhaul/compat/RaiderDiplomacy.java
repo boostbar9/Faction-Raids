@@ -60,8 +60,9 @@ public final class RaiderDiplomacy {
      * that hasn't been ensured yet; Recruits treats unknown teams as no-ops.
      */
     public static void setRelation(MinecraftServer server, String playerTeam, String raiderTeam, String statusName) {
-        if (server == null || playerTeam == null || playerTeam.isBlank()
-                || raiderTeam == null || raiderTeam.isBlank() || statusName == null) return;
+        String playerFaction = factionId(playerTeam);
+        String raiderFaction = factionId(raiderTeam);
+        if (server == null || playerFaction == null || raiderFaction == null || statusName == null) return;
         init();
         if (!available) return;
         ServerLevel level = server.overworld();
@@ -71,10 +72,10 @@ public final class RaiderDiplomacy {
                     .getField("recruitsFactionManager").get(null);
             if (manager == null) return;
             Object status = Enum.valueOf(statusClass.asSubclass(Enum.class), statusName);
-            setRelation.invoke(manager, playerTeam, raiderTeam, status, level);
-            setRelation.invoke(manager, raiderTeam, playerTeam, status, level);
+            setRelation.invoke(manager, playerFaction, raiderFaction, status, level);
+            setRelation.invoke(manager, raiderFaction, playerFaction, status, level);
         } catch (ReflectiveOperationException | RuntimeException ex) {
-            FactionLogger.LOG.debug("Diplomacy set {} <-> {} failed: {}", playerTeam, raiderTeam, ex.getMessage());
+            FactionLogger.LOG.debug("Diplomacy set {} <-> {} failed: {}", playerFaction, raiderFaction, ex.getMessage());
         }
     }
 
@@ -108,16 +109,32 @@ public final class RaiderDiplomacy {
 
     /** Read current relation for diagnostics; returns null if Recruits is absent. */
     public static String currentRelation(String teamA, String teamB) {
+        String factionA = factionId(teamA);
+        String factionB = factionId(teamB);
+        if (factionA == null || factionB == null) return null;
         init();
         if (!available) return null;
         try {
             Object manager = Class.forName("com.talhanation.recruits.FactionEvents")
                     .getField("recruitsFactionManager").get(null);
             if (manager == null) return null;
-            Object result = getRelation.invoke(manager, teamA, teamB);
+            Object result = getRelation.invoke(manager, factionA, factionB);
             return result == null ? null : ((Enum<?>) result).name();
         } catch (ReflectiveOperationException | RuntimeException ex) {
             return null;
         }
+    }
+
+    /**
+     * Siege Overhaul persists scoreboard identities as {@code team:<id>}, but
+     * Recruits' faction and diplomacy managers are keyed by the raw string id.
+     * Player fallback anchors have no native Recruits faction and must not be
+     * handed to that API.
+     */
+    static String factionId(String key) {
+        if (key == null || key.isBlank() || key.startsWith("player:")) return null;
+        if (!key.startsWith("team:")) return key;
+        String id = key.substring(5);
+        return id.isBlank() ? null : id;
     }
 }

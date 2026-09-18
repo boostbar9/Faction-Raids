@@ -1,3 +1,8 @@
+# 4.43.2 beta
+
+- Normalize saved `team:<id>` keys before calling Villager Recruits' diplomacy manager, so active-siege hostility is applied to the real faction instead of an unknown prefixed identity.
+- Ignore solo-player fallback keys at the native diplomacy boundary while preserving the existing safe no-op behavior when the Recruits API is unavailable.
+
 # 4.43.1 beta
 
 - Keep enemy command-core courtyards protected even when War Gate planning fails, and reject overlapping Workers 2 construction before gate or road setup can mutate the camp.
