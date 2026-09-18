@@ -9,6 +9,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.level.material.Fluids;
 
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -41,11 +42,33 @@ public final class NavalFleet {
      * small ring around {@code stagingPos}. See {@link #findScatterPos}.
      */
     public static Optional<Entity> spawn(ServerLevel level, BlockPos stagingPos) {
-        BlockPos scattered = findScatterPos(level, stagingPos);
-        if (RaidConfig.PREFER_SMALL_SHIPS.get() && SmallShipsIntegration.hasAnyKnownShip()) {
-            Optional<Entity> ship = SmallShipsIntegration.spawnShip(level, scattered,
-                    RaidConfig.SMALL_SHIPS_PREFER_LARGE.get());
-            if (ship.isPresent()) return ship;
+        // v4.42.0: preferSmall (a vanilla boat) when the raider is going
+        // to end up swimming otherwise. Callers still get a Small Ships
+        // warship when the mod is installed and the site can fit one.
+        return spawn(level, stagingPos, false);
+    }
+
+    /**
+     * v4.42.0 - vessel spawn with an explicit staging position. The
+     * scatter search verifies clear water AND clear air above so a
+     * boat never spawns inside a cliff face or clipped through terrain.
+     * If no clear staging can be found, the vessel is not spawned.
+     * That is safer than dropping a boat inside solid rock where it
+     * suffocates.
+     */
+    public static Optional<Entity> spawn(ServerLevel level, BlockPos stagingPos, boolean forceVanilla) {
+        BlockPos scattered = findScatterPos(level, stagingPos, /*hullRadius=*/2);
+        if (scattered == null) return Optional.empty();
+        if (!forceVanilla && RaidConfig.PREFER_SMALL_SHIPS.get() && SmallShipsIntegration.hasAnyKnownShip()) {
+            // Small Ships warships are ~4-5 wide, so check a wider hull radius
+            // before we commit to spawning one. If the surface can't fit a
+            // warship, still try a vanilla boat rather than skip.
+            BlockPos warshipScatter = findScatterPos(level, stagingPos, /*hullRadius=*/3);
+            if (warshipScatter != null) {
+                Optional<Entity> ship = SmallShipsIntegration.spawnShip(level, warshipScatter,
+                        RaidConfig.SMALL_SHIPS_PREFER_LARGE.get());
+                if (ship.isPresent()) return ship;
+            }
         }
         return spawnVanillaBoat(level, scattered);
     }
@@ -74,7 +97,24 @@ public final class NavalFleet {
      * attempt lands on solid ground or lava, fall back to the original
      * position — worst case we're no worse than pre-fix.
      */
-    private static BlockPos findScatterPos(ServerLevel level, BlockPos stagingPos) {
+    /**
+     * v4.42.0 - wider search ring, verified water surface, verified clear
+     * hull footprint (checks {@code hullRadius} blocks in every direction
+     * are also water and have open air above). Returns null when no
+     * viable staging exists so the caller can skip rather than spawn a
+     * ship inside a cliff face or on top of another vessel.
+     */
+    private static BlockPos findScatterPos(ServerLevel level, BlockPos stagingPos, int hullRadius) {
+        // Track occupied scatter positions per level tick so successive
+        // spawns in the same squad don't land on the same water tile.
+        java.util.Set<Long> claimed = OCCUPIED.computeIfAbsent(level.dimension().location().toString(),
+                k -> new java.util.HashSet<>());
+        if (level.getGameTime() != lastPurgeTick) {
+            OCCUPIED.clear();
+            lastPurgeTick = level.getGameTime();
+            claimed = OCCUPIED.computeIfAbsent(level.dimension().location().toString(),
+                    k -> new java.util.HashSet<>());
+        }
         for (int i = 0; i < SPAWN_SCATTER_TRIES; i++) {
             int radius = SPAWN_SCATTER_MIN_RADIUS + level.random.nextInt(
                     SPAWN_SCATTER_MAX_RADIUS - SPAWN_SCATTER_MIN_RADIUS + 1);
@@ -82,15 +122,53 @@ public final class NavalFleet {
             int dx = (int) Math.round(Math.cos(angle) * radius);
             int dz = (int) Math.round(Math.sin(angle) * radius);
             BlockPos candidate = stagingPos.offset(dx, 0, dz);
-            if (isWater(level, candidate)) return candidate;
+            if (!isClearWaterFootprint(level, candidate, hullRadius)) continue;
+            if (!claimed.add(candidate.asLong())) continue;
+            return candidate;
         }
-        return stagingPos;
+        // Fallback - accept the raw staging pos ONLY if it is safe.
+        if (isClearWaterFootprint(level, stagingPos, hullRadius) && claimed.add(stagingPos.asLong())) {
+            return stagingPos;
+        }
+        return null;
     }
 
-    private static boolean isWater(ServerLevel level, BlockPos pos) {
-        return level.getFluidState(pos).getType() == Fluids.WATER
-                || level.getFluidState(pos.below()).getType() == Fluids.WATER;
+    /**
+     * v4.42.0 - centre tile must be surface water, and every tile within
+     * {@code hullRadius} in the cardinal directions must ALSO be water
+     * with clear air above. Rejects cliff faces, jetties, and
+     * partially-blocked spawn sites that used to slice ship models in
+     * half.
+     */
+    private static boolean isClearWaterFootprint(ServerLevel level, BlockPos pos, int hullRadius) {
+        if (!isSurfaceWater(level, pos)) return false;
+        for (int r = 1; r <= hullRadius; r++) {
+            if (!isSurfaceWater(level, pos.offset(r, 0, 0))) return false;
+            if (!isSurfaceWater(level, pos.offset(-r, 0, 0))) return false;
+            if (!isSurfaceWater(level, pos.offset(0, 0, r))) return false;
+            if (!isSurfaceWater(level, pos.offset(0, 0, -r))) return false;
+        }
+        return true;
     }
+
+    /**
+     * v4.42.0 - water at {@code pos} AND air (or water) 2 blocks above,
+     * so the hull has clearance for masts / sails / raider heads.
+     */
+    private static boolean isSurfaceWater(ServerLevel level, BlockPos pos) {
+        if (!level.hasChunkAt(pos)) return false;
+        if (level.getFluidState(pos).getType() != Fluids.WATER) return false;
+        // Ceiling clearance: no solid blocks in the two tiles above.
+        var above1 = level.getBlockState(pos.above());
+        var above2 = level.getBlockState(pos.above(2));
+        if (!above1.isAir() && !above1.getFluidState().is(Fluids.WATER)) return false;
+        if (!above2.isAir() && !above2.getFluidState().is(Fluids.WATER)) return false;
+        return true;
+    }
+
+    /** v4.42.0 - reservations that expire when the game tick advances. */
+    private static final Map<String, java.util.Set<Long>> OCCUPIED = new java.util.HashMap<>();
+    private static long lastPurgeTick = Long.MIN_VALUE;
 
     // Scatter tuning. Kept as constants (not config) because this is a
     // per-boat spread, not a gameplay dial — server owners should never
@@ -98,9 +176,13 @@ public final class NavalFleet {
     // over roughly a 6-block-wide arc, wide enough for each boat to have
     // clear water on both sides without pulling any boat so far from the
     // beach heading that its steering fights the current.
-    private static final int SPAWN_SCATTER_TRIES = 8;
-    private static final int SPAWN_SCATTER_MIN_RADIUS = 2;
-    private static final int SPAWN_SCATTER_MAX_RADIUS = 4;
+    // v4.42.0: wider search, more tries. Squads of 6+ warships need
+    // ~6-8 blocks of separation to avoid hull collision, and the
+    // increased hull-footprint check makes some candidates fail so we
+    // need more tries per boat.
+    private static final int SPAWN_SCATTER_TRIES = 24;
+    private static final int SPAWN_SCATTER_MIN_RADIUS = 4;
+    private static final int SPAWN_SCATTER_MAX_RADIUS = 10;
 
     /**
      * Mount up to {@code max} raiders on a vessel. Returns the number
