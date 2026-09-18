@@ -1297,7 +1297,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         text(g, CoreLoot.NAMES[i], x + 30, y + 6, w - 36, CommandPalette.TEXT);
         String subtitle = opening ? "Unsealing the seal..."
                 : done ? revealed.getHoverName().getString()
-                : CoreLoot.rarity(CoreLoot.topTier(i)) + " ceiling  |  " + CoreLoot.odds();
+                : CoreLoot.floorTier(i) > 0
+                        ? CoreLoot.rarity(CoreLoot.floorTier(i)) + " floor  |  Epic ceiling"
+                        : "Sealed Loot Box  |  " + CoreLoot.odds();
         text(g, subtitle, x + 30, y + 17, w - 36,
                 opening ? CommandPalette.ACCENT_ARCANE
                         : done ? CommandPalette.tier(revealedTier)
@@ -1334,10 +1336,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int bandH = Math.min(h, 30);
         CommandFrame.card(g, x, y, w, bandH, CommandPalette.ACCENT_STEEL);
         CommandIcon.CHEST.draw(g, x + 6, y + 5, 12);
-        text(g, "Every chest rolls independently  ·  " + CoreLoot.odds(),
+        text(g, "Purchases hand you a sealed box  ·  open it in your inventory to reveal the loot",
                 x + 23, y + 6, w - 29, CommandPalette.TEXT_MUTED);
         if (bandH >= 26) {
-            text(g, "Common finds are frequent, Epic rolls are rare but pack the best gear.",
+            text(g, "Pricier chests floor higher rarity  ·  Field roll from Common, Veteran from Uncommon, Royal from Rare.",
                     x + 23, y + 17, w - 29, CommandPalette.TEXT_DIM);
         }
     }

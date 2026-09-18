@@ -7,6 +7,10 @@ import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -35,50 +39,152 @@ public final class CampTerraforming {
     private CampTerraforming() {}
 
     /**
-     * Pave the entire {@code (2*halfExtent+1)^2} column footprint at
-     * {@code campY - 1}. Water gets filled with dirt from sea floor up to
-     * {@code campY - 1}. Terrain above {@code campY - 1} is cut back down.
-     * Anything above the plane is cleared to air so tents and the palisade
-     * have headroom. Returns the number of block ops performed (for logging).
+     * Populate {@code state.terraformQueue} with every block position that
+     * needs paving for the camp footprint, ordered from the center outward
+     * in concentric rings. Does NOT touch the world - callers must drain
+     * the queue via {@link #tickTerraformQueue} so the paving is visible
+     * as a build-out over time instead of a single instant slap of dirt.
+     *
+     * <p>Ordering matters: center-out reads as "workers laid the middle
+     * pad first, then expanded to the edges", which is how a real crew
+     * would work. Random ordering looks like glitchy world generation.
      */
-    public static int paveFootprint(ServerLevel level, RaidSavedData.RaidState state,
+    public static int queueFootprint(ServerLevel level, RaidSavedData.RaidState state,
                                      BlockPos center, int halfExtent) {
+        return queueRing(level, state, center, halfExtent, 0, halfExtent + 2);
+    }
+
+    /**
+     * Populate the terraform queue with a Chebyshev-ring band {@code [startRing, endRing]}
+     * around {@code center}. Use this to split paving into phases: an
+     * inner synchronous fill under the palisade, then an outer expansion
+     * that visibly builds over time. Successive calls with the same
+     * center accumulate positions in the queue.
+     */
+    public static int queueRing(ServerLevel level, RaidSavedData.RaidState state,
+                                BlockPos center, int halfExtent, int startRing, int endRing) {
+        if (state.terraformCenter == null || !state.terraformCenter.equals(center)) {
+            state.terraformQueue.clear();
+            state.terraformCenter = center;
+            state.terraformHalfExtent = halfExtent;
+        }
         int floorY = center.getY() - 1;
         int ceilingY = center.getY() + 4;
-        int ops = 0;
-        BlockState dirt = Blocks.DIRT.defaultBlockState();
-        BlockState grass = Blocks.GRASS_BLOCK.defaultBlockState();
-        for (int dx = -halfExtent; dx <= halfExtent; dx++) {
-            for (int dz = -halfExtent; dz <= halfExtent; dz++) {
-                int wx = center.getX() + dx;
-                int wz = center.getZ() + dz;
-                if (!level.hasChunkAt(new BlockPos(wx, floorY, wz))) continue;
-                // Fill any air/water from the natural surface floor up to
-                // floorY. If the surface is already higher than floorY, cut
-                // the extra material off (down to floorY + 1 empty).
-                int surfaceY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, wx, wz);
-                // Cap the fill depth so a deep ocean column doesn't turn
-                // into a solid dirt tower to the seafloor; 8 blocks is
-                // enough to give the palisade a stable footing without
-                // creating an obvious dirt wall visible from the shore.
-                int fillFrom = Math.max(floorY - 8, Math.min(surfaceY, floorY));
-                for (int y = fillFrom; y <= floorY; y++) {
-                    BlockPos p = new BlockPos(wx, y, wz);
-                    if (replace(level, state, p, y == floorY ? grass : dirt)) ops++;
-                }
-                // Clear excess terrain above the plane so the camp has
-                // headroom. Leaves and vegetation are already filtered by
-                // CampVegetation.replaceable; solid stone/dirt on a hill
-                // gets removed here.
-                for (int y = floorY + 1; y <= ceilingY; y++) {
-                    BlockPos p = new BlockPos(wx, y, wz);
-                    if (replace(level, state, p, Blocks.AIR.defaultBlockState())) ops++;
+        int total = 0;
+        // Center-out ring walk: ring 0 is the center column, ring N is the
+        // square shell at Chebyshev distance N. v4.36.0 polish: pave one
+        // extra ring past the palisade so the outer edge of the camp
+        // meets the natural terrain on a level border instead of
+        // dropping straight from grass to a cliff or water.
+        for (int ring = startRing; ring <= endRing; ring++) {
+            for (int dx = -ring; dx <= ring; dx++) {
+                for (int dz = -ring; dz <= ring; dz++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) continue;
+                    int wx = center.getX() + dx;
+                    int wz = center.getZ() + dz;
+                    if (!level.hasChunkAt(new BlockPos(wx, floorY, wz))) continue;
+                    int surfaceY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, wx, wz);
+                    // Outer polish ring: keep the fill shallow (max 3
+                    // blocks below the plane) so we tuck the border into
+                    // the existing terrain instead of laying down an
+                    // obvious dirt collar around the camp.
+                    int maxDepth = ring > halfExtent ? 3 : 8;
+                    int fillFrom = Math.max(floorY - maxDepth, Math.min(surfaceY, floorY));
+                    // Fill columns bottom-up so the workers appear to lay
+                    // dirt starting from the floor and stack up.
+                    for (int y = fillFrom; y <= floorY; y++) {
+                        state.terraformQueue.add(new BlockPos(wx, y, wz).asLong());
+                        total++;
+                    }
+                    // Then clear excess terrain above the plane, top-down
+                    // (so tall obstacles collapse from the top).
+                    for (int y = ceilingY; y > floorY; y--) {
+                        state.terraformQueue.add(new BlockPos(wx, y, wz).asLong());
+                        total++;
+                    }
                 }
             }
         }
-        FactionLogger.LOG.info("Terraformed camp footprint at {} ({}x{}, {} ops)",
-                center, halfExtent * 2 + 1, halfExtent * 2 + 1, ops);
+        FactionLogger.LOG.info("Queued {} terraforming ops for camp at {} ({}x{})",
+                total, center, halfExtent * 2 + 1, halfExtent * 2 + 1);
+        return total;
+    }
+
+    /**
+     * Synchronously pave the palisade-only rings (0..{@code halfExtent}).
+     * Used when the fence needs solid ground immediately; call
+     * {@link #queueRing} afterwards to add the over-time outer polish
+     * band without disturbing the just-placed inner fill.
+     */
+    public static int paveFootprint(ServerLevel level, RaidSavedData.RaidState state,
+                                     BlockPos center, int halfExtent) {
+        queueRing(level, state, center, halfExtent, 0, halfExtent);
+        int ops = 0;
+        BlockState dirt = Blocks.DIRT.defaultBlockState();
+        BlockState grass = Blocks.GRASS_BLOCK.defaultBlockState();
+        int floorY = center.getY() - 1;
+        for (long packed : state.terraformQueue) {
+            BlockPos p = BlockPos.of(packed);
+            BlockState target = p.getY() > floorY ? Blocks.AIR.defaultBlockState()
+                    : (p.getY() == floorY ? grass : dirt);
+            if (replace(level, state, p, target)) ops++;
+        }
+        state.terraformQueue.clear();
         return ops;
+    }
+
+    /**
+     * Drain up to {@code opsPerTick} block ops from {@code state.terraformQueue},
+     * emitting a block-place sound and dirt particles at each block so the
+     * paving reads as workers actively building the pad instead of a
+     * single instantaneous slap of dirt. Returns true when the queue is
+     * empty (so the caller can advance the raid to the next phase).
+     */
+    public static boolean tickTerraformQueue(ServerLevel level, RaidSavedData.RaidState state,
+                                             int opsPerTick) {
+        if (state.terraformQueue.isEmpty() || state.terraformCenter == null) return true;
+        BlockState dirt = Blocks.DIRT.defaultBlockState();
+        BlockState grass = Blocks.GRASS_BLOCK.defaultBlockState();
+        BlockState air = Blocks.AIR.defaultBlockState();
+        int floorY = state.terraformCenter.getY() - 1;
+        int placed = 0;
+        while (placed < opsPerTick && !state.terraformQueue.isEmpty()) {
+            long packed = state.terraformQueue.remove(0);
+            BlockPos p = BlockPos.of(packed);
+            BlockState target = p.getY() > floorY ? air
+                    : (p.getY() == floorY ? grass : dirt);
+            BlockState pre = level.getBlockState(p);
+            if (replace(level, state, p, target)) {
+                // Placement sound + dirt particles so the block visibly
+                // "gets built" instead of just appearing. For clears we
+                // use the pre-existing block's break sound to sell the
+                // removal.
+                if (target.isAir()) {
+                    level.playSound(null, p, pre.getSoundType().getBreakSound(),
+                            SoundSource.BLOCKS, 0.6f, 0.9f + level.random.nextFloat() * 0.2f);
+                    level.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, pre),
+                            p.getX() + 0.5, p.getY() + 0.5, p.getZ() + 0.5, 6,
+                            0.25, 0.25, 0.25, 0.02);
+                } else {
+                    level.playSound(null, p, target.getSoundType().getPlaceSound(),
+                            SoundSource.BLOCKS, 0.7f, 0.9f + level.random.nextFloat() * 0.2f);
+                    level.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, target),
+                            p.getX() + 0.5, p.getY() + 1.0, p.getZ() + 0.5, 4,
+                            0.2, 0.05, 0.2, 0.01);
+                }
+                placed++;
+            }
+            // Skipped ops (player builds we won't overwrite) don't count
+            // against the per-tick budget - the loop just moves on until
+            // it finds a placeable position or the queue empties.
+        }
+        if (state.terraformQueue.isEmpty()) {
+            FactionLogger.LOG.info("Terraforming complete at {}", state.terraformCenter);
+            state.terraformCenter = null;
+            state.terraformHalfExtent = 0;
+            return true;
+        }
+        return false;
     }
 
     /**

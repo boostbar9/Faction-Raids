@@ -11,6 +11,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.Enchantments;
+import com.devfarinsky.siegeoverhaul.items.LootBoxItem;
+import com.devfarinsky.siegeoverhaul.items.ModItems;
 import java.util.List;
 
 /**
@@ -48,6 +50,16 @@ public final class CoreLoot {
     public static int topTier(int box) {
         if (price(box) < 0) throw new IllegalArgumentException("Invalid loot box");
         return 3;
+    }
+
+    /**
+     * v4.36.0: minimum tier the given chest can hand out. Field Supplies
+     * can still roll Common, Veteran Armory floors at Uncommon, Royal
+     * Treasury floors at Rare. Matches the shift applied in
+     * {@link #tierForBox}.
+     */
+    public static int floorTier(int box) {
+        return switch (box) { case 1 -> 1; case 2 -> 2; default -> 0; };
     }
 
     /** Rarity tier for a 0-99 roll, matching the advertised odds exactly. */
@@ -509,23 +521,80 @@ public final class CoreLoot {
             player.sendSystemMessage(Component.literal("You need " + price + " emeralds in the faction Treasury."));
             return null;
         }
-        // Require space for every possible outcome before rolling. Full
-        // inventories cannot be used to filter unwanted rewards or lose a
-        // paid reward. We only need to probe one roll per tier because
-        // every reward inside a tier is capped at the same stack size (1
-        // for gear, 64 for materials or arrows).
-        for (int roll : new int[]{0, 50, 80, 95}) {
-            if (!fits(inventory.items, reward(box, roll))) {
+        // v4.36.0 loot box rework: the Hub hands out a SEALED loot box
+        // matching the rolled rarity instead of opening it here. The
+        // player takes the box back to base and opens it in their own
+        // inventory - that reveal moment is the point of the whole loot
+        // system. Fall back to the legacy inline reward path when the
+        // sealed box registry isn't initialized (unit tests without a
+        // running server).
+        int roll = player.getRandom().nextInt(100);
+        int tier = tierForBox(box, roll);
+        LootBoxItem.Tier sealedTier = sealedTierFor(tier);
+        ItemStack sealedPrize = sealedPrizeFor(sealedTier);
+        if (sealedPrize != null) {
+            if (!fits(inventory.items, sealedPrize)) {
+                player.sendSystemMessage(Component.literal("Make room in your inventory before buying a chest."));
+                return null;
+            }
+            if (!PaymentSource.consume(player, price)) return null;
+            inventory.add(sealedPrize.copy()); inventory.setChanged();
+            data.putLong("SiegeLootNext", now + OPEN_TICKS);
+            player.sendSystemMessage(Component.literal(
+                    "Purchased from " + NAMES[box] + ". A sealed "
+                            + sealedTier.label + " Loot Box is in your inventory - open it when you get home."));
+            return new Receipt(sealedPrize.copy(), tier);
+        }
+        // Test-only fallback: sealed registry not present. Roll a concrete
+        // reward and hand it out immediately as v4.35 did.
+        for (int probeRoll : new int[]{0, 50, 80, 95}) {
+            if (!fits(inventory.items, reward(box, probeRoll))) {
                 player.sendSystemMessage(Component.literal("Make room in your inventory before opening a box."));
                 return null;
             }
         }
-        int roll = player.getRandom().nextInt(100);
         ItemStack prize = reward(box, roll);
         if (!PaymentSource.consume(player, price)) return null;
         inventory.add(prize.copy()); inventory.setChanged();
         data.putLong("SiegeLootNext", now + OPEN_TICKS);
         player.sendSystemMessage(Component.literal("Opening " + NAMES[box] + "... Reward secured in your inventory."));
         return new Receipt(prize.copy(), tier(roll));
+    }
+
+    private static ItemStack sealedPrizeFor(LootBoxItem.Tier tier) {
+        try {
+            var obj = ModItems.lootBox(tier);
+            if (obj == null || !obj.isPresent()) return null;
+            return new ItemStack(obj.get());
+        } catch (NullPointerException | IllegalStateException e) {
+            return null;
+        }
+    }
+
+    /**
+     * v4.36.0: pricier chests bias the rolled tier upward. The base roll
+     * still uses the advertised 50/30/15/5 odds so the odds line in the
+     * UI stays honest; the ladder shift only floors the outcome so a 96e
+     * Royal Treasury can never hand out a Common box.
+     *
+     * <ul>
+     *   <li>Field Supplies (16e): rolled tier as-is.</li>
+     *   <li>Veteran Armory (48e): floor at Uncommon (min tier 1).</li>
+     *   <li>Royal Treasury (96e): floor at Rare (min tier 2).</li>
+     * </ul>
+     */
+    public static int tierForBox(int box, int roll) {
+        int base = tier(roll);
+        int floor = switch (box) { case 1 -> 1; case 2 -> 2; default -> 0; };
+        return Math.max(base, floor);
+    }
+
+    private static LootBoxItem.Tier sealedTierFor(int tier) {
+        return switch (tier) {
+            case 0 -> LootBoxItem.Tier.COMMON;
+            case 1 -> LootBoxItem.Tier.UNCOMMON;
+            case 2 -> LootBoxItem.Tier.RARE;
+            default -> LootBoxItem.Tier.EPIC;
+        };
     }
 }
