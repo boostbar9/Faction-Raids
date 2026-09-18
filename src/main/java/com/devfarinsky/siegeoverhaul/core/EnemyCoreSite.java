@@ -15,13 +15,17 @@ public final class EnemyCoreSite {
         List<BlockPos> sites = new ArrayList<>();
         for (int dy : new int[]{0, 1, -1, 2, -2}) sites.add(camp.above(dy));
         for (int depth : new int[]{-6, -3, 0, 3, 6})
-            for (int side : new int[]{-5, 5, -8, 8})
+            // The keep is five blocks wide and the palisade radius is nine.
+            // Keeping centres within six blocks leaves the whole footprint
+            // inside the wall instead of letting the old +/-8 sites cross it.
+            for (int side : new int[]{-5, 5, -6, 6})
                 for (int dy : new int[]{0, 1, -1, 2, -2})
                     sites.add(camp.relative(front, depth).relative(front.getClockWise(), side).above(dy));
         return List.copyOf(sites);
     }
     static boolean clear(ServerLevel level, RaidSavedData.RaidState raid, BlockPos center,
                          Predicate<BlockPos> allowed) {
+        Set<Long> blockedColumns = blockedColumns(raid);
         // Check a level, dry 5x5 keep footprint with seven blocks of open headroom.
         for (int x=-2;x<=2;x++) for (int z=-2;z<=2;z++) {
             BlockPos feet=center.offset(x,0,z);
@@ -37,16 +41,23 @@ public final class EnemyCoreSite {
                 if (y<0 ? !state.isFaceSturdy(level,p,Direction.UP) : !CampVegetation.replaceable(state)) return false;
             }
             // Do not occupy a planned building, even when its roof is above the clearance box.
-            for (long key : raid.pendingCampBlocks.keySet()) if (sameColumn(feet,BlockPos.of(key))) return false;
-            for (long key : raid.pendingFortifications.keySet()) if (sameColumn(feet,BlockPos.of(key))) return false;
-            for (String key : raid.warGate.getCompound("RoadBlocks").getAllKeys()) {
-                try { if (sameColumn(feet,BlockPos.of(Long.parseLong(key)))) return false; }
-                catch (NumberFormatException ignored) { /* Invalid legacy ledger cell. */ }
-            }
+            if (blockedColumns.contains(columnKey(feet))) return false;
         }
         return true;
     }
-    private static boolean sameColumn(BlockPos a, BlockPos b) { return a.getX()==b.getX() && a.getZ()==b.getZ(); }
+    static Set<Long> blockedColumns(RaidSavedData.RaidState raid) {
+        Set<Long> blocked = new HashSet<>();
+        raid.pendingCampBlocks.keySet().forEach(key -> blocked.add(columnKey(BlockPos.of(key))));
+        raid.pendingFortifications.keySet().forEach(key -> blocked.add(columnKey(BlockPos.of(key))));
+        for (String key : raid.warGate.getCompound("RoadBlocks").getAllKeys()) {
+            try { blocked.add(columnKey(BlockPos.of(Long.parseLong(key)))); }
+            catch (NumberFormatException ignored) { /* Invalid legacy ledger cell. */ }
+        }
+        return blocked;
+    }
+    private static long columnKey(BlockPos p) {
+        return ((long) p.getX() << 32) ^ (p.getZ() & 0xffffffffL);
+    }
     /** Keep future construction and player obstructions out of the saved walking ring. */
     public static boolean reserved(RaidSavedData.RaidState raid, BlockPos pos) {
         BlockPos core=EnemyCore.position(raid);

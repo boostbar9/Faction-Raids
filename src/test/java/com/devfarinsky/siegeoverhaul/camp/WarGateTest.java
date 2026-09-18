@@ -13,6 +13,15 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 class WarGateTest extends MinecraftTestSupport {
+    @Test void savedEnemyKeepIsProtectedEvenWithoutWarGateCenter() {
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        BlockPos core=new BlockPos(8,65,8);
+        raid.campaign.putLong("EnemyCore",core.asLong());
+        raid.campaign.putBoolean("EnemyCoreCourtyard",true);
+        assertTrue(WarGate.protectedByRaid(raid,core.east()));
+        assertFalse(WarGate.protectedByRaid(raid,core.east(3)));
+        assertFalse(raid.warGate.contains("Center"));
+    }
     @Test void blockedFrontSiteFallsBackToAnotherSideAndWaitSurvivesSave() {
         ServerLevel level=mock(ServerLevel.class);
         when(level.hasChunkAt(any())).thenReturn(true);

@@ -33,6 +33,9 @@ class EnemyCoreSiteTest extends MinecraftTestSupport {
                 int side=(p.getX()-center.getX())*front.getClockWise().getStepX()
                         +(p.getZ()-center.getZ())*front.getClockWise().getStepZ();
                 assertTrue(Math.abs(side)>=5 || p.getX()==center.getX() && p.getZ()==center.getZ());
+                assertTrue(Math.abs(side)<=6);
+                assertTrue(Math.abs(p.getX()-center.getX())+2<=8);
+                assertTrue(Math.abs(p.getZ()-center.getZ())+2<=8);
             }
         }
     }
@@ -65,6 +68,17 @@ class EnemyCoreSiteTest extends MinecraftTestSupport {
         var road=new net.minecraft.nbt.CompoundTag(); road.putString(Long.toString(center.below().asLong()),"minecraft:gravel");
         raid.warGate.put("RoadBlocks",road);
         assertFalse(EnemyCoreSite.clear(level,raid,center,p->true));
+    }
+    @Test void queuedCellsAreIndexedOncePerColumn() {
+        var raid=raid();
+        raid.pendingCampBlocks.put(center.asLong(),"minecraft:stone");
+        raid.pendingCampBlocks.put(center.above(7).asLong(),"minecraft:stone");
+        raid.pendingFortifications.put(center.east().asLong(),"minecraft:stone");
+        var road=new net.minecraft.nbt.CompoundTag();
+        road.putString(Long.toString(center.east().below().asLong()),"minecraft:gravel");
+        road.putString("invalid","minecraft:gravel");
+        raid.warGate.put("RoadBlocks",road);
+        assertEquals(2,EnemyCoreSite.blockedColumns(raid).size());
     }
     @Test void reservationSurvivesSaveWithoutMovingLegacyCoreOrCaptureProgress() {
         var raid=raid(); raid.campaign.putLong("EnemyCore",center.asLong()); raid.campaign.putInt("EnemyCaptureTicks",123);

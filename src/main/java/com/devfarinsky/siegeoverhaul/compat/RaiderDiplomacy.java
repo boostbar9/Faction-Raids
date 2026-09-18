@@ -83,6 +83,24 @@ public final class RaiderDiplomacy {
         setRelation(server, playerTeam, RaiderFactions.id(raiderFactionKey), ENEMY);
     }
 
+    /**
+     * Reassert the two-way hostile relation while a siege is active. Players
+     * may use Recruits' diplomacy UI, but changing a synthetic raider faction
+     * to neutral or ally cannot disable native combat targeting mid-siege.
+     * Reflection failures remain fail-safe no-ops.
+     */
+    public static void maintainEnemy(MinecraftServer server, String playerTeam, String raiderFactionKey) {
+        if (raiderFactionKey == null || raiderFactionKey.isBlank()) return;
+        String raiderTeam = RaiderFactions.id(raiderFactionKey);
+        String forward = currentRelation(playerTeam, raiderTeam);
+        String reverse = currentRelation(raiderTeam, playerTeam);
+        if (needsEnemyRepair(forward, reverse)) setRelation(server, playerTeam, raiderTeam, ENEMY);
+    }
+
+    static boolean needsEnemyRepair(String forward, String reverse) {
+        return forward != null && reverse != null && (!ENEMY.equals(forward) || !ENEMY.equals(reverse));
+    }
+
     /** Convenience: raid ended - reset to NEUTRAL so hostile targeting stops. */
     public static void resetRelation(MinecraftServer server, String playerTeam, String raiderFactionKey) {
         setRelation(server, playerTeam, RaiderFactions.id(raiderFactionKey), NEUTRAL);
