@@ -386,6 +386,14 @@ public final class TerritoryFortification {
             BlockPos p = new BlockPos(base.getX(), base.getY() - dy, base.getZ());
             if (!level.hasChunkAt(p)) break;
             BlockState state = level.getBlockState(p);
+            // v4.42.0: tree logs count as "sturdy" via isFaceSturdy but
+            // are terrain the builder can and should chop through to
+            // reach real ground. Otherwise the foundation lands on top
+            // of a log with a 6-block gap between it and real dirt.
+            boolean tree = state.is(net.minecraft.tags.BlockTags.LOGS)
+                    || state.is(net.minecraft.tags.BlockTags.LEAVES)
+                    || state.is(net.minecraft.tags.BlockTags.SAPLINGS);
+            if (tree) { filled = dy; continue; }
             if (state.isFaceSturdy(level, p, Direction.UP)) break;
             if (!state.isAir() && !state.canBeReplaced()) break;
             filled = dy;
@@ -402,15 +410,45 @@ public final class TerritoryFortification {
                                   int baseY, int x, int z) {
         // Match wall base to actual terrain surface so short cliffs don't leave floating walls.
         int surface = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
-        int y = Math.max(baseY - 4, Math.min(baseY + 4, surface));
+        // v4.42.0: the vanilla heightmap sits on top of tree logs, so a
+        // forested perimeter puts the wall base 6-8 blocks up in the
+        // canopy where the foundation dangles in mid-air. Walk down
+        // through logs / leaves / saplings to find real ground.
+        surface = seeThroughTreesForWall(level, x, z, surface);
+        // v4.42.0: expanded the vertical clamp from +/-4 to +/-12 so a
+        // perimeter that crosses a real hill or ravine follows the
+        // terrain instead of leaving stair-step gaps where the wall
+        // hits the clamp ceiling / floor.
+        int y = Math.max(baseY - 12, Math.min(baseY + 12, surface));
         BlockPos base = new BlockPos(x, y, z);
         if (seen.add(base.asLong())) out.add(base);
+    }
+
+    /**
+     * v4.42.0 - walk down from {@code topY} past any log / leaf /
+     * sapling blocks until we find real ground. Mirrors the same
+     * fix that made camp acceptance forest-aware in v4.40.0.
+     */
+    private static int seeThroughTreesForWall(ServerLevel level, int x, int z, int topY) {
+        for (int dy = 0; dy < 16; dy++) {
+            int y = topY - dy;
+            BlockPos p = new BlockPos(x, y - 1, z);
+            if (!level.hasChunkAt(p)) return topY;
+            BlockState state = level.getBlockState(p);
+            if (state.is(net.minecraft.tags.BlockTags.LOGS)
+                    || state.is(net.minecraft.tags.BlockTags.LEAVES)
+                    || state.is(net.minecraft.tags.BlockTags.SAPLINGS)) continue;
+            return y;
+        }
+        return topY;
     }
 
     private static void markCorner(ServerLevel level, Set<Long> cornerColumns,
                                    int baseY, int x, int z) {
         int surface = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
-        int y = Math.max(baseY - 4, Math.min(baseY + 4, surface));
+        // v4.42.0: same tree see-through + wider clamp as regular columns.
+        surface = seeThroughTreesForWall(level, x, z, surface);
+        int y = Math.max(baseY - 12, Math.min(baseY + 12, surface));
         cornerColumns.add(new BlockPos(x, y, z).asLong());
     }
 
