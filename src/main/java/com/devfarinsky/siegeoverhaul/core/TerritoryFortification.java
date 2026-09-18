@@ -228,8 +228,20 @@ public final class TerritoryFortification {
                 BlockPos p = new BlockPos(base.getX(), y, base.getZ());
                 if (!level.hasChunkAt(p)) continue;
                 BlockState existing = level.getBlockState(p);
-                // Never overwrite existing solid blocks the player placed.
-                if (!existing.isAir() && !existing.canBeReplaced()) continue;
+                // v4.39.0: let the builder terraform the wall line. Previously
+                // the blueprint skipped any non-replaceable block, which
+                // meant a tree, a dirt hill, or a stone outcrop sitting on
+                // the perimeter would break the wall into a series of gaps
+                // that Workers 2 could never close. Now we queue the wall
+                // material at every column position and let Workers 2 dig
+                // out whatever was there first (build-area does clear
+                // existing blocks it needs to overwrite). Skip only:
+                //   - the target wall material itself (already correct)
+                //   - block entities (chests / signs / spawners / anything
+                //     the player built with intent) so we don't destroy
+                //     a house that happens to sit on the boundary.
+                if (existing.getBlock() == block) continue;
+                if (existing.hasBlockEntity()) continue;
                 blocks.put(p.asLong(), mat.blockId());
             }
         }

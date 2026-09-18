@@ -3425,7 +3425,16 @@ public final class RaidEvents {
                     .collectClaimedChunks(level, anchor, radiusChunks, anchorRecord));
         }
         boolean remote = state != null && state.campSearchPos != null;
-        for (int attempt = 0; attempt < (remote ? 9 : 128); attempt++) {
+        // v4.39.0: track why sites reject so 'no viable camp' failures
+        // can be diagnosed from the log instead of guessed at.
+        int rejChunk=0, rejExcluded=0, rejClaim=0, rejForeign=0, rejSurface=0,
+            rejNavalGuard=0, rejTerrainPlan=0, rejClaimCreate=0, rejTerrainApply=0;
+        // v4.39.0: give the terraforming path more attempts per candidate
+        // step. Coastal / rocky / island terrain often has many rejects in
+        // one 6-block box because a single hilly sample kills the whole
+        // 21x21 footprint; more jitter lets us find a workable center.
+        int cap = remote ? (state != null && state.campTerraformed ? 25 : 9) : 128;
+        for (int attempt = 0; attempt < cap; attempt++) {
             // First prefer the invasion approach, then search the surrounding ring for clear terrain.
             double angle = approachAngle + (attempt < 32 ? (level.random.nextDouble() - 0.5D) * 0.5D
                     : (attempt - 32) * 2.399963229728653);
@@ -3434,44 +3443,49 @@ public final class RaidEvents {
             int x = anchor.getX() + Mth.floor(Math.cos(angle) * distance);
             int z = anchor.getZ() + Mth.floor(Math.sin(angle) * distance);
             if(remote) { x=state.campSearchPos.getX()+(attempt%3-1)*6; z=state.campSearchPos.getZ()+(attempt/3-1)*6; }
-            if (!level.hasChunk(x >> 4, z >> 4)) continue;
+            if (!level.hasChunk(x >> 4, z >> 4)) { rejChunk++; continue; }
             if (!excludedChunks.isEmpty()
-                    && excludedChunks.contains(new net.minecraft.world.level.ChunkPos(x >> 4, z >> 4))) continue;
+                    && excludedChunks.contains(new net.minecraft.world.level.ChunkPos(x >> 4, z >> 4))) { rejExcluded++; continue; }
             BlockPos center = surfacePosition(level, x, z);
             if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.canClaim(level, center)
-                    || com.devfarinsky.siegeoverhaul.compat.CampClaims.footprint(center).stream().anyMatch(excludedChunks::contains)) continue;
+                    || com.devfarinsky.siegeoverhaul.compat.CampClaims.footprint(center).stream().anyMatch(excludedChunks::contains)) { rejClaim++; continue; }
             if (remote && RaidConfig.RESPECT_FOREIGN_CLAIMS.get() && anchorRecord!=null
                     && com.devfarinsky.siegeoverhaul.compat.CampClaims.footprint(center).stream().anyMatch(chunk ->
-                        com.devfarinsky.siegeoverhaul.compat.ClaimBridge.isForeignClaim(level,chunk,anchorRecord))) continue;
+                        com.devfarinsky.siegeoverhaul.compat.ClaimBridge.isForeignClaim(level,chunk,anchorRecord))) { rejForeign++; continue; }
             // v4.36.0: on the terraforming fallback path, accept sites
             // that the paver can normalize (water, cliffs, small height
             // variance) instead of the strict natural-terrain check.
             boolean terraformFallback = state != null && state.campTerraformed;
             if (terraformFallback) {
                 if (!com.devfarinsky.siegeoverhaul.camp.CampTerraforming.acceptableForTerraforming(
-                        level, center, anchor, RaidConfig.CAMP_TERRAFORM_MAX_DEPTH.get())) continue;
-            } else if (!validCampSurface(level, center, anchor)) continue;
+                        level, center, anchor, RaidConfig.CAMP_TERRAFORM_MAX_DEPTH.get())) { rejSurface++; continue; }
+            } else if (!validCampSurface(level, center, anchor)) { rejSurface++; continue; }
             // v2.16.1 - keep the palisade clear of the boat spawn. The
             // camp footprint is 19x19 (9 per side + gate); anything closer
             // than 24 blocks would put boats inside the fence.
             if (navalStaging != null) {
                 int ddx = center.getX() - navalStaging.getX();
                 int ddz = center.getZ() - navalStaging.getZ();
-                if (ddx * ddx + ddz * ddz < navalGuardSq) continue;
+                if (ddx * ddx + ddz * ddz < navalGuardSq) { rejNavalGuard++; continue; }
             }
             if (RaidConfig.LEVEL_CAMP_TERRAIN.get() && RaidConfig.CLEANUP_WAR_CAMPS.get()) {
                 var terrain = com.devfarinsky.siegeoverhaul.camp.CampTerrain.plan(level, center,
                         pos -> excludedChunks.contains(new net.minecraft.world.level.ChunkPos(pos)));
-                if (terrain.isEmpty()) continue;
-                if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.create(level, state, center)) continue;
+                if (terrain.isEmpty()) { rejTerrainPlan++; continue; }
+                if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.create(level, state, center)) { rejClaimCreate++; continue; }
                 if (!com.devfarinsky.siegeoverhaul.camp.CampTerrain.apply(level, state, terrain.get())) {
                     state.campClaimId = null;
                     com.devfarinsky.siegeoverhaul.compat.CampClaims.cleanOrphans(level, RaidSavedData.get(level.getServer()));
-                    continue;
+                    rejTerrainApply++; continue;
                 }
-            } else if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.create(level, state, center)) continue;
+            } else if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.create(level, state, center)) { rejClaimCreate++; continue; }
             return center;
         }
+        FactionLogger.LOG.info("Camp site search failed: cap={} remote={} terraform={} "+
+                "rejects[chunk={}, excluded={}, claim={}, foreign={}, surface={}, navalGuard={}, terrainPlan={}, claimCreate={}, terrainApply={}]",
+                cap, remote, state != null && state.campTerraformed,
+                rejChunk, rejExcluded, rejClaim, rejForeign, rejSurface,
+                rejNavalGuard, rejTerrainPlan, rejClaimCreate, rejTerrainApply);
         return null;
     }
 

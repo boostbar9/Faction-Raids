@@ -301,13 +301,19 @@ public final class CampTerraforming {
         if (Math.abs(center.getY() - anchor.getY()) > 64) return false;
         int floorY = center.getY() - 1;
         final int r = 9;
+        // v4.39.0: allow a few individual sample rejections rather than
+        // failing the whole site on one bad column. A camp that is 90%
+        // level with one tall pillar or one deep pit is still buildable
+        // once the terraformer runs.
+        int rejectSlack = 3;
+        int used = 0;
         for (int dx = -r; dx <= r; dx += 3) {
             for (int dz = -r; dz <= r; dz += 3) {
                 BlockPos column = center.offset(dx, 0, dz);
                 if (!level.hasChunkAt(column)) return false;
                 int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
                         column.getX(), column.getZ());
-                if (Math.abs(y - center.getY()) > maxVariance) return false;
+                if (Math.abs(y - center.getY()) > maxVariance) { if (++used > rejectSlack) return false; continue; }
                 // Reject if a player build sits inside the footprint.
                 BlockState surface = level.getBlockState(new BlockPos(column.getX(), y - 1, column.getZ()));
                 if (!surface.isAir() && !surface.getFluidState().isEmpty()) continue;
