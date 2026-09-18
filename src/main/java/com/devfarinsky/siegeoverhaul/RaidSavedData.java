@@ -501,6 +501,17 @@ public final class RaidSavedData extends SavedData {
          * the tick loop to keep the smoothing pass alive; a naturally-flat
          * camp doesn't need ongoing terrain work. Persisted. */
         public boolean campTerraformed;
+        /** v4.36.0: queue of packed block positions the terraforming crew
+         * still has to visit. Populated once when the site is picked;
+         * drained N blocks per tick so paving reads as construction in
+         * progress instead of a single instant slap of dirt. */
+        public final java.util.List<Long> terraformQueue = new java.util.ArrayList<>();
+        /** Center block of the current terraforming footprint, needed by the
+         * drain routine so it knows the plane Y for grass-vs-dirt selection. */
+        public BlockPos terraformCenter;
+        /** Half-extent of the current terraforming footprint (palisade only,
+         * outer polish rings are extent + 2). */
+        public int terraformHalfExtent;
         /** Water-surface staging point when this raid has an amphibious component. Null otherwise. */
         public BlockPos navalStagingPos;
         /** Landing beach the naval convoy steers toward. Null when no naval staging. */
@@ -707,6 +718,13 @@ public final class RaidSavedData extends SavedData {
             tag.putBoolean("CampBuildAttempted", campBuildAttempted);
             tag.putBoolean("CampSearchAbandoned", campSearchAbandoned);
             tag.putBoolean("CampTerraformed", campTerraformed);
+            if (!terraformQueue.isEmpty()) {
+                long[] arr = new long[terraformQueue.size()];
+                for (int i = 0; i < arr.length; i++) arr[i] = terraformQueue.get(i);
+                tag.putLongArray("TerraformQueue", arr);
+            }
+            if (terraformCenter != null) tag.putLong("TerraformCenter", terraformCenter.asLong());
+            if (terraformHalfExtent > 0) tag.putInt("TerraformHalfExtent", terraformHalfExtent);
             if (navalStagingPos != null) tag.putLong("NavalStagingPos", navalStagingPos.asLong());
             if (navalBeachPos != null) tag.putLong("NavalBeachPos", navalBeachPos.asLong());
             tag.putInt("SappersDispatched", sappersDispatched);
@@ -879,6 +897,13 @@ public final class RaidSavedData extends SavedData {
             state.campBuildAttempted = tag.getBoolean("CampBuildAttempted");
             state.campSearchAbandoned = tag.getBoolean("CampSearchAbandoned");
             state.campTerraformed = tag.getBoolean("CampTerraformed");
+            if (tag.contains("TerraformQueue", Tag.TAG_LONG_ARRAY)) {
+                for (long v : tag.getLongArray("TerraformQueue")) state.terraformQueue.add(v);
+            }
+            if (tag.contains("TerraformCenter", Tag.TAG_LONG)) {
+                state.terraformCenter = BlockPos.of(tag.getLong("TerraformCenter"));
+            }
+            state.terraformHalfExtent = tag.getInt("TerraformHalfExtent");
             state.navalStagingPos = tag.contains("NavalStagingPos", Tag.TAG_LONG) ?
                     BlockPos.of(tag.getLong("NavalStagingPos")) : null;
             state.navalBeachPos = tag.contains("NavalBeachPos", Tag.TAG_LONG) ?

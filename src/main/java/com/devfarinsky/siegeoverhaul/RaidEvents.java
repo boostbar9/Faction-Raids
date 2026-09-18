@@ -3087,12 +3087,24 @@ public final class RaidEvents {
         BlockPos camp = findWarCampPosition(level, anchor, point.pos(), state.approachAngle, state);
         if (camp == null) return;
         state.campPos = camp;
-        // v4.36.0: on hostile terrain, pave the entire 21x21 footprint at
-        // camp.getY() - 1 so the palisade sits on a level plane. Recorded
-        // blocks flow through the normal cleanup ledger so raid end
-        // restores the original water / cliff terrain.
+        // v4.36.0: on hostile terrain, queue the paving so the crew
+        // visibly lays down dirt over time (blocks per tick, with sound
+        // and dirt particles) instead of a single instant slap. The
+        // palisade goes down as usual on the same call because the site
+        // was already validated to a levelable plane; the queue only
+        // affects the visible ground fill, which finishes in the
+        // background while the palisade rises. Recorded blocks flow
+        // through the normal cleanup ledger so raid end restores the
+        // original water / cliff terrain.
         if (state.campTerraformed && RaidConfig.CAMP_TERRAFORM.get()) {
+            // Two-phase paving: level the palisade footprint (rings 0..10)
+            // synchronously so the fence has solid ground immediately,
+            // then queue the outer polish rings (11..12) for over-time
+            // paving. That reads as: the ground under the camp is already
+            // there when the palisade rises, and workers continue laying
+            // dirt around the perimeter for the next few seconds.
             com.devfarinsky.siegeoverhaul.camp.CampTerraforming.paveFootprint(level, state, camp, 10);
+            com.devfarinsky.siegeoverhaul.camp.CampTerraforming.queueRing(level, state, camp, 10, 11, 12);
         }
 
         final int cx = camp.getX();
