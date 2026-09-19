@@ -20,6 +20,8 @@ class HeroTraitsTest extends MinecraftTestSupport {
 
         verify(legacy).setCustomName(argThat(name->CoreHiring.NAMES[10].equals(name.getString())));
         assertTrue(legacyTag.getBoolean("SiegeOlympianHeroIdentity"));
+        assertEquals(net.minecraft.nbt.Tag.TAG_BYTE,legacyTag.get("SiegeOlympianHeroIdentity").getId());
+        assertEquals(2,legacyTag.getInt("SiegeOlympianHeroIdentitySchema"));
 
         Mob labelledEnemy=mock(Mob.class);
         CompoundTag enemyTag=new CompoundTag();
@@ -34,6 +36,7 @@ class HeroTraitsTest extends MinecraftTestSupport {
         verify(labelledEnemy).setCustomName(argThat(name->
                 ("Enemy Hero · "+CoreHiring.NAMES[10]).equals(name.getString())));
         assertTrue(enemyTag.getBoolean("SiegeOlympianHeroIdentity"));
+        assertEquals(2,enemyTag.getInt("SiegeOlympianHeroIdentitySchema"));
 
         Mob renamed=mock(Mob.class);
         CompoundTag renamedTag=new CompoundTag();
@@ -46,6 +49,7 @@ class HeroTraitsTest extends MinecraftTestSupport {
 
         verify(renamed,never()).setCustomName(any());
         assertTrue(renamedTag.getBoolean("SiegeOlympianHeroIdentity"));
+        assertEquals(2,renamedTag.getInt("SiegeOlympianHeroIdentitySchema"));
 
         // 4.44 stored a boolean schema marker. Untouched 4.44 names must still
         // move to the new five-host roster, while the marker advances safely.
@@ -57,7 +61,23 @@ class HeroTraitsTest extends MinecraftTestSupport {
         HeroTraits.ensureOlympianIdentity(previous,12);
 
         verify(previous).setCustomName(argThat(name->CoreHiring.NAMES[12].equals(name.getString())));
-        assertEquals(2,previousTag.getInt("SiegeOlympianHeroIdentity"));
+        assertTrue(previousTag.getBoolean("SiegeOlympianHeroIdentity"));
+        assertEquals(net.minecraft.nbt.Tag.TAG_BYTE,previousTag.get("SiegeOlympianHeroIdentity").getId());
+        assertEquals(2,previousTag.getInt("SiegeOlympianHeroIdentitySchema"));
+
+        // 4.45 saves may already contain the temporary integer marker. Keep
+        // the player's name and normalize the marker without rerunning migration.
+        Mob v445=mock(Mob.class);
+        CompoundTag v445Tag=new CompoundTag();v445Tag.putInt("SiegeOlympianHeroIdentity",2);
+        when(v445.getPersistentData()).thenReturn(v445Tag);
+        when(v445.getCustomName()).thenReturn(Component.literal("Bobby"));
+
+        HeroTraits.ensureOlympianIdentity(v445,12);
+
+        verify(v445,never()).setCustomName(any());
+        assertTrue(v445Tag.getBoolean("SiegeOlympianHeroIdentity"));
+        assertEquals(net.minecraft.nbt.Tag.TAG_BYTE,v445Tag.get("SiegeOlympianHeroIdentity").getId());
+        assertEquals(2,v445Tag.getInt("SiegeOlympianHeroIdentitySchema"));
     }
 
     @Test void fullRosterHasDistinctOlympianNamesWithoutChangingRoleTables() {

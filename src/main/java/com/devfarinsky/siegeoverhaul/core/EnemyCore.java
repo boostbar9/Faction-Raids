@@ -32,26 +32,44 @@ public final class EnemyCore {
         return keepBlueprint(base, "");
     }
     public static Map<BlockPos, String> keepBlueprint(BlockPos base, String factionId) {
-        KeepPalette palette=keepPalette(factionId);
+        KeepStyle style=keepStyle(factionId);
+        KeepPalette palette=style.palette();
         Map<BlockPos, String> plan = new LinkedHashMap<>();
         for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++)
             plan.put(base.offset(dx, 0, dz), palette.plinth);
+        int column=0;
         for (int cx : new int[]{-2, 2}) for (int cz : new int[]{-2, 2}) {
-            for (int y = 1; y <= 5; y++) plan.put(base.offset(cx, y, cz), palette.pillar);
-            plan.put(base.offset(cx, 6, cz), palette.light);
+            int height=style.pillarHeights().get(column++);
+            for (int y = 1; y <= height; y++) plan.put(base.offset(cx, y, cz), palette.pillar);
+            plan.put(base.offset(cx, height+1, cz), palette.light);
         }
         return plan;
     }
 
-    private static KeepPalette keepPalette(String factionId) {
+    private static KeepStyle keepStyle(String factionId) {
         return switch(factionId==null?"":factionId) {
-            case "blackbay_reavers" -> new KeepPalette("minecraft:prismarine_bricks","minecraft:dark_prismarine","minecraft:sea_lantern");
-            case "hollowfang_clan" -> new KeepPalette("minecraft:polished_blackstone_bricks","minecraft:chiseled_polished_blackstone","minecraft:shroomlight");
-            case "emberchant_zealots" -> new KeepPalette("minecraft:cut_copper","minecraft:polished_blackstone_bricks","minecraft:shroomlight");
-            case "crownfall_exiles" -> new KeepPalette("minecraft:quartz_bricks","minecraft:quartz_pillar","minecraft:sea_lantern");
-            case "wilds_marauders" -> new KeepPalette("minecraft:mossy_stone_bricks","minecraft:stripped_birch_log","minecraft:shroomlight");
-            default -> new KeepPalette("minecraft:polished_diorite","minecraft:quartz_pillar","minecraft:sea_lantern");
+            case "blackbay_reavers" -> new KeepStyle(
+                    new KeepPalette("minecraft:prismarine_bricks","minecraft:dark_prismarine","minecraft:sea_lantern"),
+                    List.of(3,4,5,4));
+            case "hollowfang_clan" -> new KeepStyle(
+                    new KeepPalette("minecraft:polished_blackstone_bricks","minecraft:chiseled_polished_blackstone","minecraft:shroomlight"),
+                    List.of(5,5,5,5));
+            case "emberchant_zealots" -> new KeepStyle(
+                    new KeepPalette("minecraft:cut_copper","minecraft:polished_blackstone_bricks","minecraft:shroomlight"),
+                    List.of(5,3,5,3));
+            case "crownfall_exiles" -> new KeepStyle(
+                    new KeepPalette("minecraft:quartz_bricks","minecraft:quartz_pillar","minecraft:sea_lantern"),
+                    List.of(4,5,5,4));
+            case "wilds_marauders" -> new KeepStyle(
+                    new KeepPalette("minecraft:mossy_stone_bricks","minecraft:stripped_birch_log","minecraft:shroomlight"),
+                    List.of(3,5,3,5));
+            default -> new KeepStyle(
+                    new KeepPalette("minecraft:polished_diorite","minecraft:quartz_pillar","minecraft:sea_lantern"),
+                    List.of(5,5,5,5));
         };
+    }
+    private record KeepStyle(KeepPalette palette,List<Integer> pillarHeights) {
+        private KeepStyle { pillarHeights=List.copyOf(pillarHeights); }
     }
     private record KeepPalette(String plinth,String pillar,String light) {}
     /** The core rests one block above the plinth centre so raiders can stand beside it. */

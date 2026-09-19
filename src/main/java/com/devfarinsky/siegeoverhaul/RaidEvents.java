@@ -2009,6 +2009,7 @@ public final class RaidEvents {
                 com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
             if (state.wave == 0) state.ticksToNextWave = 20;
             announce(server, anchor.teamKey(), Component.literal("The enemy army is leaving camp. Defend your Siege Core!").withStyle(ChatFormatting.RED), true);
+            showSignatureAssault(server, anchor.teamKey(), state);
         } else if (!before.equals(preparationLabel(state))) {
             announce(server, anchor.teamKey(), Component.literal(preparationLabel(state) + ". Assault in " + (state.preparationTicks + 1199) / 1200 + " minutes.").withStyle(ChatFormatting.GOLD), false);
         }
@@ -2644,13 +2645,7 @@ public final class RaidEvents {
                 approachDirection(state.approachAngle) + formationSuffix +
                 scoutingSummary(recruitScale, assetScale, recruits.size(), compat))
                 .withStyle(ChatFormatting.RED), true);
-        if (state.preparationTicks <= 0 && (EndlessSiege.active(state) ? state.wave % 5 == 0 : state.wave >= RaidConfig.WAVES.get())) {
-            // v2.32.0: command assault reads as MAJOR (final wave, high stakes).
-            showTitle(server, anchor.teamKey(), Component.literal("Command Assault")
-                            .withStyle(ChatFormatting.DARK_RED),
-                    Component.literal("Break the commander and hold the stronghold")
-                            .withStyle(ChatFormatting.GOLD));
-        }
+        if (state.preparationTicks <= 0) showSignatureAssault(server, anchor.teamKey(), state);
         spawnNextSquad(server, level, data, anchor, point, state);
     }
 
@@ -2677,8 +2672,10 @@ public final class RaidEvents {
 
         // Naval share: when a staging point is available, route a percentage of
         // this squad into boats. The rest still spawn on land as usual.
-        boolean amphibious = state.campPos==null && state.preparationTicks <= 0 && state.navalStagingPos != null && state.navalBeachPos != null;
-        int navalShare = amphibious ? (wanted * RaidConfig.NAVAL_WAVE_SHARE_PERCENT.get() + 50) / 100 : 0;
+        boolean amphibious = com.devfarinsky.siegeoverhaul.naval.NavalAssaultPolicy.available(state);
+        int navalPercent = com.devfarinsky.siegeoverhaul.naval.NavalAssaultPolicy.sharePercent(
+                state, RaidConfig.NAVAL_WAVE_SHARE_PERCENT.get(), RaidConfig.WAVES.get());
+        int navalShare = amphibious ? (wanted * navalPercent + 50) / 100 : 0;
 
         int spawned = 0;
         // v4.43.0 - batch naval raiders together so a squad of 6 SHARES
@@ -2711,7 +2708,7 @@ public final class RaidEvents {
             scrubPigMount(raider);
             // A dependency initializer may relocate or resize a mob. Recheck the designated
             // gate after initialization, before registration, instead of accepting a remote spawn.
-            if (state.campPos!=null) {
+            if (state.campPos!=null && !asNaval) {
                 BlockPos pad=com.devfarinsky.siegeoverhaul.camp.WarGate.spawn(level,state,raider);
                 if(pad==null){raider.discard();continue;}
                 raider.moveTo(pad.getX()+.5,pad.getY(),pad.getZ()+.5,raider.getYRot(),0);
@@ -5193,9 +5190,15 @@ public final class RaidEvents {
         } else {
             String held = objectiveName + " " + capturePercent + "% | " + compactObjectiveStatus(state);
             String waveChip = EndlessSiege.waveLabel(state, totalWaves);
+            String signatureChip = state.pendingWaveSpawns > 0 || !state.raiders.isEmpty()
+                    ? signatureAssault(state)
+                        .map(com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.SignatureAssault::title)
+                        .orElse(null)
+                    : null;
             String deployed = state.raiders.size() + " deployed"
                     + (state.pendingWaveSpawns > 0 ? " + " + state.pendingWaveSpawns + " reinforcing" : "");
-            label = com.devfarinsky.siegeoverhaul.chat.ChatStyle.bossbarLabel(epithet, phase, held, waveChip, deployed);
+            label = com.devfarinsky.siegeoverhaul.chat.ChatStyle.bossbarLabel(
+                    epithet, phase, held, waveChip, signatureChip, deployed);
         }
 
         // Idempotency: only push a new name Component when the label text
@@ -5254,6 +5257,42 @@ public final class RaidEvents {
         } else onlineMembers(server, teamKey).forEach(p -> p.sendSystemMessage(styled));
         if (horn) onlineMembers(server, teamKey).forEach(p ->
                 p.playNotifySound(SoundEvents.RAID_HORN.value(), SoundSource.HOSTILE, 1.0F, 1.0F));
+    }
+
+    static Optional<com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.SignatureAssault>
+    signatureAssault(RaidSavedData.RaidState state) {
+        if (state == null || state.wave <= 0) return Optional.empty();
+        int wave = EndlessSiege.active(state) ? EndlessSiege.chapterWave(state.wave) : state.wave;
+        int totalWaves = EndlessSiege.active(state) ? EndlessSiege.CHECKPOINT : RaidConfig.WAVES.get();
+        var host = com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.forFaction(state.factionId);
+        return host.signatureWave(wave, totalWaves) ? Optional.of(host.signatureAssault()) : Optional.empty();
+    }
+
+    private static void showSignatureAssault(MinecraftServer server, String teamKey,
+                                             RaidSavedData.RaidState state) {
+        var assault = signatureAssault(state);
+        if (assault.isEmpty()) return;
+        var plan = assault.get();
+        var host = com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.forFaction(state.factionId);
+        showTitle(server, teamKey,
+                Component.literal(plan.title()).withStyle(ChatFormatting.DARK_RED),
+                Component.literal(plan.counterplay()).withStyle(ChatFormatting.GOLD));
+        announce(server, teamKey, Component.literal(host.hostName() + " commits its " + plan.title()
+                + ". " + plan.counterplay() + ".").withStyle(ChatFormatting.GOLD), false);
+        net.minecraft.sounds.SoundEvent cue = switch (host.commanderPower()) {
+            case TIDAL_ADVANCE -> SoundEvents.TRIDENT_RIPTIDE_3;
+            case WAR_CRY, LAST_STAND -> SoundEvents.RAID_HORN.value();
+            case FORGE_WARD -> SoundEvents.ANVIL_USE;
+            case AEGIS_ORDER -> SoundEvents.SHIELD_BLOCK;
+            case HUNTERS_MARK -> SoundEvents.CROSSBOW_SHOOT;
+        };
+        float pitch = switch (host.commanderPower()) {
+            case TIDAL_ADVANCE, FORGE_WARD -> 0.8F;
+            case WAR_CRY, LAST_STAND -> 0.9F;
+            case AEGIS_ORDER -> 0.7F;
+            case HUNTERS_MARK -> 1.2F;
+        };
+        playCue(server, teamKey, cue, pitch);
     }
 
     /**

@@ -4,6 +4,7 @@ import com.devfarinsky.siegeoverhaul.formations.Formation;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,32 +26,41 @@ public final class WaveComposition {
 
     public final int total;
     public final Map<String, Integer> roleCounts;
+    /** Exact spawn order; repeated roles stay in their configured positions. */
+    public final List<String> roleSlots;
     public final Formation formation;
     /** Human-readable label used in the wave announcement, e.g. "Shield line". */
     public final String label;
 
     public WaveComposition(int total, Map<String, Integer> roleCounts,
                            Formation formation, String label) {
+        this(total, expand(roleCounts), roleCounts, formation, label);
+    }
+
+    public WaveComposition(int total, List<String> roleSlots, Map<String, Integer> roleCounts,
+                           Formation formation, String label) {
         this.total = Math.max(0, total);
         this.roleCounts = roleCounts == null ? Map.of() :
                 Collections.unmodifiableMap(new LinkedHashMap<>(roleCounts));
+        this.roleSlots = roleSlots == null ? List.of() : List.copyOf(roleSlots);
         this.formation = formation == null ? Formation.NONE : formation;
         this.label = label == null ? "" : label;
     }
 
+    private static List<String> expand(Map<String, Integer> roleCounts) {
+        if(roleCounts==null || roleCounts.isEmpty())return List.of();
+        java.util.ArrayList<String> roles=new java.util.ArrayList<>();
+        for(var entry:roleCounts.entrySet())
+            for(int i=0;i<Math.max(0,entry.getValue());i++)roles.add(entry.getKey());
+        return roles;
+    }
+
     /**
-     * Resolve the role at a given wave index. Iterates the ordered role map
-     * so higher-priority roles (captains, engineers) fill first, then the
-     * bulk of shieldmen and bowmen. Returns null when the index is past the
-     * composition (caller falls back to a default).
+     * Resolve the role at a given composition index. The explicit slot list
+     * preserves interleaved or repeated doctrine entries; the count map is
+     * retained for summaries and tests. Returns null past the composition.
      */
     public String roleAt(int index) {
-        if(index<0)return null;
-        int cursor = 0;
-        for (Map.Entry<String, Integer> entry : roleCounts.entrySet()) {
-            cursor += entry.getValue();
-            if (index < cursor) return entry.getKey();
-        }
-        return null;
+        return index<0 || index>=roleSlots.size()?null:roleSlots.get(index);
     }
 }

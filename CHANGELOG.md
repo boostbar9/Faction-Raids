@@ -1,3 +1,12 @@
+# 4.46.0 beta
+
+- Turn every fifth wave into a clearly telegraphed patron-specific signature assault. Poseidon commits a Tidal Onslaught, Ares a Bronze Spearhead, Hephaestus a Forge Engine Advance, Athena an Aegis Phalanx, and Artemis a Moonlit Hunt, each with its own roster, title, sound cue and counterplay warning.
+- Give newly established Olympian camps distinct six-unit garrisons and defensive leashes: Tidewatch Sentries, Bronze Gateguards, Forgeward Sentries, Aegis Sentinels and Silver Hunt Wardens. New core keeps also use patron-specific pillar silhouettes; existing cores and guards keep their saved positions while guards adopt the matching title and leash.
+- Let coastal war camps actually deploy their configured naval contingent instead of redirecting would-be ship crews back through the land gate. Poseidon's checkpoint assault commits at least 75% of eligible non-cavalry troops to ships when a safe staging route exists.
+- Keep the Treasury interest countdown at `Due now` after its deadline until settlement advances the saved payout anchor, rather than wrapping to another future-day countdown.
+- Preserve the exact configured order of repeated wave roles, keep Artemis' Hunter's Mark command to its promised five seconds, and normalize both 4.44 boolean and 4.45 integer hero-identity markers into a save-compatible boolean plus a separate schema field.
+- Preserve wave/entity caps, ordinary reward balance, existing raids and saves, faction IDs, restoration limits, dependency requirements and player structures. Signature assaults replace normal wave slots instead of adding unbounded enemies.
+
 # 4.45.0 beta
 
 - Give every Olympian war host a real battlefield doctrine: Poseidon's broad tidal line, Ares' melee-heavy spearhead, Hephaestus' supplied siege column, Athena's captain-led shield square, and Artemis' ranged skirmish screen. Terrain and specialist safety can still override formation orders when needed.

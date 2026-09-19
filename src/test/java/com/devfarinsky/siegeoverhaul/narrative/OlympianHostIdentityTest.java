@@ -19,6 +19,9 @@ class OlympianHostIdentityTest extends MinecraftTestSupport {
         assertEquals(5,hosts.stream().map(OlympianHostIdentity::formation).distinct().count());
         assertEquals(5,hosts.stream().map(OlympianHostIdentity::commanderPower).distinct().count());
         assertEquals(5,hosts.stream().map(OlympianHostIdentity::waveLabel).distinct().count());
+        assertEquals(5,hosts.stream().map(host->host.signatureAssault().title()).distinct().count());
+        assertEquals(5,hosts.stream().map(host->host.campDoctrine().guardTitle()).distinct().count());
+        assertEquals(5,hosts.stream().map(host->host.campDoctrine().leashBlocks()).distinct().count());
 
         var champions=new HashSet<Integer>();
         for(var host:hosts) {
@@ -36,6 +39,18 @@ class OlympianHostIdentityTest extends MinecraftTestSupport {
                 assertNotEquals("siege_engineer",role);
                 assertNotEquals("patrol_leader",role);
             }
+            assertFalse(host.signatureWave(4,5));
+            assertTrue(host.signatureWave(5,5));
+            assertFalse(host.signatureAssault().counterplay().isBlank());
+            assertFalse(host.signatureAssault().roles().isEmpty());
+            for(String role:host.signatureAssault().roles()) {
+                assertTrue(WaveComposer.COMBAT_TYPES.contains(role));
+                assertNotEquals("siege_engineer",role);
+                assertNotEquals("patrol_leader",role);
+            }
+            assertEquals(6,host.campDoctrine().guardRoles().size());
+            for(String role:host.campDoctrine().guardRoles())
+                assertTrue(WaveComposer.COMBAT_TYPES.contains(role));
         }
         assertEquals(java.util.stream.IntStream.rangeClosed(10,29).boxed().collect(java.util.stream.Collectors.toSet()),champions);
     }

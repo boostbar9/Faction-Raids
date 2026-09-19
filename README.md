@@ -48,11 +48,11 @@ Each box awards **one randomly selected reward stack**. Rarity odds are **Common
 
 ## How a Siege Unfolds
 
-1. **An Olympian foothold.** A host of Poseidon, Ares, Hephaestus, Athena, or Artemis searches for a suitable camp site and registers a real Villager Recruits claim. Each has distinct map colors, divine banners, equipment, camp architecture, troop doctrine, champions and a signature Strategos command.
+1. **An Olympian foothold.** A host of Poseidon, Ares, Hephaestus, Athena, or Artemis searches for a suitable camp site and registers a real Villager Recruits claim. Each has distinct map colors, divine banners, equipment, camp and core-keep silhouettes, troop doctrine, champions, camp sentries and a signature Strategos command.
 2. **Time to prepare.** New sieges allow **12 minutes of preparation by default**, split between establishment, fortification, and army muster. Defenders can prepare their troops or disrupt the enemy camp.
-3. **Builders get to work.** Armored Workers 2 builders use native building jobs and supplied materials. Camp guards defend the site while construction and later upgrades progress.
+3. **Builders get to work.** Armored Workers 2 builders use native building jobs and supplied materials. Each patron stations its own six-unit garrison around the War Gate and perimeter while construction and later upgrades progress.
 4. **The War Gate opens.** A protected reinforcement gate provides a designated ground-level arrival point. The gate and its graded access road arrive fully assembled when the camp is established, leaving builders free to work on the camp itself. The gate is removed during siege cleanup.
-5. **The army advances.** Infantry, ranged units, cavalry, officers, sappers, and siege engineers attack in waves. Units use reachable, role-based formations on the approach and release marching orders for combat or obstacles.
+5. **The army advances.** Infantry, ranged units, cavalry, officers, sappers, and siege engineers attack in waves. Units use reachable, role-based formations on the approach and release marching orders for combat or obstacles. Every fifth wave is a named signature assault with a patron-specific roster, warning and counterplay; coastal camps can send their configured share by ship, with Poseidon committing most eligible troops during a Tidal Onslaught.
 6. **Defenses are tested.** Raiders use breaching, ladders, alternate approaches, and supported siege equipment. Commanders can perform a visible, interruptible strike against certain building blocks.
 7. **The core is contested.** Numerical superiority around the core drives capture. Losing the core transfers its territory to the enemy faction. Bring yourself and your recruits back to outnumber the occupiers and reclaim it.
 

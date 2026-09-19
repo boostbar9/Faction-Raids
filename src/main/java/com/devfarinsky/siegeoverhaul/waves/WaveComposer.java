@@ -25,12 +25,14 @@ public final class WaveComposer {
         int available=total;
         for(int i=0;i<Math.min(total,3);i++)if(reserved(wave,totalWaves,i,RaidConfig.ENABLE_COMMANDER.get(),RaidConfig.ENABLE_ILLUSIONERS.get()))available--;
         OlympianHostIdentity host=OlympianHostIdentity.forFaction(factionId);
-        List<String> priority=host.rolesForWave(wave);
+        List<String> priority=host.rolesForWave(wave,totalWaves);
+        List<String> slots=new ArrayList<>(available);
         Map<String,Integer> mix=new LinkedHashMap<>();
         for(int i=0;i<available;i++) {
             String role=priority.get(i%priority.size());
+            slots.add(role);
             mix.merge(role,1,Integer::sum);
         }
-        return new WaveComposition(total,mix,host.formation(),host.labelForWave(wave));
+        return new WaveComposition(total,slots,mix,host.formation(),host.labelForWave(wave,totalWaves));
     }
 }
