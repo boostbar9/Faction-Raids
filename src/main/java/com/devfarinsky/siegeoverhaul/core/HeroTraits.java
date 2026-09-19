@@ -127,8 +127,14 @@ public final class HeroTraits {
         CompoundTag tag=mob.getPersistentData();
         if(tag.getBoolean(OLYMPIAN_IDENTITY_TAG))return;
         Component current=mob.getCustomName();
-        if(current==null || CoreHiring.legacyHeroName(role).equals(current.getString()) || EnemyHeroes.active(mob))
-            mob.setCustomName(Component.literal(CoreHiring.NAMES[role]).withStyle(nameColor(CoreHiring.heroTier(role))));
+        String legacy=CoreHiring.legacyHeroName(role);
+        String currentText=current==null?"":current.getString();
+        boolean generatedEnemyLabel=("Enemy Hero · "+legacy).equals(currentText);
+        if(current==null || legacy.equals(currentText) || generatedEnemyLabel) {
+            String replacement=generatedEnemyLabel?"Enemy Hero · "+CoreHiring.NAMES[role]:CoreHiring.NAMES[role];
+            ChatFormatting color=generatedEnemyLabel?ChatFormatting.LIGHT_PURPLE:nameColor(CoreHiring.heroTier(role));
+            mob.setCustomName(Component.literal(replacement).withStyle(color));
+        }
         tag.putBoolean(OLYMPIAN_IDENTITY_TAG,true);
     }
     public static void equip(Mob mob,int role,SimpleContainer inventory) {

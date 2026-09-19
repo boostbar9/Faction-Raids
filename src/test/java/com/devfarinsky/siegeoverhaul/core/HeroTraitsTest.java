@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 class HeroTraitsTest extends MinecraftTestSupport {
-    @Test void legacyDefaultNamesMigrateButPlayerNamesRemainUntouched() {
+    @Test void legacyDefaultAndGeneratedEnemyNamesMigrateButPlayerNamesRemainUntouched() {
         Mob legacy=mock(Mob.class);
         CompoundTag legacyTag=new CompoundTag();
         when(legacy.getPersistentData()).thenReturn(legacyTag);
@@ -21,8 +21,24 @@ class HeroTraitsTest extends MinecraftTestSupport {
         verify(legacy).setCustomName(argThat(name->CoreHiring.NAMES[10].equals(name.getString())));
         assertTrue(legacyTag.getBoolean("SiegeOlympianHeroIdentity"));
 
+        Mob labelledEnemy=mock(Mob.class);
+        CompoundTag enemyTag=new CompoundTag();
+        enemyTag.putBoolean("SiegeEnemyHero",true);
+        enemyTag.putInt("SiegeHeroRole",10);
+        when(labelledEnemy.getPersistentData()).thenReturn(enemyTag);
+        when(labelledEnemy.getCustomName()).thenReturn(
+                Component.literal("Enemy Hero · "+CoreHiring.legacyHeroName(10)));
+
+        HeroTraits.ensureOlympianIdentity(labelledEnemy,10);
+
+        verify(labelledEnemy).setCustomName(argThat(name->
+                ("Enemy Hero · "+CoreHiring.NAMES[10]).equals(name.getString())));
+        assertTrue(enemyTag.getBoolean("SiegeOlympianHeroIdentity"));
+
         Mob renamed=mock(Mob.class);
         CompoundTag renamedTag=new CompoundTag();
+        renamedTag.putBoolean("SiegeEnemyHero",true);
+        renamedTag.putInt("SiegeHeroRole",10);
         when(renamed.getPersistentData()).thenReturn(renamedTag);
         when(renamed.getCustomName()).thenReturn(Component.literal("Bobby"));
 
