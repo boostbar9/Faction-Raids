@@ -4,7 +4,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;
+import java.util.List;
+import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 class CoreControlTest extends MinecraftTestSupport {
     @Test void aMajorityMustHoldForTheFullTimerRegardlessOfArmySize() {
         int small=0,large=0;
@@ -49,10 +53,39 @@ class CoreControlTest extends MinecraftTestSupport {
         assertEquals(id,loaded.siegeCores.get("team:blue").getUUID("OccupiedClaim"));
         assertEquals(860,loaded.siegeCores.get("team:blue").getInt("RecaptureTicks"));
     }
-    @Test void currentForeignClaimHolderContestsRecoveryWithoutLockingOriginalFactionOut() {
-        assertEquals(1,CoreOccupation.side("team:blue","team:blue","red"));
-        assertEquals(-1,CoreOccupation.side("team:red","team:blue","red"));
-        assertEquals(0,CoreOccupation.side("team:green","team:blue","red"));
-        assertEquals(0,CoreOccupation.side("player:"+java.util.UUID.randomUUID(),"team:blue","red"));
+    @Test void currentForeignClaimHolderPlayersAndSoldiersContestRecovery() {
+        RaidConfig.CORE_CAPTURE_REQUIRE_SIGHT.set(false);
+        RaidConfig.CORE_CAPTURE_RADIUS.set(10);
+        RaidConfig.CORE_CAPTURE_VERTICAL.set(2);
+        var level=mock(net.minecraft.server.level.ServerLevel.class);
+        var defender=playerAtCore(); var occupier=playerAtCore(); var unrelated=playerAtCore();
+        when(level.players()).thenReturn(List.of(defender,occupier,unrelated));
+        var defenderSoldier=mobAtCore(); var occupierSoldier=mobAtCore(); var unrelatedSoldier=mobAtCore();
+        when(level.getEntitiesOfClass(eq(net.minecraft.world.entity.Mob.class),any(net.minecraft.world.phys.AABB.class),any()))
+                .thenReturn(List.of(defenderSoldier,occupierSoldier,unrelatedSoldier));
+        Set<java.util.UUID> members=Set.of();
+        try(var keys=mockStatic(SiegeCore.class);var recruits=mockStatic(com.devfarinsky.siegeoverhaul.RecruitsBridge.class)) {
+            keys.when(()->SiegeCore.key(defender)).thenReturn("team:blue");
+            keys.when(()->SiegeCore.key(occupier)).thenReturn("team:red");
+            keys.when(()->SiegeCore.key(unrelated)).thenReturn("team:green");
+            recruits.when(()->com.devfarinsky.siegeoverhaul.RecruitsBridge.isRecruitSoldier(any())).thenReturn(false);
+            recruits.when(()->com.devfarinsky.siegeoverhaul.RecruitsBridge.belongsTo(defenderSoldier,"team:blue",members)).thenReturn(true);
+            recruits.when(()->com.devfarinsky.siegeoverhaul.RecruitsBridge.belongsTo(occupierSoldier,"team:red",Set.of())).thenReturn(true);
+            int[] counts=CoreOccupation.counts(level,BlockPos.ZERO,"team:blue",members,"red");
+            assertArrayEquals(new int[]{2,2},counts,"unrelated factions must stay neutral to recovery");
+        }
+    }
+    private static net.minecraft.server.level.ServerPlayer playerAtCore() {
+        var player=mock(net.minecraft.server.level.ServerPlayer.class);
+        when(player.isAlive()).thenReturn(true);
+        when(player.position()).thenReturn(new Vec3(.5,.5,.5));
+        return player;
+    }
+    private static net.minecraft.world.entity.Mob mobAtCore() {
+        var mob=mock(net.minecraft.world.entity.Mob.class);
+        when(mob.isAlive()).thenReturn(true);
+        when(mob.position()).thenReturn(new Vec3(.5,.5,.5));
+        when(mob.getPersistentData()).thenReturn(new CompoundTag());
+        return mob;
     }
 }
