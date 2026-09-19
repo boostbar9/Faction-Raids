@@ -15,17 +15,17 @@ class RaiderFactionsTest extends MinecraftTestSupport {
         FakeFaction faction=new FakeFaction("Blackbay Reavers","Blackbay Reavers Warlord",oldBanner,(byte)0,0);
 
         assertTrue(RaiderFactions.refreshNativeIdentity(
-                faction,"Poseidon's Tide","Poseidon's Tide Strategos",olympianBanner,(byte)6,0x00AAAA));
+                faction,"Poseidon's Tide","Poseidon's Tide Strategos",olympianBanner,(byte)6,3));
         assertEquals("Poseidon's Tide",faction.getTeamDisplayName());
         assertEquals("Poseidon's Tide Strategos",faction.getTeamLeaderName());
         assertEquals((byte)6,faction.getUnitColor());
-        assertEquals(0x00AAAA,faction.getTeamColor());
+        assertEquals(3,faction.getTeamColor(),"Recruits stores the ChatFormatting id, not the RGB value");
         assertEquals(olympianBanner,faction.getBanner());
         assertNotSame(olympianBanner,faction.getBanner(),"native faction must own a defensive NBT copy");
         assertEquals(5,faction.mutations);
 
         assertFalse(RaiderFactions.refreshNativeIdentity(
-                faction,"Poseidon's Tide","Poseidon's Tide Strategos",olympianBanner,(byte)6,0x00AAAA));
+                faction,"Poseidon's Tide","Poseidon's Tide Strategos",olympianBanner,(byte)6,3));
         assertEquals(5,faction.mutations,"stable identities must not dirty the faction save again");
     }
 

@@ -74,7 +74,7 @@ public final class RaiderFactions {
         try {
             String id=id(faction), name=name(faction), leaderName=name+" Strategos";
             ChatFormatting formatting=scoreboardColor(faction);
-            int teamColor=Objects.requireNonNull(formatting.getColor());
+            int teamColor=formatting.getId();
             var scoreboard=server.getScoreboard();
             var team=scoreboard.getPlayerTeam(id);
             if(team==null) {
