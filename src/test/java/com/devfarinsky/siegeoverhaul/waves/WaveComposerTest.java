@@ -13,11 +13,16 @@ class WaveComposerTest extends MinecraftTestSupport {
             var assault=WaveComposer.compose(host.factionId(),4,5,20);
             assertEquals(host.formation(),opening.formation);
             assertEquals(host.waveLabel(),opening.label);
-            for(int i=0;i<host.openingRoles().size();i++)assertEquals(host.openingRoles().get(i),opening.roleAt(i));
-            for(int i=0;i<host.assaultRoles().size();i++)assertEquals(host.assaultRoles().get(i),assault.roleAt(i));
+            assertEquals(expectedMix(host.openingRoles(),12),opening.roleCounts);
+            assertEquals(expectedMix(host.assaultRoles(),20),assault.roleCounts);
             assertEquals(12,opening.roleCounts.values().stream().mapToInt(Integer::intValue).sum());
             assertEquals(20,assault.roleCounts.values().stream().mapToInt(Integer::intValue).sum());
         }
+    }
+    private static Map<String,Integer> expectedMix(List<String> priority,int total) {
+        Map<String,Integer> expected=new LinkedHashMap<>();
+        for(int i=0;i<total;i++)expected.merge(priority.get(i%priority.size()),1,Integer::sum);
+        return expected;
     }
     @Test void reservedSlotsNeverSkipOrDuplicateTheComposition() {
         for(boolean commander:new boolean[]{false,true})for(boolean illusions:new boolean[]{false,true})for(int wave=1;wave<=5;wave++) {
