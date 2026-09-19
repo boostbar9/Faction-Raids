@@ -1,3 +1,11 @@
+# 4.45.0 beta
+
+- Give every Olympian war host a real battlefield doctrine: Poseidon's broad tidal line, Ares' melee-heavy spearhead, Hephaestus' supplied siege column, Athena's captain-led shield square, and Artemis' ranged skirmish screen. Terrain and specialist safety can still override formation orders when needed.
+- Give each Strategos a distinct, five-second signature command at half health: Tidal Advance, War Cry, Forge Ward, Aegis Order, or Hunter's Mark. Effects are bounded, visible and non-destructive; they do not place water, spread fire, or alter terrain.
+- Bind enemy champions to the patron leading their invasion. The twenty existing hero roles are divided into four champions per host while preserving role IDs, rarity, prices, stats and mechanics. Untouched 4.44 names migrate; player-renamed heroes remain unchanged.
+- Give each host a recognizable command keep and progressive camp skyline using patron-specific palettes: prismarine waves, blackstone battlements, copper forge chimneys, a quartz acropolis, or a moss-and-birch hunting shrine.
+- Update Intel lore with each host's doctrine, camp silhouette, Strategos ability and counterplay. Existing faction IDs, active raids, saves, claims, diplomacy records, restoration tracking and dependency requirements remain compatible.
+
 # 4.44.0 beta
 
 - Recast the five enemy factions as Olympian war hosts: Poseidon's Tide, the Warhost of Ares, the Forgeguard of Hephaestus, the Aegis Order of Athena, and the Silver Hunt of Artemis. Their banners, map colors, uniforms, lore, commander titles, and visible territory names now share that identity.

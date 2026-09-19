@@ -19,13 +19,18 @@ public final class EnemyHeroes {
     }
     public static void plan(RaidSavedData.RaidState state, int wave, int totalWaves, int size,
                             boolean enabled, int chance, boolean commander, boolean illusioners, RandomSource random) {
+        plan(state, "", wave, totalWaves, size, enabled, chance, commander, illusioners, random);
+    }
+    public static void plan(RaidSavedData.RaidState state, String factionId, int wave, int totalWaves, int size,
+                            boolean enabled, int chance, boolean commander, boolean illusioners, RandomSource random) {
         state.enemyHeroRole = -1;
         state.enemyHeroSlot = -1;
         if (!enabled || wave < 2 || chance <= 0 || random.nextInt(100) >= chance) return;
+        var host = com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.forFaction(factionId);
         for (int index = 0; index < size; index++) {
             if (!WaveComposer.reserved(wave, totalWaves, index, commander, illusioners)) {
                 state.enemyHeroSlot = index;
-                state.enemyHeroRole = CoreOffers.hero(random.nextInt(100));
+                state.enemyHeroRole = host.heroForRoll(random.nextInt(host.heroWeightTotal()));
                 return;
             }
         }

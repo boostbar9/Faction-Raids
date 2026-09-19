@@ -33,10 +33,19 @@ public final class FormationTactics {
         };
     }
     public static Formation choose(String group,boolean narrow,boolean underFire) {
+        return choose(Formation.LINE,group,narrow,underFire);
+    }
+    /**
+     * Preserve terrain and specialist safety while letting the host doctrine
+     * control the front rank and command group. Ranged troops still spread
+     * out, mobile troops still flank, and every host compresses in a choke.
+     */
+    public static Formation choose(Formation doctrine,String group,boolean narrow,boolean underFire) {
         if(narrow)return Formation.COLUMN;
         if(group.equals("ranged"))return Formation.SKIRMISH;
         if(group.equals("mobile"))return underFire?Formation.SKIRMISH:Formation.WEDGE;
-        return group.equals("support")?Formation.SQUARE:Formation.LINE;
+        if(group.equals("support"))return Formation.SQUARE;
+        return doctrine==null || doctrine==Formation.NONE?Formation.LINE:doctrine;
     }
     public static Vec3 offset(Formation shape,int index,int count) {
         return switch(shape) {

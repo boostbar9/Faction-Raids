@@ -26,12 +26,20 @@ public final class CoreHiring {
         // Commons (10-11)
         "Damon, Ares' Blade", "Thalia, Athena's Aegis",
         // Uncommons (12-15)
-        "Iris, Zeus' Stormbow", "Kyros, Artemis' Frost", "Leon, Ares' Fury", "Helena, Apollo's Dawn",
+        "Iris, Poseidon's Storm", "Kyros, Artemis' Frost", "Leon, Ares' Fury", "Helena, Hephaestus' Ward",
         // Rares (16-21)
-        "Pyra, Hephaestus' Flame", "Niko, Hermes' Veil", "Theron, Ares' Warbell", "Daphne, Artemis' Root", "Cassia, Apollo's Sunlance", "Atalanta, Silver Hunt",
+        "Pyra, Hephaestus' Flame", "Niko, Poseidon's Fog", "Theron, Ares' Warbell", "Daphne, Artemis' Root", "Cassia, Hephaestus' Sunforge", "Sophia, Athena's Tempo",
         // Epics (22-26)
-        "Melia, Athena's Owl", "Asteria, Athena's Oracle", "Petra, Hephaestus' Fire", "Ajax, Athena's Bulwark", "Orion, Artemis' Skyhunter",
+        "Melia, Poseidon's Tempest", "Asteria, Athena's Oracle", "Petra, Hephaestus' Fire", "Ajax, Athena's Bulwark", "Orion, Artemis' Skyhunter",
         // Legendaries (27-29)
+        "Elara, Ares' Inferno", "Actaeon, Artemis' Hounds", "Kleon, Poseidon's Undertow"
+    };
+    /** Exact 4.44 defaults, retained so untouched heroes adopt their host-aligned identity. */
+    private static final String[] PREVIOUS_OLYMPIAN_HERO_NAMES = {
+        "Damon, Ares' Blade", "Thalia, Athena's Aegis",
+        "Iris, Zeus' Stormbow", "Kyros, Artemis' Frost", "Leon, Ares' Fury", "Helena, Apollo's Dawn",
+        "Pyra, Hephaestus' Flame", "Niko, Hermes' Veil", "Theron, Ares' Warbell", "Daphne, Artemis' Root", "Cassia, Apollo's Sunlance", "Atalanta, Silver Hunt",
+        "Melia, Athena's Owl", "Asteria, Athena's Oracle", "Petra, Hephaestus' Fire", "Ajax, Athena's Bulwark", "Orion, Artemis' Skyhunter",
         "Elara, Apollo's Chosen", "Actaeon, Artemis' Hounds", "Kleon, Hermes' Hourglass"
     };
     /** Exact pre-4.44 default names, retained only to migrate untouched saved heroes. */
@@ -70,8 +78,15 @@ public final class CoreHiring {
     public static final int HERO_ID_MAX = 29;
     public static boolean isHero(int role) { return role >= HERO_ID_MIN && role <= HERO_ID_MAX; }
     static String legacyHeroName(int role) { return isHero(role) ? LEGACY_HERO_NAMES[role - HERO_ID_MIN] : ""; }
+    static String previousOlympianHeroName(int role) { return isHero(role) ? PREVIOUS_OLYMPIAN_HERO_NAMES[role - HERO_ID_MIN] : ""; }
     public static int heroTier(int role) { return isHero(role) ? HERO_TIER[role - HERO_ID_MIN] : -1; }
     public static int heroBase(int role) { return isHero(role) ? HERO_BASE[role - HERO_ID_MIN] : role; }
+    public static String heroFaction(int role) {
+        if (!isHero(role)) return "";
+        for (var host : com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.hosts())
+            if (host.heroRoles().contains(role)) return host.factionId();
+        return "";
+    }
     private static final String[] COSTS = {"RecruitCost", "ShieldmanCost", "BowmanCost", "CrossbowmanCost", "FarmerCost", "LumberjackCost", "MinerCost", "BuilderCost", "CookCost", "CourierCost"};
     private CoreHiring() {}
     private static Object config(String name) throws ReflectiveOperationException {

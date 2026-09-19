@@ -46,6 +46,18 @@ class HeroTraitsTest extends MinecraftTestSupport {
 
         verify(renamed,never()).setCustomName(any());
         assertTrue(renamedTag.getBoolean("SiegeOlympianHeroIdentity"));
+
+        // 4.44 stored a boolean schema marker. Untouched 4.44 names must still
+        // move to the new five-host roster, while the marker advances safely.
+        Mob previous=mock(Mob.class);
+        CompoundTag previousTag=new CompoundTag();previousTag.putBoolean("SiegeOlympianHeroIdentity",true);
+        when(previous.getPersistentData()).thenReturn(previousTag);
+        when(previous.getCustomName()).thenReturn(Component.literal(CoreHiring.previousOlympianHeroName(12)));
+
+        HeroTraits.ensureOlympianIdentity(previous,12);
+
+        verify(previous).setCustomName(argThat(name->CoreHiring.NAMES[12].equals(name.getString())));
+        assertEquals(2,previousTag.getInt("SiegeOlympianHeroIdentity"));
     }
 
     @Test void fullRosterHasDistinctOlympianNamesWithoutChangingRoleTables() {
@@ -57,6 +69,7 @@ class HeroTraitsTest extends MinecraftTestSupport {
             assertFalse(HeroTraits.description(role).isBlank());
             assertTrue(CoreHiring.heroBase(role)>=0 && CoreHiring.heroBase(role)<=3);
             assertTrue(CoreHiring.heroTier(role)>=0 && CoreHiring.heroTier(role)<=4);
+            assertFalse(CoreHiring.heroFaction(role).isBlank());
         }
         assertEquals(20,names.size());
     }

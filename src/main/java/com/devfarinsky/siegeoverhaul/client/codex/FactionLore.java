@@ -31,42 +31,39 @@ public final class FactionLore {
         // every tactical promise tied to behavior the mod actually ships.
         register("blackbay_reavers", List.of(
                 "POSEIDON'S TIDE \u00b7 Trident-Bearers",
-                "A sea-born war host. Naval staging is more likely",
-                "against them \u2014 expect ships and beach landings when",
-                "your stronghold stands near open water.",
+                "Doctrine: a broad tidal line led by ranged scouts.",
+                "Camp: prismarine halls beneath a wave-crested roof.",
+                "Strategos: Tidal Advance speeds the nearby host.",
                 "",
-                "Tactic: shore denial. A two-block wall in the beach",
-                "shallows turns their landing into a killing ground."));
+                "Counter: break sightlines and deny shoreline routes."));
         register("hollowfang_clan", List.of(
                 "WARHOST OF ARES \u00b7 Bronze-Blooded",
-                "An aggressive melee host that drives its breachers",
-                "straight toward gates and weak points.",
+                "Doctrine: a melee-heavy bronze spearhead.",
+                "Camp: blackstone battlements under a blood-red roof.",
+                "Strategos: War Cry strengthens the nearby vanguard.",
                 "",
-                "Tactic: killing its Strategos while your perimeter",
-                "remains unbreached pays extra emeralds. Hold the wall."));
+                "Counter: stagger the wedge before it reaches your gate."));
         register("emberchant_zealots", List.of(
                 "FORGEGUARD OF HEPHAESTUS \u00b7 Flame-Smiths",
-                "A siege-minded host with a heavier warcaster presence",
-                "during final waves.",
+                "Doctrine: a supplied siege column with crossbow cover.",
+                "Camp: brick forges marked by twin copper chimneys.",
+                "Strategos: Forge Ward shields troops from harm and fire.",
                 "",
-                "Tactic: melee through illusioner clones (they die on",
-                "one hit) before they thin out your arrow supply. Only",
-                "the real illusioner takes damage."));
+                "Counter: isolate the engineers and destroy their works."));
         register("crownfall_exiles", List.of(
                 "AEGIS ORDER OF ATHENA \u00b7 Owl-Shields",
-                "A disciplined, captain-heavy formation with more",
-                "command-aura pulses per push than any other host.",
+                "Doctrine: a disciplined, captain-led shield square.",
+                "Camp: a symmetrical white-and-blue acropolis.",
+                "Strategos: Aegis Order hardens the phalanx.",
                 "",
-                "Tactic: prioritize captains and patrol leaders on",
-                "sight. Breaking their command structure is the fastest",
-                "way to unravel Athena's formation."));
+                "Counter: remove captains, then split the shield square."));
         register("wilds_marauders", List.of(
                 "SILVER HUNT OF ARTEMIS \u00b7 Moon-Arrows",
-                "A roaming host of hunters and skirmishers. Their broad",
-                "mandate lets them answer any omen or war pretext.",
+                "Doctrine: a loose screen of archers and fast hunters.",
+                "Camp: mossy shrines beneath a silver-green canopy.",
+                "Strategos: Hunter's Mark exposes the Hunt's quarry.",
                 "",
-                "Tactic: deny clear firing lanes and force the Hunt into",
-                "the close quarters beneath your walls."));
+                "Counter: deny firing lanes and force close combat."));
     }
 
     private FactionLore() {}

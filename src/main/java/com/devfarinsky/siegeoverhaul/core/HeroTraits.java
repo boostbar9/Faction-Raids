@@ -27,29 +27,30 @@ public final class HeroTraits {
     private static final UUID WILDSONG_ATTACK_SPEED_ID = UUID.fromString("3f68d978-7160-42e3-a81e-5476f362f969");
     private static final String WILDSONG_ATTACK_SPEED_TAG = "SiegeWildsongAttackSpeedUntil";
     private static final String OLYMPIAN_IDENTITY_TAG = "SiegeOlympianHeroIdentity";
+    private static final int OLYMPIAN_IDENTITY_SCHEMA = 2;
     /** Signature-ability description shown on hero cards. Keep concise (fits card). */
     public static String description(int role) {
         return switch(role) {
             case 10 -> "Ares' Blade: every third melee hit heals 1 heart";
             case 11 -> "Athena's Aegis: blocked hits ward nearby allies";
-            case 12 -> "Zeus' Stormbow: every fourth arrow chains lightning";
+            case 12 -> "Poseidon's Storm: every fourth arrow chains lightning";
             case 13 -> "Artemis' Moonfrost: a bolt slows up to three foes";
             case 14 -> "Ares' Fury: a full-health strike grants absorption";
-            case 15 -> "Apollo's Dawn: shields a badly wounded ally";
+            case 15 -> "Hephaestus' Ward: shields a badly wounded ally";
             case 16 -> "Hephaestus' Flame: melee hits ignite the target";
-            case 17 -> "Hermes' Veil: every third arrow marks its target";
+            case 17 -> "Poseidon's Fog: every third arrow marks its target";
             case 18 -> "Ares' Warbell: blocked hits unleash a shockwave";
             case 19 -> "Artemis' Roots: arrows root the target for 2s";
-            case 20 -> "Apollo's Sunlance: bolts burst through an impact zone";
-            case 21 -> "Silver Hunt: kills grant +20% attack speed for 6s";
-            case 22 -> "Athena's Judgment: casts an arcane nova every 15s";
+            case 20 -> "Hephaestus' Sunforge: bolts burst through an impact zone";
+            case 21 -> "Athena's Tempo: kills grant +20% attack speed for 6s";
+            case 22 -> "Poseidon's Tempest: casts a tidal nova every 15s";
             case 23 -> "Athena's Oracle: melee hits arc into a nearby foe";
             case 24 -> "Forgefire: melee hits trigger a flame burst (3s)";
             case 25 -> "Aegis Bulwark: Resistance II aura to nearby allies";
             case 26 -> "Artemis' Skyhunt: arrows split into three tracers";
-            case 27 -> "Apollo's Chosen: sunlight burns nearby foes";
+            case 27 -> "Ares' Inferno: battle fury burns nearby foes";
             case 28 -> "Artemis' Hounds: summons two shadow wolves";
-            case 29 -> "Hermes' Hourglass: heavily slows nearby foes";
+            case 29 -> "Poseidon's Undertow: heavily slows nearby foes";
             default -> "";
         };
     }
@@ -71,10 +72,10 @@ public final class HeroTraits {
         // Common: rusty; Uncommon: bright metal; Rare: gems; Epic: exotic; Legendary: netherite/amethyst.
         return switch(role) {
             case 10 -> "iron"; case 11 -> "copper";
-            case 12 -> "emerald"; case 13 -> "lapis"; case 14 -> "redstone"; case 15 -> "gold";
-            case 16 -> "redstone"; case 17 -> "amethyst"; case 18 -> "iron"; case 19 -> "emerald"; case 20 -> "lapis"; case 21 -> "copper";
-            case 22 -> "amethyst"; case 23 -> "diamond"; case 24 -> "redstone"; case 25 -> "netherite"; case 26 -> "emerald";
-            case 27 -> "gold"; case 28 -> "netherite"; case 29 -> "amethyst";
+            case 12 -> "lapis"; case 13 -> "emerald"; case 14 -> "redstone"; case 15 -> "copper";
+            case 16 -> "redstone"; case 17 -> "lapis"; case 18 -> "iron"; case 19 -> "emerald"; case 20 -> "copper"; case 21 -> "diamond";
+            case 22 -> "diamond"; case 23 -> "gold"; case 24 -> "redstone"; case 25 -> "netherite"; case 26 -> "emerald";
+            case 27 -> "redstone"; case 28 -> "netherite"; case 29 -> "lapis";
             default -> "iron";
         };
     }
@@ -91,11 +92,11 @@ public final class HeroTraits {
     /** RGB shell tint for Epic Knights compat, used when armor supports colored leather layers. */
     private static int shellColor(int role) {
         return switch(role) {
-            case 10 -> 0x8b7355; case 11 -> 0x7d7d7d;
-            case 12 -> 0x4a7bc4; case 13 -> 0x87ceeb; case 14 -> 0x963f3f; case 15 -> 0xf2c96b;
-            case 16 -> 0xff6633; case 17 -> 0x2a1a4d; case 18 -> 0xc4b087; case 19 -> 0x3a6b2f; case 20 -> 0x2f3a5e; case 21 -> 0xa04030;
-            case 22 -> 0x8a2be2; case 23 -> 0xe6d78a; case 24 -> 0xe64d1f; case 25 -> 0x1a1a1a; case 26 -> 0x7fe0d0;
-            case 27 -> 0xffd966; case 28 -> 0x0f0d1a; case 29 -> 0x9370db;
+            case 10 -> 0x8b302b; case 11 -> 0xe8e1c7;
+            case 12 -> 0x256aa1; case 13 -> 0xb8c4bf; case 14 -> 0xa53a32; case 15 -> 0xb76e3b;
+            case 16 -> 0xe85d2a; case 17 -> 0x315b7a; case 18 -> 0x8e3b32; case 19 -> 0x476b3a; case 20 -> 0xc46b32; case 21 -> 0xd7c98b;
+            case 22 -> 0x2d79a8; case 23 -> 0xe6d78a; case 24 -> 0xd94a22; case 25 -> 0xd8e6ef; case 26 -> 0x7aa38b;
+            case 27 -> 0x7f211d; case 28 -> 0x343c36; case 29 -> 0x1d557c;
             default -> 0x808080;
         };
     }
@@ -103,10 +104,10 @@ public final class HeroTraits {
     private static String weaponName(int role) {
         return switch(role) {
             case 10 -> "Spear of Ares"; case 11 -> "Aegis Edge";
-            case 12 -> "Thunderbow"; case 13 -> "Moonfrost"; case 14 -> "Phobos Fang"; case 15 -> "Dawnkeeper";
-            case 16 -> "Forgefire"; case 17 -> "Hermes' Mark"; case 18 -> "Warbell"; case 19 -> "Laurel Bow"; case 20 -> "Sunlance"; case 21 -> "Silver Hunt";
-            case 22 -> "Owl's Judgment"; case 23 -> "Oracle's Staff"; case 24 -> "Volcanic Staff"; case 25 -> "Aegis Bulwark"; case 26 -> "Orion's Bow";
-            case 27 -> "Solar Scepter"; case 28 -> "Moon-Hound Crook"; case 29 -> "Hermes' Hourglass";
+            case 12 -> "Stormbow of Poseidon"; case 13 -> "Moonfrost"; case 14 -> "Phobos Fang"; case 15 -> "Forgeward";
+            case 16 -> "Forgefire"; case 17 -> "Fogpiercer"; case 18 -> "Warbell"; case 19 -> "Laurel Bow"; case 20 -> "Sunforge"; case 21 -> "Strategist's Blade";
+            case 22 -> "Tempest Scepter"; case 23 -> "Oracle's Staff"; case 24 -> "Volcanic Staff"; case 25 -> "Aegis Bulwark"; case 26 -> "Orion's Bow";
+            case 27 -> "Brand of Ares"; case 28 -> "Moon-Hound Crook"; case 29 -> "Undertow Staff";
             default -> "Hero weapon";
         };
     }
@@ -125,17 +126,19 @@ public final class HeroTraits {
     static void ensureOlympianIdentity(Mob mob,int role) {
         if(!CoreHiring.isHero(role))return;
         CompoundTag tag=mob.getPersistentData();
-        if(tag.getBoolean(OLYMPIAN_IDENTITY_TAG))return;
+        if(tag.getInt(OLYMPIAN_IDENTITY_TAG)>=OLYMPIAN_IDENTITY_SCHEMA)return;
         Component current=mob.getCustomName();
         String legacy=CoreHiring.legacyHeroName(role);
+        String previous=CoreHiring.previousOlympianHeroName(role);
         String currentText=current==null?"":current.getString();
-        boolean generatedEnemyLabel=("Enemy Hero · "+legacy).equals(currentText);
-        if(current==null || legacy.equals(currentText) || generatedEnemyLabel) {
+        boolean generatedEnemyLabel=("Enemy Hero · "+legacy).equals(currentText)
+                || ("Enemy Hero · "+previous).equals(currentText);
+        if(current==null || legacy.equals(currentText) || previous.equals(currentText) || generatedEnemyLabel) {
             String replacement=generatedEnemyLabel?"Enemy Hero · "+CoreHiring.NAMES[role]:CoreHiring.NAMES[role];
             ChatFormatting color=generatedEnemyLabel?ChatFormatting.LIGHT_PURPLE:nameColor(CoreHiring.heroTier(role));
             mob.setCustomName(Component.literal(replacement).withStyle(color));
         }
-        tag.putBoolean(OLYMPIAN_IDENTITY_TAG,true);
+        tag.putInt(OLYMPIAN_IDENTITY_TAG,OLYMPIAN_IDENTITY_SCHEMA);
     }
     public static void equip(Mob mob,int role,SimpleContainer inventory) {
         int base = CoreHiring.heroBase(role);

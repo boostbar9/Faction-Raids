@@ -13,6 +13,16 @@ class FormationTacticsTest extends MinecraftTestSupport {
         assertEquals(Formation.SKIRMISH,FormationTactics.choose("mobile",false,true));
         for(String group:List.of("front","ranged","mobile","support","leadership"))assertEquals(Formation.COLUMN,FormationTactics.choose(group,true,false));
     }
+    @Test void hostDoctrineControlsFrontRanksWithoutBreakingSpecialistSafety() {
+        for(Formation doctrine:List.of(Formation.LINE,Formation.SQUARE,Formation.COLUMN,Formation.SKIRMISH,Formation.WEDGE)) {
+            assertEquals(doctrine,FormationTactics.choose(doctrine,"front",false,false));
+            assertEquals(doctrine,FormationTactics.choose(doctrine,"leadership",false,false));
+            assertEquals(Formation.SKIRMISH,FormationTactics.choose(doctrine,"ranged",false,false));
+            assertEquals(Formation.WEDGE,FormationTactics.choose(doctrine,"mobile",false,false));
+            assertEquals(Formation.SQUARE,FormationTactics.choose(doctrine,"support",false,false));
+            assertEquals(Formation.COLUMN,FormationTactics.choose(doctrine,"front",true,false));
+        }
+    }
     @Test void leadersAdvanceAheadWhileRangedAndEngineersKeepTheirBackline() {
         for (String type : List.of("captain", "patrol_leader", "commander",
                 "recruits:captain", "recruit_patrol_leader")) {

@@ -12,6 +12,22 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class EnemyHeroesTest extends MinecraftTestSupport {
+    @Test void invadingHostsOnlyFieldChampionsOfTheirOwnPatron() {
+        for(var host:com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.hosts()) {
+            var reachable=new HashSet<Integer>();
+            for(int roll=0;roll<host.heroWeightTotal();roll++) {
+                var state=new RaidSavedData.RaidState("team:test","siege_core",0);
+                var random=mock(RandomSource.class);
+                when(random.nextInt(100)).thenReturn(0);
+                when(random.nextInt(host.heroWeightTotal())).thenReturn(roll);
+                EnemyHeroes.plan(state,host.factionId(),2,5,12,true,100,true,true,random);
+                assertTrue(host.heroRoles().contains(state.enemyHeroRole));
+                assertEquals(host.factionId(),CoreHiring.heroFaction(state.enemyHeroRole));
+                reachable.add(state.enemyHeroRole);
+            }
+            assertEquals(new HashSet<>(host.heroRoles()),reachable);
+        }
+    }
     @Test void tenPercentWaveChanceAndDisabledOpeningWave() {
         for (int roll = 0; roll < 100; roll++) {
             var state = new RaidSavedData.RaidState("team:test", "siege_core", 0);
