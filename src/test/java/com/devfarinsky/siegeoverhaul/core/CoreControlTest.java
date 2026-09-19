@@ -49,4 +49,10 @@ class CoreControlTest extends MinecraftTestSupport {
         assertEquals(id,loaded.siegeCores.get("team:blue").getUUID("OccupiedClaim"));
         assertEquals(860,loaded.siegeCores.get("team:blue").getInt("RecaptureTicks"));
     }
+    @Test void currentForeignClaimHolderContestsRecoveryWithoutLockingOriginalFactionOut() {
+        assertEquals(1,CoreOccupation.side("team:blue","team:blue","red"));
+        assertEquals(-1,CoreOccupation.side("team:red","team:blue","red"));
+        assertEquals(0,CoreOccupation.side("team:green","team:blue","red"));
+        assertEquals(0,CoreOccupation.side("player:"+java.util.UUID.randomUUID(),"team:blue","red"));
+    }
 }
