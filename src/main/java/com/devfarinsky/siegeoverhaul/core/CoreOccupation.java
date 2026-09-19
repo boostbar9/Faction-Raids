@@ -30,9 +30,21 @@ public final class CoreOccupation {
                 && (!RaidConfig.CORE_CAPTURE_REQUIRE_SIGHT.get() || CaptureRing.visible(level,core,entity));
     }
     public static int[] counts(ServerLevel level, BlockPos pos, String key, Set<UUID> members) {
+        return counts(level, pos, key, members, null);
+    }
+    /**
+     * Count the core's original defenders and hostile occupiers. During
+     * recovery the native claim may have changed hands again; counting that
+     * faction prevents a third party from standing uncontested while also
+     * avoiding a permanent occupation lock.
+     */
+    static int[] counts(ServerLevel level, BlockPos pos, String key, Set<UUID> members, String occupyingFaction) {
         int enemies=0, defenders=0;
         for (var player:level.players()) if (player.isAlive() && !player.isSpectator() && !player.isCreative()
-                && key.equals(SiegeCore.key(player)) && contesting(level,player.position(),pos)) defenders++;
+                && contesting(level,player.position(),pos)) {
+            int side=side(SiegeCore.key(player),key,occupyingFaction);
+            if(side>0)defenders++; else if(side<0)enemies++;
+        }
         int radius=RaidConfig.CORE_CAPTURE_RADIUS.get();
         int vertical=RaidConfig.CORE_CAPTURE_VERTICAL.get();
         for (Mob mob:level.getEntitiesOfClass(Mob.class,new AABB(pos).inflate(radius,vertical,radius),
@@ -41,8 +53,16 @@ public final class CoreOccupation {
                     || key.equals(mob.getPersistentData().getString(com.devfarinsky.siegeoverhaul.camp.CampGuards.TEAM_TAG))
                     || (mob.getTeam()!=null && RaiderFactions.enemy(mob.getTeam().getName())))) enemies++;
             else if (RecruitsBridge.belongsTo(mob,key,members)) defenders++;
+            else if (occupyingFaction!=null && !occupyingFaction.isBlank()
+                    && RecruitsBridge.belongsTo(mob,"team:"+occupyingFaction,Set.of())) enemies++;
         }
         return new int[]{enemies,defenders};
+    }
+    static int side(String actorKey,String defenderKey,String occupyingFaction) {
+        if(defenderKey.equals(actorKey))return 1;
+        if(occupyingFaction!=null && !occupyingFaction.isBlank()
+                && ("team:"+occupyingFaction).equals(actorKey))return -1;
+        return 0;
     }
     public static boolean capture(ServerLevel level, RaidSavedData data, RaidSavedData.RaidState raid, BlockPos pos) {
         CompoundTag core=data.siegeCores.get(raid.teamKey);
@@ -77,7 +97,6 @@ public final class CoreOccupation {
             if(claim.ownerFactionStringId().equals(key.substring(5))) {
                 core.putBoolean("Occupied",false); core.putInt("RecaptureTicks",0); data.setDirty(); continue;
             }
-            if(!RaiderFactions.enemy(claim.ownerFactionStringId())) continue;
             var activeRaid=data.raids.get(key);
             String faction=core.contains("OccupyingFaction")?core.getString("OccupyingFaction"):activeRaid==null?null:activeRaid.factionId;
             if(!core.contains("OriginalClaimName"))core.putString("OriginalClaimName",claim.claimName());
@@ -88,7 +107,7 @@ public final class CoreOccupation {
                 }
             }
             var anchor=data.anchors.get(key);
-            int[] counts=counts(level,pos,key,anchor==null?Set.of():anchor.members());
+            int[] counts=counts(level,pos,key,anchor==null?Set.of():anchor.members(),claim.ownerFactionStringId());
             int max=RaidConfig.CORE_RECAPTURE_SECONDS.get()*20;
             int progress=CoreControl.advance(core.getInt("RecaptureTicks"),max,counts[1],counts[0]);
             core.putInt("RecaptureTicks",progress); data.setDirty();

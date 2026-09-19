@@ -1,3 +1,8 @@
+# 4.43.3 beta
+
+- Keep occupied Siege Cores recoverable when another Recruits faction takes control of the same native claim instead of leaving the occupation permanently stuck.
+- Count the current claim holder's nearby players and Recruits soldiers as opposition during recovery, while unrelated factions remain neutral to the capture meter.
+
 # 4.43.2 beta
 
 - Normalize saved `team:<id>` keys before calling Villager Recruits' diplomacy manager, so active-siege hostility is applied to the real faction instead of an unknown prefixed identity.
