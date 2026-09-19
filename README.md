@@ -29,11 +29,12 @@ The menu sizes itself from the player's Minecraft-scaled viewport, selects detai
 | Hero | Signature skill |
 | --- | --- |
 | **Leon, Ares' Fury** | At full health, a melee hit grants a short absorption shield. |
-| **Helena, Apollo's Dawn** | Grants an emergency shield to one nearby wounded ally belonging to her owner. |
-| **Iris, Zeus' Stormbow** | Every fourth arrow hit can chain magical damage to two additional nearby siege enemies. |
+| **Helena, Hephaestus' Ward** | Grants an emergency shield to one nearby wounded ally belonging to her owner. |
+| **Melia, Poseidon's Tempest** | Unleashes a bounded tidal nova every 15 seconds. |
+| **Thalia, Athena's Aegis** | Blocked hits ward nearby allies. |
 | **Kyros, Artemis' Frost** | Bolts briefly slow up to three nearby siege enemies. |
 
-All twenty heroes are Olympian champions with patron-themed names, equipment and ability descriptions. Hero magic uses bounded effects and cooldowns while retaining the recruits' normal combat and movement. Existing default-named heroes adopt their Olympian identities without replacing equipment; player-renamed heroes keep their custom names.
+All twenty heroes are divided evenly among the five Olympian hosts, with patron-themed names, equipment and ability descriptions. Enemy hosts only field their own four champions; the player's rotating recruitment offer can still feature any champion. Hero magic uses bounded effects and cooldowns while retaining the recruits' normal combat and movement. Existing default-named heroes adopt their current Olympian identities without replacing equipment; player-renamed heroes keep their custom names.
 
 ## Emerald Loot Boxes
 
@@ -47,7 +48,7 @@ Each box awards **one randomly selected reward stack**. Rarity odds are **Common
 
 ## How a Siege Unfolds
 
-1. **An Olympian foothold.** A host of Poseidon, Ares, Hephaestus, Athena, or Artemis searches for a suitable camp site and registers a real Villager Recruits claim. Each has distinct map colors, divine banners, and equipment identities.
+1. **An Olympian foothold.** A host of Poseidon, Ares, Hephaestus, Athena, or Artemis searches for a suitable camp site and registers a real Villager Recruits claim. Each has distinct map colors, divine banners, equipment, camp architecture, troop doctrine, champions and a signature Strategos command.
 2. **Time to prepare.** New sieges allow **12 minutes of preparation by default**, split between establishment, fortification, and army muster. Defenders can prepare their troops or disrupt the enemy camp.
 3. **Builders get to work.** Armored Workers 2 builders use native building jobs and supplied materials. Camp guards defend the site while construction and later upgrades progress.
 4. **The War Gate opens.** A protected reinforcement gate provides a designated ground-level arrival point. The gate and its graded access road arrive fully assembled when the camp is established, leaving builders free to work on the camp itself. The gate is removed during siege cleanup.

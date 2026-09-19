@@ -4,6 +4,21 @@ import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 class WaveComposerTest extends MinecraftTestSupport {
+    @Test void everyOlympianHostUsesItsOwnDoctrineAndOpeningRoster() {
+        RaidConfig.ENABLE_WAVE_COMPOSITION.set(true);
+        RaidConfig.ENABLE_COMMANDER.set(false);
+        RaidConfig.ENABLE_ILLUSIONERS.set(false);
+        for(var host:com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.hosts()) {
+            var opening=WaveComposer.compose(host.factionId(),1,5,12);
+            var assault=WaveComposer.compose(host.factionId(),4,5,20);
+            assertEquals(host.formation(),opening.formation);
+            assertEquals(host.waveLabel(),opening.label);
+            for(int i=0;i<host.openingRoles().size();i++)assertEquals(host.openingRoles().get(i),opening.roleAt(i));
+            for(int i=0;i<host.assaultRoles().size();i++)assertEquals(host.assaultRoles().get(i),assault.roleAt(i));
+            assertEquals(12,opening.roleCounts.values().stream().mapToInt(Integer::intValue).sum());
+            assertEquals(20,assault.roleCounts.values().stream().mapToInt(Integer::intValue).sum());
+        }
+    }
     @Test void reservedSlotsNeverSkipOrDuplicateTheComposition() {
         for(boolean commander:new boolean[]{false,true})for(boolean illusions:new boolean[]{false,true})for(int wave=1;wave<=5;wave++) {
             int cursor=0;

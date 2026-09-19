@@ -91,7 +91,7 @@ public final class CampDevelopment {
         int towardX=raid.campPos.getX()-center.getX(), towardZ=raid.campPos.getZ()-center.getZ();
         Direction entrance=Math.abs(towardX)>=Math.abs(towardZ)
                 ? (towardX>=0?Direction.EAST:Direction.WEST) : (towardZ>=0?Direction.SOUTH:Direction.NORTH);
-        plan.putAll(CampUpgradeLayout.structure(center, entrance, raid.campUpgradeStage));
+        plan.putAll(CampUpgradeLayout.structure(center, entrance, raid.campUpgradeStage, raid.factionId));
         raid.pendingCampBlocks.putAll(plan);
         // Never fall back to remote placement for an upgrade or replace an obstructing player block.
         if(NativeCampConstruction.start(level,raid)) { CampStructures.record(raid,raid.campUpgradeStage,center,entrance); raid.campUpgradeStage++; return true; }

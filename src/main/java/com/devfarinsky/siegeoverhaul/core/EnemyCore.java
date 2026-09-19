@@ -22,22 +22,38 @@ public final class EnemyCore {
     }
     /**
      * Keep decoration around the core, relative to the plinth-top centre {@code base}.
-     * A five-wide marble-like diorite plinth with four quartz columns capped
-     * by divine lights marks the Olympian sanctuary. The core
+     * A five-wide patron-themed plinth with four tall columns capped by divine
+     * lights marks the Olympian sanctuary. The core
      * sits one block above the plinth centre; the pillars are diagonal and the
      * plinth top is open, so nothing blocks the horizontal line of sight the
      * capture ring requires.
      */
     public static Map<BlockPos, String> keepBlueprint(BlockPos base) {
+        return keepBlueprint(base, "");
+    }
+    public static Map<BlockPos, String> keepBlueprint(BlockPos base, String factionId) {
+        KeepPalette palette=keepPalette(factionId);
         Map<BlockPos, String> plan = new LinkedHashMap<>();
         for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++)
-            plan.put(base.offset(dx, 0, dz), "minecraft:polished_diorite");
+            plan.put(base.offset(dx, 0, dz), palette.plinth);
         for (int cx : new int[]{-2, 2}) for (int cz : new int[]{-2, 2}) {
-            for (int y = 1; y <= 5; y++) plan.put(base.offset(cx, y, cz), "minecraft:quartz_pillar");
-            plan.put(base.offset(cx, 6, cz), "minecraft:sea_lantern");
+            for (int y = 1; y <= 5; y++) plan.put(base.offset(cx, y, cz), palette.pillar);
+            plan.put(base.offset(cx, 6, cz), palette.light);
         }
         return plan;
     }
+
+    private static KeepPalette keepPalette(String factionId) {
+        return switch(factionId==null?"":factionId) {
+            case "blackbay_reavers" -> new KeepPalette("minecraft:prismarine_bricks","minecraft:dark_prismarine","minecraft:sea_lantern");
+            case "hollowfang_clan" -> new KeepPalette("minecraft:polished_blackstone_bricks","minecraft:chiseled_polished_blackstone","minecraft:shroomlight");
+            case "emberchant_zealots" -> new KeepPalette("minecraft:cut_copper","minecraft:polished_blackstone_bricks","minecraft:shroomlight");
+            case "crownfall_exiles" -> new KeepPalette("minecraft:quartz_bricks","minecraft:quartz_pillar","minecraft:sea_lantern");
+            case "wilds_marauders" -> new KeepPalette("minecraft:mossy_stone_bricks","minecraft:stripped_birch_log","minecraft:shroomlight");
+            default -> new KeepPalette("minecraft:polished_diorite","minecraft:quartz_pillar","minecraft:sea_lantern");
+        };
+    }
+    private record KeepPalette(String plinth,String pillar,String light) {}
     /** The core rests one block above the plinth centre so raiders can stand beside it. */
     public static BlockPos corePos(BlockPos base) { return base.above(); }
 
@@ -69,7 +85,7 @@ public final class EnemyCore {
                                    java.util.function.Predicate<BlockPos> allowed) {
         BlockPos core = corePos(base);
         if (!EnemyCoreSite.clear(level, raid, base, allowed)) return false;
-        Map<BlockPos, String> blocks = new LinkedHashMap<>(keepBlueprint(base));
+        Map<BlockPos, String> blocks = new LinkedHashMap<>(keepBlueprint(base, raid.factionId));
         blocks.put(core, "siegeoverhaul:siege_core");
         List<CampTerrain.Change> changes = new ArrayList<>();
         for (var entry : blocks.entrySet()) {

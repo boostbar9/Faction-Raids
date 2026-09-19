@@ -7,6 +7,24 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EnemyCoreKeepTest extends MinecraftTestSupport {
+    @Test void everyHostCoreKeepUsesItsOwnPaletteWithoutChangingCaptureSpace() {
+        BlockPos base=new BlockPos(0,64,0);
+        var expected=Map.of(
+                "blackbay_reavers","minecraft:prismarine_bricks",
+                "hollowfang_clan","minecraft:polished_blackstone_bricks",
+                "emberchant_zealots","minecraft:cut_copper",
+                "crownfall_exiles","minecraft:quartz_bricks",
+                "wilds_marauders","minecraft:mossy_stone_bricks");
+        var palettes=new java.util.HashSet<java.util.Collection<String>>();
+        for(var entry:expected.entrySet()) {
+            var plan=EnemyCore.keepBlueprint(base,entry.getKey());
+            assertEquals(49,plan.size());
+            assertTrue(plan.containsValue(entry.getValue()));
+            assertFalse(plan.containsKey(EnemyCore.corePos(base)));
+            assertTrue(palettes.add(new java.util.HashSet<>(plan.values())));
+        }
+        assertEquals(5,palettes.size());
+    }
     @Test void keepIsBoundedRaisedAndLeavesTheCoreVisibleForCapture() {
         BlockPos base = new BlockPos(120, 68, -240);
         Map<BlockPos, String> plan = EnemyCore.keepBlueprint(base);

@@ -2616,7 +2616,7 @@ public final class RaidEvents {
         state.waveStartingCount = 0;
         state.pendingWaveSpawns = wanted;
         state.squadsSpawned = 0;
-        com.devfarinsky.siegeoverhaul.core.EnemyHeroes.plan(state,
+        com.devfarinsky.siegeoverhaul.core.EnemyHeroes.plan(state, state.factionId,
                 EndlessSiege.active(state) ? EndlessSiege.chapterWave(nextWave) : nextWave,
                 EndlessSiege.active(state) ? 5 : RaidConfig.WAVES.get(), wanted,
                 RaidConfig.USE_RECRUIT_INVADERS.get(), RaidConfig.ENEMY_HERO_CHANCE_PERCENT.get(),
@@ -2626,7 +2626,9 @@ public final class RaidEvents {
         // counts (shieldmen/bowmen/captains/etc.) and a formation shape the
         // FormationDirector will hold on advance.
         com.devfarinsky.siegeoverhaul.waves.WaveComposition composition =
-                com.devfarinsky.siegeoverhaul.waves.WaveComposer.compose(EndlessSiege.active(state) ? EndlessSiege.chapterWave(nextWave) : nextWave, EndlessSiege.active(state) ? 5 : RaidConfig.WAVES.get(), wanted);
+                com.devfarinsky.siegeoverhaul.waves.WaveComposer.compose(state.factionId,
+                        EndlessSiege.active(state) ? EndlessSiege.chapterWave(nextWave) : nextWave,
+                        EndlessSiege.active(state) ? 5 : RaidConfig.WAVES.get(), wanted);
         ACTIVE_COMPOSITIONS.put(anchor.teamKey(), composition);
         state.waveFormation = composition == null ? "NONE" : composition.formation.name();
         state.ticksToNextWave = 0;
@@ -3008,7 +3010,8 @@ public final class RaidEvents {
         var comp=ACTIVE_COMPOSITIONS.get(teamKey);
         if(comp==null && RaidConfig.ENABLE_WAVE_COMPOSITION.get()) {
             var raid=RaidSavedData.get(level.getServer()).raids.get(teamKey);
-            if(raid!=null) comp=com.devfarinsky.siegeoverhaul.waves.WaveComposer.compose(wave,totalWaves,raid.waveStartingCount+raid.pendingWaveSpawns);
+            if(raid!=null) comp=com.devfarinsky.siegeoverhaul.waves.WaveComposer.compose(
+                    raid.factionId,wave,totalWaves,raid.waveStartingCount+raid.pendingWaveSpawns);
         }
         if(compIndex>=0 && comp!=null && RaidConfig.ENABLE_WAVE_COMPOSITION.get()) recruitType=comp.roleAt(compIndex);
 
@@ -5430,7 +5433,9 @@ public final class RaidEvents {
                 Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20);
         int nextWaveNumber = EndlessSiege.active(state) ? (int)Math.min(Integer.MAX_VALUE,state.wave+1L) : Math.min(state.wave + 1, RaidConfig.WAVES.get());
         com.devfarinsky.siegeoverhaul.waves.WaveComposition nextPreview =
-                com.devfarinsky.siegeoverhaul.waves.WaveComposer.compose(EndlessSiege.active(state) ? EndlessSiege.chapterWave(nextWaveNumber) : nextWaveNumber, EndlessSiege.active(state) ? 5 : RaidConfig.WAVES.get(),
+                com.devfarinsky.siegeoverhaul.waves.WaveComposer.compose(state.factionId,
+                        EndlessSiege.active(state) ? EndlessSiege.chapterWave(nextWaveNumber) : nextWaveNumber,
+                        EndlessSiege.active(state) ? 5 : RaidConfig.WAVES.get(),
                         Math.max(1, RaidConfig.BASE_ENEMIES_PER_WAVE.get()));
         String nextLabel = nextWaveNumber <= state.wave ? "Final wave in progress" :
                 "Wave " + nextWaveNumber + (nextPreview.label.isEmpty() ? "" : " — " + nextPreview.label);
