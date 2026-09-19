@@ -8,7 +8,9 @@ import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.RegistryObject;
 
 /**
- * Custom banner patterns for the five raiding factions. Each pattern is a
+ * Custom banner patterns for the five Olympian war hosts. Registry names and
+ * hashnames retain their original persistence ids so existing banners keep
+ * rendering after the 4.44 visual conversion. Each pattern is a
  * white-on-transparent 16x16 mask under
  * {@code assets/siegeoverhaul/textures/entity/banner/&lt;id&gt;.png}
  * (and a matching {@code entity/shield/&lt;id&gt;.png}) which vanilla Minecraft

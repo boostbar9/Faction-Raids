@@ -38,6 +38,11 @@ class CampUpgradeLayoutTest extends MinecraftTestSupport {
         assertTrue(CampUpgradeLayout.structure(center,Direction.NORTH,0).containsValue("minecraft:hay_block"));
         assertTrue(CampUpgradeLayout.structure(center,Direction.NORTH,1).containsValue("minecraft:smithing_table"));
         assertTrue(CampUpgradeLayout.structure(center,Direction.NORTH,2).containsValue("minecraft:cartography_table"));
+        for(int stage=0;stage<3;stage++) {
+            var plan=CampUpgradeLayout.structure(center,Direction.NORTH,stage);
+            assertTrue(plan.containsValue("minecraft:quartz_pillar"));
+            assertTrue(plan.containsValue(stage==2?"minecraft:quartz_bricks":"minecraft:polished_diorite"));
+        }
         assertThrows(IllegalArgumentException.class,()->CampUpgradeLayout.structure(center,Direction.UP,0));
     }
 }

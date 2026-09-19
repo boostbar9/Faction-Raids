@@ -4,7 +4,7 @@
 
 **Build a faction. Raise an army. Defend your Siege Core.**
 
-Enemy factions claim a foothold near your territory, build a fortified war camp, and prepare an army to take your land. Hire recruits, recruit magical heroes, and hold the line when the assault begins.
+Five rival Olympian war hosts claim footholds near your territory, raise temple-camps, and prepare armies to take your land. Hire mythic champions, rally your recruits, and hold the line when the assault begins.
 
 > **Formerly Faction Raids.** Same project and author, with a new core-based siege system. **Beds and respawn anchors no longer establish new raid targets.**
 
@@ -18,7 +18,7 @@ The core opens a responsive five-tab command center:
 
 - **Army:** two recruit offers, one worker offer, and a featured hero, rotating every **15 minutes of server runtime**. Each offer can be purchased once per rotation across your faction. Catapult and ballista crews are delivered as deployment kits so you can place them on a clear, flat area sized for the selected engine away from an indoor Core.
 - **Loot:** spend emeralds on hidden equipment and supply rewards, or activate short personal blessings.
-- **Bank:** manage the shared faction treasury and review the member roster and recent activity.
+- **Treasury:** manage the shared faction treasury and review the member roster and recent activity.
 - **Territory:** purchase permanent faction-wide upgrades.
 - **Intel:** browse unit reference cards, enemy lore, and field guidance.
 
@@ -28,12 +28,12 @@ The menu sizes itself from the player's Minecraft-scaled viewport, selects detai
 
 | Hero | Signature skill |
 | --- | --- |
-| **Kael Bloodthorn** | At full health, a melee hit grants a short absorption shield. |
-| **Branna Dawnwarden** | Grants an emergency shield to one nearby wounded ally belonging to her owner. |
-| **Sylva Stormbow** | Every fourth arrow hit can chain magical damage to two additional nearby siege enemies. |
-| **Orin Frostbinder** | Bolts briefly slow up to three nearby siege enemies. |
+| **Leon, Ares' Fury** | At full health, a melee hit grants a short absorption shield. |
+| **Helena, Apollo's Dawn** | Grants an emergency shield to one nearby wounded ally belonging to her owner. |
+| **Iris, Zeus' Stormbow** | Every fourth arrow hit can chain magical damage to two additional nearby siege enemies. |
+| **Kyros, Artemis' Frost** | Bolts briefly slow up to three nearby siege enemies. |
 
-Hero magic uses bounded effects and cooldowns while retaining the recruits' normal combat and movement. Existing hired heroes gain their new role abilities without receiving replacement equipment.
+All twenty heroes are Olympian champions with patron-themed names, equipment and ability descriptions. Hero magic uses bounded effects and cooldowns while retaining the recruits' normal combat and movement. Existing default-named heroes adopt their Olympian identities without replacing equipment; player-renamed heroes keep their custom names.
 
 ## Emerald Loot Boxes
 
@@ -47,7 +47,7 @@ Each box awards **one randomly selected reward stack**. Rarity odds are **Common
 
 ## How a Siege Unfolds
 
-1. **An enemy foothold.** An attacking faction searches for a suitable camp site and registers a real Villager Recruits claim. Enemy factions have distinct map colors, banners, and equipment identities.
+1. **An Olympian foothold.** A host of Poseidon, Ares, Hephaestus, Athena, or Artemis searches for a suitable camp site and registers a real Villager Recruits claim. Each has distinct map colors, divine banners, and equipment identities.
 2. **Time to prepare.** New sieges allow **12 minutes of preparation by default**, split between establishment, fortification, and army muster. Defenders can prepare their troops or disrupt the enemy camp.
 3. **Builders get to work.** Armored Workers 2 builders use native building jobs and supplied materials. Camp guards defend the site while construction and later upgrades progress.
 4. **The War Gate opens.** A protected reinforcement gate provides a designated ground-level arrival point. The gate and its graded access road arrive fully assembled when the camp is established, leaving builders free to work on the camp itself. The gate is removed during siege cleanup.

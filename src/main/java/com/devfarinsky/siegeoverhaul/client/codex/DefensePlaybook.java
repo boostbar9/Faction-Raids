@@ -35,8 +35,8 @@ public final class DefensePlaybook {
                     "The Army tab always shows two recruit offers, one worker, and one featured hero. Stock is shared across your whole faction and rotates every 15 minutes, so coordinate purchases with your team."),
             new Tip("Hire","Read the card before you buy",
                     "Each hire card shows the role, a short description, its kit (armor and weapon), and the cost. Hover for extra flavor. Recruits fight, workers gather, heroes have unique abilities."),
-            new Tip("Hire","Heroes only spawn on Sundays",
-                    "Four heroes rotate through the featured slot: Kael Bloodthorn, Branna Dawnwarden, Sylva Stormbow, and Orin Frostbinder. They cost more but bring passive auras that boost your recruits."),
+            new Tip("Hire","Olympian champions",
+                    "Twenty Olympian champions rotate through the featured slot, from Ares' front-line fighters to Athena's guardians and Artemis' hunters. Each keeps a distinct signature ability and rarity."),
             // === Defense ===
             new Tip("Defend","Hold the core ring",
                     "During a raid, the enemy tries to enter the ring around your Siege Core. If they outnumber your defenders inside it long enough, they capture the claim. Equal numbers pause capture. A defending majority reverses it."),
@@ -55,7 +55,7 @@ public final class DefensePlaybook {
             new Tip("Intel","Know your enemy",
                     "The Intel tab lists every raider unit: their tag, stats, behavior, counter, and drops. Read it before the first wave so you're not surprised by sappers or siege engineers."),
             new Tip("Intel","Faction lore matters",
-                    "Each attacking faction has its own theme: Blackbay Reavers strike from the water, Hollowfang Clan brute-forces, Emberchant Zealots burn, Crownfall Exiles fight for lost titles, Wilds Marauders swarm. Their unit mix reflects that."),
+                    "Each Olympian host fights differently: Poseidon's Tide lands from the water, Ares presses the breach, Hephaestus fields siege craft, Athena coordinates captains, and Artemis hunts from range."),
             // === Recapture and counterattack ===
             new Tip("Recapture","Take your territory back",
                     "If a raid captures your claim, the core still stands. Rally your faction, get more bodies into the ring than the occupiers, and hold the majority until recapture completes. The claim flips back."),

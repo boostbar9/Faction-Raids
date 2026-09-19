@@ -27,12 +27,12 @@ public final class CampStructures {
     private CampStructures() {}
 
     public enum Kind {
-        GRANARY(0, "granary", "Granary", "minecraft:hay_block",
-                "Supply Depot: enemy camp guards mend their wounds while it stands."),
-        ARMOURY(1, "armoury", "Armoury", "minecraft:anvil",
-                "Forge: enemy camp guards fight with sharper weapons while it stands."),
-        COMMAND_POST(2, "command", "Command Post", "minecraft:cartography_table",
-                "War Room: enemy waves are coordinated to arrive faster while it stands.");
+        GRANARY(0, "granary", "Sanctuary of Demeter", "minecraft:hay_block",
+                "Sacred Stores: enemy camp guards mend their wounds while it stands."),
+        ARMOURY(1, "armoury", "Forge of Hephaestus", "minecraft:anvil",
+                "Divine Forge: enemy camp guards fight with sharper weapons while it stands."),
+        COMMAND_POST(2, "command", "Strategion of Athena", "minecraft:cartography_table",
+                "War Council: enemy waves are coordinated to arrive faster while it stands.");
         public final int stage;
         public final String key, title, keystoneBlock, purpose;
         Kind(int stage, String key, String title, String keystoneBlock, String purpose) {

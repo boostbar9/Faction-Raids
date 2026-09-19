@@ -15,21 +15,25 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * Centralized banner descriptors for each of the five raiding factions.
+ * Centralized banner descriptors for the five Olympian war hosts.
  *
  * <p>A "banner" here is really a two-layer stack: a base dye color plus one
  * custom pattern (the faction sigil) tinted a contrasting overlay color.
- * Faction Raids composes this stack into an ItemStack (for loot drops) or
+ * Siege Overhaul composes this stack into an ItemStack (for loot drops) or
  * directly into a BlockEntity NBT chunk (for camp-planted banners) via
  * {@link #applyToBlockEntityTag(CompoundTag, FactionId)}.</p>
  *
- * <p>The five factions and their color language:</p>
+ * <p>The enum constants and string ids intentionally retain their pre-4.44
+ * names. They are persistence keys used by existing raids, claims, configs and
+ * trophy items; only the player-facing identity changes.</p>
+ *
+ * <p>The five Olympian hosts and their color language:</p>
  * <ul>
- *   <li><b>Blackbay Reavers</b>: black base + white wave (salt spray on tar)</li>
- *   <li><b>Hollowfang Clan</b>: gray base + white tusk (bone against mud)</li>
- *   <li><b>Emberchant Zealots</b>: black base + orange flame (fire in ash)</li>
- *   <li><b>Crownfall Exiles</b>: purple base + yellow crown (fallen royalty)</li>
- *   <li><b>Wilds Marauders</b>: brown base + white clubs (rag flag)</li>
+ *   <li><b>Poseidon's Tide</b>: blue base + cyan wave</li>
+ *   <li><b>Warhost of Ares</b>: red base + black war-fang</li>
+ *   <li><b>Forgeguard of Hephaestus</b>: black base + orange forge flame</li>
+ *   <li><b>Aegis Order of Athena</b>: white base + light-blue owl crown</li>
+ *   <li><b>Silver Hunt of Artemis</b>: green base + light-gray crossed weapons</li>
  * </ul>
  *
  * <p>The corresponding standing/wall banner Blocks
@@ -42,24 +46,34 @@ public final class FactionBanners {
     /** Enum-like descriptor. Uses the same string ids as FactionLore. */
     public enum FactionId {
         BLACKBAY_REAVERS("blackbay_reavers",
-                DyeColor.BLACK, DyeColor.WHITE, ModBannerPatterns.BLACKBAY_WAVE),
+                "Poseidon's Tide", "Poseidon",
+                DyeColor.BLUE, DyeColor.CYAN, ModBannerPatterns.BLACKBAY_WAVE),
         HOLLOWFANG_CLAN("hollowfang_clan",
-                DyeColor.GRAY, DyeColor.WHITE, ModBannerPatterns.HOLLOWFANG_TUSK),
+                "Warhost of Ares", "Ares",
+                DyeColor.RED, DyeColor.BLACK, ModBannerPatterns.HOLLOWFANG_TUSK),
         EMBERCHANT_ZEALOTS("emberchant_zealots",
+                "Forgeguard of Hephaestus", "Hephaestus",
                 DyeColor.BLACK, DyeColor.ORANGE, ModBannerPatterns.EMBERCHANT_FLAME),
         CROWNFALL_EXILES("crownfall_exiles",
-                DyeColor.PURPLE, DyeColor.YELLOW, ModBannerPatterns.CROWNFALL_CROWN),
+                "Aegis Order of Athena", "Athena",
+                DyeColor.WHITE, DyeColor.LIGHT_BLUE, ModBannerPatterns.CROWNFALL_CROWN),
         WILDS_MARAUDERS("wilds_marauders",
-                DyeColor.BROWN, DyeColor.WHITE, ModBannerPatterns.WILDS_CLUBS);
+                "Silver Hunt of Artemis", "Artemis",
+                DyeColor.GREEN, DyeColor.LIGHT_GRAY, ModBannerPatterns.WILDS_CLUBS);
 
         public final String id;
+        public final String displayName;
+        public final String patron;
         public final DyeColor baseColor;
         public final DyeColor patternColor;
         private final RegistryObject<BannerPattern> pattern;
 
-        FactionId(String id, DyeColor baseColor, DyeColor patternColor,
+        FactionId(String id, String displayName, String patron,
+                  DyeColor baseColor, DyeColor patternColor,
                   RegistryObject<BannerPattern> pattern) {
             this.id = id;
+            this.displayName = displayName;
+            this.patron = patron;
             this.baseColor = baseColor;
             this.patternColor = patternColor;
             this.pattern = pattern;
@@ -121,7 +135,7 @@ public final class FactionBanners {
         // NBT into the ItemStack so the pattern survives pickup / placement.
         stack.getOrCreateTag().put("BlockEntityTag", beTag);
         // Bake a display name using the block.minecraft.banner.<hashname>.<color> key
-        // so the item tooltip reads e.g. "Blackbay Reavers" instead of "Black Banner".
+        // so the item tooltip identifies the Olympian host instead of a plain banner.
         return stack;
     }
 

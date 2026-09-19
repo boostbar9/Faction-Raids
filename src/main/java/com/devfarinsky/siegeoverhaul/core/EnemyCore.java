@@ -22,8 +22,8 @@ public final class EnemyCore {
     }
     /**
      * Keep decoration around the core, relative to the plinth-top centre {@code base}.
-     * A five-wide raised stone-brick plinth with four corner pillars capped by
-     * beacons marks the town centre and stays visible over the camp. The core
+     * A five-wide marble-like diorite plinth with four quartz columns capped
+     * by divine lights marks the Olympian sanctuary. The core
      * sits one block above the plinth centre; the pillars are diagonal and the
      * plinth top is open, so nothing blocks the horizontal line of sight the
      * capture ring requires.
@@ -31,9 +31,9 @@ public final class EnemyCore {
     public static Map<BlockPos, String> keepBlueprint(BlockPos base) {
         Map<BlockPos, String> plan = new LinkedHashMap<>();
         for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++)
-            plan.put(base.offset(dx, 0, dz), "minecraft:stone_bricks");
+            plan.put(base.offset(dx, 0, dz), "minecraft:polished_diorite");
         for (int cx : new int[]{-2, 2}) for (int cz : new int[]{-2, 2}) {
-            for (int y = 1; y <= 5; y++) plan.put(base.offset(cx, y, cz), "minecraft:stone_bricks");
+            for (int y = 1; y <= 5; y++) plan.put(base.offset(cx, y, cz), "minecraft:quartz_pillar");
             plan.put(base.offset(cx, 6, cz), "minecraft:sea_lantern");
         }
         return plan;

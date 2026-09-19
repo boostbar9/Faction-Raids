@@ -22,39 +22,40 @@ public final class RaiderFactionRegistry {
 
     static {
         Map<String, RaiderFaction> m = new LinkedHashMap<>();
-        // Coastal raiders — favour naval + loot pretexts.
+        // Persistence ids stay unchanged so existing worlds/configs remain valid.
+        // Poseidon's coastal host favours naval + loot pretexts.
         m.put("blackbay_reavers", new RaiderFaction(
                 "blackbay_reavers",
-                "the Blackbay Reavers",
-                "Ship-Wolves",
+                "Poseidon's Tide",
+                "Trident-Bearers",
                 ChatFormatting.DARK_AQUA,
                 Set.of("raider", "loot", "naval")));
-        // Highland warband — territorial pretexts.
+        // Ares favours direct conquest and retaliation.
         m.put("hollowfang_clan", new RaiderFaction(
                 "hollowfang_clan",
-                "the Hollowfang Clan",
-                "Stone-Reapers",
+                "the Warhost of Ares",
+                "Bronze-Blooded",
                 ChatFormatting.DARK_RED,
                 Set.of("raider", "territory", "retaliation")));
-        // Zealots — creed pretexts and taunts about relics/omens.
+        // Hephaestus gives the siege engineers a divine forge identity.
         m.put("emberchant_zealots", new RaiderFaction(
                 "emberchant_zealots",
-                "the Emberchant Zealots",
-                "Ash-Prophets",
+                "the Forgeguard of Hephaestus",
+                "Flame-Smiths",
                 ChatFormatting.GOLD,
                 Set.of("religious", "retaliation", "raider")));
-        // Ruined nobility — old grievances, taxes, insults.
+        // Athena's disciplined host favours territorial and political pretexts.
         m.put("crownfall_exiles", new RaiderFaction(
                 "crownfall_exiles",
-                "the Crownfall Exiles",
-                "Lost-Banners",
-                ChatFormatting.LIGHT_PURPLE,
+                "the Aegis Order of Athena",
+                "Owl-Shields",
+                ChatFormatting.AQUA,
                 Set.of("retaliation", "territory", "insult")));
-        // Generic marauders — the fallback that accepts anything.
+        // Artemis' roaming hunt remains the broad fallback that accepts anything.
         m.put("wilds_marauders", new RaiderFaction(
                 "wilds_marauders",
-                "the Wilds Marauders",
-                "Green-Blades",
+                "the Silver Hunt of Artemis",
+                "Moon-Arrows",
                 ChatFormatting.DARK_GREEN,
                 Set.of()));
         FACTIONS = Collections.unmodifiableMap(m);

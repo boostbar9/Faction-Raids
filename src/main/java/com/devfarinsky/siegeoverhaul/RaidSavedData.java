@@ -641,13 +641,14 @@ public final class RaidSavedData extends SavedData {
         public com.devfarinsky.siegeoverhaul.narrative.RaidNarrative narrative;
 
         /**
-         * Which of the five raiding factions is attacking this raid. Set once
+         * Which of the five Olympian war hosts is attacking this raid. Set once
          * at raid start by {@code RaidEvents.pickFaction()} and persisted so
          * banners, lore, and future territory logic stay consistent across a
          * server restart. Null on raids loaded from pre-2.29.0 saves — callers
          * must fall back to a safe default.
          *
-         * <p>Valid values: {@code blackbay_reavers}, {@code hollowfang_clan},
+         * <p>Valid values intentionally remain the legacy persistence ids:
+         * {@code blackbay_reavers}, {@code hollowfang_clan},
          * {@code emberchant_zealots}, {@code crownfall_exiles},
          * {@code wilds_marauders}. These match the ids registered in
          * {@code FactionLore}.</p>

@@ -26,29 +26,30 @@ public final class HeroTraits {
     private HeroTraits() {}
     private static final UUID WILDSONG_ATTACK_SPEED_ID = UUID.fromString("3f68d978-7160-42e3-a81e-5476f362f969");
     private static final String WILDSONG_ATTACK_SPEED_TAG = "SiegeWildsongAttackSpeedUntil";
+    private static final String OLYMPIAN_IDENTITY_TAG = "SiegeOlympianHeroIdentity";
     /** Signature-ability description shown on hero cards. Keep concise (fits card). */
     public static String description(int role) {
         return switch(role) {
-            case 10 -> "Ironoath: every third melee hit heals 1 heart";
-            case 11 -> "Stonehand: on block, allies within 4 blocks take 25% less damage";
-            case 12 -> "Stormbow: every fourth arrow chains lightning to two nearby foes";
-            case 13 -> "Frostbinder: a bolt slows up to three enemies for 3s";
-            case 14 -> "Bloodthorn: at full health, first hit grants absorption";
-            case 15 -> "Dawnwarden: shields an ally below 30% health for 5s";
-            case 16 -> "Emberstep: melee hits ignite the target for 4s";
-            case 17 -> "Hollowveil: every third arrow marks target for +30% damage";
-            case 18 -> "Warbell: on block, a shockwave staggers nearby enemies";
-            case 19 -> "Verdant: arrows root the target for 2s";
-            case 20 -> "Grimwatch: bolts burst in a piercing impact zone";
-            case 21 -> "Wildsong: kills grant +20% attack speed for 6s";
-            case 22 -> "Voidweaver mage: casts a void nova every 15s";
-            case 23 -> "Starweaver mage: melee hits arc starlight to a nearby foe";
-            case 24 -> "Ashenheart mage: melee hits trigger a flame burst (3s)";
-            case 25 -> "Ironclad: Resistance II aura to nearby allies";
-            case 26 -> "Skyrender: arrows split into three tracers on hit";
-            case 27 -> "Solmyra the Radiant: sunlight burns all foes within 8 blocks every 20s";
-            case 28 -> "Nightcaller: summons two shadow wolves for 30s (45s)";
-            case 29 -> "Chronos: slows all enemies within 10 blocks for 4s (30s)";
+            case 10 -> "Ares' Blade: every third melee hit heals 1 heart";
+            case 11 -> "Athena's Aegis: blocked hits ward nearby allies";
+            case 12 -> "Zeus' Stormbow: every fourth arrow chains lightning";
+            case 13 -> "Artemis' Moonfrost: a bolt slows up to three foes";
+            case 14 -> "Ares' Fury: a full-health strike grants absorption";
+            case 15 -> "Apollo's Dawn: shields a badly wounded ally";
+            case 16 -> "Hephaestus' Flame: melee hits ignite the target";
+            case 17 -> "Hermes' Veil: every third arrow marks its target";
+            case 18 -> "Ares' Warbell: blocked hits unleash a shockwave";
+            case 19 -> "Artemis' Roots: arrows root the target for 2s";
+            case 20 -> "Apollo's Sunlance: bolts burst through an impact zone";
+            case 21 -> "Silver Hunt: kills grant +20% attack speed for 6s";
+            case 22 -> "Athena's Judgment: casts an arcane nova every 15s";
+            case 23 -> "Athena's Oracle: melee hits arc into a nearby foe";
+            case 24 -> "Forgefire: melee hits trigger a flame burst (3s)";
+            case 25 -> "Aegis Bulwark: Resistance II aura to nearby allies";
+            case 26 -> "Artemis' Skyhunt: arrows split into three tracers";
+            case 27 -> "Apollo's Chosen: sunlight burns nearby foes";
+            case 28 -> "Artemis' Hounds: summons two shadow wolves";
+            case 29 -> "Hermes' Hourglass: heavily slows nearby foes";
             default -> "";
         };
     }
@@ -101,11 +102,11 @@ public final class HeroTraits {
     /** Weapon name per hero. Adds flavor and reads at a glance in the tooltip. */
     private static String weaponName(int role) {
         return switch(role) {
-            case 10 -> "Ironoath"; case 11 -> "Stonebreaker";
-            case 12 -> "Thornsong"; case 13 -> "Stormbolt"; case 14 -> "Cinderfang"; case 15 -> "Oathkeeper";
-            case 16 -> "Emberedge"; case 17 -> "Hollowshaft"; case 18 -> "Warbell"; case 19 -> "Verdantbow"; case 20 -> "Grimlance"; case 21 -> "Wildfang";
-            case 22 -> "Voidcaller Staff"; case 23 -> "Starweaver Staff"; case 24 -> "Ashenheart Staff"; case 25 -> "Ironclad Bulwark"; case 26 -> "Skyrender";
-            case 27 -> "Sunspire Staff"; case 28 -> "Nightcaller Staff"; case 29 -> "Chronoscepter";
+            case 10 -> "Spear of Ares"; case 11 -> "Aegis Edge";
+            case 12 -> "Thunderbow"; case 13 -> "Moonfrost"; case 14 -> "Phobos Fang"; case 15 -> "Dawnkeeper";
+            case 16 -> "Forgefire"; case 17 -> "Hermes' Mark"; case 18 -> "Warbell"; case 19 -> "Laurel Bow"; case 20 -> "Sunlance"; case 21 -> "Silver Hunt";
+            case 22 -> "Owl's Judgment"; case 23 -> "Oracle's Staff"; case 24 -> "Volcanic Staff"; case 25 -> "Aegis Bulwark"; case 26 -> "Orion's Bow";
+            case 27 -> "Solar Scepter"; case 28 -> "Moon-Hound Crook"; case 29 -> "Hermes' Hourglass";
             default -> "Hero weapon";
         };
     }
@@ -119,6 +120,22 @@ public final class HeroTraits {
             case 4 -> ChatFormatting.GOLD;
             default -> ChatFormatting.WHITE;
         };
+    }
+    /** Rename untouched legacy defaults while preserving player-applied custom names. */
+    static void ensureOlympianIdentity(Mob mob,int role) {
+        if(!CoreHiring.isHero(role))return;
+        CompoundTag tag=mob.getPersistentData();
+        if(tag.getBoolean(OLYMPIAN_IDENTITY_TAG))return;
+        Component current=mob.getCustomName();
+        String legacy=CoreHiring.legacyHeroName(role);
+        String currentText=current==null?"":current.getString();
+        boolean generatedEnemyLabel=("Enemy Hero · "+legacy).equals(currentText);
+        if(current==null || legacy.equals(currentText) || generatedEnemyLabel) {
+            String replacement=generatedEnemyLabel?"Enemy Hero · "+CoreHiring.NAMES[role]:CoreHiring.NAMES[role];
+            ChatFormatting color=generatedEnemyLabel?ChatFormatting.LIGHT_PURPLE:nameColor(CoreHiring.heroTier(role));
+            mob.setCustomName(Component.literal(replacement).withStyle(color));
+        }
+        tag.putBoolean(OLYMPIAN_IDENTITY_TAG,true);
     }
     public static void equip(Mob mob,int role,SimpleContainer inventory) {
         int base = CoreHiring.heroBase(role);
@@ -158,7 +175,7 @@ public final class HeroTraits {
             inventory.setItem(4, shield); mob.setItemSlot(EquipmentSlot.OFFHAND, shield);
         }
         mob.getPersistentData().putInt("SiegeHeroRole",role);
-        mob.setCustomName(Component.literal(CoreHiring.NAMES[role]).withStyle(nameColor(tier)));
+        ensureOlympianIdentity(mob,role);
     }
     static boolean ready(long now,long next) { return next<=now || next>now+1200; }
     private static int role(Mob mob) {
@@ -247,9 +264,10 @@ public final class HeroTraits {
         }
         if (!mob.isAlive() || mob.isNoAi()) return;
         int r = role(mob); if (r < 0) return;
+        ensureOlympianIdentity(mob,r);
         long now = level.getGameTime();
         var tag = mob.getPersistentData();
-        // Dawnwarden (15): shield the most-hurt ally in a 6-block bubble every 30s.
+        // Apollo's Dawn (15): shield the most-hurt ally in a 6-block bubble every 30s.
         if (r == 15 && ready(now, tag.getLong("SiegeHeroNext"))) {
             var candidates = allies(level, mob, 6).stream()
                     .filter(o -> o.getHealth() <= o.getMaxHealth() * .3F && !o.hasEffect(MobEffects.ABSORPTION)
@@ -264,13 +282,13 @@ public final class HeroTraits {
             }
             return;
         }
-        // Ironclad (25): passive Resistance II aura to nearby allies. Refreshed every second.
+        // Athena's Bulwark (25): passive Resistance II aura to nearby allies. Refreshed every second.
         if (r == 25) {
             for (var a : allies(level, mob, 6)) a.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 60, 1, false, true, true));
             if (mob.tickCount % 40 == 0) burst(level, mob.getX(), mob.getY() + 1, mob.getZ(), net.minecraft.core.particles.ParticleTypes.ENCHANT, 8, 1.5, 0.02);
             return;
         }
-        // Voidweaver (22): void nova every 15s (300 ticks). 6-block AoE, 5 damage, purple particle ring.
+        // Athena's Judgment (22): arcane nova every 15s (300 ticks). 6-block AoE, 5 damage.
         if (r == 22 && mob.getTarget() != null && ready(now, tag.getLong("SiegeHeroNext"))) {
             tag.putLong("SiegeHeroNext", now + 300);
             burst(level, mob.getX(), mob.getY() + 1, mob.getZ(), net.minecraft.core.particles.ParticleTypes.PORTAL, 80, 3.0, 0.4);
@@ -279,7 +297,7 @@ public final class HeroTraits {
             for (var enemy : enemies(level, mob, 6)) enemy.hurt(level.damageSources().indirectMagic(mob, mob), 5);
             return;
         }
-        // Solmyra Radiant (27): sunlight column on all enemies within 8 blocks every 20s.
+        // Apollo's Chosen (27): sunlight column on all enemies within 8 blocks every 20s.
         if (r == 27 && mob.getTarget() != null && ready(now, tag.getLong("SiegeHeroNext"))) {
             tag.putLong("SiegeHeroNext", now + 400);
             var foes = enemies(level, mob, 8);
@@ -292,7 +310,7 @@ public final class HeroTraits {
             level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.AMETHYST_BLOCK_CHIME, net.minecraft.sounds.SoundSource.HOSTILE, 1.2F, 1.6F);
             return;
         }
-        // Nightcaller (28): summon two wolves for 30s, 45s cooldown; saved deadline identifies summons.
+        // Artemis' Hounds (28): summon two wolves for 30s, 45s cooldown; saved deadline identifies summons.
         if (r == 28 && mob.getTarget() != null && ready(now, tag.getLong("SiegeHeroNext"))) {
             tag.putLong("SiegeHeroNext", now + 900);
             for (int i = 0; i < 2; i++) {
@@ -309,7 +327,7 @@ public final class HeroTraits {
             level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.WOLF_HOWL, net.minecraft.sounds.SoundSource.HOSTILE, 1.5F, 0.5F);
             return;
         }
-        // Chronos (29): every 30s, all enemies within 10 blocks slowed 90% for 4s.
+        // Hermes' Hourglass (29): every 30s, all enemies within 10 blocks slowed 90% for 4s.
         if (r == 29 && mob.getTarget() != null && ready(now, tag.getLong("SiegeHeroNext"))) {
             tag.putLong("SiegeHeroNext", now + 600);
             for (var enemy : enemies(level, mob, 10)) {
@@ -337,7 +355,7 @@ public final class HeroTraits {
                     sparkle(level, mob, net.minecraft.core.particles.ParticleTypes.HEART);
                 }
             }
-            // 14 Bloodthorn: at full health, next melee hit grants absorption.
+            // 14 Ares' Fury: at full health, next melee hit grants absorption.
             if (r == 14 && ready(now, tag.getLong("SiegeHeroNext"))
                     && mob.getHealth() >= mob.getMaxHealth() && !mob.hasEffect(MobEffects.ABSORPTION)) {
                 mob.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, 100, 0, false, true, true));
@@ -366,7 +384,7 @@ public final class HeroTraits {
                 burst(level, starTarget.getX(), starTarget.getY() + 1, starTarget.getZ(), net.minecraft.core.particles.ParticleTypes.GLOW, 8, 0.2, 0.02);
                 level.playSound(null, starTarget.blockPosition(), net.minecraft.sounds.SoundEvents.AMETHYST_CLUSTER_HIT, net.minecraft.sounds.SoundSource.HOSTILE, 0.6F, 1.5F);
             }
-            // Ashenheart uses the native melee/staff attack; no projectile is created by that AI.
+            // Hephaestus' Flame uses the native melee/staff attack; no projectile is created by that AI.
             if (r == 24 && ready(now, tag.getLong("SiegeHeroNext"))) {
                 tag.putLong("SiegeHeroNext", now + 60);
                 var foes = level.getEntitiesOfClass(LivingEntity.class, target.getBoundingBox().inflate(3), e -> hostile(mob, e));
