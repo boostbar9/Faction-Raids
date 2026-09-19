@@ -13,9 +13,9 @@ public final class FactionUniforms {
     public static String factionMaterial(String faction) {
         return switch(FactionBanners.FactionId.byIdOrDefault(faction)) {
             case BLACKBAY_REAVERS -> "lapis";
-            case HOLLOWFANG_CLAN -> "quartz";
-            case EMBERCHANT_ZEALOTS -> "redstone";
-            case CROWNFALL_EXILES -> "amethyst";
+            case HOLLOWFANG_CLAN -> "redstone";
+            case EMBERCHANT_ZEALOTS -> "copper";
+            case CROWNFALL_EXILES -> "gold";
             case WILDS_MARAUDERS -> "emerald";
         };
     }
@@ -42,7 +42,7 @@ public final class FactionUniforms {
         if(item instanceof DyeableLeatherItem leather) leather.setColor(stack,0x52663D);
         int factionIndex=FactionBanners.FactionId.byIdOrDefault(faction).ordinal();
         int outfit=commander?4+factionIndex%2:wild?6:Math.floorMod(factionIndex,4);
-        int color=new int[]{0x35495C,0x74777A,0xA13E27,0x705084,0x52663D}[factionIndex];
+        int color=new int[]{0x245E8A,0x8F2828,0xB85724,0xE4D7A2,0x356B42}[factionIndex];
         return com.devfarinsky.siegeoverhaul.compat.EpicKnightsCompatibility.armor(stack,outfit,slot,color);
     }
     public static void decorateShield(ItemStack shield,String faction) {

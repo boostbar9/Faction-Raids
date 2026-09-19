@@ -1,3 +1,11 @@
+# 4.44.0 beta
+
+- Recast the five enemy factions as Olympian war hosts: Poseidon's Tide, the Warhost of Ares, the Forgeguard of Hephaestus, the Aegis Order of Athena, and the Silver Hunt of Artemis. Their banners, map colors, uniforms, lore, commander titles, and visible territory names now share that identity.
+- Retheme all twenty recruitable and enemy heroes with Greek names, Olympian patrons, divine equipment names, and matching ability descriptions while preserving every role, rarity, price, stat, and combat mechanic.
+- Migrate untouched legacy hero names automatically. Heroes renamed by a player keep their custom names, and existing faction IDs, claims, diplomacy records, trophy data, active raids, and configuration allowlists remain compatible.
+- Give new enemy core sanctuaries and progressive camp pavilions a marble, quartz-column, and colored-terracotta visual language without changing their footprints, finite construction budgets, or restoration behavior.
+- Keep Minecraft 1.20.1 Forge, Java 17, the required dependency contract, save format, and loot-box prices unchanged.
+
 # 4.43.3 beta
 
 - Keep occupied Siege Cores recoverable when another Recruits faction takes control of the same native claim instead of leaving the occupation permanently stuck.

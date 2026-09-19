@@ -27,48 +27,46 @@ public final class FactionLore {
     private static final Map<String, List<String>> LORE = new LinkedHashMap<>();
 
     static {
-        // v2.28.0 rewrite: pre-v2.28 lore promised faction-specific mechanics
-        // (drowning crews, chant auras, morale collapse) that no code path
-        // ever implemented. Each faction now describes real behavior only:
-        // approach direction, unit mix expectations, and tactics that work
-        // with the raid systems the mod actually ships.
+        // Stable legacy ids now resolve to the five Olympian war hosts. Keep
+        // every tactical promise tied to behavior the mod actually ships.
         register("blackbay_reavers", List.of(
-                "Coastal raiders. Naval staging detection is more",
-                "likely to trigger against them \u2014 expect boat spawns",
-                "and beach landings when your stronghold is near open",
-                "water.",
+                "POSEIDON'S TIDE \u00b7 Trident-Bearers",
+                "A sea-born war host. Naval staging is more likely",
+                "against them \u2014 expect ships and beach landings when",
+                "your stronghold stands near open water.",
                 "",
                 "Tactic: shore denial. A two-block wall in the beach",
                 "shallows turns their landing into a killing ground."));
         register("hollowfang_clan", List.of(
-                "Highland warband. Aggressive melee mix with the",
-                "standard breacher push toward gates.",
+                "WARHOST OF ARES \u00b7 Bronze-Blooded",
+                "An aggressive melee host that drives its breachers",
+                "straight toward gates and weak points.",
                 "",
-                "Tactic: v2.28.0 bonus applies here \u2014 killing the",
-                "Faction Commander with your perimeter never breached",
-                "pays extra emeralds. Hold your walls."));
+                "Tactic: killing its Strategos while your perimeter",
+                "remains unbreached pays extra emeralds. Hold the wall."));
         register("emberchant_zealots", List.of(
-                "Ash-Prophets. Heavier illusioner presence on final",
-                "waves \u2014 warcaster role tag more common.",
+                "FORGEGUARD OF HEPHAESTUS \u00b7 Flame-Smiths",
+                "A siege-minded host with a heavier warcaster presence",
+                "during final waves.",
                 "",
                 "Tactic: melee through illusioner clones (they die on",
                 "one hit) before they thin out your arrow supply. Only",
                 "the real illusioner takes damage."));
         register("crownfall_exiles", List.of(
-                "Ruined nobility. Captain-heavy composition \u2014",
-                "more Captain-aura pulses per push than any other",
-                "faction.",
+                "AEGIS ORDER OF ATHENA \u00b7 Owl-Shields",
+                "A disciplined, captain-heavy formation with more",
+                "command-aura pulses per push than any other host.",
                 "",
                 "Tactic: prioritize captains and patrol leaders on",
-                "sight. Cutting the aura source is a bigger DPS swing",
-                "against Crownfall than against any other faction."));
+                "sight. Breaking their command structure is the fastest",
+                "way to unravel Athena's formation."));
         register("wilds_marauders", List.of(
-                "Generic raider fallback \u2014 no specific culture, no",
-                "specific grudge. They show up when no other faction",
-                "fits the tags for the current pretext.",
+                "SILVER HUNT OF ARTEMIS \u00b7 Moon-Arrows",
+                "A roaming host of hunters and skirmishers. Their broad",
+                "mandate lets them answer any omen or war pretext.",
                 "",
-                "Tactic: baseline. Fight is straightforward, rewards",
-                "are baseline. Good practice wave for new teams."));
+                "Tactic: deny clear firing lanes and force the Hunt into",
+                "the close quarters beneath your walls."));
     }
 
     private FactionLore() {}

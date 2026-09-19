@@ -13,20 +13,21 @@ final class CampUpgradeLayout {
         if (entrance.getAxis().isVertical() || stage < 0 || stage > 2)
             throw new IllegalArgumentException("Invalid camp upgrade");
         Map<Long, String> plan = new LinkedHashMap<>();
-        String base = stage == 2 ? "minecraft:stone_bricks" : "minecraft:cobblestone";
-        // Solid knee walls and timber frames protect the interior. A three-wide,
+        String base = stage == 2 ? "minecraft:quartz_bricks" : "minecraft:polished_diorite";
+        // Marble-like knee walls and column frames give every upgrade an
+        // Olympian pavilion silhouette. A three-wide,
         // two-high entrance keeps builders and troops moving through the frontage.
         for (int y=1;y<=3;y++) for (int x=-3;x<=3;x++) for (int z=-3;z<=3;z++) {
             boolean edge=Math.abs(x)==3 || Math.abs(z)==3;
             boolean corner=Math.abs(x)==3 && Math.abs(z)==3;
             boolean doorway=z==3 && Math.abs(x)<=1 && y<=2;
             if (!edge || doorway) continue;
-            String block=corner || y==3 ? "minecraft:stripped_spruce_log"
-                    : y==1 ? base : "minecraft:spruce_fence";
+            String block=corner || y==3 ? "minecraft:quartz_pillar"
+                    : y==1 ? base : "minecraft:birch_fence";
             put(plan,center,entrance,x,y,z,block);
         }
         // A continuous eave layer supports the raised ridge; no floating roof cells.
-        String roof=stage==0?"minecraft:gray_wool":stage==1?"minecraft:red_terracotta":"minecraft:dark_oak_planks";
+        String roof=stage==0?"minecraft:yellow_terracotta":stage==1?"minecraft:orange_terracotta":"minecraft:light_blue_terracotta";
         for(int x=-3;x<=3;x++) for(int z=-3;z<=3;z++)
             put(plan,center,entrance,x,4,z,roof);
         for(int x=-1;x<=1;x++) for(int z=-3;z<=3;z++)

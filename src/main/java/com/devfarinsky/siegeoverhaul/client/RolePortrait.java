@@ -15,10 +15,10 @@ import net.minecraft.client.gui.GuiGraphics;
  *
  * <p>Role indices follow {@link com.devfarinsky.siegeoverhaul.core.CoreHiring#IDS}:
  * <pre>
- *   0  Recruit         5  Lumberjack     10 Kael Bloodthorn (hero)
- *   1  Shieldman       6  Miner          11 Branna Dawnwarden (hero)
- *   2  Archer          7  Builder        12 Sylva Stormbow (hero)
- *   3  Crossbowman     8  Cook           13 Orin Frostbinder (hero)
+ *   0  Recruit         5  Lumberjack     10 Damon, Ares' Blade (hero)
+ *   1  Shieldman       6  Miner          11 Thalia, Athena's Aegis (hero)
+ *   2  Archer          7  Builder        12 Iris, Zeus' Stormbow (hero)
+ *   3  Crossbowman     8  Cook           13 Kyros, Artemis' Frost (hero)
  *   4  Farmer          9  Courier
  * </pre>
  */
@@ -71,10 +71,10 @@ public final class RolePortrait {
             case 7 -> pal(0xffdfae83, 0xff5a3a20, 0xff8a6a40, 0xff6a4a24, 0xffbfb0a0, 0xffe8c968, 0xff3a260f, 0xff17110c); // Builder
             case 8 -> pal(0xffe8ba90, 0xff4a3020, 0xffefe0b8, 0xff8b6a3a, 0xffcbd0d5, 0xffd9534f, 0xff5a3d1c, 0xff17110c); // Cook
             case 9 -> pal(0xffddb18c, 0xff6a3f22, 0xff4a3a5c, 0xff5a3d24, 0xffbfb0a0, 0xffe8c968, 0xff2a1c10, 0xff17110c); // Courier
-            case 10 -> pal(0xffcaa079, 0xff2a1610, 0xff7a1e1e, 0xff5a2016, 0xff4a3226, 0xffff5c3a, 0xff1e0f0a, 0xffff8f4a); // Kael Bloodthorn
-            case 11 -> pal(0xfff2caa5, 0xffefe0b8, 0xffe8c968, 0xff9c7a3a, 0xfff5efd8, 0xffffe4a8, 0xff8b6a3a, 0xff17110c); // Branna Dawnwarden
-            case 12 -> pal(0xffd8b48e, 0xff2a3a56, 0xff2a4a5c, 0xff3a4a5a, 0xff8faabf, 0xff9dc5ff, 0xff1e2a3a, 0xff17110c); // Sylva Stormbow
-            case 13 -> pal(0xffcadde8, 0xffe0eaff, 0xff2a3a5c, 0xff3a4a6a, 0xff9dc5ff, 0xffb89aff, 0xff1e2a3a, 0xff81e8da); // Orin Frostbinder
+            case 10 -> pal(0xffcaa079, 0xff2a1610, 0xff7a1e1e, 0xff5a2016, 0xff4a3226, 0xffff5c3a, 0xff1e0f0a, 0xffff8f4a); // Damon, Ares' Blade
+            case 11 -> pal(0xfff2caa5, 0xffefe0b8, 0xffe8c968, 0xff9c7a3a, 0xfff5efd8, 0xffffe4a8, 0xff8b6a3a, 0xff17110c); // Thalia, Athena's Aegis
+            case 12 -> pal(0xffd8b48e, 0xff2a3a56, 0xff2a4a5c, 0xff3a4a5a, 0xff8faabf, 0xff9dc5ff, 0xff1e2a3a, 0xff17110c); // Iris, Zeus' Stormbow
+            case 13 -> pal(0xffcadde8, 0xffe0eaff, 0xff2a3a5c, 0xff3a4a6a, 0xff9dc5ff, 0xffb89aff, 0xff1e2a3a, 0xff81e8da); // Kyros, Artemis' Frost
             default -> pal(0xffb89968, 0xff3a2818, 0xff4a4a4a, 0xff3a2818, 0xffb2b8bf, 0xffe8c968, 0xff2a1c10, 0xff17110c);
         };
     }
@@ -180,7 +180,7 @@ public final class RolePortrait {
                 fill(g, originX, originY, cell, 2, 7, 8, 0xff4a5e3a);
                 fill(g, originX, originY, cell, 3, 6, 10, 0xff4a5e3a);
             }
-            case 10 -> { // Kael horned helmet
+            case 10 -> { // Ares-crested helmet
                 fill(g, originX, originY, cell, 2, 6, 2, metal);
                 fill(g, originX, originY, cell, 3, 5, 2, metal);
                 fill(g, originX, originY, cell, 2, 14, 2, metal);
@@ -188,18 +188,18 @@ public final class RolePortrait {
                 // Red plume
                 fill(g, originX, originY, cell, 1, 10, 2, accent);
             }
-            case 11 -> { // Branna radiant crown
+            case 11 -> { // Athena radiant crown
                 fill(g, originX, originY, cell, 2, 8, 6, accent);
                 fill(g, originX, originY, cell, 3, 7, 2, accent);
                 fill(g, originX, originY, cell, 3, 10, 2, accent);
                 fill(g, originX, originY, cell, 3, 13, 2, accent);
             }
-            case 12 -> { // Sylva feathered arrow behind shoulder
+            case 12 -> { // Zeus-feathered arrow behind shoulder
                 fill(g, originX, originY, cell, 10, 15, 4, 0xff9dc5ff);
                 fill(g, originX, originY, cell, 11, 14, 5, 0xffcbd0d5);
                 fill(g, originX, originY, cell, 12, 15, 4, 0xff9dc5ff);
             }
-            case 13 -> { // Orin frost rune floating beside head
+            case 13 -> { // Artemis frost rune floating beside head
                 fill(g, originX, originY, cell, 4, 2, 2, 0xff81e8da);
                 fill(g, originX, originY, cell, 5, 2, 2, 0xffb89aff);
                 fill(g, originX, originY, cell, 4, 18, 2, 0xff81e8da);

@@ -24,19 +24,26 @@ public final class CoreHiring {
         "Recruit", "Shieldman", "Archer", "Crossbowman",
         "Farmer", "Lumberjack", "Miner", "Builder", "Cook", "Courier",
         // Commons (10-11)
-        "Garrick Ironoath", "Mira Stonehand",
+        "Damon, Ares' Blade", "Thalia, Athena's Aegis",
         // Uncommons (12-15)
-        "Sylva Stormbow", "Orin Frostbinder", "Kael Bloodthorn", "Branna Dawnwarden",
+        "Iris, Zeus' Stormbow", "Kyros, Artemis' Frost", "Leon, Ares' Fury", "Helena, Apollo's Dawn",
         // Rares (16-21)
-        "Vex Emberstep", "Nyx Hollowveil", "Roric Warbell", "Elowen Verdant", "Thane Grimwatch", "Zara Wildsong",
+        "Pyra, Hephaestus' Flame", "Niko, Hermes' Veil", "Theron, Ares' Warbell", "Daphne, Artemis' Root", "Cassia, Apollo's Sunlance", "Atalanta, Silver Hunt",
         // Epics (22-26)
-        "Arcanis Voidweaver", "Lyria Starweaver", "Pyra Ashenheart", "Sable Ironclad", "Talon Skyrender",
+        "Melia, Athena's Owl", "Asteria, Athena's Oracle", "Petra, Hephaestus' Fire", "Ajax, Athena's Bulwark", "Orion, Artemis' Skyhunter",
         // Legendaries (27-29)
+        "Elara, Apollo's Chosen", "Actaeon, Artemis' Hounds", "Kleon, Hermes' Hourglass"
+    };
+    /** Exact pre-4.44 default names, retained only to migrate untouched saved heroes. */
+    private static final String[] LEGACY_HERO_NAMES = {
+        "Garrick Ironoath", "Mira Stonehand", "Sylva Stormbow", "Orin Frostbinder", "Kael Bloodthorn", "Branna Dawnwarden",
+        "Vex Emberstep", "Nyx Hollowveil", "Roric Warbell", "Elowen Verdant", "Thane Grimwatch", "Zara Wildsong",
+        "Arcanis Voidweaver", "Lyria Starweaver", "Pyra Ashenheart", "Sable Ironclad", "Talon Skyrender",
         "Solmyra the Radiant", "Umbros the Nightcaller", "Chronos Timebender"
     };
     /** Underlying entity role each hero uses when spawned. 0=sword,1=shield,2=bow,3=crossbow. */
     public static final int[] HERO_BASE = {
-        0, 1,          // Common: Garrick sword, Mira shield
+        0, 1,          // Common: Damon sword, Thalia shield
         2, 3, 0, 1,    // Uncommon: bow, crossbow, sword, shield
         0, 2, 1, 2, 3, 0, // Rare
         0, 0, 0, 1, 2, // Epic: three mages + shield + bow
@@ -62,6 +69,7 @@ public final class CoreHiring {
     public static final int HERO_ID_MIN = 10;
     public static final int HERO_ID_MAX = 29;
     public static boolean isHero(int role) { return role >= HERO_ID_MIN && role <= HERO_ID_MAX; }
+    static String legacyHeroName(int role) { return isHero(role) ? LEGACY_HERO_NAMES[role - HERO_ID_MIN] : ""; }
     public static int heroTier(int role) { return isHero(role) ? HERO_TIER[role - HERO_ID_MIN] : -1; }
     public static int heroBase(int role) { return isHero(role) ? HERO_BASE[role - HERO_ID_MIN] : role; }
     private static final String[] COSTS = {"RecruitCost", "ShieldmanCost", "BowmanCost", "CrossbowmanCost", "FarmerCost", "LumberjackCost", "MinerCost", "BuilderCost", "CookCost", "CourierCost"};

@@ -1,6 +1,7 @@
 package com.devfarinsky.siegeoverhaul.core;
 import com.devfarinsky.siegeoverhaul.MinecraftTestSupport;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
@@ -9,6 +10,41 @@ import org.junit.jupiter.api.Test;
 import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 class HeroTraitsTest extends MinecraftTestSupport {
+    @Test void legacyDefaultNamesMigrateButPlayerNamesRemainUntouched() {
+        Mob legacy=mock(Mob.class);
+        CompoundTag legacyTag=new CompoundTag();
+        when(legacy.getPersistentData()).thenReturn(legacyTag);
+        when(legacy.getCustomName()).thenReturn(Component.literal(CoreHiring.legacyHeroName(10)));
+
+        HeroTraits.ensureOlympianIdentity(legacy,10);
+
+        verify(legacy).setCustomName(argThat(name->CoreHiring.NAMES[10].equals(name.getString())));
+        assertTrue(legacyTag.getBoolean("SiegeOlympianHeroIdentity"));
+
+        Mob renamed=mock(Mob.class);
+        CompoundTag renamedTag=new CompoundTag();
+        when(renamed.getPersistentData()).thenReturn(renamedTag);
+        when(renamed.getCustomName()).thenReturn(Component.literal("Bobby"));
+
+        HeroTraits.ensureOlympianIdentity(renamed,10);
+
+        verify(renamed,never()).setCustomName(any());
+        assertTrue(renamedTag.getBoolean("SiegeOlympianHeroIdentity"));
+    }
+
+    @Test void fullRosterHasDistinctOlympianNamesWithoutChangingRoleTables() {
+        var names=new java.util.HashSet<String>();
+        for(int role=CoreHiring.HERO_ID_MIN;role<=CoreHiring.HERO_ID_MAX;role++) {
+            String name=CoreHiring.NAMES[role];
+            assertTrue(names.add(name),"duplicate hero name: "+name);
+            assertNotEquals(CoreHiring.legacyHeroName(role),name);
+            assertFalse(HeroTraits.description(role).isBlank());
+            assertTrue(CoreHiring.heroBase(role)>=0 && CoreHiring.heroBase(role)<=3);
+            assertTrue(CoreHiring.heroTier(role)>=0 && CoreHiring.heroTier(role)<=4);
+        }
+        assertEquals(20,names.size());
+    }
+
     @Test void bloodthornHealsOnlyOnThirdEnemyMeleeHitAndRangedChainCannotRecurse() {
         var level=mock(net.minecraft.server.level.ServerLevel.class);var hero=mock(Mob.class);var victim=mock(Mob.class);
         var heroTag=new CompoundTag();heroTag.putBoolean("SiegeHiredHero",true);heroTag.putInt("SiegeHeroRole",10);

@@ -210,14 +210,14 @@ public final class EntityPortrait {
                 feet = new ItemStack(Items.LEATHER_BOOTS);
                 main = new ItemStack(Items.FILLED_MAP);
             }
-            case 10 -> { // Kael Bloodthorn (Warblade)
+            case 10 -> { // Damon, Ares' Blade (Warblade)
                 head = new ItemStack(Items.NETHERITE_HELMET);
                 chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
                 legs = new ItemStack(Items.NETHERITE_LEGGINGS);
                 feet = new ItemStack(Items.NETHERITE_BOOTS);
                 main = new ItemStack(Items.NETHERITE_SWORD);
             }
-            case 11 -> { // Branna Dawnwarden (Bulwark)
+            case 11 -> { // Thalia, Athena's Aegis (Bulwark)
                 head = new ItemStack(Items.NETHERITE_HELMET);
                 chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
                 legs = new ItemStack(Items.NETHERITE_LEGGINGS);
@@ -225,14 +225,14 @@ public final class EntityPortrait {
                 main = new ItemStack(Items.NETHERITE_AXE);
                 off = new ItemStack(Items.SHIELD);
             }
-            case 12 -> { // Sylva Stormbow (Archer hero)
+            case 12 -> { // Iris, Zeus' Stormbow (Archer hero)
                 head = new ItemStack(Items.NETHERITE_HELMET);
                 chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
                 legs = new ItemStack(Items.NETHERITE_LEGGINGS);
                 feet = new ItemStack(Items.NETHERITE_BOOTS);
                 main = new ItemStack(Items.BOW);
             }
-            case 13 -> { // Orin Frostbinder (Crossbow hero)
+            case 13 -> { // Kyros, Artemis' Frost (Crossbow hero)
                 head = new ItemStack(Items.NETHERITE_HELMET);
                 chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
                 legs = new ItemStack(Items.NETHERITE_LEGGINGS);

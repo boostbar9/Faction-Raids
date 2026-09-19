@@ -14,7 +14,8 @@ class EnemyCoreKeepTest extends MinecraftTestSupport {
 
         // Small, finite citadel, not a fortress.
         assertTrue(plan.size() <= 64, "keep must stay a small bounded structure: " + plan.size());
-        assertTrue(plan.containsValue("minecraft:stone_bricks"));
+        assertTrue(plan.containsValue("minecraft:polished_diorite"));
+        assertTrue(plan.containsValue("minecraft:quartz_pillar"));
         assertTrue(plan.containsValue("minecraft:sea_lantern"), "needs a beacon-like vertical marker");
 
         // The core rests one block above the plinth centre and is never a decoration cell.
@@ -37,6 +38,6 @@ class EnemyCoreKeepTest extends MinecraftTestSupport {
 
         // A raised plinth: a full 5x5 walkable floor one block below the core.
         for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++)
-            assertEquals("minecraft:stone_bricks", plan.get(base.offset(dx, 0, dz)));
+            assertEquals("minecraft:polished_diorite", plan.get(base.offset(dx, 0, dz)));
     }
 }
