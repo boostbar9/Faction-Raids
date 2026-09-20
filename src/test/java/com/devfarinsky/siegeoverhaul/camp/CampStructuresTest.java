@@ -72,4 +72,21 @@ class CampStructuresTest extends MinecraftTestSupport {
             assertTrue(CampStructures.standing(reloaded, CampStructures.Kind.GRANARY));
         }
     }
+
+    @Test void legacyOutsidePavilionKeepsThreeWideDoorThroughLaterPalisade() {
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        raid.campPos=new BlockPos(0,64,0);
+        BlockPos oldCenter=raid.campPos.east(15);
+        // Simulate the old save shape, which had only the keystone position.
+        var all=new net.minecraft.nbt.CompoundTag();
+        var granary=new net.minecraft.nbt.CompoundTag();
+        granary.putLong("Pos",oldCenter.east(2).above().asLong());
+        all.put(CampStructures.Kind.GRANARY.key,granary);
+        raid.campaign.put(ModConstants.Tags.CAMP_STRUCTURES,all);
+        BlockPos doorway=raid.campPos.east(CampPerimeter.RADIUS);
+        assertTrue(CampStructures.legacyPerimeterOpening(raid,doorway));
+        assertTrue(CampStructures.legacyPerimeterOpening(raid,doorway.north()));
+        assertTrue(CampStructures.legacyPerimeterOpening(raid,doorway.south()));
+        assertFalse(CampStructures.legacyPerimeterOpening(raid,doorway.north(2)));
+    }
 }

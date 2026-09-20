@@ -117,6 +117,10 @@ public final class CampPerimeter {
             if (ground == null) continue;
             boolean opening = gated && Math.abs(lateral) <= GATE_HALF_WIDTH;
             boolean gatePost = gated && Math.abs(lateral) == GATE_HALF_WIDTH + 1;
+            // v4.47: old camps could place a pavilion doorway exactly on
+            // this ring. Preserve that three-wide access instead of sealing
+            // an already-built installation behind the later palisade.
+            if (CampStructures.legacyPerimeterOpening(raid, column)) continue;
             if (opening) {
                 // The gate stays open: only the lintel spans the gap, high
                 // enough for mounted units and siege crews to ride through.

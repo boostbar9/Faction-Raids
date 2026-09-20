@@ -60,6 +60,17 @@ public final class ModConstants {
         public static final String FORMATION_MARCH = "SiegeFormationMarch";
         public static final String NATIVE_CAMP = "NativeCampConstruction";
         public static final String CAMP_AREA_TEAM = "SiegeCampAreaTeam";
+        /** Player-commissioned Workers 2 build area; never route through enemy-camp cleanup. */
+        public static final String PLAYER_FORTIFICATION_AREA = "SiegePlayerFortificationArea";
+        /** Build-area UUID saved on the commissioned player builder. */
+        public static final String PLAYER_FORTIFICATION_AREA_ID = "SiegePlayerFortificationAreaId";
+        /** Builder UUID saved on the player build area for reload recovery. */
+        public static final String PLAYER_FORTIFICATION_BUILDER = "SiegePlayerFortificationBuilder";
+        /** Player owner UUID shared by both sides of a commissioned wall job. */
+        public static final String PLAYER_FORTIFICATION_OWNER = "SiegePlayerFortificationOwner";
+        /** Last known build-area position and bounded missing-area retry count. */
+        public static final String PLAYER_FORTIFICATION_POS = "SiegePlayerFortificationPos";
+        public static final String PLAYER_FORTIFICATION_MISSES = "SiegePlayerFortificationMisses";
         public static final String CAMP_SUPPLY_OWNER = "SiegeSupplyOwner";
         public static final String CAMP_OWNER = "Owner";
         public static final String CAMP_BUILD_AREA = "BuildArea";

@@ -90,6 +90,17 @@ class NavalConvoyTest extends MinecraftTestSupport {
         verify(first).teleportTo(x.capture(),y.capture(),z.capture());
         verify(second,never()).teleportTo(x.getValue(),y.getValue(),z.getValue());
     }
+    @Test void stalledVesselCanUseSafeIntendedBeachOutsideBoatSearchRadius() {
+        ServerLevel level=land(); Entity boat=mock(Entity.class);
+        when(boat.blockPosition()).thenReturn(new BlockPos(0,64,0));
+        Mob mob=raider(); BlockPos beach=new BlockPos(40,64,0);
+        BlockPos landing=NavalConvoy.findLanding(level,boat,mob,beach,List.of());
+        assertNotNull(landing);
+        assertTrue(Math.abs(landing.getX()-beach.getX())<=12);
+        assertTrue(Math.abs(landing.getZ()-beach.getZ())<=12);
+        assertTrue(landing.distSqr(boat.blockPosition())>16L*16L,
+                "regression: landing must not be limited to the vessel's local search box");
+    }
     @Test void noSafeLandKeepsCrewAboardInsteadOfBlindTeleport() {
         ServerLevel level=land();when(level.hasChunkAt(any())).thenReturn(false);
         Entity boat=mock(Entity.class);when(boat.blockPosition()).thenReturn(new BlockPos(0,64,0));Mob mob=raider();

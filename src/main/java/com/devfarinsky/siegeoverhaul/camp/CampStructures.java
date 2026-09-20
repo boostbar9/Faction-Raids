@@ -61,6 +61,8 @@ public final class CampStructures {
         CompoundTag all = root(raid);
         CompoundTag entry = new CompoundTag();
         entry.putLong("Pos", keystone(center, entrance).asLong());
+        entry.putLong("Center", center.asLong());
+        entry.putInt("Entrance", entrance.get2DDataValue());
         entry.putString("Block", kind.keystoneBlock);
         entry.putBoolean("Active", false);
         entry.putBoolean("Announced", false);
@@ -105,6 +107,7 @@ public final class CampStructures {
                 FactionLogger.LOG.info("Camp {} lost its {}", raid.teamKey, kind.title);
                 dirty = true;
             }
+            if (present && level.getGameTime() % 20L == 0L) emitActivity(level, kind, pos);
         }
         if (dirty) {
             raid.campaign.put(ModConstants.Tags.CAMP_STRUCTURES, all);
@@ -115,6 +118,51 @@ public final class CampStructures {
     private static boolean matches(ServerLevel level, BlockPos pos, String block) {
         ResourceLocation id = ForgeRegistries.BLOCKS.getKey(level.getBlockState(pos).getBlock());
         return id != null && id.toString().equals(block);
+    }
+
+    /**
+     * Keep a visible, low-cost sign that each installation is operational.
+     * This is intentionally a handful of server particles once per second,
+     * not a per-tick emitter.
+     */
+    private static void emitActivity(ServerLevel level, Kind kind, BlockPos pos) {
+        var particle = switch (kind) {
+            case GRANARY -> net.minecraft.core.particles.ParticleTypes.HAPPY_VILLAGER;
+            case ARMOURY -> net.minecraft.core.particles.ParticleTypes.CRIT;
+            case COMMAND_POST -> net.minecraft.core.particles.ParticleTypes.ENCHANT;
+        };
+        level.sendParticles(particle, pos.getX()+0.5D, pos.getY()+1.2D, pos.getZ()+0.5D,
+                3, 0.45D, 0.35D, 0.45D, 0.02D);
+    }
+
+    /**
+     * Preserve entrances of camps created by older releases whose pavilions
+     * were centred outside the radius-12 palisade. The saved keystone points
+     * two blocks behind the centre, so five blocks back toward camp is the
+     * three-wide doorway on the wall line.
+     */
+    static boolean legacyPerimeterOpening(RaidState raid, BlockPos wallColumn) {
+        if (raid.campPos == null) return false;
+        CompoundTag all = root(raid);
+        for (Kind kind : Kind.values()) {
+            if (!all.contains(kind.key, Tag.TAG_COMPOUND)) continue;
+            CompoundTag entry = all.getCompound(kind.key);
+            BlockPos door;
+            if (entry.contains("Center", Tag.TAG_LONG) && entry.contains("Entrance", Tag.TAG_INT)) {
+                Direction entrance=Direction.from2DDataValue(entry.getInt("Entrance"));
+                door=BlockPos.of(entry.getLong("Center")).relative(entrance,3);
+            } else {
+                BlockPos keystone=BlockPos.of(entry.getLong("Pos"));
+                int dx=keystone.getX()-raid.campPos.getX(),dz=keystone.getZ()-raid.campPos.getZ();
+                Direction outward=Math.abs(dx)>=Math.abs(dz)
+                        ? (dx>=0?Direction.EAST:Direction.WEST)
+                        : (dz>=0?Direction.SOUTH:Direction.NORTH);
+                door=keystone.relative(outward.getOpposite(),5).below();
+            }
+            if (Math.abs(door.getX()-wallColumn.getX())+Math.abs(door.getZ()-wallColumn.getZ())<=1)
+                return true;
+        }
+        return false;
     }
 
     // --- Pure, configurable effect helpers, so wave/guard code stays declarative. ---

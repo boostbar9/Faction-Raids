@@ -53,6 +53,8 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.ai.goal.OpenDoorGoal;
+import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 import net.minecraft.world.entity.ai.util.DefaultRandomPos;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.storage.loot.LootParams;
@@ -85,6 +87,7 @@ public final class RaidEvents {
     private static final Component MESSAGE_PREFIX = ModConstants.MESSAGE_PREFIX;
     private static final String RAID_TEAM_TAG = ModConstants.Tags.RAID_TEAM;
     private static final String RAID_ROLE_TAG = ModConstants.Tags.RAID_ROLE;
+    static final int CORE_APPROACH_BREACH_RADIUS = 24;
 
     /**
      * Per-raid wave composition (progressive picker + formation choice).
@@ -158,6 +161,7 @@ public final class RaidEvents {
     @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.LOWEST)
     public static void onCampWorkerTick(net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent event) {
         if (!(event.getEntity() instanceof Mob mob) || !(mob.level() instanceof ServerLevel level)) return;
+        com.devfarinsky.siegeoverhaul.core.PlayerFortificationJobs.tick(level, mob);
         String team = mob.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM);
         if (team.isBlank()) return;
         RaidSavedData.RaidState raid = RaidSavedData.get(level.getServer()).raids.get(team);
@@ -192,6 +196,8 @@ public final class RaidEvents {
                 && !RaidSavedData.get(level.getServer()).raids.containsKey(engineTeam)) {
             joining.discard(); event.setCanceled(true); return;
         }
+        if (com.devfarinsky.siegeoverhaul.core.PlayerFortificationJobs.handleAreaJoin(
+                level, event.getEntity(), event.loadedFromDisk())) return;
         String areaTeam = event.getEntity().getPersistentData().getString(ModConstants.Tags.CAMP_AREA_TEAM);
         if (!areaTeam.isBlank()) {
             if (event.loadedFromDisk() && !com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.reloadArea(
@@ -282,6 +288,15 @@ public final class RaidEvents {
      */
     private static void attachRaiderAI(Mob mob) {
         com.devfarinsky.siegeoverhaul.raid.RaidMarchDiscipline.install(mob);
+        // Recruits' custom ground navigator can route through a doorway, but
+        // without both the navigation flag and an OpenDoorGoal the closed
+        // door remains an impassable node. Let ordinary entrances work before
+        // the bounded physical-breach fallback considers any block damage.
+        if (mob.getNavigation() instanceof GroundPathNavigation ground) {
+            ground.setCanOpenDoors(true);
+            ground.setCanPassDoors(true);
+            mob.goalSelector.addGoal(1, new OpenDoorGoal(mob, true));
+        }
         mob.getPersistentData().remove(com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal.CHARGING);
         mob.goalSelector.addGoal(0,new com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal(mob));
         // Parkour: leap short obstacles. Only meaningful for PathfinderMobs
@@ -3823,7 +3838,8 @@ public final class RaidEvents {
         BlockPos target = focus.getKey();
         List<Mob> targetContributors = contributors.getOrDefault(target, List.of());
         BlockState targetState = level.getBlockState(target);
-        int required = breachWorkRequired(targetState);
+        boolean coreApproach = coreApproachBreachAllowed(state, target, point.pos());
+        int required = breachWorkRequired(targetState, coreApproach);
         if (previousTarget != null && !previousTarget.equals(target)) {
             level.destroyBlockProgress(breakerAnimationId(state), previousTarget, -1);
         }
@@ -3846,7 +3862,7 @@ public final class RaidEvents {
         // v2.16.0: command the contributing breachers to actually walk up
         // to the block and swing at it, so the visual matches the credit.
         driveBreachersToTarget(level, targetContributors, target, swingTick);
-        if (progress >= required) breachAndRemember(level, state, target);
+        if (progress >= required) breachAndRemember(level, state, target, coreApproach);
     }
 
     /**
@@ -3994,7 +4010,13 @@ public final class RaidEvents {
             Vec3 offset=Vec3.atCenterOf(candidate).subtract(mob.position()).multiply(1,0,1);
             if(offset.dot(toward)<=0 || offset.lengthSqr()>9)continue;
             BlockState blockState = level.getBlockState(candidate);
-            if (!isBreachableDefense(blockState)) continue;
+            boolean coreApproach = coreApproachBreachAllowed(state, candidate, stronghold);
+            if (!isBreachableDefense(blockState, coreApproach)) continue;
+            // Common full blocks are a final-core fallback only and must be
+            // inside the defending faction's native claim. Doors/fences keep
+            // the established foreign-claim rules below.
+            if (!com.devfarinsky.siegeoverhaul.siege.BlockRestoration.isBreachable(blockState)
+                    && !com.devfarinsky.siegeoverhaul.core.SiegeCore.claimed(level, candidate, state.teamKey)) continue;
             // v3.3.0: refuse to break blocks in another player's claim. This
             // stops raiders from smashing through a neighbor's fortress on
             // their way to the defender - the whole point of the neighbor
@@ -4024,26 +4046,39 @@ public final class RaidEvents {
         return best;
     }
 
-    private static boolean isBreachableDefense(BlockState state) {
+    static boolean coreApproachBreachAllowed(RaidSavedData.RaidState state, BlockPos candidate,
+                                             BlockPos stronghold) {
+        return state.breached && candidate.distSqr(stronghold)
+                <= (long) CORE_APPROACH_BREACH_RADIUS * CORE_APPROACH_BREACH_RADIUS;
+    }
+
+    private static boolean isBreachableDefense(BlockState state, boolean coreApproach) {
         // v3.1.0: delegate to the single-source-of-truth whitelist. Walls
         // (cobblestone, stone brick, etc.) are now breachable so a walled-off
         // gate isn't a permanent shield.
-        return com.devfarinsky.siegeoverhaul.siege.BlockRestoration.isBreachable(state);
+        return coreApproach
+                ? com.devfarinsky.siegeoverhaul.siege.BlockRestoration.isCoreApproachBreachable(state)
+                : com.devfarinsky.siegeoverhaul.siege.BlockRestoration.isBreachable(state);
     }
 
-    private static int breachWorkRequired(BlockState state) {
+    private static int breachWorkRequired(BlockState state, boolean coreApproach) {
         // v3.1.0: reinforced tier now includes walls in addition to the
         // v2.x iron door/trapdoor/bars. Delegates to BlockRestoration so the
         // reinforced classification stays consistent across paths.
-        boolean reinforced = com.devfarinsky.siegeoverhaul.siege.BlockRestoration.isReinforced(state);
+        boolean reinforced = com.devfarinsky.siegeoverhaul.siege.BlockRestoration.isReinforced(state)
+                || coreApproach && !com.devfarinsky.siegeoverhaul.siege.BlockRestoration.isBreachable(state);
         return reinforced ? RaidConfig.REINFORCED_BREACH_SECONDS.get() : RaidConfig.WOODEN_BREACH_SECONDS.get();
     }
 
-    private static void breachAndRemember(ServerLevel level, RaidSavedData.RaidState raid, BlockPos target) {
+    private static void breachAndRemember(ServerLevel level, RaidSavedData.RaidState raid,
+                                          BlockPos target, boolean coreApproach) {
         boolean firstPhysicalBreach = raid.breachedBlocks.isEmpty();
         List<BlockPos> affected = new ArrayList<>(
-                com.devfarinsky.siegeoverhaul.siege.BlockRestoration.snapshotBreach(
-                        level, raid.breachedBlocks, target, RaidConfig.MAX_RESTORABLE_BLOCKS.get()));
+                coreApproach
+                        ? com.devfarinsky.siegeoverhaul.siege.BlockRestoration.snapshotCoreApproachBreach(
+                                level, raid.breachedBlocks, target, RaidConfig.MAX_RESTORABLE_BLOCKS.get())
+                        : com.devfarinsky.siegeoverhaul.siege.BlockRestoration.snapshotBreach(
+                                level, raid.breachedBlocks, target, RaidConfig.MAX_RESTORABLE_BLOCKS.get()));
         if (affected.isEmpty()) {
             // v2.19.0 RE2: drop the target's progress entry when we bail on
             // capacity. Otherwise progress stays >= required and this method

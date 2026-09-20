@@ -155,15 +155,29 @@ public final class NavalConvoy {
         int radius = Math.max(8, Math.min(16, (int) Math.ceil(boat.getBbWidth() / 2.0) + 3));
         BlockPos from = boat.blockPosition(), best = null;
         double bestScore = Double.MAX_VALUE;
-        for (int dx = -radius; dx <= radius; dx++) {
-            for (int dz = -radius; dz <= radius; dz++) {
-                BlockPos column = from.offset(dx, 0, dz);
-                if (!level.hasChunkAt(column)) continue;
-                BlockPos feet = new BlockPos(column.getX(), level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                        column.getX(), column.getZ()), column.getZ());
-                if (Math.abs(feet.getY() - from.getY()) > 6 || !safeLanding(level, mob, feet, reserved)) continue;
-                double score = feet.distSqr(preferred) + feet.distSqr(from) * 0.25;
-                if (score < bestScore) { bestScore = score; best = feet; }
+        // Search both ends of the landing operation. The old search only
+        // inspected columns around the vessel, so a ship stalled more than
+        // sixteen blocks offshore could never see the already-validated beach
+        // and its entire crew remained passengers forever. The preferred beach
+        // is still only accepted after the same loaded-chunk, collision, fluid
+        // and sturdy-floor checks as a nearby landing.
+        LinkedHashSet<BlockPos> centers = new LinkedHashSet<>();
+        centers.add(from);
+        if (preferred != null) centers.add(preferred);
+        for (BlockPos center : centers) {
+            int searchRadius = center.equals(from) ? radius : Math.min(12, radius);
+            for (int dx = -searchRadius; dx <= searchRadius; dx++) {
+                for (int dz = -searchRadius; dz <= searchRadius; dz++) {
+                    BlockPos column = center.offset(dx, 0, dz);
+                    if (!level.hasChunkAt(column)) continue;
+                    BlockPos feet = new BlockPos(column.getX(), level.getHeight(
+                            Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                            column.getX(), column.getZ()), column.getZ());
+                    if (Math.abs(feet.getY() - center.getY()) > 8 || !safeLanding(level, mob, feet, reserved)) continue;
+                    double preferredScore = preferred == null ? feet.distSqr(from) : feet.distSqr(preferred);
+                    double score = preferredScore + feet.distSqr(from) * 0.05;
+                    if (score < bestScore) { bestScore = score; best = feet; }
+                }
             }
         }
         return best;

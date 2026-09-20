@@ -9,6 +9,20 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 class CampDevelopmentTest extends MinecraftTestSupport {
+    @Test void upgradeCandidatesKeepWholePavilionInsidePalisade() {
+        BlockPos camp=new BlockPos(0,64,0);
+        for(var direction:net.minecraft.core.Direction.Plane.HORIZONTAL) {
+            var sites=CampDevelopment.candidates(camp,direction);
+            assertEquals(8,sites.size());
+            for(BlockPos site:sites) {
+                int radius=Math.max(Math.abs(site.getX()-camp.getX()),Math.abs(site.getZ()-camp.getZ()));
+                assertTrue(radius>=7 && radius<=8);
+                assertTrue(radius+3<CampPerimeter.RADIUS,
+                        "7x7 pavilion requires a clear buffer inside the palisade");
+            }
+        }
+    }
+
     @Test void obstructedPreferredUpgradeRetriesAnotherSiteWithoutReplacingBlocks() {
         var level=mock(ServerLevel.class);var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
         raid.campPos=new BlockPos(0,64,0);raid.campClaimId=UUID.randomUUID();raid.campUpgradeTicks=2400;

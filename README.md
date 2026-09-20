@@ -22,7 +22,7 @@ The core opens a responsive five-tab command center:
 - **Territory:** purchase permanent faction-wide upgrades.
 - **Intel:** browse unit reference cards, enemy lore, and field guidance.
 
-The menu sizes itself from the player's Minecraft-scaled viewport, selects detailed or compact cards from the space actually available, and uniformly scales down for unusually small windows so controls and mouse hitboxes stay aligned. It also includes selected-tab highlighting, an emerald balance, offer refresh progress, affordability cues, and a **Leave Feedback** button that opens the mod's CurseForge comments page through Minecraft's normal link confirmation.
+The menu sizes itself from the player's Minecraft-scaled viewport, selects detailed or compact cards from the space actually available, and uniformly scales down for unusually small windows so controls and mouse hitboxes stay aligned. Static heraldic portraits keep the menu responsive; hovering a portrait previews the real recruit model. It also includes selected-tab highlighting, an emerald balance, offer refresh progress, affordability cues, and a **Leave Feedback** button that opens the mod's CurseForge comments page through Minecraft's normal link confirmation.
 
 ## Heroes With a Purpose
 
@@ -50,10 +50,10 @@ Each box awards **one randomly selected reward stack**. Rarity odds are **Common
 
 1. **An Olympian foothold.** A host of Poseidon, Ares, Hephaestus, Athena, or Artemis searches for a suitable camp site and registers a real Villager Recruits claim. Each has distinct map colors, divine banners, equipment, camp and core-keep silhouettes, troop doctrine, champions, camp sentries and a signature Strategos command.
 2. **Time to prepare.** New sieges allow **12 minutes of preparation by default**, split between establishment, fortification, and army muster. Defenders can prepare their troops or disrupt the enemy camp.
-3. **Builders get to work.** Armored Workers 2 builders use native building jobs and supplied materials. Each patron stations its own six-unit garrison around the War Gate and perimeter while construction and later upgrades progress.
+3. **Builders get to work.** Armored Workers 2 builders use native building jobs and supplied materials. Purposeful camp pavilions stand inside the palisade with open courtyard approaches: Demeter's sanctuary heals camp guards, Hephaestus' forge strengthens them, and Athena's strategion coordinates faster waves. Each patron also stations its own six-unit garrison around the War Gate and perimeter while construction progresses.
 4. **The War Gate opens.** A protected reinforcement gate provides a designated ground-level arrival point. The gate and its graded access road arrive fully assembled when the camp is established, leaving builders free to work on the camp itself. The gate is removed during siege cleanup.
 5. **The army advances.** Infantry, ranged units, cavalry, officers, sappers, and siege engineers attack in waves. Units use reachable, role-based formations on the approach and release marching orders for combat or obstacles. Every fifth wave is a named signature assault with a patron-specific roster, warning and counterplay; coastal camps can send their configured share by ship, with Poseidon committing most eligible troops during a Tidal Onslaught.
-6. **Defenses are tested.** Raiders use breaching, ladders, alternate approaches, and supported siege equipment. Commanders can perform a visible, interruptible strike against certain building blocks.
+6. **Defenses are tested.** Raiders use doors, breaching, ladders, alternate approaches, and supported siege equipment. Once the abstract perimeter falls, breachers near the core can slowly open a restoration-tracked passage through common masonry or planks inside the defending claim; protected containers, valuables, machinery, obsidian and unrelated claims remain off limits. Commanders retain their visible, interruptible wall strike.
 7. **The core is contested.** Numerical superiority around the core drives capture. Losing the core transfers its territory to the enemy faction. Bring yourself and your recruits back to outnumber the occupiers and reclaim it.
 
 **Ties pause capture progress. The opposing side's numerical superiority reverses it.** Capture distances and timings are configurable.
@@ -105,6 +105,7 @@ Siege Overhaul records supported siege damage and temporary construction for res
 - Waves can delay when server performance falls below the configured TPS floor.
 - Temporary chunk tickets keep active siege areas ticking; they are not permanent world-wide chunk loaders.
 - Enemy camp construction, siege equipment, and pathfinding require suitable terrain and space. These systems continue to receive beta improvements.
+- **Fortify Perimeter** links a free player-owned Workers 2 builder to its commissioned build area across reloads. Keep a builder-enabled storage area supplied near the queued wall section.
 - The mod now includes a **custom Siege Core block and items**. The old "no custom blocks" description no longer applies.
 - Remove the old `factionraids-*.jar` when installing `siegeoverhaul-*.jar`. Do not run both.
 - `/factionraids` remains a legacy command alias. New sieges use claimed Siege Cores; old bed locations do not replace this setup.

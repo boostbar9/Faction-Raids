@@ -45,5 +45,15 @@ class RaidPathingHeuristicsTest extends MinecraftTestSupport {
             assertTrue(seen.contains(p));
     }
 
-}
+    @Test void fullBlockBreachingOnlyUnlocksDuringClaimedCoreApproachPhase() {
+        var raid = new RaidSavedData.RaidState("team:test","siege_core",0);
+        var core = new net.minecraft.core.BlockPos(0,64,0);
+        raid.breached=false;
+        assertTrue(!RaidEvents.coreApproachBreachAllowed(raid,core.east(),core));
+        raid.breached=true;
+        assertTrue(RaidEvents.coreApproachBreachAllowed(raid,core.offset(20,0,0),core));
+        assertTrue(!RaidEvents.coreApproachBreachAllowed(raid,
+                core.offset(RaidEvents.CORE_APPROACH_BREACH_RADIUS+1,0,0),core));
+    }
 
+}
