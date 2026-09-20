@@ -13,16 +13,16 @@ import java.util.*;
 /** A finite initial garrison, independent of wave completion and never replenished. */
 public final class CampGuards {
     public static final String TEAM_TAG = "SiegeCampGuardTeam";
-    private static final String[] TYPES = {"recruit_shieldman", "recruit_shieldman", "bowman", "recruit",
-            "recruit_shieldman", "bowman"};
+    private static final int GUARD_COUNT = 6;
     private CampGuards() {}
     public static void start(ServerLevel level, RaidSavedData data, RaidSavedData.RaidState raid) {
         if (raid.campGuardsStarted || raid.campPos == null || !level.hasChunkAt(raid.campPos)) return;
         if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level, raid)) return;
         raid.campGuardsStarted = true;
         data.setDirty();
-        for (int slot=0; slot<TYPES.length; slot++) {
-            String id=TYPES[slot];
+        List<String> guardRoles = doctrine(raid.factionId).guardRoles();
+        for (int slot=0; slot<guardRoles.size(); slot++) {
+            String id=guardRoles.get(slot);
             int total = data.raids.values().stream().mapToInt(r -> r.raiders.size() + r.campGuards.size()).sum();
             if (total >= RaidConfig.MAX_GLOBAL_RAIDERS.get() || raid.raiders.size()+raid.campGuards.size() >= RaidConfig.MAX_ACTIVE_RAIDERS.get()) break;
             var type = ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("recruits", id));
@@ -44,14 +44,15 @@ public final class CampGuards {
                 RecruitsBridge.configureHostileRaidRecruit(guard);
                 RecruitsBridge.assignToRaidersFaction(guard);
                 guard.getClass().getMethod("setAggroState", int.class).invoke(guard,1);
-                guard.setCustomName(net.minecraft.network.chat.Component.literal(com.devfarinsky.siegeoverhaul.compat.RaiderFactions.name(raid.factionId)+" Camp Guard"));
+                guard.setCustomName(net.minecraft.network.chat.Component.literal(guardName(raid.factionId)));
                 guard.getClass().getMethod("setListen", boolean.class).invoke(guard,false);
                 guard.getClass().getMethod("setHoldPos", net.minecraft.world.phys.Vec3.class).invoke(guard,guard.position());
                 guard.getClass().getMethod("setFollowState", int.class).invoke(guard,3);
                 var inventory = guard.getClass().getMethod("getInventory").invoke(guard);
                 if (inventory instanceof net.minecraft.world.SimpleContainer container) {
                     container.addItem(new ItemStack(Items.BREAD,16));
-                    if (id.equals("bowman")) container.addItem(new ItemStack(Items.ARROW,64));
+                    if (id.equals("bowman") || id.equals("crossbowman") || id.equals("scout"))
+                        container.addItem(new ItemStack(Items.ARROW,64));
                 }
                 com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(guard,raid.factionId,"guard");
                 strengthen(guard,raid.wave);
@@ -81,7 +82,7 @@ public final class CampGuards {
                 try {
                     var nbt=guard.getPersistentData();
                     if (!nbt.contains("SiegeGuardPost")) {
-                        int slot=new TreeSet<>(raid.campGuards).headSet(id).size()%TYPES.length;
+                        int slot=new TreeSet<>(raid.campGuards).headSet(id).size()%GUARD_COUNT;
                         BlockPos post=candidates(raid,slot).stream().filter(p -> safePost(level,raid,p)).findFirst().orElse(guard.blockPosition());
                         nbt.putInt("SiegeGuardSlot",slot); nbt.putLong("SiegeGuardPost",post.asLong());
                     }
@@ -110,11 +111,20 @@ public final class CampGuards {
                     guard.getClass().getMethod("setHoldPos",net.minecraft.world.phys.Vec3.class).invoke(guard,net.minecraft.world.phys.Vec3.atBottomCenterOf(post));
                     if (!Integer.valueOf(3).equals(guard.getClass().getMethod("getFollowState").invoke(guard)))
                         guard.getClass().getMethod("setFollowState",int.class).invoke(guard,3);
-                    if (guard.getTarget()!=null && guard.getTarget().distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(post))>144) guard.setTarget(null);
-                    guard.setCustomName(net.minecraft.network.chat.Component.literal(com.devfarinsky.siegeoverhaul.compat.RaiderFactions.name(raid.factionId)+" Camp Guard"));
+                    int leash=doctrine(raid.factionId).leashBlocks();
+                    if (guard.getTarget()!=null && guard.getTarget().distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(post))>leash*leash) guard.setTarget(null);
+                    guard.setCustomName(net.minecraft.network.chat.Component.literal(guardName(raid.factionId)));
                 } catch (ReflectiveOperationException ex) { FactionLogger.LOG.warn("Cannot maintain camp guard orders",ex); }
             }
         }
+    }
+    static com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.CampDoctrine doctrine(String factionId) {
+        return com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.forFaction(factionId).campDoctrine();
+    }
+    static String guardName(String factionId) {
+        var host=com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.forFaction(factionId);
+        return host.factionId().isBlank()?"Raider Camp Guard"
+                : host.hostName()+" "+host.campDoctrine().guardTitle();
     }
     public static void muster(ServerLevel level,RaidSavedData.RaidState raid) {
         int slot=0;

@@ -16,14 +16,21 @@ class EnemyCoreKeepTest extends MinecraftTestSupport {
                 "crownfall_exiles","minecraft:quartz_bricks",
                 "wilds_marauders","minecraft:mossy_stone_bricks");
         var palettes=new java.util.HashSet<java.util.Collection<String>>();
+        var shapes=new java.util.HashSet<java.util.Set<BlockPos>>();
         for(var entry:expected.entrySet()) {
             var plan=EnemyCore.keepBlueprint(base,entry.getKey());
-            assertEquals(49,plan.size());
+            assertTrue(plan.size()>=41 && plan.size()<=49);
             assertTrue(plan.containsValue(entry.getValue()));
             assertFalse(plan.containsKey(EnemyCore.corePos(base)));
             assertTrue(palettes.add(new java.util.HashSet<>(plan.values())));
+            assertTrue(shapes.add(new java.util.HashSet<>(plan.keySet())),
+                    "duplicate core-keep silhouette for "+entry.getKey());
+            for(BlockPos neighbour:new BlockPos[]{EnemyCore.corePos(base).north(),EnemyCore.corePos(base).south(),
+                    EnemyCore.corePos(base).east(),EnemyCore.corePos(base).west(),EnemyCore.corePos(base).above()})
+                assertFalse(plan.containsKey(neighbour));
         }
         assertEquals(5,palettes.size());
+        assertEquals(5,shapes.size());
     }
     @Test void keepIsBoundedRaisedAndLeavesTheCoreVisibleForCapture() {
         BlockPos base = new BlockPos(120, 68, -240);

@@ -79,7 +79,7 @@ public final class CommanderTraits {
             case AEGIS_ORDER -> ally.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE,100,0));
             case HUNTERS_MARK -> {
                 ally.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED,100,0));
-                ally.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION,120,0));
+                ally.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION,100,0));
             }
         }
         if(power==com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.CommanderPower.HUNTERS_MARK) {

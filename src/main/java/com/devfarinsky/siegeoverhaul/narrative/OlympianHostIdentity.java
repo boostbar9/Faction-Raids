@@ -26,7 +26,9 @@ public record OlympianHostIdentity(
         List<String> openingRoles,
         List<String> middleRoles,
         List<String> assaultRoles,
-        List<Integer> heroRoles) {
+        List<Integer> heroRoles,
+        SignatureAssault signatureAssault,
+        CampDoctrine campDoctrine) {
 
     public enum CommanderPower {
         LAST_STAND,
@@ -35,6 +37,26 @@ public record OlympianHostIdentity(
         FORGE_WARD,
         AEGIS_ORDER,
         HUNTERS_MARK
+    }
+
+    /** A checkpoint-wave identity that reuses bounded, already-supported units. */
+    public record SignatureAssault(String title, String counterplay,
+                                   List<String> roles, int navalShareFloor) {
+        public SignatureAssault {
+            title = title == null ? "" : title;
+            counterplay = counterplay == null ? "" : counterplay;
+            roles = List.copyOf(roles);
+            navalShareFloor = Math.max(0, Math.min(100, navalShareFloor));
+        }
+    }
+
+    /** Stable camp-garrison flavor without adding entities or save fields. */
+    public record CampDoctrine(String guardTitle, List<String> guardRoles, int leashBlocks) {
+        public CampDoctrine {
+            guardTitle = guardTitle == null || guardTitle.isBlank() ? "Camp Guard" : guardTitle;
+            guardRoles = List.copyOf(guardRoles);
+            leashBlocks = Math.max(6, Math.min(24, leashBlocks));
+        }
     }
 
     private static final List<String> GENERIC_OPENING =
@@ -50,7 +72,12 @@ public record OlympianHostIdentity(
             CommanderPower.LAST_STAND,
             "Last Stand! Nearby troops gain strength for 5 seconds.",
             GENERIC_OPENING, GENERIC_MIDDLE, GENERIC_ASSAULT,
-            java.util.stream.IntStream.rangeClosed(10, 29).boxed().toList());
+            java.util.stream.IntStream.rangeClosed(10, 29).boxed().toList(),
+            new SignatureAssault("Command Assault", "Break the commander and hold the stronghold",
+                    GENERIC_ASSAULT, 0),
+            new CampDoctrine("Camp Guard",
+                    List.of("recruit_shieldman", "recruit_shieldman", "bowman", "recruit",
+                            "recruit_shieldman", "bowman"), 12));
 
     private static final List<OlympianHostIdentity> HOSTS = List.of(
             new OlympianHostIdentity(
@@ -61,7 +88,14 @@ public record OlympianHostIdentity(
                     List.of("crossbowman", "scout", "nomad", "bowman", "captain", "recruit_shieldman", "recruit"),
                     List.of("crossbowman", "scout", "assassin", "nomad", "bowman", "captain",
                             "recruit_shieldman", "recruit", "horseman", "assassin_leader"),
-                    List.of(12, 17, 22, 29)),
+                    List.of(12, 17, 22, 29),
+                    new SignatureAssault("Tidal Onslaught",
+                            "Brace the shore and break the fast outer line",
+                            List.of("crossbowman", "scout", "nomad", "recruit_shieldman",
+                                    "crossbowman", "scout", "bowman"), 75),
+                    new CampDoctrine("Tidewatch Sentry",
+                            List.of("crossbowman", "scout", "recruit_shieldman", "bowman",
+                                    "crossbowman", "scout"), 14)),
             new OlympianHostIdentity(
                     "hollowfang_clan", "Warhost of Ares", "Ares", Formation.WEDGE, "Bronze spearhead",
                     CommanderPower.WAR_CRY,
@@ -70,7 +104,14 @@ public record OlympianHostIdentity(
                     List.of("captain", "recruit_shieldman", "recruit", "horseman", "assassin", "bowman", "crossbowman"),
                     List.of("captain", "recruit_shieldman", "recruit", "assassin", "assassin_leader",
                             "horseman", "nomad", "crossbowman", "bowman", "scout"),
-                    List.of(10, 14, 18, 27)),
+                    List.of(10, 14, 18, 27),
+                    new SignatureAssault("Bronze Spearhead",
+                            "Hold the breach and eliminate its captains",
+                            List.of("captain", "recruit_shieldman", "recruit", "assassin",
+                                    "recruit_shieldman", "recruit", "assassin_leader"), 0),
+                    new CampDoctrine("Bronze Gateguard",
+                            List.of("recruit_shieldman", "recruit", "captain", "recruit_shieldman",
+                                    "recruit", "captain"), 18)),
             new OlympianHostIdentity(
                     "emberchant_zealots", "Forgeguard of Hephaestus", "Hephaestus", Formation.COLUMN, "Forge siege column",
                     CommanderPower.FORGE_WARD,
@@ -79,7 +120,14 @@ public record OlympianHostIdentity(
                     List.of("crossbowman", "captain", "recruit_shieldman", "recruit", "nomad", "bowman", "scout"),
                     List.of("crossbowman", "recruit_shieldman", "captain", "assassin_leader", "nomad",
                             "recruit", "bowman", "scout", "horseman", "assassin"),
-                    List.of(15, 16, 20, 24)),
+                    List.of(15, 16, 20, 24),
+                    new SignatureAssault("Forge Engine Advance",
+                            "Destroy the engineer escort before it reaches your walls",
+                            List.of("recruit_shieldman", "crossbowman", "captain", "recruit_shieldman",
+                                    "crossbowman", "recruit"), 0),
+                    new CampDoctrine("Forgeward Sentry",
+                            List.of("recruit_shieldman", "crossbowman", "recruit_shieldman", "crossbowman",
+                                    "captain", "recruit"), 10)),
             new OlympianHostIdentity(
                     "crownfall_exiles", "Aegis Order of Athena", "Athena", Formation.SQUARE, "Aegis phalanx",
                     CommanderPower.AEGIS_ORDER,
@@ -88,7 +136,14 @@ public record OlympianHostIdentity(
                     List.of("captain", "recruit_shieldman", "crossbowman", "recruit", "bowman", "scout", "nomad"),
                     List.of("captain", "recruit_shieldman", "crossbowman", "bowman", "recruit", "scout",
                             "nomad", "assassin", "horseman", "assassin_leader"),
-                    List.of(11, 21, 23, 25)),
+                    List.of(11, 21, 23, 25),
+                    new SignatureAssault("Aegis Phalanx",
+                            "Split the square and isolate its captains",
+                            List.of("captain", "recruit_shieldman", "recruit_shieldman", "crossbowman",
+                                    "recruit", "captain"), 0),
+                    new CampDoctrine("Aegis Sentinel",
+                            List.of("recruit_shieldman", "captain", "recruit_shieldman", "bowman",
+                                    "captain", "crossbowman"), 9)),
             new OlympianHostIdentity(
                     "wilds_marauders", "Silver Hunt of Artemis", "Artemis", Formation.SKIRMISH, "Moonlit hunt",
                     CommanderPower.HUNTERS_MARK,
@@ -97,7 +152,12 @@ public record OlympianHostIdentity(
                     List.of("scout", "bowman", "crossbowman", "nomad", "assassin", "recruit", "recruit_shieldman"),
                     List.of("bowman", "scout", "assassin", "crossbowman", "nomad", "horseman",
                             "assassin_leader", "captain", "recruit_shieldman", "recruit"),
-                    List.of(13, 19, 26, 28))
+                    List.of(13, 19, 26, 28),
+                    new SignatureAssault("Moonlit Hunt",
+                            "Watch the flanks and deny clear firing lanes",
+                            List.of("scout", "bowman", "crossbowman", "assassin", "scout", "bowman"), 0),
+                    new CampDoctrine("Silver Hunt Warden",
+                            List.of("bowman", "scout", "crossbowman", "bowman", "scout", "assassin"), 16))
     );
 
     private static final Map<String, OlympianHostIdentity> BY_ID = HOSTS.stream()
@@ -108,6 +168,8 @@ public record OlympianHostIdentity(
         middleRoles = List.copyOf(middleRoles);
         assaultRoles = List.copyOf(assaultRoles);
         heroRoles = List.copyOf(heroRoles);
+        signatureAssault = java.util.Objects.requireNonNull(signatureAssault, "signatureAssault");
+        campDoctrine = java.util.Objects.requireNonNull(campDoctrine, "campDoctrine");
     }
 
     public static OlympianHostIdentity forFaction(String factionId) {
@@ -123,10 +185,22 @@ public record OlympianHostIdentity(
         return wave <= 1 ? openingRoles : wave == 2 ? middleRoles : assaultRoles;
     }
 
+    public List<String> rolesForWave(int wave, int totalWaves) {
+        return signatureWave(wave, totalWaves) ? signatureAssault.roles() : rolesForWave(wave);
+    }
+
     public String labelForWave(int wave) {
         if (this == GENERIC) return wave <= 1 ? "Infantry and scouts"
                 : wave == 2 ? "Mobile support" : waveLabel;
         return waveLabel;
+    }
+
+    public String labelForWave(int wave, int totalWaves) {
+        return signatureWave(wave, totalWaves) ? signatureAssault.title() : labelForWave(wave);
+    }
+
+    public boolean signatureWave(int wave, int totalWaves) {
+        return wave > 0 && wave <= Math.max(1, totalWaves) && wave % 5 == 0;
     }
 
     /** Weighted selection within this host's four champions. */

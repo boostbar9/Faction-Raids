@@ -22,7 +22,7 @@ class CommanderTraitsTest extends MinecraftTestSupport {
             CommanderTraits.applyPower(commander,java.util.List.of(ally),host.commanderPower(),"team:defender");
             var effects=ArgumentCaptor.forClass(MobEffectInstance.class);
             verify(ally,atLeastOnce()).addEffect(effects.capture());
-            assertTrue(effects.getAllValues().stream().allMatch(effect->effect.getDuration()<=120));
+            assertTrue(effects.getAllValues().stream().allMatch(effect->effect.getDuration()==100));
             String signature=effects.getAllValues().stream().map(effect->effect.getEffect().getDescriptionId())
                     .sorted().collect(java.util.stream.Collectors.joining(","));
             assertTrue(signatures.add(signature),"duplicate commander effect plan for "+host.hostName());

@@ -27,6 +27,7 @@ public final class HeroTraits {
     private static final UUID WILDSONG_ATTACK_SPEED_ID = UUID.fromString("3f68d978-7160-42e3-a81e-5476f362f969");
     private static final String WILDSONG_ATTACK_SPEED_TAG = "SiegeWildsongAttackSpeedUntil";
     private static final String OLYMPIAN_IDENTITY_TAG = "SiegeOlympianHeroIdentity";
+    private static final String OLYMPIAN_IDENTITY_SCHEMA_TAG = "SiegeOlympianHeroIdentitySchema";
     private static final int OLYMPIAN_IDENTITY_SCHEMA = 2;
     /** Signature-ability description shown on hero cards. Keep concise (fits card). */
     public static String description(int role) {
@@ -126,7 +127,16 @@ public final class HeroTraits {
     static void ensureOlympianIdentity(Mob mob,int role) {
         if(!CoreHiring.isHero(role))return;
         CompoundTag tag=mob.getPersistentData();
-        if(tag.getInt(OLYMPIAN_IDENTITY_TAG)>=OLYMPIAN_IDENTITY_SCHEMA)return;
+        // 4.44 stored the public marker as a boolean; 4.45 briefly reused the
+        // same key as an integer schema. Accept either save shape, then restore
+        // the boolean contract and keep the schema in its own numeric field.
+        int schema=tag.getInt(OLYMPIAN_IDENTITY_SCHEMA_TAG);
+        if(schema<=0) schema=tag.getInt(OLYMPIAN_IDENTITY_TAG);
+        if(schema>=OLYMPIAN_IDENTITY_SCHEMA) {
+            tag.putBoolean(OLYMPIAN_IDENTITY_TAG,true);
+            tag.putInt(OLYMPIAN_IDENTITY_SCHEMA_TAG,schema);
+            return;
+        }
         Component current=mob.getCustomName();
         String legacy=CoreHiring.legacyHeroName(role);
         String previous=CoreHiring.previousOlympianHeroName(role);
@@ -138,7 +148,8 @@ public final class HeroTraits {
             ChatFormatting color=generatedEnemyLabel?ChatFormatting.LIGHT_PURPLE:nameColor(CoreHiring.heroTier(role));
             mob.setCustomName(Component.literal(replacement).withStyle(color));
         }
-        tag.putInt(OLYMPIAN_IDENTITY_TAG,OLYMPIAN_IDENTITY_SCHEMA);
+        tag.putBoolean(OLYMPIAN_IDENTITY_TAG,true);
+        tag.putInt(OLYMPIAN_IDENTITY_SCHEMA_TAG,OLYMPIAN_IDENTITY_SCHEMA);
     }
     public static void equip(Mob mob,int role,SimpleContainer inventory) {
         int base = CoreHiring.heroBase(role);

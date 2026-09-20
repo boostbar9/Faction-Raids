@@ -10,6 +10,18 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 class CampGarrisonTest extends MinecraftTestSupport {
+    @Test void olympianCampsUseDistinctSixGuardGarrisonsAndLeashes() {
+        var plans=new HashSet<List<String>>();
+        var names=new HashSet<String>();
+        for(var host:com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.hosts()) {
+            var doctrine=CampGuards.doctrine(host.factionId());
+            assertEquals(6,doctrine.guardRoles().size());
+            assertTrue(plans.add(doctrine.guardRoles()),"duplicate guard plan for "+host.hostName());
+            assertTrue(names.add(CampGuards.guardName(host.factionId())));
+            assertTrue(CampGuards.guardName(host.factionId()).startsWith(host.hostName()));
+            assertTrue(doctrine.leashBlocks()>=9 && doctrine.leashBlocks()<=18);
+        }
+    }
     @Test void postsFollowSmallTerrainStepsWithoutMovingIntoTheCentralApproach() {
         var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
         raid.campPos=new BlockPos(-20,70,-30);

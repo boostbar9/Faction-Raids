@@ -19,6 +19,8 @@ class CampUpgradeLayoutTest extends MinecraftTestSupport {
         for(var entry:expected.entrySet()) {
             var plan=CampUpgradeLayout.structure(center,Direction.NORTH,1,entry.getKey());
             assertTrue(plan.containsValue(entry.getValue()));
+            assertDoesNotThrow(()->NativeCampConstruction.blueprint(plan),
+                    "host palette contains an invalid Minecraft 1.20.1 block: "+entry.getKey());
             assertTrue(plan.size()+147<512);
             for(int z=0;z<=3;z++)for(int x=-1;x<=1;x++)for(int y=1;y<=2;y++)
                 assertFalse(plan.containsKey(center.relative(Direction.NORTH,z).relative(Direction.EAST,x).above(y).asLong()));
