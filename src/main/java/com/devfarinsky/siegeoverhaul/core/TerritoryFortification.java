@@ -263,9 +263,11 @@ public final class TerritoryFortification {
                     max.getZ() - min.getZ() + 1,
                     max.getY() - min.getY() + 1);
 
-            build.getPersistentData().putString(
-                    com.devfarinsky.siegeoverhaul.ModConstants.Tags.CAMP_AREA_TEAM,
-                    coreKey);
+            // Persist a player-job association on both sides. Do not use the
+            // enemy CAMP_AREA_TEAM marker: the enemy reload hook discards
+            // areas whose key has no active hostile raid, which used to erase
+            // commissioned wall jobs after a server/chunk reload.
+            PlayerFortificationJobs.link(builder, build, owner);
 
             // Spawn the buildarea into the level BEFORE calling setStartBuild.
             // setStartBuild reads world block state at each target position to
@@ -348,7 +350,10 @@ public final class TerritoryFortification {
             saved.setDirty();
             return true;
         } catch (ReflectiveOperationException | RuntimeException ex) {
-            if (build != null) build.discard();
+            if (build != null) {
+                PlayerFortificationJobs.unlink(builder, build.getUUID());
+                build.discard();
+            }
             player.sendSystemMessage(Component.literal(
                     "Fortify Perimeter failed to start: " + ex.getMessage()));
             FactionLogger.LOG.warn("[SiegeOverhaul] Fortify Perimeter commission failed", ex);

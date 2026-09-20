@@ -77,7 +77,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private final Button[] boxes = new Button[3];
     private final Button[] buffs = new Button[3];
     private final Button[] bank = new Button[4];
-    private final TerritoryPanel territory = new TerritoryPanel();
     private Button recenterButton;
     private Button zoomInButton;
     private Button zoomOutButton;
@@ -116,7 +115,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             final int index = i;
             addRenderableWidget(new CoreButton(
                     Component.literal(tabLabels[i]),
-                    b -> { tab = index; confirmBox = -1; territory.reset(); },
+                    b -> { tab = index; confirmBox = -1; },
                     layout.tabX(i, tabCount),
                     layout.tabY(),
                     tabWidth, CoreHireLayout.TAB_HEIGHT,
@@ -292,11 +291,13 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     layout.cardWidth() - keyXInset - 6, keyHeight,
                     false, () -> false));
         }
+        updateControlState();
     }
 
     @Override
     protected void containerTick() {
         super.containerTick();
+        updateControlState();
         if (waitingTicks > 0) waitingTicks--;
         if (menu.lootSequence() != seenLoot) {
             seenLoot = menu.lootSequence();
@@ -330,7 +331,21 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         g.pose().pushPose();
         g.pose().scale(layout.scale(), layout.scale(), 1.0F);
 
-        // Wire visibility/active state of buttons before AbstractContainerScreen paints them.
+        super.render(g, logicalMouseX, logicalMouseY, partial);
+        g.pose().popPose();
+        // Tooltips stay at Minecraft's normal readable scale. Hover testing
+        // still uses logical coordinates so tiny-window scaling cannot shift
+        // the target away from the rendered card or button.
+        drawTooltips(g, logicalMouseX, logicalMouseY, mx, my);
+    }
+
+    /**
+     * Button state changes at game-tick frequency, not frame frequency. The
+     * old render loop allocated dozens of Components every frame (often
+     * 100+ times per second), even while every value was unchanged.
+     */
+    private void updateControlState() {
+        if (layout == null || hire[0] == null) return;
         for (int i = 0; i < 4; i++) {
             hire[i].visible = tab == 0;
             hire[i].active = menu.role(i) >= 0 && menu.cost(i) >= 0
@@ -396,17 +411,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             buffs[i].setMessage(Component.literal(
                     active ? "Blessing active" : "Bless  ·  " + CoreBuffs.PRICES[i] + "e"));
         }
-
-        // Draw an active-tab under-glow before the tab bar paints so the
-        // active tab gets a soft candlelight backing.
-        drawActiveTabGlow(g);
-
-        super.render(g, logicalMouseX, logicalMouseY, partial);
-        g.pose().popPose();
-        // Tooltips stay at Minecraft's normal readable scale. Hover testing
-        // still uses logical coordinates so tiny-window scaling cannot shift
-        // the target away from the rendered card or button.
-        drawTooltips(g, logicalMouseX, logicalMouseY, mx, my);
     }
 
     /**
@@ -638,6 +642,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // stable hash mixed with real time so they slowly drift diagonally.
         drawMotes(g, x + 4, layout.contentY(), w - 8,
                 Math.max(0, layout.contentBottom() - layout.contentY()));
+
+        // Draw the active-tab under-glow below the tab widgets themselves.
+        drawActiveTabGlow(g);
 
         // Tab body.
         if (tab == 0) {
@@ -1627,8 +1634,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     @Override
     public void onClose() {
-        territory.reset();
-        territory.closeTextures();
         EntityPortrait.clear();
         super.onClose();
     }

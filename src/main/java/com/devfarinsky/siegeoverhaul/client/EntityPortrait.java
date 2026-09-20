@@ -45,6 +45,16 @@ public final class EntityPortrait {
      */
     public static void draw(GuiGraphics g, int role, int x, int y, int size,
                             float mouseX, float mouseY) {
+        // Rendering four fully animated third-party entities every frame was
+        // the dominant Command Center cost on modpacks with heavy armor and
+        // entity render layers. Keep the custom static portrait for the card,
+        // and render the real model only while that portrait is inspected.
+        // A cursor can intersect at most one card, bounding the expensive path
+        // to one entity render per frame instead of four.
+        if (!livePreview(x, y, size, mouseX, mouseY)) {
+            RolePortrait.draw(g, role, x, y, size);
+            return;
+        }
         // Card backdrop drawn identically to RolePortrait so both paths line up.
         g.fill(x, y, x + size, y + size, 0xff0e0906);
         g.fillGradient(x + 1, y + 1, x + size - 1, y + size - 1,
@@ -97,6 +107,10 @@ public final class EntityPortrait {
             CACHE.remove(role);
             RolePortrait.draw(g, role, x, y, size);
         }
+    }
+
+    static boolean livePreview(int x, int y, int size, float mouseX, float mouseY) {
+        return mouseX >= x && mouseX < x + size && mouseY >= y && mouseY < y + size;
     }
 
     private static LivingEntity getOrCreate(int role) {

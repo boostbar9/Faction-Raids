@@ -1,3 +1,13 @@
+# 4.47.0 beta
+
+- Let stranded invasion crews disembark onto the prevalidated landing beach even when their vessel stops outside its old local landing search, while retaining collision, fluid, world-border and loaded-chunk safety checks.
+- Preserve player-commissioned Workers 2 fortification jobs across chunk and server reloads. Wall build areas now use a durable player-builder link instead of the enemy-camp cleanup tag, including migration for still-active legacy jobs.
+- Improve the final approach to claimed Siege Cores: raiders can operate ordinary doors, and breachers may slowly open a restored passage through a narrow whitelist of common masonry or planks within 24 blocks of the core. Containers, valuables, obsidian, machinery, foreign claims and the restoration cap remain protected.
+- Place new enemy pavilions wholly inside the palisade with a paved, validated three-wide approach. Preserve openings for older saved camps whose pavilion doorway intersects the later wall.
+- Make the Sanctuary of Demeter, Forge of Hephaestus and Strategion of Athena visibly active with bounded thematic particles while retaining their guard-healing, guard-damage and wave-coordination effects.
+- Reduce Command Center frame cost by rendering at most one live third-party entity preview while hovered and using the custom static portraits for the other cards. Button labels and state now update once per game tick instead of allocating again every rendered frame.
+- Preserve Minecraft 1.20.1 Forge / Java 17, saves, required and optional dependency metadata, loot-box prices, player structures, claims and existing restoration safeguards.
+
 # 4.46.0 beta
 
 - Turn every fifth wave into a clearly telegraphed patron-specific signature assault. Poseidon commits a Tidal Onslaught, Ares a Bronze Spearhead, Hephaestus a Forge Engine Advance, Athena an Aegis Phalanx, and Artemis a Moonlit Hunt, each with its own roster, title, sound cue and counterplay warning.

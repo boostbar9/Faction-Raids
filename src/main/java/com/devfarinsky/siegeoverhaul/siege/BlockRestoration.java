@@ -95,6 +95,23 @@ public final class BlockRestoration {
     }
 
     /**
+     * Snapshot one final-approach obstacle. Ordinary doors keep their paired
+     * half behavior; common full masonry is admitted only through this
+     * explicit path and never when it owns block-entity data or fluid.
+     */
+    public static List<BlockPos> snapshotCoreApproachBreach(ServerLevel level,
+                                                            Map<Long, CompoundTag> ledger,
+                                                            BlockPos target, int maxBlocks) {
+        BlockState initial = level.getBlockState(target);
+        if (isBreachable(initial)) return snapshotBreach(level, ledger, target, maxBlocks);
+        if (!isCoreApproachBreachable(initial) || initial.hasBlockEntity()
+                || !initial.getFluidState().isEmpty()) return List.of();
+        if (!ledger.containsKey(target.asLong()) && ledger.size() >= maxBlocks) return List.of();
+        ledger.putIfAbsent(target.asLong(), serialize(level, target));
+        return List.of(target.immutable());
+    }
+
+    /**
      * Serialize the block at {@code pos} into a self-describing tag suitable
      * for storage in RaidState. Returns an empty tag when the block cannot be
      * identified (defensive; loader migrations sometimes drop registrations).
@@ -206,6 +223,15 @@ public final class BlockRestoration {
                 || block instanceof FenceBlock
                 || block instanceof IronBarsBlock
                 || block instanceof WallBlock;
+    }
+
+    /**
+     * Narrow extension used only after attackers reach the final claimed
+     * approach to a Siege Core. This intentionally excludes containers,
+     * valuables, machinery, obsidian and arbitrary mod blocks.
+     */
+    public static boolean isCoreApproachBreachable(BlockState state) {
+        return isBreachable(state) || CommanderWallStrikeGoal.breakable(state);
     }
 
     /**
