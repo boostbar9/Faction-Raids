@@ -2,14 +2,28 @@ package com.devfarinsky.siegeoverhaul.client;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EntityPortraitTest {
-    @Test void expensiveLivePreviewOnlyRunsForHoveredPortrait() {
-        assertTrue(EntityPortrait.livePreview(10,20,40,10,20));
-        assertTrue(EntityPortrait.livePreview(10,20,40,49.9f,59.9f));
-        assertFalse(EntityPortrait.livePreview(10,20,40,50,30));
-        assertFalse(EntityPortrait.livePreview(10,20,40,30,60));
-        assertFalse(EntityPortrait.livePreview(10,20,40,9,30));
+    @Test
+    void ordinaryUnitsKeepTheirEntityRole() {
+        for (int role = 0; role < 10; role++) {
+            assertEquals(role, EntityPortrait.entityRole(role));
+        }
+    }
+
+    @Test
+    void everyOlympianHeroMapsToARealRecruitEntity() {
+        for (int role = 10; role <= 29; role++) {
+            int entityRole = EntityPortrait.entityRole(role);
+            assertTrue(entityRole >= 0 && entityRole <= 3,
+                    "hero " + role + " mapped outside the Recruits combat roster");
+        }
+    }
+
+    @Test
+    void lateRosterHeroesDoNotUseTheOldRoleMinusTenMapping() {
+        assertEquals(0, EntityPortrait.entityRole(29));
     }
 }

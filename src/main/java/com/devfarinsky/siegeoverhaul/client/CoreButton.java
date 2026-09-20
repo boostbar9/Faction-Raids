@@ -16,25 +16,19 @@ import java.util.function.BooleanSupplier;
  * key. Buttons retain vanilla focus, narration and keyboard activation so
  * accessibility keeps working.
  *
- * <p>An optional {@link CommandIcon} is drawn to the left of the label; when
- * present, the label is centered in the remaining space.
+ * <p>Buttons may show a real Minecraft item sprite when that conveys useful
+ * information (currently the emerald on treasury controls). Decorative
+ * procedural glyphs are intentionally excluded so labels stay unambiguous.
  */
 public final class CoreButton extends Button {
     private final BooleanSupplier selected;
     private final boolean tab;
-    private final CommandIcon icon;
     private final ItemStack itemIcon;
 
     public CoreButton(Component text, OnPress press,
                       int x, int y, int width, int height,
                       boolean tab, BooleanSupplier selected) {
-        this(text, press, x, y, width, height, tab, selected, (CommandIcon) null, ItemStack.EMPTY);
-    }
-
-    public CoreButton(Component text, OnPress press,
-                      int x, int y, int width, int height,
-                      boolean tab, BooleanSupplier selected, CommandIcon icon) {
-        this(text, press, x, y, width, height, tab, selected, icon, ItemStack.EMPTY);
+        this(text, press, x, y, width, height, tab, selected, ItemStack.EMPTY);
     }
 
 
@@ -46,17 +40,9 @@ public final class CoreButton extends Button {
     public CoreButton(Component text, OnPress press,
                       int x, int y, int width, int height,
                       boolean tab, BooleanSupplier selected, ItemStack itemIcon) {
-        this(text, press, x, y, width, height, tab, selected, (CommandIcon) null, itemIcon);
-    }
-
-    private CoreButton(Component text, OnPress press,
-                       int x, int y, int width, int height,
-                       boolean tab, BooleanSupplier selected,
-                       CommandIcon icon, ItemStack itemIcon) {
         super(x, y, width, height, text, press, DEFAULT_NARRATION);
         this.tab = tab;
         this.selected = selected;
-        this.icon = icon;
         this.itemIcon = itemIcon == null ? ItemStack.EMPTY : itemIcon;
     }
 
@@ -111,15 +97,12 @@ public final class CoreButton extends Button {
 
         int iconSize = Math.min(h - 4, 12);
         int textLeft = x + 6;
-        // At high GUI scales some buttons become too narrow for both their
-        // glyph and complete label. Drop the decorative glyph first instead
-        // of crushing or overlapping the actionable text.
-        boolean hasGlyph = icon != null || !itemIcon.isEmpty();
-        boolean showIcon = hasGlyph
+        // At high GUI scales some buttons become too narrow for both the real
+        // item sprite and complete label. Keep the actionable text readable.
+        boolean showIcon = !itemIcon.isEmpty()
                 && w >= iconSize + font.width(getMessage()) + 18;
         if (showIcon) {
-            if (icon != null) icon.draw(g, x + 4, y + (h - iconSize) / 2, iconSize);
-            else ItemIcons.draw(g, itemIcon, x + 4, y + (h - iconSize) / 2, iconSize);
+            ItemIcons.draw(g, itemIcon, x + 4, y + (h - iconSize) / 2, iconSize);
             textLeft = x + 6 + iconSize + 4;
         }
         int textAreaWidth = Math.max(1, x + w - 6 - textLeft);

@@ -9,6 +9,7 @@ import net.minecraft.client.gui.screens.ConfirmLinkScreen;
 import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.api.distmarker.Dist;
@@ -16,7 +17,10 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Command Center HUD — medieval-fantasy but modern-sleek presentation.
@@ -25,13 +29,14 @@ import java.util.Locale;
  * paints server-authoritative state from {@link CoreHireMenu} and dispatches
  * inventory-button clicks or {@link RaidNetwork} packets. Layout math and
  * server contracts are unchanged from the compact version — only the
- * presentation layer is rebuilt around {@link CommandFrame},
- * {@link CommandPalette} and {@link CommandIcon}.
+ * presentation layer is rebuilt around {@link CommandFrame} and
+ * {@link CommandPalette}. Controls use readable labels; only real Minecraft
+ * item sprites are used where an icon communicates a concrete item.
  *
  * <p>Five tabs share the window:
  * <ul>
- *   <li><b>Army &amp; Heroes</b> — four rotating hire cards with role icon,
- *       rarity ribbon and forged "Recruit" key, plus siege deployment kits.</li>
+ *   <li><b>Army &amp; Heroes</b> — four rotating hire cards with live armored
+ *       entity previews, readable kit details and siege deployment kits.</li>
  *   <li><b>Loot &amp; Blessings</b> — three mystery-loot cards with animated
  *       reveal reel and three blessing cards with cool-down state.</li>
  *   <li><b>Bank &amp; Faction</b> — deposit/withdraw controls with an
@@ -77,10 +82,22 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private final Button[] boxes = new Button[3];
     private final Button[] buffs = new Button[3];
     private final Button[] bank = new Button[4];
-    private Button recenterButton;
-    private Button zoomInButton;
-    private Button zoomOutButton;
     private Button feedbackButton;
+
+    /** Bounded caches avoid remeasuring and rewrapping unchanged labels every frame. */
+    private final Map<TextMeasureKey, String> fittedText = boundedCache(256);
+    private final Map<TextMeasureKey, List<FormattedCharSequence>> wrappedText = boundedCache(256);
+
+    private record TextMeasureKey(String value, int width) {}
+
+    private static <K, V> Map<K, V> boundedCache(int maximumSize) {
+        return new LinkedHashMap<>(64, 0.75F, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
+                return size() > maximumSize;
+            }
+        };
+    }
 
     public CoreHireScreen(CoreHireMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -99,29 +116,34 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     @Override
     protected void init() {
+        fittedText.clear();
+        wrappedText.clear();
         layout = CoreHireLayout.fit(width, height);
         imageWidth = layout.width();
         imageHeight = layout.height();
         super.init();
 
-        // Tab rail across the top: icon + label, evenly spaced.
+        // Text-only tabs stay readable at every GUI scale. The old decorative
+        // glyphs were ambiguous and competed with the labels.
         String[] tabLabels = layout.compact()
                 ? new String[]{"Army", "Loot", "Treasury", "Land", "Intel"}
                 : new String[]{"Army", "Loot", "Treasury", "Territory", "Intel"};
-        CommandIcon[] tabIcons = {CommandIcon.SWORDS, CommandIcon.CHEST, CommandIcon.BANK, CommandIcon.MAP, CommandIcon.BOOK};
         int tabCount = tabLabels.length;
         int tabWidth = layout.tabWidth(tabCount);
         for (int i = 0; i < tabCount; i++) {
             final int index = i;
             addRenderableWidget(new CoreButton(
                     Component.literal(tabLabels[i]),
-                    b -> { tab = index; confirmBox = -1; },
+                    b -> {
+                        tab = index;
+                        confirmBox = -1;
+                        updateControlState();
+                    },
                     layout.tabX(i, tabCount),
                     layout.tabY(),
                     tabWidth, CoreHireLayout.TAB_HEIGHT,
                     true,
-                    () -> tab == index,
-                    tabIcons[i]));
+                    () -> tab == index));
         }
 
         // Close (X) button in the header for players who can't reach Escape
@@ -158,26 +180,15 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             String[] bankLabels = layout.compact()
                     ? new String[]{"+8", "+64", "-8", "-64"}
                     : new String[]{"Deposit 8", "Deposit 64", "Withdraw 8", "Withdraw 64"};
-            // Deposits show the vanilla emerald sprite; withdrawals keep the
-            // vault glyph so the two directions stay distinguishable.
-            boolean emeraldSide = i < 2;
             int bankGap = layout.controlGap();
             int bw = (layout.width() - layout.outerMargin() * 2 - bankGap * 3) / 4;
-            bank[i] = emeraldSide
-                    ? addRenderableWidget(new CoreButton(
-                            Component.literal(bankLabels[i]),
-                            b -> action(40 + index),
-                            layout.x() + layout.outerMargin() + i * (bw + bankGap),
-                            layout.contentY() + 50,
-                            bw, 20,
-                            false, () -> false, ItemIcons.EMERALD))
-                    : addRenderableWidget(new CoreButton(
-                            Component.literal(bankLabels[i]),
-                            b -> action(40 + index),
-                            layout.x() + layout.outerMargin() + i * (bw + bankGap),
-                            layout.contentY() + 50,
-                            bw, 20,
-                            false, () -> false, CommandIcon.BANK));
+            bank[i] = addRenderableWidget(new CoreButton(
+                    Component.literal(bankLabels[i]),
+                    b -> action(40 + index),
+                    layout.x() + layout.outerMargin() + i * (bw + bankGap),
+                    layout.contentY() + 50,
+                    bw, 20,
+                    false, () -> false, ItemIcons.EMERALD));
         }
 
         // Siege Yard buttons issue paid placement kits. The player then
@@ -193,8 +204,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     layout.x() + layout.outerMargin() + i * (yardW + yardGap),
                     layout.siegeYardY(),
                     yardW, CoreHireLayout.ARMY_ACTION_HEIGHT,
-                    false, () -> false,
-                    i == 0 ? CommandIcon.SWORDS : CommandIcon.BOOK));
+                    false, () -> false));
         }
 
         // Territory-level buff buttons: four one-time upgrades that apply
@@ -223,7 +233,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     cellX + tbCellW - btnW - 8,
                     cellY + tbCellH - btnH - 6,
                     btnW, btnH,
-                    false, () -> false, CommandIcon.FLAG));
+                    false, () -> false));
         }
         // Fortify Perimeter strip: 3 side-by-side material buttons that
         // commission a Villager Recruits Builder to wall off the territory
@@ -242,18 +252,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     layout.x() + 10 + i * (fbW + fbGap),
                     stripY,
                     fbW, stripH,
-                    false, () -> false, CommandIcon.FLAG));
+                    false, () -> false));
         }
-
-        // Recenter/zoom buttons removed; the Territory tab is now a pure
-        // upgrade shop. Keep the button fields non-null for the render loop
-        // by pointing them at hidden placeholders that render nothing.
-        recenterButton = addRenderableWidget(new CoreButton(
-                Component.literal(""), b -> {}, 0, -100, 1, 1, false, () -> false));
-        zoomInButton = addRenderableWidget(new CoreButton(
-                Component.literal(""), b -> {}, 0, -100, 1, 1, false, () -> false));
-        zoomOutButton = addRenderableWidget(new CoreButton(
-                Component.literal(""), b -> {}, 0, -100, 1, 1, false, () -> false));
 
         // Persistent path for beta feedback. Minecraft shows its normal
         // external-link confirmation before opening CurseForge comments.
@@ -264,7 +264,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 layout.x() + layout.width() - feedbackW - 8,
                 layout.footerY() + 2,
                 feedbackW, 14,
-                false, () -> false, CommandIcon.BOOK));
+                false, () -> false));
 
         // Loot boxes and blessing keys.
         for (int i = 0; i < 3; i++) {
@@ -393,9 +393,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                             : "Fortify  " + label + "  " + TerritoryFortification.PRICE + "e"));
         }
         for (int i = 0; i < 3; i++) {
-            recenterButton.visible = tab == 3;
-            zoomInButton.visible = tab == 3;
-            zoomOutButton.visible = tab == 3;
             boxes[i].visible = buffs[i].visible = tab == 1;
             boxes[i].active = waitingTicks == 0 && revealTicks == 0
                     && canAfford(CoreLoot.price(i));
@@ -411,22 +408,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             buffs[i].setMessage(Component.literal(
                     active ? "Blessing active" : "Bless  ·  " + CoreBuffs.PRICES[i] + "e"));
         }
-    }
-
-    /**
-     * Paint a soft additive glow behind the currently active tab button so
-     * the selected tab clearly reads as "lit". Tab button positions match
-     * the layout in {@link #init()}.
-     */
-    private void drawActiveTabGlow(GuiGraphics g) {
-        int tabCount = 5;
-        int tabWidth = layout.tabWidth(tabCount);
-        int gx = layout.tabX(tab, tabCount);
-        int gy = layout.tabY();
-        HudAtlas.enableAdditive();
-        HudAtlas.blitTinted(g, HudAtlas.GLOW_SOFT,
-                gx - 8, gy - 6, tabWidth + 16, 32, 0x50ffd08a);
-        HudAtlas.disableAdditive();
     }
 
     private void drawTooltips(GuiGraphics g, int mx, int my,
@@ -553,8 +534,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int maxByViewport = Math.max(1, width - 24);
         int maxByPanel = layout == null ? maxByViewport : Math.max(1, layout.width() - 24);
         int wrapWidth = Math.max(1, Math.min(300, Math.min(maxByViewport, maxByPanel)));
-        g.renderTooltip(font, font.split(Component.literal(text),
-                wrapWidth), x, y);
+        g.renderTooltip(font, wrapped(text, wrapWidth), x, y);
     }
 
     private static String emeralds(long amount) {
@@ -563,12 +543,28 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     private void text(GuiGraphics g, String text, int x, int y, int width, int color) {
         int available = Math.max(1, width);
-        String fitted = font.plainSubstrByWidth(text, available);
-        if (!fitted.equals(text) && available > font.width("…")) {
-            fitted = font.plainSubstrByWidth(text,
-                    available - font.width("…")) + "…";
+        TextMeasureKey key = new TextMeasureKey(text, available);
+        String fitted = fittedText.get(key);
+        if (fitted == null) {
+            fitted = font.plainSubstrByWidth(text, available);
+            if (!fitted.equals(text) && available > font.width("…")) {
+                fitted = font.plainSubstrByWidth(text,
+                        available - font.width("…")) + "…";
+            }
+            fittedText.put(key, fitted);
         }
         g.drawString(font, fitted, x, y, color, false);
+    }
+
+    private List<FormattedCharSequence> wrapped(String text, int width) {
+        int available = Math.max(1, width);
+        TextMeasureKey key = new TextMeasureKey(text, available);
+        List<FormattedCharSequence> cached = wrappedText.get(key);
+        if (cached != null) return cached;
+        List<FormattedCharSequence> lines = List.copyOf(
+                font.split(Component.literal(text), available));
+        wrappedText.put(key, lines);
+        return lines;
     }
 
     private long availableFunds() {
@@ -618,11 +614,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int chipW = Math.max(layout.compact() ? 82 : 96,
                 Math.min(w / 3, font.width(purse) + (layout.compact() ? 44 : 60)));
         int chipX = x + w - chipW - 30;
-        // Soft glow behind the pill for treasury prominence.
-        HudAtlas.enableAdditive();
-        HudAtlas.blitTinted(g, HudAtlas.GLOW_SOFT,
-                chipX - 16, y + 4, chipW + 32, 32, 0x60ffe0a0);
-        HudAtlas.disableAdditive();
         HudAtlas.blit(g, HudAtlas.TREASURY_PILL, chipX, y + 6, chipW, 24);
         // Real vanilla emerald sprite so the currency readout always matches
         // the player's resource pack.
@@ -636,15 +627,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
         // Active-siege ribbon under the header.
         drawSiegeRibbon(g, x, y, w);
-
-        // Drifting golden motes across the tab body for atmosphere. Motes
-        // are procedural so they cost no textures; positions come from a
-        // stable hash mixed with real time so they slowly drift diagonally.
-        drawMotes(g, x + 4, layout.contentY(), w - 8,
-                Math.max(0, layout.contentBottom() - layout.contentY()));
-
-        // Draw the active-tab under-glow below the tab widgets themselves.
-        drawActiveTabGlow(g);
 
         // Tab body.
         if (tab == 0) {
@@ -662,42 +644,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
         // Footer stats strip: faction size + contextual tab hint.
         drawFooterStrip(g, x, layout.footerY(), w);
-    }
-
-    /**
-     * Drifting golden atmosphere motes across the tab body. Motes are pure
-     * math (no textures, no allocations) so they stay cheap; positions come
-     * from a stable hash mixed with real time so each mote drifts diagonally
-     * and wraps within the bounds.
-     */
-    private void drawMotes(GuiGraphics g, int x, int y, int w, int h) {
-        if (w <= 0 || h <= 0) return;
-        long tick = minecraft != null && minecraft.level != null
-                ? minecraft.level.getGameTime() : 0;
-        float t = tick + (minecraft != null ? minecraft.getFrameTime() : 0);
-        int count = Math.min(24, Math.max(6, (w * h) / 4000));
-        for (int i = 0; i < count; i++) {
-            float phase = i * 137.5f;
-            float sx = (float) ((Math.sin(i * 12.9898) * 43758.5453) % 1.0);
-            float sy = (float) ((Math.sin(i * 78.233) * 43758.5453) % 1.0);
-            if (sx < 0) sx += 1;
-            if (sy < 0) sy += 1;
-            float px = sx + (t * 0.0007f + phase * 0.001f);
-            float py = sy + (t * 0.0011f);
-            px -= (float) Math.floor(px);
-            py -= (float) Math.floor(py);
-            int mx = x + (int) (px * (w - 2));
-            int my = y + (int) (py * (h - 2));
-            float twinkle = 0.4f + 0.6f * (float) Math.sin(t * 0.05f + i);
-            int a = Math.min(200, (int) (twinkle * 200));
-            int argb = (a << 24) | 0x00ffd88a;
-            g.fill(mx, my, mx + 1, my + 1, argb);
-            if (twinkle > 0.85f) {
-                int halo = ((a / 3) << 24) | 0x00ffd88a;
-                g.fill(mx - 1, my, mx + 2, my + 1, halo);
-                g.fill(mx, my - 1, mx + 1, my + 2, halo);
-            }
-        }
     }
 
     /** Textured hanging crest banner rendered from the HUD atlas. */
@@ -724,9 +670,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         String membersLine = layout.compact()
                 ? Integer.toString(members)
                 : members + (members == 1 ? " member" : " members");
-        CommandIcon.SHIELD.draw(g, x + 10, y + 2, 10);
-        text(g, membersLine, x + 24, y + 4,
-                layout.compact() ? 28 : 94, CommandPalette.TEXT_MUTED);
+        text(g, membersLine, x + 10, y + 4,
+                layout.compact() ? 42 : 108, CommandPalette.TEXT_MUTED);
 
         // Context hint in the middle.
         String hint = switch (tab) {
@@ -738,7 +683,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             default -> "";
         };
         if (!layout.compact()) {
-            int hintLeft = x + 122;
+            int hintLeft = x + 126;
             int hintRight = tab == 0 ? feedbackLeft - 92 : feedbackLeft - 8;
             int hintArea = Math.max(1, hintRight - hintLeft);
             int hintW = Math.min(font.width(hint), hintArea);
@@ -771,12 +716,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // Sub-tab strip
         String[] labels = {"Units", "Enemy Lore", "How to Play"};
         int segW = w / 3;
-        // Under-glow behind the active sub-tab.
-        int activeSx = x + intelSection * segW;
-        HudAtlas.enableAdditive();
-        HudAtlas.blitTinted(g, HudAtlas.GLOW_SOFT,
-                activeSx - 8, y - 6, segW + 16, 32, 0x40ffd08a);
-        HudAtlas.disableAdditive();
         for (int i = 0; i < 3; i++) {
             int sx = x + i * segW;
             boolean active = intelSection == i;
@@ -912,7 +851,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     /** Word-wrap helper. Returns the total height consumed. */
     private int drawWrapped(GuiGraphics g, String s, int x, int y, int w, int colour) {
-        var lines = font.split(net.minecraft.network.chat.Component.literal(s), w);
+        var lines = wrapped(s, w);
         int used = 0;
         for (var line : lines) {
             g.drawString(font, line, x, y + used, colour, false);
@@ -955,9 +894,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             if (owned) CommandFrame.cardDimmed(g, cx, cy, cellW, cellH);
             else CommandFrame.card(g, cx, cy, cellW, cellH, accent);
 
-            // Flag icon + label at top of card.
-            CommandIcon.FLAG.draw(g, cx + 8, cy + 8, 14);
-            text(g, TerritoryBuffs.LABELS[i], cx + 28, cy + 10, cellW - 34, accent);
+            // Readable heading replaces the former ambiguous flag glyph.
+            text(g, TerritoryBuffs.LABELS[i], cx + 10, cy + 10, cellW - 20, accent);
 
             // Multi-line description below the label.
             String desc = TerritoryBuffs.DESCRIPTIONS[i];
@@ -992,7 +930,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         boolean siege = wave > 0;
         boolean voting = vote > 0;
 
-        CommandIcon icon = voting ? CommandIcon.SCROLL : siege ? CommandIcon.SWORDS : CommandIcon.SHIELD;
         int accent = voting ? CommandPalette.ACCENT_ARCANE
                 : siege ? CommandPalette.ACCENT_BLOOD
                 : CommandPalette.ACCENT_STEEL;
@@ -1007,39 +944,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
         int ribbonY = layout.ribbonY();
 
-        // While a siege is active the ribbon pulses with a hot red glow behind
-        // it; peacetime uses a neutral steel accent card.
-        if (siege) {
-            long tick = minecraft != null && minecraft.level != null
-                    ? minecraft.level.getGameTime() : 0;
-            float pulse = 0.55f + 0.45f * (float) Math.sin(tick * 0.15f);
-            int alpha = Math.min(255, (int) (pulse * 220));
-            int glowArgb = (alpha << 24) | 0x00ff5a3c;
-            HudAtlas.enableAdditive();
-            HudAtlas.blitTinted(g, HudAtlas.GLOW_HOT,
-                    x + w / 2 - 96, ribbonY - 24, 192, 64, glowArgb);
-            HudAtlas.disableAdditive();
-        }
-
         CommandFrame.card(g, x + 10, ribbonY, w - 20, CoreHireLayout.RIBBON_HEIGHT, accent);
-        icon.draw(g, x + 14, ribbonY + 2, 11);
-        text(g, status, x + 29, ribbonY + 4,
-                Math.max(1, w / 2 - 33), accent);
+        text(g, status, x + 16, ribbonY + 4,
+                Math.max(1, w / 2 - 20), accent);
         text(g, detail, x + w / 2, ribbonY + 4,
                 Math.max(1, w / 2 - 14), CommandPalette.TEXT);
-
-        // Faint tab-specific emblem watermark in the top-right of the tab body.
-        TabEmblem emblem = switch (tab) {
-            case 0 -> TabEmblem.ARMY;
-            case 1 -> TabEmblem.LOOT;
-            case 2 -> TabEmblem.BANK;
-            default -> TabEmblem.TERRITORY;
-        };
-        // Only draw the watermark if there is room and we are not in territory
-        // (the map fills that area itself).
-        if (tab != 3 && w > 480) {
-            emblem.draw(g, x + w - 46, layout.contentY() - 16, 32);
-        }
     }
 
     private void drawHire(GuiGraphics g, int i, int mouseX, int mouseY) {
@@ -1084,22 +993,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 : shortRole(role);
         text(g, roleLabel, infoLeft, y + 20, infoWidth, CommandPalette.TEXT_MUTED);
 
-        // Equipment glyphs row (three or four small icons) hinting at loadout.
-        CommandIcon[] gear = gearGlyphs(role);
-        int glyphY = y + 32;
-        int glyphSize = 12;
-        int glyphGap = 6;
-        for (int g_i = 0; g_i < gear.length && g_i < 4; g_i++) {
-            int gx = infoLeft + g_i * (glyphSize + glyphGap);
-            gear[g_i].draw(g, gx, glyphY, glyphSize);
-        }
-
         // Descriptive blurb: role summary for regular recruits/workers,
         // ability line for heroes. Wrapped across up to three lines so the
         // player doesn't have to hover the tooltip to know what they're
         // hiring.
         String blurb = i == 3 ? HeroTraits.description(role) : roleBlurb(role);
-        int blurbY = y + 48;
+        int blurbY = y + 34;
         int chipY = y + h - 42;
         int maxBlurbLines = Math.max(1, Math.min(3,
                 (chipY - blurbY - 2) / 10));
@@ -1173,32 +1072,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private int drawWrappedText(GuiGraphics g, String s, int x, int y, int width,
                                 int maxLines, int color) {
         if (s == null || s.isEmpty()) return 0;
-        String[] words = s.split(" ");
-        StringBuilder line = new StringBuilder();
-        int drawn = 0;
-        for (int w = 0; w < words.length; w++) {
-            String word = words[w];
-            if (font.width(word) > width) {
-                String clipped = font.plainSubstrByWidth(word, Math.max(1, width - font.width("…")));
-                word = clipped + "…";
-            }
-            String candidate = line.length() == 0 ? word : line + " " + word;
-            if (font.width(candidate) <= width) {
-                line.setLength(0);
-                line.append(candidate);
-            } else {
-                if (line.length() > 0) {
-                    g.drawString(font, line.toString(), x, y + drawn * 10, color, false);
-                    drawn++;
-                    if (drawn >= maxLines) return drawn;
-                }
-                line.setLength(0);
-                line.append(word);
-            }
-        }
-        if (line.length() > 0 && drawn < maxLines) {
-            g.drawString(font, line.toString(), x, y + drawn * 10, color, false);
-            drawn++;
+        List<FormattedCharSequence> lines = wrapped(s, width);
+        int drawn = Math.min(maxLines, lines.size());
+        for (int i = 0; i < drawn; i++) {
+            g.drawString(font, lines.get(i), x, y + i * 10, color, false);
         }
         return drawn;
     }
@@ -1222,6 +1099,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     /** Loadout / armor hint shown under the blurb. */
     private static String kitDescriptor(int role) {
+        if (CoreHiring.isHero(role)) {
+            String armor = switch (CoreHiring.heroTier(role)) {
+                case 0 -> "iron";
+                case 4 -> "netherite";
+                default -> "diamond";
+            };
+            return "Kit: " + armor + " themed armor, " + HeroTraits.weaponName(role);
+        }
         return switch (role) {
             case 0 -> "Kit: leather cap, iron sword, wooden shield";
             case 1 -> "Kit: iron helm, iron sword, iron shield";
@@ -1233,15 +1118,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             case 7 -> "Kit: leather cap, hammer, timber";
             case 8 -> "Kit: chef hat, iron knife, cook pot";
             case 9 -> "Kit: leather boots, satchel, map";
-            case 10 -> "Kit: netherite helm, Cinderfang blade, redstone-trimmed armor";
-            case 11 -> "Kit: netherite helm, Oathkeeper blade, ward-trimmed armor";
-            case 12 -> "Kit: netherite helm, Thornsong bow, wild-trimmed armor";
-            case 13 -> "Kit: netherite helm, Stormbolt crossbow, eye-trimmed armor";
             default -> "";
         };
     }
 
     private static String shortRole(int role) {
+        if (CoreHiring.isHero(role)) return "Hero";
         return switch (role) {
             case 0 -> "Recruit";
             case 1 -> "Shieldman";
@@ -1253,28 +1135,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             case 7 -> "Builder";
             case 8 -> "Cook";
             case 9 -> "Courier";
-            case 10, 11, 12, 13 -> "Hero";
             default -> "Unit";
-        };
-    }
-
-    private static CommandIcon[] gearGlyphs(int role) {
-        return switch (role) {
-            case 0 -> new CommandIcon[]{CommandIcon.SWORDS, CommandIcon.SHIELD};
-            case 1 -> new CommandIcon[]{CommandIcon.SHIELD, CommandIcon.SWORDS, CommandIcon.SHIELD};
-            case 2 -> new CommandIcon[]{CommandIcon.SWORDS, CommandIcon.SCROLL};
-            case 3 -> new CommandIcon[]{CommandIcon.SWORDS, CommandIcon.SCROLL, CommandIcon.SHIELD};
-            case 4 -> new CommandIcon[]{CommandIcon.WIND, CommandIcon.SCROLL};
-            case 5 -> new CommandIcon[]{CommandIcon.SWORDS, CommandIcon.SCROLL};
-            case 6 -> new CommandIcon[]{CommandIcon.POWER, CommandIcon.SCROLL};
-            case 7 -> new CommandIcon[]{CommandIcon.SHIELD, CommandIcon.SCROLL};
-            case 8 -> new CommandIcon[]{CommandIcon.SCROLL, CommandIcon.EMERALD};
-            case 9 -> new CommandIcon[]{CommandIcon.SCROLL, CommandIcon.FLAG};
-            case 10 -> new CommandIcon[]{CommandIcon.SWORDS, CommandIcon.POWER, CommandIcon.SHIELD, CommandIcon.CROWN};
-            case 11 -> new CommandIcon[]{CommandIcon.AEGIS, CommandIcon.SHIELD, CommandIcon.CROWN};
-            case 12 -> new CommandIcon[]{CommandIcon.SWORDS, CommandIcon.WIND, CommandIcon.CROWN};
-            case 13 -> new CommandIcon[]{CommandIcon.POWER, CommandIcon.AEGIS, CommandIcon.CROWN};
-            default -> new CommandIcon[]{CommandIcon.SHIELD};
         };
     }
 
@@ -1288,26 +1149,28 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
         if (layout.compact()) {
             if (done) g.renderItem(revealed, x + 4, y + Math.max(2, (h - 16) / 2));
-            else LootIcons.tier(i).draw(g, x + 6, y + Math.max(3, (h - 12) / 2), 12);
-            text(g, CoreLoot.NAMES[i], x + 23, y + 5, w - 29, CommandPalette.TEXT);
+            text(g, CoreLoot.NAMES[i], done ? x + 23 : x + 8, y + 5,
+                    done ? w - 29 : w - 16, CommandPalette.TEXT);
             return;
         }
 
-        // Portrait slot: tiered box icon by default, revealed item after unsealing.
-        CommandFrame.chip(g, x + 6, y + 5, 20, 20, CommandPalette.ACCENT_GOLD);
+        // Show the real reward item after unsealing. Before opening, readable
+        // text carries the tier instead of an unexplained miniature glyph.
+        int textLeft = x + 8;
         if (done) {
+            CommandFrame.chip(g, x + 6, y + 5, 20, 20, CommandPalette.ACCENT_GOLD);
             g.renderItem(revealed, x + 8, y + 7);
-        } else {
-            LootIcons.tier(i).draw(g, x + 10, y + 9, 12);
+            textLeft = x + 30;
         }
 
-        text(g, CoreLoot.NAMES[i], x + 30, y + 6, w - 36, CommandPalette.TEXT);
+        text(g, CoreLoot.NAMES[i], textLeft, y + 6,
+                x + w - textLeft - 6, CommandPalette.TEXT);
         String subtitle = opening ? "Unsealing the seal..."
                 : done ? revealed.getHoverName().getString()
                 : CoreLoot.floorTier(i) > 0
                         ? CoreLoot.rarity(CoreLoot.floorTier(i)) + " floor  |  Epic ceiling"
                         : "Sealed Loot Box  |  " + CoreLoot.odds();
-        text(g, subtitle, x + 30, y + 17, w - 36,
+        text(g, subtitle, textLeft, y + 17, x + w - textLeft - 6,
                 opening ? CommandPalette.ACCENT_ARCANE
                         : done ? CommandPalette.tier(revealedTier)
                         : CommandPalette.TEXT_MUTED);
@@ -1342,12 +1205,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int y = layout.marketFreeTop();
         int bandH = Math.min(h, 30);
         CommandFrame.card(g, x, y, w, bandH, CommandPalette.ACCENT_STEEL);
-        CommandIcon.CHEST.draw(g, x + 6, y + 5, 12);
         text(g, "Purchases hand you a sealed box  ·  open it in your inventory to reveal the loot",
-                x + 23, y + 6, w - 29, CommandPalette.TEXT_MUTED);
+                x + 8, y + 6, w - 16, CommandPalette.TEXT_MUTED);
         if (bandH >= 26) {
             text(g, "Pricier chests floor higher rarity  ·  Field roll from Common, Veteran from Uncommon, Royal from Rare.",
-                    x + 23, y + 17, w - 29, CommandPalette.TEXT_DIM);
+                    x + 8, y + 17, w - 16, CommandPalette.TEXT_DIM);
         }
     }
 
@@ -1356,19 +1218,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int w = layout.cardWidth(), h = layout.marketHeight();
         CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_TEAL);
 
-        CommandIcon icon = i == 0 ? CommandIcon.WIND
-                : i == 1 ? CommandIcon.POWER
-                : CommandIcon.AEGIS;
         if (layout.compact()) {
-            icon.draw(g, x + 6, y + Math.max(3, (h - 12) / 2), 12);
-            text(g, CoreBuffs.NAMES[i], x + 23, y + 5, w - 29, CommandPalette.TEXT);
+            text(g, CoreBuffs.NAMES[i], x + 8, y + 5, w - 16, CommandPalette.TEXT);
             return;
         }
-        CommandFrame.chip(g, x + 6, y + 5, 20, 20, CommandPalette.ACCENT_TEAL);
-        icon.draw(g, x + 10, y + 9, 12);
-
-        text(g, CoreBuffs.NAMES[i], x + 30, y + 6, w - 36, CommandPalette.TEXT);
-        text(g, CoreBuffs.DETAILS[i], x + 30, y + 17, w - 36, CommandPalette.TEXT_MUTED);
+        text(g, CoreBuffs.NAMES[i], x + 8, y + 6, w - 16, CommandPalette.TEXT);
+        text(g, CoreBuffs.DETAILS[i], x + 8, y + 17, w - 16, CommandPalette.TEXT_MUTED);
 
         ItemIcons.emerald(g, x + 8, y + 26, 10);
         text(g, CoreBuffs.PRICES[i] + "  |  personal blessing, 5 min",
@@ -1386,15 +1241,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int bankY = layout.contentY();
         CommandFrame.card(g, x + 10, bankY, w - 20, bankCardH, CommandPalette.ACCENT_GOLD);
 
-        // Textured bank coin-stack icon with a soft glow.
-        int coinX = x + 14, coinY = bankY + 4;
-        HudAtlas.enableAdditive();
-        HudAtlas.blitTinted(g, HudAtlas.GLOW_SOFT,
-                coinX - 8, coinY - 4, 42, 34, 0x80ffdd8a);
-        HudAtlas.disableAdditive();
-        HudAtlas.blit(g, HudAtlas.ICON_BANK, coinX, coinY);
-
-        int leftX = x + 46;
+        int leftX = x + 18;
         long dailyInterest = (long) menu.bank() * menu.interestRate() / 10000L;
         String interestCountdown = formatInterestCountdown(menu.ticksUntilInterest());
         if (layout.compact()) {
@@ -1438,8 +1285,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int rosterY = bankRosterY();
         int rosterH = bankRosterHeight();
         CommandFrame.card(g, x + 10, rosterY, w - 20, rosterH, CommandPalette.ACCENT_ARCANE);
-        CommandIcon.SCROLL.draw(g, x + 16, rosterY + 4, 12);
-        text(g, "FACTION ROSTER", x + 32, rosterY + 6, w - 48,
+        text(g, "FACTION ROSTER", x + 18, rosterY + 6, w - 34,
                 CommandPalette.ACCENT_ARCANE);
 
         boolean showGraph = !layout.compact() && rosterH >= 82;
