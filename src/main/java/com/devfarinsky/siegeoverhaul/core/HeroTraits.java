@@ -102,7 +102,7 @@ public final class HeroTraits {
         };
     }
     /** Weapon name per hero. Adds flavor and reads at a glance in the tooltip. */
-    private static String weaponName(int role) {
+    public static String weaponName(int role) {
         return switch(role) {
             case 10 -> "Spear of Ares"; case 11 -> "Aegis Edge";
             case 12 -> "Stormbow of Poseidon"; case 13 -> "Moonfrost"; case 14 -> "Phobos Fang"; case 15 -> "Forgeward";

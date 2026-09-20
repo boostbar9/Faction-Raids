@@ -1,3 +1,12 @@
+# 4.47.1 beta
+
+- Restore real, continuously visible Recruits and Workers entity previews to all four Army offer cards. Models wear their preview loadouts and follow the cursor again; the flat procedural avatars now appear nowhere in the normal Command Center path.
+- Correct preview entity selection for the complete twenty-hero Olympian roster. Later heroes now map through their actual Recruit class instead of `role - 10`, and previews reuse the production equipment paths, including supported Epic Knights and Musket equipment when installed.
+- Remove the unclear equipment glyph rows, large tab-corner emblems and decorative icons from tabs, status, upgrades, blessings, roster and action buttons. Keep real Minecraft emeralds and revealed reward items where an item sprite has literal meaning.
+- Reduce Command Center frame work while preserving four live models: cache fitted and wrapped text, remove continuous motes and additive glow passes, remove three obsolete hidden map widgets, and keep control-state updates at game-tick frequency.
+- Tighten Army card text flow and use readable headings across Loot, Treasury, Territory and Intel at detailed and compact GUI sizes.
+- Preserve Minecraft 1.20.1 Forge / Java 17, saves, gameplay balance, loot-box prices, required and optional dependency metadata and server-side purchase validation.
+
 # 4.47.0 beta
 
 - Let stranded invasion crews disembark onto the prevalidated landing beach even when their vessel stops outside its old local landing search, while retaining collision, fluid, world-border and loaded-chunk safety checks.

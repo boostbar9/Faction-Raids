@@ -87,6 +87,7 @@ class HeroTraitsTest extends MinecraftTestSupport {
             assertTrue(names.add(name),"duplicate hero name: "+name);
             assertNotEquals(CoreHiring.legacyHeroName(role),name);
             assertFalse(HeroTraits.description(role).isBlank());
+            assertFalse(HeroTraits.weaponName(role).isBlank());
             assertTrue(CoreHiring.heroBase(role)>=0 && CoreHiring.heroBase(role)<=3);
             assertTrue(CoreHiring.heroTier(role)>=0 && CoreHiring.heroTier(role)<=4);
             assertFalse(CoreHiring.heroFaction(role).isBlank());

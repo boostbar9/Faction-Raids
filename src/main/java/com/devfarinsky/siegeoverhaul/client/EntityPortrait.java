@@ -2,15 +2,20 @@ package com.devfarinsky.siegeoverhaul.client;
 
 import com.devfarinsky.siegeoverhaul.core.CoreHiring;
 import com.devfarinsky.siegeoverhaul.core.CoreOffers;
+import com.devfarinsky.siegeoverhaul.core.HeroTraits;
+import com.devfarinsky.siegeoverhaul.core.RecruitPersonality;
+import com.devfarinsky.siegeoverhaul.core.WorkerStartingKit;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -25,11 +30,11 @@ import java.util.Map;
  * <p>The mob is created once per role on the client side, cached, and drawn
  * with {@link InventoryScreen#renderEntityInInventoryFollowsMouse} so the head
  * gently tracks the cursor. If creation fails (missing dep, strict client-only
- * ctor in another mod, etc.), we fall back to the procedural
- * {@link RolePortrait} so a hire card is never empty.
+ * ctor in another mod, etc.), we fall back to the role's real Minecraft item
+ * sprite so the card stays understandable without showing a fake avatar.
  *
- * <p>Role indices follow {@link CoreHiring#IDS}. Heroes 10-13 remap to the
- * matching hero entity id (indices 0-3 in the recruits registry).
+ * <p>Role indices follow {@link CoreHiring#IDS}. Every hero role remaps through
+ * {@link CoreHiring#heroBase(int)} to its matching Recruits entity type.
  */
 public final class EntityPortrait {
     private EntityPortrait() {}
@@ -41,21 +46,11 @@ public final class EntityPortrait {
 
     /**
      * Draw the mob for {@code role} centred on the given square. Falls back to
-     * {@link RolePortrait} when the entity cannot be constructed on the client.
+     * a role-item preview when the entity cannot be constructed on the client.
      */
     public static void draw(GuiGraphics g, int role, int x, int y, int size,
                             float mouseX, float mouseY) {
-        // Rendering four fully animated third-party entities every frame was
-        // the dominant Command Center cost on modpacks with heavy armor and
-        // entity render layers. Keep the custom static portrait for the card,
-        // and render the real model only while that portrait is inspected.
-        // A cursor can intersect at most one card, bounding the expensive path
-        // to one entity render per frame instead of four.
-        if (!livePreview(x, y, size, mouseX, mouseY)) {
-            RolePortrait.draw(g, role, x, y, size);
-            return;
-        }
-        // Card backdrop drawn identically to RolePortrait so both paths line up.
+        // Stable card backdrop shared by the entity and failure paths.
         g.fill(x, y, x + size, y + size, 0xff0e0906);
         g.fillGradient(x + 1, y + 1, x + size - 1, y + size - 1,
                 0xff2a2016, 0xff130f0c);
@@ -67,20 +62,8 @@ public final class EntityPortrait {
 
         LivingEntity entity = getOrCreate(role);
         if (entity == null) {
-            // Failure path: draw the procedural bust inside the same frame.
-            RolePortrait.draw(g, role, x, y, size);
+            drawFallback(g, role, x, y, size);
             return;
-        }
-
-        // Aureole glow for heroes so they read as legendary.
-        if (role >= 10) {
-            int gx = x + size / 2;
-            int gy = y + size / 2;
-            for (int r = size / 2; r >= 1; r--) {
-                int alpha = Math.max(3, 40 - r * 3);
-                int color = (alpha << 24) | 0xffe4a8;
-                g.fill(gx - r, gy - r, gx + r, gy + r, color);
-            }
         }
 
         // Position the entity so its full body (head to feet) fits inside the
@@ -105,12 +88,17 @@ public final class EntityPortrait {
             // Any renderer NPE from a mod with strict client init: fall back.
             FAILED.add(role);
             CACHE.remove(role);
-            RolePortrait.draw(g, role, x, y, size);
+            drawFallback(g, role, x, y, size);
         }
     }
 
-    static boolean livePreview(int x, int y, int size, float mouseX, float mouseY) {
-        return mouseX >= x && mouseX < x + size && mouseY >= y && mouseY < y + size;
+    private static void drawFallback(GuiGraphics g, int role, int x, int y, int size) {
+        int iconSize = Math.max(12, Math.min(24, size - 8));
+        ItemStack icon = new ItemStack(CoreHiring.icon(role));
+        ItemIcons.draw(g, icon,
+                x + (size - iconSize) / 2,
+                y + (size - iconSize) / 2,
+                iconSize);
     }
 
     private static LivingEntity getOrCreate(int role) {
@@ -122,7 +110,7 @@ public final class EntityPortrait {
         ClientLevel level = mc.level;
         if (level == null) return null;
 
-        int typeRole = role >= 10 ? role - 10 : role;
+        int typeRole = entityRole(role);
         if (typeRole < 0 || typeRole >= CoreHiring.IDS.length) {
             FAILED.add(role);
             return null;
@@ -146,14 +134,15 @@ public final class EntityPortrait {
             living.moveTo(0, 0, 0, 0, 0);
             living.setYRot(0);
             living.setYHeadRot(0);
-            if (role >= 10) {
+            if (CoreHiring.isHero(role)) {
                 living.getPersistentData().putBoolean("SiegeHiredHero", true);
             }
-            // Client-side entities never receive the server's spawn loadout,
-            // so equip a role-appropriate vanilla kit here so the portrait
-            // matches the printed "Kit:" line on the hire card. Cosmetic only:
-            // this instance never sees combat.
-            applyKit(living, role);
+            // Use the same loadout code as a purchased unit so optional Epic
+            // Knights armor, hero equipment and recruit kits are visible in
+            // the preview. The preview stays client-only and never enters the
+            // world. Fall back to a vanilla display kit if a dependency's
+            // client entity does not expose its inventory yet.
+            if (!applyActualKit(living, role)) applyFallbackKit(living, role);
             CACHE.put(role, living);
             return living;
         } catch (Throwable t) {
@@ -162,20 +151,68 @@ public final class EntityPortrait {
         }
     }
 
+    static int entityRole(int role) {
+        return CoreHiring.isHero(role) ? CoreHiring.heroBase(role) : role;
+    }
+
     /**
-     * Equip a display-only vanilla loadout so the portrait mob actually looks
-     * like the printed kit. Uses only vanilla items so it works whether or not
-     * downstream mods (Epic Knights, Musket, etc.) are present.
+     * Apply the same client-safe loadout pipeline used when a unit is hired,
+     * including compatible equipment supplied by companion mods.
      */
-    private static void applyKit(LivingEntity e, int role) {
-        // Helmet + body per role. Heroes get netherite so they read as elite.
+    private static boolean applyActualKit(LivingEntity entity, int role) {
+        if (!(entity instanceof Mob mob)) return false;
+        try {
+            Object value = mob.getClass().getMethod("getInventory").invoke(mob);
+            if (!(value instanceof SimpleContainer inventory)) return false;
+            if (CoreHiring.isHero(role)) {
+                HeroTraits.equip(mob, role, inventory);
+            } else if (role < CoreOffers.WORKER_START) {
+                RecruitPersonality.prepare(mob, role, inventory);
+            } else {
+                WorkerStartingKit.prepare(mob, role, inventory);
+                // Workers keep their finite supplies in native cargo slots.
+                // Put one of those real starter tools in the preview's hand
+                // so the card communicates the job without inventing armor.
+                ItemStack displayTool = switch (role) {
+                    case 4 -> new ItemStack(Items.DIAMOND_HOE);
+                    case 5 -> new ItemStack(Items.DIAMOND_AXE);
+                    case 6, 7 -> new ItemStack(Items.DIAMOND_PICKAXE);
+                    case 8 -> new ItemStack(Items.BREAD);
+                    default -> ItemStack.EMPTY;
+                };
+                if (!displayTool.isEmpty()) mob.setItemSlot(EquipmentSlot.MAINHAND, displayTool);
+            }
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static void applyFallbackKit(LivingEntity e, int role) {
+        // Vanilla-only display fallback for entities whose mod inventory is
+        // unavailable during client-side preview construction.
         ItemStack head = ItemStack.EMPTY;
         ItemStack chest = ItemStack.EMPTY;
         ItemStack legs = ItemStack.EMPTY;
         ItemStack feet = ItemStack.EMPTY;
         ItemStack main = ItemStack.EMPTY;
         ItemStack off = ItemStack.EMPTY;
-        switch (role) {
+        if (CoreHiring.isHero(role)) {
+            int tier = CoreHiring.heroTier(role);
+            int base = CoreHiring.heroBase(role);
+            ItemStack armor = new ItemStack(tier >= 4 ? Items.NETHERITE_HELMET
+                    : tier == 0 ? Items.IRON_HELMET : Items.DIAMOND_HELMET);
+            head = armor;
+            chest = new ItemStack(tier >= 4 ? Items.NETHERITE_CHESTPLATE
+                    : tier == 0 ? Items.IRON_CHESTPLATE : Items.DIAMOND_CHESTPLATE);
+            legs = new ItemStack(tier >= 4 ? Items.NETHERITE_LEGGINGS
+                    : tier == 0 ? Items.IRON_LEGGINGS : Items.DIAMOND_LEGGINGS);
+            feet = new ItemStack(tier >= 4 ? Items.NETHERITE_BOOTS
+                    : tier == 0 ? Items.IRON_BOOTS : Items.DIAMOND_BOOTS);
+            main = new ItemStack(base == 2 ? Items.BOW
+                    : base == 3 ? Items.CROSSBOW : Items.DIAMOND_SWORD);
+            if (base == 1) off = new ItemStack(Items.SHIELD);
+        } else switch (role) {
             case 0 -> { // Recruit
                 head = new ItemStack(Items.LEATHER_HELMET);
                 chest = new ItemStack(Items.LEATHER_CHESTPLATE);
@@ -223,35 +260,6 @@ public final class EntityPortrait {
             case 9 -> { // Courier
                 feet = new ItemStack(Items.LEATHER_BOOTS);
                 main = new ItemStack(Items.FILLED_MAP);
-            }
-            case 10 -> { // Damon, Ares' Blade (Warblade)
-                head = new ItemStack(Items.NETHERITE_HELMET);
-                chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
-                legs = new ItemStack(Items.NETHERITE_LEGGINGS);
-                feet = new ItemStack(Items.NETHERITE_BOOTS);
-                main = new ItemStack(Items.NETHERITE_SWORD);
-            }
-            case 11 -> { // Thalia, Athena's Aegis (Bulwark)
-                head = new ItemStack(Items.NETHERITE_HELMET);
-                chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
-                legs = new ItemStack(Items.NETHERITE_LEGGINGS);
-                feet = new ItemStack(Items.NETHERITE_BOOTS);
-                main = new ItemStack(Items.NETHERITE_AXE);
-                off = new ItemStack(Items.SHIELD);
-            }
-            case 12 -> { // Iris, Zeus' Stormbow (Archer hero)
-                head = new ItemStack(Items.NETHERITE_HELMET);
-                chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
-                legs = new ItemStack(Items.NETHERITE_LEGGINGS);
-                feet = new ItemStack(Items.NETHERITE_BOOTS);
-                main = new ItemStack(Items.BOW);
-            }
-            case 13 -> { // Kyros, Artemis' Frost (Crossbow hero)
-                head = new ItemStack(Items.NETHERITE_HELMET);
-                chest = new ItemStack(Items.NETHERITE_CHESTPLATE);
-                legs = new ItemStack(Items.NETHERITE_LEGGINGS);
-                feet = new ItemStack(Items.NETHERITE_BOOTS);
-                main = new ItemStack(Items.CROSSBOW);
             }
             default -> { /* leave bare */ }
         }

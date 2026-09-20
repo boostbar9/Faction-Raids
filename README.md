@@ -22,7 +22,7 @@ The core opens a responsive five-tab command center:
 - **Territory:** purchase permanent faction-wide upgrades.
 - **Intel:** browse unit reference cards, enemy lore, and field guidance.
 
-The menu sizes itself from the player's Minecraft-scaled viewport, selects detailed or compact cards from the space actually available, and uniformly scales down for unusually small windows so controls and mouse hitboxes stay aligned. Static heraldic portraits keep the menu responsive; hovering a portrait previews the real recruit model. It also includes selected-tab highlighting, an emerald balance, offer refresh progress, affordability cues, and a **Leave Feedback** button that opens the mod's CurseForge comments page through Minecraft's normal link confirmation.
+The menu sizes itself from the player's Minecraft-scaled viewport, selects detailed or compact cards from the space actually available, and uniformly scales down for unusually small windows so controls and mouse hitboxes stay aligned. Army offers continuously show the real Recruits or Workers entity in its armor and equipment, with the model following the cursor. Text-first navigation replaces ambiguous decorative glyphs, while real Minecraft emerald and reward sprites remain where they carry literal meaning. Fitted and wrapped text is cached, control state updates at game-tick frequency, and decorative animation passes are omitted to keep the menu responsive. The footer includes a **Leave Feedback** button that opens the mod's CurseForge comments page through Minecraft's normal link confirmation.
 
 ## Heroes With a Purpose
 
