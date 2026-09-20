@@ -41,6 +41,11 @@ class OlympianHostIdentityTest extends MinecraftTestSupport {
             }
             assertFalse(host.signatureWave(4,5));
             assertTrue(host.signatureWave(5,5));
+            assertTrue(host.signatureWave(5,10));
+            assertFalse(host.signatureWave(6,10));
+            assertFalse(host.signatureWave(9,10));
+            assertTrue(host.signatureWave(10,10));
+            assertFalse(host.signatureWave(11,10));
             assertFalse(host.signatureAssault().counterplay().isBlank());
             assertFalse(host.signatureAssault().roles().isEmpty());
             for(String role:host.signatureAssault().roles()) {

@@ -200,7 +200,7 @@ public record OlympianHostIdentity(
     }
 
     public boolean signatureWave(int wave, int totalWaves) {
-        return wave >= Math.max(1, totalWaves);
+        return wave > 0 && wave <= Math.max(1, totalWaves) && wave % 5 == 0;
     }
 
     /** Weighted selection within this host's four champions. */
