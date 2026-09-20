@@ -61,39 +61,41 @@ public final class CoreButton extends Button {
         boolean chosen = selected.getAsBoolean();
         boolean hover = isHoveredOrFocused();
 
-        // Palette for tabs vs. action keys, in three states: disabled, chosen, active.
-        int borderTop = !active ? 0xff2a2018
-                : chosen ? 0xffe8c968
-                : hover ? 0xffc59a5c
-                : 0xff5a4228;
-        int borderBottom = !active ? 0xff17110c
-                : chosen ? 0xff8b6a2c
-                : 0xff2f2214;
-        int fillTop = !active ? 0xff1a140f
-                : chosen ? (tab ? 0xff3a2e1c : 0xff382c1a)
-                : hover ? (tab ? 0xff2a2116 : 0xff2e2317)
-                : (tab ? 0xff20180f : 0xff261c11);
-        int fillBottom = !active ? 0xff0c0906
-                : chosen ? 0xff20180d
-                : (tab ? 0xff130e08 : 0xff17110b);
+        // Flat navy controls with a restrained gold selection line feel more
+        // like a command console while remaining consistent with the setting.
+        int border = !active ? CommandPalette.CARD_BORDER_DIM
+                : chosen ? CommandPalette.BEVEL_LIGHT
+                : hover ? CommandPalette.CARD_BORDER_HOVER
+                : CommandPalette.CARD_BORDER;
+        int fillTop = !active ? CommandPalette.CARD_TOP_DIM
+                : chosen ? 0xff2a3448
+                : hover ? CommandPalette.CARD_HOVER_TOP
+                : tab ? 0xff182237 : CommandPalette.CARD_TOP;
+        int fillBottom = !active ? CommandPalette.CARD_BOTTOM_DIM
+                : chosen ? 0xff151d2d
+                : hover ? CommandPalette.CARD_HOVER_BOTTOM
+                : tab ? 0xff0e1523 : CommandPalette.CARD_BOTTOM;
 
         int x = getX(), y = getY(), w = width, h = height;
 
-        // Two-tone border with a top hairline for the metal-tab feel.
-        g.fill(x, y + 1, x + w, y + h - 1, borderBottom);
-        g.fill(x + 1, y, x + w - 1, y + h, borderBottom);
-        g.fill(x + 1, y, x + w - 1, y + 1, borderTop);
+        g.fill(x, y + 1, x + w, y + h - 1, border);
+        g.fill(x + 1, y, x + w - 1, y + h, border);
         g.fillGradient(x + 1, y + 1, x + w - 1, y + h - 1, fillTop, fillBottom);
         if (chosen) {
-            // Bright top-edge glow so the active tab reads at a glance.
-            g.fill(x + 3, y + 1, x + w - 3, y + 2, 0xffe8c968);
+            // Active tabs use a modern bottom rail; confirmation actions keep
+            // the same language without introducing another pictogram.
+            int indicatorY = tab ? y + h - 2 : y + 1;
+            g.fill(x + 3, indicatorY, x + w - 3, indicatorY + 1,
+                    CommandPalette.ACCENT_GOLD);
+        } else if (hover && active) {
+            g.fill(x + 4, y + 1, x + w - 4, y + 2, CommandPalette.PANEL_INSET);
         }
 
         var font = Minecraft.getInstance().font;
-        int textColor = !active ? 0xff5a4d3a
-                : chosen ? 0xfffff2c8
-                : hover ? 0xffefe4c8
-                : 0xffcdb99a;
+        int textColor = !active ? CommandPalette.TEXT_DIM
+                : chosen ? CommandPalette.TEXT
+                : hover ? 0xfff7f1df
+                : CommandPalette.TEXT_MUTED;
 
         int iconSize = Math.min(h - 4, 12);
         int textLeft = x + 6;

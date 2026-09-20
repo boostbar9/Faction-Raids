@@ -22,6 +22,9 @@ public record CoreHireLayout(int x, int y, int width, int height,
     public static final int RIBBON_TOP = 55;
     public static final int RIBBON_HEIGHT = 15;
     public static final int CONTENT_TOP = 74;
+    /** Roomy screens get a compact page title and live context line. */
+    public static final int PAGE_HEADER_HEIGHT = 18;
+    public static final int PAGE_HEADER_GAP = 4;
     public static final int FOOTER_HEIGHT = 18;
     public static final int ARMY_ACTION_HEIGHT = 18;
     private static final int MIN_PANEL_WIDTH = 304;
@@ -104,7 +107,11 @@ public record CoreHireLayout(int x, int y, int width, int height,
 
     public int tabY() { return y + TAB_TOP; }
     public int ribbonY() { return y + RIBBON_TOP; }
-    public int contentY() { return y + CONTENT_TOP; }
+    public int pageHeaderY() { return y + CONTENT_TOP; }
+    public int pageHeaderHeight() { return compact ? 0 : PAGE_HEADER_HEIGHT; }
+    public int contentY() {
+        return pageHeaderY() + (compact ? 0 : PAGE_HEADER_HEIGHT + PAGE_HEADER_GAP);
+    }
     public int footerY() { return y + height - FOOTER_HEIGHT; }
     public int contentBottom() { return footerY() - 4; }
 

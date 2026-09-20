@@ -39,9 +39,10 @@ import java.util.Map;
  *       entity previews, readable kit details and siege deployment kits.</li>
  *   <li><b>Loot &amp; Blessings</b> — three mystery-loot cards with animated
  *       reveal reel and three blessing cards with cool-down state.</li>
- *   <li><b>Bank &amp; Faction</b> — deposit/withdraw controls with an
- *       emerald-etched balance readout and a scrollable roster.</li>
- *   <li><b>Territory</b> — permanent faction-wide upgrades.</li>
+ *   <li><b>Treasury</b> — deposit/withdraw controls, glanceable financial
+ *       metrics, a scrollable roster and recent activity.</li>
+ *   <li><b>Territory</b> — permanent faction-wide upgrades and builder
+ *       fortification contracts.</li>
  *   <li><b>Intel</b> — units, enemy lore and the field playbook.</li>
  * </ul>
  */
@@ -51,6 +52,17 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     private static final String FEEDBACK_URL =
             "https://www.curseforge.com/minecraft/mc-mods/siege-overhaul/comments";
+    private static final String[] PAGE_TITLES = {
+            "War Council", "Olympian Reliquary", "Faction Treasury",
+            "Kingdom Development", "Warlord Intelligence"
+    };
+    private static final String[] PAGE_SUBTITLES = {
+            "Recruit defenders, specialists and legendary heroes",
+            "Unseal divine spoils and prepare battlefield blessings",
+            "Manage shared wealth, rewards and faction activity",
+            "Commission permanent upgrades and perimeter works",
+            "Study units, enemy hosts and defensive doctrine"
+    };
 
 
     private CoreHireLayout layout;
@@ -237,7 +249,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
         // Fortify Perimeter strip: 3 side-by-side material buttons that
         // commission a Villager Recruits Builder to wall off the territory
-        // in the chosen material. Bank + inventory pay 900 emeralds per job.
+        // in the chosen material. The faction Treasury pays 900 emeralds.
         int stripY = tbGridBottom + 8;
         int stripH = 22;
         int stripW = layout.width() - 20;
@@ -375,14 +387,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             boolean owned = menu.hasTerritoryBuff(i);
             territoryBuffs[i].active = !owned && canAfford(TerritoryBuffs.PRICES[i]);
             long missing = canAfford(TerritoryBuffs.PRICES[i]) ? 0L : Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
-            territoryBuffs[i].setMessage(Component.literal(layout.compact()
-                    ? (owned ? "Active"
-                            : (missing == 0L ? "Buy  ·  " + TerritoryBuffs.PRICES[i] + "e"
-                            : "Need  ·  " + missing + "e"))
-                    : (owned ? TerritoryBuffs.LABELS[i] + " (active)"
-                            : (missing == 0L
-                            ? TerritoryBuffs.LABELS[i] + "  ·  " + TerritoryBuffs.PRICES[i] + "e"
-                            : TerritoryBuffs.LABELS[i] + "  ·  need " + missing + "e"))));
+            territoryBuffs[i].setMessage(Component.literal(
+                    owned ? "Active"
+                            : missing == 0L
+                                    ? (layout.compact() ? "Buy" : "Enact")
+                                            + "  ·  " + TerritoryBuffs.PRICES[i] + "e"
+                                    : "Need  ·  " + missing + "e"));
         }
         for (int i = 0; i < fortifyButtons.length; i++) {
             fortifyButtons[i].visible = tab == 3;
@@ -473,7 +483,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 if (over(mx, my, layout.cardX(1), layout.marketY(i),
                         layout.cardWidth(), layout.marketHeight())) {
                     tooltip(g, CoreBuffs.DETAILS[i]
-                            + " for 5 minutes. Uses your personal emeralds;"
+                            + " for 5 minutes. Uses the faction Treasury;"
                             + " existing effects are preserved.", tooltipX, tooltipY);
                 }
             }
@@ -523,6 +533,19 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                             tooltipX, tooltipY);
                 }
             }
+            for (int i = 0; i < fortifyButtons.length; i++) {
+                if (fortifyButtons[i].isMouseOver(mx, my)) {
+                    String material = TerritoryFortification.material(i).label();
+                    String affordability = canAfford(TerritoryFortification.PRICE)
+                            ? "Treasury funds are ready."
+                            : "Need " + emeralds(TerritoryFortification.PRICE - availableFunds())
+                                    + " more in the faction Treasury.";
+                    tooltip(g, "Commission a " + material
+                                    + " perimeter from a Workers 2 builder. Requires a nearby"
+                                    + " Builder-enabled storage area with materials. " + affordability,
+                            tooltipX, tooltipY);
+                }
+            }
         }
     }
 
@@ -554,6 +577,15 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             fittedText.put(key, fitted);
         }
         g.drawString(font, fitted, x, y, color, false);
+    }
+
+    /** Draw a right-aligned, text-only state badge and return its width. */
+    private int drawBadge(GuiGraphics g, String label, int right, int y, int accent) {
+        int badgeWidth = font.width(label) + 10;
+        int left = right - badgeWidth;
+        CommandFrame.badge(g, left, y, badgeWidth, 13, accent);
+        text(g, label, left + 6, y + 3, badgeWidth - 8, accent);
+        return badgeWidth;
     }
 
     private List<FormattedCharSequence> wrapped(String text, int width) {
@@ -607,20 +639,20 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         text(g, menu.factionName(),
                 x + 42, y + 22, w / 2 - 50, CommandPalette.TEXT_MUTED);
 
-        // Treasury pill on the right, using the textured rounded pill from
-        // the atlas plus an emerald icon glyph and a live-updating balance.
+        // Personal purse on the right. It uses the same quiet chip language
+        // as the rest of the console and a real emerald item sprite.
         // Leaves 26px of room on the far right for the close (X) button.
         String purse = String.format(Locale.ROOT, "%,d", menu.emeralds());
         int chipW = Math.max(layout.compact() ? 82 : 96,
                 Math.min(w / 3, font.width(purse) + (layout.compact() ? 44 : 60)));
         int chipX = x + w - chipW - 30;
-        HudAtlas.blit(g, HudAtlas.TREASURY_PILL, chipX, y + 6, chipW, 24);
+        CommandFrame.chip(g, chipX, y + 6, chipW, 24,
+                CommandPalette.ACCENT_EMERALD);
         // Real vanilla emerald sprite so the currency readout always matches
         // the player's resource pack.
         ItemIcons.emerald(g, chipX + 7, y + 12, 14);
-        // Top-right pill shows the player's personal emeralds (what they can
-        // spend right now). The Bank card shows the faction-wide treasury.
-        // Two different pools, two clearly different labels.
+        // Top-right pill is an informational view of personal emeralds. Core
+        // purchases still debit only the faction Treasury shown on its tab.
         text(g, layout.compact() ? "PURSE" : "YOUR PURSE",
                 chipX + 26, y + 10, chipW - 32, CommandPalette.ACCENT_GOLD);
         text(g, purse, chipX + 26, y + 20, chipW - 32, CommandPalette.ACCENT_EMERALD);
@@ -629,21 +661,102 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         drawSiegeRibbon(g, x, y, w);
 
         // Tab body.
+        drawPageHeader(g);
+
         if (tab == 0) {
             for (int i = 0; i < 4; i++) drawHire(g, i, mx, my);
         } else if (tab == 1) {
-            for (int i = 0; i < 3; i++) { drawLoot(g, i); drawBuff(g, i); }
+            for (int i = 0; i < 3; i++) {
+                drawLoot(g, i, mx, my);
+                drawBuff(g, i, mx, my);
+            }
             drawLootReserve(g);
         } else if (tab == 2) {
             drawFaction(g);
         } else if (tab == 3) {
-            drawTerritory(g);
+            drawTerritory(g, mx, my);
         } else if (tab == 4) {
-            drawIntel(g);
+            drawIntel(g, mx, my);
         }
 
         // Footer stats strip: faction size + contextual tab hint.
         drawFooterStrip(g, x, layout.footerY(), w);
+    }
+
+    /** Modern two-line page identity shared by every roomy tab. */
+    private void drawPageHeader(GuiGraphics g) {
+        if (layout.pageHeaderHeight() == 0) return;
+        int x = layout.x() + 10;
+        int y = layout.pageHeaderY();
+        int w = layout.width() - 20;
+        int accent = pageAccent();
+
+        g.fill(x, y, x + w, y + CoreHireLayout.PAGE_HEADER_HEIGHT,
+                0x8a0b111d);
+        g.fill(x, y, x + 2, y + CoreHireLayout.PAGE_HEADER_HEIGHT, accent);
+        g.fill(x + 2, y + CoreHireLayout.PAGE_HEADER_HEIGHT - 1,
+                x + w, y + CoreHireLayout.PAGE_HEADER_HEIGHT,
+                CommandPalette.DIVIDER);
+
+        String title = PAGE_TITLES[Math.max(0, Math.min(tab, PAGE_TITLES.length - 1))];
+        String subtitle = PAGE_SUBTITLES[Math.max(0, Math.min(tab, PAGE_SUBTITLES.length - 1))];
+        int titleWidth = Math.min(w / 3, Math.max(90, font.width(title) + 8));
+        text(g, title.toUpperCase(Locale.ROOT), x + 8, y + 2,
+                titleWidth, accent);
+        text(g, subtitle, x + titleWidth + 10, y + 2,
+                Math.max(1, w - titleWidth - 170), CommandPalette.TEXT_MUTED);
+
+        String metric = pageMetric();
+        int metricWidth = Math.min(150, font.width(metric) + 4);
+        text(g, metric, x + w - metricWidth - 7, y + 2,
+                metricWidth, CommandPalette.TEXT);
+        text(g, pageContext(), x + 8, y + 10,
+                w - 16, CommandPalette.TEXT_DIM);
+    }
+
+    private int pageAccent() {
+        return switch (tab) {
+            case 1 -> CommandPalette.ACCENT_ARCANE;
+            case 2 -> CommandPalette.ACCENT_EMERALD;
+            case 3 -> CommandPalette.ACCENT_TEAL;
+            case 4 -> CommandPalette.ACCENT_STEEL;
+            default -> CommandPalette.ACCENT_GOLD;
+        };
+    }
+
+    private String pageMetric() {
+        return switch (tab) {
+            case 0 -> String.format(Locale.ROOT, "Refresh %d:%02d",
+                    menu.seconds() / 60, menu.seconds() % 60);
+            case 1 -> String.format(Locale.ROOT, "Treasury %,de", menu.bank());
+            case 2 -> String.format(Locale.ROOT, "Balance %,de", menu.bank());
+            case 3 -> ownedTerritoryBuffs() + "/" + TerritoryBuffs.COUNT + " active";
+            case 4 -> switch (intelSection) {
+                case 0 -> "Unit archive";
+                case 1 -> "Host archive";
+                default -> "Field doctrine";
+            };
+            default -> "";
+        };
+    }
+
+    private String pageContext() {
+        return switch (tab) {
+            case 0 -> "Four faction-wide offers · purchases deploy from the shared Treasury";
+            case 1 -> "Rewards stay concealed until opened · purchases use the shared Treasury";
+            case 2 -> "Every transaction is faction-wide and recorded in recent activity";
+            case 3 -> "Permanent decrees affect every member · contracts dispatch equipped builders";
+            case 4 -> "Scroll the archive or switch dossiers without leaving the command center";
+            default -> "";
+        };
+    }
+
+    private int ownedTerritoryBuffs() {
+        int owned = 0;
+        for (int i = 0; i < TerritoryBuffs.COUNT; i++) {
+            if (menu.hasTerritoryBuff(i)) owned++;
+        }
+        return owned;
     }
 
     /** Textured hanging crest banner rendered from the HUD atlas. */
@@ -676,7 +789,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // Context hint in the middle.
         String hint = switch (tab) {
             case 0 -> "Shared stock rotates every 15 minutes";
-            case 1 -> "Loot & blessings use personal emeralds";
+            case 1 -> "Loot & blessings draw from the faction Treasury";
             case 2 -> "Interest " + menu.interestRate() / 100.0 + "% every 24h";
             case 3 -> "Faction-wide upgrades apply to every member";
             case 4 -> "Unit reference, enemy lore and field guidance";
@@ -708,7 +821,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
      * bake in the old Warlord's Codex content so the player no longer needs
      * to spawn a book.
      */
-    private void drawIntel(GuiGraphics g) {
+    private void drawIntel(GuiGraphics g, int mouseX, int mouseY) {
         int x = layout.x() + 10, y = layout.contentY();
         int w = layout.width() - 20;
         int h = layout.height() - (y - layout.y()) - 22;
@@ -719,16 +832,16 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         for (int i = 0; i < 3; i++) {
             int sx = x + i * segW;
             boolean active = intelSection == i;
-            int bg = active ? CommandPalette.CARD_TOP : CommandPalette.CARD_TOP_DIM;
-            g.fill(sx, y, sx + segW - 2, y + 18, bg);
-            // Top hairline + bottom accent for a struck-metal tab feel.
-            g.fill(sx, y, sx + segW - 2, y + 1,
-                    active ? CommandPalette.ACCENT_GOLD : CommandPalette.CARD_BORDER);
-            g.fill(sx, y + 17, sx + segW - 2, y + 18,
-                    active ? CommandPalette.ACCENT_GOLD : CommandPalette.BEVEL_DARK);
+            int accent = active ? CommandPalette.ACCENT_STEEL : CommandPalette.TEXT_DIM;
+            CommandFrame.card(g, sx, y, segW - 2, 18, accent,
+                    over(mouseX, mouseY, sx, y, segW - 2, 18));
+            if (active) {
+                g.fill(sx + 4, y + 16, sx + segW - 6, y + 17,
+                        CommandPalette.ACCENT_GOLD);
+            }
             int labelW = font.width(labels[i]);
             text(g, labels[i], sx + (segW - labelW) / 2, y + 5, segW,
-                    active ? CommandPalette.ACCENT_GOLD : CommandPalette.TEXT_MUTED);
+                    active ? CommandPalette.TEXT : CommandPalette.TEXT_MUTED);
         }
 
         // Body panel
@@ -800,16 +913,22 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private int drawUnitsSection(GuiGraphics g, int x, int startY, int w) {
         int y = startY;
         for (var entry : com.devfarinsky.siegeoverhaul.client.codex.UnitCodex.ENTRIES) {
-            text(g, entry.name(), x, y, w, CommandPalette.ACCENT_GOLD); y += 12;
-            text(g, entry.tagline(), x, y, w, CommandPalette.TEXT); y += 10;
-            text(g, entry.stats(), x, y, w, CommandPalette.ACCENT_TEAL); y += 10;
-            y += drawWrapped(g, entry.behavior(), x, y, w, CommandPalette.TEXT_MUTED);
-            y += drawWrapped(g, "Counter: " + entry.counter(), x, y, w, CommandPalette.TEXT);
-            y += drawWrapped(g, "Drops: " + entry.drops(), x, y, w, CommandPalette.ACCENT_EMERALD);
-            text(g, entry.availability(), x, y, w, CommandPalette.TEXT_DIM); y += 10;
-            y += 4;
-            g.fill(x, y, x + w, y + 1, CommandPalette.BEVEL_DARK);
-            y += 6;
+            int innerW = Math.max(1, w - 16);
+            int behaviorH = wrapped(entry.behavior(), innerW).size() * 10;
+            int counterH = wrapped("Counter: " + entry.counter(), innerW).size() * 10;
+            int dropsH = wrapped("Drops: " + entry.drops(), innerW).size() * 10;
+            int cardH = 12 + 12 + 10 + 10 + behaviorH + counterH + dropsH + 10;
+            CommandFrame.card(g, x, y, w, cardH, CommandPalette.ACCENT_STEEL);
+            int tx = x + 8;
+            int ty = y + 6;
+            text(g, entry.name(), tx, ty, innerW, CommandPalette.ACCENT_GOLD); ty += 12;
+            text(g, entry.tagline(), tx, ty, innerW, CommandPalette.TEXT); ty += 10;
+            text(g, entry.stats(), tx, ty, innerW, CommandPalette.ACCENT_TEAL); ty += 10;
+            ty += drawWrapped(g, entry.behavior(), tx, ty, innerW, CommandPalette.TEXT_MUTED);
+            ty += drawWrapped(g, "Counter: " + entry.counter(), tx, ty, innerW, CommandPalette.TEXT);
+            ty += drawWrapped(g, "Drops: " + entry.drops(), tx, ty, innerW, CommandPalette.ACCENT_EMERALD);
+            text(g, entry.availability(), tx, ty, innerW, CommandPalette.TEXT_DIM);
+            y += cardH + 6;
         }
         return y - startY;
     }
@@ -825,13 +944,21 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 title.append(cap ? Character.toUpperCase(c) : c);
                 cap = c == ' ';
             }
-            text(g, title.toString(), x, y, w, CommandPalette.ACCENT_GOLD); y += 12;
+            int innerW = Math.max(1, w - 16);
+            int bodyH = 0;
             for (String line : entry.getValue()) {
-                text(g, line, x, y, w, CommandPalette.TEXT_MUTED); y += 10;
+                bodyH += wrapped(line, innerW).size() * 10;
             }
-            y += 4;
-            g.fill(x, y, x + w, y + 1, CommandPalette.BEVEL_DARK);
-            y += 6;
+            int cardH = 12 + 12 + bodyH;
+            CommandFrame.card(g, x, y, w, cardH, CommandPalette.ACCENT_ARCANE);
+            int tx = x + 8;
+            int ty = y + 6;
+            text(g, title.toString(), tx, ty, innerW, CommandPalette.ACCENT_GOLD);
+            ty += 12;
+            for (String line : entry.getValue()) {
+                ty += drawWrapped(g, line, tx, ty, innerW, CommandPalette.TEXT_MUTED);
+            }
+            y += cardH + 6;
         }
         return y - startY;
     }
@@ -839,12 +966,20 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private int drawHowToPlaySection(GuiGraphics g, int x, int startY, int w) {
         int y = startY;
         for (var tip : com.devfarinsky.siegeoverhaul.client.codex.DefensePlaybook.TIPS) {
-            text(g, "[" + tip.tag() + "] " + tip.title(), x, y, w, CommandPalette.ACCENT_GOLD);
-            y += 12;
-            y += drawWrapped(g, tip.body(), x, y, w, CommandPalette.TEXT_MUTED);
-            y += 4;
-            g.fill(x, y, x + w, y + 1, CommandPalette.BEVEL_DARK);
-            y += 6;
+            int innerW = Math.max(1, w - 16);
+            int bodyH = wrapped(tip.body(), innerW).size() * 10;
+            int cardH = 12 + 12 + bodyH;
+            CommandFrame.card(g, x, y, w, cardH, CommandPalette.ACCENT_TEAL);
+            int tx = x + 8;
+            int ty = y + 6;
+            text(g, tip.tag().toUpperCase(Locale.ROOT), tx, ty,
+                    Math.min(70, innerW), CommandPalette.ACCENT_TEAL);
+            text(g, tip.title(), tx + Math.min(76, innerW / 3), ty,
+                    Math.max(1, innerW - Math.min(76, innerW / 3)),
+                    CommandPalette.ACCENT_GOLD);
+            ty += 12;
+            drawWrapped(g, tip.body(), tx, ty, innerW, CommandPalette.TEXT_MUTED);
+            y += cardH + 6;
         }
         return y - startY;
     }
@@ -871,7 +1006,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 (int) Math.ceil(bottom * scale));
     }
 
-    private void drawTerritory(GuiGraphics g) {
+    private void drawTerritory(GuiGraphics g, int mouseX, int mouseY) {
         // Territory tab is a pure upgrade shop: four one-time faction-wide
         // purchases laid out as a 2x2 grid of tall cards. Each card shows
         // the label, a short description, price and status, with the
@@ -892,10 +1027,20 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                             ? CommandPalette.ACCENT_GOLD
                             : CommandPalette.ACCENT_STEEL);
             if (owned) CommandFrame.cardDimmed(g, cx, cy, cellW, cellH);
-            else CommandFrame.card(g, cx, cy, cellW, cellH, accent);
+            else CommandFrame.card(g, cx, cy, cellW, cellH, accent,
+                    over(mouseX, mouseY, cx, cy, cellW, cellH));
 
             // Readable heading replaces the former ambiguous flag glyph.
-            text(g, TerritoryBuffs.LABELS[i], cx + 10, cy + 10, cellW - 20, accent);
+            if (!layout.compact()) {
+                String stateLabel = owned ? "ACTIVE" : "DECREE";
+                int stateWidth = drawBadge(g, stateLabel, cx + cellW - 7,
+                        cy + 6, accent);
+                text(g, TerritoryBuffs.LABELS[i], cx + 10, cy + 10,
+                        Math.max(1, cellW - stateWidth - 24), accent);
+            } else {
+                text(g, TerritoryBuffs.LABELS[i], cx + 10, cy + 10,
+                        cellW - 20, accent);
+            }
 
             // Multi-line description below the label.
             String desc = TerritoryBuffs.DESCRIPTIONS[i];
@@ -920,6 +1065,47 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             }
             // Compact cards communicate status through the button and tooltip.
             if (!layout.compact()) text(g, status, cx + 10, cy + cellH - 40, cellW - 20, statusColor);
+        }
+
+        drawTerritoryOverview(g);
+    }
+
+    /** Uses the formerly empty Territory band as a compact kingdom summary. */
+    private void drawTerritoryOverview(GuiGraphics g) {
+        int available = layout.territoryFreeHeight();
+        if (available < 18) return;
+        int x = layout.x() + 10;
+        int y = layout.territoryFreeTop();
+        int w = layout.width() - 20;
+        int h = available;
+        int owned = ownedTerritoryBuffs();
+        CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_TEAL);
+        text(g, "KINGDOM READINESS", x + 9, y + 6,
+                Math.max(1, w / 3), CommandPalette.ACCENT_TEAL);
+        String summary = owned + " of " + TerritoryBuffs.COUNT
+                + " permanent decrees active";
+        text(g, summary, x + w / 3, y + 6,
+                Math.max(1, w - w / 3 - 9), CommandPalette.TEXT);
+        if (h >= 30) {
+            CommandFrame.progress(g, x + 9, y + 19, w - 18, 5,
+                    owned / (float) TerritoryBuffs.COUNT,
+                    CommandPalette.ACCENT_TEAL);
+            text(g, owned == TerritoryBuffs.COUNT
+                            ? "All kingdom decrees are active across the faction"
+                            : "Permanent decrees improve every member of the faction",
+                    x + 9, y + 29, w - 18, CommandPalette.TEXT_DIM);
+        }
+        if (h >= 56) {
+            CommandFrame.divider(g, x + 9, y + 43, w - 18);
+            text(g, "PERIMETER CONTRACTS", x + 9, y + 50,
+                    Math.max(1, w / 3), CommandPalette.ACCENT_GOLD);
+            text(g, "Choose a material below to dispatch an equipped Workers 2 builder",
+                    x + w / 3, y + 50,
+                    Math.max(1, w - w / 3 - 9), CommandPalette.TEXT);
+        }
+        if (h >= 72) {
+            text(g, "Requires a Builder-enabled storage area stocked near the wall line",
+                    x + 9, y + 64, w - 18, CommandPalette.TEXT_MUTED);
         }
     }
 
@@ -960,8 +1146,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 : i == 2 ? CommandPalette.ACCENT_TEAL
                 : CommandPalette.ACCENT_GOLD;
 
+        boolean hovered = over(mouseX, mouseY, x, y, w, h);
         if (menu.sold(i)) CommandFrame.cardDimmed(g, x, y, w, h);
-        else CommandFrame.card(g, x, y, w, h, accent);
+        else CommandFrame.card(g, x, y, w, h, accent, hovered);
 
         if (role < 0 || role >= CoreHiring.NAMES.length) return;
 
@@ -985,8 +1172,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int infoLeft = px + portrait + 8;
         int infoWidth = w - portrait - 18;
         // Character name in white.
+        String badge = menu.sold(i) ? "HIRED"
+                : i == 3 ? CoreHiring.rarity(role).toUpperCase(Locale.ROOT)
+                : "AVAILABLE";
+        int badgeColor = menu.sold(i) ? CommandPalette.TEXT_DIM : accent;
+        int badgeWidth = drawBadge(g, badge, x + w - 7, y + 6, badgeColor);
         String name = CoreHiring.NAMES[role];
-        text(g, name, infoLeft, y + 8, infoWidth, CommandPalette.TEXT);
+        text(g, name, infoLeft, y + 8,
+                Math.max(1, infoWidth - badgeWidth - 5), CommandPalette.TEXT);
         // Role/class line in muted gold-brown.
         String roleLabel = i == 3 ? "Hero"
                 : i == 2 ? "Worker " + CoreHiring.NAMES[role]
@@ -1139,10 +1332,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         };
     }
 
-    private void drawLoot(GuiGraphics g, int i) {
+    private void drawLoot(GuiGraphics g, int i, int mouseX, int mouseY) {
         int x = layout.cardX(0), y = layout.marketY(i);
         int w = layout.cardWidth(), h = layout.marketHeight();
-        CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_GOLD);
+        CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_GOLD,
+                over(mouseX, mouseY, x, y, w, h));
 
         boolean opening = revealBox == i && revealTicks > 0;
         boolean done = revealBox == i && revealTicks == 0 && !revealed.isEmpty();
@@ -1163,8 +1357,15 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             textLeft = x + 30;
         }
 
+        String lootState = opening ? "OPENING"
+                : done ? CoreLoot.rarity(revealedTier).toUpperCase(Locale.ROOT)
+                : "SEALED";
+        int stateColor = opening ? CommandPalette.ACCENT_ARCANE
+                : done ? CommandPalette.tier(revealedTier)
+                : CommandPalette.ACCENT_GOLD;
+        int badgeWidth = drawBadge(g, lootState, x + w - 6, y + 5, stateColor);
         text(g, CoreLoot.NAMES[i], textLeft, y + 6,
-                x + w - textLeft - 6, CommandPalette.TEXT);
+                Math.max(1, x + w - textLeft - badgeWidth - 10), CommandPalette.TEXT);
         String subtitle = opening ? "Unsealing the seal..."
                 : done ? revealed.getHoverName().getString()
                 : CoreLoot.floorTier(i) > 0
@@ -1192,37 +1393,60 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
     }
 
-    /**
-     * Free band under the three Loot rows. Rows are capped at the height they
-     * need, so this strip is genuine spare room. Displays a static hint about
-     * the chest odds so newcomers understand the rarity spread at a glance.
-     */
+    /** Free band under the market becomes a readable reliquary protocol. */
     private void drawLootReserve(GuiGraphics g) {
         int h = layout.marketFreeHeight();
         if (h < 16) return;
         int x = layout.x() + 10;
         int w = layout.width() - 20;
         int y = layout.marketFreeTop();
-        int bandH = Math.min(h, 30);
-        CommandFrame.card(g, x, y, w, bandH, CommandPalette.ACCENT_STEEL);
-        text(g, "Purchases hand you a sealed box  ·  open it in your inventory to reveal the loot",
-                x + 8, y + 6, w - 16, CommandPalette.TEXT_MUTED);
-        if (bandH >= 26) {
-            text(g, "Pricier chests floor higher rarity  ·  Field roll from Common, Veteran from Uncommon, Royal from Rare.",
-                    x + 8, y + 17, w - 16, CommandPalette.TEXT_DIM);
+        CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_STEEL);
+        int badgeWidth = 0;
+        if (!layout.compact() && w >= 260) {
+            badgeWidth = drawBadge(g, "REWARDS HIDDEN", x + w - 7, y + 5,
+                    CommandPalette.ACCENT_ARCANE);
+        }
+        text(g, "RELIQUARY PROTOCOL", x + 9, y + 7,
+                Math.max(1, w - badgeWidth - 24), CommandPalette.ACCENT_STEEL);
+        if (h >= 30) {
+            text(g, "Purchases deliver a sealed box; its item remains unknown until the reveal",
+                    x + 9, y + 19, w - 18, CommandPalette.TEXT_MUTED);
+        }
+        if (h >= 48) {
+            CommandFrame.divider(g, x + 9, y + 35, w - 18);
+            text(g, "FIELD", x + 9, y + 42, w / 3 - 12, CommandPalette.TEXT);
+            text(g, "VETERAN", x + w / 3, y + 42, w / 3 - 12, CommandPalette.ACCENT_EMERALD);
+            text(g, "ROYAL", x + (w * 2) / 3, y + 42, w / 3 - 12, CommandPalette.ACCENT_GOLD);
+        }
+        if (h >= 62) {
+            text(g, "Any rarity", x + 9, y + 53, w / 3 - 12, CommandPalette.TEXT_DIM);
+            text(g, "Uncommon floor", x + w / 3, y + 53, w / 3 - 12, CommandPalette.TEXT_DIM);
+            text(g, "Rare floor", x + (w * 2) / 3, y + 53, w / 3 - 12, CommandPalette.TEXT_DIM);
+        }
+        if (h >= 82) {
+            CommandFrame.divider(g, x + 9, y + 72, w - 18);
+            text(g, "Treasury funded  ·  server-authoritative roll  ·  no reward previews",
+                    x + 9, y + 79, w - 18, CommandPalette.TEXT_DIM);
         }
     }
 
-    private void drawBuff(GuiGraphics g, int i) {
+    private void drawBuff(GuiGraphics g, int i, int mouseX, int mouseY) {
         int x = layout.cardX(1), y = layout.marketY(i);
         int w = layout.cardWidth(), h = layout.marketHeight();
-        CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_TEAL);
+        CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_TEAL,
+                over(mouseX, mouseY, x, y, w, h));
 
         if (layout.compact()) {
             text(g, CoreBuffs.NAMES[i], x + 8, y + 5, w - 16, CommandPalette.TEXT);
             return;
         }
-        text(g, CoreBuffs.NAMES[i], x + 8, y + 6, w - 16, CommandPalette.TEXT);
+        boolean active = minecraft != null && minecraft.player != null
+                && minecraft.player.hasEffect(CoreBuffs.effect(i));
+        String state = active ? "ACTIVE" : "5 MIN";
+        int stateColor = active ? CommandPalette.ACCENT_EMERALD : CommandPalette.ACCENT_TEAL;
+        int badgeWidth = drawBadge(g, state, x + w - 6, y + 5, stateColor);
+        text(g, CoreBuffs.NAMES[i], x + 8, y + 6,
+                Math.max(1, w - badgeWidth - 20), CommandPalette.TEXT);
         text(g, CoreBuffs.DETAILS[i], x + 8, y + 17, w - 16, CommandPalette.TEXT_MUTED);
 
         ItemIcons.emerald(g, x + 8, y + 26, 10);
@@ -1235,16 +1459,16 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int x = layout.x();
         int w = layout.width();
 
-        // Bank summary card up top: taller card so we have three text rows
-        // per side without overlap.
+        // Treasury overview: one compact summary on small screens, three
+        // glanceable KPI cards on roomy screens.
         int bankCardH = 46;
         int bankY = layout.contentY();
-        CommandFrame.card(g, x + 10, bankY, w - 20, bankCardH, CommandPalette.ACCENT_GOLD);
-
-        int leftX = x + 18;
         long dailyInterest = (long) menu.bank() * menu.interestRate() / 10000L;
         String interestCountdown = formatInterestCountdown(menu.ticksUntilInterest());
         if (layout.compact()) {
+            CommandFrame.card(g, x + 10, bankY, w - 20, bankCardH,
+                    CommandPalette.ACCENT_EMERALD);
+            int leftX = x + 18;
             int compactW = w - (leftX - x) - 14;
             text(g, menu.factionName(), leftX, bankY + 6,
                     compactW, CommandPalette.TEXT);
@@ -1255,27 +1479,21 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                             dailyInterest, interestCountdown, menu.nextWave()),
                     leftX, bankY + 30, compactW, CommandPalette.TEXT_MUTED);
         } else {
-            int leftW = w / 2 - 52;
-            text(g, menu.factionName(), leftX, bankY + 6, leftW, CommandPalette.TEXT);
-            text(g, String.format(Locale.ROOT, "Treasury: %,d emeralds", menu.bank()),
-                    leftX, bankY + 18, leftW, CommandPalette.ACCENT_EMERALD);
-            // Status line (peace / siege / retreat vote) below treasury.
-            String status = menu.voteSeconds() > 0
-                    ? "Retreat vote: " + menu.voteSeconds() + "s remaining"
-                    : menu.currentWave() > 0
-                            ? "Surviving wave " + menu.currentWave()
-                            : "Preparing for the next siege";
-            text(g, status, leftX, bankY + 30, leftW, CommandPalette.TEXT_MUTED);
-
-            int rightX = x + w / 2;
-            int rightW = w / 2 - 18;
-            text(g, "Next wave " + menu.nextWave() + ": +" + menu.nextReward() + " to Treasury",
-                    rightX, bankY + 6, rightW, CommandPalette.ACCENT_TEAL);
-            text(g, String.format(Locale.ROOT, "Interest: +%,d in %s (%.2f%%/day)",
-                            dailyInterest, interestCountdown, menu.interestRate() / 100.0),
-                    rightX, bankY + 18, rightW, CommandPalette.ACCENT_GOLD);
-            text(g, "All purchases use Treasury emeralds",
-                    rightX, bankY + 30, rightW, CommandPalette.TEXT_DIM);
+            int gap = 6;
+            int cardsW = w - 20;
+            int metricW = (cardsW - gap * 2) / 3;
+            drawMetricCard(g, x + 10, bankY, metricW, bankCardH,
+                    "TREASURY", String.format(Locale.ROOT, "%,de", menu.bank()),
+                    menu.factionName(), CommandPalette.ACCENT_EMERALD);
+            drawMetricCard(g, x + 10 + metricW + gap, bankY, metricW, bankCardH,
+                    "NEXT REWARD", String.format(Locale.ROOT, "+%,de", menu.nextReward()),
+                    "Wave " + menu.nextWave(), CommandPalette.ACCENT_TEAL);
+            drawMetricCard(g, x + 10 + (metricW + gap) * 2, bankY,
+                    cardsW - (metricW + gap) * 2, bankCardH,
+                    "DAILY INTEREST", String.format(Locale.ROOT, "+%,de", dailyInterest),
+                    interestCountdown + "  ·  "
+                            + String.format(Locale.ROOT, "%.2f%%", menu.interestRate() / 100.0),
+                    CommandPalette.ACCENT_GOLD);
         }
 
         // Roster panel below (pushed down to make room for the taller bank card
@@ -1302,8 +1520,15 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     CommandPalette.TEXT_MUTED);
         } else {
             for (int i = 0; i < lines && i + rosterOffset < count; i++) {
-                text(g, "-  " + menu.members().get(i + rosterOffset),
-                        x + 18, listTop + i * 12, rosterListW, CommandPalette.TEXT);
+                int rowY = listTop + i * 12;
+                if ((i & 1) == 0) {
+                    g.fill(x + 16, rowY - 2, x + 16 + rosterListW,
+                            rowY + 10, 0x261f2c42);
+                }
+                g.fill(x + 18, rowY + 2, x + 20, rowY + 7,
+                        CommandPalette.ACCENT_EMERALD);
+                text(g, menu.members().get(i + rosterOffset),
+                        x + 24, rowY, rosterListW - 8, CommandPalette.TEXT);
             }
         }
         // Scroll indicator when overflow is present.
@@ -1326,6 +1551,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
     }
 
+    private void drawMetricCard(GuiGraphics g, int x, int y, int w, int h,
+                                String label, String value, String detail, int accent) {
+        CommandFrame.card(g, x, y, w, h, accent);
+        text(g, label, x + 9, y + 6, w - 18, CommandPalette.TEXT_DIM);
+        text(g, value, x + 9, y + 18, w - 18, accent);
+        text(g, detail, x + 9, y + 30, w - 18, CommandPalette.TEXT_MUTED);
+    }
+
     private int bankRosterY() {
         return layout.contentY() + 74;
     }
@@ -1336,13 +1569,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     /** v4.18.0 bank activity sparkline. Renders a zero-centered bar chart. */
     private void drawBankGraph(GuiGraphics g, int gx, int gy, int gw, int gh) {
-        // Frame + label header.
-        g.fill(gx, gy, gx + gw, gy + gh, 0x40000000);
-        g.fill(gx, gy, gx + gw, gy + 1, 0xFF6b4a1a);
-        g.fill(gx, gy + gh - 1, gx + gw, gy + gh, 0xFF6b4a1a);
-        g.fill(gx, gy, gx + 1, gy + gh, 0xFF6b4a1a);
-        g.fill(gx + gw - 1, gy, gx + gw, gy + gh, 0xFF6b4a1a);
-        text(g, "RECENT ACTIVITY", gx + 4, gy + 3, gw - 8, CommandPalette.ACCENT_GOLD);
+        // Inset analytics panel inside the roster card.
+        g.fill(gx, gy, gx + gw, gy + gh, CommandPalette.CHIP_BORDER);
+        g.fillGradient(gx + 1, gy + 1, gx + gw - 1, gy + gh - 1,
+                CommandPalette.HEADER_TOP, CommandPalette.CHIP_FILL);
+        g.fill(gx + 1, gy + 1, gx + 3, gy + gh - 1,
+                CommandPalette.ACCENT_EMERALD);
+        text(g, "RECENT ACTIVITY", gx + 7, gy + 4, gw - 12,
+                CommandPalette.ACCENT_GOLD);
 
         int[] ledger = menu.bankLedger();
         int plotTop = gy + 16;
@@ -1350,7 +1584,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int plotH = plotBottom - plotTop;
         int zeroY = plotTop + plotH / 2;
         // Zero line.
-        g.fill(gx + 4, zeroY, gx + gw - 4, zeroY + 1, 0x60ffffff);
+        g.fill(gx + 5, zeroY, gx + gw - 5, zeroY + 1,
+                CommandPalette.DIVIDER);
 
         if (ledger.length == 0) {
             text(g, "No transactions yet", gx + 6, zeroY + 6, gw - 12, CommandPalette.TEXT_DIM);
@@ -1368,10 +1603,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             int bx = startX + i * barW;
             int barH = (int) ((long) Math.abs(d) * (plotH / 2 - 2) / maxAbs);
             if (d >= 0) {
-                g.fill(bx + 1, zeroY - barH, bx + barW - 1, zeroY, 0xFF2E9E4A);
+                g.fill(bx + 1, zeroY - barH, bx + barW - 1, zeroY,
+                        CommandPalette.ACCENT_EMERALD);
                 totalCredit += d;
             } else {
-                g.fill(bx + 1, zeroY + 1, bx + barW - 1, zeroY + 1 + barH, 0xFFB1352B);
+                g.fill(bx + 1, zeroY + 1, bx + barW - 1, zeroY + 1 + barH,
+                        CommandPalette.ACCENT_BLOOD);
                 totalDebit += -d;
             }
         }

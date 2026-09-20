@@ -12,6 +12,9 @@ class CoreHireLayoutTest {
         assertEquals(1.0F, layout.scale());
         assertTrue(layout.cardWidth() >= 230);
         assertTrue(layout.cardHeight() >= 96);
+        assertEquals(CoreHireLayout.PAGE_HEADER_HEIGHT, layout.pageHeaderHeight());
+        assertEquals(layout.pageHeaderY() + CoreHireLayout.PAGE_HEADER_HEIGHT
+                + CoreHireLayout.PAGE_HEADER_GAP, layout.contentY());
     }
 
     @Test
@@ -19,6 +22,8 @@ class CoreHireLayoutTest {
         CoreHireLayout layout = CoreHireLayout.fit(640, 320);
         assertTrue(layout.compact());
         assertTrue(layout.cardWidth() < 230 || layout.cardHeight() < 96);
+        assertEquals(0, layout.pageHeaderHeight());
+        assertEquals(layout.pageHeaderY(), layout.contentY());
     }
 
     @Test
