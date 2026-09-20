@@ -1,0 +1,167 @@
+name: Publish tested 4.47.0 beta to CurseForge
+
+on:
+  push:
+    branches: [publish/curseforge-v4.47.0]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v4.47.0
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify successful merged-main build and identical PR tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          import json, os, urllib.request
+
+          def get(path):
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'Accept': 'application/vnd.github+json'},
+              )
+              with urllib.request.urlopen(request) as response:
+                  return json.load(response)
+
+          source_sha = '986ece78b5464c0bb60e81e455177f54d9f0bf4d'
+          source_tree = '0daee815195a9ca2388c235cc89bbdc99f3e49fd'
+          pr_head_sha = '9003fbc3efe1e3b61122af603cbae70ce59328d9'
+          run = get('actions/runs/35490520533')
+          assert run['status'] == 'completed' and run['conclusion'] == 'success'
+          assert run['event'] == 'push' and run['head_branch'] == 'main'
+          assert run['head_sha'] == source_sha
+          pr = get('pulls/166')
+          assert pr['merged'] and pr['merge_commit_sha'] == source_sha
+          assert pr['head']['sha'] == pr_head_sha
+          for sha in (run['head_sha'], pr['merge_commit_sha'], pr_head_sha):
+              assert get('git/commits/' + sha)['tree']['sha'] == source_tree
+          CHECK
+
+      - name: Download exact tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 35490520533
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Download regression results
+        uses: actions/download-artifact@v4
+        with:
+          name: regression-test-results
+          run-id: 35490520533
+          github-token: ${{ github.token }}
+          path: regression
+
+      - name: Verify tested bytes, metadata, dependencies, and regressions
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          import xml.etree.ElementTree as ET
+
+          jar = Path('dist/siegeoverhaul-4.47.0.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == 'ee62681b949a2fe73b9377cc2949bd80503cbe07a8016fde83c2c742abc8ed6b'
+          Path('verified-sha256.txt').write_text(digest)
+          with zipfile.ZipFile(jar) as archive:
+              assert archive.testzip() is None
+              for entry in (
+                  'com/devfarinsky/siegeoverhaul/core/PlayerFortificationJobs.class',
+                  'com/devfarinsky/siegeoverhaul/naval/NavalConvoy.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampDevelopment.class',
+                  'com/devfarinsky/siegeoverhaul/client/EntityPortrait.class',
+                  'com/devfarinsky/siegeoverhaul/core/FactionBank.class',
+              ):
+                  assert entry in archive.namelist(), entry
+              data = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+          mod = data['mods'][0]
+          assert mod['modId'] == 'siegeoverhaul' and mod['version'] == '4.47.0'
+          assert mod['displayTest'] == 'MATCH_VERSION'
+          dependencies = {entry['modId']: entry for entry in data['dependencies']['siegeoverhaul']}
+          for mod_id in ('recruits', 'workers', 'smallships', 'siegeweapons'):
+              assert dependencies[mod_id]['mandatory'] and dependencies[mod_id]['side'] == 'BOTH', mod_id
+          assert dependencies['recruits']['versionRange'] == '[1.15.2,)'
+          assert dependencies['workers']['versionRange'] == '[2.0.3,)'
+          for mod_id in ('ftbchunks', 'openpartiesandclaims', 'corpse', 'magistuarmory', 'musketmod'):
+              assert not dependencies[mod_id]['mandatory'] and dependencies[mod_id]['side'] == 'BOTH', mod_id
+          totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0)
+          reports = list(Path('regression').rglob('TEST-*.xml'))
+          assert reports
+          for report in reports:
+              result = ET.parse(report).getroot()
+              for key in totals:
+                  totals[key] += int(result.get(key, 0))
+          assert totals == {'tests': 433, 'failures': 0, 'errors': 0, 'skipped': 0}, totals
+          print('Verified', jar.name, digest, totals)
+          CHECK
+
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.47.0.jar
+          name: The Siege Overhaul v4.47.0 beta - Siege Reliability
+          version: v4.47.0
+          version-type: beta
+          changelog: |
+            # 4.47.0 beta
+
+            - Let stranded invasion crews disembark onto the prevalidated landing beach even when their vessel stops outside its old local landing search, while retaining collision, fluid, world-border and loaded-chunk safety checks.
+            - Preserve player-commissioned Workers 2 fortification jobs across chunk and server reloads. Wall build areas now use a durable player-builder link instead of the enemy-camp cleanup tag, including migration for still-active legacy jobs.
+            - Improve the final approach to claimed Siege Cores: raiders can operate ordinary doors, and breachers may slowly open a restored passage through a narrow whitelist of common masonry or planks within 24 blocks of the core. Containers, valuables, obsidian, machinery, foreign claims and the restoration cap remain protected.
+            - Place new enemy pavilions wholly inside the palisade with a paved, validated three-wide approach. Preserve openings for older saved camps whose pavilion doorway intersects the later wall.
+            - Make the Sanctuary of Demeter, Forge of Hephaestus and Strategion of Athena visibly active with bounded thematic particles while retaining their guard-healing, guard-damage and wave-coordination effects.
+            - Reduce Command Center frame cost by rendering at most one live third-party entity preview while hovered and using the custom static portraits for the other cards. Button labels and state now update once per game tick instead of allocating again every rendered frame.
+            - Preserve Minecraft 1.20.1 Forge / Java 17, saves, required and optional dependency metadata, loot-box prices, player structures, claims and existing restoration safeguards.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+          fail-mode: fail
+
+      - name: Record accepted upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os, hashlib
+          from pathlib import Path
+          digest = hashlib.sha256(Path('dist/siegeoverhaul-4.47.0.jar').read_bytes()).hexdigest()
+          assert digest == Path('verified-sha256.txt').read_text()
+          result = {
+              'version': '4.47.0',
+              'file_id': os.environ['RELEASE_FILE_ID'],
+              'url': os.environ['RELEASE_URL'],
+              'source': '986ece78b5464c0bb60e81e455177f54d9f0bf4d',
+              'source_tree': '0daee815195a9ca2388c235cc89bbdc99f3e49fd',
+              'pr_head': '9003fbc3efe1e3b61122af603cbae70ce59328d9',
+              'build_run': 35490520533,
+              'tests': 433,
+              'sha256': digest,
+          }
+          assert result['file_id'] and result['url']
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Accepted upload (moderation/public availability separate): ' + json.dumps(result) + '\n')
+          RECEIPT
