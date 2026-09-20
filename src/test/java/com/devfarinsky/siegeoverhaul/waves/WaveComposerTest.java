@@ -17,14 +17,17 @@ class WaveComposerTest extends MinecraftTestSupport {
             assertEquals(expectedMix(host.openingRoles(),12),opening.roleCounts);
             assertEquals(expectedMix(host.assaultRoles(),20),assault.roleCounts);
             assertEquals(host.signatureAssault().title(),signature.label);
-            assertEquals(expectedMix(host.signatureAssault().roles(),20),signature.roleCounts);
+            int signatureSlots=20;
+            for(int i=0;i<20;i++)if(WaveComposer.reserved(5,5,i,false,false))signatureSlots--;
+            assertEquals(expectedMix(host.signatureAssault().roles(),signatureSlots),signature.roleCounts);
             for(int i=0;i<12;i++)assertEquals(host.openingRoles().get(i%host.openingRoles().size()),opening.roleAt(i));
             for(int i=0;i<20;i++)assertEquals(host.assaultRoles().get(i%host.assaultRoles().size()),assault.roleAt(i));
-            for(int i=0;i<20;i++)assertEquals(host.signatureAssault().roles().get(i%host.signatureAssault().roles().size()),signature.roleAt(i));
+            for(int i=0;i<signatureSlots;i++)assertEquals(host.signatureAssault().roles().get(i%host.signatureAssault().roles().size()),signature.roleAt(i));
+            assertNull(signature.roleAt(signatureSlots));
             assertNotEquals(assault.roleCounts,signature.roleCounts);
             assertEquals(12,opening.roleCounts.values().stream().mapToInt(Integer::intValue).sum());
             assertEquals(20,assault.roleCounts.values().stream().mapToInt(Integer::intValue).sum());
-            assertEquals(20,signature.roleCounts.values().stream().mapToInt(Integer::intValue).sum());
+            assertEquals(signatureSlots,signature.roleCounts.values().stream().mapToInt(Integer::intValue).sum());
         }
     }
     @Test void signatureRostersRespectCommanderAndIllusionerReservations() {
@@ -36,7 +39,7 @@ class WaveComposerTest extends MinecraftTestSupport {
                 int reserved=0;
                 for(int i=0;i<total;i++)if(WaveComposer.reserved(5,5,i,commander,illusioners))reserved++;
                 assertEquals(total-reserved,plan.roleCounts.values().stream().mapToInt(Integer::intValue).sum());
-                assertEquals(host.signatureAssault().title(),plan.label);
+                assertEquals(total==0?"":host.signatureAssault().title(),plan.label);
             }
         }
     }
