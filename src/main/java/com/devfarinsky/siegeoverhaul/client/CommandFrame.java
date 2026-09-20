@@ -5,11 +5,11 @@ import net.minecraft.client.gui.GuiGraphics;
 /**
  * Procedural medieval-fantasy framing for the command center HUD.
  *
- * <p>The frame is drawn with pure rectangle fills — no textures, no per-frame
- * allocations, no vertex buffers. It gives the HUD a sleek, modern silhouette
- * (soft drop shadow, thin double border, faint corner rivets) while keeping
- * the fantasy palette (dark iron, aged bronze, deep parchment) that reads as
- * a Minecraft-native interface.
+ * <p>The frame is drawn with rectangle fills — no per-frame allocations or
+ * vertex buffers. The result deliberately uses modern, quiet surfaces and
+ * thin information accents instead of tiling a busy texture over the entire
+ * screen. Aged gold, midnight navy and small heraldic corners retain the
+ * fantasy identity without making the menu look like an illustrated book.
  *
  * <p>All colors are provided by {@link CommandPalette} so the whole HUD stays
  * on one visual system.
@@ -22,35 +22,25 @@ public final class CommandFrame {
      * with the given dimensions.
      */
     public static void window(GuiGraphics g, int x, int y, int w, int h) {
-        // Soft ambient drop shadow behind the whole panel.
+        // Deep floating shadow separates the command center from the world.
         g.fill(x - 6, y + 4, x + w + 6, y + h + 8, CommandPalette.SHADOW_OUTER);
         g.fill(x - 4, y + 2, x + w + 4, y + h + 6, CommandPalette.SHADOW_INNER);
 
-        // Aged-gold outer bevel.
-        g.fill(x - 2, y - 2, x + w + 2, y + h + 2, CommandPalette.BEVEL_LIGHT);
-        g.fill(x - 1, y - 1, x + w + 1, y + h + 1, CommandPalette.BEVEL_DARK);
+        // Restrained aged-gold outline with a dark inner keyline.
+        g.fill(x - 2, y - 2, x + w + 2, y + h + 2, CommandPalette.BEVEL_DARK);
+        g.fill(x - 1, y - 1, x + w + 1, y + h + 1, CommandPalette.BEVEL_LIGHT);
 
-        // Midnight-navy body with a subtle vertical gradient.
+        // Midnight-navy body with a subtle vertical gradient and inner rim.
         g.fillGradient(x, y, x + w, y + h,
                 CommandPalette.PANEL_TOP, CommandPalette.PANEL_BOTTOM);
+        g.fill(x + 2, y + 2, x + w - 2, y + 3, CommandPalette.PANEL_INSET);
+        g.fill(x + 2, y + h - 3, x + w - 2, y + h - 2, 0xff05070c);
 
-        // Candlelit backdrop tiled across the body (subtle vellum + glow).
-        // The atlas region is 128x64; tile it enough to cover the body.
-        for (int by = 0; by < h; by += 64) {
-            for (int bx = 0; bx < w; bx += 128) {
-                int tw = Math.min(128, w - bx);
-                int th = Math.min(64, h - by);
-                g.blit(HudAtlas.TEXTURE, x + bx, y + by, tw, th,
-                        HudAtlas.BACKDROP[0], HudAtlas.BACKDROP[1],
-                        tw, th, HudAtlas.ATLAS, HudAtlas.ATLAS);
-            }
-        }
-
-        // Ornate gold corner ornaments (24x24 each) from the atlas.
-        HudAtlas.blit(g, HudAtlas.CORNER_TL, x - 4, y - 4);
-        HudAtlas.blit(g, HudAtlas.CORNER_TR, x + w - 20, y - 4);
-        HudAtlas.blit(g, HudAtlas.CORNER_BL, x - 4, y + h - 20);
-        HudAtlas.blit(g, HudAtlas.CORNER_BR, x + w - 20, y + h - 20);
+        // Small architectural corners read as bronze joinery, not mystery icons.
+        cornerBracket(g, x + 3, y + 3, +1, +1);
+        cornerBracket(g, x + w - 4, y + 3, -1, +1);
+        cornerBracket(g, x + 3, y + h - 4, +1, -1);
+        cornerBracket(g, x + w - 4, y + h - 4, -1, -1);
     }
 
     /**
@@ -61,16 +51,15 @@ public final class CommandFrame {
     public static void cornerBracket(GuiGraphics g, int x, int y, int dx, int dy) {
         int light = CommandPalette.BEVEL_LIGHT;
         int dark = CommandPalette.BEVEL_DARK;
-        // Long arms
-        g.fill(x, y, x + 14 * (dx > 0 ? 1 : 0) + (dx < 0 ? 0 : 0), y + 1, dark);
-        int ax = dx > 0 ? x : x - 13;
-        int ay = dy > 0 ? y : y - 13;
-        g.fill(ax, y, ax + 14, y + 1, dark);
-        g.fill(x, ay, x + 1, ay + 14, dark);
-        g.fill(ax, y + (dy > 0 ? 1 : -1), ax + 14, y + (dy > 0 ? 2 : 0), light);
-        g.fill(x + (dx > 0 ? 1 : -1), ay, x + (dx > 0 ? 2 : 0), ay + 14, light);
-        // Corner cap dot
-        g.fill(x, y, x + 1, y + 1, light);
+        int arm = 10;
+        int hx1 = Math.min(x, x + dx * arm);
+        int hx2 = Math.max(x, x + dx * arm) + 1;
+        int vy1 = Math.min(y, y + dy * arm);
+        int vy2 = Math.max(y, y + dy * arm) + 1;
+        g.fill(hx1, y, hx2, y + 2, dark);
+        g.fill(x, vy1, x + 2, vy2, dark);
+        g.fill(hx1, y, hx2, y + 1, light);
+        g.fill(x, vy1, x + 1, vy2, light);
     }
 
     /**
@@ -79,13 +68,10 @@ public final class CommandFrame {
      * cluster on the left plus a treasury chip on the right.
      */
     public static void header(GuiGraphics g, int x, int y, int w, int height) {
-        // Base header gradient stays as a fallback under the ribbon tiles so
-        // partially transparent tiling still reads as dark navy.
+        // Quiet gradient and a gold keyline keep the header crisp at any scale.
         g.fillGradient(x + 4, y + 4, x + w - 4, y + 4 + height,
                 CommandPalette.HEADER_TOP, CommandPalette.HEADER_BOTTOM);
-        // Tile the header ribbon texture across the strip.
-        HudAtlas.tileHoriz(g, HudAtlas.TILE_HEADER_RIBBON, x + 4, y + 4, w - 8);
-        // Twin separator lines: bronze over shadow for a struck-metal look.
+        g.fill(x + 5, y + 5, x + w - 5, y + 6, CommandPalette.PANEL_INSET);
         g.fill(x + 4, y + 4 + height, x + w - 4, y + 5 + height, CommandPalette.HAIRLINE);
         g.fill(x + 4, y + 5 + height, x + w - 4, y + 6 + height, CommandPalette.PANEL_BOTTOM);
     }
@@ -96,10 +82,22 @@ public final class CommandFrame {
      * bank widgets, roster panels.
      */
     public static void card(GuiGraphics g, int x, int y, int w, int h, int accent) {
-        g.fill(x, y + 1, x + w, y + h - 1, CommandPalette.CARD_BORDER);
-        g.fill(x + 1, y, x + w - 1, y + h, CommandPalette.CARD_BORDER);
-        g.fillGradient(x + 1, y + 1, x + w - 1, y + h - 1,
-                CommandPalette.CARD_TOP, CommandPalette.CARD_BOTTOM);
+        card(g, x, y, w, h, accent, false);
+    }
+
+    /** Card with a brighter border/surface for a hovered actionable region. */
+    public static void card(GuiGraphics g, int x, int y, int w, int h,
+                            int accent, boolean hovered) {
+        int border = hovered ? CommandPalette.CARD_BORDER_HOVER : CommandPalette.CARD_BORDER;
+        int top = hovered ? CommandPalette.CARD_HOVER_TOP : CommandPalette.CARD_TOP;
+        int bottom = hovered ? CommandPalette.CARD_HOVER_BOTTOM : CommandPalette.CARD_BOTTOM;
+        g.fill(x, y + 1, x + w, y + h - 1, border);
+        g.fill(x + 1, y, x + w - 1, y + h, border);
+        g.fillGradient(x + 1, y + 1, x + w - 1, y + h - 1, top, bottom);
+        // A narrow colored rail gives every card a clear purpose without an icon.
+        g.fill(x + 1, y + 2, x + 3, y + h - 2, accent);
+        g.fill(x + 3, y + 1, x + w - 2, y + 2,
+                hovered ? CommandPalette.PANEL_INSET : CommandPalette.DIVIDER);
     }
 
     /**
@@ -119,6 +117,7 @@ public final class CommandFrame {
         g.fill(x + 1, y, x + w - 1, y + h, CommandPalette.CARD_BORDER_DIM);
         g.fillGradient(x + 1, y + 1, x + w - 1, y + h - 1,
                 CommandPalette.CARD_TOP_DIM, CommandPalette.CARD_BOTTOM_DIM);
+        g.fill(x + 1, y + 2, x + 3, y + h - 2, CommandPalette.TEXT_DIM);
     }
 
     /**
@@ -130,6 +129,13 @@ public final class CommandFrame {
         g.fill(x, y, x + w, y + h, CommandPalette.CHIP_BORDER);
         g.fill(x + 1, y + 1, x + w - 1, y + h - 1, CommandPalette.CHIP_FILL);
         g.fill(x + 1, y + 1, x + w - 1, y + 2, accent);
+    }
+
+    /** Small text badge used for availability, tiers and short live states. */
+    public static void badge(GuiGraphics g, int x, int y, int w, int h, int accent) {
+        g.fill(x, y, x + w, y + h, CommandPalette.CHIP_BORDER);
+        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, CommandPalette.CHIP_FILL);
+        g.fill(x + 1, y + 1, x + 3, y + h - 1, accent);
     }
 
     /**

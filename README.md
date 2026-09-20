@@ -17,12 +17,12 @@ Create or join a [Villager Recruits](https://www.curseforge.com/minecraft/mc-mod
 The core opens a responsive five-tab command center:
 
 - **Army:** two recruit offers, one worker offer, and a featured hero, rotating every **15 minutes of server runtime**. Each offer can be purchased once per rotation across your faction. Catapult and ballista crews are delivered as deployment kits so you can place them on a clear, flat area sized for the selected engine away from an indoor Core.
-- **Loot:** spend emeralds on hidden equipment and supply rewards, or activate short personal blessings.
-- **Treasury:** manage the shared faction treasury and review the member roster and recent activity.
-- **Territory:** purchase permanent faction-wide upgrades.
-- **Intel:** browse unit reference cards, enemy lore, and field guidance.
+- **Loot:** spend shared Treasury emeralds on concealed equipment and supply rewards, or activate short personal blessings.
+- **Treasury:** scan balance, interest and next-wave reward metrics, then manage deposits, withdrawals, members and recent activity.
+- **Territory:** enact permanent faction-wide upgrades and commission Workers 2 perimeter construction.
+- **Intel:** browse scrollable unit dossiers, Olympian host lore, and field guidance.
 
-The menu sizes itself from the player's Minecraft-scaled viewport, selects detailed or compact cards from the space actually available, and uniformly scales down for unusually small windows so controls and mouse hitboxes stay aligned. Army offers continuously show the real Recruits or Workers entity in its armor and equipment, with the model following the cursor. Text-first navigation replaces ambiguous decorative glyphs, while real Minecraft emerald and reward sprites remain where they carry literal meaning. Fitted and wrapped text is cached, control state updates at game-tick frequency, and decorative animation passes are omitted to keep the menu responsive. The footer includes a **Leave Feedback** button that opens the mod's CurseForge comments page through Minecraft's normal link confirmation.
+The menu sizes itself from the player's Minecraft-scaled viewport, selects detailed or compact cards from the space actually available, and uniformly scales down for unusually small windows so controls and mouse hitboxes stay aligned. Every tab uses the same modern navy-and-aged-gold command-console language, with page context, glanceable live metrics, restrained status badges and purpose-colored card rails. Army offers continuously show the real Recruits or Workers entity in its armor and equipment, with the model following the cursor. Text-first navigation replaces ambiguous decorative glyphs, while real Minecraft emerald and reward sprites remain where they carry literal meaning. Fitted and wrapped text is cached, control state updates at game-tick frequency, and the full-window tiled backdrop and decorative animation passes are omitted to keep the menu responsive. The footer includes a **Leave Feedback** button that opens the mod's CurseForge comments page through Minecraft's normal link confirmation.
 
 ## Heroes With a Purpose
 
@@ -160,7 +160,7 @@ Both integrations are optional on Minecraft 1.20.1 Forge. Automated tests and up
 The Siege Core has a glowing crystal model and three compact service tabs:
 
 - **Army & Heroes:** ordinary hires, workers, and the rotating hero offer together.
-- **Loot & Buffs:** mystery boxes remain 16/48/96 emeralds. Personal five-minute blessings offer Speed I (16), Strength I (24), or Resistance I (32), without replacing an existing effect.
+- **Loot & Buffs:** mystery boxes remain 16/48/96 emeralds. Personal five-minute blessings offer Speed I (24), Strength I (36), or Resistance I (48), without replacing an existing effect; all Command Center purchases debit the faction Treasury.
 - **Bank & Faction:** shared balance, online/offline faction roster, upcoming wave rewards, and deposit/withdraw controls. Members may deposit; the faction leader may withdraw. Inventory space and bank capacity are checked server-side.
 
 The bank earns **1% interest per real 24-hour day** by default, configurable from 0–10%. Fractional interest carries forward; full-day catch-up is bounded to 365 days. The ledger, completed-wave payments, and votes survive saves and core relocation.

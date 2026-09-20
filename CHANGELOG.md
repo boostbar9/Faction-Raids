@@ -1,3 +1,13 @@
+# 4.47.2 beta
+
+- Modernize all five Command Center tabs around one quieter navy-and-aged-gold visual system: flat tab rails, slim purpose-colored card accents, clearer hover states, compact text badges and consistent two-line page headers.
+- Keep Army offers centered on real equipped Recruits and Workers previews while adding readable availability and hero-rarity states without restoring the removed mystery glyphs.
+- Rebuild Loot as an Olympian reliquary view with sealed/opening/revealed states, blessing-duration badges and an explicit no-preview protocol. Correct its copy to state that Command Center purchases debit the faction Treasury, not personal emeralds.
+- Rebuild Treasury around three glanceable metrics for balance, next-wave reward and daily interest, plus a cleaner member roster and palette-matched transaction graph.
+- Use Territory's former empty area for kingdom-readiness progress, permanent-decree status and Workers 2 perimeter requirements. Add clear fortification tooltips without changing prices or job behavior.
+- Present Intel entries as scrollable dossier cards with modern sub-navigation while preserving the complete unit, Olympian-host and field-playbook content.
+- Reduce HUD frame cost by replacing the full-window tiled backdrop and oversized ornamental corners with a gradient surface and lightweight architectural lines. Preserve responsive scaling, live models, hidden loot, save/network formats and server-authoritative purchases.
+
 # 4.47.1 beta
 
 - Restore real, continuously visible Recruits and Workers entity previews to all four Army offer cards. Models wear their preview loadouts and follow the cursor again; the flat procedural avatars now appear nowhere in the normal Command Center path.
