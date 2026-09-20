@@ -1,0 +1,166 @@
+name: Publish tested 4.46.0 beta to CurseForge
+
+on:
+  push:
+    branches: [publish/curseforge-v4.46.0]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v4.46.0
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify successful merged-main build and identical PR tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          import json, os, urllib.request
+
+          def get(path):
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'Accept': 'application/vnd.github+json'},
+              )
+              with urllib.request.urlopen(request) as response:
+                  return json.load(response)
+
+          source_sha = 'e1a97fba6ec575f0ad513d11b0017eb33467a0f3'
+          source_tree = '430762112d442835351a1ea6b2a09688b388e48a'
+          pr_head_sha = '3008543cf5d07398cf4d654b36391627566a579a'
+          run = get('actions/runs/35479093388')
+          assert run['status'] == 'completed' and run['conclusion'] == 'success'
+          assert run['event'] == 'push' and run['head_branch'] == 'main'
+          assert run['head_sha'] == source_sha
+          pr = get('pulls/165')
+          assert pr['merged'] and pr['merge_commit_sha'] == source_sha
+          assert pr['head']['sha'] == pr_head_sha
+          for sha in (run['head_sha'], pr['merge_commit_sha'], pr_head_sha):
+              assert get('git/commits/' + sha)['tree']['sha'] == source_tree
+          CHECK
+
+      - name: Download exact tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 35479093388
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Download regression results
+        uses: actions/download-artifact@v4
+        with:
+          name: regression-test-results
+          run-id: 35479093388
+          github-token: ${{ github.token }}
+          path: regression
+
+      - name: Verify tested bytes, metadata, dependencies, and regressions
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          import xml.etree.ElementTree as ET
+
+          jar = Path('dist/siegeoverhaul-4.46.0.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == '73b15349f2b8a8db5b827b324fd07506b8a351d4e3f7bd2366bcea03da9914db'
+          Path('verified-sha256.txt').write_text(digest)
+          with zipfile.ZipFile(jar) as archive:
+              assert archive.testzip() is None
+              for entry in (
+                  'com/devfarinsky/siegeoverhaul/narrative/OlympianHostIdentity.class',
+                  'com/devfarinsky/siegeoverhaul/naval/NavalAssaultPolicy.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampGuards.class',
+                  'com/devfarinsky/siegeoverhaul/waves/WaveComposition.class',
+                  'com/devfarinsky/siegeoverhaul/core/FactionBank.class',
+              ):
+                  assert entry in archive.namelist(), entry
+              data = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+          mod = data['mods'][0]
+          assert mod['modId'] == 'siegeoverhaul' and mod['version'] == '4.46.0'
+          assert mod['displayTest'] == 'MATCH_VERSION'
+          dependencies = {entry['modId']: entry for entry in data['dependencies']['siegeoverhaul']}
+          for mod_id in ('recruits', 'workers', 'smallships', 'siegeweapons'):
+              assert dependencies[mod_id]['mandatory'] and dependencies[mod_id]['side'] == 'BOTH', mod_id
+          assert dependencies['recruits']['versionRange'] == '[1.15.2,)'
+          assert dependencies['workers']['versionRange'] == '[2.0.3,)'
+          for mod_id in ('ftbchunks', 'openpartiesandclaims', 'corpse', 'magistuarmory', 'musketmod'):
+              assert not dependencies[mod_id]['mandatory'] and dependencies[mod_id]['side'] == 'BOTH', mod_id
+          totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0)
+          reports = list(Path('regression').rglob('TEST-*.xml'))
+          assert reports
+          for report in reports:
+              result = ET.parse(report).getroot()
+              for key in totals:
+                  totals[key] += int(result.get(key, 0))
+          assert totals == {'tests': 425, 'failures': 0, 'errors': 0, 'skipped': 0}, totals
+          print('Verified', jar.name, digest, totals)
+          CHECK
+
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.46.0.jar
+          name: The Siege Overhaul v4.46.0 beta - Olympian Signature Assaults
+          version: v4.46.0
+          version-type: beta
+          changelog: |
+            # 4.46.0 beta
+
+            - Turn every fifth wave into a clearly telegraphed patron-specific signature assault. Poseidon commits a Tidal Onslaught, Ares a Bronze Spearhead, Hephaestus a Forge Engine Advance, Athena an Aegis Phalanx, and Artemis a Moonlit Hunt, each with its own roster, title, sound cue and counterplay warning.
+            - Give newly established Olympian camps distinct six-unit garrisons and defensive leashes: Tidewatch Sentries, Bronze Gateguards, Forgeward Sentries, Aegis Sentinels and Silver Hunt Wardens. New core keeps also use patron-specific pillar silhouettes; existing cores and guards keep their saved positions while guards adopt the matching title and leash.
+            - Let coastal war camps actually deploy their configured naval contingent instead of redirecting would-be ship crews back through the land gate. Poseidon's checkpoint assault commits at least 75% of eligible non-cavalry troops to ships when a safe staging route exists.
+            - Keep the Treasury interest countdown at `Due now` after its deadline until settlement advances the saved payout anchor, rather than wrapping to another future-day countdown.
+            - Preserve the exact configured order of repeated wave roles, keep Artemis' Hunter's Mark command to its promised five seconds, and normalize both 4.44 boolean and 4.45 integer hero-identity markers into a save-compatible boolean plus a separate schema field.
+            - Preserve wave/entity caps, ordinary reward balance, existing raids and saves, faction IDs, restoration limits, dependency requirements and player structures. Signature assaults replace normal wave slots instead of adding unbounded enemies.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+          fail-mode: fail
+
+      - name: Record accepted upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os, hashlib
+          from pathlib import Path
+          digest = hashlib.sha256(Path('dist/siegeoverhaul-4.46.0.jar').read_bytes()).hexdigest()
+          assert digest == Path('verified-sha256.txt').read_text()
+          result = {
+              'version': '4.46.0',
+              'file_id': os.environ['RELEASE_FILE_ID'],
+              'url': os.environ['RELEASE_URL'],
+              'source': 'e1a97fba6ec575f0ad513d11b0017eb33467a0f3',
+              'source_tree': '430762112d442835351a1ea6b2a09688b388e48a',
+              'pr_head': '3008543cf5d07398cf4d654b36391627566a579a',
+              'build_run': 35479093388,
+              'tests': 425,
+              'sha256': digest,
+          }
+          assert result['file_id'] and result['url']
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Accepted upload (moderation/public availability separate): ' + json.dumps(result) + '\n')
+          RECEIPT
