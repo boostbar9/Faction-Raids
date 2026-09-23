@@ -4048,7 +4048,14 @@ public final class RaidEvents {
 
     static boolean coreApproachBreachAllowed(RaidSavedData.RaidState state, BlockPos candidate,
                                              BlockPos stronghold) {
-        return state.breached && candidate.distSqr(stronghold)
+        // The broader masonry/plank whitelist exists only to keep a claimed
+        // Siege Core reachable. Legacy saves can still contain named or
+        // synthetic defense points, and those raids also set breached=true
+        // after their perimeter phase. Do not let that shared phase flag turn
+        // an ordinary defense point into a license to cut through a player's
+        // full-block walls.
+        return "siege_core".equals(state.defensePointName)
+                && state.breached && candidate.distSqr(stronghold)
                 <= (long) CORE_APPROACH_BREACH_RADIUS * CORE_APPROACH_BREACH_RADIUS;
     }
 

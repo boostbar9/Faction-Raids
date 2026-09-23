@@ -1,3 +1,8 @@
+# 4.47.3 beta
+
+- Restrict the expanded masonry-and-plank breaching fallback to real Siege Core assaults. Legacy named defense points and synthetic claim targets no longer gain the stronger whitelist merely because their perimeter phase has been breached.
+- Preserve ordinary door, fence and siege-breach behavior, the 24-block claimed-core limit, tracked restoration, existing saves, prices and dependency requirements.
+
 # 4.47.2 beta
 
 - Modernize all five Command Center tabs around one quieter navy-and-aged-gold visual system: flat tab rails, slim purpose-colored card accents, clearer hover states, compact text badges and consistent two-line page headers.

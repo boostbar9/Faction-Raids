@@ -3,6 +3,7 @@ package com.devfarinsky.siegeoverhaul;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RaidPathingHeuristicsTest extends MinecraftTestSupport {
@@ -49,11 +50,20 @@ class RaidPathingHeuristicsTest extends MinecraftTestSupport {
         var raid = new RaidSavedData.RaidState("team:test","siege_core",0);
         var core = new net.minecraft.core.BlockPos(0,64,0);
         raid.breached=false;
-        assertTrue(!RaidEvents.coreApproachBreachAllowed(raid,core.east(),core));
+        assertFalse(RaidEvents.coreApproachBreachAllowed(raid,core.east(),core));
         raid.breached=true;
         assertTrue(RaidEvents.coreApproachBreachAllowed(raid,core.offset(20,0,0),core));
-        assertTrue(!RaidEvents.coreApproachBreachAllowed(raid,
+        assertFalse(RaidEvents.coreApproachBreachAllowed(raid,
                 core.offset(RaidEvents.CORE_APPROACH_BREACH_RADIUS+1,0,0),core));
+    }
+
+    @Test void nonCoreDefensePointNeverUnlocksMasonryFallbackAfterBreach() {
+        var legacyRaid = new RaidSavedData.RaidState("team:test", "claim:12,-7", 0);
+        var stronghold = new net.minecraft.core.BlockPos(0,64,0);
+        legacyRaid.breached = true;
+
+        assertFalse(RaidEvents.coreApproachBreachAllowed(
+                legacyRaid, stronghold.east(), stronghold));
     }
 
 }
