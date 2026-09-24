@@ -78,9 +78,11 @@ public final class PlayerFortificationJobs {
             reconnectLoadedBuilder(level, area);
             return true;
         }
+        if (!loadedFromDisk) return false;
         String legacyKey = tag.getString(ModConstants.Tags.CAMP_AREA_TEAM);
+        if (legacyKey.isBlank() || !WorkersBridge.isPlayerBuildArea(area)) return false;
         UUID owner = WorkersBridge.readOwner(area);
-        if (!legacyPlayerCommission(loadedFromDisk, legacyKey, owner, WorkersBridge.isPlayerBuildArea(area)))
+        if (!legacyPlayerCommission(loadedFromDisk, legacyKey, owner, true))
             return false;
 
         tag.putBoolean(ModConstants.Tags.PLAYER_FORTIFICATION_AREA, true);

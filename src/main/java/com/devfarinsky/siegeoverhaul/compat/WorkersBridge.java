@@ -47,8 +47,9 @@ public final class WorkersBridge {
      * marker. Enemy camp areas carry the raider faction id instead.
      */
     public static boolean isPlayerBuildArea(Entity entity) {
+        if (!isBuildArea(entity)) return false;
         String team = readAreaTeamApi(entity);
-        return isBuildArea(entity) && team != null && team.isBlank();
+        return team != null && team.isBlank();
     }
 
     private static boolean entityTypeIs(Entity entity, ResourceLocation expected) {
