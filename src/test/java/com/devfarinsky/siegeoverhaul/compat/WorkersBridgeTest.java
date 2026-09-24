@@ -58,6 +58,14 @@ class WorkersBridgeTest extends MinecraftTestSupport {
     }
 
     @Test
+    void areaTeamMarkerSeparatesPlayerJobsFromEnemyCampJobs() {
+        assertEquals("", WorkersBridge.readAreaTeamApi(new AreaApi("")));
+        assertEquals(RecruitsBridge.RAIDERS_FACTION_ID,
+                WorkersBridge.readAreaTeamApi(new AreaApi(RecruitsBridge.RAIDERS_FACTION_ID)));
+        assertNull(WorkersBridge.readAreaTeamApi(new Object()));
+    }
+
+    @Test
     void ownedBusyAndFleeingWorkersAreRecognisedThroughTheOptionalApi() {
         BuilderApi free = new BuilderApi();
         UUID player = UUID.randomUUID();
@@ -113,5 +121,9 @@ class WorkersBridgeTest extends MinecraftTestSupport {
         private final Object types;
         UnexpectedStorageAreaApi(Object types) { this.types = types; }
         public Object getStorageTypes() { return types; }
+    }
+
+    public record AreaApi(String team) {
+        public String getTeamStringID() { return team; }
     }
 }

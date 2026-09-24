@@ -2,6 +2,7 @@ package com.devfarinsky.siegeoverhaul.core;
 
 import com.devfarinsky.siegeoverhaul.MinecraftTestSupport;
 import com.devfarinsky.siegeoverhaul.ModConstants;
+import com.devfarinsky.siegeoverhaul.RecruitsBridge;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Entity;
@@ -42,5 +43,39 @@ class PlayerFortificationJobsTest extends MinecraftTestSupport {
         assertEquals(active,tag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
         PlayerFortificationJobs.unlink(builder,active);
         assertFalse(tag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+    }
+
+    @Test void legacyMigrationRequiresPositivePlayerBuildAreaEvidence() {
+        UUID player=UUID.randomUUID();
+        assertTrue(PlayerFortificationJobs.legacyPlayerCommission(
+                true,"team:claimed-core",player,true));
+
+        assertFalse(PlayerFortificationJobs.legacyPlayerCommission(
+                false,"team:claimed-core",player,true));
+        assertFalse(PlayerFortificationJobs.legacyPlayerCommission(
+                true,"",player,true));
+        assertFalse(PlayerFortificationJobs.legacyPlayerCommission(
+                true,"team:claimed-core",null,true));
+        assertFalse(PlayerFortificationJobs.legacyPlayerCommission(
+                true,"team:claimed-core",player,false));
+        assertFalse(PlayerFortificationJobs.legacyPlayerCommission(
+                true,"team:claimed-core",RecruitsBridge.RAIDERS_LEADER_UUID,true));
+    }
+
+    @Test void lateBuilderReconnectRequiresOwnerAndReservationMatch() {
+        UUID owner=UUID.randomUUID(),builder=UUID.randomUUID(),other=UUID.randomUUID();
+        assertTrue(PlayerFortificationJobs.pendingBuilderMatches(
+                owner,owner,null,builder,true,false));
+        assertTrue(PlayerFortificationJobs.pendingBuilderMatches(
+                owner,owner,builder,builder,true,false));
+
+        assertFalse(PlayerFortificationJobs.pendingBuilderMatches(
+                owner,other,null,builder,true,false));
+        assertFalse(PlayerFortificationJobs.pendingBuilderMatches(
+                owner,owner,other,builder,true,false));
+        assertFalse(PlayerFortificationJobs.pendingBuilderMatches(
+                owner,owner,null,builder,false,false));
+        assertFalse(PlayerFortificationJobs.pendingBuilderMatches(
+                owner,owner,null,builder,true,true));
     }
 }

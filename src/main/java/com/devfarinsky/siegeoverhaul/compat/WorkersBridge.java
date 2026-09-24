@@ -14,6 +14,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.Optional;
 import java.util.Set;
@@ -22,12 +23,50 @@ import java.util.concurrent.ConcurrentHashMap;
 /** Optional Workers 2 bridge. No Workers classes are linked when the mod is absent. */
 public final class WorkersBridge {
     private static final ResourceLocation BUILDER_ID = new ResourceLocation("workers", "builder");
+    private static final ResourceLocation BUILD_AREA_ID = new ResourceLocation("workers", "buildarea");
     private static final Set<String> WARNED = ConcurrentHashMap.newKeySet();
     private WorkersBridge() {}
 
     public static boolean available() {
         return RaidConfig.ENABLE_WORKERS_COMPAT.get()
                 && OptionalCompatBridge.isLoaded(OptionalCompatBridge.WORKERS);
+    }
+
+    /** True only for the native Workers 2 builder entity. */
+    public static boolean isBuilder(Entity entity) {
+        return entityTypeIs(entity, BUILDER_ID);
+    }
+
+    /** True only for the native Workers 2 build-area entity. */
+    public static boolean isBuildArea(Entity entity) {
+        return entityTypeIs(entity, BUILD_AREA_ID);
+    }
+
+    /**
+     * True only for a native build area with Workers 2's player-only access
+     * marker. Enemy camp areas carry the raider faction id instead.
+     */
+    public static boolean isPlayerBuildArea(Entity entity) {
+        if (!isBuildArea(entity)) return false;
+        String team = readAreaTeamApi(entity);
+        return team != null && team.isBlank();
+    }
+
+    private static boolean entityTypeIs(Entity entity, ResourceLocation expected) {
+        if (entity == null || entity.getType() == null) return false;
+        return expected.equals(ForgeRegistries.ENTITY_TYPES.getKey(entity.getType()));
+    }
+
+    /** Package-visible seam for testing the optional area API without linking its class. */
+    static String readAreaTeamApi(Object area) {
+        if (area == null) return null;
+        try {
+            Object result = area.getClass().getMethod("getTeamStringID").invoke(area);
+            return result instanceof String team ? team : null;
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            warn("read area team", ex);
+            return null;
+        }
     }
 
     /** Configure before registration: an incompatible API must never leave a half-owned NPC in the world. */
