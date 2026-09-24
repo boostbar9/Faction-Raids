@@ -1,3 +1,9 @@
+# 4.47.4 beta
+
+- Recover paid Fortify Perimeter jobs when their Workers 2 builder loads after the wall build area. The correct owner's builder reconnects automatically or after finishing another job; other workers and active jobs are left alone.
+- Migrate older wall areas using positive player-owned Workers 2 evidence instead of raid timing. Active sieges no longer cause legacy player jobs to be discarded, and stale enemy camp areas cannot be mistaken for player commissions.
+- Limit reload checks to real Workers 2 builders and preserve existing saves, wall prices, Treasury rules, required and optional dependencies, claims, and player-supplied inventories.
+
 # 4.47.3 beta
 
 - Restrict the expanded masonry-and-plank breaching fallback to real Siege Core assaults. Legacy named defense points and synthetic claim targets no longer gain the stronger whitelist merely because their perimeter phase has been breached.
