@@ -80,7 +80,7 @@ public final class PlayerFortificationJobs {
         }
         String legacyKey = tag.getString(ModConstants.Tags.CAMP_AREA_TEAM);
         UUID owner = WorkersBridge.readOwner(area);
-        if (!legacyPlayerCommission(loadedFromDisk, legacyKey, owner, WorkersBridge.isBuildArea(area)))
+        if (!legacyPlayerCommission(loadedFromDisk, legacyKey, owner, WorkersBridge.isPlayerBuildArea(area)))
             return false;
 
         tag.putBoolean(ModConstants.Tags.PLAYER_FORTIFICATION_AREA, true);
@@ -96,9 +96,9 @@ public final class PlayerFortificationJobs {
      * while enemy camp areas use the raider leader as owner.
      */
     static boolean legacyPlayerCommission(boolean loadedFromDisk, String legacyKey,
-                                          UUID owner, boolean workersBuildArea) {
+                                          UUID owner, boolean playerWorkersBuildArea) {
         return loadedFromDisk && legacyKey != null && !legacyKey.isBlank()
-                && workersBuildArea && owner != null
+                && playerWorkersBuildArea && owner != null
                 && !RecruitsBridge.RAIDERS_LEADER_UUID.equals(owner);
     }
 

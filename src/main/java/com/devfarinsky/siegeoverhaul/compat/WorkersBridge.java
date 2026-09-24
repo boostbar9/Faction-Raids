@@ -42,9 +42,30 @@ public final class WorkersBridge {
         return entityTypeIs(entity, BUILD_AREA_ID);
     }
 
+    /**
+     * True only for a native build area with Workers 2's player-only access
+     * marker. Enemy camp areas carry the raider faction id instead.
+     */
+    public static boolean isPlayerBuildArea(Entity entity) {
+        String team = readAreaTeamApi(entity);
+        return isBuildArea(entity) && team != null && team.isBlank();
+    }
+
     private static boolean entityTypeIs(Entity entity, ResourceLocation expected) {
         if (entity == null || entity.getType() == null) return false;
         return expected.equals(ForgeRegistries.ENTITY_TYPES.getKey(entity.getType()));
+    }
+
+    /** Package-visible seam for testing the optional area API without linking its class. */
+    static String readAreaTeamApi(Object area) {
+        if (area == null) return null;
+        try {
+            Object result = area.getClass().getMethod("getTeamStringID").invoke(area);
+            return result instanceof String team ? team : null;
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            warn("read area team", ex);
+            return null;
+        }
     }
 
     /** Configure before registration: an incompatible API must never leave a half-owned NPC in the world. */
