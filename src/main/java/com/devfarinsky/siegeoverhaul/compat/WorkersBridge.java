@@ -229,20 +229,23 @@ public final class WorkersBridge {
             return PlayerJobRelease.FAILED;
         }
 
-        // Reset movement before detaching the job. Each cleanup is best-effort:
-        // a changed optional API must not prevent the other half from running.
+        // Detach first. If that fails, the builder must remain in its working
+        // state with a live area; resetting movement first would preserve the
+        // pointer but silently stall the job. Once detached, movement cleanup
+        // is best-effort because there is no longer an entity reference to
+        // invalidate.
+        try {
+            field.set(worker, null);
+        } catch (IllegalAccessException | RuntimeException ex) {
+            warn("release player build area", ex);
+            return PlayerJobRelease.FAILED;
+        }
         try {
             call(worker, "setFollowState", int.class, 0);
         } catch (ReflectiveOperationException | RuntimeException ex) {
             warn("reset player builder state", ex);
         }
-        try {
-            field.set(worker, null);
-            return PlayerJobRelease.RELEASED;
-        } catch (IllegalAccessException | RuntimeException ex) {
-            warn("release player build area", ex);
-            return PlayerJobRelease.FAILED;
-        }
+        return PlayerJobRelease.RELEASED;
     }
 
     enum PlayerJobRelease { RELEASED, NOT_ATTACHED, FAILED }

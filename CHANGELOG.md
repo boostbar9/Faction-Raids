@@ -1,3 +1,7 @@
+# 4.47.9 beta
+
+- Detach a failed Workers 2 wall job before resetting the builder's movement state. If detachment is rejected, the live job and working state now remain together instead of stalling.
+
 # 4.47.8 beta
 
 - Preserve a failed Workers 2 wall build area when the builder still references it, instead of discarding the entity and leaving a broken job pointer.
