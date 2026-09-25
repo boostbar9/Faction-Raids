@@ -1,3 +1,8 @@
+# 4.47.6 beta
+
+- Check a wall area's current owner before reconnecting its saved job, including when the builder loads later. Transferred areas cannot reserve a former owner's builder.
+- If ownership is temporarily unavailable, keep the job pending and retry when it can be verified.
+
 # 4.47.5 beta
 
 - Keep a wall builder's saved job reserved while chunks load, so a second wall area cannot replace it before work starts.

@@ -110,6 +110,12 @@ public final class PlayerFortificationJobs {
         UUID owner = tag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER)
                 ? tag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER) : WorkersBridge.readOwner(area);
         if (owner == null) return;
+        if (!owner.equals(WorkersBridge.readOwner(area))) {
+            // Saved tags are not authority to reclaim a transferred area.
+            // Keep the pending entry so an unreadable API can retry later.
+            rememberPending(level, owner, area.getUUID());
+            return;
+        }
         Mob builder = null;
         if (tag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_BUILDER)
                 && level.getEntity(tag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_BUILDER)) instanceof Mob saved
@@ -176,6 +182,7 @@ public final class PlayerFortificationJobs {
             }
             if (!pendingBuilderMatches(areaOwner, owner, reservedBuilder, builder.getUUID(), true, false))
                 continue;
+            if (!areaOwner.equals(WorkersBridge.readOwner(area))) continue;
             if (selected == null || builder.distanceToSqr(area) < builder.distanceToSqr(selected)) selected = area;
         }
         if (selected != null) {

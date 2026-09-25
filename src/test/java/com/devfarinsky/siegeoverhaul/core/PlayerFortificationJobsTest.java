@@ -18,6 +18,53 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class PlayerFortificationJobsTest extends MinecraftTestSupport {
+    @Test void areaJoinCannotLinkTransferredAreaToFormerOwner() {
+        try (JobFixture f = new JobFixture()) {
+            when(f.level.getEntity(f.builder.getUUID())).thenReturn(f.builder);
+            f.bridge.when(() -> WorkersBridge.readOwner(f.area)).thenReturn(UUID.randomUUID());
+
+            PlayerFortificationJobs.handleAreaJoin(f.level, f.area, true);
+
+            assertFalse(f.workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+        }
+    }
+
+    @Test void areaJoinWaitsForReadableOwnerThenRecovers() {
+        try (JobFixture f = new JobFixture()) {
+            when(f.level.getEntity(f.builder.getUUID())).thenReturn(f.builder);
+            f.bridge.when(() -> WorkersBridge.readOwner(f.area)).thenReturn(null);
+
+            PlayerFortificationJobs.handleAreaJoin(f.level, f.area, true);
+            assertFalse(f.workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+            f.bridge.when(() -> WorkersBridge.readOwner(f.area)).thenReturn(f.owner);
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            assertEquals(f.area.getUUID(), f.workerTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+        }
+    }
+
+    @Test void pendingAreaCannotLinkAfterOwnershipTransfer() {
+        try (JobFixture f = new JobFixture()) {
+            PlayerFortificationJobs.handleAreaJoin(f.level, f.area, true);
+            f.bridge.when(() -> WorkersBridge.readOwner(f.area)).thenReturn(UUID.randomUUID());
+
+            PlayerFortificationJobs.tick(f.level, f.builder);
+
+            assertFalse(f.workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+        }
+    }
+
+    @Test void pendingAreaWaitsForReadableOwnerThenRecovers() {
+        try (JobFixture f = new JobFixture()) {
+            PlayerFortificationJobs.handleAreaJoin(f.level, f.area, true);
+            f.bridge.when(() -> WorkersBridge.readOwner(f.area)).thenReturn(null);
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            assertFalse(f.workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+            f.bridge.when(() -> WorkersBridge.readOwner(f.area)).thenReturn(f.owner);
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            assertEquals(f.area.getUUID(), f.workerTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+        }
+    }
+
     @Test void newCommissionWaitsForSavedJobToFinish() {
         try (JobFixture f = new JobFixture()) {
             net.minecraft.server.level.ServerPlayer player = mock(net.minecraft.server.level.ServerPlayer.class);
