@@ -1,3 +1,11 @@
+# 4.47.5 beta
+
+- Keep a wall builder's saved job reserved while chunks load, so a second wall area cannot replace it before work starts.
+- New perimeter commissions also wait for saved wall jobs to finish instead of replacing them during recovery.
+- Respect transferred workers and build areas. Recovery no longer assigns them back to a former owner, and waits when ownership cannot be read.
+- Keep enemy camp workers out of player wall recovery and remove unloaded or finished jobs from pending scans. Unfinished areas register again when their chunks load.
+- Includes the 4.47.4 wall-job reload and legacy migration fixes.
+
 # 4.47.4 beta
 
 - Recover paid Fortify Perimeter jobs when their Workers 2 builder loads after the wall build area. The correct owner's builder reconnects automatically or after finishing another job; other workers and active jobs are left alone.

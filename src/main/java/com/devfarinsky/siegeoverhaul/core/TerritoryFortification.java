@@ -499,14 +499,11 @@ public final class TerritoryFortification {
      */
     static BuilderSearch findNearbyBuilder(ServerLevel level, ServerPlayer player, BlockPos center) {
         AABB area = new AABB(center).inflate(BUILDER_SEARCH_RADIUS);
-        // Any Villager Recruits Builder counts. We identify by entity registry id.
-        ResourceLocation wanted = new ResourceLocation("workers", "builder");
         Mob best = null;
         double bestDistance = Double.MAX_VALUE;
         boolean sawBusy = false, sawForeign = false, sawFleeing = false;
         for (Mob m : level.getEntitiesOfClass(Mob.class, area, mob -> mob.isAlive())) {
-            ResourceLocation id = ForgeRegistries.ENTITY_TYPES.getKey(m.getType());
-            if (!wanted.equals(id)) continue;
+            if (!WorkersBridge.isBuilder(m)) continue;
             // Never steal the enemy siege camp's construction crew.
             if (m.getPersistentData().contains(
                     com.devfarinsky.siegeoverhaul.ModConstants.Tags.CAMP_WORKER_TEAM)) {
@@ -515,7 +512,9 @@ public final class TerritoryFortification {
             }
             UUID owner = WorkersBridge.readWorkerOwner(m);
             if (owner != null && !owner.equals(player.getUUID())) { sawForeign = true; continue; }
-            if (WorkersBridge.hasActiveBuildArea(m)) { sawBusy = true; continue; }
+            if (m.getPersistentData().hasUUID(
+                    com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
+                    || WorkersBridge.hasActiveBuildArea(m)) { sawBusy = true; continue; }
             if (WorkersBridge.isFleeing(m)) { sawFleeing = true; continue; }
             double distance = m.distanceToSqr(center.getX() + 0.5, center.getY(), center.getZ() + 0.5);
             if (distance < bestDistance) { bestDistance = distance; best = m; }
