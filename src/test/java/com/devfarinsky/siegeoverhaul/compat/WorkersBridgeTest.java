@@ -96,9 +96,11 @@ class WorkersBridgeTest extends MinecraftTestSupport {
         assertTrue(WorkersBridge.assignBuildAreaApi(worker, first));
         assertSame(first, worker.currentBuildArea);
         assertEquals(6, worker.followState);
-        assertFalse(WorkersBridge.releasePlayerJobApi(worker, second));
+        assertEquals(WorkersBridge.PlayerJobRelease.NOT_ATTACHED,
+                WorkersBridge.releasePlayerJobApi(worker, second));
         assertSame(first, worker.currentBuildArea);
-        assertTrue(WorkersBridge.releasePlayerJobApi(worker, first));
+        assertEquals(WorkersBridge.PlayerJobRelease.RELEASED,
+                WorkersBridge.releasePlayerJobApi(worker, first));
         assertNull(worker.currentBuildArea);
         assertEquals(0, worker.followState);
     }
@@ -120,9 +122,21 @@ class WorkersBridgeTest extends MinecraftTestSupport {
         BuilderWithBrokenFollowState worker = new BuilderWithBrokenFollowState();
         worker.currentBuildArea = failedArea;
 
-        assertTrue(WorkersBridge.releasePlayerJobApi(worker, failedArea));
+        assertEquals(WorkersBridge.PlayerJobRelease.RELEASED,
+                WorkersBridge.releasePlayerJobApi(worker, failedArea));
 
         assertNull(worker.currentBuildArea);
+        assertEquals(1, worker.resetAttempts);
+    }
+
+    @Test
+    void rollbackReportsFailureWhenAreaCannotBeDetached() {
+        BuilderWithReadOnlyBuildArea worker = new BuilderWithReadOnlyBuildArea();
+
+        assertEquals(WorkersBridge.PlayerJobRelease.FAILED,
+                WorkersBridge.releasePlayerJobApi(worker, BuilderWithReadOnlyBuildArea.currentBuildArea));
+
+        assertNotNull(BuilderWithReadOnlyBuildArea.currentBuildArea);
         assertEquals(1, worker.resetAttempts);
     }
 
@@ -145,6 +159,12 @@ class WorkersBridgeTest extends MinecraftTestSupport {
             resetAttempts++;
             throw new IllegalStateException("incompatible optional API");
         }
+    }
+
+    public static class BuilderWithReadOnlyBuildArea {
+        public static final Object currentBuildArea = new Object();
+        int resetAttempts;
+        public void setFollowState(int state) { resetAttempts++; }
     }
 
     /** Public signatures verified against Workers 2 / Recruits upstream. */
