@@ -110,10 +110,12 @@ public final class PlayerFortificationJobs {
         UUID owner = tag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER)
                 ? tag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER) : WorkersBridge.readOwner(area);
         if (owner == null) return;
-        if (!owner.equals(WorkersBridge.readOwner(area))) {
-            // Saved tags are not authority to reclaim a transferred area.
-            // Keep the pending entry so an unreadable API can retry later.
-            rememberPending(level, owner, area.getUUID());
+        UUID liveOwner = WorkersBridge.readOwner(area);
+        if (!owner.equals(liveOwner)) {
+            // Unknown ownership may recover; a confirmed transfer retires
+            // the old owner's pending entry instead of scanning it forever.
+            if (liveOwner == null) rememberPending(level, owner, area.getUUID());
+            else forgetPending(level, owner, area.getUUID());
             return;
         }
         Mob builder = null;
@@ -182,7 +184,11 @@ public final class PlayerFortificationJobs {
             }
             if (!pendingBuilderMatches(areaOwner, owner, reservedBuilder, builder.getUUID(), true, false))
                 continue;
-            if (!areaOwner.equals(WorkersBridge.readOwner(area))) continue;
+            UUID liveOwner = WorkersBridge.readOwner(area);
+            if (!areaOwner.equals(liveOwner)) {
+                if (liveOwner != null) forgetPending(level, owner, areaId);
+                continue;
+            }
             if (selected == null || builder.distanceToSqr(area) < builder.distanceToSqr(selected)) selected = area;
         }
         if (selected != null) {

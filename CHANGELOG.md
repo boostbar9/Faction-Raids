@@ -2,6 +2,7 @@
 
 - Check a wall area's current owner before reconnecting its saved job, including when the builder loads later. Transferred areas cannot reserve a former owner's builder.
 - If ownership is temporarily unavailable, keep the job pending and retry when it can be verified.
+- Remove confirmed ownership transfers from the former owner's pending-job scans.
 
 # 4.47.5 beta
 
