@@ -26,6 +26,10 @@ class PlayerFortificationJobsTest extends MinecraftTestSupport {
             PlayerFortificationJobs.handleAreaJoin(f.level, f.area, true);
 
             assertFalse(f.workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+            f.bridge.when(() -> WorkersBridge.readOwner(f.area)).thenReturn(f.owner);
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            assertFalse(f.workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID),
+                    "A confirmed transfer must not leave a pending reservation");
         }
     }
 
@@ -50,6 +54,10 @@ class PlayerFortificationJobsTest extends MinecraftTestSupport {
             PlayerFortificationJobs.tick(f.level, f.builder);
 
             assertFalse(f.workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+            f.bridge.when(() -> WorkersBridge.readOwner(f.area)).thenReturn(f.owner);
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            assertFalse(f.workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID),
+                    "A transferred pending area must be removed from the old owner's scan");
         }
     }
 
