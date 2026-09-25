@@ -21,6 +21,9 @@ class PlayerFortificationJobsTest extends MinecraftTestSupport {
     @Test void areaJoinCannotLinkTransferredAreaToFormerOwner() {
         try (JobFixture f = new JobFixture()) {
             when(f.level.getEntity(f.builder.getUUID())).thenReturn(f.builder);
+            // Seed a real pending entry before the join path sees a transfer.
+            f.bridge.when(() -> WorkersBridge.readOwner(f.area)).thenReturn(null);
+            PlayerFortificationJobs.handleAreaJoin(f.level, f.area, true);
             f.bridge.when(() -> WorkersBridge.readOwner(f.area)).thenReturn(UUID.randomUUID());
 
             PlayerFortificationJobs.handleAreaJoin(f.level, f.area, true);
