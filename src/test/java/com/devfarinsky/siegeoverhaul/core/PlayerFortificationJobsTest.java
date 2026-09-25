@@ -18,6 +18,21 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class PlayerFortificationJobsTest extends MinecraftTestSupport {
+    @Test void newCommissionWaitsForSavedJobToFinish() {
+        try (JobFixture f = new JobFixture()) {
+            net.minecraft.server.level.ServerPlayer player = mock(net.minecraft.server.level.ServerPlayer.class);
+            when(player.getUUID()).thenReturn(f.owner);
+            when(f.level.getEntitiesOfClass(eq(Mob.class), any(), any()))
+                    .thenReturn(java.util.List.of(f.builder));
+            PlayerFortificationJobs.link(f.builder, f.area, f.owner);
+
+            assertNull(TerritoryFortification.findNearbyBuilder(f.level, player, BlockPos.ZERO).builder());
+
+            PlayerFortificationJobs.unlink(f.builder, f.area.getUUID());
+            assertSame(f.builder, TerritoryFortification.findNearbyBuilder(f.level, player, BlockPos.ZERO).builder());
+        }
+    }
+
     @Test void secondReloadedAreaCannotOverwriteReservedJob() {
         try (JobFixture f = new JobFixture()) {
             PlayerFortificationJobs.link(f.builder, f.area, f.owner);
