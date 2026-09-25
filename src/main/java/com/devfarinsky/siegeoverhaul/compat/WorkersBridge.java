@@ -216,16 +216,25 @@ public final class WorkersBridge {
     /** Package-visible seam for the optional Workers 2 API. */
     static boolean releasePlayerJobApi(Object worker, Object expectedArea) {
         if (worker == null || expectedArea == null) return false;
+        java.lang.reflect.Field field;
         try {
-            java.lang.reflect.Field field = worker.getClass().getField("currentBuildArea");
+            field = worker.getClass().getField("currentBuildArea");
             if (field.get(worker) != expectedArea) return false;
-            field.set(worker, null);
-            call(worker, "setFollowState", int.class, 0);
-            return true;
         } catch (ReflectiveOperationException | RuntimeException ex) {
-            warn("release player build area", ex);
+            warn("inspect player build area", ex);
             return false;
         }
+
+        // Reset movement before detaching the job. Each cleanup is best-effort:
+        // a changed optional API must not prevent the other half from running.
+        try {
+            call(worker, "setFollowState", int.class, 0);
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            warn("reset player builder state", ex);
+        }
+        try { field.set(worker, null); }
+        catch (IllegalAccessException | RuntimeException ex) { warn("release player build area", ex); }
+        return true;
     }
 
     /**
