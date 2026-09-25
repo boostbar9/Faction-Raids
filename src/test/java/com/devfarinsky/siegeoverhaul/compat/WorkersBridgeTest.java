@@ -137,7 +137,8 @@ class WorkersBridgeTest extends MinecraftTestSupport {
                 WorkersBridge.releasePlayerJobApi(worker, BuilderWithReadOnlyBuildArea.currentBuildArea));
 
         assertNotNull(BuilderWithReadOnlyBuildArea.currentBuildArea);
-        assertEquals(1, worker.resetAttempts);
+        assertEquals(0, worker.resetAttempts);
+        assertEquals(6, worker.followState);
     }
 
     /** Public signatures verified against Workers 2 / Recruits upstream. */
@@ -163,8 +164,12 @@ class WorkersBridgeTest extends MinecraftTestSupport {
 
     public static class BuilderWithReadOnlyBuildArea {
         public static final Object currentBuildArea = new Object();
+        int followState = 6;
         int resetAttempts;
-        public void setFollowState(int state) { resetAttempts++; }
+        public void setFollowState(int state) {
+            resetAttempts++;
+            followState = state;
+        }
     }
 
     /** Public signatures verified against Workers 2 / Recruits upstream. */
