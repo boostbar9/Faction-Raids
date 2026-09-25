@@ -88,13 +88,43 @@ class WorkersBridgeTest extends MinecraftTestSupport {
         assertFalse(WorkersBridge.isFleeingApi(null));
     }
 
+    @Test
+    void buildAreaHandoffAndRollbackAffectOnlyTheExpectedJob() {
+        BuilderApi worker = new BuilderApi();
+        Object first = new Object(), second = new Object();
+
+        assertTrue(WorkersBridge.assignBuildAreaApi(worker, first));
+        assertSame(first, worker.currentBuildArea);
+        assertEquals(6, worker.followState);
+        assertFalse(WorkersBridge.releasePlayerJobApi(worker, second));
+        assertSame(first, worker.currentBuildArea);
+        assertTrue(WorkersBridge.releasePlayerJobApi(worker, first));
+        assertNull(worker.currentBuildArea);
+        assertEquals(0, worker.followState);
+    }
+
+    @Test
+    void failedReflectiveHandoffRestoresThePreviousNativeJob() {
+        Object previous = new Object();
+        BuilderWithoutFollowState worker = new BuilderWithoutFollowState();
+        worker.currentBuildArea = previous;
+
+        assertFalse(WorkersBridge.assignBuildAreaApi(worker, new Object()));
+
+        assertSame(previous, worker.currentBuildArea);
+    }
+
     /** Public signatures verified against Workers 2 / Recruits upstream. */
     public static class BuilderApi {
         public Object currentBuildArea;
         public boolean isFleeing;
+        public int followState;
         Optional<UUID> owner = Optional.empty();
         public Optional<UUID> getOwnerUUID() { return owner; }
+        public void setFollowState(int state) { followState = state; }
     }
+
+    public static class BuilderWithoutFollowState { public Object currentBuildArea; }
 
     /** Public signatures verified against Workers 2 / Recruits upstream. */
     public static class Workers2Api {

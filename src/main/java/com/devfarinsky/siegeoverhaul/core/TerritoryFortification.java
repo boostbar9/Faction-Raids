@@ -252,6 +252,7 @@ public final class TerritoryFortification {
         }
 
         Entity build = null;
+        boolean committed = false;
         // Use the player's UUID as the buildarea owner so their existing
         // storagearea (owned by the same player) grants access naturally.
         UUID owner = player.getUUID();
@@ -312,6 +313,7 @@ public final class TerritoryFortification {
             if (!player.isCreative() && !PaymentSource.consume(player, PRICE)) {
                 throw new IllegalStateException("Payment rejected");
             }
+            committed = true;
 
             // v4.42.0 - clearer material breakdown so the player knows
             // exactly what to put in the storage area and roughly how
@@ -350,7 +352,16 @@ public final class TerritoryFortification {
             saved.setDirty();
             return true;
         } catch (ReflectiveOperationException | RuntimeException ex) {
+            if (committed) {
+                // The job and payment already succeeded. A later feedback or
+                // logging failure must not destroy paid work or report a false
+                // purchase failure to the menu.
+                saved.setDirty();
+                FactionLogger.LOG.warn("[SiegeOverhaul] Fortify Perimeter started, but completion feedback failed", ex);
+                return true;
+            }
             if (build != null) {
+                WorkersBridge.releasePlayerJob(builder, build);
                 PlayerFortificationJobs.unlink(builder, build.getUUID());
                 build.discard();
             }

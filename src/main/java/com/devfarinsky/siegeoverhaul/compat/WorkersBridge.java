@@ -175,13 +175,55 @@ public final class WorkersBridge {
      */
     public static boolean assignBuildAreaDirectly(Mob worker, Entity buildArea) {
         if (worker == null || buildArea == null) return false;
+        worker.getNavigation().stop();
+        return assignBuildAreaApi(worker, buildArea);
+    }
+
+    /** Package-visible seam that also makes the reflective handoff transactional. */
+    static boolean assignBuildAreaApi(Object worker, Object buildArea) {
+        if (worker == null || buildArea == null) return false;
+        java.lang.reflect.Field field = null;
+        Object previous = null;
         try {
-            worker.getNavigation().stop();
-            worker.getClass().getField("currentBuildArea").set(worker, buildArea);
+            field = worker.getClass().getField("currentBuildArea");
+            previous = field.get(worker);
+            field.set(worker, buildArea);
             call(worker, "setFollowState", int.class, 6);
             return true;
         } catch (ReflectiveOperationException | RuntimeException ex) {
+            if (field != null) {
+                try { field.set(worker, previous); }
+                catch (IllegalAccessException | RuntimeException restoreEx) {
+                    warn("restore build area", restoreEx);
+                }
+            }
             warn("assign build area", ex);
+            return false;
+        }
+    }
+
+    /**
+     * Roll back only the area from a failed player commission. An unrelated
+     * Workers 2 job is never cleared.
+     */
+    public static boolean releasePlayerJob(Mob worker, Entity expectedArea) {
+        if (worker == null || expectedArea == null) return false;
+        boolean released = releasePlayerJobApi(worker, expectedArea);
+        if (released) worker.getNavigation().stop();
+        return released;
+    }
+
+    /** Package-visible seam for the optional Workers 2 API. */
+    static boolean releasePlayerJobApi(Object worker, Object expectedArea) {
+        if (worker == null || expectedArea == null) return false;
+        try {
+            java.lang.reflect.Field field = worker.getClass().getField("currentBuildArea");
+            if (field.get(worker) != expectedArea) return false;
+            field.set(worker, null);
+            call(worker, "setFollowState", int.class, 0);
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            warn("release player build area", ex);
             return false;
         }
     }

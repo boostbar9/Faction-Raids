@@ -1,3 +1,9 @@
+# 4.47.7 beta
+
+- Roll back a partially assigned Workers 2 build area when a wall commission fails, so the builder does not remain stuck in working mode on a discarded job.
+- Restore the builder's previous native job when the reflective Workers 2 handoff is incompatible, and never clear an unrelated job during cleanup.
+- Treat a paid, started wall commission as successful even if later confirmation text or logging fails, preserving both the work and the player's Treasury purchase.
+
 # 4.47.6 beta
 
 - Check a wall area's current owner before reconnecting its saved job, including when the builder loads later. Transferred areas cannot reserve a former owner's builder.
