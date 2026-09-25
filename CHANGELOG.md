@@ -1,3 +1,8 @@
+# 4.47.8 beta
+
+- Preserve a failed Workers 2 wall build area when the builder still references it, instead of discarding the entity and leaving a broken job pointer.
+- Report reflective detachment failures accurately while still allowing an incompatible movement-state reset to complete the safe half of cleanup.
+
 # 4.47.7 beta
 
 - Roll back a partially assigned Workers 2 build area when a wall commission fails, so the builder does not remain stuck in working mode on a discarded job.

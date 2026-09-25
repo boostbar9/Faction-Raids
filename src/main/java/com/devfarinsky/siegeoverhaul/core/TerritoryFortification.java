@@ -361,9 +361,15 @@ public final class TerritoryFortification {
                 return true;
             }
             if (build != null) {
-                WorkersBridge.releasePlayerJob(builder, build);
-                PlayerFortificationJobs.unlink(builder, build.getUUID());
-                build.discard();
+                if (WorkersBridge.releasePlayerJob(builder, build)) {
+                    PlayerFortificationJobs.unlink(builder, build.getUUID());
+                    build.discard();
+                } else {
+                    // Workers 2 still points at this area. Preserve both sides
+                    // of the association instead of creating a dangling job
+                    // reference to a discarded entity.
+                    FactionLogger.LOG.warn("[SiegeOverhaul] Could not detach failed Fortify Perimeter job; retaining its build area");
+                }
             }
             player.sendSystemMessage(Component.literal(
                     "Fortify Perimeter failed to start: " + ex.getMessage()));

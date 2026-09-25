@@ -208,21 +208,25 @@ public final class WorkersBridge {
      */
     public static boolean releasePlayerJob(Mob worker, Entity expectedArea) {
         if (worker == null || expectedArea == null) return false;
-        boolean released = releasePlayerJobApi(worker, expectedArea);
-        if (released) worker.getNavigation().stop();
-        return released;
+        PlayerJobRelease result = releasePlayerJobApi(worker, expectedArea);
+        if (result == PlayerJobRelease.RELEASED) worker.getNavigation().stop();
+        // It is safe to discard the failed area when it was detached or was
+        // never attached. An unreadable or non-writable field is not safe:
+        // keep the area alive rather than leave the builder pointing at a
+        // discarded entity.
+        return result != PlayerJobRelease.FAILED;
     }
 
     /** Package-visible seam for the optional Workers 2 API. */
-    static boolean releasePlayerJobApi(Object worker, Object expectedArea) {
-        if (worker == null || expectedArea == null) return false;
+    static PlayerJobRelease releasePlayerJobApi(Object worker, Object expectedArea) {
+        if (worker == null || expectedArea == null) return PlayerJobRelease.FAILED;
         java.lang.reflect.Field field;
         try {
             field = worker.getClass().getField("currentBuildArea");
-            if (field.get(worker) != expectedArea) return false;
+            if (field.get(worker) != expectedArea) return PlayerJobRelease.NOT_ATTACHED;
         } catch (ReflectiveOperationException | RuntimeException ex) {
             warn("inspect player build area", ex);
-            return false;
+            return PlayerJobRelease.FAILED;
         }
 
         // Reset movement before detaching the job. Each cleanup is best-effort:
@@ -232,10 +236,16 @@ public final class WorkersBridge {
         } catch (ReflectiveOperationException | RuntimeException ex) {
             warn("reset player builder state", ex);
         }
-        try { field.set(worker, null); }
-        catch (IllegalAccessException | RuntimeException ex) { warn("release player build area", ex); }
-        return true;
+        try {
+            field.set(worker, null);
+            return PlayerJobRelease.RELEASED;
+        } catch (IllegalAccessException | RuntimeException ex) {
+            warn("release player build area", ex);
+            return PlayerJobRelease.FAILED;
+        }
     }
+
+    enum PlayerJobRelease { RELEASED, NOT_ATTACHED, FAILED }
 
     /**
      * Teleport a builder to a safe standing surface near a known-good anchor
