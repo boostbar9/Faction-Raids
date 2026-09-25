@@ -3,11 +3,14 @@ package com.devfarinsky.siegeoverhaul.core;
 import com.devfarinsky.siegeoverhaul.MinecraftTestSupport;
 import com.devfarinsky.siegeoverhaul.ModConstants;
 import com.devfarinsky.siegeoverhaul.RecruitsBridge;
+import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.server.level.ServerLevel;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 
 import java.util.UUID;
 
@@ -15,6 +18,154 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class PlayerFortificationJobsTest extends MinecraftTestSupport {
+    @Test void secondReloadedAreaCannotOverwriteReservedJob() {
+        try (JobFixture f = new JobFixture()) {
+            PlayerFortificationJobs.link(f.builder, f.area, f.owner);
+            UUID firstJob = f.area.getUUID();
+            Entity second = f.newArea(true);
+            when(f.level.getEntity(f.builder.getUUID())).thenReturn(f.builder);
+
+            PlayerFortificationJobs.handleAreaJoin(f.level, second, true);
+
+            assertEquals(firstJob, f.workerTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+        }
+    }
+
+    @Test void nearbyBuilderWithReservedJobIsExcludedFromLegacySearch() {
+        try (JobFixture f = new JobFixture()) {
+            PlayerFortificationJobs.link(f.builder, f.area, f.owner);
+            Entity second = f.newArea(false);
+            when(second.getBoundingBox()).thenReturn(new net.minecraft.world.phys.AABB(0, 0, 0, 1, 1, 1));
+            when(f.level.getEntitiesOfClass(eq(Mob.class), any(), any())).thenAnswer(invocation -> {
+                java.util.function.Predicate<Mob> filter = invocation.getArgument(2);
+                return filter.test(f.builder) ? java.util.List.of(f.builder) : java.util.List.of();
+            });
+
+            PlayerFortificationJobs.handleAreaJoin(f.level, second, true);
+
+            assertEquals(f.area.getUUID(), f.workerTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+            assertFalse(second.getPersistentData().hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_BUILDER));
+        }
+    }
+
+    @Test void areaLoadedBeforeBuilderRecoversThroughRealTickPath() throws Exception {
+        try (JobFixture f = new JobFixture()) {
+            PlayerFortificationJobs.handleAreaJoin(f.level, f.area, true);
+            assertFalse(f.workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            assertEquals(f.area.getUUID(), f.workerTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            f.bridge.verify(() -> WorkersBridge.enablePlayerJob(f.builder, f.owner));
+            f.bridge.verify(() -> WorkersBridge.assignBuildAreaDirectly(f.builder, f.area));
+        }
+    }
+
+    @Test void busyBuilderWaitsThenRecoversPendingJob() {
+        try (JobFixture f = new JobFixture()) {
+            PlayerFortificationJobs.handleAreaJoin(f.level, f.area, true);
+            f.bridge.when(() -> WorkersBridge.hasActiveBuildArea(f.builder)).thenReturn(true);
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            assertFalse(f.workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+            f.bridge.when(() -> WorkersBridge.hasActiveBuildArea(f.builder)).thenReturn(false);
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            assertEquals(f.area.getUUID(), f.workerTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+        }
+    }
+
+    @Test void transferredBuilderIsNeverReownedByRecovery() throws Exception {
+        try (JobFixture f = new JobFixture()) {
+            PlayerFortificationJobs.link(f.builder, f.area, f.owner);
+            f.bridge.when(() -> WorkersBridge.readWorkerOwner(f.builder)).thenReturn(UUID.randomUUID());
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            assertFalse(f.workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+            f.bridge.verify(() -> WorkersBridge.enablePlayerJob(any(), any()), never());
+            f.bridge.verify(() -> WorkersBridge.assignBuildAreaDirectly(any(), any()), never());
+        }
+    }
+
+    @Test void transferredAreaCannotBeWorkedUsingStaleOwnerTags() throws Exception {
+        try (JobFixture f = new JobFixture()) {
+            PlayerFortificationJobs.link(f.builder, f.area, f.owner);
+            f.bridge.when(() -> WorkersBridge.readOwner(f.area)).thenReturn(UUID.randomUUID());
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            assertFalse(f.workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+            f.bridge.verify(() -> WorkersBridge.enablePlayerJob(any(), any()), never());
+        }
+    }
+
+    @Test void unreadableOwnershipRetainsJobForLaterRetry() throws Exception {
+        try (JobFixture f = new JobFixture()) {
+            PlayerFortificationJobs.link(f.builder, f.area, f.owner);
+            f.bridge.when(() -> WorkersBridge.readOwner(f.area)).thenReturn(null);
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            assertEquals(f.area.getUUID(), f.workerTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+            f.bridge.verify(() -> WorkersBridge.enablePlayerJob(any(), any()), never());
+            f.bridge.when(() -> WorkersBridge.readOwner(f.area)).thenReturn(f.owner);
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            f.bridge.verify(() -> WorkersBridge.assignBuildAreaDirectly(f.builder, f.area));
+        }
+    }
+
+    @Test void campWorkerCannotReconnectToPendingPlayerJob() {
+        try (JobFixture f = new JobFixture()) {
+            PlayerFortificationJobs.handleAreaJoin(f.level, f.area, true);
+            f.workerTag.putString(ModConstants.Tags.CAMP_WORKER_TEAM, "team:enemy");
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            assertFalse(f.workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+        }
+    }
+
+    @Test void unloadedPendingAreaIsForgottenAndRegistersAgainOnJoin() {
+        try (JobFixture f = new JobFixture()) {
+            PlayerFortificationJobs.handleAreaJoin(f.level, f.area, true);
+            when(f.level.getEntity(f.area.getUUID())).thenReturn(null);
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            when(f.level.getEntity(f.area.getUUID())).thenReturn(f.area);
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            assertFalse(f.workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+            PlayerFortificationJobs.handleAreaJoin(f.level, f.area, true);
+            PlayerFortificationJobs.tick(f.level, f.builder);
+            assertEquals(f.area.getUUID(), f.workerTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+        }
+    }
+
+    private static final class JobFixture implements AutoCloseable {
+        final ServerLevel level = mock(ServerLevel.class);
+        final Mob builder = mock(Mob.class);
+        final UUID owner = UUID.randomUUID();
+        final CompoundTag workerTag = new CompoundTag();
+        final MockedStatic<WorkersBridge> bridge = mockStatic(WorkersBridge.class);
+        final Entity area;
+
+        JobFixture() {
+            when(builder.getUUID()).thenReturn(UUID.randomUUID());
+            when(builder.getPersistentData()).thenReturn(workerTag);
+            when(builder.isAlive()).thenReturn(true);
+            bridge.when(() -> WorkersBridge.isBuilder(builder)).thenReturn(true);
+            bridge.when(() -> WorkersBridge.readWorkerOwner(builder)).thenReturn(owner);
+            area = newArea(true);
+            bridge.when(() -> WorkersBridge.assignBuildAreaDirectly(builder, area)).thenReturn(true);
+        }
+
+        Entity newArea(boolean reserved) {
+            Entity result = mock(Entity.class);
+            UUID id = UUID.randomUUID();
+            CompoundTag tag = new CompoundTag();
+            tag.putBoolean(ModConstants.Tags.PLAYER_FORTIFICATION_AREA, true);
+            tag.putUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER, owner);
+            if (reserved) tag.putUUID(ModConstants.Tags.PLAYER_FORTIFICATION_BUILDER, builder.getUUID());
+            when(result.getPersistentData()).thenReturn(tag);
+            when(result.getUUID()).thenReturn(id);
+            when(result.blockPosition()).thenReturn(new BlockPos(80, 70, -16));
+            when(result.isAlive()).thenReturn(true);
+            when(level.getEntity(id)).thenReturn(result);
+            bridge.when(() -> WorkersBridge.readOwner(result)).thenReturn(owner);
+            return result;
+        }
+
+        public void close() { bridge.close(); }
+    }
+
     @Test void commissionedWallUsesDurablePlayerLinkInsteadOfEnemyCampTag() {
         Mob builder=mock(Mob.class); Entity area=mock(Entity.class);
         CompoundTag workerTag=new CompoundTag(),areaTag=new CompoundTag();

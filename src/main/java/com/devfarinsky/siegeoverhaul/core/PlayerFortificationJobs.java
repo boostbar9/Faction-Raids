@@ -95,7 +95,7 @@ public final class PlayerFortificationJobs {
     /**
      * Positive legacy evidence. Active raids and deleted cores are deliberately
      * irrelevant: player commissions used a player-owned Workers buildarea,
-     * while enemy camp areas use the raider leader as owner.
+     * while enemy camp areas carry the raider faction's native team marker.
      */
     static boolean legacyPlayerCommission(boolean loadedFromDisk, String legacyKey,
                                           UUID owner, boolean playerWorkersBuildArea) {
@@ -113,6 +113,7 @@ public final class PlayerFortificationJobs {
         Mob builder = null;
         if (tag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_BUILDER)
                 && level.getEntity(tag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_BUILDER)) instanceof Mob saved
+                && canRecoverJob(saved, area.getUUID())
                 && pendingBuilderMatches(owner, WorkersBridge.readWorkerOwner(saved),
                         tag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_BUILDER), saved.getUUID(),
                         WorkersBridge.isBuilder(saved), WorkersBridge.hasActiveBuildArea(saved)))
@@ -129,16 +130,25 @@ public final class PlayerFortificationJobs {
         return level.getEntitiesOfClass(Mob.class, area.getBoundingBox().inflate(128.0D), candidate ->
                         candidate.isAlive()
                                 && WorkersBridge.isBuilder(candidate)
-                                && !candidate.getPersistentData().contains(ModConstants.Tags.CAMP_WORKER_TEAM)
+                                && canRecoverJob(candidate, area.getUUID())
                                 && owner.equals(WorkersBridge.readWorkerOwner(candidate))
                                 && !WorkersBridge.hasActiveBuildArea(candidate))
                 .stream().min(Comparator.comparingDouble(candidate -> candidate.distanceToSqr(area))).orElse(null);
     }
 
+    /** A saved job is reserved even before Workers 2 starts its in-memory job. */
+    private static boolean canRecoverJob(Mob builder, UUID areaId) {
+        CompoundTag tag = builder.getPersistentData();
+        return !tag.contains(ModConstants.Tags.CAMP_WORKER_TEAM)
+                && (!tag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
+                    || areaId.equals(tag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)));
+    }
+
     private static void reconnectPendingBuilder(ServerLevel level, Mob builder) {
         if (level == null || builder == null || !WorkersBridge.isBuilder(builder)) return;
         CompoundTag workerTag = builder.getPersistentData();
-        if (workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
+        if (workerTag.contains(ModConstants.Tags.CAMP_WORKER_TEAM)
+                || workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
                 || WorkersBridge.hasActiveBuildArea(builder)) return;
         UUID owner = WorkersBridge.readWorkerOwner(builder);
         if (owner == null) return;
@@ -147,7 +157,12 @@ public final class PlayerFortificationJobs {
         Entity selected = null;
         for (UUID areaId : candidates) {
             Entity area = level.getEntity(areaId);
-            if (area == null) continue; // The area may be temporarily unloaded.
+            if (area == null) {
+                // Unloaded areas register again on join. Completed or removed
+                // jobs must not accumulate in every idle builder's scan.
+                forgetPending(level, owner, areaId);
+                continue;
+            }
             CompoundTag areaTag = area.getPersistentData();
             UUID areaOwner = areaTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER)
                     ? areaTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER)
@@ -204,8 +219,9 @@ public final class PlayerFortificationJobs {
 
     /** Called cheaply from the existing living-tick hook; meaningful work runs once every two seconds. */
     public static void tick(ServerLevel level, Mob builder) {
-        if (!WorkersBridge.isBuilder(builder) || builder.tickCount % RECOVERY_INTERVAL != 0) return;
+        if (builder.tickCount % RECOVERY_INTERVAL != 0 || !WorkersBridge.isBuilder(builder)) return;
         CompoundTag tag = builder.getPersistentData();
+        if (tag.contains(ModConstants.Tags.CAMP_WORKER_TEAM)) return;
         if (!tag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)) {
             reconnectPendingBuilder(level, builder);
             return;
@@ -219,7 +235,18 @@ public final class PlayerFortificationJobs {
                     || builder.getUUID().equals(area.getPersistentData().getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_BUILDER)))) {
             UUID owner = tag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER)
                     ? tag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER) : WorkersBridge.readWorkerOwner(builder);
-            if (owner == null) { unlink(builder, areaId); return; }
+            UUID currentOwner = WorkersBridge.readWorkerOwner(builder);
+            UUID areaOwner = WorkersBridge.readOwner(area);
+            // Never turn an old save association into an ownership transfer.
+            // Unknown APIs retry later; positively changed ownership detaches.
+            if (owner == null || currentOwner == null || areaOwner == null) return;
+            CompoundTag areaTag = area.getPersistentData();
+            if (!owner.equals(currentOwner) || !owner.equals(areaOwner)
+                    || (areaTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER)
+                        && !owner.equals(areaTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER)))) {
+                unlink(builder, areaId);
+                return;
+            }
             try {
                 WorkersBridge.enablePlayerJob(builder, owner);
                 if (WorkersBridge.assignBuildAreaDirectly(builder, area)) {
