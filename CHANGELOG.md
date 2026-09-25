@@ -2,6 +2,7 @@
 
 - Roll back a partially assigned Workers 2 build area when a wall commission fails, so the builder does not remain stuck in working mode on a discarded job.
 - Restore the builder's previous native job when the reflective Workers 2 handoff is incompatible, and never clear an unrelated job during cleanup.
+- Run movement-state and area cleanup independently so an incompatible optional API cannot block the rest of the rollback.
 - Treat a paid, started wall commission as successful even if later confirmation text or logging fails, preserving both the work and the player's Treasury purchase.
 
 # 4.47.6 beta

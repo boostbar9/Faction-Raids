@@ -114,6 +114,18 @@ class WorkersBridgeTest extends MinecraftTestSupport {
         assertSame(previous, worker.currentBuildArea);
     }
 
+    @Test
+    void rollbackStillDetachesAreaWhenFollowStateResetIsIncompatible() {
+        Object failedArea = new Object();
+        BuilderWithBrokenFollowState worker = new BuilderWithBrokenFollowState();
+        worker.currentBuildArea = failedArea;
+
+        assertTrue(WorkersBridge.releasePlayerJobApi(worker, failedArea));
+
+        assertNull(worker.currentBuildArea);
+        assertEquals(1, worker.resetAttempts);
+    }
+
     /** Public signatures verified against Workers 2 / Recruits upstream. */
     public static class BuilderApi {
         public Object currentBuildArea;
@@ -125,6 +137,15 @@ class WorkersBridgeTest extends MinecraftTestSupport {
     }
 
     public static class BuilderWithoutFollowState { public Object currentBuildArea; }
+
+    public static class BuilderWithBrokenFollowState {
+        public Object currentBuildArea;
+        int resetAttempts;
+        public void setFollowState(int state) {
+            resetAttempts++;
+            throw new IllegalStateException("incompatible optional API");
+        }
+    }
 
     /** Public signatures verified against Workers 2 / Recruits upstream. */
     public static class Workers2Api {
