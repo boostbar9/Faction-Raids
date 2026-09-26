@@ -58,6 +58,17 @@ class NavalFleetTest extends MinecraftTestSupport {
         assertFalse(NavalFleet.isClearWaterFootprint(level, WATER, 3));
     }
 
+    @Test void fractionalBorderMustContainEntireFootprintNotOnlyBlockOrigins() {
+        ServerLevel level = water();
+        level.getWorldBorder().setCenter(0, 0);
+        level.getWorldBorder().setSize(6.5);
+        assertTrue(level.getWorldBorder().isWithinBounds(WATER.offset(3, 0, 3)));
+        assertFalse(NavalFleet.isClearWaterFootprint(level, WATER, 3));
+        level.getWorldBorder().setCenter(.5, .5);
+        level.getWorldBorder().setSize(7);
+        assertTrue(NavalFleet.isClearWaterFootprint(level, WATER, 3));
+    }
+
     @Test void rejectedNativeBoardingNeverRetriesWithForce() {
         Entity vessel = mock(Entity.class);
         Mob rejected = mock(Mob.class), accepted = mock(Mob.class);

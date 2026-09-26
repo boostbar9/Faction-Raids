@@ -151,12 +151,15 @@ public final class NavalFleet {
         // Reserve room for the hull, including diagonal corners and vessels spawned earlier.
         var hull = new net.minecraft.world.phys.AABB(pos.offset(-hullRadius, 0, -hullRadius),
                 pos.offset(hullRadius + 1, 3, hullRadius + 1));
-        return level.getEntities((Entity) null, hull).isEmpty();
+        var border = level.getWorldBorder();
+        return hull.minX >= border.getMinX() && hull.maxX <= border.getMaxX()
+                && hull.minZ >= border.getMinZ() && hull.maxZ <= border.getMaxZ()
+                && level.getEntities((Entity) null, hull).isEmpty();
     }
 
     /**
-     * v4.42.0 - water at {@code pos} AND air (or water) 2 blocks above,
-     * so the hull has clearance for masts / sails / raider heads.
+     * Non-colliding water at {@code pos}, with two air blocks above.
+     * This is minimum hull/crew clearance, not a multipart mast-envelope check.
      */
     private static boolean isSurfaceWater(ServerLevel level, BlockPos pos) {
         if (!level.hasChunkAt(pos)) return false;
