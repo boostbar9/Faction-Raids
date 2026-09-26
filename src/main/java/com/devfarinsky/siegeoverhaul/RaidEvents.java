@@ -1288,7 +1288,7 @@ public final class RaidEvents {
             var core = data.siegeCores.get(key);
             if (core != null) {
                 long balance = FactionBank.balance(core);
-                int rateBp = RaidConfig.BANK_INTEREST_BASIS_POINTS.get();
+                int rateBp = FactionBank.interestRate(core, RaidConfig.BANK_INTEREST_BASIS_POINTS.get());
                 long dailyInterest = balance * rateBp / 10000L;
                 long ticks = FactionBank.ticksUntilInterest(core, source.getServer().overworld().getGameTime());
                 String countdown = formatInterestCountdown(ticks);
