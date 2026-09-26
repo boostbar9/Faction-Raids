@@ -4728,7 +4728,8 @@ public final class RaidEvents {
         Vec3 center = Vec3.atCenterOf(point.pos());
         if ("siege_core".equals(point.name())) {
             state.breached = true;
-            int[] counts = com.devfarinsky.siegeoverhaul.core.CoreOccupation.counts(level,point.pos(),state.teamKey,anchor.members());
+            int[] counts = com.devfarinsky.siegeoverhaul.core.CoreOccupation.counts(level,point.pos(),state.teamKey,anchor.members(),
+                    com.devfarinsky.siegeoverhaul.compat.RaiderFactions.id(state.factionId));
             int maximum = RaidConfig.CAPTURE_TIME_SECONDS.get()*20;
             state.captureTicks = com.devfarinsky.siegeoverhaul.core.CoreControl.advance(state.captureTicks,maximum,counts[0],counts[1]);
             state.objectiveStatus = "Core capture " + state.captureTicks*100/maximum + "% | " + counts[0] + " enemies / " + counts[1] + " defenders";

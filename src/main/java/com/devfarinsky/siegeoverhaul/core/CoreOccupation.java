@@ -38,7 +38,7 @@ public final class CoreOccupation {
      * faction prevents a third party from standing uncontested while also
      * avoiding a permanent occupation lock.
      */
-    static int[] counts(ServerLevel level, BlockPos pos, String key, Set<UUID> members, String occupyingFaction) {
+    public static int[] counts(ServerLevel level, BlockPos pos, String key, Set<UUID> members, String occupyingFaction) {
         int enemies=0, defenders=0;
         for (var player:level.players()) if (player.isAlive() && !player.isSpectator() && !player.isCreative()
                 && contesting(level,player.position(),pos)) {
@@ -49,9 +49,13 @@ public final class CoreOccupation {
         int vertical=RaidConfig.CORE_CAPTURE_VERTICAL.get();
         for (Mob mob:level.getEntitiesOfClass(Mob.class,new AABB(pos).inflate(radius,vertical,radius),
                 m -> m.isAlive() && !m.isPassenger() && contesting(level,m.position(),pos))) {
-            if (RecruitsBridge.isRecruitSoldier(mob) && (key.equals(mob.getPersistentData().getString(ModConstants.Tags.RAID_TEAM))
-                    || key.equals(mob.getPersistentData().getString(com.devfarinsky.siegeoverhaul.camp.CampGuards.TEAM_TAG))
-                    || (mob.getTeam()!=null && RaiderFactions.enemy(mob.getTeam().getName())))) enemies++;
+            String raidTeam = mob.getPersistentData().getString(ModConstants.Tags.RAID_TEAM);
+            String guardTeam = mob.getPersistentData().getString(com.devfarinsky.siegeoverhaul.camp.CampGuards.TEAM_TAG);
+            // Siege tags bind a unit to one contest. Luring another camp's
+            // soldiers here must not contribute capture pressure or defense.
+            if ((!raidTeam.isBlank() && !key.equals(raidTeam))
+                    || (!guardTeam.isBlank() && !key.equals(guardTeam))) continue;
+            if (RecruitsBridge.isRecruitSoldier(mob) && (key.equals(raidTeam) || key.equals(guardTeam))) enemies++;
             else if (RecruitsBridge.belongsTo(mob,key,members)) defenders++;
             else if (occupyingFaction!=null && !occupyingFaction.isBlank()
                     && RecruitsBridge.belongsTo(mob,"team:"+occupyingFaction,Set.of())) enemies++;
@@ -77,6 +81,7 @@ public final class CoreOccupation {
         data.setDirty();
         if(!CoreClaimTransfer.transfer(level,claim.claimId(),raid.teamKey.substring(5),RaiderFactions.id(raid.factionId),RaiderFactions.name(raid.factionId)+" Occupied Territory")) return false;
         core.putBoolean("Occupied",true); core.putInt("RecaptureTicks",0);
+        CoreControl.bindOwner(core,"RecaptureTicks",RaiderFactions.id(raid.factionId));
         raid.coreCaptured=true; raid.pendingWaveSpawns=0; raid.ticksToNextWave=0;
         data.setDirty();
         notify(level.getServer(),raid.teamKey,"Your Siege Core was captured. Its territory now belongs to "+RaiderFactions.name(raid.factionId)+". Outnumber them within "
@@ -107,6 +112,7 @@ public final class CoreOccupation {
                 }
             }
             var anchor=data.anchors.get(key);
+            CoreControl.bindOwner(core,"RecaptureTicks",claim.ownerFactionStringId());
             int[] counts=counts(level,pos,key,anchor==null?Set.of():anchor.members(),claim.ownerFactionStringId());
             int max=RaidConfig.CORE_RECAPTURE_SECONDS.get()*20;
             int progress=CoreControl.advance(core.getInt("RecaptureTicks"),max,counts[1],counts[0]);

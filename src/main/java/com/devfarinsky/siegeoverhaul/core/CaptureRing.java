@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -29,8 +30,12 @@ public final class CaptureRing {
         // Aim at chest height so a one-block lip in front of the core does not
         // hide a defender who is genuinely standing at it.
         Vec3 to = new Vec3(position.x, position.y + 1.0D, position.z);
-        HitResult hit = level.clip(new ClipContext(from, to, ClipContext.Block.COLLIDER,
+        // Cast toward the core: a ray starting inside its solid shape hits
+        // the core immediately, hiding every contestant. Only the endpoint
+        // core may occlude this ray; walls along the approach still block it.
+        HitResult hit = level.clip(new ClipContext(to, from, ClipContext.Block.COLLIDER,
                 ClipContext.Fluid.NONE, null));
-        return hit == null || hit.getType() == HitResult.Type.MISS;
+        return hit != null && (hit.getType() == HitResult.Type.MISS
+                || hit instanceof BlockHitResult block && block.getBlockPos().equals(core));
     }
 }

@@ -132,7 +132,17 @@ public final class EnemyCore {
     public static boolean tick(ServerLevel level, RaidSavedData data, RaidSavedData.RaidState raid, RaidSavedData.Anchor anchor) {
         if (!EndlessSiege.active(raid) || raid.preparationTicks > 0 || raid.coreCaptured || !ensure(level, raid)) return false;
         BlockPos pos = position(raid);
-        int[] counts = CoreOccupation.counts(level, pos, raid.teamKey, anchor.members());
+        var claim = RecruitsClaimsBridge.getClaimAt(level, pos).orElse(null);
+        if (claim == null || !claim.claimId().equals(raid.campClaimId)
+                || !(RaiderFactions.id(raid.factionId).equals(claim.ownerFactionStringId())
+                    || RecruitsBridge.RAIDERS_FACTION_ID.equals(claim.ownerFactionStringId()))) {
+            if (raid.campaign.getInt("EnemyCaptureTicks") != 0) {
+                raid.campaign.putInt("EnemyCaptureTicks", 0);
+                data.setDirty();
+            }
+            return false;
+        }
+        int[] counts = CoreOccupation.counts(level, pos, raid.teamKey, anchor.members(), claim.ownerFactionStringId());
         int maximum = RaidConfig.CORE_RECAPTURE_SECONDS.get() * 20;
         int before = raid.campaign.getInt("EnemyCaptureTicks");
         int progress = CoreControl.advance(before, maximum, counts[1], counts[0]);

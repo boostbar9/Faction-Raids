@@ -56,7 +56,7 @@ Each box awards **one randomly selected reward stack**. Rarity odds are **Common
 6. **Defenses are tested.** Raiders use doors, breaching, ladders, alternate approaches, and supported siege equipment. Once the abstract perimeter falls, breachers near the core can slowly open a restoration-tracked passage through common masonry or planks inside the defending claim; protected containers, valuables, machinery, obsidian and unrelated claims remain off limits. Commanders retain their visible, interruptible wall strike.
 7. **The core is contested.** Numerical superiority around the core drives capture. Losing the core transfers its territory to the enemy faction. Bring yourself and your recruits back to outnumber the occupiers and reclaim it.
 
-**Ties pause capture progress. The opposing side's numerical superiority reverses it.** Capture distances and timings are configurable.
+**Occupied ties pause capture progress. The opposing side's numerical superiority reverses it, and an empty ring loses one second of progress each second.** Capture distances and timings are configurable. Walls and roofs block the capture sight check; troops assigned to a different siege do not count.
 
 Siege engines use supplied native crews. Deployment depends on available space, working routes, configuration, and entity caps.
 
