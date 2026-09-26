@@ -167,15 +167,32 @@ class CampPerimeterTest extends MinecraftTestSupport {
     void aStageThatCannotBeBuiltIsAbandonedAfterABoundedNumberOfRetries() {
         var level = flatLevel();
         var raid = camp();
-        raid.campUpgradeStage = CampPerimeter.FIRST_STAGE;
+        int stage=CampPerimeter.FIRST_STAGE+1;
+        raid.campUpgradeStage = stage;
         when(level.hasChunkAt(any())).thenReturn(false);
         for (int attempt = 0; attempt < 2; attempt++) {
             withClaims(raid, level, () -> { CampDevelopment.tryPerimeter(level, raid); return null; });
-            assertEquals(CampPerimeter.FIRST_STAGE, raid.campUpgradeStage);
+            assertEquals(stage, raid.campUpgradeStage);
         }
         withClaims(raid, level, () -> { CampDevelopment.tryPerimeter(level, raid); return null; });
-        assertEquals(CampPerimeter.FIRST_STAGE + 1, raid.campUpgradeStage);
+        assertEquals(stage+1, raid.campUpgradeStage);
         assertTrue(raid.pendingCampBlocks.isEmpty());
+    }
+
+    @Test void partialWallWaitsForAValidGateThreshold() {
+        var level=flatLevel();var raid=camp();raid.campUpgradeStage=CampPerimeter.FIRST_STAGE;
+        BlockPos gate=CampPerimeter.mainGateCenter(raid);
+        when(level.getHeight(any(),eq(gate.getX()),eq(gate.getZ()))).thenReturn(GROUND-20);
+        try(var nativeJobs=mockStatic(NativeCampConstruction.class)) {
+            withClaims(raid,level,()->{
+                assertFalse(CampPerimeter.plan(level,raid,CampPerimeter.FIRST_STAGE).isEmpty());
+                for(int attempt=0;attempt<4;attempt++)CampDevelopment.tryPerimeter(level,raid);
+                return null;
+            });
+            nativeJobs.verifyNoInteractions();
+        }
+        assertEquals(CampPerimeter.FIRST_STAGE,raid.campUpgradeStage);
+        assertTrue(raid.pendingCampBlocks.isEmpty());assertFalse(CampPerimeter.gateBuilt(raid));
     }
 
     @Test

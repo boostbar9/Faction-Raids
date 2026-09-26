@@ -58,6 +58,9 @@ class CoreApproachTest extends MinecraftTestSupport {
         when(level.getBlockState(core.south().below())).thenReturn(Blocks.MAGMA_BLOCK.defaultBlockState());
         when(level.getFluidState(core.east())).thenReturn(net.minecraft.world.level.material.Fluids.WATER.defaultFluidState());
         assertEquals(Set.of(core.west()),CoreApproach.targets(level,mob,core));
+        when(level.getBlockState(core.west())).thenReturn(Blocks.FIRE.defaultBlockState());
+        assertTrue(CoreApproach.targets(level,mob,core).isEmpty());
+        when(level.getBlockState(core.west())).thenReturn(Blocks.AIR.defaultBlockState());
         when(level.noCollision(eq(mob),any(AABB.class))).thenReturn(false);
         assertTrue(CoreApproach.targets(level,mob,core).isEmpty());
         verify(level,never()).setBlock(any(),any(),anyInt());

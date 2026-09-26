@@ -31,7 +31,8 @@ public final class CoreApproach {
             if(!support.isFaceSturdy(level,floor,Direction.UP) || !support.getFluidState().isEmpty()
                     || support.is(Blocks.MAGMA_BLOCK) || support.is(Blocks.CAMPFIRE)
                     || support.is(Blocks.SOUL_CAMPFIRE) || support.is(Blocks.CACTUS))continue;
-            if(!level.getFluidState(feet).isEmpty() || !level.getFluidState(feet.above()).isEmpty())continue;
+            if(!level.getBlockState(feet).isAir() || !level.getBlockState(feet.above()).isAir()
+                    || !level.getFluidState(feet).isEmpty() || !level.getFluidState(feet.above()).isEmpty())continue;
             // Use the actual unit's hitbox, including tall/wide companion mobs.
             Vec3 at=Vec3.atBottomCenterOf(feet);
             if(!level.noCollision(mob,mob.getBoundingBox().move(at.subtract(mob.position()))))continue;

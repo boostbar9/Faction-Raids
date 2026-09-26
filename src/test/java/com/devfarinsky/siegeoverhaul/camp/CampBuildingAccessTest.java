@@ -72,4 +72,16 @@ class CampBuildingAccessTest extends MinecraftTestSupport {
         assertFalse(CampStructures.accessColumn(loaded,center.south(5)));
         assertFalse(CampStructures.accessColumn(loaded,center.north(5).east(2)));
     }
+
+    @Test void legacyKeystoneOnlyRecordsStillProtectTheirEntrances() {
+        var raid=raid();raid.campPos=new BlockPos(0,64,0);
+        var center=raid.campPos.north(15);
+        CampStructures.record(raid,0,center,Direction.SOUTH);
+        var old=raid.campaign.getCompound(ModConstants.Tags.CAMP_STRUCTURES).getCompound("granary");
+        old.remove("Center");old.remove("Entrance");
+        var loaded=RaidSavedData.RaidState.load(raid.save());
+        assertTrue(CampStructures.accessColumn(loaded,center.south(3)));
+        assertTrue(CampStructures.accessColumn(loaded,center.south(5).east()));
+        assertFalse(CampStructures.accessColumn(loaded,center.north(3)));
+    }
 }

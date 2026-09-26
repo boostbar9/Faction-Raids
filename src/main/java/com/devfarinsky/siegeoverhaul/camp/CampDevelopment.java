@@ -46,6 +46,10 @@ public final class CampDevelopment {
     static void tryPerimeter(ServerLevel level,RaidSavedData.RaidState raid) {
         BlockPos gate=raid.campUpgradeStage==CampPerimeter.FIRST_STAGE
                 ? CampPerimeter.plannedGateCenter(level,raid) : null;
+        if(raid.campUpgradeStage==CampPerimeter.FIRST_STAGE && gate==null) {
+            raid.constructionPauseReason="Main gate needs loaded, supported ground";
+            return;
+        }
         var plan=CampPerimeter.plan(level,raid,raid.campUpgradeStage);
         if(!plan.isEmpty()) {
             raid.pendingCampBlocks.putAll(plan);

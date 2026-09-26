@@ -169,9 +169,19 @@ public final class CampStructures {
     static boolean accessColumn(RaidState raid, BlockPos pos) {
         for (Kind kind : Kind.values()) {
             CompoundTag entry=root(raid).getCompound(kind.key);
-            if (!entry.contains("Center",Tag.TAG_LONG) || !entry.contains("Entrance",Tag.TAG_INT)) continue;
-            BlockPos center=BlockPos.of(entry.getLong("Center"));
-            Direction front=Direction.from2DDataValue(entry.getInt("Entrance"));
+            BlockPos center;
+            Direction front;
+            if(entry.contains("Center",Tag.TAG_LONG) && entry.contains("Entrance",Tag.TAG_INT)) {
+                center=BlockPos.of(entry.getLong("Center"));
+                front=Direction.from2DDataValue(entry.getInt("Entrance"));
+            } else {
+                if(raid.campPos==null || !entry.contains("Pos",Tag.TAG_LONG))continue;
+                BlockPos keystone=BlockPos.of(entry.getLong("Pos"));
+                int dx=raid.campPos.getX()-keystone.getX(),dz=raid.campPos.getZ()-keystone.getZ();
+                front=Math.abs(dx)>=Math.abs(dz)?(dx>=0?Direction.EAST:Direction.WEST)
+                        :(dz>=0?Direction.SOUTH:Direction.NORTH);
+                center=keystone.relative(front,2).below();
+            }
             int dx=pos.getX()-center.getX(), dz=pos.getZ()-center.getZ();
             int depth=dx*front.getStepX()+dz*front.getStepZ();
             int side=dx*front.getClockWise().getStepX()+dz*front.getClockWise().getStepZ();
