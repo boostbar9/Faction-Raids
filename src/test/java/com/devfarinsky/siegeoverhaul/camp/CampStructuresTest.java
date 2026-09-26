@@ -18,6 +18,7 @@ class CampStructuresTest extends MinecraftTestSupport {
         for(var host:com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.hosts()) {
             var raid=new RaidSavedData.RaidState("team:test","siege_core",0);raid.factionId=host.factionId();
             var center=new BlockPos(10,64,10);CampStructures.record(raid,0,center,Direction.NORTH);
+            complete(raid, center, Direction.NORTH);
             var pos=CampStructures.keystone(center,Direction.NORTH);
             var level=mock(ServerLevel.class);var server=mock(MinecraftServer.class);var players=mock(PlayerList.class);
             var player=mock(net.minecraft.server.level.ServerPlayer.class);
@@ -66,6 +67,7 @@ class CampStructuresTest extends MinecraftTestSupport {
         BlockPos center = new BlockPos(10, 64, 10);
         CampStructures.record(raid, 0, center, Direction.NORTH);
         assertFalse(CampStructures.standing(raid, CampStructures.Kind.GRANARY));
+        complete(raid, center, Direction.NORTH);
 
         BlockPos keystone = center.relative(Direction.NORTH, -2).above();
         var level = mock(ServerLevel.class);
@@ -118,5 +120,83 @@ class CampStructuresTest extends MinecraftTestSupport {
         assertTrue(CampStructures.legacyPerimeterOpening(raid,doorway.north()));
         assertTrue(CampStructures.legacyPerimeterOpening(raid,doorway.south()));
         assertFalse(CampStructures.legacyPerimeterOpening(raid,doorway.north(2)));
+    }
+
+    private static void complete(RaidSavedData.RaidState raid, BlockPos center, Direction entrance) {
+        raid.pendingCampBlocks.put(CampStructures.keystone(center, entrance).asLong(), "minecraft:hay_block");
+        CampStructures.constructionCompleted(raid);
+        raid.pendingCampBlocks.clear();
+    }
+
+    @Test void unfinishedKeystoneStaysDormantAcrossReloadAndUnrelatedCompletedJobs() {
+        var raid = new RaidSavedData.RaidState("team:test", "siege_core", 0);
+        BlockPos center = new BlockPos(10, 64, 10);
+        CampStructures.record(raid, 0, center, Direction.NORTH);
+        var level = mock(ServerLevel.class);
+        when(level.hasChunkAt(any())).thenReturn(true);
+        when(level.getBlockState(any())).thenReturn(Blocks.HAY_BLOCK.defaultBlockState());
+        CampStructures.tick(level, raid);
+        assertFalse(CampStructures.standing(raid, CampStructures.Kind.GRANARY));
+        var reloaded = RaidSavedData.RaidState.load(raid.save());
+        // A stopped/abandoned job no longer has pending cells. Neither that nor
+        // completion of a subsequent perimeter project unlocks this building.
+        CampStructures.constructionCompleted(reloaded);
+        reloaded.pendingCampBlocks.put(center.east(12).asLong(), "minecraft:stone_bricks");
+        CampStructures.constructionCompleted(reloaded);
+        CampStructures.tick(level, reloaded);
+        assertFalse(CampStructures.standing(reloaded, CampStructures.Kind.GRANARY));
+        verify(level, never()).sendParticles(any(), anyDouble(), anyDouble(), anyDouble(), anyInt(),
+                anyDouble(), anyDouble(), anyDouble(), anyDouble());
+        verify(level, never()).getServer();
+    }
+
+    @Test void olderCompletedInstallationsKeepKeystoneBehavior() {
+        var raid = new RaidSavedData.RaidState("team:test", "siege_core", 0);
+        CampStructures.record(raid, 0, BlockPos.ZERO, Direction.NORTH);
+        var entry = raid.campaign.getCompound(ModConstants.Tags.CAMP_STRUCTURES).getCompound("granary");
+        entry.remove("AwaitingBuild");
+        entry.putBoolean("Active", true);
+        entry.putBoolean("Announced", true);
+        var reloaded = RaidSavedData.RaidState.load(raid.save());
+        assertTrue(CampStructures.standing(reloaded, CampStructures.Kind.GRANARY));
+        var level = mock(ServerLevel.class);
+        when(level.hasChunkAt(any())).thenReturn(true);
+        when(level.getBlockState(any())).thenReturn(Blocks.HAY_BLOCK.defaultBlockState());
+        when(level.getGameTime()).thenReturn(1L);
+        CampStructures.tick(level, reloaded);
+        assertTrue(CampStructures.standing(reloaded, CampStructures.Kind.GRANARY));
+    }
+
+    @Test void nativeCompletionWaitsForLastBlockAndUnlocksBeforeClearingPlan() {
+        var raid = new RaidSavedData.RaidState("team:test", "siege_core", 0);
+        BlockPos center = new BlockPos(10, 64, 10);
+        CampStructures.record(raid, 0, center, Direction.NORTH);
+        BlockPos keystone = CampStructures.keystone(center, Direction.NORTH);
+        BlockPos roof = center.above(4);
+        raid.pendingCampBlocks.put(keystone.asLong(), "minecraft:hay_block");
+        raid.pendingCampBlocks.put(roof.asLong(), "minecraft:quartz_block");
+        var level = mock(ServerLevel.class);
+        when(level.getBlockState(keystone)).thenReturn(Blocks.HAY_BLOCK.defaultBlockState());
+        when(level.getBlockState(roof)).thenReturn(Blocks.AIR.defaultBlockState());
+        try (var nativeJobs = mockStatic(NativeCampConstruction.class)) {
+            nativeJobs.when(() -> NativeCampConstruction.tick(level, raid)).thenCallRealMethod();
+            nativeJobs.when(() -> NativeCampConstruction.safeToTick(level, raid)).thenReturn(true);
+            nativeJobs.when(() -> NativeCampConstruction.stop(level, raid)).thenAnswer(call -> {
+                assertFalse(raid.campaign.getCompound(ModConstants.Tags.CAMP_STRUCTURES)
+                        .getCompound("granary").getBoolean("AwaitingBuild"));
+                raid.pendingCampBlocks.clear();
+                return null;
+            });
+            NativeCampConstruction.tick(level, raid);
+            assertTrue(raid.campaign.getCompound(ModConstants.Tags.CAMP_STRUCTURES)
+                    .getCompound("granary").getBoolean("AwaitingBuild"));
+            nativeJobs.verify(() -> NativeCampConstruction.stop(level, raid), never());
+            when(level.getBlockState(roof)).thenReturn(Blocks.QUARTZ_BLOCK.defaultBlockState());
+            NativeCampConstruction.tick(level, raid);
+            assertTrue(raid.pendingCampBlocks.isEmpty());
+            var reloaded = RaidSavedData.RaidState.load(raid.save());
+            assertFalse(reloaded.campaign.getCompound(ModConstants.Tags.CAMP_STRUCTURES)
+                    .getCompound("granary").getBoolean("AwaitingBuild"));
+        }
     }
 }

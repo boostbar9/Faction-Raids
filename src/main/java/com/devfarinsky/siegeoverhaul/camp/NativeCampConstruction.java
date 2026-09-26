@@ -333,6 +333,7 @@ public final class NativeCampConstruction {
         int completed = (int) raid.pendingCampBlocks.keySet().stream().filter(key -> !level.getBlockState(BlockPos.of(key)).isAir()).count();
         if (completed == raid.pendingCampBlocks.size()) {
             FactionLogger.LOG.info("Camp builders for {} completed {} planned cells", raid.teamKey, completed);
+            CampStructures.constructionCompleted(raid);
             stop(level, raid); return;
         }
         if (completed > raid.campCompletedBlocks) raid.campBuildTicks = 0;

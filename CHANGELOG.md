@@ -1,3 +1,8 @@
+# 4.47.16 beta
+- Enemy builders announce the Olympian installation they are starting and the advantage it will provide, giving defenders a chance to disrupt construction.
+- New camp installations grant their bonus only after the entire native build order finishes. An early centerpiece or abandoned shell no longer provides a finished building's advantage.
+- Keep completed-building sabotage, existing saved installations and finite construction supplies intact.
+
 # 4.47.15 beta
 - Arrange camp upgrades around the actual main gate, keeping a five-block-wide approach clear of pavilions and new supply barrels.
 - Add four interior corner sites when the main building wings are occupied, with space for the palisade and corner towers.
