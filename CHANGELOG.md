@@ -1,3 +1,9 @@
+# 4.47.13 beta
+- Fix the solid core blocking its own capture sight checks. Walls and roofs still prevent capture through cover.
+- Keep troops assigned to another siege out of a core's capture count. Native soldiers of the actual occupying faction still contest recovery.
+- Abandoned capture progress now drains at one second per second. Occupied ties still pause, and larger armies do not shorten the hold timer.
+- Reset recapture progress when the observed occupying faction changes, and reject enemy-core victory if its camp claim has been removed, replaced or transferred.
+
 # 4.47.12 beta
 - Fix commissioned wall blueprints shifting sideways when an outer edge is already built or protected. Existing solid blocks are no longer queued for demolition, and unloaded wall columns are left alone.
 - Grade camp-building entrances into walkable, three-wide steps; reject blocked interiors and sites without a safe connection to the courtyard.

@@ -17,10 +17,42 @@ class CoreControlTest extends MinecraftTestSupport {
         assertEquals(2400,CoreControl.advance(small,2400,2,1));
     }
     @Test void emptyOrTiedRingCannotCaptureOrRecapture() {
-        assertEquals(1200,CoreControl.advance(1200,2400,0,0));
+        assertEquals(1180,CoreControl.advance(1200,2400,0,0));
         assertEquals(1200,CoreControl.advance(1200,2400,3,3));
         assertEquals(1180,CoreControl.advance(1200,2400,1,2));
         assertEquals(0,CoreControl.advance(0,2400,0,1));
+    }
+    @Test void abandonedProgressRunsDownWithoutGoingNegative() {
+        int progress=100;
+        for(int i=0;i<10;i++)progress=CoreControl.advance(progress,2400,0,0);
+        assertEquals(0,progress);
+        assertEquals(20,CoreControl.advance(progress,2400,1,0));
+    }
+    @Test void recaptureProgressIsBoundToTheObservedOwnerAcrossReloads() {
+        var tag=new CompoundTag();tag.putInt("RecaptureTicks",800);
+        CoreControl.bindOwner(tag,"RecaptureTicks","red");
+        assertEquals(800,tag.getInt("RecaptureTicks"),"old saves retain their progress");
+        tag=tag.copy();
+        CoreControl.bindOwner(tag,"RecaptureTicks","red");
+        assertEquals(800,tag.getInt("RecaptureTicks"));
+        CoreControl.bindOwner(tag,"RecaptureTicks","green");
+        assertEquals(0,tag.getInt("RecaptureTicks"));
+    }
+    @Test void soldiersFromOtherSiegesCannotBeLuredIntoThisContest() {
+        RaidConfig.CORE_CAPTURE_REQUIRE_SIGHT.set(false);
+        var level=mock(net.minecraft.server.level.ServerLevel.class);
+        var own=mobAtCore();var other=mobAtCore();var otherGuard=mobAtCore();var neutral=mobAtCore();
+        own.getPersistentData().putString(ModConstants.Tags.RAID_TEAM,"team:blue");
+        other.getPersistentData().putString(ModConstants.Tags.RAID_TEAM,"team:green");
+        otherGuard.getPersistentData().putString(com.devfarinsky.siegeoverhaul.camp.CampGuards.TEAM_TAG,"team:green");
+        when(level.getEntitiesOfClass(eq(net.minecraft.world.entity.Mob.class),any(net.minecraft.world.phys.AABB.class),any()))
+                .thenReturn(List.of(own,other,otherGuard,neutral));
+        try(var recruits=mockStatic(RecruitsBridge.class)) {
+            recruits.when(()->RecruitsBridge.isRecruitSoldier(any())).thenReturn(true);
+            // Even a native faction match must not override a different raid's tag.
+            recruits.when(()->RecruitsBridge.belongsTo(any(),eq("team:red"),any())).thenReturn(true);
+            assertArrayEquals(new int[]{2,0},CoreOccupation.counts(level,BlockPos.ZERO,"team:blue",Set.of(),"red"));
+        }
     }
     @Test void roofAndNearbyOutsideTroopsCannotCount() {
         RaidConfig.CORE_CAPTURE_RADIUS.set(10);

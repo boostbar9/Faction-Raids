@@ -23,10 +23,10 @@ class CoreCaptureRegressionTest extends MinecraftTestSupport {
         method.setAccessible(true);
         var point=new RaidSavedData.DefensePoint("siege_core",Level.OVERWORLD.location(),BlockPos.ZERO);
         try(var presence=mockStatic(CoreOccupation.class)) {
-            presence.when(()->CoreOccupation.counts(level,BlockPos.ZERO,raid.teamKey,Set.of())).thenReturn(new int[]{3,2});
+            presence.when(()->CoreOccupation.counts(level,BlockPos.ZERO,raid.teamKey,Set.of(),RaiderFactions.id(raid.factionId))).thenReturn(new int[]{3,2});
             assertEquals(true,method.invoke(null,null,anchor,point,raid,level,List.of(),List.of()));
             assertTrue(raid.breached); assertEquals(0,raid.breachTicks); assertEquals(2400,raid.captureTicks);
-            presence.when(()->CoreOccupation.counts(level,BlockPos.ZERO,raid.teamKey,Set.of())).thenReturn(new int[]{0,0});
+            presence.when(()->CoreOccupation.counts(level,BlockPos.ZERO,raid.teamKey,Set.of(),RaiderFactions.id(raid.factionId))).thenReturn(new int[]{0,0});
             assertEquals(false,method.invoke(null,null,anchor,point,raid,level,List.of(),List.of()));
         }
     }
