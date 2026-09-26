@@ -18,12 +18,20 @@ class CampLayoutRoutingTest extends MinecraftTestSupport {
         final RaidSavedData.RaidState raid=new RaidSavedData.RaidState("team:test","siege_core",0);
         final RaidSavedData saved=new RaidSavedData();
         final Map<BlockPos,BlockState> world=new HashMap<>();
+        boolean solidGround=true;
         final RecruitsClaimsBridge.ClaimSnapshot claim=mock(RecruitsClaimsBridge.ClaimSnapshot.class);
         Site() {
             raid.campPos=new BlockPos(-40,64,-40);raid.campClaimId=UUID.randomUUID();
             // Real gate faces north; the original approach would choose west.
             raid.warGate.putLong("Center",raid.campPos.north(18).asLong());
             raid.warGate.putInt("Facing",Direction.NORTH.get2DDataValue());
+            var gate=WarGate.blueprint(raid.campPos.north(18),Direction.NORTH);
+            var cells=new net.minecraft.nbt.CompoundTag();
+            gate.forEach((key,id)->{
+                cells.putString(Long.toString(key),id);
+                world.put(BlockPos.of(key),net.minecraftforge.registries.ForgeRegistries.BLOCKS.getValue(new net.minecraft.resources.ResourceLocation(id)).defaultBlockState());
+            });
+            raid.warGate.put("Blocks",cells);
             UUID id=UUID.randomUUID();raid.campWorkers.add(id);var worker=mock(Mob.class);
             when(level.getEntity(id)).thenReturn(worker);when(worker.isAlive()).thenReturn(true);
             when(level.hasChunkAt(any())).thenReturn(true);when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(64);
@@ -32,15 +40,15 @@ class CampLayoutRoutingTest extends MinecraftTestSupport {
             var border=mock(net.minecraft.world.level.border.WorldBorder.class);when(level.getWorldBorder()).thenReturn(border);
             when(border.isWithinBounds(any(BlockPos.class))).thenReturn(true);
             when(level.getBlockState(any())).thenAnswer(call->{BlockPos p=call.getArgument(0);return world.getOrDefault(p,
-                    (p.getY()<64?Blocks.STONE:Blocks.AIR).defaultBlockState());});
+                    (p.getY()<64 && solidGround?Blocks.STONE:Blocks.AIR).defaultBlockState());});
             saved.anchors.put(raid.teamKey,new RaidSavedData.Anchor(raid.teamKey,"Test",UUID.randomUUID(),Set.of(),false,false,Map.of(),0));
             when(claim.claimId()).thenReturn(raid.campClaimId);when(claim.ownerFactionStringId()).thenReturn("enemy");
         }
         void ticks(int count,java.util.function.Consumer<Map<Long,String>> accepted) {
-            try(var gates=mockStatic(WarGate.class,CALLS_REAL_METHODS);var camps=mockStatic(CampClaims.class);
+            try(var camps=mockStatic(CampClaims.class);
                 var jobs=mockStatic(NativeCampConstruction.class);var saves=mockStatic(RaidSavedData.class);
                 var claims=mockStatic(RecruitsClaimsBridge.class);var external=mockStatic(ClaimBridge.class)) {
-                gates.when(()->WarGate.ready(level,raid)).thenReturn(true);
+                assertTrue(WarGate.ready(level,raid),"fixture must have a complete, real gate");
                 camps.when(()->CampClaims.owns(level,raid)).thenReturn(true);
                 saves.when(()->RaidSavedData.get(null)).thenReturn(saved);
                 claims.when(()->RecruitsClaimsBridge.getClaimAt(eq(level),any(BlockPos.class))).thenReturn(Optional.of(claim));
@@ -75,7 +83,7 @@ class CampLayoutRoutingTest extends MinecraftTestSupport {
     }
 
     @Test void unsupportedFoundationsRejectAllSitesWithoutStartingAJob() {
-        var s=new Site();when(s.level.getBlockState(any())).thenReturn(Blocks.AIR.defaultBlockState());
+        var s=new Site();s.solidGround=false;
         s.ticks(1,plan->fail("unsupported pavilion accepted"));assertEquals(0,s.raid.campUpgradeStage);
         assertTrue(s.raid.campaign.getCompound(ModConstants.Tags.CAMP_STRUCTURES).isEmpty());
     }
