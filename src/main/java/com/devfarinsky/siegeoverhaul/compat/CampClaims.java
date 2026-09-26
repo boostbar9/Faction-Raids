@@ -101,15 +101,51 @@ public final class CampClaims {
         } catch (ReflectiveOperationException | RuntimeException ex) { return false; }
     }
     public static void cleanOrphans(ServerLevel level, RaidSavedData data) {
-        Set<UUID> active = new HashSet<>();
-        for (var raid : data.raids.values()) if (raid.campClaimId != null) active.add(raid.campClaimId);
-        for (UUID id : new ArrayList<>(data.campClaimLeases)) {
-            if (active.contains(id)) continue;
+        Set<UUID> protectedClaims = new HashSet<>();
+        for (var raid : data.raids.values()) if (raid.campClaimId != null) protectedClaims.add(raid.campClaimId);
+        // Core occupations intentionally keep their Recruits claim after the
+        // active raid ends so the faction can fight to recapture it. Those
+        // claims use the same Olympian owner ids as camps and must never be
+        // mistaken for orphaned camp reservations.
+        for (var core : data.siegeCores.values())
+            if (core.hasUUID("OccupiedClaim")) protectedClaims.add(core.getUUID("OccupiedClaim"));
+        Set<UUID> candidates = new LinkedHashSet<>(data.campClaimLeases);
+        Object m;
+        try {
+            m = manager();
+            if (m == null) return;
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            FactionLogger.LOG.warn("Camp claim cleanup deferred while the Recruits claim manager is unavailable", ex);
+            return;
+        }
+
+        // Lease tracking was added after native camp claims. Worlds upgraded
+        // from an older release can therefore contain a Siege Overhaul-owned
+        // claim which is no longer referenced by any live raid and is absent
+        // from campClaimLeases. Recruits still treats those invisible leftovers
+        // as reserved territory, preventing otherwise-valid player claims.
+        // Discover them from the native manager as well as the saved lease set.
+        try {
+            Object all = m.getClass().getMethod("getAllClaims").invoke(m);
+            if (all instanceof Collection<?> claims) for (Object claim : claims) {
+                if (claim == null) continue;
+                UUID id = (UUID) claim.getClass().getMethod("getUUID").invoke(claim);
+                String owner = (String) claim.getClass().getMethod("getOwnerFactionStringID").invoke(claim);
+                if (orphanedRaidClaim(id, owner, protectedClaims)) candidates.add(id);
+            }
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            // Older compatible Recruits builds can still clean the claims for
+            // which we have leases. Do not turn discovery failure into a total
+            // cleanup failure.
+            FactionLogger.LOG.warn("Could not discover unleased raider camp claims; cleaning known leases only", ex);
+        }
+
+        for (UUID id : candidates) {
+            if (protectedClaims.contains(id)) continue;
             try {
-                Object m = manager();
-                if (m == null) return;
                 Object claim = m.getClass().getMethod("getClaim", UUID.class).invoke(m, id);
-                if (claim != null && RaiderFactions.enemy((String)claim.getClass().getMethod("getOwnerFactionStringID").invoke(claim))) {
+                if (claim != null && orphanedRaidClaim(id,
+                        (String) claim.getClass().getMethod("getOwnerFactionStringID").invoke(claim), protectedClaims)) {
                     m.getClass().getMethod("removeClaim", ServerLevel.class, UUID.class).invoke(m, level, id);
                     m.getClass().getMethod("save", ServerLevel.class).invoke(m, level);
                 }
@@ -119,5 +155,10 @@ public final class CampClaims {
                 FactionLogger.LOG.warn("Camp claim cleanup deferred for {}", id, ex); return;
             }
         }
+    }
+
+    static boolean orphanedRaidClaim(UUID id, String ownerFaction, Set<UUID> protectedClaims) {
+        return id != null && ownerFaction != null && !protectedClaims.contains(id)
+                && RaiderFactions.enemy(ownerFaction);
     }
 }

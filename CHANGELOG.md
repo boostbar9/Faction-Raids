@@ -1,3 +1,7 @@
+# 4.47.10 beta
+
+- Remove stale enemy camp territory claims left behind by older or interrupted sieges. These invisible Recruits reservations could prevent players from claiming otherwise-empty land; active camps, occupied Siege Core territory and camps captured by players remain intact.
+
 # 4.47.9 beta
 
 - Detach a failed Workers 2 wall job before resetting the builder's movement state. If detachment is rejected, the live job and working state now remain together instead of stalling.
