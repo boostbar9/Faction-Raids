@@ -1,3 +1,8 @@
+# 4.47.15 beta
+- Arrange camp upgrades around the actual main gate, keeping a five-block-wide approach clear of pavilions and new supply barrels.
+- Add four interior corner sites when the main building wings are occupied, with space for the palisade and corner towers.
+- Reject pavilion foundations without solid support. Existing buildings and saved camp layouts stay in place.
+
 # 4.47.14 beta
 - Give each Olympian host its own camp installation names and active-building effects, with clear messages describing the benefit lost when a building falls.
 - Replace mismatched hero effects with patron signatures: Poseidon's sea surges, Ares' burning battle fury, Hephaestus' forge sparks, Athena's aegis magic and Artemis' moonlight. Newly summoned wolves are named Moon Hounds.

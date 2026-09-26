@@ -246,6 +246,7 @@ public final class NativeCampConstruction {
                 if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)
                         || com.devfarinsky.siegeoverhaul.core.EnemyCoreSite.reserved(raid,p)
                         || CampStructures.accessColumn(raid,p)
+                        || CampPerimeter.mainApproachColumn(raid,p)
                         || raid.warGate.getCompound("RoadBlocks").contains(Long.toString(p.below().asLong()))
                         || raid.pendingCampBlocks.containsKey(p.asLong())
                         || raid.pendingCampBlocks.containsKey(p.above().asLong())

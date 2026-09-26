@@ -23,19 +23,23 @@ public final class CampDevelopment {
         if(raid.campUpgradeTicks<RaidConfig.CAMP_UPGRADE_SECONDS.get()*20)return;
         raid.campUpgradeTicks=0;
         if(CampPerimeter.perimeterStage(raid.campUpgradeStage)) { tryPerimeter(level,raid); return; }
-        double x=-Math.cos(raid.approachAngle),z=-Math.sin(raid.approachAngle);
-        Direction front=Math.abs(x)>=Math.abs(z)?(x>=0?Direction.EAST:Direction.WEST):(z>=0?Direction.SOUTH:Direction.NORTH);
+        Direction front=CampPerimeter.mainGateSide(raid);
         Direction extension=raid.campUpgradeStage==0?front.getClockWise():raid.campUpgradeStage==1?front.getCounterClockWise():front.getOpposite();
-        for(BlockPos center : candidates(raid.campPos,extension)) if(trySite(level,raid,center))return;
+        for(BlockPos center : candidates(raid.campPos,extension,front)) if(trySite(level,raid,center))return;
     }
-    static List<BlockPos> candidates(BlockPos camp,Direction preferred) {
+    static List<BlockPos> candidates(BlockPos camp,Direction preferred,Direction gateSide) {
         var sites=new ArrayList<BlockPos>();
         // A 7x7 pavilion centred eight blocks out occupies radii 5..11:
         // wholly inside the radius-12 palisade, with a one-block buffer at
         // the wall. The old 15/23 positions put the only doorway directly on
         // (or beyond) the future wall and could seal the building shut.
         for(int distance:new int[]{8,7}) for(Direction side:new Direction[]{preferred,preferred.getClockWise(),preferred.getCounterClockWise(),preferred.getOpposite()})
-            sites.add(camp.relative(side,distance));
+            if(side!=gateSide)sites.add(camp.relative(side,distance));
+        // Corner courtyards provide alternatives when the three wings are
+        // occupied. Seven leaves room for both the wall and its corner tower;
+        // the central avenues remain at least seven blocks wide.
+        for(Direction side:new Direction[]{preferred,preferred.getClockWise(),preferred.getCounterClockWise(),preferred.getOpposite()})
+            sites.add(camp.relative(side,7).relative(side.getClockWise(),7));
         return sites;
     }
     /**
@@ -80,6 +84,7 @@ public final class CampDevelopment {
         int y=Integer.MIN_VALUE;
         for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++) {
             BlockPos p=center.offset(dx,0,dz);
+            if(CampPerimeter.mainApproachColumn(raid,p))return false;
             if(!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p))return false;
             if(!claimed(level,raid,anchor,checked,p))return false;
             y=Math.max(y,level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,p.getX(),p.getZ()));
@@ -89,7 +94,9 @@ public final class CampDevelopment {
         for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++) {
             BlockPos p=center.offset(dx,0,dz);
             int ground=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,p.getX(),p.getZ());
-            if(y-ground>2 || !level.getFluidState(new BlockPos(p.getX(),ground-1,p.getZ())).isEmpty())return false;
+            BlockPos support=p.atY(ground-1);
+            if(y-ground>2 || !level.getFluidState(support).isEmpty()
+                    || !level.getBlockState(support).isFaceSturdy(level,support,Direction.UP))return false;
             for(int sy=ground;sy<y;sy++)plan.put(new BlockPos(p.getX(),sy,p.getZ()).asLong(),"minecraft:cobblestone");
             plan.put(p.asLong(),"minecraft:spruce_planks");
         }

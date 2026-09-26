@@ -102,6 +102,16 @@ public final class CampPerimeter {
                 : raid.campPos.relative(mainGateSide(raid), RADIUS);
     }
 
+    /** Five-wide avenue from the keep's edge through the main gate and exit. */
+    static boolean mainApproachColumn(RaidSavedData.RaidState raid, BlockPos pos) {
+        if(raid.campPos==null)return false;
+        Direction front=mainGateSide(raid),side=front.getClockWise();
+        int dx=pos.getX()-raid.campPos.getX(),dz=pos.getZ()-raid.campPos.getZ();
+        int depth=dx*front.getStepX()+dz*front.getStepZ();
+        int lateral=dx*side.getStepX()+dz*side.getStepZ();
+        return depth>=3 && depth<=RADIUS+3 && Math.abs(lateral)<=GATE_HALF_WIDTH;
+    }
+
     /** Before construction, record feet height at the real threshold, not camp-centre height. */
     static BlockPos plannedGateCenter(ServerLevel level, RaidSavedData.RaidState raid) {
         BlockPos column=raid.campPos.relative(mainGateSide(raid),RADIUS);
