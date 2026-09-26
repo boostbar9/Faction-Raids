@@ -13,7 +13,9 @@ import static org.mockito.Mockito.*;
 class CaptureRingTest extends MinecraftTestSupport {
     private BlockGetter world(Set<BlockPos> walls) {
         var level=mock(BlockGetter.class,CALLS_REAL_METHODS);
-        var core=new CoreBlocks.CoreBlock().defaultBlockState();
+        // A solid endpoint exercises the same self-occlusion without trying
+        // to register a new mod block after the plain JUnit registry freezes.
+        var core=Blocks.STONE.defaultBlockState();
         when(level.getBlockState(any())).thenAnswer(c -> {
             BlockPos pos=c.getArgument(0);
             return pos.equals(BlockPos.ZERO)?core:walls.contains(pos)?Blocks.STONE.defaultBlockState():Blocks.AIR.defaultBlockState();
