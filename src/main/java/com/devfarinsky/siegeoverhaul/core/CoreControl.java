@@ -9,9 +9,11 @@ public final class CoreControl {
     }
 
     /** Preserve legacy progress on first observation, but never carry it to a different owner. */
-    static void bindOwner(net.minecraft.nbt.CompoundTag tag, String progressKey, String owner) {
+    static boolean bindOwner(net.minecraft.nbt.CompoundTag tag, String progressKey, String owner) {
         String ownerKey = progressKey + "Owner";
+        boolean changed = !tag.contains(ownerKey) || !owner.equals(tag.getString(ownerKey));
         if (tag.contains(ownerKey) && !owner.equals(tag.getString(ownerKey))) tag.putInt(progressKey, 0);
         tag.putString(ownerKey, owner);
+        return changed;
     }
 }

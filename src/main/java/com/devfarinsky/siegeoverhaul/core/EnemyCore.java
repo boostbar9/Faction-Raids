@@ -144,6 +144,9 @@ public final class EnemyCore {
         }
         int[] counts = CoreOccupation.counts(level, pos, raid.teamKey, anchor.members(), claim.ownerFactionStringId());
         int maximum = RaidConfig.CORE_RECAPTURE_SECONDS.get() * 20;
+        // The legacy shared faction and its migrated patron are one logical
+        // owner. Persist the binding even if an occupied tie pauses progress.
+        if (CoreControl.bindOwner(raid.campaign, "EnemyCaptureTicks", RaiderFactions.id(raid.factionId))) data.setDirty();
         int before = raid.campaign.getInt("EnemyCaptureTicks");
         int progress = CoreControl.advance(before, maximum, counts[1], counts[0]);
         raid.campaign.putInt("EnemyCaptureTicks", progress);
