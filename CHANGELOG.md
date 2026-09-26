@@ -1,6 +1,7 @@
 # 4.47.10 beta
 
 - Remove stale enemy camp territory claims left behind by older or interrupted sieges. These invisible Recruits reservations could prevent players from claiming otherwise-empty land; active camps, occupied Siege Core territory and camps captured by players remain intact.
+- Run camp-claim maintenance once per interval and limit full native-claim discovery to every five minutes, avoiding repeated registry scans on the server tick.
 
 # 4.47.9 beta
 
