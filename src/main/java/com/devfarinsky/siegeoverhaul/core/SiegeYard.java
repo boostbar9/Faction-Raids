@@ -357,6 +357,7 @@ public final class SiegeYard {
                                 net.minecraft.world.item.Items.COBBLESTONE, 32));
                     }
                     container.addItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 16));
+                    com.devfarinsky.siegeoverhaul.siege.EngineerSupplies.addRepairKit(container);
                 }
             } catch (ReflectiveOperationException e) {
                 FactionLogger.LOG.debug("Could not stock friendly siege engineer: {}", e.toString());

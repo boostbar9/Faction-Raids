@@ -1,3 +1,8 @@
+# 4.47.18 beta
+- Respect native vessel boarding rules and keep vanilla fallback boats at two crew members.
+- Check diagonal spawn-area corners, world borders and nearby entities before placing invasion vessels.
+- Give newly supplied friendly and enemy siege engineers a finite repair kit for native repairs. Existing inventories are unchanged.
+
 # 4.47.17 beta
 - Fix native diplomacy updates calling Villager Recruits' faction manager instead of its separate diplomacy manager. Siege hostility, relationship repair and post-siege neutral resets now reach the correct API.
 - Read the current diplomacy manager after server restarts and preserve safe handling while it is unavailable.

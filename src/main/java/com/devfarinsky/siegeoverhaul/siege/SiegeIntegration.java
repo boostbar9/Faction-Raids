@@ -263,6 +263,7 @@ public final class SiegeIntegration {
             if (ammunition == null || ammunition == net.minecraft.world.item.Items.AIR) throw new IllegalStateException("Missing siege ammunition");
             inventory.addItem(new net.minecraft.world.item.ItemStack(ammunition, 64));
             inventory.addItem(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 16));
+            EngineerSupplies.addRepairKit(inventory);
             if ((!mount && (!level.hasChunkAt(mob.blockPosition()) || !level.noCollision(mob)))
                     || (mount && !assignSiegeEngineer(mob, vehicle)) || !level.addFreshEntity(mob)) {
                 mob.stopRiding(); mob.discard(); return Optional.empty();
