@@ -62,4 +62,33 @@ class EnemyCoreTest extends MinecraftTestSupport {
             counts.verifyNoInteractions();
         }
     }
+    @Test void ownerBindingPersistsDuringTiesAndResetsProgressForAnotherPatron() {
+        var level=mock(ServerLevel.class);var data=new RaidSavedData();
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);raid.campClaimId=UUID.randomUUID();
+        var anchor=new RaidSavedData.Anchor("team:test","Test",UUID.randomUUID(),Set.of(),false,false,Map.of(),0);
+        BlockPos pos=new BlockPos(32,65,48);raid.campaign.putLong("EnemyCore",pos.asLong());
+        raid.campaign.putInt("EnemyCaptureTicks",800);
+        String owner=RaiderFactions.id(raid.factionId);
+        try(var enemy=mockStatic(EnemyCore.class,CALLS_REAL_METHODS);var counts=mockStatic(CoreOccupation.class);var claims=mockStatic(RecruitsClaimsBridge.class)) {
+            enemy.when(()->EnemyCore.ensure(level,raid)).thenReturn(true);
+            claims.when(()->RecruitsClaimsBridge.getClaimAt(level,pos)).thenReturn(Optional.of(
+                    new RecruitsClaimsBridge.ClaimSnapshot(raid.campClaimId,"Camp",RecruitsBridge.RAIDERS_FACTION_ID,new ChunkPos(pos),Set.of(),false,100,100)));
+            counts.when(()->CoreOccupation.counts(eq(level),eq(pos),eq("team:test"),anySet(),anyString())).thenReturn(new int[]{2,2});
+            data.setDirty(false);
+            assertFalse(EnemyCore.tick(level,data,raid,anchor));
+            assertEquals(800,raid.campaign.getInt("EnemyCaptureTicks"));
+            assertEquals(owner,raid.campaign.getString("EnemyCaptureTicksOwner"));
+            assertTrue(data.isDirty(),"first binding must save even while progress is paused");
+            claims.when(()->RecruitsClaimsBridge.getClaimAt(level,pos)).thenReturn(Optional.of(
+                    new RecruitsClaimsBridge.ClaimSnapshot(raid.campClaimId,"Camp",owner,new ChunkPos(pos),Set.of(),false,100,100)));
+            data.setDirty(false);
+            assertFalse(EnemyCore.tick(level,data,raid,anchor));
+            assertEquals(800,raid.campaign.getInt("EnemyCaptureTicks"),"migration preserves progress");
+            assertFalse(data.isDirty());
+            raid.campaign.putString("EnemyCaptureTicksOwner","different_patron");
+            assertFalse(EnemyCore.tick(level,data,raid,anchor));
+            assertEquals(0,raid.campaign.getInt("EnemyCaptureTicks"));
+            assertTrue(data.isDirty());
+        }
+    }
 }
