@@ -135,20 +135,23 @@ public final class NavalFleet {
 
     /**
      * v4.42.0 - centre tile must be surface water, and every tile within
-     * {@code hullRadius} in the cardinal directions must ALSO be water
+     * the square {@code hullRadius} footprint must ALSO be water
      * with clear air above. Rejects cliff faces, jetties, and
      * partially-blocked spawn sites that used to slice ship models in
      * half.
      */
-    private static boolean isClearWaterFootprint(ServerLevel level, BlockPos pos, int hullRadius) {
-        if (!isSurfaceWater(level, pos)) return false;
-        for (int r = 1; r <= hullRadius; r++) {
-            if (!isSurfaceWater(level, pos.offset(r, 0, 0))) return false;
-            if (!isSurfaceWater(level, pos.offset(-r, 0, 0))) return false;
-            if (!isSurfaceWater(level, pos.offset(0, 0, r))) return false;
-            if (!isSurfaceWater(level, pos.offset(0, 0, -r))) return false;
+    static boolean isClearWaterFootprint(ServerLevel level, BlockPos pos, int hullRadius) {
+        if (pos.getY() < level.getMinBuildHeight() || pos.getY() + 3 > level.getMaxBuildHeight()) return false;
+        for (int dx = -hullRadius; dx <= hullRadius; dx++) {
+            for (int dz = -hullRadius; dz <= hullRadius; dz++) {
+                BlockPos column = pos.offset(dx, 0, dz);
+                if (!level.getWorldBorder().isWithinBounds(column) || !isSurfaceWater(level, column)) return false;
+            }
         }
-        return true;
+        // Reserve room for the hull, including diagonal corners and vessels spawned earlier.
+        var hull = new net.minecraft.world.phys.AABB(pos.offset(-hullRadius, 0, -hullRadius),
+                pos.offset(hullRadius + 1, 3, hullRadius + 1));
+        return level.getEntities((Entity) null, hull).isEmpty();
     }
 
     /**
@@ -158,11 +161,11 @@ public final class NavalFleet {
     private static boolean isSurfaceWater(ServerLevel level, BlockPos pos) {
         if (!level.hasChunkAt(pos)) return false;
         if (level.getFluidState(pos).getType() != Fluids.WATER) return false;
+        if (!level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()) return false;
         // Ceiling clearance: no solid blocks in the two tiles above.
         var above1 = level.getBlockState(pos.above());
         var above2 = level.getBlockState(pos.above(2));
-        if (!above1.isAir() && !above1.getFluidState().is(Fluids.WATER)) return false;
-        if (!above2.isAir() && !above2.getFluidState().is(Fluids.WATER)) return false;
+        if (!above1.isAir() || !above2.isAir()) return false;
         return true;
     }
 
@@ -195,9 +198,15 @@ public final class NavalFleet {
         for (Mob raider : raiders) {
             if (mounted >= max) break;
             if (raider == null || !raider.isAlive()) continue;
-            if (raider.startRiding(vessel, true)) mounted++;
+            if (board(vessel, raider)) mounted++;
         }
         return mounted;
+    }
+
+    /** Let the vessel enforce seats, capacity, locks and mount restrictions. */
+    public static boolean board(Entity vessel, Mob raider) {
+        if (vessel == null || raider == null || !raider.isAlive() || raider.isPassenger()) return false;
+        return raider.startRiding(vessel, false);
     }
 
     /**

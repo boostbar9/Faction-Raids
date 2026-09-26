@@ -131,6 +131,12 @@ public final class NavalConvoy {
         return crew;
     }
 
+    /** Rejected boarding uses the same checked landing as arriving vessels. */
+    public static boolean landUnboarded(ServerLevel level, Mob mob, BlockPos beach, BlockPos objective) {
+        if (mob.isPassenger() || beach == null) return false;
+        return disembark(level, mob, List.of(mob), beach, objective) == 1;
+    }
+
     static int disembark(ServerLevel level, Entity boat, List<Mob> crew, BlockPos beach, BlockPos objective) {
         List<AABB> reserved = new ArrayList<>();
         int landed = 0;

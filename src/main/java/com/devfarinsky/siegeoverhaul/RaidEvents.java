@@ -2788,29 +2788,27 @@ public final class RaidEvents {
                     if (state.navalBeachPos != null) {
                         for (int j = idx; j < pendingNavalCrew.size(); j++) {
                             net.minecraft.world.entity.Mob leftover = pendingNavalCrew.get(j);
-                            leftover.teleportTo(state.navalBeachPos.getX() + 0.5,
-                                    state.navalBeachPos.getY(), state.navalBeachPos.getZ() + 0.5);
+                            com.devfarinsky.siegeoverhaul.naval.NavalConvoy.landUnboarded(
+                                    level, leftover, state.navalBeachPos, point.pos());
                         }
                     }
                     break;
                 }
                 net.minecraft.world.entity.Entity vessel = vesselOpt.get();
                 int mounted = 0;
-                for (int c = 0; c < perVesselCap && idx < pendingNavalCrew.size(); c++, idx++) {
+                int vesselCap = com.devfarinsky.siegeoverhaul.naval.NavalFleet.isSmallShipsVessel(vessel)
+                        ? perVesselCap : 2;
+                for (int c = 0; c < vesselCap && idx < pendingNavalCrew.size(); c++, idx++) {
                     net.minecraft.world.entity.Mob crew = pendingNavalCrew.get(idx);
-                    vessel.setYRot(crew.getYRot());
-                    // Teleport crew ONTO the ship so startRiding never has
-                    // to bridge a distance gap. This is the fix for the
-                    // "empty ship on one side, troops on the opposite
-                    // side" bug: crew always arrives at the vessel.
-                    crew.teleportTo(vessel.getX(), vessel.getY() + 0.5, vessel.getZ());
-                    if (crew.startRiding(vessel, true)) {
+                    if (mounted == 0) vessel.setYRot(crew.getYRot());
+                    // startRiding attaches directly; moving first could put a rejected passenger inside the hull.
+                    if (com.devfarinsky.siegeoverhaul.naval.NavalFleet.board(vessel, crew)) {
                         mounted++;
                     } else if (state.navalBeachPos != null) {
                         // Ship rejected this mount specifically. Put this
                         // raider on the beach; keep trying the rest.
-                        crew.teleportTo(state.navalBeachPos.getX() + 0.5,
-                                state.navalBeachPos.getY(), state.navalBeachPos.getZ() + 0.5);
+                        com.devfarinsky.siegeoverhaul.naval.NavalConvoy.landUnboarded(
+                                level, crew, state.navalBeachPos, point.pos());
                     }
                 }
                 if (mounted == 0) {

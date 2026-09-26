@@ -32,3 +32,29 @@ Use build/resource metadata rather than the upstream `gradle.properties` example
 Source review checks the contract; it does not certify every feature or replace a live Forge server/client test with the actual companion JARs. Terrain-dependent navigation, concurrent builders and other mods' event listeners still require runtime evidence. No interactive Minecraft playtest was performed for this review.
 
 For future bridge changes, inspect the matching upstream source and record its commit, method owner, parameter/return types, lifecycle and side effects. A permissive mock with the desired method names is insufficient: keep separate upstream manager types in tests so the wrong receiver cannot pass unnoticed. Preserve the current required dependency contract.
+
+## Small Ships and Siege Weapons review (4.47.18)
+
+References inspected on 2026-09-26:
+
+- Small Ships `v2-1.20_beta`, commit `08aed675409d9bbd93c352a4082971ba88c29366`: metadata declares Minecraft 1.20.1 / 2.0.0-b1.4.
+- Small Ships `1.20.1`, commit `842e309875b1e074d8b4a944407ca92ad36ebe18`: newer source with multipart hulls and seat assignments. Do not assume this source matches a published JAR or that its registry AABB covers all hull/mast parts.
+- Siege Weapons `0748a61fc0f6d4c4eede5ab0ac6e72055838e0dc`: build version 0.2.5 / Minecraft 1.20.1. Source-to-release byte correspondence has not been established.
+- Recruits controller source is the 1.15.2 snapshot pinned above.
+
+Verified corrections in 4.47.18:
+
+- Naval boarding no longer uses `startRiding(vessel, true)`, which bypasses native passenger admission. The normal overload enforces Small Ships locks, configured exclusions and capacity. Already-mounted mobs are not taken from another vehicle. Actual vanilla fallback boats receive at most two crew even when Small Ships is installed.
+- The spawn search now checks all columns of its square footprint, including diagonal obstructions, the world border, build height and nearby entities. This fixes the previous cross-shaped sampling and avoids placing new vessels on existing ones. It does not certify the full multipart collision envelope of unreleased ship models.
+- Rejected boarding and failed vessel spawns use checked landing positions instead of blindly teleporting to the saved beach block. Existing passengers are not ejected by that fallback.
+- Native Recruits engineer repair requires both iron nuggets and plank-tagged items. New friendly and enemy operator inventories receive 16 of each once, alongside their existing ammunition/food; no tick-based refill or existing-inventory mutation is introduced.
+
+Contracts that match: catapult/ballista registry IDs, bolt and cluster-shot item IDs, the public engineer controller fields, `ISiegeController.tryMount(Entity)`, `getSiegeEntity()`, native movement-order setters and squared arrival tolerances. Automatic raids deliberately convert non-ranged engine choices to ballistas because no ram/tower controller is wired; changing that requires implementing their own assault behavior, not merely allowing them to spawn.
+
+Follow-up work, not claimed fixed by this release:
+
+1. Replace direct convoy velocity/yaw writes with a verified native sailing handoff. Small Ships calculates velocity from its internal speed and sail state; direct velocity can conflict with this. Compare behavior with the actual supported companion JARs before publishing that change. Older Recruits assumes its captain is passenger zero; newer Small Ships uses assigned helm seats, so blindly attaching the captain controller is insufficient.
+2. Verify full hull/mast placement for the selected ship version, including multipart bounds and safe spacing. The repaired square search is a minimum footprint, not a guarantee for arbitrary future ships.
+3. Dedicated captains, cannon provisioning, naval target selection and rams/towers are integration extensions. They need finite budgets, ownership checks, friendly-fire/claim protection and runtime validation before activation.
+
+Tests cover admission flags, refusal/existing-passenger handling, diagonal terrain and ceiling rejection, nearby entities, borders/heights, checked fallback landing and finite non-destructive repair supplies. They do not execute companion implementations or constitute interactive playtesting.

@@ -107,6 +107,20 @@ class NavalConvoyTest extends MinecraftTestSupport {
         assertEquals(0,NavalConvoy.disembark(level,boat,List.of(mob),new BlockPos(3,64,3),BlockPos.ZERO));
         verify(mob,never()).stopRiding();verify(mob,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
     }
+    @Test void rejectedBoardingUsesSafeLandingWithoutTakingExistingPassengers() {
+        ServerLevel level=land(); Mob mob=raider();
+        when(mob.blockPosition()).thenReturn(new BlockPos(0,64,0));
+        when(mob.isPassenger()).thenReturn(true);
+        assertFalse(NavalConvoy.landUnboarded(level,mob,new BlockPos(3,64,3),BlockPos.ZERO));
+        verify(mob,never()).stopRiding();
+        when(mob.isPassenger()).thenReturn(false);
+        when(level.hasChunkAt(any())).thenReturn(false);
+        assertFalse(NavalConvoy.landUnboarded(level,mob,new BlockPos(3,64,3),BlockPos.ZERO));
+        verify(mob,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+        when(level.hasChunkAt(any())).thenReturn(true);
+        assertTrue(NavalConvoy.landUnboarded(level,mob,new BlockPos(3,64,3),BlockPos.ZERO));
+        verify(mob).teleportTo(anyDouble(),eq(64.0),anyDouble());
+    }
     private static Mob raider() {
         Mob mob=mock(Mob.class);CompoundTag tag=new CompoundTag();tag.putString(ModConstants.Tags.RAID_TEAM,"team:test");
         when(mob.getPersistentData()).thenReturn(tag);when(mob.isAlive()).thenReturn(true);
