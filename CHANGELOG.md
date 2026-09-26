@@ -1,3 +1,8 @@
+# 4.47.17 beta
+- Fix native diplomacy updates calling Villager Recruits' faction manager instead of its separate diplomacy manager. Siege hostility, relationship repair and post-siege neutral resets now reach the correct API.
+- Read the current diplomacy manager after server restarts and preserve safe handling while it is unavailable.
+- Record the Recruits 1.15.2 / Workers 2.0.3 source compatibility review and add tests that distinguish their manager types.
+
 # 4.47.16 beta
 - Enemy builders announce the Olympian installation they are starting and the advantage it will provide, giving defenders a chance to disrupt construction.
 - New camp installations grant their bonus only after the entire native build order finishes. An early centerpiece or abandoned shell no longer provides a finished building's advantage.

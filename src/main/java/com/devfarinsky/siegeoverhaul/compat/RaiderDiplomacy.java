@@ -5,6 +5,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 
 /**
  * v4.30.0 - Bridges into Villager Recruits' RecruitsDiplomacyManager so raider
@@ -33,6 +35,7 @@ public final class RaiderDiplomacy {
     private static Class<?> statusClass;
     private static Method setRelation;
     private static Method getRelation;
+    private static Field diplomacyManagerField;
 
     private static synchronized void init() {
         if (initialized) return;
@@ -40,6 +43,8 @@ public final class RaiderDiplomacy {
         try {
             managerClass = Class.forName("com.talhanation.recruits.world.RecruitsDiplomacyManager");
             statusClass  = Class.forName("com.talhanation.recruits.world.RecruitsDiplomacyManager$DiplomacyStatus");
+            diplomacyManagerField = resolveManagerField(
+                    Class.forName("com.talhanation.recruits.FactionEvents"), managerClass);
             // (String, String, DiplomacyStatus, ServerLevel) - the notify-players
             // toast is desirable so pick the short overload when it exists.
             setRelation = managerClass.getMethod("setRelation",
@@ -53,11 +58,19 @@ public final class RaiderDiplomacy {
         }
     }
 
+    /** Cache the API field, not its world-scoped value: Recruits replaces it on server startup. */
+    static Field resolveManagerField(Class<?> events, Class<?> manager) throws ReflectiveOperationException {
+        Field field = events.getField("recruitsDiplomacyManager");
+        if (!Modifier.isStatic(field.getModifiers()) || !manager.isAssignableFrom(field.getType()))
+            throw new NoSuchFieldException("Incompatible Recruits diplomacy manager field");
+        return field;
+    }
+
     /**
      * Set the diplomatic relation between a player faction and one of our
      * raider factions. Both directions are set so vanilla Recruits doesn't get
-     * confused about who is hostile to whom. Safe to call with a raider team
-     * that hasn't been ensured yet; Recruits treats unknown teams as no-ops.
+     * confused about who is hostile to whom. Callers register native factions
+     * before starting a siege; Recruits stores relations by raw faction id.
      */
     public static void setRelation(MinecraftServer server, String playerTeam, String raiderTeam, String statusName) {
         String playerFaction = factionId(playerTeam);
@@ -68,8 +81,7 @@ public final class RaiderDiplomacy {
         ServerLevel level = server.overworld();
         if (level == null) return;
         try {
-            Object manager = Class.forName("com.talhanation.recruits.FactionEvents")
-                    .getField("recruitsFactionManager").get(null);
+            Object manager = diplomacyManagerField.get(null);
             if (manager == null) return;
             Object status = Enum.valueOf(statusClass.asSubclass(Enum.class), statusName);
             setRelation.invoke(manager, playerFaction, raiderFaction, status, level);
@@ -115,8 +127,7 @@ public final class RaiderDiplomacy {
         init();
         if (!available) return null;
         try {
-            Object manager = Class.forName("com.talhanation.recruits.FactionEvents")
-                    .getField("recruitsFactionManager").get(null);
+            Object manager = diplomacyManagerField.get(null);
             if (manager == null) return null;
             Object result = getRelation.invoke(manager, factionA, factionB);
             return result == null ? null : ((Enum<?>) result).name();

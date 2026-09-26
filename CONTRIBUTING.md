@@ -43,6 +43,8 @@ All Java packages below are under src/main/java/com/devfarinsky/siegeoverhaul.
 
 Read the relevant implementation and neighboring tests before editing. RaidEvents is large: prefer focused helpers over broad restructuring. Keep Minecraft client-only classes out of dedicated-server paths.
 
+For Recruits/Workers bridge changes, compare the matching upstream source, including the owning manager, argument/return types and lifecycle. See [the pinned compatibility review](docs/upstream-compatibility.md). Record the source commit used; source review and independent API fixtures are not live companion-mod playtesting.
+
 ## Copilot workflow
 
 Repository instructions live in .github/copilot-instructions.md; AGENTS.md points other coding agents to the same guidance. GitHub's cloud agent setup is .github/workflows/copilot-setup-steps.yml.
