@@ -1676,7 +1676,7 @@ public final class RaidEvents {
         for (var core : data.siegeCores.values()) if (FactionBank.settle(core, bankNow, bankRate)) data.setDirty();
         // Core ownership follows the placing faction, not an individual changing teams.
         long now = server.overworld().getGameTime();
-        if (now / 20 % 5 == 0) com.devfarinsky.siegeoverhaul.compat.CampClaims.cleanOrphans(server.overworld(), data);
+        if (now % (20 * 5) == 0) com.devfarinsky.siegeoverhaul.compat.CampClaims.cleanOrphans(server.overworld(), data);
 
         if (RaidConfig.AUTOMATIC_RAIDS.get() && data.raids.size() < RaidConfig.MAX_CONCURRENT_RAIDS.get()) {
             for (RaidSavedData.Anchor anchor : new ArrayList<>(data.anchors.values())) {
