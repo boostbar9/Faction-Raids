@@ -1,0 +1,178 @@
+name: Publish tested 4.47.17 beta to CurseForge
+
+on:
+  push:
+    branches: [publish/curseforge-v4.47.17]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v4.47.17
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify successful merged-main build and identical PR tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          import json, os, urllib.request
+
+          def get(path):
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'Accept': 'application/vnd.github+json'},
+              )
+              with urllib.request.urlopen(request) as response:
+                  return json.load(response)
+
+          source_sha = '05168a8e725b5dedd3aecc43dc9c423faf49a822'
+          source_tree = '684d9b86b5e1fa6e8745ecd792d786b917bf6b27'
+          pr_head_sha = 'e38f6bd6a3da7de5763f7ecf3287d2c666aa9834'
+          run = get('actions/runs/36269624132')
+          assert run['status'] == 'completed' and run['conclusion'] == 'success'
+          assert run['event'] == 'push' and run['head_branch'] == 'main'
+          assert run['head_sha'] == source_sha
+          pr = get('pulls/187')
+          assert pr['merged'] and pr['merge_commit_sha'] == source_sha
+          assert pr['head']['sha'] == pr_head_sha
+          for sha in (run['head_sha'], pr['merge_commit_sha'], pr_head_sha):
+              assert get('git/commits/' + sha)['tree']['sha'] == source_tree
+          CHECK
+
+      - name: Download exact tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 36269624132
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Download regression results
+        uses: actions/download-artifact@v4
+        with:
+          name: regression-test-results
+          run-id: 36269624132
+          github-token: ${{ github.token }}
+          path: regression
+
+      - name: Verify tested bytes, metadata, dependencies, and regressions
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          import xml.etree.ElementTree as ET
+
+          jar = Path('dist/siegeoverhaul-4.47.17.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == '9e9ff360faf57454e4c9a2acd3ac0149593bcfc282442b3a5fe51db137cc866d'
+          Path('verified-sha256.txt').write_text(digest)
+          with zipfile.ZipFile(jar) as archive:
+              assert archive.testzip() is None
+              entries = set(archive.namelist())
+              for entry in (
+                  'com/devfarinsky/siegeoverhaul/RaidEvents.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampDevelopment.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampStructures.class',
+                  'com/devfarinsky/siegeoverhaul/camp/NativeCampConstruction.class',
+                  'com/devfarinsky/siegeoverhaul/narrative/OlympianPresentation.class',
+                  'com/devfarinsky/siegeoverhaul/compat/RaiderDiplomacy.class',
+                  'com/devfarinsky/siegeoverhaul/core/CaptureRing.class',
+                  'com/devfarinsky/siegeoverhaul/core/CoreOccupation.class',
+                  'com/devfarinsky/siegeoverhaul/compat/WorkersBridge.class',
+                  'com/devfarinsky/siegeoverhaul/compat/CampClaims.class',
+                  'com/devfarinsky/siegeoverhaul/core/PlayerFortificationJobs.class',
+                  'com/devfarinsky/siegeoverhaul/client/CoreHireScreen.class',
+              ):
+                  assert entry in entries, entry
+              assert b'm_20148_' in archive.read(
+                  'com/devfarinsky/siegeoverhaul/core/PlayerFortificationJobs.class'
+              ), 'Expected reobfuscated Minecraft method name'
+              data = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+          mod = data['mods'][0]
+          assert mod['modId'] == 'siegeoverhaul' and mod['version'] == '4.47.17'
+          assert mod['displayTest'] == 'MATCH_VERSION'
+          dependencies = {entry['modId']: entry for entry in data['dependencies']['siegeoverhaul']}
+          for mod_id in ('recruits', 'workers', 'smallships', 'siegeweapons'):
+              assert dependencies[mod_id]['mandatory'] and dependencies[mod_id]['side'] == 'BOTH', mod_id
+          assert dependencies['recruits']['versionRange'] == '[1.15.2,)'
+          assert dependencies['workers']['versionRange'] == '[2.0.3,)'
+          for mod_id in ('ftbchunks', 'openpartiesandclaims', 'corpse', 'magistuarmory', 'musketmod'):
+              assert not dependencies[mod_id]['mandatory'] and dependencies[mod_id]['side'] == 'BOTH', mod_id
+          totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0)
+          reports = list(Path('regression').rglob('TEST-*.xml'))
+          assert reports
+          for report in reports:
+              result = ET.parse(report).getroot()
+              for key in totals:
+                  totals[key] += int(result.get(key, 0))
+          assert totals == {'tests': 504, 'failures': 0, 'errors': 0, 'skipped': 0}, totals
+          print('Verified', jar.name, digest, totals)
+          CHECK
+
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.47.17.jar
+          name: The Siege Overhaul v4.47.17 beta - Recruits Diplomacy Compatibility
+          version: v4.47.17
+          version-type: beta
+          changelog: |
+            # 4.47.17 beta
+
+            - Fix native relationship updates invoking the faction manager instead of Villager Recruits' separate diplomacy manager.
+            - Restore the intended API path for siege hostility, relationship repair and post-siege neutral resets.
+            - Read the current manager after server restarts; preserve safe handling while it is unavailable.
+            - Verified against the public Recruits 1.15.2 and Workers 2.0.3 source contracts; no dependency changes.
+            - Full Forge Java 17 build and 504 automated tests passed. No interactive Minecraft playtest was performed.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            ftb-chunks-forge(optional)
+            open-parties-and-claims(optional)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+          fail-mode: fail
+
+      - name: Record accepted upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os, hashlib
+          from pathlib import Path
+          digest = hashlib.sha256(Path('dist/siegeoverhaul-4.47.17.jar').read_bytes()).hexdigest()
+          assert digest == Path('verified-sha256.txt').read_text()
+          result = {
+              'version': '4.47.17',
+              'file_id': os.environ['RELEASE_FILE_ID'],
+              'url': os.environ['RELEASE_URL'],
+              'source': '05168a8e725b5dedd3aecc43dc9c423faf49a822',
+              'source_tree': '684d9b86b5e1fa6e8745ecd792d786b917bf6b27',
+              'pr_head': 'e38f6bd6a3da7de5763f7ecf3287d2c666aa9834',
+              'build_run': 36269624132,
+              'tests': 504,
+              'sha256': digest,
+          }
+          assert result['file_id'] and result['url']
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Accepted upload (moderation/public availability separate): ' + json.dumps(result) + '\n')
+          RECEIPT
