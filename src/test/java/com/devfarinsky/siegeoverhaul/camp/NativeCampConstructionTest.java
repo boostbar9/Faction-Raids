@@ -14,6 +14,42 @@ import static org.junit.jupiter.api.Assertions.*;
 import static com.devfarinsky.siegeoverhaul.ModConstants.Tags.*;
 
 class NativeCampConstructionTest extends MinecraftTestSupport {
+    @Test void blockedJobIsRejectedBeforeGateOrRoadPreparation() {
+        var level=org.mockito.Mockito.mock(net.minecraft.server.level.ServerLevel.class);
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        raid.campWorkers.add(UUID.randomUUID());raid.pendingCampBlocks.put(BlockPos.ZERO.asLong(),"minecraft:spruce_planks");
+        raid.warGate.putLong("Center",new BlockPos(20,64,20).asLong());
+        org.mockito.Mockito.when(level.hasChunkAt(org.mockito.ArgumentMatchers.any())).thenReturn(true);
+        var border=org.mockito.Mockito.mock(net.minecraft.world.level.border.WorldBorder.class);
+        org.mockito.Mockito.when(level.getWorldBorder()).thenReturn(border);
+        org.mockito.Mockito.when(border.isWithinBounds(org.mockito.ArgumentMatchers.any(BlockPos.class))).thenReturn(true);
+        org.mockito.Mockito.when(level.getBlockState(BlockPos.ZERO)).thenReturn(Blocks.CHEST.defaultBlockState());
+        try(var claims=org.mockito.Mockito.mockStatic(com.devfarinsky.siegeoverhaul.compat.CampClaims.class);
+            var gate=org.mockito.Mockito.mockStatic(GateAssembly.class);var road=org.mockito.Mockito.mockStatic(CampRoad.class)) {
+            claims.when(()->com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level,raid)).thenReturn(true);
+            var saved=raid.save();
+            assertFalse(NativeCampConstruction.start(level,raid));
+            assertEquals(saved,raid.save());gate.verifyNoInteractions();road.verifyNoInteractions();
+            org.mockito.Mockito.verify(level,org.mockito.Mockito.never()).setBlock(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyInt());
+        }
+    }
+    @Test void supplyBarrelsAvoidSavedCourtyardAndBuildingEntrances() {
+        var level=org.mockito.Mockito.mock(net.minecraft.server.level.ServerLevel.class);
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);raid.campPos=new BlockPos(0,64,0);
+        raid.campaign.putLong("EnemyCore",raid.campPos.asLong());raid.campaign.putBoolean("EnemyCoreCourtyard",true);
+        CampStructures.record(raid,0,raid.campPos.north(8),net.minecraft.core.Direction.SOUTH);
+        org.mockito.Mockito.when(level.hasChunkAt(org.mockito.ArgumentMatchers.any())).thenReturn(true);
+        var border=org.mockito.Mockito.mock(net.minecraft.world.level.border.WorldBorder.class);
+        org.mockito.Mockito.when(level.getWorldBorder()).thenReturn(border);
+        org.mockito.Mockito.when(border.isWithinBounds(org.mockito.ArgumentMatchers.any(BlockPos.class))).thenReturn(true);
+        org.mockito.Mockito.when(level.getBlockState(org.mockito.ArgumentMatchers.any())).thenAnswer(c ->
+                ((BlockPos)c.getArgument(0)).getY()<64?Blocks.STONE.defaultBlockState():Blocks.AIR.defaultBlockState());
+        BlockPos supply=NativeCampConstruction.findSupplyPosition(level,raid);
+        assertNotNull(supply);
+        assertFalse(com.devfarinsky.siegeoverhaul.core.EnemyCoreSite.reserved(raid,supply));
+        assertFalse(CampStructures.accessColumn(raid,supply));
+        assertTrue(supply.distSqr(raid.campPos)>4);
+    }
     @Test void constructionRejectsSavedKeepOverlapBeforeProvisioning() {
         var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
         BlockPos core=new BlockPos(8,65,8);

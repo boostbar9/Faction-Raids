@@ -38,18 +38,18 @@ public final class NativeCampConstruction {
         // Validate the saved courtyard before GateAssembly or CampRoad can
         // mutate world/restoration ledgers. A rejected job must be a no-op.
         if (overlapsEnemyCoreReservation(raid)) return false;
+        // Gate preparation owns its saved infrastructure cells. Validate all
+        // other job cells first so a rejected building site cannot trigger
+        // unrelated gate/road mutations before discovering its obstruction.
+        if (!pendingCellsClear(level,raid,true)
+                || com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.blocksAny(level,raid.pendingCampBlocks.keySet())) return false;
         if (!raid.warGate.isEmpty() && !GateAssembly.install(level,raid)) return false;
         Entity build = null, storage = null;
         BlockPos supply = null;
         try {
             if(com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.blocksAny(level,raid.pendingCampBlocks.keySet()))return false;
             if(!CampRoad.prepare(level,raid))return false;
-            for (long key : raid.pendingCampBlocks.keySet()) {
-                BlockPos p = BlockPos.of(key);
-                if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)
-                        || !CampVegetation.replaceable(level.getBlockState(p)) || !level.getFluidState(p).isEmpty()
-                        || level.getBlockEntity(p) != null) return false;
-            }
+            if (!pendingCellsClear(level,raid,false)) return false;
             supply = findSupplyPosition(level, raid);
             if (supply == null) return false;
             UUID owner = UUID.randomUUID();
@@ -127,6 +127,18 @@ public final class NativeCampConstruction {
                     && !pos.equals(core)) return true;
         }
         return false;
+    }
+
+    private static boolean pendingCellsClear(ServerLevel level, RaidSavedData.RaidState raid, boolean beforeGate) {
+        var gate=raid.warGate.getCompound("Blocks");
+        for(long key:raid.pendingCampBlocks.keySet()) {
+            if(beforeGate && gate.contains(Long.toString(key)))continue;
+            BlockPos p=BlockPos.of(key);
+            if(!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)
+                    || !CampVegetation.replaceable(level.getBlockState(p)) || !level.getFluidState(p).isEmpty()
+                    || level.getBlockEntity(p)!=null)return false;
+        }
+        return true;
     }
 
     /** Workers uses a scanned relative-coordinate blueprint, not a vanilla structure template. */
@@ -227,11 +239,14 @@ public final class NativeCampConstruction {
         return new BlockPos(x, y, z);
     }
 
-    private static BlockPos findSupplyPosition(ServerLevel level, RaidSavedData.RaidState raid) {
+    static BlockPos findSupplyPosition(ServerLevel level, RaidSavedData.RaidState raid) {
         for (int radius = 2; radius <= 6; radius++) {
             for (Direction direction : Direction.Plane.HORIZONTAL) {
                 BlockPos p = raid.campPos.relative(direction, radius);
                 if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)
+                        || com.devfarinsky.siegeoverhaul.core.EnemyCoreSite.reserved(raid,p)
+                        || CampStructures.accessColumn(raid,p)
+                        || raid.warGate.getCompound("RoadBlocks").contains(Long.toString(p.below().asLong()))
                         || raid.pendingCampBlocks.containsKey(p.asLong())
                         || raid.pendingCampBlocks.containsKey(p.above().asLong())
                         || com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.blocksAt(level,p)) continue;
