@@ -13,6 +13,36 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class CampStructuresTest extends MinecraftTestSupport {
+    @Test void liveInstallationsAnnounceTheirPatronAndEmitOnlyWhileLoadedAndStanding() {
+        RaidConfig.ANNOUNCE_GLOBALLY.set(false);
+        for(var host:com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.hosts()) {
+            var raid=new RaidSavedData.RaidState("team:test","siege_core",0);raid.factionId=host.factionId();
+            var center=new BlockPos(10,64,10);CampStructures.record(raid,0,center,Direction.NORTH);
+            var pos=CampStructures.keystone(center,Direction.NORTH);
+            var level=mock(ServerLevel.class);var server=mock(MinecraftServer.class);var players=mock(PlayerList.class);
+            var player=mock(net.minecraft.server.level.ServerPlayer.class);
+            when(level.getServer()).thenReturn(server);when(server.getPlayerList()).thenReturn(players);
+            when(players.getPlayers()).thenReturn(List.of(player));when(level.hasChunkAt(pos)).thenReturn(true);
+            when(level.getBlockState(pos)).thenReturn(Blocks.HAY_BLOCK.defaultBlockState());when(level.getGameTime()).thenReturn(20L);
+            try(var saves=mockStatic(RaidSavedData.class);var keys=mockStatic(com.devfarinsky.siegeoverhaul.core.SiegeCore.class)) {
+                saves.when(()->RaidSavedData.get(server)).thenReturn(new RaidSavedData());
+                keys.when(()->com.devfarinsky.siegeoverhaul.core.SiegeCore.key(player)).thenReturn("team:test");
+                CampStructures.tick(level,raid);
+                String title=CampStructures.title(raid,CampStructures.Kind.GRANARY);
+                verify(player).sendSystemMessage(argThat(c->c.getString().contains(title+" raised") && c.getString().contains("recover health")));
+                var particle=com.devfarinsky.siegeoverhaul.narrative.OlympianPresentation.forFaction(host.factionId()).particle();
+                verify(level).sendParticles(eq(particle),anyDouble(),anyDouble(),anyDouble(),eq(3),anyDouble(),anyDouble(),anyDouble(),anyDouble());
+                clearInvocations(level,player);
+                when(level.hasChunkAt(pos)).thenReturn(false);CampStructures.tick(level,raid);
+                verify(level,never()).sendParticles(any(),anyDouble(),anyDouble(),anyDouble(),anyInt(),anyDouble(),anyDouble(),anyDouble(),anyDouble());
+                when(level.hasChunkAt(pos)).thenReturn(true);when(level.getBlockState(pos)).thenReturn(Blocks.AIR.defaultBlockState());
+                CampStructures.tick(level,raid);
+                verify(player).sendSystemMessage(argThat(c->c.getString().contains(title+" destroyed")));
+                assertFalse(CampStructures.standing(raid,CampStructures.Kind.GRANARY));
+                verify(level,never()).sendParticles(any(),anyDouble(),anyDouble(),anyDouble(),anyInt(),anyDouble(),anyDouble(),anyDouble(),anyDouble());
+            }
+        }
+    }
     @Test void stageMappingAndConfigurableEffectsHaveBackwardsCompatibleDefaults() {
         assertEquals(CampStructures.Kind.GRANARY, CampStructures.Kind.forStage(0));
         assertEquals(CampStructures.Kind.ARMOURY, CampStructures.Kind.forStage(1));

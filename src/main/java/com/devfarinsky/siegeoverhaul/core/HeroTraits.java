@@ -2,6 +2,7 @@ package com.devfarinsky.siegeoverhaul.core;
 
 import com.devfarinsky.siegeoverhaul.*;
 import com.devfarinsky.siegeoverhaul.compat.EnemyHiringProtection;
+import com.devfarinsky.siegeoverhaul.narrative.OlympianPresentation;
 import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -34,7 +35,7 @@ public final class HeroTraits {
         return switch(role) {
             case 10 -> "Ares' Blade: every third melee hit heals 1 heart";
             case 11 -> "Athena's Aegis: blocked hits ward nearby allies";
-            case 12 -> "Poseidon's Storm: every fourth arrow chains lightning";
+            case 12 -> "Poseidon's Surge: every fourth arrow surges into two foes";
             case 13 -> "Artemis' Moonfrost: a bolt slows up to three foes";
             case 14 -> "Ares' Fury: a full-health strike grants absorption";
             case 15 -> "Hephaestus' Ward: shields a badly wounded ally";
@@ -50,7 +51,7 @@ public final class HeroTraits {
             case 25 -> "Aegis Bulwark: Resistance II aura to nearby allies";
             case 26 -> "Artemis' Skyhunt: arrows split into three tracers";
             case 27 -> "Ares' Inferno: battle fury burns nearby foes";
-            case 28 -> "Artemis' Hounds: summons two shadow wolves";
+            case 28 -> "Artemis' Hounds: summons two moon hounds for 30s";
             case 29 -> "Poseidon's Undertow: heavily slows nearby foes";
             default -> "";
         };
@@ -219,6 +220,11 @@ public final class HeroTraits {
     private static void burst(ServerLevel level, double x, double y, double z, net.minecraft.core.particles.SimpleParticleType particle, int count, double spread, double speed) {
         level.sendParticles(particle, x, y, z, count, spread, spread, spread, speed);
     }
+    private static void signature(ServerLevel level, LivingEntity source, int role, int count, double spread) {
+        var style=OlympianPresentation.forFaction(CoreHiring.heroFaction(role));
+        burst(level,source.getX(),source.getY()+1,source.getZ(),style.particle(),count,spread,.04);
+        level.playSound(null,source.blockPosition(),style.sound(),net.minecraft.sounds.SoundSource.HOSTILE,.7F,1.0F);
+    }
     static void applyWildsongAttackSpeed(Mob mob, long now) {
         var attribute = mob.getAttribute(Attributes.ATTACK_SPEED);
         if (attribute == null) return;
@@ -271,7 +277,7 @@ public final class HeroTraits {
             summonTag.remove("SiegeHiredHero");
             summonTag.remove("SiegeHeroRole");
             if (summonTag.getLong("SiegeShadowDespawn") <= level.getGameTime()) {
-                burst(level, mob.getX(), mob.getY() + 0.5, mob.getZ(), net.minecraft.core.particles.ParticleTypes.SOUL, 20, 0.4, 0.05);
+                burst(level, mob.getX(), mob.getY() + 0.5, mob.getZ(), net.minecraft.core.particles.ParticleTypes.END_ROD, 12, 0.4, 0.03);
                 mob.discard();
             }
             return;
@@ -281,7 +287,7 @@ public final class HeroTraits {
         ensureOlympianIdentity(mob,r);
         long now = level.getGameTime();
         var tag = mob.getPersistentData();
-        // Apollo's Dawn (15): shield the most-hurt ally in a 6-block bubble every 30s.
+        // Hephaestus' Ward: shield the most-hurt ally in a 6-block bubble every 30s.
         if (r == 15 && ready(now, tag.getLong("SiegeHeroNext"))) {
             var candidates = allies(level, mob, 6).stream()
                     .filter(o -> o.getHealth() <= o.getMaxHealth() * .3F && !o.hasEffect(MobEffects.ABSORPTION)
@@ -291,8 +297,7 @@ public final class HeroTraits {
                 ally.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, 100, 1));
                 ally.getPersistentData().putLong("SiegeLastLight", now + 600);
                 tag.putLong("SiegeHeroNext", now + 600);
-                sparkle(level, ally, net.minecraft.core.particles.ParticleTypes.TOTEM_OF_UNDYING);
-                level.playSound(null, ally.blockPosition(), net.minecraft.sounds.SoundEvents.AMETHYST_BLOCK_CHIME, net.minecraft.sounds.SoundSource.NEUTRAL, 0.7F, 1.2F);
+                signature(level,ally,r,16,.4);
             }
             return;
         }
@@ -302,26 +307,29 @@ public final class HeroTraits {
             if (mob.tickCount % 40 == 0) burst(level, mob.getX(), mob.getY() + 1, mob.getZ(), net.minecraft.core.particles.ParticleTypes.ENCHANT, 8, 1.5, 0.02);
             return;
         }
-        // Athena's Judgment (22): arcane nova every 15s (300 ticks). 6-block AoE, 5 damage.
-        if (r == 22 && mob.getTarget() != null && ready(now, tag.getLong("SiegeHeroNext"))) {
+        // Offensive spells require a live, visible enemy, not a stale native AI target.
+        if ((r == 22 || r >= 27) && (mob.getTarget() == null || !hostile(mob,mob.getTarget()))) return;
+        // Poseidon's Tempest: tidal nova every 15s, with a visible enemy in its six-block reach.
+        if (r == 22 && ready(now, tag.getLong("SiegeHeroNext"))) {
+            var foes=enemies(level,mob,6);
+            if (foes.isEmpty()) return;
             tag.putLong("SiegeHeroNext", now + 300);
-            burst(level, mob.getX(), mob.getY() + 1, mob.getZ(), net.minecraft.core.particles.ParticleTypes.PORTAL, 80, 3.0, 0.4);
-            burst(level, mob.getX(), mob.getY() + 1, mob.getZ(), net.minecraft.core.particles.ParticleTypes.REVERSE_PORTAL, 40, 2.0, 0.2);
-            level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.ENDERMAN_TELEPORT, net.minecraft.sounds.SoundSource.HOSTILE, 1.0F, 0.6F);
-            for (var enemy : enemies(level, mob, 6)) enemy.hurt(level.damageSources().indirectMagic(mob, mob), 5);
+            signature(level,mob,r,36,2.0);
+            burst(level,mob.getX(),mob.getY()+.5,mob.getZ(),net.minecraft.core.particles.ParticleTypes.CLOUD,12,1.5,.04);
+            for (var enemy : foes) enemy.hurt(level.damageSources().indirectMagic(mob, mob), 5);
             return;
         }
-        // Apollo's Chosen (27): sunlight column on all enemies within 8 blocks every 20s.
-        if (r == 27 && mob.getTarget() != null && ready(now, tag.getLong("SiegeHeroNext"))) {
-            tag.putLong("SiegeHeroNext", now + 400);
+        // Ares' Inferno: burning battle fury within eight blocks, every 20s.
+        if (r == 27 && ready(now, tag.getLong("SiegeHeroNext"))) {
             var foes = enemies(level, mob, 8);
             if (foes.isEmpty()) return;
+            tag.putLong("SiegeHeroNext", now + 400);
             for (var enemy : foes) {
-                for (int y = 0; y < 6; y++) burst(level, enemy.getX(), enemy.getY() + y, enemy.getZ(), net.minecraft.core.particles.ParticleTypes.END_ROD, 6, 0.15, 0.02);
+                burst(level,enemy.getX(),enemy.getY()+1,enemy.getZ(),net.minecraft.core.particles.ParticleTypes.FLAME,12,.5,.04);
                 enemy.hurt(level.damageSources().indirectMagic(mob, mob), 6);
                 enemy.setSecondsOnFire(4);
             }
-            level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.AMETHYST_BLOCK_CHIME, net.minecraft.sounds.SoundSource.HOSTILE, 1.2F, 1.6F);
+            signature(level,mob,r,16,.8);
             return;
         }
         // Artemis' Hounds (28): summon two wolves for 30s, 45s cooldown; saved deadline identifies summons.
@@ -332,23 +340,25 @@ public final class HeroTraits {
                 if (wolf == null) continue;
                 double angle = (i * Math.PI); wolf.setPos(mob.getX() + Math.cos(angle) * 1.5, mob.getY(), mob.getZ() + Math.sin(angle) * 1.5);
                 wolf.getPersistentData().putLong("SiegeShadowDespawn", now + 600);
-                wolf.setCustomName(Component.literal("Shadow Wolf").withStyle(ChatFormatting.DARK_PURPLE));
+                wolf.setCustomName(Component.literal("Moon Hound").withStyle(ChatFormatting.WHITE));
                 if (mob.getTarget() != null) wolf.setTarget(mob.getTarget());
                 if (!EnemyHeroes.prepareShadow(level, mob, wolf)) { wolf.discard(); continue; }
                 if (!level.addFreshEntity(wolf)) { wolf.discard(); continue; }
-                burst(level, wolf.getX(), wolf.getY() + 0.5, wolf.getZ(), net.minecraft.core.particles.ParticleTypes.SOUL, 30, 0.5, 0.05);
+                burst(level, wolf.getX(), wolf.getY() + 0.5, wolf.getZ(), net.minecraft.core.particles.ParticleTypes.END_ROD, 16, 0.5, 0.03);
             }
             level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.WOLF_HOWL, net.minecraft.sounds.SoundSource.HOSTILE, 1.5F, 0.5F);
             return;
         }
-        // Hermes' Hourglass (29): every 30s, all enemies within 10 blocks slowed 90% for 4s.
-        if (r == 29 && mob.getTarget() != null && ready(now, tag.getLong("SiegeHeroNext"))) {
+        // Poseidon's Undertow: four seconds of heavy slowing, every 30s.
+        if (r == 29 && ready(now, tag.getLong("SiegeHeroNext"))) {
+            var foes=enemies(level,mob,10);
+            if (foes.isEmpty()) return;
             tag.putLong("SiegeHeroNext", now + 600);
-            for (var enemy : enemies(level, mob, 10)) {
+            for (var enemy : foes) {
                 enemy.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 80, 4));
-                burst(level, enemy.getX(), enemy.getY() + 1, enemy.getZ(), net.minecraft.core.particles.ParticleTypes.PORTAL, 20, 0.6, 0.05);
+                burst(level, enemy.getX(), enemy.getY() + .3, enemy.getZ(), net.minecraft.core.particles.ParticleTypes.SPLASH, 12, 0.6, 0.05);
             }
-            level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.ELDER_GUARDIAN_CURSE, net.minecraft.sounds.SoundSource.HOSTILE, 1.0F, 1.5F);
+            signature(level,mob,r,16,.8);
         }
     }
     @SubscribeEvent
@@ -413,9 +423,9 @@ public final class HeroTraits {
         }
         // === RANGED HEROES (projectile hits) ===
         if (!(event.getSource().getDirectEntity() instanceof Projectile projectile) || projectile.getOwner() != mob) return;
-        // 12 Stormbow: every 4th arrow chains lightning to two nearby foes for 4 magic damage.
+        // Poseidon's Surge: every fourth arrow carries a surge to two nearby foes for 4 magic damage.
         if (r == 12) {
-            if (!charged(tag, "SiegeHeroHits", 4)) { sparkle(level, mob, net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK); return; }
+            if (!charged(tag, "SiegeHeroHits", 4)) { sparkle(level, mob, net.minecraft.core.particles.ParticleTypes.SPLASH); return; }
             if (!ready(now, tag.getLong("SiegeHeroNext"))) return;
             tag.putInt("SiegeHeroHits", 0); tag.putLong("SiegeHeroNext", now + 60);
             var primary = target;
@@ -424,17 +434,16 @@ public final class HeroTraits {
             foes.sort(java.util.Comparator.comparingDouble(primary::distanceToSqr));
             for (var enemy : foes.stream().limit(2).toList()) {
                 if (enemy.hurt(level.damageSources().indirectMagic(mob, mob), 4)) {
-                    sparkle(level, enemy, net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK);
+                    sparkle(level, enemy, net.minecraft.core.particles.ParticleTypes.SPLASH);
                     double sx = primary.getX(), sy = primary.getY() + 1, sz = primary.getZ();
                     double dx = enemy.getX() - sx, dy = enemy.getY() + 1 - sy, dz = enemy.getZ() - sz;
                     for (int i = 0; i < 10; i++) {
                         double t = i / 10.0;
-                        burst(level, sx + dx * t, sy + dy * t, sz + dz * t, net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK, 1, 0.02, 0.0);
+                        burst(level, sx + dx * t, sy + dy * t, sz + dz * t, net.minecraft.core.particles.ParticleTypes.SPLASH, 1, 0.02, 0.0);
                     }
                 }
             }
-            sparkle(level, primary, net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK);
-            level.playSound(null, primary.blockPosition(), net.minecraft.sounds.SoundEvents.LIGHTNING_BOLT_IMPACT, net.minecraft.sounds.SoundSource.HOSTILE, 0.6F, 1.3F);
+            signature(level,primary,r,16,.4);
             return;
         }
         // 13 Frostbinder: bolt slows up to 3 enemies for 3s.
@@ -448,7 +457,7 @@ public final class HeroTraits {
                 if (!ready(now, enemy.getPersistentData().getLong("SiegeFrostNext"))) continue;
                 enemy.getPersistentData().putLong("SiegeFrostNext", now + 100);
                 enemy.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 60, 1));
-                sparkle(level, enemy, net.minecraft.core.particles.ParticleTypes.SNOWFLAKE);
+                sparkle(level, enemy, net.minecraft.core.particles.ParticleTypes.END_ROD);
             }
             return;
         }
@@ -545,8 +554,7 @@ public final class HeroTraits {
         if (r == 11 && ready(now, tag.getLong("SiegeHeroNext"))) {
             tag.putLong("SiegeHeroNext", now + 40);
             for (var a : allies(level, mob, 4)) a.getPersistentData().putLong("SiegeStoneguardUntil", now + 60);
-            burst(level, mob.getX(), mob.getY() + 1, mob.getZ(), net.minecraft.core.particles.ParticleTypes.CLOUD, 10, 0.6, 0.02);
-            level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.SHIELD_BLOCK, net.minecraft.sounds.SoundSource.HOSTILE, 0.8F, 1.1F);
+            signature(level,mob,r,10,.6);
         }
     }
 }

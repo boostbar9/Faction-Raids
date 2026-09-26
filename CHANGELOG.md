@@ -1,3 +1,9 @@
+# 4.47.14 beta
+- Give each Olympian host its own camp installation names and active-building effects, with clear messages describing the benefit lost when a building falls.
+- Replace mismatched hero effects with patron signatures: Poseidon's sea surges, Ares' burning battle fury, Hephaestus' forge sparks, Athena's aegis magic and Artemis' moonlight. Newly summoned wolves are named Moon Hounds.
+- Offensive hero spells now wait for a living, visible enemy. Area spells no longer consume their cooldown when no eligible enemy is in reach.
+- Keep existing damage, effect durations, cooldowns, camp benefits and saved identities. Reduce particle counts for the tidal nova, battle fury and hound effects.
+
 # 4.47.13 beta
 - Fix the solid core blocking its own capture sight checks. Walls and roofs still prevent capture through cover.
 - Keep troops assigned to another siege out of a core's capture count. Native soldiers of the actual occupying faction still contest recovery.

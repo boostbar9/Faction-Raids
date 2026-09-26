@@ -36,6 +36,16 @@ The menu sizes itself from the player's Minecraft-scaled viewport, selects detai
 
 All twenty heroes are divided evenly among the five Olympian hosts, with patron-themed names, equipment and ability descriptions. Enemy hosts only field their own four champions; the player's rotating recruitment offer can still feature any champion. Hero magic uses bounded effects and cooldowns while retaining the recruits' normal combat and movement. Existing default-named heroes adopt their current Olympian identities without replacing equipment; player-renamed heroes keep their custom names.
 
+| Patron | Battle effects | Camp landmarks |
+| --- | --- | --- |
+| **Poseidon** | Sea spray, tidal surges and undertow | Poseidon's Spring, Trident Arsenal, Tide Council |
+| **Ares** | Battle fury, war cries and searing strikes | Vanguard Mess, Arsenal of Ares, Hall of the War Drum |
+| **Hephaestus** | Forge sparks and protective wards | Hearth of Hephaestus, Divine Forge, Master Smith's Hall |
+| **Athena** | Shield magic and coordinated defense | Olive Court, Aegis Arsenal, Strategion of Athena |
+| **Artemis** | Moonlight, slowing arrows and moon hounds | Hunters' Lodge, Silver Bowyer, Moonwatch of Artemis |
+
+Camp announcements identify each landmark and its benefit. Destroying its keystone removes that benefit: guard healing from stores, extra guard damage from the arsenal, or faster reinforcements from the command post.
+
 ## Emerald Loot Boxes
 
 | Box | Price | Category |
