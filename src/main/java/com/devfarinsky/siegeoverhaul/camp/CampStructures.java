@@ -3,6 +3,7 @@ package com.devfarinsky.siegeoverhaul.camp;
 import com.devfarinsky.siegeoverhaul.*;
 import com.devfarinsky.siegeoverhaul.RaidSavedData.RaidState;
 import com.devfarinsky.siegeoverhaul.core.SiegeCore;
+import com.devfarinsky.siegeoverhaul.narrative.OlympianPresentation;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -28,11 +29,11 @@ public final class CampStructures {
 
     public enum Kind {
         GRANARY(0, "granary", "Sanctuary of Demeter", "minecraft:hay_block",
-                "Sacred Stores: enemy camp guards mend their wounds while it stands."),
+                "Camp guards recover health while it stands."),
         ARMOURY(1, "armoury", "Forge of Hephaestus", "minecraft:anvil",
-                "Divine Forge: enemy camp guards fight with sharper weapons while it stands."),
+                "Camp guards deal more damage while it stands."),
         COMMAND_POST(2, "command", "Strategion of Athena", "minecraft:cartography_table",
-                "War Council: enemy waves are coordinated to arrive faster while it stands.");
+                "Reinforcements arrive sooner while it stands.");
         public final int stage;
         public final String key, title, keystoneBlock, purpose;
         Kind(int stage, String key, String title, String keystoneBlock, String purpose) {
@@ -43,6 +44,10 @@ public final class CampStructures {
             for (Kind kind : values()) if (kind.stage == stage) return kind;
             return null;
         }
+    }
+
+    public static String title(RaidState raid, Kind kind) {
+        return OlympianPresentation.forFaction(raid.factionId).installations().get(kind.stage);
     }
 
     /** Keystone (identity centrepiece) local offset x=0,y=1,z=-2 in every stage layout. */
@@ -97,17 +102,17 @@ public final class CampStructures {
                 if (!entry.getBoolean("Announced")) {
                     entry.putBoolean("Announced", true);
                     announce(level.getServer(), raid.teamKey, Component.literal(
-                            "Enemy " + kind.title + " raised. " + kind.purpose).withStyle(ChatFormatting.RED));
+                            "Enemy " + title(raid,kind) + " raised. " + kind.purpose).withStyle(ChatFormatting.RED));
                 }
                 dirty = true;
             } else if (!present && active) {
                 entry.putBoolean("Active", false);
                 announce(level.getServer(), raid.teamKey, Component.literal(
-                        "Enemy " + kind.title + " destroyed. Its advantage is gone.").withStyle(ChatFormatting.GREEN));
-                FactionLogger.LOG.info("Camp {} lost its {}", raid.teamKey, kind.title);
+                        "Enemy " + title(raid,kind) + " destroyed. Its advantage is gone.").withStyle(ChatFormatting.GREEN));
+                FactionLogger.LOG.info("Camp {} lost its {}", raid.teamKey, title(raid,kind));
                 dirty = true;
             }
-            if (present && level.getGameTime() % 20L == 0L) emitActivity(level, kind, pos);
+            if (present && level.getGameTime() % 20L == 0L) emitActivity(level, raid.factionId, pos);
         }
         if (dirty) {
             raid.campaign.put(ModConstants.Tags.CAMP_STRUCTURES, all);
@@ -125,12 +130,8 @@ public final class CampStructures {
      * This is intentionally a handful of server particles once per second,
      * not a per-tick emitter.
      */
-    private static void emitActivity(ServerLevel level, Kind kind, BlockPos pos) {
-        var particle = switch (kind) {
-            case GRANARY -> net.minecraft.core.particles.ParticleTypes.HAPPY_VILLAGER;
-            case ARMOURY -> net.minecraft.core.particles.ParticleTypes.CRIT;
-            case COMMAND_POST -> net.minecraft.core.particles.ParticleTypes.ENCHANT;
-        };
+    private static void emitActivity(ServerLevel level, String faction, BlockPos pos) {
+        var particle = OlympianPresentation.forFaction(faction).particle();
         level.sendParticles(particle, pos.getX()+0.5D, pos.getY()+1.2D, pos.getZ()+0.5D,
                 3, 0.45D, 0.35D, 0.45D, 0.02D);
     }
