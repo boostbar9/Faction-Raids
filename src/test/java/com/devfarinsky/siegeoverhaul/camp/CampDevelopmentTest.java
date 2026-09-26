@@ -29,6 +29,10 @@ class CampDevelopmentTest extends MinecraftTestSupport {
 
     @Test void obstructedPreferredUpgradeRetriesAnotherSiteWithoutReplacingBlocks() {
         var level=mock(ServerLevel.class);var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        var server=mock(net.minecraft.server.MinecraftServer.class);
+        var players=mock(net.minecraft.server.players.PlayerList.class);
+        when(level.getServer()).thenReturn(server);when(server.getPlayerList()).thenReturn(players);
+        RaidConfig.ANNOUNCE_GLOBALLY.set(true);
         raid.campPos=new BlockPos(0,64,0);raid.campClaimId=UUID.randomUUID();raid.campUpgradeTicks=2400;
         UUID workerId=UUID.randomUUID();raid.campWorkers.add(workerId);var worker=mock(Mob.class);
         when(level.getEntity(workerId)).thenReturn(worker);when(worker.isAlive()).thenReturn(true);
@@ -45,15 +49,18 @@ class CampDevelopmentTest extends MinecraftTestSupport {
         try(var camps=mockStatic(CampClaims.class);var nativeJobs=mockStatic(NativeCampConstruction.class);
             var saves=mockStatic(RaidSavedData.class);var claims=mockStatic(RecruitsClaimsBridge.class);var external=mockStatic(ClaimBridge.class)) {
             camps.when(()->CampClaims.owns(level,raid)).thenReturn(true);
-            saves.when(()->RaidSavedData.get(null)).thenReturn(saved);
+            saves.when(()->RaidSavedData.get(server)).thenReturn(saved);
             claims.when(()->RecruitsClaimsBridge.getClaimAt(eq(level),any(BlockPos.class))).thenReturn(Optional.of(claim));
             nativeJobs.when(()->NativeCampConstruction.start(level,raid)).thenAnswer(call->{sites.add(Set.copyOf(raid.pendingCampBlocks.keySet()));return sites.size()==2;});
             CampDevelopment.tick(level,raid);
             assertEquals(2,sites.size());assertNotEquals(sites.get(0),sites.get(1));assertEquals(1,raid.campUpgradeStage);
+            verify(players).broadcastSystemMessage(argThat(c -> c.getString().contains("builders are raising")
+                    && c.getString().contains(CampStructures.title(raid,CampStructures.Kind.GRANARY))),eq(false));
             assertTrue(raid.pendingCampBlocks.size()<512);verify(level,never()).setBlock(any(),any(),anyInt());
             raid.pendingCampBlocks.clear();raid.campUpgradeTicks=2400;
             external.when(()->ClaimBridge.isForeignClaim(eq(level),any(BlockPos.class),any(RaidSavedData.Anchor.class))).thenReturn(true);
             CampDevelopment.tick(level,raid);assertEquals(2,sites.size());assertEquals(1,raid.campUpgradeStage);
+            verifyNoMoreInteractions(players);
         }
     }
 }

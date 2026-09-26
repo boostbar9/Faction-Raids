@@ -15,6 +15,7 @@ import static org.mockito.Mockito.*;
 class CampLayoutRoutingTest extends MinecraftTestSupport {
     private static class Site {
         final ServerLevel level=mock(ServerLevel.class);
+        final net.minecraft.server.MinecraftServer server=mock(net.minecraft.server.MinecraftServer.class);
         final RaidSavedData.RaidState raid=new RaidSavedData.RaidState("team:test","siege_core",0);
         final RaidSavedData saved=new RaidSavedData();
         final Map<BlockPos,BlockState> world=new HashMap<>();
@@ -22,6 +23,8 @@ class CampLayoutRoutingTest extends MinecraftTestSupport {
         java.util.function.ToIntFunction<BlockPos> surface=p->64;
         final RecruitsClaimsBridge.ClaimSnapshot claim=mock(RecruitsClaimsBridge.ClaimSnapshot.class);
         Site() {
+            when(level.getServer()).thenReturn(server);
+            when(server.getPlayerList()).thenReturn(mock(net.minecraft.server.players.PlayerList.class));
             raid.campPos=new BlockPos(-40,64,-40);raid.campClaimId=UUID.randomUUID();
             // Real gate faces north; the original approach would choose west.
             raid.warGate.putLong("Center",raid.campPos.north(18).asLong());
@@ -53,7 +56,7 @@ class CampLayoutRoutingTest extends MinecraftTestSupport {
                 var claims=mockStatic(RecruitsClaimsBridge.class);var external=mockStatic(ClaimBridge.class)) {
                 assertTrue(WarGate.ready(level,raid),"fixture must have a complete, real gate");
                 camps.when(()->CampClaims.owns(level,raid)).thenReturn(true);
-                saves.when(()->RaidSavedData.get(null)).thenReturn(saved);
+                saves.when(()->RaidSavedData.get(server)).thenReturn(saved);
                 claims.when(()->RecruitsClaimsBridge.getClaimAt(eq(level),any(BlockPos.class))).thenReturn(Optional.of(claim));
                 jobs.when(()->NativeCampConstruction.start(level,raid)).thenAnswer(call->{accepted.accept(Map.copyOf(raid.pendingCampBlocks));return true;});
                 for(int i=0;i<count;i++) {raid.campUpgradeTicks=RaidConfig.CAMP_UPGRADE_SECONDS.get()*20;CampDevelopment.tick(level,raid);raid.pendingCampBlocks.clear();}

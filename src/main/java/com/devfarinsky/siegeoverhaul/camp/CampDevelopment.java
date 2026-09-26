@@ -123,7 +123,11 @@ public final class CampDevelopment {
         var previous=raid.campaign.getCompound(structures).copy();
         // Reserve the entrance before choosing a supply barrel for this job.
         CampStructures.record(raid,raid.campUpgradeStage,center,entrance);
-        if(NativeCampConstruction.start(level,raid)) { raid.campUpgradeStage++; return true; }
+        if(NativeCampConstruction.start(level,raid)) {
+            CampStructures.constructionStarted(level,raid,raid.campUpgradeStage);
+            raid.campUpgradeStage++;
+            return true;
+        }
         if(previous.isEmpty())raid.campaign.remove(structures);else raid.campaign.put(structures,previous);
         raid.pendingCampBlocks.clear(); return false;
     }

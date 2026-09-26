@@ -19,7 +19,7 @@ import net.minecraftforge.registries.ForgeRegistries;
  * Purpose and payoff for the three war-camp upgrade buildings.
  *
  * <p>Each stage-built structure is now a named installation with a live
- * gameplay effect and a keystone block. While the keystone stands the effect
+ * gameplay effect and a keystone block. Once construction finishes, while the keystone stands the effect
  * applies; destroying or burning it (the keystone vanishes) ends the effect and
  * announces the loss, so raiding the buildings is worthwhile. State lives on the
  * raid's {@code campaign} compound under a namespaced key so it survives reloads.
@@ -59,7 +59,7 @@ public final class CampStructures {
         return raid.campaign.getCompound(ModConstants.Tags.CAMP_STRUCTURES);
     }
 
-    /** Record a freshly commissioned structure. It becomes active once its keystone is placed. */
+    /** Reserve a new installation; its native construction job must finish before it can operate. */
     public static void record(RaidState raid, int stage, BlockPos center, Direction entrance) {
         Kind kind = Kind.forStage(stage);
         if (kind == null) return;
@@ -71,13 +71,40 @@ public final class CampStructures {
         entry.putString("Block", kind.keystoneBlock);
         entry.putBoolean("Active", false);
         entry.putBoolean("Announced", false);
+        entry.putBoolean("AwaitingBuild", true);
         all.put(kind.key, entry);
         raid.campaign.put(ModConstants.Tags.CAMP_STRUCTURES, all);
     }
 
     public static boolean standing(RaidState raid, Kind kind) {
         CompoundTag entry = root(raid).getCompound(kind.key);
-        return entry.getBoolean("Active");
+        return !entry.getBoolean("AwaitingBuild") && entry.getBoolean("Active");
+    }
+
+    /** Called only after a new installation's finite work order has been accepted. */
+    static void constructionStarted(ServerLevel level, RaidState raid, int stage) {
+        Kind kind = Kind.forStage(stage);
+        if (kind == null) return;
+        announce(level.getServer(), raid.teamKey, Component.literal(
+                "Enemy builders are raising " + title(raid, kind) + ". " + kind.purpose
+                        + " Disrupt construction before it is ready.").withStyle(ChatFormatting.GOLD));
+    }
+
+    /**
+     * Called with the verified, completed work order, before stop clears it.
+     * An abandoned project must not be unlocked by a later wall or tower job.
+     * Missing AwaitingBuild on older saves keeps their existing keystone rules.
+     * The native completion path persists this change with the rest of the job.
+     */
+    static void constructionCompleted(RaidState raid) {
+        CompoundTag all = root(raid);
+        for (Kind kind : Kind.values()) {
+            CompoundTag entry = all.getCompound(kind.key);
+            if (entry.getBoolean("AwaitingBuild") && entry.contains("Pos", Tag.TAG_LONG)
+                    && kind.keystoneBlock.equals(raid.pendingCampBlocks.get(entry.getLong("Pos")))) {
+                entry.putBoolean("AwaitingBuild", false);
+            }
+        }
     }
 
     /**
@@ -93,6 +120,7 @@ public final class CampStructures {
         for (Kind kind : Kind.values()) {
             if (!all.contains(kind.key, Tag.TAG_COMPOUND)) continue;
             CompoundTag entry = all.getCompound(kind.key);
+            if (entry.getBoolean("AwaitingBuild")) continue;
             BlockPos pos = BlockPos.of(entry.getLong("Pos"));
             if (!level.hasChunkAt(pos)) continue;
             boolean present = matches(level, pos, entry.getString("Block"));
