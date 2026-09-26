@@ -134,7 +134,8 @@ public final class EnemyCore {
         BlockPos pos = position(raid);
         var claim = RecruitsClaimsBridge.getClaimAt(level, pos).orElse(null);
         if (claim == null || !claim.claimId().equals(raid.campClaimId)
-                || !RaiderFactions.id(raid.factionId).equals(claim.ownerFactionStringId())) {
+                || !(RaiderFactions.id(raid.factionId).equals(claim.ownerFactionStringId())
+                    || RecruitsBridge.RAIDERS_FACTION_ID.equals(claim.ownerFactionStringId()))) {
             if (raid.campaign.getInt("EnemyCaptureTicks") != 0) {
                 raid.campaign.putInt("EnemyCaptureTicks", 0);
                 data.setDirty();

@@ -35,6 +35,12 @@ class EnemyCoreTest extends MinecraftTestSupport {
             assertFalse(EnemyCore.tick(level,data,raid,anchor));
             counts.when(()->CoreOccupation.counts(level,core,"team:test",anchor.members(),owner)).thenReturn(new int[]{1,2});
             assertTrue(EnemyCore.tick(level,data,raid,anchor));
+            // Old camps used the shared raider faction; exact claim identity
+            // still permits their capture before native ownership migration.
+            claims.when(()->RecruitsClaimsBridge.getClaimAt(level,core)).thenReturn(Optional.of(
+                    new RecruitsClaimsBridge.ClaimSnapshot(raid.campClaimId,"Camp",RecruitsBridge.RAIDERS_FACTION_ID,new ChunkPos(core),Set.of(),false,100,100)));
+            counts.when(()->CoreOccupation.counts(level,core,"team:test",anchor.members(),RecruitsBridge.RAIDERS_FACTION_ID)).thenReturn(new int[]{1,2});
+            assertTrue(EnemyCore.tick(level,data,raid,anchor));
             raid.coreCaptured=true; assertFalse(EnemyCore.tick(level,data,raid,anchor));
         }
     }
