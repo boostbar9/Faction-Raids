@@ -8,6 +8,25 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EndlessSiegeTest extends MinecraftTestSupport {
+    @Test void waveClearSettlesProvisioningAtTheSameRateBeforeCreditingReward() {
+        var data = new RaidSavedData();
+        var state = new RaidSavedData.RaidState("team:test", "siege_core", 0);
+        state.wave = 1;
+        state.rewardEligible = true;
+        var core = new CompoundTag();
+        core.putInt("TerritoryBuffs", 1 << 2);
+        data.siegeCores.put(state.teamKey, core);
+        FactionBank.credit(core, 10000);
+        FactionBank.settle(core, 1000, 100);
+
+        long paid = EndlessSiege.awardClearedWave(data, state, 1000 + FactionBank.DAY_TICKS, 100);
+        assertEquals(EndlessSiege.reward(1), paid);
+        assertEquals(10150 + paid, FactionBank.balance(core));
+        assertFalse(FactionBank.settle(core, 1000 + FactionBank.DAY_TICKS, 100));
+        assertEquals(0, EndlessSiege.awardClearedWave(data, state, 1000 + FactionBank.DAY_TICKS, 100));
+        assertEquals(10150 + paid, FactionBank.balance(core));
+    }
+
     @Test void endlessLabelsShowAbsoluteWaveAndRetreatCheckpointWithoutAFiveWaveLimit() {
         var state = new RaidSavedData.RaidState("team:test", "siege_core", 0);
         for (int wave : new int[]{1, 5, 6, 10, 11, 20, 30}) {

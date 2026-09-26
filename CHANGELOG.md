@@ -1,3 +1,8 @@
+# 4.47.11 beta
+
+- Fix Provisioning's interest bonus being skipped by automatic Treasury settlement and wave-clear payouts. All settlement paths now apply the same effective rate, whether the Command Center is open or closed.
+- Show the effective interest rate in the Treasury and label its interval as one in-game day instead of 24 hours. The existing interest cap, fractional carry, and saved payout timing still apply.
+
 # 4.47.10 beta
 
 - Remove stale enemy camp territory claims left behind by older or interrupted sieges. These invisible Recruits reservations could prevent players from claiming otherwise-empty land; active camps, occupied Siege Core territory and camps captured by players remain intact.

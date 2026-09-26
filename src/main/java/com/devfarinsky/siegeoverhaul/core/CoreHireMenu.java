@@ -106,7 +106,8 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         for (int i = 0; i < 4; i++) data.set(10 + i, (int) ((rotation >>> (i * 16)) & 0xffff));
         data.set(14,owner.getInventory().items.stream().filter(stack->stack.is(Items.EMERALD)).mapToInt(ItemStack::getCount).sum());
         FactionBank.settle(saved,core);
-        wide(18,(int)FactionBank.balance(core)); data.set(20,com.devfarinsky.siegeoverhaul.RaidConfig.BANK_INTEREST_BASIS_POINTS.get());
+        wide(18,(int)FactionBank.balance(core));
+        data.set(20,FactionBank.interestRate(core,com.devfarinsky.siegeoverhaul.RaidConfig.BANK_INTEREST_BASIS_POINTS.get()));
         var raid = saved.raids.get(SiegeCore.key(owner));
         int next = raid == null ? 1 : (int)Math.min(Integer.MAX_VALUE,raid.wave+1L);
         wide(21,next); wide(23,raid!=null && !raid.rewardEligible ? 0 : EndlessSiege.reward(next)); data.set(25,FactionBank.canWithdraw(owner)?1:0);
