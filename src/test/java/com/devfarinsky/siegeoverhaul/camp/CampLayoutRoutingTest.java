@@ -19,6 +19,7 @@ class CampLayoutRoutingTest extends MinecraftTestSupport {
         final RaidSavedData saved=new RaidSavedData();
         final Map<BlockPos,BlockState> world=new HashMap<>();
         boolean solidGround=true;
+        java.util.function.ToIntFunction<BlockPos> surface=p->64;
         final RecruitsClaimsBridge.ClaimSnapshot claim=mock(RecruitsClaimsBridge.ClaimSnapshot.class);
         Site() {
             raid.campPos=new BlockPos(-40,64,-40);raid.campClaimId=UUID.randomUUID();
@@ -34,13 +35,15 @@ class CampLayoutRoutingTest extends MinecraftTestSupport {
             raid.warGate.put("Blocks",cells);
             UUID id=UUID.randomUUID();raid.campWorkers.add(id);var worker=mock(Mob.class);
             when(level.getEntity(id)).thenReturn(worker);when(worker.isAlive()).thenReturn(true);
-            when(level.hasChunkAt(any())).thenReturn(true);when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(64);
+            when(level.hasChunkAt(any())).thenReturn(true);
+            when(level.getHeight(any(),anyInt(),anyInt())).thenAnswer(call->
+                    surface.applyAsInt(new BlockPos((int)call.getArgument(1),64,(int)call.getArgument(2))));
             when(level.getMinBuildHeight()).thenReturn(-64);when(level.getMaxBuildHeight()).thenReturn(320);
             when(level.getFluidState(any())).thenReturn(net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState());
             var border=mock(net.minecraft.world.level.border.WorldBorder.class);when(level.getWorldBorder()).thenReturn(border);
             when(border.isWithinBounds(any(BlockPos.class))).thenReturn(true);
             when(level.getBlockState(any())).thenAnswer(call->{BlockPos p=call.getArgument(0);return world.getOrDefault(p,
-                    (p.getY()<64 && solidGround?Blocks.STONE:Blocks.AIR).defaultBlockState());});
+                    (p.getY()<surface.applyAsInt(p) && solidGround?Blocks.STONE:Blocks.AIR).defaultBlockState());});
             saved.anchors.put(raid.teamKey,new RaidSavedData.Anchor(raid.teamKey,"Test",UUID.randomUUID(),Set.of(),false,false,Map.of(),0));
             when(claim.claimId()).thenReturn(raid.campClaimId);when(claim.ownerFactionStringId()).thenReturn("enemy");
         }
@@ -85,6 +88,20 @@ class CampLayoutRoutingTest extends MinecraftTestSupport {
     @Test void unsupportedFoundationsRejectAllSitesWithoutStartingAJob() {
         var s=new Site();s.solidGround=false;
         s.ticks(1,plan->fail("unsupported pavilion accepted"));assertEquals(0,s.raid.campUpgradeStage);
+        assertTrue(s.raid.campaign.getCompound(ModConstants.Tags.CAMP_STRUCTURES).isEmpty());
+    }
+
+    @Test void raisedCornerApronCannotFillTheGateAvenue() {
+        var s=new Site();BlockPos corner=s.raid.campPos.offset(-7,0,-7);
+        for(BlockPos site:CampDevelopment.candidates(s.raid.campPos,Direction.EAST,Direction.NORTH))
+            if(!site.equals(corner))s.world.put(site.above(),Blocks.STONE.defaultBlockState());
+        s.surface=p->{int x=p.getX()-s.raid.campPos.getX(),z=p.getZ()-s.raid.campPos.getZ();
+            return x>=-3 && x<=0 && z>=-8 && z<=-6?62:64;};
+        var apron=CampBuildingAccess.plan(s.level,s.raid,corner,Direction.EAST,p->true).orElseThrow();
+        assertTrue(apron.keySet().stream().anyMatch(key->CampPerimeter.mainApproachColumn(s.raid,BlockPos.of(key))),
+                "fixture must require raised steps inside the avenue");
+        s.ticks(1,plan->fail("raised entrance obstructed the gate avenue"));
+        assertEquals(0,s.raid.campUpgradeStage);
         assertTrue(s.raid.campaign.getCompound(ModConstants.Tags.CAMP_STRUCTURES).isEmpty());
     }
 

@@ -112,6 +112,10 @@ public final class CampDevelopment {
         var access=CampBuildingAccess.plan(level,raid,center,entrance,
                 pos -> claimed(level,raid,anchor,checked,pos));
         if(access.isEmpty())return false;
+        // A raised apron can reach past the pavilion footprint. Do not fill
+        // the gate avenue even when the pavilion itself sits safely beside it.
+        if(access.get().keySet().stream().anyMatch(key ->
+                CampPerimeter.mainApproachColumn(raid,BlockPos.of(key))))return false;
         plan.putAll(access.get());
         raid.pendingCampBlocks.putAll(plan);
         // Never fall back to remote placement for an upgrade or replace an obstructing player block.
