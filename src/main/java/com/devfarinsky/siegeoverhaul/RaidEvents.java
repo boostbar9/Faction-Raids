@@ -1667,10 +1667,8 @@ public final class RaidEvents {
             }
         }
         com.devfarinsky.siegeoverhaul.core.CoreOccupation.tick(server, data);
-        // v4.28.8: interest is now measured in game ticks so single-player
-        // pausing doesn't rack up phantom interest. The tick-level settle
-        // uses the base rate; the territory-provisioning buff is applied by
-        // the two-arg settle(data,core) helper on HUD open and wave clears.
+        // Settlement applies each core's Provisioning upgrade on every path,
+        // using game time so single-player pausing does not accrue interest.
         long bankNow = server.overworld().getGameTime();
         int bankRate = RaidConfig.BANK_INTEREST_BASIS_POINTS.get();
         for (var core : data.siegeCores.values()) if (FactionBank.settle(core, bankNow, bankRate)) data.setDirty();

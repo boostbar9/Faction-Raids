@@ -70,7 +70,14 @@ public final class FactionBank {
         TreasuryNotifications.changed(core, -amount);
         return true;
     }
-    public static boolean settle(CompoundTag core, long now, int basisPoints) {
+    /** Effective rate shared by settlement and the Treasury display, including Provisioning. */
+    public static int interestRate(CompoundTag core, int baseBasisPoints) {
+        int base = Math.max(0, Math.min(1000, baseBasisPoints));
+        return TerritoryBuffs.has(core, 2) ? Math.min(1000, (int) Math.round(base * 1.5)) : base;
+    }
+
+    /** All callers supply the configured base rate; apply core upgrades exactly once here. */
+    public static boolean settle(CompoundTag core, long now, int baseBasisPoints) {
         // v4.28.8 migration: legacy saves stored BankInterestAt as a
         // System.currentTimeMillis() timestamp (values well above any plausible
         // game-tick reading). If we detect an obviously wall-clock value, drop
@@ -85,7 +92,7 @@ public final class FactionBank {
         if (now <= last || now - last < DAY_TICKS) return false;
         long days = (now - last) / DAY_TICKS;
         long before = balance(core);
-        int rate = Math.max(0, Math.min(1000, basisPoints));
+        int rate = interestRate(core, baseBasisPoints);
         long remainder = Math.max(0, Math.min(9999, core.getLong("BankInterestRemainder")));
         // Bounded catch-up avoids loops proportional to untrusted or ancient timestamps.
         for (long i = 0; i < Math.min(365, days); i++) {
@@ -100,10 +107,7 @@ public final class FactionBank {
     public static void settle(RaidSavedData data, CompoundTag core) {
         var server = net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer();
         if (server == null) return;
-        // v4.18.0 Territory Provisioning buff boosts bank interest by +50%.
-        int base = RaidConfig.BANK_INTEREST_BASIS_POINTS.get();
-        int rate = TerritoryBuffs.has(core, 2) ? (int) Math.min(Integer.MAX_VALUE, Math.round(base * 1.5)) : base;
-        if (settle(core, server.overworld().getGameTime(), rate)) data.setDirty();
+        if (settle(core, server.overworld().getGameTime(), RaidConfig.BANK_INTEREST_BASIS_POINTS.get())) data.setDirty();
     }
 
     /**

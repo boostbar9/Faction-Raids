@@ -790,7 +790,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         String hint = switch (tab) {
             case 0 -> "Shared stock rotates every 15 minutes";
             case 1 -> "Loot & blessings draw from the faction Treasury";
-            case 2 -> "Interest " + menu.interestRate() / 100.0 + "% every 24h";
+            case 2 -> "Interest " + menu.interestRate() / 100.0 + "% per in-game day";
             case 3 -> "Faction-wide upgrades apply to every member";
             case 4 -> "Unit reference, enemy lore and field guidance";
             default -> "";
