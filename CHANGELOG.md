@@ -1,3 +1,9 @@
+# 4.47.12 beta
+- Fix commissioned wall blueprints shifting sideways when an outer edge is already built or protected. Existing solid blocks are no longer queued for demolition, and unloaded wall columns are left alone.
+- Grade camp-building entrances into walkable, three-wide steps; reject blocked interiors and sites without a safe connection to the courtyard.
+- Keep later camp buildings and supply barrels out of saved entrances and core courtyards. New perimeter gates record their actual ground height for troop waypoints.
+- Let attackers choose reachable floor beside a Siege Core during their final approach, using their actual collision size. Existing routes and protected-block breaching rules remain in place.
+
 # 4.47.11 beta
 
 - Fix Provisioning's interest bonus being skipped by automatic Treasury settlement and wave-clear payouts. All settlement paths now apply the same effective rate, whether the Command Center is open or closed.

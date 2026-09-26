@@ -165,6 +165,21 @@ public final class CampStructures {
         return false;
     }
 
+    /** Keep later buildings and supply barrels out of an installation's entrance. */
+    static boolean accessColumn(RaidState raid, BlockPos pos) {
+        for (Kind kind : Kind.values()) {
+            CompoundTag entry=root(raid).getCompound(kind.key);
+            if (!entry.contains("Center",Tag.TAG_LONG) || !entry.contains("Entrance",Tag.TAG_INT)) continue;
+            BlockPos center=BlockPos.of(entry.getLong("Center"));
+            Direction front=Direction.from2DDataValue(entry.getInt("Entrance"));
+            int dx=pos.getX()-center.getX(), dz=pos.getZ()-center.getZ();
+            int depth=dx*front.getStepX()+dz*front.getStepZ();
+            int side=dx*front.getClockWise().getStepX()+dz*front.getClockWise().getStepZ();
+            if(depth>=3 && depth<=7 && Math.abs(side)<=1) return true;
+        }
+        return false;
+    }
+
     // --- Pure, configurable effect helpers, so wave/guard code stays declarative. ---
 
     /** Between-wave delay (ticks) with the Command Post's coordination applied when it stands. */

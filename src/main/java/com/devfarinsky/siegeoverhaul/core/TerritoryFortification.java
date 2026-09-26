@@ -228,20 +228,11 @@ public final class TerritoryFortification {
                 BlockPos p = new BlockPos(base.getX(), y, base.getZ());
                 if (!level.hasChunkAt(p)) continue;
                 BlockState existing = level.getBlockState(p);
-                // v4.39.0: let the builder terraform the wall line. Previously
-                // the blueprint skipped any non-replaceable block, which
-                // meant a tree, a dirt hill, or a stone outcrop sitting on
-                // the perimeter would break the wall into a series of gaps
-                // that Workers 2 could never close. Now we queue the wall
-                // material at every column position and let Workers 2 dig
-                // out whatever was there first (build-area does clear
-                // existing blocks it needs to overwrite). Skip only:
-                //   - the target wall material itself (already correct)
-                //   - block entities (chests / signs / spawners / anything
-                //     the player built with intent) so we don't destroy
-                //     a house that happens to sit on the boundary.
+                // A commission is not permission to mine an existing house.
+                // Native Workers can clear cells in its blueprint; omit solid
+                // obstructions, not only containers, before handing it the job.
                 if (existing.getBlock() == block) continue;
-                if (existing.hasBlockEntity()) continue;
+                if (!safeWallReplacement(existing)) continue;
                 blocks.put(p.asLong(), mat.blockId());
             }
         }
@@ -278,7 +269,7 @@ public final class TerritoryFortification {
             if (!level.addFreshEntity(build)) {
                 throw new IllegalStateException("Cannot register buildarea entity");
             }
-            CompoundTag blueprint = blueprint(blocks, min);
+            CompoundTag blueprint = blueprint(blocks, min, max);
             WorkersBridge.startBlueprint(build, blueprint);
 
             // Report the exact material requirement to the player before we
@@ -378,6 +369,11 @@ public final class TerritoryFortification {
         }
     }
 
+    static boolean safeWallReplacement(BlockState state) {
+        return !state.hasBlockEntity() && state.getFluidState().isEmpty()
+                && (state.isAir() || com.devfarinsky.siegeoverhaul.camp.CampVegetation.plant(state));
+    }
+
     /**
      * Keep only the perimeter columns a builder supplied by {@code storage}
      * can reach. Distance is measured horizontally so a storage area on a
@@ -456,6 +452,7 @@ public final class TerritoryFortification {
 
     private static void addColumn(ServerLevel level, Set<Long> seen, List<BlockPos> out,
                                   int baseY, int x, int z) {
+        if (!level.hasChunkAt(new BlockPos(x,baseY,z))) return;
         // Match wall base to actual terrain surface so short cliffs don't leave floating walls.
         int surface = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
         // v4.42.0: the vanilla heightmap sits on top of tree logs, so a
@@ -493,6 +490,7 @@ public final class TerritoryFortification {
 
     private static void markCorner(ServerLevel level, Set<Long> cornerColumns,
                                    int baseY, int x, int z) {
+        if (!level.hasChunkAt(new BlockPos(x,baseY,z))) return;
         int surface = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
         // v4.42.0: same tree see-through + wider clamp as regular columns.
         surface = seeThroughTreesForWall(level, x, z, surface);
@@ -584,16 +582,12 @@ public final class TerritoryFortification {
     }
 
     /** Same shape as NativeCampConstruction.blueprint. */
-    private static CompoundTag blueprint(Map<Long, String> jobs, BlockPos min) {
-        // Recompute bounds against the min we already computed for the buildarea.
-        int maxX = min.getX(), maxZ = min.getZ();
-        for (long key : jobs.keySet()) {
-            BlockPos p = BlockPos.of(key);
-            if (p.getX() > maxX) maxX = p.getX();
-            if (p.getZ() > maxZ) maxZ = p.getZ();
-        }
+    static CompoundTag blueprint(Map<Long, String> jobs, BlockPos min, BlockPos max) {
+        // Workers mirrors local X around the area's eastern origin using this
+        // width. Keep the full area bounds even if its eastern cells are already
+        // built or protected; shrinking to the remaining jobs shifts every cell.
         CompoundTag tag = new CompoundTag();
-        tag.putInt("width", maxX - min.getX() + 1);
+        tag.putInt("width", max.getX() - min.getX() + 1);
         tag.putString("facing", "south");
         ListTag list = new ListTag();
         jobs.forEach((key, id) -> {

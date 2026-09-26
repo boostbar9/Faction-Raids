@@ -44,12 +44,13 @@ public final class CampDevelopment {
      * number of times before the camp moves on to the next section.
      */
     static void tryPerimeter(ServerLevel level,RaidSavedData.RaidState raid) {
+        BlockPos gate=raid.campUpgradeStage==CampPerimeter.FIRST_STAGE
+                ? CampPerimeter.plannedGateCenter(level,raid) : null;
         var plan=CampPerimeter.plan(level,raid,raid.campUpgradeStage);
         if(!plan.isEmpty()) {
             raid.pendingCampBlocks.putAll(plan);
             if(NativeCampConstruction.start(level,raid)) {
                 if(raid.campUpgradeStage==CampPerimeter.FIRST_STAGE) {
-                    BlockPos gate=CampPerimeter.mainGateCenter(raid);
                     if(gate!=null) {
                         raid.warGate.putLong("PerimeterGate",gate.asLong());
                         raid.warGate.putInt("PerimeterGateFacing",CampPerimeter.mainGateSide(raid).get2DDataValue());
@@ -94,32 +95,21 @@ public final class CampDevelopment {
                 ? (towardX>=0?Direction.EAST:Direction.WEST) : (towardZ>=0?Direction.SOUTH:Direction.NORTH);
         plan.putAll(CampUpgradeLayout.structure(center, entrance, raid.campUpgradeStage, raid.factionId));
 
-        // Continue the three-wide centre aisle two blocks into the courtyard.
-        // Besides making the entrance visually legible, validating the full
-        // two-block headroom prevents trees, another pavilion, the core keep,
-        // or a queued road from leaving a finished building unusable.
-        Direction lateral=entrance.getClockWise();
-        for(int depth=4;depth<=5;depth++)for(int offset=-1;offset<=1;offset++) {
-            BlockPos column=center.relative(entrance,depth).relative(lateral,offset);
-            if(!level.hasChunkAt(column) || !level.getWorldBorder().isWithinBounds(column)
-                    || !claimed(level,raid,anchor,checked,column))return false;
-            int ground=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,column.getX(),column.getZ());
-            if(Math.abs(ground-y)>2 || !level.getFluidState(column.atY(ground-1)).isEmpty())return false;
-            for(int sy=ground;sy<y;sy++)plan.put(column.atY(sy).asLong(),"minecraft:cobblestone");
-            BlockPos floor=column.atY(y);
-            for(int dy=0;dy<=2;dy++) {
-                BlockPos cell=floor.above(dy);
-                if(com.devfarinsky.siegeoverhaul.core.EnemyCoreSite.reserved(raid,cell)
-                        || raid.campBlocks.containsKey(cell.asLong())
-                        || raid.pendingFortifications.containsKey(cell.asLong())
-                        || !level.getFluidState(cell).isEmpty() || level.getBlockEntity(cell)!=null
-                        || !CampVegetation.replaceable(level.getBlockState(cell)))return false;
-            }
-            plan.put(floor.asLong(),"minecraft:spruce_planks");
-        }
+        // Hollow cells are absent from Workers' placement list, so validate
+        // them too: a valid shell must not enclose an existing obstruction.
+        if (!CampBuildingAccess.clearInterior(level, raid, center, plan)) return false;
+        var access=CampBuildingAccess.plan(level,raid,center,entrance,
+                pos -> claimed(level,raid,anchor,checked,pos));
+        if(access.isEmpty())return false;
+        plan.putAll(access.get());
         raid.pendingCampBlocks.putAll(plan);
         // Never fall back to remote placement for an upgrade or replace an obstructing player block.
-        if(NativeCampConstruction.start(level,raid)) { CampStructures.record(raid,raid.campUpgradeStage,center,entrance); raid.campUpgradeStage++; return true; }
+        String structures=com.devfarinsky.siegeoverhaul.ModConstants.Tags.CAMP_STRUCTURES;
+        var previous=raid.campaign.getCompound(structures).copy();
+        // Reserve the entrance before choosing a supply barrel for this job.
+        CampStructures.record(raid,raid.campUpgradeStage,center,entrance);
+        if(NativeCampConstruction.start(level,raid)) { raid.campUpgradeStage++; return true; }
+        if(previous.isEmpty())raid.campaign.remove(structures);else raid.campaign.put(structures,previous);
         raid.pendingCampBlocks.clear(); return false;
     }
 

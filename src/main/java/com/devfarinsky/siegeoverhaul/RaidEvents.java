@@ -4374,12 +4374,12 @@ public final class RaidEvents {
                 if (target != null) {
                     mob.getNavigation().moveTo(target.x, target.y, target.z, speed);
                 } else {
-                    mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
+                    moveToRaidObjective(level,mob,state,objective,speed);
                 }
             } else if (!acquired && mob.getNavigation().isDone()) {
                 Vec3 target = fallbackRouteTarget(level, mob, objective, stuck, gameTime, telemetry);
                 if (target != null) mob.getNavigation().moveTo(target.x, target.y, target.z, speed);
-                else mob.getNavigation().moveTo(objective.x, objective.y, objective.z, speed);
+                else moveToRaidObjective(level,mob,state,objective,speed);
             }
 
             // v2.23.0 stuck detection. We only care about raiders that are
@@ -4444,6 +4444,13 @@ public final class RaidEvents {
      * is >= 1, so healthy raiders keep their fast direct path.
      */
     /** Rotate a bounded scan through the complete neighborhood instead of starving one side forever. */
+    private static void moveToRaidObjective(ServerLevel level, Mob mob, RaidSavedData.RaidState state,
+                                           Vec3 objective, double speed) {
+        if ("siege_core".equals(state.defensePointName) && state.breached
+                && com.devfarinsky.siegeoverhaul.raid.CoreApproach.moveTo(level,mob,objective,speed)) return;
+        mob.getNavigation().moveTo(objective.x,objective.y,objective.z,speed);
+    }
+
     static java.util.List<BlockPos> breachScanPositions(BlockPos origin, long gameTime, int limit) {
         var positions = new java.util.ArrayList<BlockPos>(147);
         for (BlockPos pos : BlockPos.betweenClosed(origin.offset(-3, -1, -3), origin.offset(3, 1, 3)))

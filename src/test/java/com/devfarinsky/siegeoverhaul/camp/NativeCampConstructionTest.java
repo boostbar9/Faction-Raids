@@ -14,6 +14,23 @@ import static org.junit.jupiter.api.Assertions.*;
 import static com.devfarinsky.siegeoverhaul.ModConstants.Tags.*;
 
 class NativeCampConstructionTest extends MinecraftTestSupport {
+    @Test void supplyBarrelsAvoidSavedCourtyardAndBuildingEntrances() {
+        var level=org.mockito.Mockito.mock(net.minecraft.server.level.ServerLevel.class);
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);raid.campPos=new BlockPos(0,64,0);
+        raid.campaign.putLong("EnemyCore",raid.campPos.asLong());raid.campaign.putBoolean("EnemyCoreCourtyard",true);
+        CampStructures.record(raid,0,raid.campPos.north(8),net.minecraft.core.Direction.SOUTH);
+        org.mockito.Mockito.when(level.hasChunkAt(org.mockito.ArgumentMatchers.any())).thenReturn(true);
+        var border=org.mockito.Mockito.mock(net.minecraft.world.level.border.WorldBorder.class);
+        org.mockito.Mockito.when(level.getWorldBorder()).thenReturn(border);
+        org.mockito.Mockito.when(border.isWithinBounds(org.mockito.ArgumentMatchers.any(BlockPos.class))).thenReturn(true);
+        org.mockito.Mockito.when(level.getBlockState(org.mockito.ArgumentMatchers.any())).thenAnswer(c ->
+                ((BlockPos)c.getArgument(0)).getY()<64?Blocks.STONE.defaultBlockState():Blocks.AIR.defaultBlockState());
+        BlockPos supply=NativeCampConstruction.findSupplyPosition(level,raid);
+        assertNotNull(supply);
+        assertFalse(com.devfarinsky.siegeoverhaul.core.EnemyCoreSite.reserved(raid,supply));
+        assertFalse(CampStructures.accessColumn(raid,supply));
+        assertTrue(supply.distSqr(raid.campPos)>4);
+    }
     @Test void constructionRejectsSavedKeepOverlapBeforeProvisioning() {
         var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
         BlockPos core=new BlockPos(8,65,8);

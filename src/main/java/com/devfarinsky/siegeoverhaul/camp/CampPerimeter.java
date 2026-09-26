@@ -102,6 +102,13 @@ public final class CampPerimeter {
                 : raid.campPos.relative(mainGateSide(raid), RADIUS);
     }
 
+    /** Before construction, record feet height at the real threshold, not camp-centre height. */
+    static BlockPos plannedGateCenter(ServerLevel level, RaidSavedData.RaidState raid) {
+        BlockPos column=raid.campPos.relative(mainGateSide(raid),RADIUS);
+        Integer ground=groundFor(level,raid,column);
+        return ground==null ? null : column.atY(ground);
+    }
+
     private static Map<Long, String> wall(ServerLevel level, RaidSavedData.RaidState raid,
                                           Direction facing, Direction gateSide) {
         Map<Long, String> plan = new LinkedHashMap<>();

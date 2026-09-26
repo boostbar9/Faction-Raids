@@ -14,6 +14,21 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class CampPerimeterTest extends MinecraftTestSupport {
+    @Test void raisedThresholdRecordsTheActualWalkingHeightForAssaultWaypoints() {
+        var level=flatLevel();var raid=camp();raid.campUpgradeStage=CampPerimeter.FIRST_STAGE;
+        when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(GROUND+2);
+        when(level.getBlockState(any())).thenAnswer(call -> ((BlockPos)call.getArgument(0)).getY()<GROUND+2
+                ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState());
+        try(var nativeJobs=mockStatic(NativeCampConstruction.class)) {
+            nativeJobs.when(()->NativeCampConstruction.start(level,raid)).thenReturn(true);
+            withClaims(raid,level,()->{CampDevelopment.tryPerimeter(level,raid);return null;});
+        }
+        assertEquals(GROUND+2,CampPerimeter.mainGateCenter(raid).getY());
+        var loaded=RaidSavedData.RaidState.load(raid.save());
+        var waypoint=CampPerimeter.routeOut(loaded,net.minecraft.world.phys.Vec3.atBottomCenterOf(raid.campPos),
+                new net.minecraft.world.phys.Vec3(0,GROUND,400));
+        assertNotNull(waypoint);assertEquals(GROUND+2,waypoint.y);
+    }
 
     private static final int GROUND = 64;
 

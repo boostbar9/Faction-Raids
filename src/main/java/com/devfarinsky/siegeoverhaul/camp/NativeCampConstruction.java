@@ -227,11 +227,14 @@ public final class NativeCampConstruction {
         return new BlockPos(x, y, z);
     }
 
-    private static BlockPos findSupplyPosition(ServerLevel level, RaidSavedData.RaidState raid) {
+    static BlockPos findSupplyPosition(ServerLevel level, RaidSavedData.RaidState raid) {
         for (int radius = 2; radius <= 6; radius++) {
             for (Direction direction : Direction.Plane.HORIZONTAL) {
                 BlockPos p = raid.campPos.relative(direction, radius);
                 if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)
+                        || com.devfarinsky.siegeoverhaul.core.EnemyCoreSite.reserved(raid,p)
+                        || CampStructures.accessColumn(raid,p)
+                        || raid.warGate.getCompound("RoadBlocks").contains(Long.toString(p.below().asLong()))
                         || raid.pendingCampBlocks.containsKey(p.asLong())
                         || raid.pendingCampBlocks.containsKey(p.above().asLong())
                         || com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.blocksAt(level,p)) continue;

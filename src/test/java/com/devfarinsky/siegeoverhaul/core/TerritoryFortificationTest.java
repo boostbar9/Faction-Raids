@@ -12,6 +12,29 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class TerritoryFortificationTest extends MinecraftTestSupport {
+    @Test void wallCommissionDoesNotAuthorizeMiningExistingBuildingsOrFluids() {
+        for(var block:java.util.List.of(Blocks.STONE_BRICKS,Blocks.OAK_PLANKS,Blocks.GLASS,
+                Blocks.OAK_LOG,Blocks.CHEST,Blocks.WATER,Blocks.LAVA))
+            org.junit.jupiter.api.Assertions.assertFalse(TerritoryFortification.safeWallReplacement(block.defaultBlockState()));
+        org.junit.jupiter.api.Assertions.assertTrue(TerritoryFortification.safeWallReplacement(Blocks.AIR.defaultBlockState()));
+        org.junit.jupiter.api.Assertions.assertTrue(TerritoryFortification.safeWallReplacement(Blocks.POPPY.defaultBlockState()));
+    }
+    @Test void partialWallBlueprintKeepsExactWorldCoordinatesWhenEastEdgeIsAlreadyBuilt() {
+        var min=new BlockPos(-32,60,-16);var max=new BlockPos(-1,74,15);
+        java.util.Map<Long,String> jobs=java.util.Map.of(
+                new BlockPos(-32,63,-16).asLong(),"minecraft:stone_bricks",
+                new BlockPos(-8,68,15).asLong(),"minecraft:stone_bricks");
+        var plan=TerritoryFortification.blueprint(jobs,min,max);
+        assertEquals(32,plan.getInt("width"));
+        var recovered=new java.util.HashSet<Long>();
+        for(var value:plan.getList("blocks",net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            var cell=(net.minecraft.nbt.CompoundTag)value;
+            recovered.add(new BlockPos(max.getX()-(plan.getInt("width")-1-cell.getInt("x")),
+                    min.getY()+cell.getInt("y"),min.getZ()+cell.getInt("z")).asLong());
+        }
+        assertEquals(jobs.keySet(),recovered);
+    }
+
     private final BlockPos base = new BlockPos(8, 70, 12);
 
     @Test
