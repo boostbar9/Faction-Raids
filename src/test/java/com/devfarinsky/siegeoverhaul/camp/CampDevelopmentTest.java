@@ -12,13 +12,17 @@ class CampDevelopmentTest extends MinecraftTestSupport {
     @Test void upgradeCandidatesKeepWholePavilionInsidePalisade() {
         BlockPos camp=new BlockPos(0,64,0);
         for(var direction:net.minecraft.core.Direction.Plane.HORIZONTAL) {
-            var sites=CampDevelopment.candidates(camp,direction);
-            assertEquals(8,sites.size());
+            var sites=CampDevelopment.candidates(camp,direction.getClockWise(),direction);
+            assertEquals(10,sites.size());assertEquals(10,new HashSet<>(sites).size());
+            var raid=new RaidSavedData.RaidState("team:test","siege_core",0);raid.campPos=camp;
+            raid.warGate.putInt("PerimeterGateFacing",direction.get2DDataValue());
             for(BlockPos site:sites) {
                 int radius=Math.max(Math.abs(site.getX()-camp.getX()),Math.abs(site.getZ()-camp.getZ()));
                 assertTrue(radius>=7 && radius<=8);
                 assertTrue(radius+3<CampPerimeter.RADIUS,
                         "7x7 pavilion requires a clear buffer inside the palisade");
+                for(int x=-3;x<=3;x++)for(int z=-3;z<=3;z++)
+                    assertFalse(CampPerimeter.mainApproachColumn(raid,site.offset(x,0,z)),"building blocks main avenue");
             }
         }
     }
