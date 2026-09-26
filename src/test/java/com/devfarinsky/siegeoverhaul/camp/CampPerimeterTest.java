@@ -17,8 +17,9 @@ class CampPerimeterTest extends MinecraftTestSupport {
     @Test void raisedThresholdRecordsTheActualWalkingHeightForAssaultWaypoints() {
         var level=flatLevel();var raid=camp();raid.campUpgradeStage=CampPerimeter.FIRST_STAGE;
         when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(GROUND+2);
-        when(level.getBlockState(any())).thenAnswer(call -> ((BlockPos)call.getArgument(0)).getY()<GROUND+2
-                ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState());
+        doAnswer(call -> ((BlockPos)call.getArgument(0)).getY()<GROUND+2
+                ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState())
+                .when(level).getBlockState(any());
         try(var nativeJobs=mockStatic(NativeCampConstruction.class)) {
             nativeJobs.when(()->NativeCampConstruction.start(level,raid)).thenReturn(true);
             withClaims(raid,level,()->{CampDevelopment.tryPerimeter(level,raid);return null;});
