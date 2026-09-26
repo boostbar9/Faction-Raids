@@ -1,6 +1,7 @@
 package com.devfarinsky.siegeoverhaul.compat;
 
 import com.devfarinsky.siegeoverhaul.MinecraftTestSupport;
+import com.devfarinsky.siegeoverhaul.RecruitsBridge;
 import org.junit.jupiter.api.Test;
 
 import java.util.Set;
