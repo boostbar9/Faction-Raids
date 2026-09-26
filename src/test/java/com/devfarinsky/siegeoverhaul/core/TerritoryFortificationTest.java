@@ -37,6 +37,14 @@ class TerritoryFortificationTest extends MinecraftTestSupport {
 
     private final BlockPos base = new BlockPos(8, 70, 12);
 
+    @Test void preservedTimberStopsFoundationInsteadOfQueuingBlocksUnderIt() {
+        var level=mock(ServerLevel.class);
+        when(level.hasChunkAt(any())).thenReturn(true);
+        when(level.getBlockState(any())).thenAnswer(call -> base.below(2).equals(call.getArgument(0))
+                ? Blocks.OAK_LOG.defaultBlockState() : Blocks.AIR.defaultBlockState());
+        assertEquals(1,TerritoryFortification.foundationDepth(level,base));
+    }
+
     @Test
     void onlyPerimeterWithinStorageReachIsQueued() {
         BlockPos storage = new BlockPos(0, 64, 0);

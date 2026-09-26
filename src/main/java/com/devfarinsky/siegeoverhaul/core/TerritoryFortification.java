@@ -221,6 +221,7 @@ public final class TerritoryFortification {
         }
 
         Map<Long, String> blocks = new LinkedHashMap<>();
+        int protectedCells = 0;
         for (BlockPos base : wallColumns) {
             int top = columnTopY(base, cornerColumns.contains(base.asLong()));
             int bottom = base.getY() - foundationBelow.getOrDefault(base, 0);
@@ -232,7 +233,7 @@ public final class TerritoryFortification {
                 // Native Workers can clear cells in its blueprint; omit solid
                 // obstructions, not only containers, before handing it the job.
                 if (existing.getBlock() == block) continue;
-                if (!safeWallReplacement(existing)) continue;
+                if (!safeWallReplacement(existing)) { protectedCells++; continue; }
                 blocks.put(p.asLong(), mat.blockId());
             }
         }
@@ -324,6 +325,8 @@ public final class TerritoryFortification {
             player.sendSystemMessage(Component.literal(
                     "Fortify Perimeter commissioned. " + blocks.size() + " " + mat.label()
                             + " blocks queued for the builder."));
+            if (protectedCells > 0) player.sendSystemMessage(Component.literal(
+                    protectedCells + " occupied wall cells were left unchanged. Clear those spaces before commissioning another job if you want wall blocks there."));
             player.sendSystemMessage(Component.literal(
                     "Put in your Workers 2 storage area: " + itemLine.toString()
                             + "  (about " + stacks + " stack" + (stacks == 1 ? "" : "s") + ")."));
@@ -430,14 +433,8 @@ public final class TerritoryFortification {
             BlockPos p = new BlockPos(base.getX(), base.getY() - dy, base.getZ());
             if (!level.hasChunkAt(p)) break;
             BlockState state = level.getBlockState(p);
-            // v4.42.0: tree logs count as "sturdy" via isFaceSturdy but
-            // are terrain the builder can and should chop through to
-            // reach real ground. Otherwise the foundation lands on top
-            // of a log with a 6-block gap between it and real dirt.
-            boolean tree = state.is(net.minecraft.tags.BlockTags.LOGS)
-                    || state.is(net.minecraft.tags.BlockTags.LEAVES)
-                    || state.is(net.minecraft.tags.BlockTags.SAPLINGS);
-            if (tree) { filled = dy; continue; }
+            // Solid obstructions are preserved by the blueprint. Stop here
+            // instead of queuing a disconnected foundation below timber.
             if (state.isFaceSturdy(level, p, Direction.UP)) break;
             if (!state.isAir() && !state.canBeReplaced()) break;
             filled = dy;
