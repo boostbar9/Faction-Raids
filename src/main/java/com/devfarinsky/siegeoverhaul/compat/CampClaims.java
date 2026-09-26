@@ -2,6 +2,7 @@ package com.devfarinsky.siegeoverhaul.compat;
 
 import com.devfarinsky.siegeoverhaul.*;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
@@ -11,6 +12,8 @@ import java.util.*;
 /** Native Recruits claim registration for NPC camps; never overwrite or delete a player's claim. */
 public final class CampClaims {
     private static final String WORLD = "com.talhanation.recruits.world.";
+    private static final long DISCOVERY_INTERVAL_TICKS = 20L * 60L * 5L;
+    private static final Map<MinecraftServer, Long> NEXT_DISCOVERY = new WeakHashMap<>();
     private CampClaims() {}
     private static Object manager() throws ReflectiveOperationException {
         return Class.forName("com.talhanation.recruits.ClaimEvents").getField("recruitsClaimManager").get(null);
@@ -109,7 +112,6 @@ public final class CampClaims {
         // mistaken for orphaned camp reservations.
         for (var core : data.siegeCores.values())
             if (core.hasUUID("OccupiedClaim")) protectedClaims.add(core.getUUID("OccupiedClaim"));
-        Set<UUID> candidates = new LinkedHashSet<>(data.campClaimLeases);
         Object m;
         try {
             m = manager();
@@ -119,42 +121,97 @@ public final class CampClaims {
             return;
         }
 
-        // Lease tracking was added after native camp claims. Worlds upgraded
-        // from an older release can therefore contain a Siege Overhaul-owned
-        // claim which is no longer referenced by any live raid and is absent
-        // from campClaimLeases. Recruits still treats those invisible leftovers
-        // as reserved territory, preventing otherwise-valid player claims.
-        // Discover them from the native manager as well as the saved lease set.
-        try {
-            Object all = m.getClass().getMethod("getAllClaims").invoke(m);
-            if (all instanceof Collection<?> claims) for (Object claim : claims) {
-                if (claim == null) continue;
-                UUID id = (UUID) claim.getClass().getMethod("getUUID").invoke(claim);
-                String owner = (String) claim.getClass().getMethod("getOwnerFactionStringID").invoke(claim);
-                if (orphanedRaidClaim(id, owner, protectedClaims)) candidates.add(id);
-            }
-        } catch (ReflectiveOperationException | RuntimeException ex) {
-            // Older compatible Recruits builds can still clean the claims for
-            // which we have leases. Do not turn discovery failure into a total
-            // cleanup failure.
-            FactionLogger.LOG.warn("Could not discover unleased raider camp claims; cleaning known leases only", ex);
+        boolean discover = discoveryDue(level.getGameTime(), nextDiscovery(level.getServer()));
+        if (discover) scheduleNextDiscovery(level.getServer(), level.getGameTime());
+        CleanupResult result = cleanupClaims(data.campClaimLeases, protectedClaims,
+                reflectiveAccess(m, level), discover);
+        if (!result.completed().isEmpty()) {
+            data.campClaimLeases.removeAll(result.completed());
+            data.setDirty();
         }
+        if (result.discoveryFailed())
+            FactionLogger.LOG.warn("Could not discover unleased raider camp claims; cleaning known leases only");
+        if (result.failure() != null)
+            FactionLogger.LOG.warn("Camp claim cleanup deferred for {}", result.failedId(), result.failure());
+    }
 
+    private static ClaimAccess reflectiveAccess(Object manager, ServerLevel level) {
+        return new ClaimAccess() {
+            public Collection<ClaimRef> allClaims() throws ReflectiveOperationException {
+                Object all = manager.getClass().getMethod("getAllClaims").invoke(manager);
+                if (!(all instanceof Collection<?> claims)) throw new ReflectiveOperationException("getAllClaims did not return a collection");
+                List<ClaimRef> result = new ArrayList<>();
+                for (Object claim : claims) if (claim != null) result.add(ref(claim));
+                return result;
+            }
+            public ClaimRef get(UUID id) throws ReflectiveOperationException {
+                Object claim = manager.getClass().getMethod("getClaim", UUID.class).invoke(manager, id);
+                return claim == null ? null : ref(claim);
+            }
+            private ClaimRef ref(Object claim) throws ReflectiveOperationException {
+                return new ClaimRef((UUID) claim.getClass().getMethod("getUUID").invoke(claim),
+                        (String) claim.getClass().getMethod("getOwnerFactionStringID").invoke(claim));
+            }
+            public void remove(UUID id) throws ReflectiveOperationException {
+                manager.getClass().getMethod("removeClaim", ServerLevel.class, UUID.class).invoke(manager, level, id);
+            }
+            public void save() throws ReflectiveOperationException {
+                manager.getClass().getMethod("save", ServerLevel.class).invoke(manager, level);
+            }
+        };
+    }
+
+    /** Testable seam around the version-sensitive Recruits claim manager API. */
+    interface ClaimAccess {
+        Collection<ClaimRef> allClaims() throws Exception;
+        ClaimRef get(UUID id) throws Exception;
+        void remove(UUID id) throws Exception;
+        void save() throws Exception;
+    }
+    record ClaimRef(UUID id, String ownerFaction) {}
+    record CleanupResult(Set<UUID> completed, Set<UUID> removed, boolean discoveryFailed,
+                         UUID failedId, Exception failure) {}
+
+    static CleanupResult cleanupClaims(Set<UUID> leases, Set<UUID> protectedClaims,
+                                       ClaimAccess access, boolean discover) {
+        Set<UUID> candidates = new LinkedHashSet<>(leases);
+        boolean discoveryFailed = false;
+        if (discover) try {
+            for (ClaimRef claim : access.allClaims())
+                if (claim != null && orphanedRaidClaim(claim.id(), claim.ownerFaction(), protectedClaims))
+                    candidates.add(claim.id());
+        } catch (Exception ex) {
+            // Compatible Recruits builds without enumeration can still clean
+            // every claim for which Siege Overhaul has a saved lease.
+            discoveryFailed = true;
+        }
+        Set<UUID> completed = new LinkedHashSet<>(), removed = new LinkedHashSet<>();
         for (UUID id : candidates) {
             if (protectedClaims.contains(id)) continue;
             try {
-                Object claim = m.getClass().getMethod("getClaim", UUID.class).invoke(m, id);
-                if (claim != null && orphanedRaidClaim(id,
-                        (String) claim.getClass().getMethod("getOwnerFactionStringID").invoke(claim), protectedClaims)) {
-                    m.getClass().getMethod("removeClaim", ServerLevel.class, UUID.class).invoke(m, level, id);
-                    m.getClass().getMethod("save", ServerLevel.class).invoke(m, level);
+                ClaimRef claim = access.get(id);
+                if (claim != null && orphanedRaidClaim(id, claim.ownerFaction(), protectedClaims)) {
+                    access.remove(id);
+                    access.save();
+                    removed.add(id);
                 }
-                // A captured claim belongs to its new owner. Leave it intact.
-                data.campClaimLeases.remove(id); data.setDirty();
-            } catch (ReflectiveOperationException | RuntimeException ex) {
-                FactionLogger.LOG.warn("Camp claim cleanup deferred for {}", id, ex); return;
+                // Missing and player-captured claims no longer need a camp lease.
+                completed.add(id);
+            } catch (Exception ex) {
+                return new CleanupResult(Set.copyOf(completed), Set.copyOf(removed),
+                        discoveryFailed, id, ex);
             }
         }
+        return new CleanupResult(Set.copyOf(completed), Set.copyOf(removed),
+                discoveryFailed, null, null);
+    }
+
+    static boolean discoveryDue(long now, long next) { return now >= next; }
+    private static synchronized long nextDiscovery(MinecraftServer server) {
+        return NEXT_DISCOVERY.getOrDefault(server, Long.MIN_VALUE);
+    }
+    private static synchronized void scheduleNextDiscovery(MinecraftServer server, long now) {
+        NEXT_DISCOVERY.put(server, now + DISCOVERY_INTERVAL_TICKS);
     }
 
     static boolean orphanedRaidClaim(UUID id, String ownerFaction, Set<UUID> protectedClaims) {
