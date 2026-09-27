@@ -1,0 +1,186 @@
+name: Publish tested 4.47.20 beta to CurseForge
+
+on:
+  push:
+    branches: [publish/curseforge-v4.47.20]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v4.47.20
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify successful merged-main build and identical PR tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          import json, os, urllib.request
+
+          def get(path):
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'Accept': 'application/vnd.github+json'},
+              )
+              with urllib.request.urlopen(request) as response:
+                  return json.load(response)
+
+          source_sha = '40bd2a0679a6c7e56bf5dd5fbdf8bf0f15a03673'
+          source_tree = 'f3d913af57c90e5ccd04cd1508fd4ea3255ea6d0'
+          pr_head_sha = '0c3029c2dbdc8b26e47a62beef8b4d77625b0873'
+          run = get('actions/runs/36286889039')
+          assert run['status'] == 'completed' and run['conclusion'] == 'success'
+          assert run['event'] == 'push' and run['head_branch'] == 'main'
+          assert run['head_sha'] == source_sha
+          pr = get('pulls/190')
+          assert pr['merged'] and pr['merge_commit_sha'] == source_sha
+          assert pr['head']['sha'] == pr_head_sha
+          for sha in (run['head_sha'], pr['merge_commit_sha'], pr_head_sha):
+              assert get('git/commits/' + sha)['tree']['sha'] == source_tree
+          CHECK
+
+      - name: Download exact tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 36286889039
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Download regression results
+        uses: actions/download-artifact@v4
+        with:
+          name: regression-test-results
+          run-id: 36286889039
+          github-token: ${{ github.token }}
+          path: regression
+
+      - name: Verify tested bytes, metadata, dependencies, and regressions
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          import xml.etree.ElementTree as ET
+
+          jar = Path('dist/siegeoverhaul-4.47.20.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == 'd853cd93b4e799efb136b5fb1fea7e58f524cea1f674adf82b0cd899aaa90276'
+          Path('verified-sha256.txt').write_text(digest)
+          with zipfile.ZipFile(jar) as archive:
+              assert archive.testzip() is None
+              entries = set(archive.namelist())
+              for entry in (
+                  'com/devfarinsky/siegeoverhaul/RaidEvents.class',
+                  'com/devfarinsky/siegeoverhaul/items/OlympianLoot.class',
+                  'com/devfarinsky/siegeoverhaul/items/LootBoxItem.class',
+                  'com/devfarinsky/siegeoverhaul/naval/NavalFleet.class',
+                  'com/devfarinsky/siegeoverhaul/siege/EngineerSupplies.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampDevelopment.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampStructures.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampStarterPavilion.class',
+                  'com/devfarinsky/siegeoverhaul/core/BuilderGroundRecovery.class',
+                  'com/devfarinsky/siegeoverhaul/camp/NativeCampConstruction.class',
+                  'com/devfarinsky/siegeoverhaul/narrative/OlympianPresentation.class',
+                  'com/devfarinsky/siegeoverhaul/compat/RaiderDiplomacy.class',
+                  'com/devfarinsky/siegeoverhaul/core/CaptureRing.class',
+                  'com/devfarinsky/siegeoverhaul/core/CoreOccupation.class',
+                  'com/devfarinsky/siegeoverhaul/compat/WorkersBridge.class',
+                  'com/devfarinsky/siegeoverhaul/compat/CampClaims.class',
+                  'com/devfarinsky/siegeoverhaul/core/PlayerFortificationJobs.class',
+                  'com/devfarinsky/siegeoverhaul/client/CoreHireScreen.class',
+              ):
+                  assert entry in entries, entry
+              assert b'm_20148_' in archive.read(
+                  'com/devfarinsky/siegeoverhaul/core/PlayerFortificationJobs.class'
+              ), 'Expected reobfuscated Minecraft method name'
+              data = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+          mod = data['mods'][0]
+          assert mod['modId'] == 'siegeoverhaul' and mod['version'] == '4.47.20'
+          assert mod['displayTest'] == 'MATCH_VERSION'
+          dependencies = {entry['modId']: entry for entry in data['dependencies']['siegeoverhaul']}
+          for mod_id in ('recruits', 'workers', 'smallships', 'siegeweapons'):
+              assert dependencies[mod_id]['mandatory'] and dependencies[mod_id]['side'] == 'BOTH', mod_id
+          assert dependencies['recruits']['versionRange'] == '[1.15.2,)'
+          assert dependencies['workers']['versionRange'] == '[2.0.3,)'
+          for mod_id in ('ftbchunks', 'openpartiesandclaims', 'corpse', 'magistuarmory', 'musketmod'):
+              assert not dependencies[mod_id]['mandatory'] and dependencies[mod_id]['side'] == 'BOTH', mod_id
+          totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0)
+          reports = list(Path('regression').rglob('TEST-*.xml'))
+          assert reports
+          for report in reports:
+              result = ET.parse(report).getroot()
+              for key in totals:
+                  totals[key] += int(result.get(key, 0))
+          assert totals == {'tests': 547, 'failures': 0, 'errors': 0, 'skipped': 0}, totals
+          print('Verified', jar.name, digest, totals)
+          CHECK
+
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.47.20.jar
+          name: The Siege Overhaul v4.47.20 beta - Builders and Olympian Camps
+          version: v4.47.20
+          version-type: beta
+          changelog: |
+            # 4.47.20 beta
+
+            - Commissioned wall builders stuck below ground can recover to a nearby checked surface while keeping their native job and inventory.
+            - Recovery waits for sustained lack of movement and excludes fighting, fleeing, riding and leashed workers.
+            - Starter camps gain original Olympian pavilions with columns, stepped roofs, lit entrances and faction materials.
+            - Full interior checks, shallow foundations and wide approaches keep new buildings accessible. Entrance reservations survive reloads and protect against later construction.
+            - The forge sits clear of pavilion approaches, and corner banners use the faction's colors.
+            - Existing camps, dependency requirements and loot box prices are unchanged.
+            - Full Forge Java 17 build and 547 automated tests passed. No interactive Minecraft playtest was performed.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            ftb-chunks-forge(optional)
+            open-parties-and-claims(optional)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+          fail-mode: fail
+
+      - name: Record accepted upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os, hashlib
+          from pathlib import Path
+          digest = hashlib.sha256(Path('dist/siegeoverhaul-4.47.20.jar').read_bytes()).hexdigest()
+          assert digest == Path('verified-sha256.txt').read_text()
+          result = {
+              'version': '4.47.20',
+              'file_id': os.environ['RELEASE_FILE_ID'],
+              'url': os.environ['RELEASE_URL'],
+              'source': '40bd2a0679a6c7e56bf5dd5fbdf8bf0f15a03673',
+              'source_tree': 'f3d913af57c90e5ccd04cd1508fd4ea3255ea6d0',
+              'pr_head': '0c3029c2dbdc8b26e47a62beef8b4d77625b0873',
+              'build_run': 36286889039,
+              'tests': 547,
+              'sha256': digest,
+          }
+          assert result['file_id'] and result['url']
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Accepted upload (moderation/public availability separate): ' + json.dumps(result) + '\n')
+          RECEIPT
