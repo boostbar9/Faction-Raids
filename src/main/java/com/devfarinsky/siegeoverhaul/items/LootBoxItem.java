@@ -101,7 +101,9 @@ public final class LootBoxItem extends Item {
                         .append(Component.literal(" and " + (loot.size() - 1) + " supply stacks.")),
                 false);
 
-        return InteractionResultHolder.consume(stack);
+        // Delivery may have filled the newly empty main-hand slot. Return its current contents
+        // so ServerPlayerGameMode does not replace the delivered equipment with the spent box.
+        return InteractionResultHolder.consume(player.getItemInHand(hand));
     }
 
     @Override

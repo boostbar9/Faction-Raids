@@ -21,6 +21,7 @@ import net.minecraft.world.item.enchantment.Enchantments;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 
 import java.util.ArrayList;
@@ -140,12 +141,14 @@ class OlympianLootTest extends MinecraftTestSupport {
         // A vanilla stand-in avoids registering a second loot-box item during plain JUnit.
         var held = new ItemStack(Items.CHEST);
         inv.items.set(0, held);
-        when(player.getItemInHand(InteractionHand.MAIN_HAND)).thenReturn(held);
+        when(player.getItemInHand(InteractionHand.MAIN_HAND)).thenAnswer(ignored -> inv.items.get(0));
         var level = mock(ServerLevel.class);
         when(level.getRandom()).thenReturn(RandomSource.create(42));
-        new LootBoxItem(LootBoxItem.Tier.RARE).use(level, player, InteractionHand.MAIN_HAND);
+        var result = box(LootBoxItem.Tier.RARE).use(level, player, InteractionHand.MAIN_HAND);
         assertTrue(held.isEmpty());
         assertTrue(inv.items.get(0).isEnchanted());
+        // Minecraft writes the returned stack back to the used hand after Item.use.
+        assertSame(inv.items.get(0), result.getObject());
         var dropped = ArgumentCaptor.forClass(ItemStack.class);
         verify(player, atLeastOnce()).drop(dropped.capture(), eq(false));
         assertTrue(dropped.getAllValues().stream().noneMatch(ItemStack::isEnchanted));
@@ -158,10 +161,41 @@ class OlympianLootTest extends MinecraftTestSupport {
             assertEquals(Math.max(2, CoreLoot.tier(roll)), CoreLoot.tierForBox(2, roll));
         }
         var tooltip = new ArrayList<net.minecraft.network.chat.Component>();
-        new LootBoxItem(LootBoxItem.Tier.RARE).appendHoverText(ItemStack.EMPTY, null, tooltip, TooltipFlag.NORMAL);
+        box(LootBoxItem.Tier.RARE).appendHoverText(ItemStack.EMPTY, null, tooltip, TooltipFlag.NORMAL);
         assertTrue(tooltip.stream().anyMatch(c -> c.getString().contains("equipment and supplies")));
         assertFalse(tooltip.toString().contains("Zeus"));
         assertFalse(tooltip.toString().contains("Trident"));
+    }
+
+    @ParameterizedTest @CsvSource({"MAIN_HAND,2", "OFF_HAND,1", "OFF_HAND,2"})
+    void openingFromEitherHandConsumesExactlyOneAndPreservesRemainingBoxes(InteractionHand hand, int count) {
+        var player = player();
+        var inv = player.getInventory();
+        var held = new ItemStack(Items.CHEST, count);
+        var slots = hand == InteractionHand.MAIN_HAND ? inv.items : inv.offhand;
+        slots.set(0, held);
+        when(player.getItemInHand(hand)).thenAnswer(ignored -> slots.get(0));
+        var level = mock(ServerLevel.class);
+        when(level.getRandom()).thenReturn(RandomSource.create(42));
+        var result = box(LootBoxItem.Tier.RARE).use(level, player, hand);
+        assertEquals(count - 1, held.getCount());
+        assertSame(slots.get(0), result.getObject());
+        assertEquals(1, inv.items.stream().filter(ItemStack::isEnchanted).count());
+        verify(player, never()).drop(any(ItemStack.class), anyBoolean());
+    }
+
+    private LootBoxItem box(LootBoxItem.Tier tier) {
+        // Plain JUnit bootstraps a frozen item registry. Exercise real item methods without
+        // constructing/registering an extra Item (the Forge deferred register owns that lifecycle).
+        var box = mock(LootBoxItem.class, CALLS_REAL_METHODS);
+        try {
+            var field = LootBoxItem.class.getDeclaredField("tier");
+            field.setAccessible(true);
+            field.set(box, tier);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
+        return box;
     }
 
     private ServerPlayer player() {
