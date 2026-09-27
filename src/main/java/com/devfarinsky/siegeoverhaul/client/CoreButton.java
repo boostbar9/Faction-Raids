@@ -29,7 +29,7 @@ public final class CoreButton extends Button {
     public void setDetail(String value) { detail = value; }
 
     @Override
-    protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {
+    public void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {
         super.updateWidgetNarration(output);
         if (detail != null) output.add(net.minecraft.client.gui.narration.NarratedElementType.HINT,
                 Component.literal(detail + " emeralds. Open the faction Treasury."));
