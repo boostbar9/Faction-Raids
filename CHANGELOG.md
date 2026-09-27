@@ -1,3 +1,9 @@
+# 4.47.27 beta
+
+- Camp scouting now has a four-minute active-time limit for each search pass. Slow or unavailable terrain can no longer keep preparation paused for hours; after the natural and enabled earthworks searches fail, preparation begins for the existing camp-less assault.
+- The last selected camp site is checked before the candidate limit ends a pass. Searches never select beyond their 200-site budget, and their time limit survives saving and reloading.
+- Site safety, protected claims, reversible terrain work and the full preparation period still apply.
+
 # 4.47.26 beta
 
 - Enemy bridge builders stop construction when the army captures your Siege Core, freeing them to hold the occupied territory. Unfinished crossings retain their saved progress, material costs and deadlines.

@@ -2075,80 +2075,26 @@ public final class RaidEvents {
         }
         if (RaidConfig.BUILD_WAR_CAMPS.get() && state.campPos == null && !state.coreCaptured
                 && !state.campSearchAbandoned) {
-            // v4.36.0: after 200 candidates in the natural-terrain spiral,
-            // switch on the terraforming path so the raider crew can pave
-            // a landing pad on hostile terrain (islands, coastal cliffs,
-            // heavy water). If terraforming is disabled the raid falls
-            // back to running without a camp so it doesn't stall forever.
-            if (state.campSearchStep >= 200 && !state.campTerraformed) {
-                if (RaidConfig.CAMP_TERRAFORM.get()) {
-                    // Flip the terraforming flag; the same loop below will
-                    // run findWarCampPosition again but this time the
-                    // buildWarCamp path routes through the terraformer
-                    // before the palisade goes down. Reset the search
-                    // cursor so we sweep the whole ring again with the
-                    // loosened acceptance criteria.
-                    state.campTerraformed = true;
-                    state.campSearchStep = 0;
-                    if (state.campSearchPos != null) {
-                        com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level, state.campSearchPos);
-                        state.campSearchPos = null;
-                    }
-                    announce(server, teamKey, Component.literal(
-                            "No natural camp land found. Raiders will pave a foothold and build on hostile terrain.")
-                            .withStyle(ChatFormatting.GOLD), true);
-                    FactionLogger.LOG.info("Camp search {} switched to terraforming after {} candidates",
-                            teamKey, 200);
-                    data.setDirty();
-                } else {
-                    // Legacy 4.35 behavior: give up and run without a camp.
-                    state.campSearchAbandoned = true;
-                    if (state.campSearchPos != null) {
-                        com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level, state.campSearchPos);
-                        state.campSearchPos = null;
-                    }
-                    state.campBuildAttempted = true;
-                    state.preparationTotalTicks = RaidConfig.PREPARATION_MINUTES.get() * 1200;
-                    state.preparationTicks = state.preparationTotalTicks;
-                    state.ticksToNextWave = state.preparationTicks;
-                    announce(server, teamKey, Component.literal(
-                            "No viable camp land found within scouting range. Raiders will attack directly without a fortified camp. Preparation starts now.")
-                            .withStyle(ChatFormatting.GOLD), true);
-                    FactionLogger.LOG.info("Camp search {} abandoned after {} candidates: fallback to camp-less raid",
-                            teamKey, state.campSearchStep);
-                    data.setDirty();
-                    setRaidMobsFrozen(level, state, false);
-                    return;
-                }
-            }
-            // Once terraforming has run its own 200-candidate sweep with the
-            // loosened criteria and STILL failed, give up (rare - only if
-            // the whole spiral overlaps player claims or another dimension).
-            if (state.campTerraformed && state.campSearchStep >= 200) {
-                state.campSearchAbandoned = true;
-                if (state.campSearchPos != null) {
-                    com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level, state.campSearchPos);
-                    state.campSearchPos = null;
-                }
-                state.campBuildAttempted = true;
-                state.preparationTotalTicks = RaidConfig.PREPARATION_MINUTES.get() * 1200;
-                state.preparationTicks = state.preparationTotalTicks;
-                state.ticksToNextWave = state.preparationTicks;
+            var scouting = com.devfarinsky.siegeoverhaul.camp.CampScouting.advance(
+                    level, state, RaidConfig.CAMP_TERRAFORM.get(),
+                    RaidConfig.PREPARATION_MINUTES.get() * 1200);
+            if (scouting == com.devfarinsky.siegeoverhaul.camp.CampScouting.Result.TERRAFORM) {
                 announce(server, teamKey, Component.literal(
-                        "Terraforming pass also found no viable ground. Raiders will attack directly without a fortified camp.")
+                        "No natural camp site found in time. Scouts are checking ground for safe earthworks.")
                         .withStyle(ChatFormatting.GOLD), true);
-                FactionLogger.LOG.info("Camp terraforming search {} exhausted; running camp-less", teamKey);
+                data.setDirty();
+            } else if (scouting == com.devfarinsky.siegeoverhaul.camp.CampScouting.Result.ABANDONED) {
+                announce(server, teamKey, Component.literal(
+                        "No safe camp site found in time. Raiders will attack without a fortified camp. Preparation starts now.")
+                        .withStyle(ChatFormatting.GOLD), true);
+                FactionLogger.LOG.info("Camp search {} exhausted after {} candidates in final pass; running camp-less",
+                        teamKey, state.campSearchStep);
                 data.setDirty();
                 setRaidMobsFrozen(level, state, false);
                 return;
             }
-            // Previously failed 4.2.0 camps recover here too. No waves run without a foothold.
-            if (state.campSearchPos == null) {
-                for(int skip=0;skip<8;skip++) {
-                    BlockPos candidate=com.devfarinsky.siegeoverhaul.camp.CampLoading.candidate(point.pos(),state.approachAngle,state.campSearchStep++);
-                    if(com.devfarinsky.siegeoverhaul.compat.CampClaims.canClaim(level,candidate)) { state.campSearchPos=candidate; break; }
-                }
-            }
+            com.devfarinsky.siegeoverhaul.camp.CampScouting.selectCandidate(state, point.pos(),
+                    candidate -> com.devfarinsky.siegeoverhaul.compat.CampClaims.canClaim(level, candidate));
             if(state.campSearchPos!=null) {
                 com.devfarinsky.siegeoverhaul.camp.CampLoading.keep(level,state.campSearchPos);
                 state.campSearchTicks+=20;

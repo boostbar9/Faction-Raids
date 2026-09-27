@@ -474,6 +474,8 @@ public final class RaidSavedData extends SavedData {
         public BlockPos campSearchPos;
         public int campSearchStep;
         public int campSearchTicks;
+        /** Active scouting time in this pass; persists so reloads cannot restart the deadline. */
+        public int campSearchElapsedTicks;
         public boolean campCrewStarted;
         public boolean campGuardsStarted;
         public final Set<UUID> campGuards = new HashSet<>();
@@ -709,6 +711,7 @@ public final class RaidSavedData extends SavedData {
             if(campSearchPos!=null) tag.putLong("CampSearchPos",campSearchPos.asLong());
             tag.putInt("CampSearchStep",campSearchStep);
             tag.putInt("CampSearchTicks",campSearchTicks);
+            tag.putInt("CampSearchElapsedTicks",campSearchElapsedTicks);
             tag.putBoolean("CampCrewStarted",campCrewStarted);
             tag.putInt("BreachTicks", breachTicks);
             tag.putBoolean("Breached", breached);
@@ -879,6 +882,7 @@ public final class RaidSavedData extends SavedData {
             if(tag.contains("CampSearchPos")) state.campSearchPos=BlockPos.of(tag.getLong("CampSearchPos"));
             state.campSearchStep=Math.max(0,tag.getInt("CampSearchStep"));
             state.campSearchTicks=Math.max(0,tag.getInt("CampSearchTicks"));
+            state.campSearchElapsedTicks=Math.max(0,tag.getInt("CampSearchElapsedTicks"));
             state.campCrewStarted=tag.contains("CampCrewStarted")?tag.getBoolean("CampCrewStarted"):tag.contains("CampPosition");
             state.breachTicks = tag.getInt("BreachTicks");
             state.breached = tag.contains("Breached", Tag.TAG_BYTE) ?
