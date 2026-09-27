@@ -8,7 +8,7 @@ import java.util.*;
 public final class OlympianWeaponSkins {
     public static final String HERO_ROLE="SiegeHeroWeaponRole";
     public static final List<String> PATRONS=List.of("ares","athena","artemis","hephaestus","poseidon","zeus","apollo","demeter");
-    public static final List<String> SHAPES=List.of("blade","spear","staff","bow","bow_1","bow_2","bow_3","crossbow","crossbow_1","crossbow_2","crossbow_3","pick","hoe","hook");
+    public static final List<String> SHAPES=List.of("blade","spear","staff","bow","bow_1","bow_2","bow_3","crossbow","crossbow_1","crossbow_2","crossbow_3","crossbow_loaded","crossbow_rocket","pick","hoe","hook");
     private OlympianWeaponSkins() {}
     public static void identifyHero(ItemStack stack,int role) {
         if(stack!=null && !stack.isEmpty() && CoreHiring.isHero(role))stack.getOrCreateTag().putInt(HERO_ROLE,role);

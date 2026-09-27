@@ -3,7 +3,7 @@ from pathlib import Path
 import json, math
 out=Path(__file__).resolve().parents[1]/'src/main/resources/assets/siegeoverhaul/models/item/olympian';out.mkdir(parents=True,exist_ok=True)
 palettes={'ares':('netherite_block','redstone_block','gold_block'),'athena':('iron_block','lapis_block','gold_block'),'artemis':('iron_block','dark_prismarine','amethyst_block'),'hephaestus':('netherite_block','magma','copper_block'),'poseidon':('prismarine_bricks','dark_prismarine','gold_block'),'zeus':('gold_block','lapis_block','iron_block'),'apollo':('gold_block','orange_concrete','iron_block'),'demeter':('copper_block','moss_block','gold_block')}
-shapes=['blade','spear','staff','bow','bow_1','bow_2','bow_3','crossbow','crossbow_1','crossbow_2','crossbow_3','pick','hoe','hook']
+shapes=['blade','spear','staff','bow','bow_1','bow_2','bow_3','crossbow','crossbow_1','crossbow_2','crossbow_3','crossbow_loaded','crossbow_rocket','pick','hoe','hook']
 for patron,palette in palettes.items():
  for shape in shapes:
   elems=[]
@@ -37,9 +37,22 @@ for patron,palette in palettes.items():
    if stage:box([x,7.8,7.8],[19,8.2,8.2],'grip');box([18,7.4,7.4],[20,8.6,8.6],'metal')
    box([8.8,7,6.5],[10,9,9.5],'gem')
   elif shape.startswith('crossbow'):
-   stage=int(shape[-1]) if shape[-1].isdigit() else 0
-   box([6.5,5,5],[9.5,7,16],'grip');box([1,6,11],[15,8,13],'metal');box([1,5,9],[3,7,12],'trim');box([13,5,9],[15,7,12],'trim');box([2,6.5,9-stage],[14,6.75,9.25-stage],'string');box([7,7,8],[9,8,11],'gem')
-   if stage==3:box([7.7,8,7],[8.3,8.6,18],'grip');box([7,7.5,17],[9,9,19],'metal')
+   loaded=shape in ['crossbow_loaded','crossbow_rocket']
+   stage=3 if loaded else int(shape[-1]) if shape[-1].isdigit() else 0
+   box([6.5,5,2],[9.5,7,16],'grip');box([1,6,11],[15,8,13],'metal');box([1,5,9],[3,7,12],'trim');box([13,5,9],[15,7,12],'trim');box([7,7,8],[9,8,11],'gem')
+   # Two rotating string halves keep their outer ends attached to the limb tips.
+   angle=0 if stage<2 else 22.5 if stage==2 else 45
+   pulled_z=9-6*math.tan(math.radians(angle))
+   length=6/math.cos(math.radians(angle))
+   for x,rotation in [(5,angle),(11,-angle)]:
+    center_z=(9+pulled_z)/2
+    box([x-length/2,6.5,center_z-.125],[x+length/2,6.75,center_z+.125],'string')
+    elems[-1]['rotation']={'origin':[x,6.625,center_z],'axis':'y','angle':rotation}
+   if shape=='crossbow_loaded':
+    box([7.7,8,3],[8.3,8.6,18],'grip');box([7,7.5,17],[9,9,19],'metal')
+   elif shape=='crossbow_rocket':
+    box([7.7,8,3],[8.3,8.6,16],'grip');box([6.8,7.3,12],[9.2,9.7,18],'string')
+    box([6.6,7.1,15],[9.4,9.9,16],'gem');box([7.2,7.7,18],[8.8,9.3,20],'gem')
   elif shape=='pick':
    box([7.5,6,7.5],[8.5,14,8.5],'grip');box([2,13,7],[14,15,9],'metal');box([1,11,7],[3,14,9],'trim');box([13,11,7],[15,14,9],'trim');box([7,13,6.5],[9,15,9.5],'gem')
   elif shape=='hoe':
