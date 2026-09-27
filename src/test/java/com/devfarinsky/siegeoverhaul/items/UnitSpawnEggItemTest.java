@@ -22,6 +22,16 @@ class UnitSpawnEggItemTest extends MinecraftTestSupport {
         SimpleContainer getInventory();
         void setXpLevel(int value);
     }
+    // Items are registered during Forge startup in production. The JUnit registry is
+    // already frozen, so bind the role on an unregistered item and run its real methods.
+    private static UnitSpawnEggItem item(int role) {
+        var item = mock(UnitSpawnEggItem.class, CALLS_REAL_METHODS);
+        try {
+            var field = UnitSpawnEggItem.class.getDeclaredField("role");
+            field.setAccessible(true);field.setInt(item,role);
+            return item;
+        } catch (ReflectiveOperationException ex) { throw new AssertionError(ex); }
+    }
     private static class Fixture {
         final ServerLevel level=mock(ServerLevel.class);
         final Player player=mock(Player.class);
@@ -45,7 +55,7 @@ class UnitSpawnEggItemTest extends MinecraftTestSupport {
             when(level.noCollision(mob)).thenReturn(true);when(level.getEntities(eq(mob),any(AABB.class))).thenReturn(List.of());
             when(level.addFreshEntity(mob)).thenReturn(true);when(recruit.getInventory()).thenReturn(inventory);
         }
-        InteractionResult spawn(){return new UnitSpawnEggItem(22,Rarity.EPIC).spawn(level,ctx,type);}
+        InteractionResult spawn(){return item(22).spawn(level,ctx,type);}
     }
     @Test void outfitsHeroBeforePublishingAndConsumesOnlySurvivalEgg() {
         for(boolean creative:new boolean[]{false,true}) {

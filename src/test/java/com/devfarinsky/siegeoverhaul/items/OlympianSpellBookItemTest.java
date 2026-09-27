@@ -19,6 +19,16 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class OlympianSpellBookItemTest extends MinecraftTestSupport {
+    // Items are registered during Forge startup in production. The JUnit registry is
+    // already frozen, so bind the role on an unregistered item and run its real methods.
+    private static OlympianSpellBookItem item(int role) {
+        var item = mock(OlympianSpellBookItem.class, CALLS_REAL_METHODS);
+        try {
+            var field = OlympianSpellBookItem.class.getDeclaredField("role");
+            field.setAccessible(true);field.setInt(item,role);
+            return item;
+        } catch (ReflectiveOperationException ex) { throw new AssertionError(ex); }
+    }
     private static class Fixture {
         final ServerLevel level=mock(ServerLevel.class);
         final Player player=mock(Player.class);
@@ -29,7 +39,7 @@ class OlympianSpellBookItemTest extends MinecraftTestSupport {
         final ItemStack stack=new ItemStack(Items.BOOK);
         final DamageSource damage=new DamageSource(Holder.direct(new DamageType("test",0)),player);
         Fixture(int role) {
-            book=new OlympianSpellBookItem(role);abilities.instabuild=true;
+            book=item(role);abilities.instabuild=true;
             when(player.getAbilities()).thenReturn(abilities);when(player.getPersistentData()).thenReturn(tag);
             when(player.isAlive()).thenReturn(true);when(enemy.isAlive()).thenReturn(true);
             when(player.getItemInHand(InteractionHand.MAIN_HAND)).thenReturn(stack);
