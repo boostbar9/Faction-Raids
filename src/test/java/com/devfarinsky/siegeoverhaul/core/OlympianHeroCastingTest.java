@@ -65,9 +65,8 @@ class OlympianHeroCastingTest extends MinecraftTestSupport {
     @Test void hiredAndEnemyCastersKeepDamageAndTimersWithPatronSpecificCues() {
         for(boolean enemyHero:new boolean[]{false,true})for(int role:new int[]{22,27,29}) {
             var f=new Fixture(role,enemyHero);
-            try(var enemy=mockStatic(EnemyHeroes.class,CALLS_REAL_METHODS);var network=mockStatic(HeroCasting.class,call -> call.getMethod().getName().equals("send") ? null : call.callRealMethod())) {
+            try(var enemy=mockStatic(EnemyHeroes.class,CALLS_REAL_METHODS);var network=mockStatic(HeroCastPackets.class)) {
                 enemy.when(()->EnemyHeroes.defender(f.hero,f.target)).thenReturn(true);
-                network.when(()->HeroCasting.send(any(),anyInt(),anyLong(),anyInt())).thenAnswer(call->null);
                 f.tick();f.tick();
                 verify(f.target,never()).hurt(any(),anyFloat());verify(f.target,never()).addEffect(any());
                 when(f.level.getGameTime()).thenReturn(119L);f.tick();
@@ -78,8 +77,8 @@ class OlympianHeroCastingTest extends MinecraftTestSupport {
                 if(role==29)verify(f.target,times(1)).addEffect(argThat(e->e.getEffect()==net.minecraft.world.effect.MobEffects.MOVEMENT_SLOWDOWN && e.getDuration()==80 && e.getAmplifier()==4));
                 else verify(f.target,times(1)).hurt(f.damage,role==22?5F:6F);
                 if(role==27)verify(f.target,times(1)).setSecondsOnFire(4);
-                network.verify(()->HeroCasting.send(eq(f.hero),eq(role),eq(100L),eq(0)),times(1));
-                network.verify(()->HeroCasting.send(eq(f.hero),eq(role),eq(120L),eq(1)),times(1));
+                network.verify(()->HeroCastPackets.send(eq(f.hero),eq(role),eq(100L),eq(0)),times(1));
+                network.verify(()->HeroCastPackets.send(eq(f.hero),eq(role),eq(120L),eq(1)),times(1));
                 assertFalse(HeroTraits.ready(100,f.tag.copy().getLong("SiegeHeroNext")));
             }
         }
@@ -87,8 +86,7 @@ class OlympianHeroCastingTest extends MinecraftTestSupport {
     @Test void pendingCastCancelsWhenItsTargetBecomesFriendlyHiddenOrChanges() {
         for(int reason=0;reason<5;reason++) {
             var f=new Fixture(22,false);
-            try(var network=mockStatic(HeroCasting.class,call -> call.getMethod().getName().equals("send") ? null : call.callRealMethod())) {
-                network.when(()->HeroCasting.send(any(),anyInt(),anyLong(),anyInt())).thenAnswer(call->null);
+            try(var network=mockStatic(HeroCastPackets.class)) {
                 f.tick();
                 switch(reason) {
                     case 0 -> when(f.hero.isAlliedTo(f.target)).thenReturn(true);
@@ -99,7 +97,7 @@ class OlympianHeroCastingTest extends MinecraftTestSupport {
                 }
                 when(f.level.getGameTime()).thenReturn(120L);f.tick();f.tick();
                 verify(f.target,never()).hurt(any(),anyFloat());
-                network.verify(()->HeroCasting.send(eq(f.hero),anyInt(),eq(120L),eq(2)),times(1));
+                network.verify(()->HeroCastPackets.send(eq(f.hero),anyInt(),eq(120L),eq(2)),times(1));
                 assertEquals(400L,f.tag.getLong("SiegeHeroNext"));
             }
         }
@@ -107,8 +105,7 @@ class OlympianHeroCastingTest extends MinecraftTestSupport {
     @Test void reloadAndExpiredCastsDoNotReleaseOrResetCooldown() {
         for(boolean reload:new boolean[]{false,true}) {
             var f=new Fixture(27,false);
-            try(var network=mockStatic(HeroCasting.class,call -> call.getMethod().getName().equals("send") ? null : call.callRealMethod())) {
-                network.when(()->HeroCasting.send(any(),anyInt(),anyLong(),anyInt())).thenAnswer(call->null);
+            try(var network=mockStatic(HeroCastPackets.class)) {
                 f.tick();
                 if(reload)HeroCasting.stopped(null);
                 when(f.level.getGameTime()).thenReturn(160L);f.tick();
@@ -119,13 +116,12 @@ class OlympianHeroCastingTest extends MinecraftTestSupport {
     }
     @Test void releaseRechecksEveryAreaVictim() {
         var f=new Fixture(27,false);
-        try(var network=mockStatic(HeroCasting.class,call -> call.getMethod().getName().equals("send") ? null : call.callRealMethod())) {
-            network.when(()->HeroCasting.send(any(),anyInt(),anyLong(),anyInt())).thenAnswer(call->null);
+        try(var network=mockStatic(HeroCastPackets.class)) {
             f.tick();
             doReturn(List.of()).when(f.level).getEntitiesOfClass(eq(LivingEntity.class),any(AABB.class),any());
             when(f.level.getGameTime()).thenReturn(120L);f.tick();
             verify(f.target,never()).hurt(any(),anyFloat());
-            network.verify(()->HeroCasting.send(eq(f.hero),anyInt(),eq(120L),eq(2)));
+            network.verify(()->HeroCastPackets.send(eq(f.hero),anyInt(),eq(120L),eq(2)));
         }
     }
 }

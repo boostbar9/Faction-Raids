@@ -67,17 +67,14 @@ public final class HeroCasting {
         return level.getEntitiesOfClass(LivingEntity.class,hero.getBoundingBox().inflate(radius(role)),
                 other -> HeroTraits.hostile(hero,other));
     }
-    private static RaidNetwork.HeroCast packet(Mob hero,int role,long start,int phase) {
-        return new RaidNetwork.HeroCast(hero.getId(),hero.getUUID(),role,start,phase,hero.getX(),hero.getY(),hero.getZ());
-    }
-    static void send(Mob hero,int role,long start,int phase) {
-        RaidNetwork.sendHeroCast(hero,packet(hero,role,start,phase));
+    private static void send(Mob hero,int role,long start,int phase) {
+        HeroCastPackets.send(hero,role,start,phase);
     }
     @SubscribeEvent public static void tracking(PlayerEvent.StartTracking event) {
         if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player
                 && event.getTarget() instanceof Mob hero && ACTIVE.containsKey(hero)) {
             Cast cast=ACTIVE.get(hero);
-            RaidNetwork.sendHeroCast(player,packet(hero,cast.role,cast.start,0));
+            HeroCastPackets.sync(player,hero,cast.role,cast.start);
         }
     }
     @SubscribeEvent public static void unloaded(net.minecraftforge.event.entity.EntityLeaveLevelEvent event) {
