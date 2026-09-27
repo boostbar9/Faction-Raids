@@ -40,7 +40,7 @@ public final class CampBuilder {
     }
 
     /** Called once per periodic siege pass. All pending jobs and crew IDs survive world saves. */
-    public static void tick(ServerLevel level, RaidState raid, BiConsumer<BlockPos, Block> place) {
+    public static void tick(ServerLevel level, RaidState raid, BiConsumer<BlockPos, net.minecraft.world.level.block.state.BlockState> place) {
         if (raid.pendingCampBlocks.isEmpty() || !com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level, raid)) return;
         if (!raid.warGate.isEmpty() && !raid.warGate.getBoolean("Assembled493")) return;
         if (NativeCampConstruction.active(raid)) { NativeCampConstruction.tick(level, raid); return; }
@@ -84,16 +84,15 @@ public final class CampBuilder {
     }
 
     /** Preserve placement order (supports before roofs); never build remotely from a missing/dead crew. */
-    static int placeNearby(RaidState raid, Vec3 worker, int budget, BiConsumer<BlockPos, Block> place) {
+    static int placeNearby(RaidState raid, Vec3 worker, int budget, BiConsumer<BlockPos, net.minecraft.world.level.block.state.BlockState> place) {
         int count = 0;
         var iterator = raid.pendingCampBlocks.entrySet().iterator();
         while (iterator.hasNext() && count < budget) {
             Map.Entry<Long, String> job = iterator.next();
             BlockPos pos = BlockPos.of(job.getKey());
             if (worker != null && !withinReach(worker, pos)) break;
-            ResourceLocation key = ResourceLocation.tryParse(job.getValue());
-            Block block = key == null ? null : ForgeRegistries.BLOCKS.getValue(key);
-            if (block != null) place.accept(pos, block);
+            CampBlockState.decode(job.getValue()).filter(state -> !state.isAir())
+                    .ifPresent(state -> place.accept(pos, state));
             iterator.remove();
             count++;
         }

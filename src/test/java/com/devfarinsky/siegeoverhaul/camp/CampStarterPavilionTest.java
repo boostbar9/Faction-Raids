@@ -51,11 +51,22 @@ class CampStarterPavilionTest extends MinecraftTestSupport {
             var plan=CampStarterPavilion.structure(BlockPos.ZERO,Direction.NORTH,faction);
             signatures.add(Set.copyOf(plan.values()));
             for(String id:plan.values()) {
-                var block=net.minecraftforge.registries.ForgeRegistries.BLOCKS.getValue(new net.minecraft.resources.ResourceLocation(id));
-                assertNotNull(block,id);assertNotEquals(Blocks.AIR,block,id);
+                var block=CampBlockState.decode(id).orElseThrow().getBlock();
+                assertNotEquals(Blocks.AIR,block,id);
             }
         }
         assertEquals(5,signatures.size());
+    }
+    @Test void roofSlopesFaceTheRidgeInEveryCampOrientation() {
+        for(Direction front:Direction.Plane.HORIZONTAL) {
+            var plan=CampStarterPavilion.structure(BlockPos.ZERO,front,"crownfall_exiles");
+            for(int side:new int[]{-1,1}) {
+                var state=CampBlockState.decode(plan.get(BlockPos.ZERO.relative(front.getClockWise(),side).above(5).asLong())).orElseThrow();
+                assertEquals(side<0?front.getClockWise():front.getCounterClockWise(),state.getValue(net.minecraft.world.level.block.StairBlock.FACING));
+            }
+            var ridge=CampBlockState.decode(plan.get(BlockPos.ZERO.above(6).asLong())).orElseThrow();
+            assertEquals(net.minecraft.world.level.block.state.properties.SlabType.BOTTOM,ridge.getValue(net.minecraft.world.level.block.SlabBlock.TYPE));
+        }
     }
     @Test void buriedInteriorWaterAndQueuedDoorObstructionsRejectWholeBuilding() {
         var level=ground();var raid=raid();BlockPos center=CampStarterPavilion.anchor(raid.campPos,Direction.NORTH,1);

@@ -93,8 +93,19 @@ public final class CampStarterPavilion {
             put(plan,center,front,x,y,z,palette.column());
         for(int x=-1;x<=1;x++)for(int y=1;y<=3;y++)put(plan,center,front,x,y,-2,palette.roof());
         for(int x=-2;x<=2;x++)for(int z=-2;z<=2;z++)put(plan,center,front,x,4,z,palette.column());
-        for(int x=-1;x<=1;x++)for(int z=-2;z<=2;z++)put(plan,center,front,x,5,z,palette.roof());
-        for(int z=-2;z<=2;z++)put(plan,center,front,0,6,z,palette.column());
+        String roof = switch (faction == null ? "" : faction) {
+            case "blackbay_reavers" -> "dark_prismarine";
+            case "hollowfang_clan" -> "polished_blackstone_brick";
+            case "emberchant_zealots" -> "brick";
+            case "wilds_marauders" -> "mossy_stone_brick";
+            default -> "quartz";
+        };
+        for(int z=-2;z<=2;z++) {
+            put(plan,center,front,-1,5,z,"minecraft:"+roof+"_stairs[facing="+front.getClockWise().getName()+",half=bottom]");
+            put(plan,center,front,0,5,z,palette.roof());
+            put(plan,center,front,1,5,z,"minecraft:"+roof+"_stairs[facing="+front.getCounterClockWise().getName()+",half=bottom]");
+            put(plan,center,front,0,6,z,"minecraft:"+roof+"_slab[type=bottom]");
+        }
         String light="blackbay_reavers".equals(faction)?"minecraft:sea_lantern":"minecraft:glowstone";
         put(plan,center,front,-2,4,2,light);put(plan,center,front,2,4,2,light);
         put(plan,center,front,-1,1,-1,"minecraft:crafting_table");
