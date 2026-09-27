@@ -1,3 +1,13 @@
+# 4.47.24 beta
+
+- Enemy camps attempt checked sanctuary placement immediately when established, before the crew spawns. Players can capture the enemy core during preparation to stop the assault, using the same occupation and claim checks. Unsafe sites still wait for safe placement.
+
+- Player perimeter walls follow actual surface height instead of clamping to the core and queuing work inside hills. Water, unsupported ground and sections without clear nearby standing space inside the claim are skipped and reported. Existing commissions are not rewritten.
+
+- Camp terrain checks accept dry sand, red sand, gravel and clay, so beaches are no longer rejected simply for their ground material. Water, lava, protected claims and structures remain excluded.
+- Expanded local camp searches now check a balanced grid around the scout position. All candidates keep their terrain footprint inside the loaded search neighborhood instead of drifting far in one direction.
+- Gentle beach earthworks use the existing bounded, reversible terrain plan and preserve original blocks across saves.
+
 # 4.47.23 beta
 
 - Enemy camp builders spawn on checked surface ground instead of nearby underground air pockets.

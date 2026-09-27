@@ -155,10 +155,10 @@ public final class TerritoryFortification {
         List<BlockPos> wallColumns = new ArrayList<>();
         Set<Long> cornerColumns = new HashSet<>();
         int baseY = corePos.getY();
-        computePerimeter(level, chunks, baseY, wallColumns, cornerColumns);
+        int unsafeColumns = computePerimeter(level, chunks, baseY, wallColumns, cornerColumns);
         if (wallColumns.isEmpty()) {
             player.sendSystemMessage(Component.literal(
-                    "No exposed perimeter found. Every edge already borders your own claim."));
+                    "No safe perimeter work sites found. The wall needs dry surface ground and clear standing space inside your claim."));
             return false;
         }
         // Workers 2 builders only ever fetch material from a storage area near
@@ -325,6 +325,8 @@ public final class TerritoryFortification {
             player.sendSystemMessage(Component.literal(
                     "Fortify Perimeter commissioned. " + blocks.size() + " " + mat.label()
                             + " blocks queued for the builder."));
+            if (unsafeColumns > 0) player.sendSystemMessage(Component.literal(
+                    unsafeColumns + " unsafe perimeter sections were left out. Clear a walkable strip inside the boundary or adjust the claim, then commission those sections again."));
             if (protectedCells > 0) player.sendSystemMessage(Component.literal(
                     protectedCells + " occupied wall cells were left unchanged. Clear those spaces before commissioning another job if you want wall blocks there."));
             player.sendSystemMessage(Component.literal(
@@ -393,9 +395,10 @@ public final class TerritoryFortification {
     }
 
     /** Walk claimed chunks. For each boundary edge, drop wall columns at the outward-facing block line. */
-    private static void computePerimeter(ServerLevel level, Set<ChunkPos> chunks, int baseY,
+    static int computePerimeter(ServerLevel level, Set<ChunkPos> chunks, int baseY,
                                          List<BlockPos> wallColumns, Set<Long> cornerColumns) {
         Set<Long> seen = new HashSet<>();
+        int skipped = 0;
         for (ChunkPos chunk : chunks) {
             int minX = chunk.getMinBlockX();
             int minZ = chunk.getMinBlockZ();
@@ -407,17 +410,18 @@ public final class TerritoryFortification {
             boolean west  = !chunks.contains(new ChunkPos(chunk.x - 1, chunk.z));
             boolean east  = !chunks.contains(new ChunkPos(chunk.x + 1, chunk.z));
 
-            if (north) for (int x = minX; x <= maxX; x++) addColumn(level, seen, wallColumns, baseY, x, minZ);
-            if (south) for (int x = minX; x <= maxX; x++) addColumn(level, seen, wallColumns, baseY, x, maxZ);
-            if (west)  for (int z = minZ; z <= maxZ; z++) addColumn(level, seen, wallColumns, baseY, minX, z);
-            if (east)  for (int z = minZ; z <= maxZ; z++) addColumn(level, seen, wallColumns, baseY, maxX, z);
+            if (north) for (int x = minX; x <= maxX; x++) skipped += addColumn(level, chunks, seen, wallColumns, baseY, x, minZ);
+            if (south) for (int x = minX; x <= maxX; x++) skipped += addColumn(level, chunks, seen, wallColumns, baseY, x, maxZ);
+            if (west)  for (int z = minZ; z <= maxZ; z++) skipped += addColumn(level, chunks, seen, wallColumns, baseY, minX, z);
+            if (east)  for (int z = minZ; z <= maxZ; z++) skipped += addColumn(level, chunks, seen, wallColumns, baseY, maxX, z);
 
             // Corner pillars: only if BOTH adjacent sides are exterior.
-            if (north && west)  markCorner(level, cornerColumns, baseY, minX, minZ);
-            if (north && east)  markCorner(level, cornerColumns, baseY, maxX, minZ);
-            if (south && west)  markCorner(level, cornerColumns, baseY, minX, maxZ);
-            if (south && east)  markCorner(level, cornerColumns, baseY, maxX, maxZ);
+            if (north && west)  markCorner(wallColumns, cornerColumns, minX, minZ);
+            if (north && east)  markCorner(wallColumns, cornerColumns, maxX, minZ);
+            if (south && west)  markCorner(wallColumns, cornerColumns, minX, maxZ);
+            if (south && east)  markCorner(wallColumns, cornerColumns, maxX, maxZ);
         }
+        return skipped;
     }
 
     /**
@@ -447,52 +451,20 @@ public final class TerritoryFortification {
         return base.getY() + WALL_HEIGHT - 1 + (corner ? CORNER_EXTRA : 0);
     }
 
-    private static void addColumn(ServerLevel level, Set<Long> seen, List<BlockPos> out,
+    private static int addColumn(ServerLevel level, Set<ChunkPos> claim, Set<Long> seen, List<BlockPos> out,
                                   int baseY, int x, int z) {
-        if (!level.hasChunkAt(new BlockPos(x,baseY,z))) return;
-        // Match wall base to actual terrain surface so short cliffs don't leave floating walls.
-        int surface = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
-        // v4.42.0: the vanilla heightmap sits on top of tree logs, so a
-        // forested perimeter puts the wall base 6-8 blocks up in the
-        // canopy where the foundation dangles in mid-air. Walk down
-        // through logs / leaves / saplings to find real ground.
-        surface = seeThroughTreesForWall(level, x, z, surface);
-        // v4.42.0: expanded the vertical clamp from +/-4 to +/-12 so a
-        // perimeter that crosses a real hill or ravine follows the
-        // terrain instead of leaving stair-step gaps where the wall
-        // hits the clamp ceiling / floor.
-        int y = Math.max(baseY - 12, Math.min(baseY + 12, surface));
-        BlockPos base = new BlockPos(x, y, z);
-        if (seen.add(base.asLong())) out.add(base);
+        if (!seen.add(new BlockPos(x, 0, z).asLong())) return 0;
+        BlockPos base = WallSurface.base(level, claim, new BlockPos(x, baseY, z));
+        if (base == null) return 1;
+        out.add(base);
+        return 0;
     }
 
-    /**
-     * v4.42.0 - walk down from {@code topY} past any log / leaf /
-     * sapling blocks until we find real ground. Mirrors the same
-     * fix that made camp acceptance forest-aware in v4.40.0.
-     */
-    private static int seeThroughTreesForWall(ServerLevel level, int x, int z, int topY) {
-        for (int dy = 0; dy < 16; dy++) {
-            int y = topY - dy;
-            BlockPos p = new BlockPos(x, y - 1, z);
-            if (!level.hasChunkAt(p)) return topY;
-            BlockState state = level.getBlockState(p);
-            if (state.is(net.minecraft.tags.BlockTags.LOGS)
-                    || state.is(net.minecraft.tags.BlockTags.LEAVES)
-                    || state.is(net.minecraft.tags.BlockTags.SAPLINGS)) continue;
-            return y;
+    private static void markCorner(List<BlockPos> columns, Set<Long> corners, int x, int z) {
+        for (BlockPos column : columns) if (column.getX() == x && column.getZ() == z) {
+            corners.add(column.asLong());
+            return;
         }
-        return topY;
-    }
-
-    private static void markCorner(ServerLevel level, Set<Long> cornerColumns,
-                                   int baseY, int x, int z) {
-        if (!level.hasChunkAt(new BlockPos(x,baseY,z))) return;
-        int surface = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
-        // v4.42.0: same tree see-through + wider clamp as regular columns.
-        surface = seeThroughTreesForWall(level, x, z, surface);
-        int y = Math.max(baseY - 12, Math.min(baseY + 12, surface));
-        cornerColumns.add(new BlockPos(x, y, z).asLong());
     }
 
     /** Outcome of the builder search: the chosen builder, or the reason there is none. */

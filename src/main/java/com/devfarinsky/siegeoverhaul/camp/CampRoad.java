@@ -21,7 +21,8 @@ public final class CampRoad {
     }
     public static boolean soil(BlockState state) {
         return state.is(Blocks.DIRT)||state.is(Blocks.GRASS_BLOCK)||state.is(Blocks.COARSE_DIRT)
-                ||state.is(Blocks.ROOTED_DIRT)||state.is(Blocks.PODZOL)||state.is(Blocks.MYCELIUM);
+                ||state.is(Blocks.ROOTED_DIRT)||state.is(Blocks.PODZOL)||state.is(Blocks.MYCELIUM)
+                ||state.is(Blocks.SAND)||state.is(Blocks.RED_SAND)||state.is(Blocks.GRAVEL)||state.is(Blocks.CLAY);
     }
     public static Optional<Plan> plan(ServerLevel level,RaidSavedData.RaidState raid,BlockPos gate,Direction front) {
         if(raid.campPos==null)return Optional.empty();
@@ -47,7 +48,7 @@ public final class CampRoad {
                     if(y<=floor || !state.isAir())return Optional.empty();
                 } else if (com.devfarinsky.siegeoverhaul.core.EnemyCoreApproach.protectedCell(raid,pos)
                         && y!=floor) return Optional.empty();
-                if(state.hasBlockEntity()||!state.getFluidState().isEmpty())return Optional.empty();
+                if(state.hasBlockEntity()||state.is(Blocks.WATER)||state.is(Blocks.LAVA)||!state.getFluidState().isEmpty())return Optional.empty();
                 if(!state.isAir() && !soil(state) && !CampVegetation.replaceable(state) && !ownedCampBlock(level,raid,pos))return Optional.empty();
                 if(y<floor && !state.isAir() && !soil(state))return Optional.empty();
                 if(!level.getEntitiesOfClass(LivingEntity.class,new AABB(pos),LivingEntity::isAlive).isEmpty())return Optional.empty();

@@ -51,7 +51,7 @@ public final class CampTerrain {
                 for (int y = bottom; y <= top; y++) {
                     BlockPos pos = new BlockPos(column.getX(), y, column.getZ());
                     BlockState before = level.getBlockState(pos);
-                    if (!before.getFluidState().isEmpty() || before.hasBlockEntity()) return Optional.empty();
+                    if (!before.getFluidState().isEmpty() || before.is(Blocks.WATER) || before.is(Blocks.LAVA) || before.hasBlockEntity()) return Optional.empty();
                     // Strict soil whitelist: never cut stone foundations, timber, containers or ores.
                     if (y < oldY ? !isSoil(before) : !isClearance(before)) return Optional.empty();
                     BlockState after = before;
@@ -80,8 +80,7 @@ public final class CampTerrain {
     }
 
     private static boolean isSoil(BlockState state) {
-        return state.is(Blocks.DIRT) || state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.COARSE_DIRT)
-                || state.is(Blocks.ROOTED_DIRT) || state.is(Blocks.PODZOL) || state.is(Blocks.MYCELIUM);
+        return CampRoad.soil(state);
     }
 
     private static boolean isClearance(BlockState state) {
