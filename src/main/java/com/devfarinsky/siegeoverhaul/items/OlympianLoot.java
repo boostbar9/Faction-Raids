@@ -9,7 +9,6 @@ import net.minecraft.nbt.StringTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.BowItem;
-import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionUtils;
@@ -18,14 +17,12 @@ import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
 
-/** The sealed-box armory. All powers use ordinary, compatible vanilla enchantments. */
+/** Sealed-box equipment, practical supplies and registered utility relics. */
 final class OlympianLoot {
     static final int ARMORY_SIZE = 12;
     static final int SUPPLY_TYPES = 15;
     static final int RELIC_FIRST = 12;
     static final int AMMUNITION = 0;
-    static final int EXPERIENCE = 1;
-    static final int HEALING = 4;
     private static final String PATRON = "SiegeOlympianPatron";
 
     private OlympianLoot() {}
