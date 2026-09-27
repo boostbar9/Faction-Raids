@@ -100,7 +100,8 @@ public final class EnemyCoreApproach {
                 BlockPos cell=p.above(h);
                 if(!level.hasChunkAt(cell)||!level.getWorldBorder().isWithinBounds(cell)||!allowed.test(cell))return Optional.empty();
                 BlockState state=level.getBlockState(cell);
-                if(!state.getFluidState().isEmpty() || state.hasBlockEntity())return Optional.empty();
+                if(state.is(Blocks.WATER) || state.is(Blocks.LAVA)
+                        || !state.getFluidState().isEmpty() || state.hasBlockEntity())return Optional.empty();
                 if(h==-1) {
                     if(!state.isFaceSturdy(level,cell,Direction.UP) || state.is(Blocks.MAGMA_BLOCK)
                             || state.is(Blocks.CACTUS))return Optional.empty();
