@@ -1,3 +1,7 @@
+# 4.47.26 beta
+
+- Enemy bridge builders stop construction when the army captures your Siege Core, freeing them to hold the occupied territory. Unfinished crossings retain their saved progress, material costs and deadlines.
+
 # 4.47.25 beta
 
 - Marching troops gain a temporary 20% base movement-speed bonus while unengaged and more than 64 blocks from the objective, including troops following native formation orders. Combat, occupation, passengers and working crews use their normal pace.

@@ -121,7 +121,7 @@ public final class BridgeBuilder {
 
     private static boolean running(RaidSavedData data, RaidSavedData.RaidState state) {
         return RaidConfig.ENABLED.get() && data.raids.get(state.teamKey) == state
-                && state.preparationTicks <= 0 && !state.offlinePauseAnnounced;
+                && state.preparationTicks <= 0 && !state.coreCaptured && !state.offlinePauseAnnounced;
     }
 
     static boolean hasObjectiveRoute(Mob mob, BlockPos objective) {

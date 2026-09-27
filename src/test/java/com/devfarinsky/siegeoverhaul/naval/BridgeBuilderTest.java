@@ -443,6 +443,62 @@ class BridgeBuilderTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void captureReleasesActiveBuilderWithoutChangingTerrainOrCombatTarget() {
+        try (var saves = mockStatic(RaidSavedData.class); var claims = mockStatic(ClaimBridge.class)) {
+            saves.when(() -> RaidSavedData.get(level.getServer())).thenReturn(data);
+            var goal = job();
+            mob.goalSelector.addGoal(0, goal);
+            step(goal, 0);
+            var plan = state.bridgePlan;
+            var terrain = Map.copyOf(blocks);
+            assertEquals(1, state.bridgeBlocksSpent);
+            assertTrue(BridgeBuilder.assigned(mob));
+
+            state.coreCaptured = true;
+            clearInvocations(mob, navigation, level);
+            assertFalse(goal.canUse());
+            assertFalse(goal.canContinueToUse());
+            assertFalse(BridgeBuilder.assigned(mob));
+            step(goal, 20);
+            assertEquals(terrain, blocks);
+            assertSame(plan, state.bridgePlan);
+            assertEquals(2, plan.next);
+            assertEquals(1, state.bridgeBlocksSpent);
+            assertEquals(1, state.bridgeAttempts);
+            verify(mob, never()).setTarget(any());
+            verify(level, never()).setBlockAndUpdate(any(), any());
+            verify(navigation, atLeastOnce()).stop();
+        }
+    }
+
+    @Test void occupiedReloadDoesNotReinstallJobOrResetItsBudgetAndDeadline() {
+        try (var saves = mockStatic(RaidSavedData.class); var claims = mockStatic(ClaimBridge.class);
+             var formations = mockStatic(RecruitsFormationBridge.class)) {
+            saves.when(() -> RaidSavedData.get(level.getServer())).thenReturn(data);
+            var goal = job(); step(goal, 0);
+            state.coreCaptured = true;
+            var loaded = RaidSavedData.RaidState.load(state.save());
+            data.raids.put(state.teamKey, loaded);
+            assertTrue(loaded.coreCaptured);
+            long deadline = loaded.bridgePlan.deadline;
+            when(level.getGameTime()).thenReturn(deadline);
+
+            assertFalse(BridgeBuilder.tick(level, loaded, objective));
+            assertTrue(mob.goalSelector.getAvailableGoals().isEmpty());
+            assertEquals(2, loaded.bridgePlan.next);
+            assertEquals(deadline, loaded.bridgePlan.deadline);
+            assertEquals(1, loaded.bridgeAttempts);
+            assertEquals(1, loaded.bridgeBlocksSpent);
+
+            // Leaving occupation cannot renew an expired job or refund spent supplies.
+            loaded.coreCaptured = false;
+            BridgeBuilder.tick(level, loaded, objective);
+            assertNull(loaded.bridgePlan);
+            assertEquals(1, loaded.bridgeAttempts);
+            assertEquals(1, loaded.bridgeBlocksSpent);
+        }
+    }
+
     @Test void pausedDisabledNoAiAndEndedRaidsCannotBuildOrKeepMovementExclusions() {
         try (var saves = mockStatic(RaidSavedData.class); var claims = mockStatic(ClaimBridge.class)) {
             saves.when(() -> RaidSavedData.get(level.getServer())).thenReturn(data);
@@ -478,4 +534,3 @@ class BridgeBuilderTest extends MinecraftTestSupport {
         }
     }
 }
-
