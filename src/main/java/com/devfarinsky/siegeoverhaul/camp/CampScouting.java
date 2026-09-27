@@ -19,9 +19,13 @@ public final class CampScouting {
         state.campSearchElapsedTicks = (int) Math.min(MAX_PASS_TICKS,
                 (long) state.campSearchElapsedTicks + 20);
         // The final candidate may still be loading. Do not discard it just because
-        // selecting it consumed slot 200; only the overall deadline may interrupt it.
+        // selecting it consumed slot 200. At the deadline, give already-loaded
+        // terrain its site check; the caller then clears the candidate or establishes
+        // the camp. This grants no new candidate and no extra chunk-loading wait.
         if (state.campSearchElapsedTicks < MAX_PASS_TICKS
                 && (state.campSearchStep < MAX_CANDIDATES || state.campSearchPos != null))
+            return Result.SEARCHING;
+        if (state.campSearchPos != null && CampLoading.ready(level, state.campSearchPos))
             return Result.SEARCHING;
 
         if (state.campSearchPos != null) CampLoading.release(level, state.campSearchPos);

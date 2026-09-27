@@ -99,6 +99,25 @@ class CampScoutingTest extends MinecraftTestSupport {
         assertEquals(0, RaidSavedData.RaidState.load(old).campSearchElapsedTicks);
     }
 
+    @Test void readyFinalCandidateIsCheckedEvenWhenTheDeadlineArrives() {
+        var state = raid();
+        ServerLevel level = mock(ServerLevel.class);
+        BlockPos finalSite = new BlockPos(168, 64, 8);
+        state.campSearchPos = finalSite;
+        state.campSearchStep = 200;
+        state.campSearchElapsedTicks = CampScouting.MAX_PASS_TICKS - 20;
+        try (var loading = mockStatic(CampLoading.class)) {
+            loading.when(() -> CampLoading.ready(level, finalSite)).thenReturn(true);
+            assertEquals(CampScouting.Result.SEARCHING, CampScouting.advance(level, state, true, 3600));
+            assertEquals(finalSite, state.campSearchPos);
+            loading.verify(() -> CampLoading.release(level, finalSite), never());
+            CampScouting.selectCandidate(state, BlockPos.ZERO, pos -> { fail("Selected a new site after deadline"); return true; });
+            // Production checks the ready site and clears it on rejection.
+            state.campSearchPos = null;
+            assertEquals(CampScouting.Result.TERRAFORM, CampScouting.advance(level, state, true, 3600));
+        }
+    }
+
     @Test void corruptLargeElapsedValueCannotOverflowIntoAnotherLongSearch() {
         var state = raid();
         state.campSearchElapsedTicks = Integer.MAX_VALUE;
