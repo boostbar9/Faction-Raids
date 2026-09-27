@@ -263,6 +263,7 @@ public final class CampTerraforming {
      */
     private static boolean replace(ServerLevel level, RaidSavedData.RaidState state,
                                      BlockPos pos, BlockState target) {
+        if (com.devfarinsky.siegeoverhaul.core.EnemyCoreApproach.protectedCell(state,pos)) return false;
         BlockState current = level.getBlockState(pos);
         if (current.equals(target)) return false;
         if (!isNaturalTerrain(current)) return false;

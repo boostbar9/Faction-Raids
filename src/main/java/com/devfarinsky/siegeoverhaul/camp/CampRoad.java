@@ -41,6 +41,12 @@ public final class CampRoad {
             if(Math.abs(ground-floor)>3 || floor<level.getMinBuildHeight() || floor+4>=level.getMaxBuildHeight())return Optional.empty();
             for(int y=Math.min(ground,floor);y<=Math.max(ground+1,floor+4);y++) {
                 BlockPos pos=column.atY(y);BlockState state=level.getBlockState(pos);
+                // Same-height paving keeps the approach usable. Never raise its
+                // floor into walking space, lower its support, or clear an occupied step.
+                if (com.devfarinsky.siegeoverhaul.core.EnemyCoreApproach.reserved(raid,pos)) {
+                    if(y<=floor || !state.isAir())return Optional.empty();
+                } else if (com.devfarinsky.siegeoverhaul.core.EnemyCoreApproach.protectedCell(raid,pos)
+                        && y!=floor) return Optional.empty();
                 if(state.hasBlockEntity()||!state.getFluidState().isEmpty())return Optional.empty();
                 if(!state.isAir() && !soil(state) && !CampVegetation.replaceable(state) && !ownedCampBlock(level,raid,pos))return Optional.empty();
                 if(y<floor && !state.isAir() && !soil(state))return Optional.empty();

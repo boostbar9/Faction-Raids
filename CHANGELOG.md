@@ -1,3 +1,9 @@
+# 4.47.22 beta
+
+- New enemy core sites require a checked, three-wide walking route from the main camp avenue through the starter palisade to the sanctuary. Placement waits when no safe route is available.
+- Three-wide stone steps lead onto the raised core platform. Saved route reservations keep later buildings, supply barrels and terrain work from blocking the approach.
+- Existing cores and capture progress retain their saved positions and state.
+
 # 4.47.21 beta
 
 - Camp builders preserve the planned facing, slab height and other block properties through construction and world reloads. Both native Workers jobs and fallback construction use the same saved states.

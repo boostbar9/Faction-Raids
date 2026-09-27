@@ -165,7 +165,8 @@ public final class WarGate {
     static boolean protectedByRaid(RaidSavedData.RaidState raid, BlockPos p) {
         // The enemy keep can exist even when gate planning failed. Its
         // persisted reservation is independent of the War Gate centre.
-        if(com.devfarinsky.siegeoverhaul.core.EnemyCoreSite.reserved(raid,p))return true;
+        if(com.devfarinsky.siegeoverhaul.core.EnemyCoreSite.reserved(raid,p)
+                || com.devfarinsky.siegeoverhaul.core.EnemyCoreApproach.protectedCell(raid,p))return true;
         if(!raid.warGate.contains("Center",net.minecraft.nbt.Tag.TAG_LONG))return false;
         var road=raid.warGate.getCompound("RoadBlocks");
         for(String key:road.getAllKeys()) {
