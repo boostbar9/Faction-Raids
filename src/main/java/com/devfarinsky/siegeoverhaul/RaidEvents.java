@@ -3125,6 +3125,7 @@ public final class RaidEvents {
         BlockPos camp = findWarCampPosition(level, anchor, point.pos(), state.approachAngle, state);
         if (camp == null) return;
         state.campPos = camp;
+        state.campaign.putInt("CampLayoutVersion", 1);
         // v4.36.0: on hostile terrain, queue the paving so the crew
         // visibly lays down dirt over time (blocks per tick, with sound
         // and dirt particles) instead of a single instant slap. The

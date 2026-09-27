@@ -12,7 +12,11 @@ import static org.mockito.Mockito.*;
 
 class EnemyCoreSiteTest extends MinecraftTestSupport {
     final BlockPos center=new BlockPos(32,64,32);
-    RaidSavedData.RaidState raid() { return new RaidSavedData.RaidState("team:test","siege_core",0); }
+    RaidSavedData.RaidState raid() {
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        raid.campaign.putInt("CampLayoutVersion",1);
+        return raid;
+    }
     ServerLevel flat() {
         var level=mock(ServerLevel.class); var border=new WorldBorder();
         when(level.getWorldBorder()).thenReturn(border);

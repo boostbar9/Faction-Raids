@@ -28,7 +28,8 @@ public final class EnemyCoreSite {
         Set<Long> blockedColumns = blockedColumns(raid);
         // Leave a dry, unobstructed one-block ring around the 5x5 sanctuary.
         // Checking queued columns also prevents two roofs from touching before either is built.
-        for (int x=-3;x<=3;x++) for (int z=-3;z<=3;z++) {
+        int radius=raid.campaign.getInt("CampLayoutVersion")>=1?3:2;
+        for (int x=-radius;x<=radius;x++) for (int z=-radius;z<=radius;z++) {
             BlockPos feet=center.offset(x,0,z);
             if (raid.campPos != null && (Math.abs(feet.getX()-raid.campPos.getX())>=9
                     || Math.abs(feet.getZ()-raid.campPos.getZ())>=9)) return false;

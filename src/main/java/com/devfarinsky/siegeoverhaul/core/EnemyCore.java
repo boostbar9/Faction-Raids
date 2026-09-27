@@ -139,7 +139,7 @@ public final class EnemyCore {
         EnemyCoreApproach.save(raid, approach.get());
         raid.campaign.putLong("EnemyCore", core.asLong());
         raid.campaign.putBoolean("EnemyCoreCourtyard", true);
-        raid.campaign.putBoolean("EnemyCoreClearanceRing", true);
+        raid.campaign.putBoolean("EnemyCoreClearanceRing", raid.campaign.getInt("CampLayoutVersion")>=1);
         raid.warGate.getCompound("Blocks").putString(Long.toString(core.asLong()), "siegeoverhaul:siege_core");
         RaidSavedData.get(level.getServer()).setDirty();
         FactionLogger.LOG.info("Enemy Siege Core keep raised at clear camp site {} for {}", core, raid.teamKey);
