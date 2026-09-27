@@ -82,9 +82,9 @@ class EnemyCoreSiteTest extends MinecraftTestSupport {
                 low.add(center.relative(front,-3).relative(front.getClockWise(),side*6+width).atY(0));
             when(level.getHeight(any(),anyInt(),anyInt())).thenAnswer(i->
                     low.contains(new BlockPos((int)i.getArgument(1),0,(int)i.getArgument(2)))?63:64);
-            when(level.getBlockState(any())).thenAnswer(i->{BlockPos p=i.getArgument(0);
+            doAnswer(i->{BlockPos p=i.getArgument(0);
                 int surface=low.contains(p.atY(0))?63:64;
-                return (p.getY()<surface?Blocks.STONE:Blocks.AIR).defaultBlockState();});
+                return (p.getY()<surface?Blocks.STONE:Blocks.AIR).defaultBlockState();}).when(level).getBlockState(any());
             when(level.getFluidState(any())).thenReturn(net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState());
             for(int side:new int[]{-1,1}) {
                 var site=com.devfarinsky.siegeoverhaul.camp.CampStarterPavilion.anchor(center,front,side);
