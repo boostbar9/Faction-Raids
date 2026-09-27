@@ -103,6 +103,8 @@ public final class EnemyCore {
                                    java.util.function.Predicate<BlockPos> allowed) {
         BlockPos core = corePos(base);
         if (!EnemyCoreSite.clear(level, raid, base, allowed)) return false;
+        var approach = EnemyCoreApproach.plan(level, raid, base, allowed);
+        if (approach.isEmpty()) return false;
         Map<BlockPos, String> blocks = new LinkedHashMap<>(keepBlueprint(base, raid.factionId));
         blocks.put(core, "siegeoverhaul:siege_core");
         List<CampTerrain.Change> changes = new ArrayList<>();
@@ -116,7 +118,23 @@ public final class EnemyCore {
             if (after == null) return false;
             if (!before.equals(after)) changes.add(new CampTerrain.Change(pos, before, after));
         }
+        for (var entry : approach.get().steps().entrySet()) {
+            BlockState before = level.getBlockState(entry.getKey());
+            if (!CampVegetation.replaceable(before) || before.hasBlockEntity() || !before.getFluidState().isEmpty()) return false;
+            changes.add(new CampTerrain.Change(entry.getKey(), before, entry.getValue()));
+            if (before.getBlock() instanceof net.minecraft.world.level.block.DoublePlantBlock) {
+                BlockPos upper = entry.getKey().above();
+                BlockState plant = level.getBlockState(upper);
+                if (plant.is(before.getBlock())) changes.add(new CampTerrain.Change(upper, plant,
+                        net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()));
+            }
+        }
         if (!CampTerrain.apply(level, raid, new CampTerrain.Plan(changes))) return false;
+        // CampTerrain records legacy IDs. These new directional steps also retain
+        // their expected state so cleanup preserves later player rotations.
+        approach.get().steps().forEach((pos, placed) -> raid.recordCampBlock(pos.asLong(),
+                CampBlockState.encode(placed), raid.campBlocks.get(pos.asLong()).getCompound("Original")));
+        EnemyCoreApproach.save(raid, approach.get());
         raid.campaign.putLong("EnemyCore", core.asLong());
         raid.campaign.putBoolean("EnemyCoreCourtyard", true);
         raid.warGate.getCompound("Blocks").putString(Long.toString(core.asLong()), "siegeoverhaul:siege_core");

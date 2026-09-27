@@ -61,7 +61,7 @@ public final class EnemyCoreSite {
     /** Keep future construction and player obstructions out of the saved walking ring. */
     public static boolean reserved(RaidSavedData.RaidState raid, BlockPos pos) {
         BlockPos core=EnemyCore.position(raid);
-        return raid.campaign.getBoolean("EnemyCoreCourtyard") && core!=null
+        return EnemyCoreApproach.reserved(raid,pos) || raid.campaign.getBoolean("EnemyCoreCourtyard") && core!=null
                 && Math.abs(pos.getX()-core.getX())<=2 && Math.abs(pos.getZ()-core.getZ())<=2
                 && pos.getY()>=core.getY()-2 && pos.getY()<=core.getY()+5;
     }
