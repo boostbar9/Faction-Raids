@@ -21,6 +21,7 @@ class EnemyCoreApproachTest extends MinecraftTestSupport {
         when(level.hasChunkAt(any())).thenReturn(true);when(level.getWorldBorder()).thenReturn(new WorldBorder());
         when(level.getMinBuildHeight()).thenReturn(-64);when(level.getMaxBuildHeight()).thenReturn(320);
         when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(64);
+        when(level.getFluidState(any())).thenReturn(net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState());
         when(level.getBlockState(any())).thenAnswer(i->((BlockPos)i.getArgument(0)).getY()<64?Blocks.STONE.defaultBlockState():Blocks.AIR.defaultBlockState());
         return level;
     }
@@ -55,6 +56,31 @@ class EnemyCoreApproachTest extends MinecraftTestSupport {
         assertTrue(EnemyCoreApproach.reserved(raid,new BlockPos(1,64,-9)));
         for(int x=0;x<=2;x++)raid.pendingFortifications.put(new BlockPos(x,64,-9).asLong(),"minecraft:spruce_log");
         assertTrue(EnemyCoreApproach.plan(level,raid,camp,p->true).isEmpty());
+    }
+    @Test void normalStarterCampStillHasAnAccessibleCoreSite() {
+        for(Direction front:Direction.Plane.HORIZONTAL) {
+            var level=flat();var raid=raid(front);raid.factionId="crownfall_exiles";
+            for(int side:new int[]{-1,1}) {
+                var center=com.devfarinsky.siegeoverhaul.camp.CampStarterPavilion.anchor(camp,front,side);
+                var pavilion=com.devfarinsky.siegeoverhaul.camp.CampStarterPavilion.plan(level,raid,center,front);
+                assertFalse(pavilion.isEmpty());raid.pendingCampBlocks.putAll(pavilion);
+            }
+            raid.pendingCampBlocks.put(camp.asLong(),"minecraft:campfire");
+            raid.pendingCampBlocks.put(camp.west(3).asLong(),"minecraft:barrel");
+            raid.pendingCampBlocks.put(camp.relative(front,4).asLong(),"minecraft:stone_bricks");
+            raid.pendingCampBlocks.put(camp.relative(front,4).above().asLong(),"minecraft:white_banner");
+            var forge=camp.relative(front,4).relative(front.getClockWise(),4);
+            for(int z=-1;z<=1;z++)raid.pendingCampBlocks.put(forge.offset(0,0,z).asLong(),"minecraft:anvil");
+            for(int x=-9;x<=9;x++)for(int z=-9;z<=9;z++) {
+                if(Math.abs(x)!=9 && Math.abs(z)!=9)continue;
+                int depth=x*front.getStepX()+z*front.getStepZ();
+                int side=x*front.getClockWise().getStepX()+z*front.getClockWise().getStepZ();
+                if(depth==9 && Math.abs(side)<=1)continue;
+                raid.pendingFortifications.put(new BlockPos(x,64,z).asLong(),"minecraft:spruce_log");
+            }
+            assertTrue(EnemyCoreSite.candidates(camp,front).stream().anyMatch(base->
+                    EnemyCoreSite.clear(level,raid,base,p->true) && EnemyCoreApproach.plan(level,raid,base,p->true).isPresent()),front.toString());
+        }
     }
     @Test void waterCliffsLowCeilingsAndClaimGapsBlockTheWholeEntrance() {
         var level=flat();var raid=raid(Direction.NORTH);BlockPos threshold=camp.north(13);
