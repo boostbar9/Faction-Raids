@@ -1,3 +1,8 @@
+## 4.49.2 — Weapon animation timing
+
+- Olympian bow and crossbow skins follow Minecraft's draw-stage timing, including Quick Charge. Crossbows no longer look fully drawn before their loading animation reaches its final stage.
+- Includes the Command Center navigation and balance improvements from 4.49.1.
+
 ## 4.49.1 — Command Center navigation
 
 - Shared Treasury funds and your personal purse stay visible on every page. Select the Treasury balance to manage funds.

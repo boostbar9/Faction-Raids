@@ -56,7 +56,14 @@ public final class OlympianWeaponModels {
                         else if(entity!=null && entity.isUsingItem() && entity.getUseItem()==stack) {
                             int elapsed=stack.getUseDuration()-entity.getUseItemRemainingTicks();
                             int duration=stack.getItem() instanceof CrossbowItem?CrossbowItem.getChargeDuration(stack):20;
-                            if(shape.equals("bow") || shape.equals("crossbow"))suffix="_"+Math.min(3,Math.max(1,elapsed*3/Math.max(1,duration)+1));
+                            if(shape.equals("bow") || shape.equals("crossbow")) {
+                                float pull = Math.max(0, elapsed) / (float) Math.max(1, duration);
+                                // Match the 1.20.1 vanilla model predicates, including Quick Charge.
+                                int stage = shape.equals("crossbow")
+                                        ? (pull >= 1.0F ? 3 : pull >= 0.58F ? 2 : 1)
+                                        : (pull >= 0.9F ? 3 : pull >= 0.65F ? 2 : 1);
+                                suffix = "_" + stage;
+                            }
                         }
                         var selected=skins.get(patron+"_"+shape+suffix);
                         if(selected!=null)return selected;

@@ -53,4 +53,48 @@ class OlympianWeaponModelsTest extends MinecraftTestSupport {
         CrossbowItem.setCharged(crossbow,false);crossbow.getTag().remove("ChargedProjectiles");
         assertSame(idle,wrapper.getOverrides().resolve(wrapper,crossbow,null,null,0));
     }
+    @Test void bowSkinStagesMatchVanillaThresholdsAndCancelCleanly() {
+        for (String patron : com.devfarinsky.siegeoverhaul.items.OlympianWeaponSkins.PATRONS) {
+            var idle=mock(BakedModel.class);var first=mock(BakedModel.class);
+            var second=mock(BakedModel.class);var third=mock(BakedModel.class);
+            var wrapper=new OlympianWeaponModels.SkinnedModel(mock(BakedModel.class),Map.of(
+                    patron+"_bow",idle,patron+"_bow_1",first,patron+"_bow_2",second,patron+"_bow_3",third));
+            var bow=new ItemStack(Items.BOW);bow.getOrCreateTag().putString("SiegeOlympianPatron",patron);
+            var saved=bow.save(new net.minecraft.nbt.CompoundTag());
+            var user=mock(LivingEntity.class);
+            when(user.isUsingItem()).thenReturn(true);when(user.getUseItem()).thenReturn(bow);
+            for(int ticks=0;ticks<=25;ticks++) {
+                when(user.getUseItemRemainingTicks()).thenReturn(bow.getUseDuration()-ticks);
+                assertSame(ticks>=18?third:ticks>=13?second:first,
+                        wrapper.getOverrides().resolve(wrapper,bow,null,user,0),patron+" tick "+ticks);
+            }
+            when(user.isUsingItem()).thenReturn(false);
+            assertSame(idle,wrapper.getOverrides().resolve(wrapper,bow,null,user,0));
+            when(user.isUsingItem()).thenReturn(true);when(user.getUseItem()).thenReturn(bow.copy());
+            assertSame(idle,wrapper.getOverrides().resolve(wrapper,bow,null,user,0),"Only the actively used stack draws");
+            assertEquals(saved,bow.save(new net.minecraft.nbt.CompoundTag()));
+        }
+    }
+    @Test void crossbowSkinDoesNotReachFullDrawBeforeQuickChargeFinishes() {
+        int[] secondStage={15,12,9,6};
+        int[] chargeTicks={25,20,15,10};
+        for(int level=0;level<=3;level++) {
+            var first=mock(BakedModel.class);var second=mock(BakedModel.class);var third=mock(BakedModel.class);
+            var loaded=mock(BakedModel.class);
+            var wrapper=new OlympianWeaponModels.SkinnedModel(mock(BakedModel.class),Map.of(
+                    "athena_crossbow_1",first,"athena_crossbow_2",second,"athena_crossbow_3",third,
+                    "athena_crossbow_loaded",loaded));
+            var bow=new ItemStack(Items.CROSSBOW);bow.getOrCreateTag().putString("SiegeOlympianPatron","athena");
+            if(level>0)bow.enchant(net.minecraft.world.item.enchantment.Enchantments.QUICK_CHARGE,level);
+            assertEquals(chargeTicks[level],CrossbowItem.getChargeDuration(bow));
+            var user=mock(LivingEntity.class);when(user.isUsingItem()).thenReturn(true);when(user.getUseItem()).thenReturn(bow);
+            for(int ticks=0;ticks<=chargeTicks[level]+3;ticks++) {
+                when(user.getUseItemRemainingTicks()).thenReturn(bow.getUseDuration()-ticks);
+                assertSame(ticks>=chargeTicks[level]?third:ticks>=secondStage[level]?second:first,
+                        wrapper.getOverrides().resolve(wrapper,bow,null,user,0),"Quick Charge "+level+" tick "+ticks);
+            }
+            CrossbowItem.setCharged(bow,true);
+            assertSame(loaded,wrapper.getOverrides().resolve(wrapper,bow,null,user,0),"Loaded state wins over a trailing use animation");
+        }
+    }
 }
