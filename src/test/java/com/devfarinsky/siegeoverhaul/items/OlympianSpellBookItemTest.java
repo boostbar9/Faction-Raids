@@ -65,6 +65,25 @@ class OlympianSpellBookItemTest extends MinecraftTestSupport {
             }
         }
     }
+    @Test void denseSiegesUseTheSameAreaCoverageAsHeroCasts() {
+        try(var packets=mockStatic(HeroCastPackets.class)) {
+            var f=new Fixture(22);
+            var targets=new ArrayList<LivingEntity>();
+            for(int i=0;i<40;i++) {
+                var target=mock(Mob.class);
+                when(target.isAlive()).thenReturn(true);
+                when(target.getPersistentData()).thenReturn(f.enemyTag.copy());
+                when(f.player.hasLineOfSight(target)).thenReturn(true);
+                targets.add(target);
+            }
+            when(f.level.getEntitiesOfClass(eq(LivingEntity.class),any(AABB.class),any())).thenAnswer(call->{
+                Predicate<LivingEntity> filter=call.getArgument(2);
+                return targets.stream().filter(filter).toList();
+            });
+            f.start();f.finish();
+            for(var target:targets)verify(target,times(1)).hurt(f.damage,5F);
+        }
+    }
     @Test void survivalSpectatorsAndCooldownCannotStartACast() {
         try(var packets=mockStatic(HeroCastPackets.class)) {
             for(int reason=0;reason<3;reason++) {

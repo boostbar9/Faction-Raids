@@ -60,7 +60,7 @@ public final class OlympianSpellBookItem extends Item {
         if (!valid) { HeroCastPackets.send(player, role, server.getGameTime(), 2); return stack; }
         var foes = server.getEntitiesOfClass(LivingEntity.class, player.getBoundingBox().inflate(radius()),
                 target -> eligible(player, target));
-        for (var target : foes.stream().limit(32).toList()) {
+        for (var target : foes) {
             if (role == 29) target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 80, 4));
             else if (target.hurt(server.damageSources().indirectMagic(player, player), role == 22 ? 5 : 6) && role == 27)
                 target.setSecondsOnFire(4);
