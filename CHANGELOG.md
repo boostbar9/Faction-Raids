@@ -1,3 +1,10 @@
+# 4.49.3 — Olympian weapon presentation
+
+- Refined Olympian blades with bright cutting edges, slimmer grips and distinct deity guards; caster staves now have eight different head designs.
+- Cleaner metal, inlay and grip materials replace noisy full-face building textures across all 128 weapon model states.
+- Inventory models fit within their slots, including long staves and spears. Bow and crossbow draw states share the same framing so icons do not jump while loading.
+- Held-item alignment, draw timing, hero casting, enchantments and weapon stats are unchanged.
+
 ## 4.49.2 — Weapon animation timing
 
 - Olympian bow and crossbow skins follow Minecraft's draw-stage timing, including Quick Charge. Crossbows no longer look fully drawn before their loading animation reaches its final stage.
