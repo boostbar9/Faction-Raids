@@ -4355,9 +4355,9 @@ public final class RaidEvents {
      * is >= 1, so healthy raiders keep their fast direct path.
      */
     /** Rotate a bounded scan through the complete neighborhood instead of starving one side forever. */
-    private static void moveToRaidObjective(ServerLevel level, Mob mob, RaidSavedData.RaidState state,
+    static void moveToRaidObjective(ServerLevel level, Mob mob, RaidSavedData.RaidState state,
                                            Vec3 objective, double speed) {
-        if ("siege_core".equals(state.defensePointName) && state.breached
+        if ("siege_core".equals(state.defensePointName)
                 && com.devfarinsky.siegeoverhaul.raid.CoreApproach.moveTo(level,mob,objective,speed)) return;
         mob.getNavigation().moveTo(objective.x,objective.y,objective.z,speed);
     }
@@ -4506,7 +4506,9 @@ public final class RaidEvents {
      * so we never drop the raider inside a wall or under the floor. If the
      * destination is not a safe standing position we abort.
      */
-    private static void teleportStuckRaiderForward(ServerLevel level, Mob mob, Vec3 objective) {
+    static void teleportStuckRaiderForward(ServerLevel level, Mob mob, Vec3 objective) {
+        // Recovery is for the march, not a way to bypass the defender's building.
+        if (mob.position().subtract(objective).multiply(1, 0, 1).lengthSqr() <= 24 * 24) return;
         int maxBlocks = RaidConfig.STUCK_L3_TELEPORT_BLOCKS.get();
         Vec3 pos = mob.position();
         double dx = objective.x - pos.x;
@@ -4522,14 +4524,23 @@ public final class RaidEvents {
         // WORLD_SURFACE_WG returns the highest non-air block, so +0 lands us
         // one block above it, i.e. standing on top. Use WORLD_SURFACE (not
         // MOTION_BLOCKING) so leaves/liquid don't confuse us.
+        if (!level.hasChunkAt(new BlockPos(destX, mob.getBlockY(), destZ))) return;
         int destY = level.getHeight(Heightmap.Types.WORLD_SURFACE, destX, destZ);
+        if (destY > mob.getY() + 2 || destY < mob.getY() - 3) return;
+        Vec3 landing = new Vec3(destX + 0.5, destY, destZ + 0.5);
+        if (landing.subtract(objective).multiply(1, 0, 1).lengthSqr() <= 24 * 24) return;
         // Sanity check: destination must be loaded and non-lava under-block.
         BlockPos foot = new BlockPos(destX, destY, destZ);
         if (!level.isLoaded(foot)) return;
         var under = level.getBlockState(foot.below());
-        if (under.getFluidState().is(net.minecraft.tags.FluidTags.LAVA)) return;
+        if (!under.getFluidState().isEmpty() || !under.isFaceSturdy(level, foot.below(), Direction.UP)
+                || under.is(Blocks.MAGMA_BLOCK) || under.is(Blocks.CAMPFIRE)
+                || under.is(Blocks.SOUL_CAMPFIRE) || under.is(Blocks.CACTUS)) return;
         // Two blocks of clearance above the destination for the raider hitbox.
-        if (level.getBlockState(foot).isSolid() || level.getBlockState(foot.above()).isSolid()) return;
+        if (!level.getBlockState(foot).isAir() || !level.getBlockState(foot.above()).isAir()) return;
+        var body = mob.getBoundingBox().move(landing.subtract(pos));
+        if (!level.getWorldBorder().isWithinBounds(body) || body.minY < level.getMinBuildHeight()
+                || body.maxY >= level.getMaxBuildHeight() || !level.noCollision(mob, body)) return;
         mob.getNavigation().stop();
         mob.teleportTo(destX + 0.5, destY, destZ + 0.5);
         // A forward warp must never be charged as a fall: the raider was on

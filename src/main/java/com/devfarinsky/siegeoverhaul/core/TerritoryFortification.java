@@ -286,6 +286,7 @@ public final class TerritoryFortification {
             // player-safe path (does NOT install the raider night-shift goal
             // and does NOT overwrite the builder's inventory).
             WorkersBridge.enablePlayerJob(builder, owner);
+            WallBuilderAccess.install(builder);
 
             // Bypass Workers 2's 64-block auto-discovery: wire currentBuildArea
             // directly so the builder engages the goal on the next tick instead

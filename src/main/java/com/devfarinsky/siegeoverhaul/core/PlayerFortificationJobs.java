@@ -261,6 +261,7 @@ public final class PlayerFortificationJobs {
                 unlink(builder, areaId);
                 return;
             }
+            WallBuilderAccess.install(builder);
             if (active) {
                 if (WorkersBridge.workingOn(builder, area)) BuilderGroundRecovery.tick(level, builder);
                 else BuilderGroundRecovery.reset(builder);

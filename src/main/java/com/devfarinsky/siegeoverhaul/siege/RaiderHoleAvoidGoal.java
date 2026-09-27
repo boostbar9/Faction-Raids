@@ -83,10 +83,12 @@ public class RaiderHoleAvoidGoal extends Goal {
 
         // ---------- Cave-escape check (runs even when standing still) --------
         if (caveCooldown > 0) caveCooldown--;
-        else if (isTrappedUnderground(level)) {
-            escapeToSurface(level);
+        else {
             caveCooldown = CAVE_ESCAPE_COOLDOWN_TICKS;
-            return;
+            if (isTrappedUnderground(level)) {
+                escapeToSurface(level);
+                return;
+            }
         }
 
         // ---------- Cliff / hole look-ahead ---------------------------------
@@ -184,10 +186,25 @@ public class RaiderHoleAvoidGoal extends Goal {
      * ignores leaves and other pass-through blocks so a mob under a forest
      * canopy is not falsely flagged as caved-in.
      */
-    private boolean isTrappedUnderground(Level level) {
+    boolean isTrappedUnderground(Level level) {
+        BlockPos feet = mob.blockPosition();
+        if (!level.hasChunkAt(feet)) return false;
+        var path = mob.getNavigation().getPath();
+        if (path != null && !path.isDone() && path.canReach()) return false;
         int surfaceY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                mob.getBlockX(), mob.getBlockZ());
-        return mob.getBlockY() + CAVE_DEPTH_THRESHOLD < surfaceY;
+                feet.getX(), feet.getZ());
+        if (feet.getY() + CAVE_DEPTH_THRESHOLD >= surfaceY) return false;
+        // A heightmap also includes roofs. Require a continuous natural overburden,
+        // not an isolated ceiling above an otherwise navigable building interior.
+        for (int y = surfaceY - 3; y < surfaceY; y++) {
+            var state = level.getBlockState(feet.atY(y));
+            if (!(state.is(Blocks.STONE) || state.is(Blocks.DEEPSLATE)
+                    || state.is(net.minecraft.tags.BlockTags.BASE_STONE_OVERWORLD)
+                    || state.is(net.minecraft.tags.BlockTags.DIRT)
+                    || state.is(Blocks.SAND) || state.is(Blocks.RED_SAND)
+                    || state.is(Blocks.GRAVEL)) || !state.getFluidState().isEmpty()) return false;
+        }
+        return true;
     }
 
     /**
@@ -205,6 +222,7 @@ public class RaiderHoleAvoidGoal extends Goal {
             for (int dz = -6; dz <= 6; dz++) {
                 if (dx == 0 && dz == 0) continue;
                 int sx = mx + dx, sz = mz + dz;
+                if (!level.hasChunkAt(new BlockPos(sx, mobY, sz))) continue;
                 int sy = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, sx, sz);
                 if (sy <= mobY) continue; // Only consider tiles above mob.
                 int score = (sy - mobY) * 2 + Math.abs(dx) + Math.abs(dz);
