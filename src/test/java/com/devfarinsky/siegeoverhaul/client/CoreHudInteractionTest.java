@@ -4,7 +4,8 @@ import com.devfarinsky.siegeoverhaul.MinecraftTestSupport;
 import com.devfarinsky.siegeoverhaul.core.*;
 import net.minecraft.client.gui.components.Button;
 import org.junit.jupiter.api.Test;
-import java.util.List;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Inventory;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -26,8 +27,7 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
         call.invoke(screen, value);
     }
     @Test void intelWheelUsesScaledCoordinatesAndCannotScrollFromOutsideThePanel() throws Exception {
-        var screen = mock(CoreHireScreen.class, CALLS_REAL_METHODS);
-        doReturn(List.of()).when(screen).children();
+        var screen = new CoreHireScreen(mock(CoreHireMenu.class), mock(Inventory.class), Component.literal("Command"));
         var layout = CoreHireLayout.fit(240, 180);
         set(screen, "layout", layout);
         set(screen, "tab", CoreCommandPage.INTEL);
@@ -42,7 +42,7 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
         assertEquals(18, get(screen, "intelOffset"));
     }
     @Test void archiveSectionsRememberIndependentOffsetsAndStopDragging() throws Exception {
-        var screen = mock(CoreHireScreen.class, CALLS_REAL_METHODS);
+        var screen = new CoreHireScreen(mock(CoreHireMenu.class), mock(Inventory.class), Component.literal("Command"));
         set(screen, "intelOffsets", new int[3]);
         set(screen, "intelOffset", 72);
         set(screen, "intelDragging", true);
@@ -56,7 +56,7 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
         assertEquals(24, get(screen, "intelOffset"));
     }
     @Test void switchingPagesClearsPurchaseConfirmationAndKeepsSelectedTabVisible() throws Exception {
-        var screen = mock(CoreHireScreen.class, CALLS_REAL_METHODS);
+        var screen = new CoreHireScreen(mock(CoreHireMenu.class), mock(Inventory.class), Component.literal("Command"));
         set(screen, "layout", CoreHireLayout.fit(320, 240));
         set(screen, "tab", CoreCommandPage.LOOT);
         set(screen, "confirmBox", 2);
