@@ -1611,12 +1611,9 @@ public final class RaidEvents {
         }
         state.reconcileTicks = 0;
         reconcileTaggedMobs(level, point, state);
-        updateTrackedMobs(level, state);
-        Vec3 marchObjective=Vec3.atCenterOf(point.pos());
-        for (UUID id : state.raiders) if (level.getEntity(id) instanceof Mob mob) {
+        updateTrackedMobs(level, state, point.pos());
+        for (UUID id : state.raiders) if (level.getEntity(id) instanceof Mob mob)
             com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(mob,state.factionId,mob.getPersistentData().getString(RAID_ROLE_TAG));
-            com.devfarinsky.siegeoverhaul.raid.MarchPace.update(mob,state,marchObjective);
-        }
         data.setDirty();
         source.sendSuccess(() -> Component.literal("Reconciled invasion " + key + ": " +
                 state.raiders.size() + " enemies tracked.").withStyle(ChatFormatting.GREEN), true);
@@ -2195,7 +2192,7 @@ public final class RaidEvents {
         }
 
         reconcileTaggedMobs(level, point, state);
-        updateTrackedMobs(level, state);
+        updateTrackedMobs(level, state, point.pos());
         for (UUID id : state.raiders) if (level.getEntity(id) instanceof Mob mob)
             com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(mob,state.factionId,mob.getPersistentData().getString(RAID_ROLE_TAG));
         // v2.28.0: Captain aura \u2014 the Unit Codex has always promised that
@@ -2493,7 +2490,8 @@ public final class RaidEvents {
      *       chunk-unload. Only in this case does the grace timer advance.</li>
      * </ul>
      */
-    private static void updateTrackedMobs(ServerLevel level, RaidSavedData.RaidState state) {
+    static void updateTrackedMobs(ServerLevel level, RaidSavedData.RaidState state, BlockPos objective) {
+        Vec3 marchObjective=Vec3.atCenterOf(objective);
         int grace = RaidConfig.MISSING_ENTITY_GRACE_SECONDS.get() * 20;
         Iterator<UUID> iterator = state.raiders.iterator();
         while (iterator.hasNext()) {
@@ -2505,6 +2503,7 @@ public final class RaidEvents {
                 state.lastKnownChunks.put(id,
                         new net.minecraft.world.level.ChunkPos(entity.blockPosition()).toLong());
                 state.missingTicks.remove(id);
+                com.devfarinsky.siegeoverhaul.raid.MarchPace.update(mob,state,marchObjective);
                 // v2.15.0: refresh role label + glow visibility.
                 RaiderLabels.tick(mob);
                 // v2.34.0: if this raider is the Commander, refresh the boss
