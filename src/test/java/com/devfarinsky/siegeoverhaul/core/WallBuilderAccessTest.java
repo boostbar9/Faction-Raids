@@ -19,8 +19,16 @@ import static org.mockito.Mockito.*;
 class WallBuilderAccessTest extends MinecraftTestSupport {
     public abstract static class Builder extends Mob {
         public Entity currentBuildArea;
+        public boolean isFleeing;
+        public java.util.UUID getOwnerUUID() { return null; }
+        public int getFollowState() { return 6; }
         protected Builder(EntityType<? extends Mob> type, Level level) { super(type, level); }
     }
+    public abstract static class Area extends Entity {
+        protected Area(EntityType<?> type, Level level) { super(type,level); }
+        public java.util.UUID getPlayerUUID() { return null; }
+    }
+    public enum State { MOVE_TO_WORK_AREA }
     public static class NativeGoal extends Goal {
         public BlockPos blockPos;
         public Object state;
@@ -38,8 +46,8 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         when(level.getMinBuildHeight()).thenReturn(-64); when(level.getMaxBuildHeight()).thenReturn(320);
         when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(64);
         when(level.getWorldBorder()).thenReturn(new WorldBorder());
-        when(level.getBlockState(any())).thenAnswer(i -> ((BlockPos)i.getArgument(0)).getY()<64
-                ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState());
+        doAnswer(i -> ((BlockPos)i.getArgument(0)).getY()<64
+                ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState()).when(level).getBlockState(any());
         when(level.noCollision(eq(worker),any(AABB.class))).thenReturn(true);
     }
     @Test void buriedMarkerUsesReachableSurfaceWithoutMovingBlueprintOrPlacingBlocks() throws Exception {
@@ -65,10 +73,29 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         when(level.hasChunkAt(any())).thenReturn(false);
         assertTrue(WallBuilderAccess.standingSites(level,worker,marker).isEmpty());
         when(level.hasChunkAt(any())).thenReturn(true);
-        when(level.getBlockState(any())).thenReturn(Blocks.WATER.defaultBlockState());
+        doReturn(Blocks.WATER.defaultBlockState()).when(level).getBlockState(any());
         assertTrue(WallBuilderAccess.standingSites(level,worker,marker).isEmpty());
         terrain(); Path unreachable=mock(Path.class);when(nav.createPath(anySet(),eq(0))).thenReturn(unreachable);
         goal.route(level,marker); verify(nav,never()).moveTo(any(Path.class),anyDouble());
+    }
+    @Test void correctionRunsOnlyForTheLinkedOwnedActiveWallJob() throws Exception {
+        terrain(); var original=new NativeGoal(); original.state=State.MOVE_TO_WORK_AREA;
+        var goal=new WallBuilderAccess(worker,original); var area=mock(Area.class);
+        var data=new net.minecraft.nbt.CompoundTag(); var owner=java.util.UUID.randomUUID();
+        var id=java.util.UUID.randomUUID();worker.currentBuildArea=area;
+        when(worker.level()).thenReturn(level);when(worker.getPersistentData()).thenReturn(data);
+        when(area.isAlive()).thenReturn(true);when(area.getUUID()).thenReturn(id);
+        when(area.getOnPos()).thenReturn(new BlockPos(0,60,0));
+        when(area.getPlayerUUID()).thenReturn(owner);when(worker.getOwnerUUID()).thenReturn(owner);
+        when(worker.getFollowState()).thenReturn(6);
+        goal.tick();verifyNoInteractions(nav);
+        data.putUUID(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID,id);
+        data.putUUID(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_OWNER,owner);
+        goal.tick();verify(nav).createPath(anySet(),eq(0));
+        clearInvocations(nav);when(worker.getFollowState()).thenReturn(1);
+        when(level.getGameTime()).thenReturn(80L);goal.tick();verifyNoInteractions(nav);
+        when(worker.getFollowState()).thenReturn(6);when(worker.getOwnerUUID()).thenReturn(java.util.UUID.randomUUID());
+        goal.tick();verifyNoInteractions(nav);
     }
     @Test void nativeSleepSupplyAndOwnerCommandsRemainAuthoritative() throws Exception {
         NativeGoal original=mock(NativeGoal.class);when(original.getFlags()).thenReturn(EnumSet.of(Goal.Flag.MOVE));

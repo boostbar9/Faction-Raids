@@ -24,7 +24,7 @@ class RaiderHoleAvoidGoalTest extends MinecraftTestSupport {
                 ? net.minecraft.world.level.block.Blocks.STONE.defaultBlockState()
                 : net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
         org.junit.jupiter.api.Assertions.assertFalse(goal.isTrappedUnderground(level), "thin stone roofs are not caves");
-        when(level.getBlockState(any())).thenReturn(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+        doReturn(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState()).when(level).getBlockState(any());
         org.junit.jupiter.api.Assertions.assertTrue(goal.isTrappedUnderground(level));
         var path = mock(net.minecraft.world.level.pathfinder.Path.class);
         when(path.canReach()).thenReturn(true); when(nav.getPath()).thenReturn(path);

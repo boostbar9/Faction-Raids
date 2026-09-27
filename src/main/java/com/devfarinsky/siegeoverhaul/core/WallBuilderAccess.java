@@ -21,7 +21,7 @@ public final class WallBuilderAccess extends Goal {
     private final Mob worker;
     private final Goal delegate;
     private final Field areaField, blockField, stateField;
-    private long nextSearch;
+    private long nextSearch, nextRoute;
     private BlockPos lastTarget, destination;
 
     WallBuilderAccess(Mob worker, Goal delegate) throws ReflectiveOperationException {
@@ -87,6 +87,8 @@ public final class WallBuilderAccess extends Goal {
         double dx = worker.getX() - (target.getX() + 0.5), dz = worker.getZ() - (target.getZ() + 0.5);
         if (dx * dx + dz * dz < 16) return; // Already inside the native marker's squared reach (20).
         long now = level.getGameTime();
+        if (now < nextRoute && now >= nextRoute - 10) return;
+        nextRoute = now + 10;
         if (now < nextSearch && now >= nextSearch - 40) {
             if (target.equals(lastTarget) && destination != null) nav.moveTo(destination.getX()+0.5,
                     destination.getY(), destination.getZ()+0.5, 0.8);

@@ -83,10 +83,12 @@ public class RaiderHoleAvoidGoal extends Goal {
 
         // ---------- Cave-escape check (runs even when standing still) --------
         if (caveCooldown > 0) caveCooldown--;
-        else if (isTrappedUnderground(level)) {
-            escapeToSurface(level);
+        else {
             caveCooldown = CAVE_ESCAPE_COOLDOWN_TICKS;
-            return;
+            if (isTrappedUnderground(level)) {
+                escapeToSurface(level);
+                return;
+            }
         }
 
         // ---------- Cliff / hole look-ahead ---------------------------------
@@ -196,7 +198,8 @@ public class RaiderHoleAvoidGoal extends Goal {
         // not an isolated ceiling above an otherwise navigable building interior.
         for (int y = surfaceY - 3; y < surfaceY; y++) {
             var state = level.getBlockState(feet.atY(y));
-            if (!(state.is(net.minecraft.tags.BlockTags.BASE_STONE_OVERWORLD)
+            if (!(state.is(Blocks.STONE) || state.is(Blocks.DEEPSLATE)
+                    || state.is(net.minecraft.tags.BlockTags.BASE_STONE_OVERWORLD)
                     || state.is(net.minecraft.tags.BlockTags.DIRT)
                     || state.is(Blocks.SAND) || state.is(Blocks.RED_SAND)
                     || state.is(Blocks.GRAVEL)) || !state.getFluidState().isEmpty()) return false;
