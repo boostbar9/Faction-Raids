@@ -116,8 +116,9 @@ class CoreOffersTest extends MinecraftTestSupport {
             assertTrue(layout.ribbonY() + CoreHireLayout.RIBBON_HEIGHT <= layout.pageHeaderY());
             assertTrue(layout.pageHeaderY() + layout.pageHeaderHeight() <= layout.contentY());
             for (int tab = 0; tab < 5; tab++) {
-                assertTrue(layout.tabX(tab, 5) >= layout.x());
-                assertTrue(layout.tabX(tab, 5) + layout.tabWidth(5)
+                var tabs = layout.tabs(5, tab);
+                assertTrue(tabs.tabX(tab) >= layout.x());
+                assertTrue(tabs.tabX(tab) + tabs.tabWidth()
                         <= layout.x() + layout.width());
             }
             for (int i = 0; i < 4; i++) {

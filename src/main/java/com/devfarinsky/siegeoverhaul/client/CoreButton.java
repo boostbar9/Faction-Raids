@@ -24,6 +24,16 @@ public final class CoreButton extends Button {
     private final BooleanSupplier selected;
     private final boolean tab;
     private final ItemStack itemIcon;
+    private String detail;
+
+    public void setDetail(String value) { detail = value; }
+
+    @Override
+    public void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {
+        super.updateWidgetNarration(output);
+        if (detail != null) output.add(net.minecraft.client.gui.narration.NarratedElementType.HINT,
+                Component.literal(detail + " emeralds. Open the faction Treasury."));
+    }
 
     public CoreButton(Component text, OnPress press,
                       int x, int y, int width, int height,
@@ -118,6 +128,11 @@ public final class CoreButton extends Button {
         int labelX = showIcon
                 ? textLeft + Math.max(0, (textAreaWidth - labelWidth) / 2)
                 : x + (w - labelWidth) / 2;
-        g.drawString(font, label, labelX, y + (h - 8) / 2, textColor, false);
+        g.drawString(font, label, labelX, detail == null ? y + (h - 8) / 2 : y + 3, textColor, false);
+        if (detail != null) {
+            String value = font.plainSubstrByWidth(detail, Math.max(1, w - 12));
+            g.drawString(font, value, x + (w - font.width(value)) / 2, y + 14,
+                    CommandPalette.ACCENT_EMERALD, false);
+        }
     }
 }
