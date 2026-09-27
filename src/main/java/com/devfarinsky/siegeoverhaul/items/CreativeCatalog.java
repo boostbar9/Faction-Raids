@@ -23,6 +23,7 @@ public final class CreativeCatalog {
         for (var tier : LootBoxItem.Tier.values()) {
             for (int entry = 0; entry < OlympianLoot.ARMORY_SIZE; entry++) add(result, OlympianLoot.armory(tier, entry));
             add(result, OlympianLoot.provisions(tier));
+            add(result, OlympianLoot.supplies(tier, OlympianLoot.AMMUNITION, OlympianLoot.armory(tier, 4)));
             for (int entry = 0; entry < OlympianLoot.SUPPLY_TYPES; entry++) add(result, OlympianLoot.supplies(tier, entry));
         }
         for (var faction : FactionBanners.FactionId.values()) add(result, FactionBanners.itemStackFor(faction));

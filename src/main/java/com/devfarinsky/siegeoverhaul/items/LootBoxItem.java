@@ -123,21 +123,27 @@ public final class LootBoxItem extends Item {
         player.getInventory().setChanged();
     }
 
-    /** One armory piece, guaranteed provisions, then distinct supply categories (3-7 total stacks). */
+    /** One armory piece, provisions, a usable relic, then distinct supplies (3-7 total stacks). */
     public static List<ItemStack> roll(RandomSource rng, Tier tier) {
         int stacks = 3 + tier.ordinal() + rng.nextInt(2);
         List<ItemStack> out = new ArrayList<>(stacks);
-        out.add(OlympianLoot.armory(tier, rng.nextInt(OlympianLoot.ARMORY_SIZE)));
+        ItemStack equipment = OlympianLoot.armory(tier, rng.nextInt(OlympianLoot.ARMORY_SIZE));
+        out.add(equipment);
         out.add(OlympianLoot.provisions(tier));
-        // Sample without replacement so a chest cannot fill its extra slots with one repeated ration.
-        int[] choices = new int[OlympianLoot.SUPPLY_TYPES];
-        for (int i = 0; i < choices.length; i++) choices[i] = i;
-        for (int i = 0; i < stacks - 2; i++) {
+        int support = OlympianLoot.RELIC_FIRST + rng.nextInt(OlympianRelics.Kind.values().length);
+        out.add(OlympianLoot.supplies(tier, support, equipment));
+        // Reserve a genuine utility relic, then sample remaining categories
+        // without replacement. No extra stacks, duplicate categories or currency are added.
+        int[] choices = new int[OlympianLoot.SUPPLY_TYPES - 1];
+        for (int category = 0, at = 0; category < OlympianLoot.SUPPLY_TYPES; category++) {
+            if (category != support) choices[at++] = category;
+        }
+        for (int i = 0; i < stacks - 3; i++) {
             int selected = i + rng.nextInt(choices.length - i);
             int choice = choices[selected];
             choices[selected] = choices[i];
             choices[i] = choice;
-            out.add(OlympianLoot.supplies(tier, choice));
+            out.add(OlympianLoot.supplies(tier, choice, equipment));
         }
         return out;
     }

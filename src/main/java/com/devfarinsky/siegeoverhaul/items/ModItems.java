@@ -44,6 +44,10 @@ public final class ModItems {
     public static final RegistryObject<Item> INFERNO_BOOK = ITEMS.register("inferno_spellbook", () -> new OlympianSpellBookItem(27));
     public static final RegistryObject<Item> UNDERTOW_BOOK = ITEMS.register("undertow_spellbook", () -> new OlympianSpellBookItem(29));
 
+    public static final RegistryObject<Item> FORGE_EMBER = ITEMS.register("forge_ember", () -> new OlympianRelicItem(OlympianRelics.Kind.FORGE));
+    public static final RegistryObject<Item> OWL_SEAL = ITEMS.register("owl_seal", () -> new OlympianRelicItem(OlympianRelics.Kind.WATCH));
+    public static final RegistryObject<Item> SUN_LAUREL = ITEMS.register("sun_laurel", () -> new OlympianRelicItem(OlympianRelics.Kind.CLEANSE));
+
     // v4.33.0: rarity-tiered loot boxes handed out for wave clears. Four
     // separate registrations rather than NBT-tagged variants so each tier
     // gets its own model, texture, and vanilla-rarity name color for free.
