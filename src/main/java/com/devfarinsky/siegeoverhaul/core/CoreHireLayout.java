@@ -23,7 +23,7 @@ public record CoreHireLayout(int x, int y, int width, int height,
     public static final int RIBBON_HEIGHT = 15;
     public static final int CONTENT_TOP = 74;
     /** Roomy screens get a compact page title and live context line. */
-    public static final int PAGE_HEADER_HEIGHT = 18;
+    public static final int PAGE_HEADER_HEIGHT = 24;
     public static final int PAGE_HEADER_GAP = 4;
     public static final int FOOTER_HEIGHT = 18;
     public static final int ARMY_ACTION_HEIGHT = 18;
@@ -97,13 +97,15 @@ public record CoreHireLayout(int x, int y, int width, int height,
     public int feedbackWidth() {
         return compact ? Math.max(64, Math.min(78, width / 4)) : 110;
     }
-    public int tabWidth(int count) {
-        return Math.max(1,
-                (width - outerMargin() * 2 - tabGap() * (count - 1)) / count);
+    public CoreTabStrip tabs(int count, int selected) {
+        return CoreTabStrip.fit(x + outerMargin(), width - outerMargin() * 2,
+                count, selected, tabGap());
     }
-    public int tabX(int index, int count) {
-        return x + outerMargin() + index * (tabWidth(count) + tabGap());
-    }
+    public int purseWidth() { return compact ? 64 : 100; }
+    public int treasuryWidth() { return compact ? 84 : 124; }
+    public int purseX() { return x + width - purseWidth() - 30; }
+    public int treasuryX() { return purseX() - 6 - treasuryWidth(); }
+    public int headerTitleWidth() { return treasuryX() - (x + 42) - 8; }
 
     public int tabY() { return y + TAB_TOP; }
     public int ribbonY() { return y + RIBBON_TOP; }

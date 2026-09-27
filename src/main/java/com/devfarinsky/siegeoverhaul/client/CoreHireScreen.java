@@ -28,8 +28,9 @@ import java.util.Map;
  * <p>Purchase authority remains entirely on the server; this screen only
  * paints server-authoritative state from {@link CoreHireMenu} and dispatches
  * inventory-button clicks or {@link RaidNetwork} packets. Layout math and
- * server contracts are unchanged from the compact version — only the
- * presentation layer is rebuilt around {@link CommandFrame} and
+ * server contracts remain unchanged. Navigation metadata and bounded tab
+ * windows allow new pages without shrinking existing controls. The shared
+ * presentation layer uses {@link CommandFrame} and
  * {@link CommandPalette}. Controls use readable labels; only real Minecraft
  * item sprites are used where an icon communicates a concrete item.
  *
@@ -52,21 +53,13 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     private static final String FEEDBACK_URL =
             "https://www.curseforge.com/minecraft/mc-mods/siege-overhaul/comments";
-    private static final String[] PAGE_TITLES = {
-            "War Council", "Olympian Reliquary", "Faction Treasury",
-            "Kingdom Development", "Warlord Intelligence"
-    };
-    private static final String[] PAGE_SUBTITLES = {
-            "Recruit defenders, specialists and legendary heroes",
-            "Unseal divine spoils and prepare battlefield blessings",
-            "Manage shared wealth, rewards and faction activity",
-            "Commission permanent upgrades and perimeter works",
-            "Study units, enemy hosts and defensive doctrine"
-    };
-
-
+    private static final CoreCommandPage[] PAGES = CoreCommandPage.values();
     private CoreHireLayout layout;
-    private int tab;
+    private CoreCommandPage tab = CoreCommandPage.ARMY;
+    private final Button[] pageButtons = new Button[PAGES.length];
+    private final Button[] intelSections = new Button[3];
+    private Button previousPage, nextPage, treasuryShortcut;
+    private final int[] intelOffsets = new int[3];
     private int confirmBox = -1;
     private int seenLoot;
     private int revealBox = -1;
@@ -130,33 +123,40 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     protected void init() {
         fittedText.clear();
         wrappedText.clear();
+        intelDragging = false;
+        intelBodyW = intelBodyH = intelMaxOffset = 0;
         layout = CoreHireLayout.fit(width, height);
         imageWidth = layout.width();
         imageHeight = layout.height();
         super.init();
 
-        // Text-only tabs stay readable at every GUI scale. The old decorative
-        // glyphs were ambiguous and competed with the labels.
-        String[] tabLabels = layout.compact()
-                ? new String[]{"Army", "Loot", "Treasury", "Land", "Intel"}
-                : new String[]{"Army", "Loot", "Treasury", "Territory", "Intel"};
-        int tabCount = tabLabels.length;
-        int tabWidth = layout.tabWidth(tabCount);
-        for (int i = 0; i < tabCount; i++) {
-            final int index = i;
-            addRenderableWidget(new CoreButton(
-                    Component.literal(tabLabels[i]),
-                    b -> {
-                        tab = index;
-                        confirmBox = -1;
-                        updateControlState();
-                    },
-                    layout.tabX(i, tabCount),
-                    layout.tabY(),
-                    tabWidth, CoreHireLayout.TAB_HEIGHT,
-                    true,
-                    () -> tab == index));
+        // Page metadata and the strip own navigation; purchase IDs stay server-owned.
+        for (int i = 0; i < PAGES.length; i++) {
+            final CoreCommandPage page = PAGES[i];
+            pageButtons[i] = addRenderableWidget(new CoreButton(
+                    Component.literal(page.label()), b -> selectPage(page),
+                    0, layout.tabY(), 72, CoreHireLayout.TAB_HEIGHT,
+                    true, () -> tab == page));
         }
+        previousPage = addRenderableWidget(new CoreButton(Component.literal("<"),
+                b -> movePage(-1), 0, layout.tabY(), CoreTabStrip.ARROW_WIDTH,
+                CoreHireLayout.TAB_HEIGHT, false, () -> false));
+        nextPage = addRenderableWidget(new CoreButton(Component.literal(">"),
+                b -> movePage(1), 0, layout.tabY(), CoreTabStrip.ARROW_WIDTH,
+                CoreHireLayout.TAB_HEIGHT, false, () -> false));
+        treasuryShortcut = addRenderableWidget(new CoreButton(Component.literal(""),
+                b -> selectPage(CoreCommandPage.TREASURY), layout.treasuryX(), layout.y() + 6,
+                layout.treasuryWidth(), 24, false, () -> tab == CoreCommandPage.TREASURY));
+        treasuryShortcut.setMessage(Component.literal("Treasury"));
+        String[] archiveLabels = {"Units", "Enemy Lore", "How to Play"};
+        int archiveWidth = (layout.width() - 20) / 3;
+        for (int i = 0; i < intelSections.length; i++) {
+            final int section = i;
+            intelSections[i] = addRenderableWidget(new CoreButton(Component.literal(archiveLabels[i]),
+                    b -> selectIntelSection(section), layout.x() + 10 + i * archiveWidth,
+                    layout.contentY(), archiveWidth - 2, 18, true, () -> intelSection == section));
+        }
+        updateNavigation();
 
         // Close (X) button in the header for players who can't reach Escape
         // (e.g. controller users, one-handed play, remap conflicts).
@@ -306,6 +306,52 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         updateControlState();
     }
 
+    private void selectPage(CoreCommandPage page) {
+        if (tab == page) return;
+        tab = page;
+        confirmBox = -1;
+        intelDragging = false;
+        setFocused(null); // Never leave keyboard focus on a now-hidden purchase action.
+        updateNavigation();
+        updateControlState();
+        setFocused(pageButtons[tab.ordinal()]);
+    }
+
+    private void movePage(int direction) {
+        var strip = layout.tabs(PAGES.length, tab.ordinal());
+        selectPage(PAGES[strip.next(tab.ordinal(), direction)]);
+    }
+
+    private void updateNavigation() {
+        var strip = layout.tabs(PAGES.length, tab.ordinal());
+        for (int i = 0; i < PAGES.length; i++) {
+            pageButtons[i].visible = strip.shows(i);
+            pageButtons[i].setX(strip.tabX(i));
+            pageButtons[i].setWidth(strip.tabWidth());
+        }
+        previousPage.visible = nextPage.visible = strip.overflow();
+        previousPage.setX(strip.x());
+        nextPage.setX(strip.x() + strip.width() - CoreTabStrip.ARROW_WIDTH);
+    }
+
+    private void selectIntelSection(int section) {
+        if (section == intelSection) return;
+        intelOffsets[intelSection] = intelOffset;
+        intelSection = section;
+        intelOffset = intelOffsets[section];
+        intelDragging = false;
+        intelMaxOffset = 0; // Recomputed on the next draw at this section's actual width.
+    }
+
+    @Override
+    public boolean keyPressed(int key, int scan, int modifiers) {
+        if (hasControlDown() && key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB) {
+            movePage(hasShiftDown() ? -1 : 1);
+            return true;
+        }
+        return super.keyPressed(key, scan, modifiers);
+    }
+
     @Override
     protected void containerTick() {
         super.containerTick();
@@ -321,7 +367,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
         if (revealTicks > 0) {
             revealTicks--;
-            if (tab == 1 && (revealTicks == 0
+            if (tab == CoreCommandPage.LOOT && (revealTicks == 0
                     || revealTicks % (revealTicks > 20 ? 5 : 10) == 0)
                     && minecraft != null) {
                 float pitch = revealTicks == 0
@@ -358,8 +404,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
      */
     private void updateControlState() {
         if (layout == null || hire[0] == null) return;
+        for (Button section : intelSections) section.visible = tab == CoreCommandPage.INTEL;
+        ((CoreButton) treasuryShortcut).setDetail(String.format(Locale.ROOT, "%,d", menu.bank()));
         for (int i = 0; i < 4; i++) {
-            hire[i].visible = tab == 0;
+            hire[i].visible = tab == CoreCommandPage.ARMY;
             hire[i].active = menu.role(i) >= 0 && menu.cost(i) >= 0
                     && !menu.sold(i) && menu.rotation() > 0 && canAfford(menu.cost(i));
             String actionLabel = menu.sold(i)
@@ -369,11 +417,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                             : "Hire";
             hire[i].setMessage(Component.literal(actionLabel));
 
-            bank[i].visible = tab == 2;
+            bank[i].visible = tab == CoreCommandPage.TREASURY;
             bank[i].active = i < 2 ? menu.emeralds() > 0 : menu.canWithdraw() && menu.bank() > 0;
         }
         for (int i = 0; i < siegeYard.length; i++) {
-            siegeYard[i].visible = tab == 0;
+            siegeYard[i].visible = tab == CoreCommandPage.ARMY;
             siegeYard[i].active = SiegeYard.available() && canAfford(SiegeYard.PRICES[i]);
             String shortLabel = i == 0 ? "Catapult" : "Ballista";
             siegeYard[i].setMessage(Component.literal(
@@ -383,7 +431,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                             : shortLabel + "  ·  unavailable"));
         }
         for (int i = 0; i < territoryBuffs.length; i++) {
-            territoryBuffs[i].visible = tab == 3;
+            territoryBuffs[i].visible = tab == CoreCommandPage.TERRITORY;
             boolean owned = menu.hasTerritoryBuff(i);
             territoryBuffs[i].active = !owned && canAfford(TerritoryBuffs.PRICES[i]);
             long missing = canAfford(TerritoryBuffs.PRICES[i]) ? 0L : Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
@@ -395,7 +443,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                                     : "Need  ·  " + missing + "e"));
         }
         for (int i = 0; i < fortifyButtons.length; i++) {
-            fortifyButtons[i].visible = tab == 3;
+            fortifyButtons[i].visible = tab == CoreCommandPage.TERRITORY;
             fortifyButtons[i].active = canAfford(TerritoryFortification.PRICE);
             String label = TerritoryFortification.material(i).label();
             fortifyButtons[i].setMessage(Component.literal(
@@ -403,7 +451,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                             : "Fortify  " + label + "  " + TerritoryFortification.PRICE + "e"));
         }
         for (int i = 0; i < 3; i++) {
-            boxes[i].visible = buffs[i].visible = tab == 1;
+            boxes[i].visible = buffs[i].visible = tab == CoreCommandPage.LOOT;
             boxes[i].active = waitingTicks == 0 && revealTicks == 0
                     && canAfford(CoreLoot.price(i));
             boxes[i].setMessage(Component.literal(
@@ -422,7 +470,31 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     private void drawTooltips(GuiGraphics g, int mx, int my,
                               int tooltipX, int tooltipY) {
-        if (tab == 0) {
+        if (treasuryShortcut.isMouseOver(mx, my)) {
+            tooltip(g, String.format(Locale.ROOT, "Faction Treasury: %,d emeralds. Purchases use this balance. Click to deposit or withdraw.", menu.bank()), tooltipX, tooltipY);
+            return;
+        }
+        if (over(mx, my, layout.purseX(), layout.y() + 6, layout.purseWidth(), 24)) {
+            tooltip(g, String.format(Locale.ROOT, "Your purse: %,d emeralds. Deposit into the faction Treasury before purchasing.", menu.emeralds()), tooltipX, tooltipY);
+            return;
+        }
+        if (previousPage.isMouseOver(mx, my) || nextPage.isMouseOver(mx, my)) {
+            tooltip(g, "Previous / next page. Ctrl+Tab cycles pages; Ctrl+Shift+Tab goes back.", tooltipX, tooltipY);
+            return;
+        }
+        for (int i = 0; i < PAGES.length; i++) {
+            if (pageButtons[i].isMouseOver(mx, my)) {
+                tooltip(g, PAGES[i].title() + " | " + PAGES[i].description()
+                        + " | Ctrl+Tab or scroll over the tabs to switch.", tooltipX, tooltipY);
+                return;
+            }
+        }
+        if (layout.pageHeaderHeight() > 0 && over(mx, my, layout.x() + 10,
+                layout.pageHeaderY(), layout.width() - 20, layout.pageHeaderHeight())) {
+            tooltip(g, pageContext(), tooltipX, tooltipY);
+            return;
+        }
+        if (tab == CoreCommandPage.ARMY) {
             for (int i = 0; i < 4; i++) {
                 if (over(mx, my, layout.cardX(i), layout.cardY(i),
                         layout.cardWidth(), layout.cardHeight()) && menu.role(i) >= 0) {
@@ -470,7 +542,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             tooltip(g, "Open the Siege Overhaul CurseForge comments page to share feedback or report a problem.",
                     tooltipX, tooltipY);
         }
-        if (tab == 1) {
+        if (tab == CoreCommandPage.LOOT) {
             for (int i = 0; i < 3; i++) {
                 if (over(mx, my, layout.cardX(0), layout.marketY(i),
                         layout.cardWidth(), layout.marketHeight())) {
@@ -488,7 +560,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 }
             }
         }
-        if (tab == 2) {
+        if (tab == CoreCommandPage.TREASURY) {
             int bankY = layout.contentY();
             if (over(mx, my, layout.x() + 10, bankY,
                     layout.width() - 20, 46)) {
@@ -511,7 +583,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 }
             }
         }
-        if (tab == 3) {
+        if (tab == CoreCommandPage.TERRITORY) {
             int cols = 2;
             int rows = (TerritoryBuffs.COUNT + cols - 1) / cols;
             int gridTop = layout.contentY();
@@ -635,27 +707,17 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         String title = layout.compact() ? "COMMAND" : "KINGDOM COMMAND";
         g.drawString(font, title, x + 43, y + 13, 0xff000000, false);
         g.drawString(font, title, x + 42, y + 13, CommandPalette.BEVEL_DARK, false);
-        text(g, title, x + 42, y + 12, w / 2 - 50, CommandPalette.ACCENT_GOLD);
+        text(g, title, x + 42, y + 12, layout.headerTitleWidth(), CommandPalette.ACCENT_GOLD);
         text(g, menu.factionName(),
-                x + 42, y + 22, w / 2 - 50, CommandPalette.TEXT_MUTED);
+                x + 42, y + 22, layout.headerTitleWidth(), CommandPalette.TEXT_MUTED);
 
-        // Personal purse on the right. It uses the same quiet chip language
-        // as the rest of the console and a real emerald item sprite.
-        // Leaves 26px of room on the far right for the close (X) button.
-        String purse = String.format(Locale.ROOT, "%,d", menu.emeralds());
-        int chipW = Math.max(layout.compact() ? 82 : 96,
-                Math.min(w / 3, font.width(purse) + (layout.compact() ? 44 : 60)));
-        int chipX = x + w - chipW - 30;
-        CommandFrame.chip(g, chipX, y + 6, chipW, 24,
-                CommandPalette.ACCENT_EMERALD);
-        // Real vanilla emerald sprite so the currency readout always matches
-        // the player's resource pack.
-        ItemIcons.emerald(g, chipX + 7, y + 12, 14);
-        // Top-right pill is an informational view of personal emeralds. Core
-        // purchases still debit only the faction Treasury shown on its tab.
-        text(g, layout.compact() ? "PURSE" : "YOUR PURSE",
-                chipX + 26, y + 10, chipW - 32, CommandPalette.ACCENT_GOLD);
-        text(g, purse, chipX + 26, y + 20, chipW - 32, CommandPalette.ACCENT_EMERALD);
+        // Both balances remain visible on every page. The Treasury chip is a real
+        // keyboard-accessible navigation button, not an unlabeled decorative icon.
+        int chipW = layout.purseWidth(), chipX = layout.purseX();
+        CommandFrame.chip(g, chipX, y + 6, chipW, 24, CommandPalette.ACCENT_STEEL);
+        text(g, "PURSE", chipX + 6, y + 9, chipW - 12, CommandPalette.TEXT_MUTED);
+        text(g, String.format(Locale.ROOT, "%,d", menu.emeralds()), chipX + 6, y + 20,
+                chipW - 12, CommandPalette.TEXT);
 
         // Active-siege ribbon under the header.
         drawSiegeRibbon(g, x, y, w);
@@ -663,19 +725,19 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // Tab body.
         drawPageHeader(g);
 
-        if (tab == 0) {
+        if (tab == CoreCommandPage.ARMY) {
             for (int i = 0; i < 4; i++) drawHire(g, i, mx, my);
-        } else if (tab == 1) {
+        } else if (tab == CoreCommandPage.LOOT) {
             for (int i = 0; i < 3; i++) {
                 drawLoot(g, i, mx, my);
                 drawBuff(g, i, mx, my);
             }
             drawLootReserve(g);
-        } else if (tab == 2) {
+        } else if (tab == CoreCommandPage.TREASURY) {
             drawFaction(g);
-        } else if (tab == 3) {
+        } else if (tab == CoreCommandPage.TERRITORY) {
             drawTerritory(g, mx, my);
-        } else if (tab == 4) {
+        } else if (tab == CoreCommandPage.INTEL) {
             drawIntel(g, mx, my);
         }
 
@@ -698,40 +760,35 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 x + w, y + CoreHireLayout.PAGE_HEADER_HEIGHT,
                 CommandPalette.DIVIDER);
 
-        String title = PAGE_TITLES[Math.max(0, Math.min(tab, PAGE_TITLES.length - 1))];
-        String subtitle = PAGE_SUBTITLES[Math.max(0, Math.min(tab, PAGE_SUBTITLES.length - 1))];
-        int titleWidth = Math.min(w / 3, Math.max(90, font.width(title) + 8));
-        text(g, title.toUpperCase(Locale.ROOT), x + 8, y + 2,
-                titleWidth, accent);
-        text(g, subtitle, x + titleWidth + 10, y + 2,
-                Math.max(1, w - titleWidth - 170), CommandPalette.TEXT_MUTED);
-
+        String title = tab.title();
+        String subtitle = tab.description();
         String metric = pageMetric();
-        int metricWidth = Math.min(150, font.width(metric) + 4);
-        text(g, metric, x + w - metricWidth - 7, y + 2,
+        int metricWidth = Math.min(w / 3, font.width(metric) + 4);
+        text(g, title.toUpperCase(Locale.ROOT), x + 8, y + 3,
+                w - metricWidth - 28, accent);
+        text(g, metric, x + w - metricWidth - 7, y + 3,
                 metricWidth, CommandPalette.TEXT);
-        text(g, pageContext(), x + 8, y + 10,
-                w - 16, CommandPalette.TEXT_DIM);
+        text(g, subtitle, x + 8, y + 14, w - 16, CommandPalette.TEXT_MUTED);
     }
 
     private int pageAccent() {
         return switch (tab) {
-            case 1 -> CommandPalette.ACCENT_ARCANE;
-            case 2 -> CommandPalette.ACCENT_EMERALD;
-            case 3 -> CommandPalette.ACCENT_TEAL;
-            case 4 -> CommandPalette.ACCENT_STEEL;
+            case LOOT -> CommandPalette.ACCENT_ARCANE;
+            case TREASURY -> CommandPalette.ACCENT_EMERALD;
+            case TERRITORY -> CommandPalette.ACCENT_TEAL;
+            case INTEL -> CommandPalette.ACCENT_STEEL;
             default -> CommandPalette.ACCENT_GOLD;
         };
     }
 
     private String pageMetric() {
         return switch (tab) {
-            case 0 -> String.format(Locale.ROOT, "Refresh %d:%02d",
+            case ARMY -> String.format(Locale.ROOT, "Refresh %d:%02d",
                     menu.seconds() / 60, menu.seconds() % 60);
-            case 1 -> String.format(Locale.ROOT, "Treasury %,de", menu.bank());
-            case 2 -> String.format(Locale.ROOT, "Balance %,de", menu.bank());
-            case 3 -> ownedTerritoryBuffs() + "/" + TerritoryBuffs.COUNT + " active";
-            case 4 -> switch (intelSection) {
+            case LOOT -> String.format(Locale.ROOT, "Treasury %,de", menu.bank());
+            case TREASURY -> String.format(Locale.ROOT, "Balance %,de", menu.bank());
+            case TERRITORY -> ownedTerritoryBuffs() + "/" + TerritoryBuffs.COUNT + " active";
+            case INTEL -> switch (intelSection) {
                 case 0 -> "Unit archive";
                 case 1 -> "Host archive";
                 default -> "Field doctrine";
@@ -742,11 +799,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     private String pageContext() {
         return switch (tab) {
-            case 0 -> "Four faction-wide offers · purchases deploy from the shared Treasury";
-            case 1 -> "Rewards stay concealed until opened · purchases use the shared Treasury";
-            case 2 -> "Every transaction is faction-wide and recorded in recent activity";
-            case 3 -> "Permanent decrees affect every member · contracts dispatch equipped builders";
-            case 4 -> "Scroll the archive or switch dossiers without leaving the command center";
+            case ARMY -> "Four faction-wide offers · purchases deploy from the shared Treasury";
+            case LOOT -> "Rewards stay concealed until opened · purchases use the shared Treasury";
+            case TREASURY -> "Every transaction is faction-wide and recorded in recent activity";
+            case TERRITORY -> "Permanent decrees affect every member · contracts dispatch equipped builders";
+            case INTEL -> "Scroll the archive or switch dossiers without leaving the command center";
             default -> "";
         };
     }
@@ -788,16 +845,16 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
         // Context hint in the middle.
         String hint = switch (tab) {
-            case 0 -> "Shared stock rotates every 15 minutes";
-            case 1 -> "Loot & blessings draw from the faction Treasury";
-            case 2 -> "Interest " + menu.interestRate() / 100.0 + "% per in-game day";
-            case 3 -> "Faction-wide upgrades apply to every member";
-            case 4 -> "Unit reference, enemy lore and field guidance";
+            case ARMY -> "Shared stock rotates every 15 minutes";
+            case LOOT -> "Loot & blessings draw from the faction Treasury";
+            case TREASURY -> "Interest " + menu.interestRate() / 100.0 + "% per in-game day";
+            case TERRITORY -> "Faction-wide upgrades apply to every member";
+            case INTEL -> "Unit reference, enemy lore and field guidance";
             default -> "";
         };
         if (!layout.compact()) {
             int hintLeft = x + 126;
-            int hintRight = tab == 0 ? feedbackLeft - 92 : feedbackLeft - 8;
+            int hintRight = tab == CoreCommandPage.ARMY ? feedbackLeft - 92 : feedbackLeft - 8;
             int hintArea = Math.max(1, hintRight - hintLeft);
             int hintW = Math.min(font.width(hint), hintArea);
             text(g, hint, hintLeft + Math.max(0, (hintArea - hintW) / 2),
@@ -805,7 +862,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
 
         // Refresh timer on the right (only for tabs where it applies).
-        if (tab == 0) {
+        if (tab == CoreCommandPage.ARMY) {
             String timer = String.format(Locale.ROOT, "Refresh %d:%02d",
                     menu.seconds() / 60, menu.seconds() % 60);
             int tw = font.width(timer);
@@ -825,24 +882,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int x = layout.x() + 10, y = layout.contentY();
         int w = layout.width() - 20;
         int h = layout.height() - (y - layout.y()) - 22;
-
-        // Sub-tab strip
-        String[] labels = {"Units", "Enemy Lore", "How to Play"};
-        int segW = w / 3;
-        for (int i = 0; i < 3; i++) {
-            int sx = x + i * segW;
-            boolean active = intelSection == i;
-            int accent = active ? CommandPalette.ACCENT_STEEL : CommandPalette.TEXT_DIM;
-            CommandFrame.card(g, sx, y, segW - 2, 18, accent,
-                    over(mouseX, mouseY, sx, y, segW - 2, 18));
-            if (active) {
-                g.fill(sx + 4, y + 16, sx + segW - 6, y + 17,
-                        CommandPalette.ACCENT_GOLD);
-            }
-            int labelW = font.width(labels[i]);
-            text(g, labels[i], sx + (segW - labelW) / 2, y + 5, segW,
-                    active ? CommandPalette.TEXT : CommandPalette.TEXT_MUTED);
-        }
 
         // Body panel
         int bodyY = y + 22;
@@ -910,6 +949,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
     }
 
+    private boolean archiveCardVisible(int y, int height) {
+        return y + height > layout.contentY() + 24 && y < layout.contentBottom();
+    }
+
     private int drawUnitsSection(GuiGraphics g, int x, int startY, int w) {
         int y = startY;
         for (var entry : com.devfarinsky.siegeoverhaul.client.codex.UnitCodex.ENTRIES) {
@@ -918,6 +961,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             int counterH = wrapped("Counter: " + entry.counter(), innerW).size() * 10;
             int dropsH = wrapped("Drops: " + entry.drops(), innerW).size() * 10;
             int cardH = 12 + 12 + 10 + 10 + behaviorH + counterH + dropsH + 10;
+            if (!archiveCardVisible(y, cardH)) { y += cardH + 6; continue; }
             CommandFrame.card(g, x, y, w, cardH, CommandPalette.ACCENT_STEEL);
             int tx = x + 8;
             int ty = y + 6;
@@ -950,6 +994,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 bodyH += wrapped(line, innerW).size() * 10;
             }
             int cardH = 12 + 12 + bodyH;
+            if (!archiveCardVisible(y, cardH)) { y += cardH + 6; continue; }
             CommandFrame.card(g, x, y, w, cardH, CommandPalette.ACCENT_ARCANE);
             int tx = x + 8;
             int ty = y + 6;
@@ -969,6 +1014,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             int innerW = Math.max(1, w - 16);
             int bodyH = wrapped(tip.body(), innerW).size() * 10;
             int cardH = 12 + 12 + bodyH;
+            if (!archiveCardVisible(y, cardH)) { y += cardH + 6; continue; }
             CommandFrame.card(g, x, y, w, cardH, CommandPalette.ACCENT_TEAL);
             int tx = x + 8;
             int ty = y + 6;
@@ -1622,8 +1668,13 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     public boolean mouseScrolled(double x, double y, double delta) {
         x = layout.logicalX(x);
         y = layout.logicalY(y);
-        // Territory tab is now a pure upgrade shop; no map scroll needed.
-        if (tab == 2) {
+        if (CoreTabStrip.contains(x, y, layout.x() + 10, layout.tabY(),
+                layout.width() - 20, CoreHireLayout.TAB_HEIGHT) && delta != 0) {
+            movePage(delta > 0 ? -1 : 1);
+            return true;
+        }
+        if (tab == CoreCommandPage.TREASURY && CoreTabStrip.contains(x, y,
+                layout.x() + 10, bankRosterY(), layout.width() - 20, bankRosterHeight())) {
             int count = menu.members().size();
             int rosterH = bankRosterHeight();
             int lines = Math.max(1, (rosterH - 26) / 12);
@@ -1632,9 +1683,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             rosterOffset = Math.max(0, Math.min(maxOffset, rosterOffset + step));
             return true;
         }
-        if (tab == 4) {
+        if (tab == CoreCommandPage.INTEL && CoreTabStrip.contains(x, y,
+                intelBodyX, intelBodyY, intelBodyW, intelBodyH)) {
             int step = (int) -Math.signum(delta) * 12;
-            intelOffset = Math.max(0, intelOffset + step);
+            intelOffset = Math.max(0, Math.min(intelMaxOffset, intelOffset + step));
             return true;
         }
         return super.mouseScrolled(x, y, delta);
@@ -1644,19 +1696,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         mouseX = layout.logicalX(mouseX);
         mouseY = layout.logicalY(mouseY);
-        if (tab == 4 && button == 0) {
-            // Sub-tab strip at the top of the Intel panel: hit-test one of
-            // three equal segments and switch section.
-            int x = layout.x() + 10, y = layout.contentY(), w = layout.width() - 20;
-            int segW = w / 3;
-            for (int i = 0; i < 3; i++) {
-                int sx = x + i * segW;
-                if (mouseX >= sx && mouseX < sx + segW
-                        && mouseY >= y && mouseY < y + 18) {
-                    if (intelSection != i) { intelSection = i; intelOffset = 0; }
-                    return true;
-                }
-            }
+        if (tab == CoreCommandPage.INTEL && button == 0) {
             // Scrollbar hit-test: 8px wide gutter on the right edge of the body panel.
             int trackX = intelBodyX + intelBodyW - 8;
             int trackY = intelBodyY + 4;
@@ -1699,7 +1739,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         dx /= layout.scale();
         dy /= layout.scale();
         // Territory tab is now a pure upgrade shop; no map drag handling.
-        if (tab == 4 && intelDragging && button == 0 && intelMaxOffset > 0) {
+        if (tab == CoreCommandPage.INTEL && intelDragging && button == 0 && intelMaxOffset > 0) {
             // Map the mouse's Y travel back into scroll offset via the
             // thumb's travel range. Same formula as the draw call.
             int trackH = intelBodyH - 8;

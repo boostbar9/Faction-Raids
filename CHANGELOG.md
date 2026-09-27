@@ -1,3 +1,10 @@
+## 4.49.1 — Command Center navigation
+
+- Shared Treasury funds and your personal purse stay visible on every page. Select the Treasury balance to manage funds.
+- Narrow windows show readable tabs with previous/next controls instead of squeezing every label. Ctrl+Tab, Ctrl+Shift+Tab and scrolling over the tab bar switch pages.
+- Page headings have separate title and description lines. Intel sections support keyboard focus and retain their individual scroll positions.
+- Treasury and Intel scroll only under the pointer. Intel skips painting off-screen archive cards.
+
 ## 4.49.0 — Olympian creative catalog
 
 - The Siege Overhaul creative tab includes every registered mod item, all loot-box tiers, named Olympian rewards, hero equipment and faction banners.
