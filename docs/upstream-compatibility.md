@@ -58,3 +58,7 @@ Follow-up work, not claimed fixed by this release:
 3. Dedicated captains, cannon provisioning, naval target selection and rams/towers are integration extensions. They need finite budgets, ownership checks, friendly-fire/claim protection and runtime validation before activation.
 
 Tests cover admission flags, refusal/existing-passenger handling, diagonal terrain and ceiling rejection, nearby entities, borders/heights, checked fallback landing and finite non-destructive repair supplies. They do not execute companion implementations or constitute interactive playtesting.
+
+## Commissioned wall projections (4.49.0)
+
+Workers commit `29d26e1df6475fc8d043dc5d455f67b2fd1e9982` renders the shovel independently, but only renders BuildArea structure NBT when focused, showBox is true, or getAlwaysShowProjection() is true. Territory commissions previously never set the latter. Small new wall jobs now call the native setAlwaysShowProjection(true); jobs over 1,024 blocks keep manual projection because the native renderer parses/renders the full blueprint each frame. Missing presentation APIs do not fail the build job. The commission reports the actual native marker coordinates and explains closing the HUD and approaching it. Blueprint origins and all world build positions remain unchanged. This is an in-world job projection, not a pre-purchase HUD preview. Native entity tracking/frustum and ownership visibility rules still apply.

@@ -3,6 +3,7 @@
 - The Siege Overhaul creative tab includes every registered mod item, all loot-box tiers, named Olympian rewards, hero equipment and faction banners.
 - The Olympian Arts reference book explains all twenty hero powers and the distinction between hero abilities and held equipment.
 - Added Creative-only Tempest, Inferno and Undertow spellbooks with a one-second cast, saved cooldowns and existing casting effects. Only visible siege enemies are affected; no terrain damage.
+- Commissioned walls enable the native Workers 2 projection for plans up to 1,024 blocks and report the shovel marker coordinates. Larger plans retain manual projection to avoid rendering the entire wall every frame.
 - Spawn eggs check placement, finish outfitting before insertion, and preserve the egg on failed or cancelled spawns. Spawned units retain native Recruits hiring and commands.
 
 # 4.48.1 beta
