@@ -51,11 +51,22 @@ class UnitSpawnEggItemTest extends MinecraftTestSupport {
             when(level.hasChunkAt(any())).thenReturn(true);
             var border=mock(WorldBorder.class);when(level.getWorldBorder()).thenReturn(border);when(border.isWithinBounds(any(BlockPos.class))).thenReturn(true);
             doReturn(mob).when(type).create(level);when(mob.getPersistentData()).thenReturn(tag);
+            when(mob.getRandom()).thenReturn(net.minecraft.util.RandomSource.create(42));
             when(mob.getBoundingBox()).thenReturn(new AABB(0,65,0,1,67,1));
             when(level.noCollision(mob)).thenReturn(true);when(level.getEntities(eq(mob),any(AABB.class))).thenReturn(List.of());
             when(level.addFreshEntity(mob)).thenReturn(true);when(recruit.getInventory()).thenReturn(inventory);
         }
         InteractionResult spawn(){return item(22).spawn(level,ctx,type);}
+    }
+    @Test void everyRegisteredRoleReceivesEquipmentThroughTheEggPath() {
+        for(int role=0;role<30;role++) {
+            if(role>=4 && role<10) continue;
+            var f=new Fixture();
+            assertEquals(InteractionResult.CONSUME,item(role).spawn(f.level,f.ctx,f.type),"role "+role);
+            assertFalse(f.inventory.getItem(5).isEmpty(),"role "+role);
+            if(role>=10)assertEquals(role,f.tag.getInt("SiegeHeroRole"));
+            else assertTrue(f.tag.getBoolean("SiegeCoreOutfitted"));
+        }
     }
     @Test void outfitsHeroBeforePublishingAndConsumesOnlySurvivalEgg() {
         for(boolean creative:new boolean[]{false,true}) {
