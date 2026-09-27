@@ -195,3 +195,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for Java/Forge setup, the code map, testi
 With [Curios API](https://www.curseforge.com/minecraft/mc-mods/curios) 5.14.1+ (5.x, Minecraft 1.20.1 Forge), place a relic in the Curios charm slot: Forge Ember grants +1 armor toughness, Owl Seal grants +2 armor, and Sun Laurel grants +1 maximum heart. Wearing a relic does not consume it. Remove it and use it in hand for its usual consumable action. One charm slot is supplied without replacing other mods' slot definitions; modpacks can configure additional slots and their bonuses stack normally.
 
 Curios is optional. Install it on the server and every client when using this integration. No Curios classes are bundled; without it, all relics still work in hand. Native Curios handles equipped attributes, synchronization and death drops. There are no per-tick scans or automatic consumable activations. Automated API checks are not an interactive combined-mod playtest.
+
+### Third-party item art
+
+Tempest, Inferno and Undertow spellbook icons use unmodified artwork from [Weekly Dot - Pack 1](https://mcmodels.net/products/13626/weekly-dot-pack-1), by Hungry (Hungry22) / More&Better. The author's distribution terms and exact asset manifest are included in `META-INF/credits/weekly-dot/` in the JAR and `src/main/resources/META-INF/credits/weekly-dot/` in source. These assets retain their own terms. No ItemsAdder or Nexo installation is required.

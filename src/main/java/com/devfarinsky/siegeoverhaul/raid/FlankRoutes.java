@@ -43,7 +43,7 @@ public final class FlankRoutes {
                 BlockPos feet=BlockPos.containing(candidate.x,mob.getY()+dy,candidate.z);
                 if(!level.hasChunkAt(feet) || !level.getWorldBorder().isWithinBounds(feet)
                         || feet.getY()<=level.getMinBuildHeight() || feet.getY()+2>=level.getMaxBuildHeight())continue;
-                if(!safeGround(level,feet) || !level.noCollision(mob,mob.getBoundingBox().move(Vec3.atBottomCenterOf(feet).subtract(mob.position()))))continue;
+                if(!safeDestination(level,mob,Vec3.atBottomCenterOf(feet)))continue;
                 if(++paths>12)return null;
                 var path=mob.getNavigation().createPath(feet,0);
                 if(path==null || !path.canReach())continue;
@@ -54,9 +54,27 @@ public final class FlankRoutes {
         }
         return null;
     }
+    /** Shared by new routes and cached destinations; no chunk loading or path search. */
+    public static boolean safeDestination(ServerLevel level, Mob mob, Vec3 target) {
+        BlockPos feet=BlockPos.containing(target);
+        if(feet.getY()<=level.getMinBuildHeight() || feet.getY()+2>=level.getMaxBuildHeight()
+                || !level.hasChunkAt(feet) || !level.hasChunkAt(feet.below())
+                || !level.getWorldBorder().isWithinBounds(feet))return false;
+        var body=mob.getBoundingBox().move(target.subtract(mob.position()));
+        if(body.minY<=level.getMinBuildHeight() || body.maxY>=level.getMaxBuildHeight()
+                || !level.getWorldBorder().isWithinBounds(body))return false;
+        for(BlockPos p:BlockPos.betweenClosed(BlockPos.containing(body.minX,body.minY,body.minZ),
+                BlockPos.containing(Math.nextDown(body.maxX),Math.nextDown(body.maxY),Math.nextDown(body.maxZ)))) {
+            if(!level.hasChunkAt(p) || !level.getFluidState(p).isEmpty())return false;
+        }
+        return safeGround(level,feet) && level.noCollision(mob,body);
+    }
+
     static boolean safeGround(ServerLevel level,BlockPos feet) {
         var floor=level.getBlockState(feet.below());
         return floor.isFaceSturdy(level,feet.below(),Direction.UP)
+                && floor.getFluidState().isEmpty()
+                && !floor.is(net.minecraft.world.level.block.Blocks.CACTUS)
                 && !floor.is(net.minecraft.world.level.block.Blocks.MAGMA_BLOCK)
                 && !floor.is(net.minecraft.world.level.block.Blocks.CAMPFIRE)
                 && !floor.is(net.minecraft.world.level.block.Blocks.SOUL_CAMPFIRE)

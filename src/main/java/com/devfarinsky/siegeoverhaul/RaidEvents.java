@@ -4391,15 +4391,14 @@ public final class RaidEvents {
         return speed;
     }
 
-    private static Vec3 fallbackRouteTarget(ServerLevel level, Mob mob, Vec3 objective,
+    static Vec3 fallbackRouteTarget(ServerLevel level, Mob mob, Vec3 objective,
                                             StuckEntry stuck, long gameTime,
                                             PathingTelemetry telemetry) {
         if (stuck == null || stuck.escalationLevel < 1 || !(mob instanceof PathfinderMob pmob)) return null;
         if (stuck.cachedFallbackTarget != null && objective.equals(stuck.cachedFallbackObjective)
                 && gameTime <= stuck.fallbackCacheUntilGameTime && gameTime >= stuck.fallbackCacheUntilGameTime - 300
                 && mob.distanceToSqr(stuck.cachedFallbackTarget) > 4.0
-                && level.hasChunkAt(BlockPos.containing(stuck.cachedFallbackTarget))
-                && level.getWorldBorder().isWithinBounds(BlockPos.containing(stuck.cachedFallbackTarget))) {
+                && com.devfarinsky.siegeoverhaul.raid.FlankRoutes.safeDestination(level, mob, stuck.cachedFallbackTarget)) {
             telemetry.fallbackCacheHits++;
             return stuck.cachedFallbackTarget;
         }
@@ -4426,20 +4425,28 @@ public final class RaidEvents {
         return target;
     }
 
-    private static Vec3 coneFallbackTarget(PathfinderMob mob, Vec3 objective) {
+    static Vec3 coneFallbackTarget(PathfinderMob mob, Vec3 objective) {
         int radius = RaidConfig.CONE_FALLBACK_RADIUS.get();
         int vertical = RaidConfig.CONE_FALLBACK_VERTICAL.get();
         // Narrow cone first: vanilla's ~18-degree attempt at full radius.
         Vec3 narrow = DefaultRandomPos.getPosTowards(mob, radius, vertical,
                 objective, 0.3141592741012573);
-        if (narrow != null) return narrow;
+        if (reachableFallback(mob, narrow)) return narrow;
         // Widen to a 90-degree cone at half radius. Vanilla drops radius
         // when widening because a wider cone at full radius tends to pick
         // points behind terrain features that the narrow attempt already
         // rejected. Half-radius keeps the retry local to the raider.
         int wideRadius = Math.max(4, radius / 2);
-        return DefaultRandomPos.getPosTowards(mob, wideRadius, vertical,
+        Vec3 wide = DefaultRandomPos.getPosTowards(mob, wideRadius, vertical,
                 objective, 1.5707963705062866);
+        return reachableFallback(mob, wide) ? wide : null;
+    }
+
+    private static boolean reachableFallback(PathfinderMob mob, Vec3 candidate) {
+        if (candidate == null || !(mob.level() instanceof ServerLevel level)
+                || !com.devfarinsky.siegeoverhaul.raid.FlankRoutes.safeDestination(level,mob,candidate)) return false;
+        var path=mob.getNavigation().createPath(BlockPos.containing(candidate),0);
+        return path!=null && path.canReach();
     }
 
     private static void updateStuckTracker(Mob mob, UUID id, String teamKey,

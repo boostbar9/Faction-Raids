@@ -1,0 +1,43 @@
+English:
+  ⚠️ Notice:
+    This product is subject to the BY-NC-SA License.
+    - Attribution-NonCommercial-ShareAlike
+    - Copying, distribution, and modifications are allowed (must credit the original author and source).
+    - Commercial use is allowed except for resale.
+
+  🛠 Required Plugins:
+    ItemsAdder 3.6.2c or higher OR Nexo 0.4 or higher
+
+  📥 How to Apply:
+    1. Open the folder for the desired language (en or ko)
+    2. Open the folder for either itemsadder or nexo, depending on the type you want.
+    3. Copy the plugins folder inside.
+    4. Paste and overwrite it in your server's plugins folder. ✅ Done!
+
+  💡 Notes:
+    If you have any questions about this product, feel free to contact us on Discord!
+    Discord: https://discord.gg/uNcADBt3Kb
+
+  👤 Creator: Hungry (Hungry22)
+
+Korea:
+  ⚠️ 주의:
+    BY-NC-SA 라이선스가 적용됩니다.
+    - 저작자표시-비영리-동일조건변경허락
+    - 복사, 배포, 2차 수정 가능 (출처, 원 저작자 표시 조건)
+    - 재판매를 제외한 영리 목적 사용을 허용합니다.
+
+  🛠 필수 플러그인:
+    ItemsAdder 3.6.2c 이상 or Nexo 0.4 이상
+
+  📥 적용방법:
+    1. en, ko 중 원하는 언어의 폴더 열기
+    2. itemsadder, nexo 중 원하는 타입의 폴더 열기
+    3. 안에 있는 plugins 폴더를 복사하여
+    4. 서버의 plugins 폴더에 덮어씌우기 하면 끝
+
+  💡 참고:
+    해당 제품에 대해 궁금한 점이 있다면 디스코드로 문의주세요!
+    디스코드: https://discord.gg/uNcADBt3Kb
+
+  👤 제작자: 헝그리(Hungry22)
