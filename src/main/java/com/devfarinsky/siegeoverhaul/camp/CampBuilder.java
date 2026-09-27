@@ -30,7 +30,7 @@ public final class CampBuilder {
         if (raid.campPos == null
                 || !RaidConfig.ENABLE_CAMP_CONSTRUCTION.get() || !WorkersBridge.available()) return;
         for (int i = 0; i < RaidConfig.CAMP_BUILDER_MAX.get(); i++) {
-            BlockPos spawn = standingPosition(level, raid.campPos.offset(7 + i, 0, 0), raid.campPos.getY(), Vec3.atCenterOf(raid.campPos));
+            BlockPos spawn = CampBuilderAccess.spawnPosition(level, raid, raid.campPos.offset(7 + i, 0, 0));
             if (spawn == null) continue;
             WorkersBridge.spawnBuilder(level, spawn, raid.teamKey).ifPresent(worker -> raid.campWorkers.add(worker.getUUID()));
         }
@@ -66,7 +66,7 @@ public final class CampBuilder {
             Entity entity = level.getEntity(id);
             if (!(entity instanceof Mob worker) || !worker.isAlive()) continue;
             BlockPos target = BlockPos.of(raid.pendingCampBlocks.keySet().iterator().next());
-            BlockPos stand = standingPosition(level, target, raid.campPos.getY(), worker.position());
+            BlockPos stand = CampBuilderAccess.workPosition(level, raid, worker, target);
             if (stand == null || !WorkersBridge.moveBuilder(worker, stand)) continue;
             worker.getLookControl().setLookAt(target.getX() + 0.5, target.getY() + 0.5, target.getZ() + 0.5);
             int placed = placeNearby(raid, worker.position(), BLOCKS_PER_BUILDER, place);
@@ -105,29 +105,6 @@ public final class CampBuilder {
     static boolean withinReach(Vec3 worker, BlockPos pos) {
         double dx = worker.x - (pos.getX() + 0.5), dz = worker.z - (pos.getZ() + 0.5);
         return dx * dx + dz * dz <= 16 && Math.abs(worker.y - pos.getY()) <= 5;
-    }
-
-    /** Find ground beside the job; do not send workers onto a roof or through the camp wall. */
-    private static BlockPos standingPosition(ServerLevel level, BlockPos target, int groundY, Vec3 from) {
-        BlockPos best = null;
-        double bestDistance = Double.MAX_VALUE;
-        for (int radius = 1; radius <= 3; radius++) {
-            for (Direction direction : Direction.Plane.HORIZONTAL) {
-                for (int dy = -3; dy <= 3; dy++) {
-                    BlockPos feet = new BlockPos(target.getX(), groundY + dy, target.getZ()).relative(direction, radius);
-                    if (level.hasChunkAt(feet) && level.getWorldBorder().isWithinBounds(feet)
-                            && level.getBlockState(feet.below()).isFaceSturdy(level, feet.below(), Direction.UP)
-                            && level.getBlockState(feet).isAir() && level.getBlockState(feet.above()).isAir()) {
-                        double distance = from.distanceToSqr(Vec3.atBottomCenterOf(feet));
-                        if (distance < bestDistance) {
-                            best = feet;
-                            bestDistance = distance;
-                        }
-                    }
-                }
-            }
-        }
-        return best;
     }
 
     public static void cleanup(ServerLevel level, RaidState raid) {

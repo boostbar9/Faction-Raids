@@ -1,3 +1,9 @@
+# 4.47.23 beta
+
+- Enemy camp builders spawn on checked surface ground instead of nearby underground air pockets.
+- Fallback builders choose reachable work positions with their native navigation. Partial paths no longer redirect them toward blocked pockets.
+- Standing checks reject hazardous ground, blocked headroom and pending construction through the worker's body, while preserving finite jobs and supplies.
+
 # 4.47.22 beta
 
 - New enemy core sites require a checked, three-wide walking route from the main camp avenue through the starter palisade to the sanctuary. Placement waits when no safe route is available.
