@@ -1612,8 +1612,11 @@ public final class RaidEvents {
         state.reconcileTicks = 0;
         reconcileTaggedMobs(level, point, state);
         updateTrackedMobs(level, state);
-        for (UUID id : state.raiders) if (level.getEntity(id) instanceof Mob mob)
+        Vec3 marchObjective=Vec3.atCenterOf(point.pos());
+        for (UUID id : state.raiders) if (level.getEntity(id) instanceof Mob mob) {
             com.devfarinsky.siegeoverhaul.items.FactionUniforms.apply(mob,state.factionId,mob.getPersistentData().getString(RAID_ROLE_TAG));
+            com.devfarinsky.siegeoverhaul.raid.MarchPace.update(mob,state,marchObjective);
+        }
         data.setDirty();
         source.sendSuccess(() -> Component.literal("Reconciled invasion " + key + ": " +
                 state.raiders.size() + " enemies tracked.").withStyle(ChatFormatting.GREEN), true);
