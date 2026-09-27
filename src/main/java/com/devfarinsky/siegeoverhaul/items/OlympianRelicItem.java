@@ -118,6 +118,12 @@ public final class OlympianRelicItem extends Item {
                 tooltip.add(Component.literal("weakness and slowness. Keeps beneficial effects.").withStyle(ChatFormatting.GOLD));
             }
         }
+        tooltip.add(Component.literal("Optional Curios charm: " + switch (kind) {
+            case FORGE -> "+1 armor toughness while equipped.";
+            case WATCH -> "+2 armor while equipped.";
+            case CLEANSE -> "+1 maximum heart while equipped.";
+        }).withStyle(ChatFormatting.AQUA));
+        tooltip.add(Component.literal("Equip in the Curios screen; wearing does not consume it.").withStyle(ChatFormatting.GRAY));
         tooltip.add(Component.literal("Consumed on success · 10 second cooldown").withStyle(ChatFormatting.DARK_GRAY));
     }
 }

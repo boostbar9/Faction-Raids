@@ -189,3 +189,9 @@ Assault navigation retries prolonged circling while allowing short detours. Buil
 ## Contributing and GitHub Copilot
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for Java/Forge setup, the code map, testing and release handoff. Repository instructions and automatic Copilot setup keep development consistent across contributors.
+
+## Optional Curios accessories
+
+With [Curios API](https://www.curseforge.com/minecraft/mc-mods/curios) 5.14.1+ (5.x, Minecraft 1.20.1 Forge), place a relic in the Curios charm slot: Forge Ember grants +1 armor toughness, Owl Seal grants +2 armor, and Sun Laurel grants +1 maximum heart. Wearing a relic does not consume it. Remove it and use it in hand for its usual consumable action. One charm slot is supplied without replacing other mods' slot definitions; modpacks can configure additional slots and their bonuses stack normally.
+
+Curios is optional. Install it on the server and every client when using this integration. No Curios classes are bundled; without it, all relics still work in hand. Native Curios handles equipped attributes, synchronization and death drops. There are no per-tick scans or automatic consumable activations. Automated API checks are not an interactive combined-mod playtest.

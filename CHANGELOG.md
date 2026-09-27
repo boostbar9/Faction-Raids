@@ -1,3 +1,11 @@
+# 4.49.5 — Blessed supplies and Curios
+
+- Optional Curios 5.14.1+ support: wear Forge Ember, Owl Seal or Sun Laurel in the charm slot for a passive defense or health bonus. Equipping never spends charges; no new required dependency.
+- Blessed supplies now carry usable powers, including Rampart absorption, Forge resistance, Moon Sight, Deep Breath and safe-descent blessings. Sneak-use in air to activate; tooltips show the exact cost, effects and durations. Ordinary use, crafting and placement stay available.
+- All supply blessings share a ten-second cooldown. Ineffective uses spend nothing; stronger existing effects stay intact. The power stays with the item through saving and inventory transfers.
+- Reward-eligible siege raiders killed by the defending faction have a 2.5% chance to drop a sealed box (2% Common, 0.5% Uncommon). Creative kills, untracked spawns, canceled drops and disabled mob loot do not award boxes. Wave rewards remain separate.
+- Loot-box prices remain 16/48/96 emeralds. Update the server and every client together.
+
 # 4.49.4 — Olympian utility relics
 
 - Added three real consumable relics with separate item IDs, 3D models and activation effects: Hephaestus' Forge Ember repairs equipment in the other hand; Athena's Owl Seal outlines nearby siege enemies; Apollo's Sun Laurel removes five combat afflictions while preserving beneficial effects.

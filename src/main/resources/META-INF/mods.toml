@@ -139,3 +139,11 @@ description='''${mod_description}'''
     versionRange="[0,)"
     ordering="AFTER"
     side="BOTH"
+
+# Optional Olympian relic accessories. Install Curios on server and clients to use.
+[[dependencies.${mod_id}]]
+    modId="curios"
+    mandatory=false
+    versionRange="[5.14.1,6)"
+    ordering="AFTER"
+    side="BOTH"

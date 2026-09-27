@@ -112,6 +112,7 @@ minecraft {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
+    maven { url = "https://maven.theillusivec4.top/" }
     maven {
         name = 'MinecraftForge'
         url = 'https://maven.minecraftforge.net/'
@@ -126,6 +127,8 @@ repositories {
 }
 
 dependencies {
+    compileOnly fg.deobf('top.theillusivec4.curios:curios-forge:5.14.1+1.20.1:api')
+    testImplementation fg.deobf('top.theillusivec4.curios:curios-forge:5.14.1+1.20.1:api')
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testImplementation 'org.mockito:mockito-core:5.12.0'
     // Specify the version of Minecraft to use.
