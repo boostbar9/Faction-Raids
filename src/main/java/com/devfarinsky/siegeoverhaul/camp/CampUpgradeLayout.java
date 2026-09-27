@@ -53,7 +53,7 @@ final class CampUpgradeLayout {
         return plan;
     }
 
-    private static Palette palette(String factionId,int stage) {
+    static Palette palette(String factionId,int stage) {
         return switch(factionId==null?"":factionId) {
             case "blackbay_reavers" -> new Palette("minecraft:prismarine_bricks","minecraft:dark_prismarine",
                     "minecraft:prismarine_wall",pick(stage,"minecraft:cyan_terracotta","minecraft:blue_terracotta","minecraft:light_blue_terracotta"));
@@ -113,7 +113,7 @@ final class CampUpgradeLayout {
         }
     }
 
-    private record Palette(String base,String column,String rail,String roof) {}
+    record Palette(String base,String column,String rail,String roof) {}
 
     private static void put(Map<Long,String> plan,BlockPos center,Direction front,
                             int x,int y,int z,String block) {

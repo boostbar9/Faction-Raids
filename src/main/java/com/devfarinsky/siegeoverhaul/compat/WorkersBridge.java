@@ -449,6 +449,19 @@ public final class WorkersBridge {
         return isFleeingApi(worker);
     }
 
+    /** Exact live job and working command; never rescue a manually reassigned/following worker. */
+    public static boolean workingOn(Mob worker, Entity area) {
+        return workingOnApi(worker, area);
+    }
+
+    static boolean workingOnApi(Object worker, Object area) {
+        try {
+            return area != null && worker.getClass().getField("currentBuildArea").get(worker) == area
+                    && ((Number) worker.getClass().getMethod("getFollowState").invoke(worker)).intValue() == 6
+                    && !worker.getClass().getField("isFleeing").getBoolean(worker);
+        } catch (ReflectiveOperationException | RuntimeException ex) { return false; }
+    }
+
     /** Package-visible seam for testing the optional API without a Workers entity class. */
     static boolean isFleeingApi(Object worker) {
         if (worker == null) return false;

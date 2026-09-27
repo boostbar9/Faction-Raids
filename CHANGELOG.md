@@ -1,3 +1,9 @@
+# 4.47.20 beta
+
+- Commissioned wall builders that remain trapped below the surface now recover to a checked nearby standing position. Recovery waits for sustained lack of movement and respects ownership, the active job, follow/hold commands, combat, fleeing and leashes. It never digs terrain or changes supplies.
+- Starting camps replace the flat red tents with courtyard-facing Olympian pavilions: stone plinths, six columns, stepped roofs, lit entrances and host-specific materials.
+- Pavilion sites validate the whole building, clear interiors, shallow foundations and three-wide approaches before queuing construction. Existing camps and paid wall jobs keep their saved state.
+
 # 4.47.19 beta
 
 - Every sealed loot box now guarantees a named, enchanted Olympian armory piece plus provisions. Twelve patron identities span weapons, armor, shields and tools, with stronger materials and enchantments at higher rarities.

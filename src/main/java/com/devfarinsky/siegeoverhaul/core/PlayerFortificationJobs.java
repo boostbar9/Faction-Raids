@@ -64,6 +64,7 @@ public final class PlayerFortificationJobs {
         tag.remove(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER);
         tag.remove(ModConstants.Tags.PLAYER_FORTIFICATION_POS);
         tag.remove(ModConstants.Tags.PLAYER_FORTIFICATION_MISSES);
+        BuilderGroundRecovery.reset(builder);
     }
 
     /**
@@ -239,7 +240,7 @@ public final class PlayerFortificationJobs {
             reconnectPendingBuilder(level, builder);
             return;
         }
-        if (WorkersBridge.hasActiveBuildArea(builder)) return;
+        boolean active = WorkersBridge.hasActiveBuildArea(builder);
         UUID areaId = tag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID);
         Entity area = level.getEntity(areaId);
         if (area != null && area.isAlive()
@@ -258,6 +259,11 @@ public final class PlayerFortificationJobs {
                     || (areaTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER)
                         && !owner.equals(areaTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER)))) {
                 unlink(builder, areaId);
+                return;
+            }
+            if (active) {
+                if (WorkersBridge.workingOn(builder, area)) BuilderGroundRecovery.tick(level, builder);
+                else BuilderGroundRecovery.reset(builder);
                 return;
             }
             try {

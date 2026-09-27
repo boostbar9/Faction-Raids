@@ -196,6 +196,7 @@ public final class CampStructures {
 
     /** Keep later buildings and supply barrels out of an installation's entrance. */
     static boolean accessColumn(RaidState raid, BlockPos pos) {
+        if(CampStarterPavilion.accessColumn(raid,pos))return true;
         for (Kind kind : Kind.values()) {
             CompoundTag entry=root(raid).getCompound(kind.key);
             BlockPos center;
