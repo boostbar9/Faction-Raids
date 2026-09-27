@@ -124,4 +124,17 @@ class OlympianHeroCastingTest extends MinecraftTestSupport {
             network.verify(()->HeroCastPackets.send(eq(f.hero),anyInt(),eq(120L),eq(2)));
         }
     }
+    @Test void onlyServerUnloadsCancelServerCasts() {
+        for(boolean serverUnload:new boolean[]{false,true}) {
+            var f=new Fixture(22,false);
+            try(var network=mockStatic(HeroCastPackets.class)) {
+                f.tick();
+                var level=serverUnload?f.level:mock(net.minecraft.world.level.Level.class);
+                HeroCasting.unloaded(new net.minecraftforge.event.entity.EntityLeaveLevelEvent(f.hero,level));
+                when(f.level.getGameTime()).thenReturn(120L);f.tick();
+                verify(f.target,times(serverUnload?0:1)).hurt(f.damage,5F);
+                assertEquals(400L,f.tag.getLong("SiegeHeroNext"));
+            }
+        }
+    }
 }

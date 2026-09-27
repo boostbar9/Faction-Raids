@@ -78,7 +78,7 @@ public final class HeroCasting {
         }
     }
     @SubscribeEvent public static void unloaded(net.minecraftforge.event.entity.EntityLeaveLevelEvent event) {
-        if(event.getEntity() instanceof Mob hero)ACTIVE.remove(hero);
+        if(event.getLevel() instanceof ServerLevel && event.getEntity() instanceof Mob hero)ACTIVE.remove(hero);
     }
     @SubscribeEvent public static void stopped(ServerStoppedEvent event) { ACTIVE.clear(); }
 }
