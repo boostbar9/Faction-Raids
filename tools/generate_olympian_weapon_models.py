@@ -46,7 +46,12 @@ for patron,palette in palettes.items():
    box([7.5,6,7.5],[8.5,15,8.5],'grip');box([2,14,7],[10,16,9],'metal');box([2,11,7],[4,15,9],'trim');box([7,14,6.5],[9,16,9.5],'gem')
   else:
    box([7.5,6,7.5],[8.5,20,8.5],'grip');box([7,17,7],[9,19,9],'trim');box([8,19,7.8],[12,19.2,8.2],'string');box([11.8,8,7.8],[12,19,8.2],'string');box([10,7,7],[12,9,9],'metal')
-  display={'thirdperson_righthand':{'rotation':[0,0,0],'translation':[0,0,0],'scale':[.65,.65,.65]},'thirdperson_lefthand':{'rotation':[0,0,0],'translation':[0,0,0],'scale':[.65,.65,.65]},'firstperson_righthand':{'rotation':[0,-80,15],'translation':[1,1,0],'scale':[.65,.65,.65]},'firstperson_lefthand':{'rotation':[0,80,-15],'translation':[1,1,0],'scale':[.65,.65,.65]},'gui':{'rotation':[20,-35,-30],'translation':[0,-1,0],'scale':[.65,.65,.65]},'ground':{'rotation':[0,0,0],'translation':[0,3,0],'scale':[.4,.4,.4]},'fixed':{'rotation':[0,180,0],'translation':[0,0,0],'scale':[.65,.65,.65]}}
+  display={'thirdperson_righthand':{'rotation':[0,-90,55],'translation':[0,4,.5],'scale':[.65,.65,.65]},'thirdperson_lefthand':{'rotation':[0,90,-55],'translation':[0,4,.5],'scale':[.65,.65,.65]},'firstperson_righthand':{'rotation':[0,-80,15],'translation':[1,1,0],'scale':[.65,.65,.65]},'firstperson_lefthand':{'rotation':[0,80,-15],'translation':[1,1,0],'scale':[.65,.65,.65]},'gui':{'rotation':[20,-35,-30],'translation':[0,-1,0],'scale':[.65,.65,.65]},'ground':{'rotation':[0,0,0],'translation':[0,3,0],'scale':[.4,.4,.4]},'fixed':{'rotation':[0,180,0],'translation':[0,0,0],'scale':[.65,.65,.65]}}
+  if shape.startswith('crossbow'):
+   # Barrel runs along Z; align it with the hand instead of using the blade tilt.
+   for hand in ['righthand','lefthand']:
+    display['thirdperson_'+hand]={'rotation':[90,0,0],'translation':[0,2,0],'scale':[.65,.65,.65]}
+    display['firstperson_'+hand]={'rotation':[0,180,0],'translation':[0,1,0],'scale':[.65,.65,.65]}
   model={'gui_light':'front','textures':{'metal':'minecraft:block/'+palette[0],'gem':'minecraft:block/'+palette[1],'trim':'minecraft:block/'+palette[2],'grip':'minecraft:block/dark_oak_planks','string':'minecraft:block/white_wool','particle':'minecraft:block/'+palette[0]},'display':display,'elements':elems}
   (out/(patron+'_'+shape+'.json')).write_text(json.dumps(model,separators=(',',':'))+'\n')
 print('Original models:',len(list(out.glob('*.json'))))
