@@ -1,3 +1,9 @@
+# 4.47.21 beta
+
+- Camp builders preserve the planned facing, slab height and other block properties through construction and world reloads. Both native Workers jobs and fallback construction use the same saved states.
+- Starter pavilions gain sloped roofs and slab ridges in their host's stone palette, aligned with the courtyard entrance.
+- Construction rejects malformed block states. Cleanup preserves later player edits that change a tracked block's orientation; old camp saves retain their existing restoration behavior.
+
 # 4.47.20 beta
 
 - Commissioned wall builders that remain trapped below the surface now recover to a checked nearby standing position. Recovery waits for sustained lack of movement and respects ownership, the active job, follow/hold commands, combat, fleeing and leashes. It never digs terrain or changes supplies.

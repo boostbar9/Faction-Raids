@@ -33,6 +33,8 @@ public final class NativeCampConstruction {
 
     public static boolean start(ServerLevel level, RaidSavedData.RaidState raid) {
         if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level, raid)) return false;
+        if (raid.pendingCampBlocks.values().stream().anyMatch(id ->
+                CampBlockState.decode(id).filter(value -> !value.isAir()).isEmpty())) return false;
         if (raid.campWorkers.isEmpty() || raid.pendingCampBlocks.isEmpty()
                 || raid.pendingCampBlocks.size() > 512 || !RaidConfig.CLEANUP_WAR_CAMPS.get()) return false;
         // Validate the saved courtyard before GateAssembly or CampRoad can
@@ -150,13 +152,13 @@ public final class NativeCampConstruction {
         ListTag blocks = new ListTag();
         jobs.forEach((key, id) -> {
             BlockPos p = BlockPos.of(key);
-            var block = ForgeRegistries.BLOCKS.getValue(new ResourceLocation(id));
-            if (block == null || block == Blocks.AIR) throw new IllegalArgumentException("Invalid camp block " + id);
+            var state = CampBlockState.decode(id).filter(value -> !value.isAir())
+                    .orElseThrow(() -> new IllegalArgumentException("Invalid camp block " + id));
             CompoundTag entry = new CompoundTag();
             entry.putInt("x", p.getX() - min.getX());
             entry.putInt("y", p.getY() - min.getY());
             entry.putInt("z", p.getZ() - min.getZ());
-            entry.put("state", NbtUtils.writeBlockState(block.defaultBlockState()));
+            entry.put("state", NbtUtils.writeBlockState(state));
             blocks.add(entry);
         });
         tag.put("blocks", blocks);
@@ -201,8 +203,8 @@ public final class NativeCampConstruction {
     static List<ItemStack> materials(ServerLevel level, Map<Long, String> jobs) throws ReflectiveOperationException {
         Map<net.minecraft.world.item.Item, Integer> counts = new LinkedHashMap<>();
         for (String id : jobs.values()) {
-            var block = ForgeRegistries.BLOCKS.getValue(new ResourceLocation(id));
-            if (block == null || block == Blocks.AIR) throw new IllegalArgumentException("Invalid camp material " + id);
+            var block = CampBlockState.decode(id).filter(value -> !value.isAir())
+                    .orElseThrow(() -> new IllegalArgumentException("Invalid camp material " + id)).getBlock();
             var item = WorkersBridge.buildMaterial(level, block);
             if (item == null || item == net.minecraft.world.item.Items.AIR)
                 throw new IllegalStateException("No native material for " + id);
@@ -307,19 +309,8 @@ public final class NativeCampConstruction {
     }
 
     static boolean safeCell(BlockState current, String planned) {
-        if(current.isAir())return true;
-        if(!planned.equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(current.getBlock()))))return false;
-        BlockState expected=current.getBlock().defaultBlockState();
-        // Neighbor updates legitimately connect fences/walls and bend stairs after placement.
-        for(var property:current.getProperties()) {
-            boolean connection=(current.getBlock() instanceof net.minecraft.world.level.block.FenceBlock
-                    || current.getBlock() instanceof net.minecraft.world.level.block.WallBlock
-                    || current.getBlock() instanceof net.minecraft.world.level.block.IronBarsBlock)
-                    && Set.of("north","south","east","west","up").contains(property.getName());
-            boolean stairShape=current.getBlock() instanceof net.minecraft.world.level.block.StairBlock && property.getName().equals("shape");
-            if(!connection && !stairShape && !current.getValue(property).equals(expected.getValue(property)))return false;
-        }
-        return true;
+        return CampBlockState.decode(planned).filter(state -> !state.isAir()).isPresent()
+                && (current.isAir() || CampBlockState.matches(current, planned));
     }
 
     public static void tick(ServerLevel level, RaidSavedData.RaidState raid) {

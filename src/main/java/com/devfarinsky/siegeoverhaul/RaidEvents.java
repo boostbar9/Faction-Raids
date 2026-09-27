@@ -3326,7 +3326,7 @@ public final class RaidEvents {
     /** Build a bounded number of decorative blocks each periodic pass. */
     private static void progressDeferredCampBuilds(ServerLevel level, RaidSavedData.RaidState state) {
         com.devfarinsky.siegeoverhaul.camp.CampBuilder.tick(level, state,
-                (pos, block) -> placeCampBlock(level, state, pos, block));
+                (pos, block) -> placeCampBlock(level, state, pos, block, state.pendingCampBlocks.get(pos.asLong())));
     }
 
     /**
@@ -3619,11 +3619,15 @@ public final class RaidEvents {
 
     private static void placeCampBlock(ServerLevel level, RaidSavedData.RaidState state,
                                        BlockPos pos, Block block) {
+        placeCampBlock(level, state, pos, block.defaultBlockState(), String.valueOf(ForgeRegistries.BLOCKS.getKey(block)));
+    }
+
+    private static void placeCampBlock(ServerLevel level, RaidSavedData.RaidState state,
+                                       BlockPos pos, BlockState planned, String encoded) {
         if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)
                 || !level.getFluidState(pos).isEmpty() || !com.devfarinsky.siegeoverhaul.camp.CampVegetation.replaceable(level.getBlockState(pos))) return;
         if (state.planningCamp) {
-            ResourceLocation id = ForgeRegistries.BLOCKS.getKey(block);
-            if (id != null) state.pendingCampBlocks.putIfAbsent(pos.asLong(), id.toString());
+            state.pendingCampBlocks.putIfAbsent(pos.asLong(), encoded);
             return;
         }
         if (com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.blocksAt(level,pos)) return;
@@ -3639,9 +3643,8 @@ public final class RaidEvents {
         BlockState originalState = level.getBlockState(pos);
         CompoundTag original = originalState.isAir() ? new CompoundTag()
                 : com.devfarinsky.siegeoverhaul.siege.BlockRestoration.serializeState(level, pos, originalState);
-        if (!level.setBlock(pos, block.defaultBlockState(), 3)) return;
-        ResourceLocation id = ForgeRegistries.BLOCKS.getKey(block);
-        if (id != null) state.recordCampBlock(pos.asLong(), id.toString(), original);
+        if (!level.setBlock(pos, planned, 3)) return;
+        state.recordCampBlock(pos.asLong(), encoded, original);
     }
 
     /**
@@ -3708,11 +3711,10 @@ public final class RaidEvents {
         for (Map.Entry<Long, CompoundTag> entry : placed) {
             BlockPos pos = BlockPos.of(entry.getKey());
             CompoundTag record = entry.getValue();
-            String placedId = record.getString("Placed");
             BlockState currentState = level.getBlockState(pos);
             // An empty space is safe to repair too: a destroyed camp block must
             // not lose the terrain it replaced. Preserve occupied replacements.
-            if (!com.devfarinsky.siegeoverhaul.camp.CampTerrain.matchesPlaced(currentState, placedId)) {
+            if (!com.devfarinsky.siegeoverhaul.camp.CampBlockState.matchesRecord(currentState, record)) {
                 orphanedPlayerBlocks++;
                 continue;
             }

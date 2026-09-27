@@ -548,7 +548,9 @@ public final class RaidSavedData extends SavedData {
          */
         public void recordCampBlock(long posKey, String placedBlockId, CompoundTag originalState) {
             CompoundTag record = new CompoundTag();
-            record.putString("Placed", placedBlockId);
+            int properties = placedBlockId.indexOf('[');
+            record.putString("Placed", properties < 0 ? placedBlockId : placedBlockId.substring(0, properties));
+            if (properties >= 0) record.putString("PlacedState", placedBlockId);
             CompoundTag previous = campBlocks.get(posKey);
             CompoundTag original = previous == null ? originalState : previous.getCompound("Original");
             record.put("Original", original == null ? new CompoundTag() : original.copy());
