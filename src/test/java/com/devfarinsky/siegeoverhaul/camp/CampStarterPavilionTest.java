@@ -50,7 +50,10 @@ class CampStarterPavilionTest extends MinecraftTestSupport {
         for(String faction:List.of("blackbay_reavers","hollowfang_clan","emberchant_zealots","crownfall_exiles","wilds_marauders")) {
             var plan=CampStarterPavilion.structure(BlockPos.ZERO,Direction.NORTH,faction);
             signatures.add(Set.copyOf(plan.values()));
-            for(String id:plan.values())assertNotEquals(Blocks.AIR,net.minecraftforge.registries.ForgeRegistries.BLOCKS.getValue(new net.minecraft.resources.ResourceLocation(id)));
+            for(String id:plan.values()) {
+                var block=net.minecraftforge.registries.ForgeRegistries.BLOCKS.getValue(new net.minecraft.resources.ResourceLocation(id));
+                assertNotNull(block,id);assertNotEquals(Blocks.AIR,block,id);
+            }
         }
         assertEquals(5,signatures.size());
     }
@@ -68,8 +71,8 @@ class CampStarterPavilionTest extends MinecraftTestSupport {
     @Test void unevenFootprintGetsSupportsAndExcessiveDropsRejectPlacement() {
         var level=ground();var raid=raid();BlockPos center=CampStarterPavilion.anchor(raid.campPos,Direction.NORTH,1);
         when(level.getHeight(any(),eq(center.getX()),eq(center.getZ()))).thenReturn(62);
-        when(level.getBlockState(any())).thenAnswer(i->{BlockPos p=i.getArgument(0);int top=p.getX()==center.getX()&&p.getZ()==center.getZ()?62:64;
-            return p.getY()<top?Blocks.STONE.defaultBlockState():Blocks.AIR.defaultBlockState();});
+        doAnswer(i->{BlockPos p=i.getArgument(0);int top=p.getX()==center.getX()&&p.getZ()==center.getZ()?62:64;
+            return p.getY()<top?Blocks.STONE.defaultBlockState():Blocks.AIR.defaultBlockState();}).when(level).getBlockState(any());
         var plan=CampStarterPavilion.plan(level,raid,center,Direction.NORTH);
         assertEquals("minecraft:cobblestone",plan.get(center.below(2).asLong()));
         when(level.getHeight(any(),eq(center.getX()),eq(center.getZ()))).thenReturn(60);

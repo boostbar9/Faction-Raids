@@ -32,8 +32,8 @@ class BuilderGroundRecoveryTest extends MinecraftTestSupport {
         when(level.getMinBuildHeight()).thenReturn(-64);when(level.getMaxBuildHeight()).thenReturn(320);
         WorldBorder border=new WorldBorder();border.setSize(1000);when(level.getWorldBorder()).thenReturn(border);
         when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(64);
-        when(level.getBlockState(any())).thenAnswer(i -> ((BlockPos)i.getArgument(0)).getY()<64
-                ? Blocks.STONE.defaultBlockState():Blocks.AIR.defaultBlockState());
+        doAnswer(i -> ((BlockPos)i.getArgument(0)).getY()<64
+                ? Blocks.STONE.defaultBlockState():Blocks.AIR.defaultBlockState()).when(level).getBlockState(any());
         when(level.getFluidState(any())).thenReturn(Fluids.EMPTY.defaultFluidState());
         when(level.noCollision(eq(worker),any(AABB.class))).thenReturn(true);
     }
@@ -81,7 +81,7 @@ class BuilderGroundRecoveryTest extends MinecraftTestSupport {
         setup();when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(80);
         assertNull(BuilderGroundRecovery.findSurface(level,worker));
         when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(64);
-        when(level.getBlockState(any())).thenReturn(Blocks.MAGMA_BLOCK.defaultBlockState());
+        doReturn(Blocks.MAGMA_BLOCK.defaultBlockState()).when(level).getBlockState(any());
         assertNull(BuilderGroundRecovery.findSurface(level,worker));
     }
     @Test void leashedCombatAndMountedWorkersStayWhereTheyAre() {
