@@ -468,6 +468,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
     }
 
+    static boolean visibleHover(Button button, double x, double y) {
+        return button.visible && button.isMouseOver(x, y);
+    }
+
     private void drawTooltips(GuiGraphics g, int mx, int my,
                               int tooltipX, int tooltipY) {
         if (treasuryShortcut.isMouseOver(mx, my)) {
@@ -478,12 +482,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             tooltip(g, String.format(Locale.ROOT, "Your purse: %,d emeralds. Deposit into the faction Treasury before purchasing.", menu.emeralds()), tooltipX, tooltipY);
             return;
         }
-        if (previousPage.isMouseOver(mx, my) || nextPage.isMouseOver(mx, my)) {
+        if (visibleHover(previousPage, mx, my) || visibleHover(nextPage, mx, my)) {
             tooltip(g, "Previous / next page. Ctrl+Tab cycles pages; Ctrl+Shift+Tab goes back.", tooltipX, tooltipY);
             return;
         }
         for (int i = 0; i < PAGES.length; i++) {
-            if (pageButtons[i].isMouseOver(mx, my)) {
+            if (visibleHover(pageButtons[i], mx, my)) {
                 tooltip(g, PAGES[i].title() + " | " + PAGES[i].description()
                         + " | Ctrl+Tab or scroll over the tabs to switch.", tooltipX, tooltipY);
                 return;

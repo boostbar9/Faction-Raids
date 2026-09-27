@@ -26,6 +26,14 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
         call.setAccessible(true);
         call.invoke(screen, value);
     }
+    @Test void hiddenNavigationControlsCannotAnnounceTooltips() {
+        var button = mock(Button.class);
+        when(button.isMouseOver(12, 34)).thenReturn(true);
+        button.visible = false;
+        assertFalse(CoreHireScreen.visibleHover(button, 12, 34));
+        button.visible = true;
+        assertTrue(CoreHireScreen.visibleHover(button, 12, 34));
+    }
     @Test void intelWheelUsesScaledCoordinatesAndCannotScrollFromOutsideThePanel() throws Exception {
         var screen = new CoreHireScreen(mock(CoreHireMenu.class), mock(Inventory.class), Component.literal("Command"));
         var layout = CoreHireLayout.fit(240, 180);
