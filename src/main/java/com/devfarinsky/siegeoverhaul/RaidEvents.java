@@ -544,6 +544,8 @@ public final class RaidEvents {
                         .trigger(killerPlayer, factionId);
             }
         }
+        com.devfarinsky.siegeoverhaul.items.EnemyLootDrops.mark(event.getEntity(), event.getSource().getEntity(),
+                state.rewardEligible && isFactionDefender(event.getSource().getEntity(), anchor));
         // v4.27.0 combat bounties: pay the treasury for each raider the
         // faction kills. Manual raids are excluded when reward farming is
         // disabled so the config toggle matches wave payouts. Commander pays

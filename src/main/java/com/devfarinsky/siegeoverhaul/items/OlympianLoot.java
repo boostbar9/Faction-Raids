@@ -109,7 +109,7 @@ final class OlympianLoot {
 
     /** Guaranteed sustenance in addition to the equipment, never a replacement for it. */
     static ItemStack provisions(LootBoxItem.Tier tier) {
-        return tier == LootBoxItem.Tier.EPIC
+        ItemStack food = tier == LootBoxItem.Tier.EPIC
                 ? named(new ItemStack(Items.ENCHANTED_GOLDEN_APPLE), "Ambrosia of Olympus", tier,
                         "Saved for the battle you cannot afford to lose.")
                 : tier == LootBoxItem.Tier.COMMON
@@ -117,21 +117,23 @@ final class OlympianLoot {
                                 "Eat well. The walls will need you.")
                         : named(new ItemStack(Items.GOLDEN_APPLE, tier == LootBoxItem.Tier.RARE ? 3 : 2),
                                 "Orchard of the Hesperides", tier, "A golden harvest, guarded no longer.");
+        return OlympianSupplyPowers.imbue(food, tier == LootBoxItem.Tier.EPIC ? OlympianSupplyPowers.Power.AMBROSIA
+                : tier == LootBoxItem.Tier.COMMON ? OlympianSupplyPowers.Power.HARVEST : OlympianSupplyPowers.Power.ORCHARD);
     }
 
     static ItemStack supplies(LootBoxItem.Tier tier, int choice, ItemStack equipment) {
         // Infinity only preserves ordinary arrows, not spectral or tipped arrows.
         if (choice == AMMUNITION && equipment.getItem() instanceof BowItem
                 && EnchantmentHelper.getItemEnchantmentLevel(Enchantments.INFINITY_ARROWS, equipment) > 0) {
-            return named(new ItemStack(Items.ARROW, 16 + tier.ordinal() * 8), "Apollo's Sunbow Arrows", tier,
-                    "Keep one in your quiver. Infinity uses ordinary arrows.");
+            return OlympianSupplyPowers.imbue(named(new ItemStack(Items.ARROW, 16 + tier.ordinal() * 8), "Apollo's Sunbow Arrows", tier,
+                    "Keep one in your quiver. Infinity uses ordinary arrows."), OlympianSupplyPowers.Power.MOON_SIGHT);
         }
         return supplies(tier, choice);
     }
 
     static ItemStack supplies(LootBoxItem.Tier tier, int choice) {
         int rank = tier.ordinal();
-        return switch (choice) {
+        ItemStack supply = switch (choice) {
             case 0 -> named(new ItemStack(Items.SPECTRAL_ARROW, 16 + rank * 8), "Artemis' Moonlit Arrows", tier,
                     "Outlines targets on hit. Consumed even with Infinity.");
             case 1 -> named(new ItemStack(Items.EXPERIENCE_BOTTLE, 4 + rank * 4), "Athena's Lessons", tier,
@@ -164,6 +166,7 @@ final class OlympianLoot {
             case 12, 13, 14 -> new ItemStack(OlympianRelics.item(OlympianRelics.Kind.values()[choice - RELIC_FIRST]), rank >= 2 ? 2 : 1);
             default -> throw new IllegalArgumentException("Unknown Olympian supply entry: " + choice);
         };
+        return choice < RELIC_FIRST ? OlympianSupplyPowers.imbue(supply, OlympianSupplyPowers.Power.values()[choice]) : supply;
     }
 
     static SimpleParticleType revealParticle(ItemStack item) {
