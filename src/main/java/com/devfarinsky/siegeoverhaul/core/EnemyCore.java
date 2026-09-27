@@ -76,14 +76,21 @@ public final class EnemyCore {
     public static BlockPos corePos(BlockPos base) { return base.above(); }
 
     public static boolean ensure(ServerLevel level, RaidSavedData.RaidState raid) {
+        return ensure(level, raid, false);
+    }
+    /** Attempt the sanctuary immediately, before builders and engines occupy the camp. */
+    public static boolean establish(ServerLevel level, RaidSavedData.RaidState raid) {
+        return EndlessSiege.active(raid) && ensure(level, raid, true);
+    }
+    private static boolean ensure(ServerLevel level, RaidSavedData.RaidState raid, boolean immediate) {
         BlockPos existing = position(raid);
         if (existing != null) return level.hasChunkAt(existing) && level.getBlockState(existing).is(CoreBlocks.CORE.get());
         if (raid.campPos == null || raid.campClaimId == null || !CampClaims.owns(level, raid)) return false;
-        if (level.getGameTime() % 100 != 0) return false;
+        if (!immediate && level.getGameTime() % 100 != 0) return false;
         return build(level, raid);
     }
     /** New placements only: erect the keep at the town centre and enshrine the core. */
-    private static boolean build(ServerLevel level, RaidSavedData.RaidState raid) {
+    static boolean build(ServerLevel level, RaidSavedData.RaidState raid) {
         var anchor = RaidSavedData.get(level.getServer()).anchors.get(raid.teamKey);
         if (anchor == null) return false;
         Map<ChunkPos, Boolean> allowedChunks = new HashMap<>();
@@ -160,7 +167,7 @@ public final class EnemyCore {
         return block == null ? null : block.defaultBlockState();
     }
     public static boolean tick(ServerLevel level, RaidSavedData data, RaidSavedData.RaidState raid, RaidSavedData.Anchor anchor) {
-        if (!EndlessSiege.active(raid) || raid.preparationTicks > 0 || raid.coreCaptured || !ensure(level, raid)) return false;
+        if (!EndlessSiege.active(raid) || raid.coreCaptured || !ensure(level, raid)) return false;
         BlockPos pos = position(raid);
         var claim = RecruitsClaimsBridge.getClaimAt(level, pos).orElse(null);
         if (claim == null || !claim.claimId().equals(raid.campClaimId)

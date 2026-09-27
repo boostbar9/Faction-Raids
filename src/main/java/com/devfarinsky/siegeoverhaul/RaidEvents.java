@@ -2241,6 +2241,10 @@ public final class RaidEvents {
         com.devfarinsky.siegeoverhaul.raid.ClaimWaypoints.tick(level, anchor, members);
         List<Mob> recruits = alliedRecruits(level, point, anchor);
         if (state.preparationTicks > 0) {
+            if (com.devfarinsky.siegeoverhaul.core.EnemyCore.tick(level, data, state, anchor)) {
+                finishRaid(server, data, teamKey, true, true, "Your faction captured the enemy Siege Core. The assault has been stopped!");
+                return;
+            }
             processPreparation(server, level, data, anchor, point, state, members, recruits);
             return;
         }
@@ -3157,6 +3161,7 @@ public final class RaidEvents {
      */
     private static void startCampCrew(ServerLevel level,RaidSavedData.RaidState state,RaidSavedData.DefensePoint point) {
         if(state.campPos==null || state.campCrewStarted)return;
+        com.devfarinsky.siegeoverhaul.core.EnemyCore.establish(level,state);
         state.campCrewStarted=true;
         int engines=com.devfarinsky.siegeoverhaul.siege.SiegeConstruction.spawnPrefabEngines(level,state,point.pos(),state.teamKey);
         com.devfarinsky.siegeoverhaul.camp.CampBuilder.startCamp(level,state);

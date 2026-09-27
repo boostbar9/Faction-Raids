@@ -11,6 +11,50 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class EnemyCoreTest extends MinecraftTestSupport {
+    @Test void establishmentAttemptsPlacementImmediatelyButKeepsClaimAndRetryGuards() {
+        var level=mock(ServerLevel.class);
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        raid.preparationTicks=2400; raid.campPos=new BlockPos(32,64,48);
+        raid.campClaimId=UUID.randomUUID();
+        when(level.getGameTime()).thenReturn(21L);
+        try(var enemy=mockStatic(EnemyCore.class,CALLS_REAL_METHODS);var claims=mockStatic(CampClaims.class)) {
+            enemy.when(()->EnemyCore.build(level,raid)).thenReturn(true);
+            assertFalse(EnemyCore.establish(level,raid));
+            enemy.verify(()->EnemyCore.build(level,raid),never());
+            claims.when(()->CampClaims.owns(level,raid)).thenReturn(true);
+            assertFalse(EnemyCore.ensure(level,raid));
+            assertTrue(EnemyCore.establish(level,raid));
+            enemy.verify(()->EnemyCore.build(level,raid),times(1));
+            raid.campaign.putLong("EnemyCore",raid.campPos.asLong());
+            // An unloaded saved core must not be moved or rebuilt on restart.
+            assertFalse(EnemyCore.establish(level,raid));
+            enemy.verify(()->EnemyCore.build(level,raid),times(1));
+        }
+    }
+    @Test void preparationCaptureUsesTheSameMajorityAndFullDurationAsTheAssault() {
+        var level=mock(ServerLevel.class); var data=new RaidSavedData();
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        raid.preparationTicks=2400; raid.campClaimId=UUID.randomUUID();
+        var anchor=new RaidSavedData.Anchor("team:test","Test",UUID.randomUUID(),Set.of(),false,false,Map.of(),0);
+        BlockPos pos=new BlockPos(32,65,48); raid.campaign.putLong("EnemyCore",pos.asLong());
+        String owner=RaiderFactions.id(raid.factionId);
+        when(level.getGameTime()).thenReturn(21L);
+        try(var enemy=mockStatic(EnemyCore.class,CALLS_REAL_METHODS);var counts=mockStatic(CoreOccupation.class);var claims=mockStatic(RecruitsClaimsBridge.class)) {
+            enemy.when(()->EnemyCore.ensure(level,raid)).thenReturn(true);
+            claims.when(()->RecruitsClaimsBridge.getClaimAt(level,pos)).thenReturn(Optional.of(
+                    new RecruitsClaimsBridge.ClaimSnapshot(raid.campClaimId,"Camp",owner,new ChunkPos(pos),Set.of(),false,100,100)));
+            counts.when(()->CoreOccupation.counts(level,pos,"team:test",anchor.members(),owner)).thenReturn(new int[]{1,2});
+            assertFalse(EnemyCore.tick(level,data,raid,anchor));
+            assertEquals(20,raid.campaign.getInt("EnemyCaptureTicks"));
+            raid.campaign.putInt("EnemyCaptureTicks",RaidConfig.CORE_RECAPTURE_SECONDS.get()*20-20);
+            counts.when(()->CoreOccupation.counts(level,pos,"team:test",anchor.members(),owner)).thenReturn(new int[]{2,2});
+            assertFalse(EnemyCore.tick(level,data,raid,anchor));
+            counts.when(()->CoreOccupation.counts(level,pos,"team:test",anchor.members(),owner)).thenReturn(new int[]{1,2});
+            assertTrue(EnemyCore.tick(level,data,raid,anchor));
+            assertEquals(2400,raid.preparationTicks);
+            assertEquals(0,raid.wave,"capture does not spawn or clear an assault wave");
+        }
+    }
     @Test void captureRequiresAlliedMajorityAndProgressSurvivesReload() {
         var level=mock(ServerLevel.class); var data=new RaidSavedData();
         var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
