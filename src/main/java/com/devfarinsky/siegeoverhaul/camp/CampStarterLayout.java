@@ -11,7 +11,7 @@ public final class CampStarterLayout {
     public static BlockPos supplies(BlockPos camp, Direction front) { return at(camp,front,-6,3); }
     public static BlockPos banner(BlockPos camp, Direction front) { return at(camp,front,-6,5); }
     public static BlockPos forge(BlockPos camp, Direction front) { return at(camp,front,6,4); }
-    public static BlockPos pavilion(BlockPos camp, Direction front, int side) { return at(camp,front,side*4,-6); }
+    public static BlockPos pavilion(BlockPos camp, Direction front, int side) { return at(camp,front,side*6,-6); }
 
     private static BlockPos at(BlockPos camp, Direction front, int side, int depth) {
         if (front.getAxis().isVertical()) throw new IllegalArgumentException("Horizontal camp facing required");

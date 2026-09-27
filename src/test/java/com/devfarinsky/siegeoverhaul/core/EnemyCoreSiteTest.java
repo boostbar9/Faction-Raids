@@ -74,15 +74,23 @@ class EnemyCoreSiteTest extends MinecraftTestSupport {
         assertFalse(EnemyCoreSite.clear(level,raid,center,p->true));
     }
     @Test void completeStarterLayoutLeavesCentralSanctuaryAndGateRouteClearInEveryOrientation() {
-        for(Direction front:Direction.Plane.HORIZONTAL) {
+        for(boolean loweredAccess:new boolean[]{false,true}) for(Direction front:Direction.Plane.HORIZONTAL) {
             var level=flat(); var raid=raid(); raid.campPos=center;
             raid.warGate.putInt("PerimeterGateFacing",front.get2DDataValue());
-            when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(64);
+            java.util.Set<BlockPos> low=new java.util.HashSet<>();
+            if(loweredAccess)for(int side:new int[]{-1,1})for(int width=-1;width<=1;width++)
+                low.add(center.relative(front,-3).relative(front.getClockWise(),side*6+width).atY(0));
+            when(level.getHeight(any(),anyInt(),anyInt())).thenAnswer(i->
+                    low.contains(new BlockPos((int)i.getArgument(1),0,(int)i.getArgument(2)))?63:64);
+            when(level.getBlockState(any())).thenAnswer(i->{BlockPos p=i.getArgument(0);
+                int surface=low.contains(p.atY(0))?63:64;
+                return (p.getY()<surface?Blocks.STONE:Blocks.AIR).defaultBlockState();});
             when(level.getFluidState(any())).thenReturn(net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState());
             for(int side:new int[]{-1,1}) {
                 var site=com.devfarinsky.siegeoverhaul.camp.CampStarterPavilion.anchor(center,front,side);
                 var plan=com.devfarinsky.siegeoverhaul.camp.CampStarterPavilion.plan(level,raid,site,front);
                 assertFalse(plan.isEmpty(),front+" pavilion "+side);
+                if(loweredAccess)assertEquals("minecraft:spruce_planks",plan.get(site.relative(front,3).below().asLong()));
                 raid.pendingCampBlocks.putAll(plan);
                 com.devfarinsky.siegeoverhaul.camp.CampStarterPavilion.reserveEntrance(raid,site,front);
             }
