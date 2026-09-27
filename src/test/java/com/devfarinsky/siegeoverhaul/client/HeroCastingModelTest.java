@@ -21,6 +21,15 @@ class HeroCastingModelTest extends MinecraftTestSupport {
         nativeModel.rightArm.xRot=.4F;HeroCastingModel.applyPose(adapter,1,0);
         assertEquals(.4F,adapter.rightArm.xRot);
     }
+    @Test void nativePreparationStateIsNotLostBeforeSetup() {
+        var root=LayerDefinition.create(HumanoidModel.createMesh(CubeDeformation.NONE,0),64,64).bakeRoot();
+        var nativeModel=new HumanoidModel<LivingEntity>(root) {
+            @Override public void prepareMobModel(LivingEntity entity,float swing,float amount,float partial) {crouching=true;}
+        };
+        var adapter=new HeroCastingModel<>(nativeModel);
+        adapter.prepareMobModel(null,0,0,0);
+        assertTrue(adapter.crouching);
+    }
     @Test void poseBlendsInAndReleaseFadesOut() {
         assertEquals(0,HeroCastVisuals.poseWeight(0,0));assertEquals(.5F,HeroCastVisuals.poseWeight(0,4));
         assertEquals(1,HeroCastVisuals.poseWeight(0,15));assertEquals(1,HeroCastVisuals.poseWeight(1,0));

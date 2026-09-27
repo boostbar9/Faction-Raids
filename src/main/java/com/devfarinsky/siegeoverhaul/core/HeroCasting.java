@@ -26,10 +26,10 @@ public final class HeroCasting {
     static boolean begin(ServerLevel level, Mob hero, int role) {
         if (!supported(role) || ACTIVE.containsKey(hero) || ACTIVE.size() >= 512
                 || hero.isPassenger() || !hero.isAlive() || hero.isNoAi()) return false;
-        var target=hero.getTarget();
-        if (target == null || !HeroTraits.hostile(hero,target) || foes(level,hero,role).isEmpty()) return false;
         long now=level.getGameTime();
         if (!HeroTraits.ready(now,hero.getPersistentData().getLong("SiegeHeroNext"))) return false;
+        var target=hero.getTarget();
+        if (target == null || !HeroTraits.hostile(hero,target) || foes(level,hero,role).isEmpty()) return false;
         ACTIVE.put(hero,new Cast(role,target.getUUID(),now));
         hero.getPersistentData().putLong("SiegeHeroNext",now+cooldown(role));
         send(hero,role,now,0);
@@ -70,7 +70,7 @@ public final class HeroCasting {
     private static RaidNetwork.HeroCast packet(Mob hero,int role,long start,int phase) {
         return new RaidNetwork.HeroCast(hero.getId(),hero.getUUID(),role,start,phase,hero.getX(),hero.getY(),hero.getZ());
     }
-    private static void send(Mob hero,int role,long start,int phase) {
+    static void send(Mob hero,int role,long start,int phase) {
         RaidNetwork.sendHeroCast(hero,packet(hero,role,start,phase));
     }
     @SubscribeEvent public static void tracking(PlayerEvent.StartTracking event) {

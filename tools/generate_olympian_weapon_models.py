@@ -1,6 +1,6 @@
 # Original Siege Overhaul geometry; vanilla Minecraft texture references only.
 from pathlib import Path
-import json
+import json, math
 out=Path(__file__).resolve().parents[1]/'src/main/resources/assets/siegeoverhaul/models/item/olympian';out.mkdir(parents=True,exist_ok=True)
 palettes={'ares':('netherite_block','redstone_block','gold_block'),'athena':('iron_block','lapis_block','gold_block'),'artemis':('iron_block','dark_prismarine','amethyst_block'),'hephaestus':('netherite_block','magma','copper_block'),'poseidon':('prismarine_bricks','dark_prismarine','gold_block'),'zeus':('gold_block','lapis_block','iron_block'),'apollo':('gold_block','orange_concrete','iron_block'),'demeter':('copper_block','moss_block','gold_block')}
 shapes=['blade','spear','staff','bow','bow_1','bow_2','bow_3','crossbow','crossbow_1','crossbow_2','crossbow_3','pick','hoe','hook']
@@ -14,7 +14,9 @@ for patron,palette in palettes.items():
    box([6,6,7],[10,15,9],'metal');box([7,15,7],[9,17,9],'trim');box([4,6,6.5],[12,7.5,9.5],'trim');box([7.25,8,6.8],[8.75,14,9.2],'gem')
   elif shape in ['staff','spear']:
    box([7.5,6,7.5],[8.5,19,8.5],'grip');box([6,15,6],[10,16,10],'trim');box([7,17,7],[9,23,9],'metal')
-   if patron=='poseidon' or shape=='spear':
+   if shape=='spear':
+    box([6,18,7],[10,21,9],'metal');box([7.5,21,7.5],[8.5,25,8.5],'trim')
+   elif patron=='poseidon':
     box([4,18,7],[12,19,9],'trim');box([4,18,7],[5,22,9],'metal');box([11,18,7],[12,22,9],'metal')
    elif patron=='hephaestus':
     box([4,19,6],[12,22,10],'metal');box([6,19.5,5.8],[10,21.5,10.2],'gem')
@@ -25,8 +27,13 @@ for patron,palette in palettes.items():
   elif shape.startswith('bow'):
    stage=int(shape[-1]) if shape[-1].isdigit() else 0
    box([7,6,7],[9,10,9],'grip');box([9,10,7],[11,14,9],'metal');box([9,2,7],[11,6,9],'metal');box([10,13,7],[13,16,9],'trim');box([10,0,7],[13,3,9],'trim')
-   x=12-stage*1.8
-   box([x,2,7.8],[x+.25,14,8.2],'string')
+   angle=0 if stage<2 else 22.5 if stage==2 else 45
+   x=12-6*math.tan(math.radians(angle))
+   length=6/math.cos(math.radians(angle))
+   for y,rotation in [(5,angle),(11,-angle)]:
+    center=(12+x)/2
+    box([center-.12,y-length/2,7.8],[center+.12,y+length/2,8.2],'string')
+    elems[-1]['rotation']={'origin':[center,y,8],'axis':'z','angle':rotation}
    if stage:box([x,7.8,7.8],[19,8.2,8.2],'grip');box([18,7.4,7.4],[20,8.6,8.6],'metal')
    box([8.8,7,6.5],[10,9,9.5],'gem')
   elif shape.startswith('crossbow'):
