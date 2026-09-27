@@ -64,8 +64,8 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         Path path=mock(Path.class); when(path.canReach()).thenReturn(true);
         when(path.getTarget()).thenReturn(new BlockPos(1,64,0));
         when(nav.createPath(anySet(),eq(0))).thenReturn(path); when(nav.moveTo(path,0.8)).thenReturn(true);
-        goal.route(level,marker); verify(nav).moveTo(path,0.8);
-        when(level.getGameTime()).thenReturn(10L);goal.route(level,marker);
+        goal.route(level,marker,20); verify(nav).moveTo(path,0.8);
+        when(level.getGameTime()).thenReturn(10L);goal.route(level,marker,20);
         verify(nav,times(1)).createPath(anySet(),eq(0));
         verify(level,never()).setBlock(any(),any(),anyInt());
         verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
@@ -79,7 +79,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         doReturn(Blocks.WATER.defaultBlockState()).when(level).getBlockState(any());
         assertTrue(WallBuilderAccess.standingSites(level,worker,marker).isEmpty());
         terrain(); Path unreachable=mock(Path.class);when(nav.createPath(anySet(),eq(0))).thenReturn(unreachable);
-        goal.route(level,marker); verify(nav,never()).moveTo(any(Path.class),anyDouble());
+        goal.route(level,marker,20); verify(nav,never()).moveTo(any(Path.class),anyDouble());
     }
     @Test void correctionRunsOnlyForTheLinkedOwnedActiveWallJob() throws Exception {
         terrain(); var original=new NativeGoal(); original.state=State.MOVE_TO_WORK_AREA;
@@ -102,6 +102,15 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         when(level.getGameTime()).thenReturn(80L);goal.tick();verifyNoInteractions(nav);
         when(worker.getFollowState()).thenReturn(6);when(worker.getOwnerUUID()).thenReturn(java.util.UUID.randomUUID());
         goal.tick();verifyNoInteractions(nav);
+    }
+    @Test void normalBlockWorkKeepsTheNativeFortySquaredReach() throws Exception {
+        terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
+        when(worker.getX()).thenReturn(5.5);when(worker.getZ()).thenReturn(0.5);
+        var target=new BlockPos(0,64,0);
+        goal.route(level,target,40);
+        verifyNoInteractions(nav);
+        goal.route(level,target,20);
+        verify(nav).createPath(anySet(),eq(0));
     }
     @Test void nativeSleepSupplyAndOwnerCommandsRemainAuthoritative() throws Exception {
         NativeGoal original=mock(NativeGoal.class);when(original.getFlags()).thenReturn(EnumSet.of(Goal.Flag.MOVE));

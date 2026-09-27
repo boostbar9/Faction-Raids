@@ -90,18 +90,18 @@ public final class WallBuilderAccess extends Goal {
                 reservedColumns = columns;
                 reservedArea = area;
             }
-            route(level, target);
+            route(level, target, state instanceof Enum<?> e && e.name().equals("MOVE_TO_WORK_AREA") ? 20 : 40);
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             // Keep native behavior when a companion changes its public job state.
         }
     }
 
-    void route(ServerLevel level, BlockPos target) {
+    void route(ServerLevel level, BlockPos target, int nativeReachSquared) {
+        double dx = worker.getX() - (target.getX() + 0.5), dz = worker.getZ() - (target.getZ() + 0.5);
+        if (dx * dx + dz * dz < nativeReachSquared) return;
         var nav = worker.getNavigation();
         var existing = nav.getPath();
         if (existing != null && !existing.isDone() && existing.canReach()) return;
-        double dx = worker.getX() - (target.getX() + 0.5), dz = worker.getZ() - (target.getZ() + 0.5);
-        if (dx * dx + dz * dz < 16) return; // Already inside the native marker's squared reach (20).
         long now = level.getGameTime();
         if (now < nextRoute && now >= nextRoute - 10) return;
         nextRoute = now + 10;
