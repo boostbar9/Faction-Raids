@@ -1,3 +1,10 @@
+# 4.48.1 beta
+
+- Olympian crossbows now show a rocket when loaded with fireworks and a bolt when loaded with arrows.
+- Charging no longer shows a loaded bolt before the weapon is ready.
+- Crossbow strings remain attached to the bow tips throughout the draw.
+- Ammo, enchantments, prices and combat behavior are unchanged.
+
 # 4.48.0 beta
 
 - Tempest, Inferno and Undertow now have a visible one-second casting wind-up, a release pose and expanding tidal or fire rings. A cast stops if its target dies, disappears or becomes friendly.

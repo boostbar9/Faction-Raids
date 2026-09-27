@@ -49,14 +49,16 @@ public final class OlympianWeaponModels {
                 @Override public BakedModel resolve(BakedModel model,ItemStack stack,@Nullable ClientLevel level,@Nullable LivingEntity entity,int seed) {
                     String patron=OlympianWeaponSkins.patron(stack),shape=OlympianWeaponSkins.shape(stack);
                     if(!patron.isEmpty() && !shape.isEmpty()) {
-                        int stage=0;
-                        if(stack.getItem() instanceof CrossbowItem && CrossbowItem.isCharged(stack))stage=3;
+                        String suffix="";
+                        if(stack.getItem() instanceof CrossbowItem && CrossbowItem.isCharged(stack)) {
+                            suffix=CrossbowItem.containsChargedProjectile(stack,Items.FIREWORK_ROCKET)?"_rocket":"_loaded";
+                        }
                         else if(entity!=null && entity.isUsingItem() && entity.getUseItem()==stack) {
                             int elapsed=stack.getUseDuration()-entity.getUseItemRemainingTicks();
                             int duration=stack.getItem() instanceof CrossbowItem?CrossbowItem.getChargeDuration(stack):20;
-                            if(shape.equals("bow") || shape.equals("crossbow"))stage=Math.min(3,Math.max(1,elapsed*3/Math.max(1,duration)+1));
+                            if(shape.equals("bow") || shape.equals("crossbow"))suffix="_"+Math.min(3,Math.max(1,elapsed*3/Math.max(1,duration)+1));
                         }
-                        var selected=skins.get(patron+"_"+shape+(stage>0?"_"+stage:""));
+                        var selected=skins.get(patron+"_"+shape+suffix);
                         if(selected!=null)return selected;
                     }
                     return original.getOverrides().resolve(original,stack,level,entity,seed);
