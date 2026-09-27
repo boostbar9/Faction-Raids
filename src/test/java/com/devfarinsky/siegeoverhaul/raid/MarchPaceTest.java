@@ -56,4 +56,19 @@ class MarchPaceTest extends MinecraftTestSupport {
             when(mob.isPassenger()).thenReturn(false);raid.campGuards.clear();
         }
     }
+    @Test void ladderWorkRemovesTravelBonusAndResumesWhenTheWorkEnds() {
+        var mob=mock(Mob.class);var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        var tag=new CompoundTag();tag.putString(ModConstants.Tags.RAID_TEAM,raid.teamKey);
+        var speed=new AttributeInstance(Attributes.MOVEMENT_SPEED,a->{});speed.setBaseValue(.3);
+        when(mob.getUUID()).thenReturn(UUID.randomUUID());when(mob.isAlive()).thenReturn(true);
+        when(mob.getPersistentData()).thenReturn(tag);when(mob.getAttribute(Attributes.MOVEMENT_SPEED)).thenReturn(speed);
+        when(mob.distanceToSqr(Vec3.ZERO)).thenReturn(800.0*800);
+        try(var ladders=mockStatic(com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.class)) {
+            MarchPace.update(mob,raid,Vec3.ZERO);assertEquals(.36,speed.getValue(),.00001);
+            ladders.when(()->com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)).thenReturn(true);
+            MarchPace.update(mob,raid,Vec3.ZERO);assertEquals(.3,speed.getValue(),.00001);
+            ladders.when(()->com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)).thenReturn(false);
+            MarchPace.update(mob,raid,Vec3.ZERO);assertEquals(.36,speed.getValue(),.00001);
+        }
+    }
 }

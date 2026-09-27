@@ -28,6 +28,7 @@ public final class MarchPace {
                 && !raid.campGuards.contains(mob.getUUID())
                 && !tag.contains(ModConstants.Tags.CAMP_WORKER_TEAM)
                 && !tag.contains(SiegeDeployment.OPERATOR_ASSIGNED) && !tag.contains(SiegeDeployment.TEAM_TAG)
+                && !com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)
                 && (raid.bridgePlan==null || !mob.getUUID().equals(raid.bridgePlan.builder));
         if (marching) {
             if (speed.getModifier(ID)==null) speed.addTransientModifier(PACE);
