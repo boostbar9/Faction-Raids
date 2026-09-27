@@ -26,9 +26,13 @@ public final class EnemyCoreSite {
     static boolean clear(ServerLevel level, RaidSavedData.RaidState raid, BlockPos center,
                          Predicate<BlockPos> allowed) {
         Set<Long> blockedColumns = blockedColumns(raid);
-        // Check a level, dry 5x5 keep footprint with seven blocks of open headroom.
-        for (int x=-2;x<=2;x++) for (int z=-2;z<=2;z++) {
+        // Leave a dry, unobstructed one-block ring around the 5x5 sanctuary.
+        // Checking queued columns also prevents two roofs from touching before either is built.
+        int radius=raid.campaign.getInt("CampLayoutVersion")>=1?3:2;
+        for (int x=-radius;x<=radius;x++) for (int z=-radius;z<=radius;z++) {
             BlockPos feet=center.offset(x,0,z);
+            if (raid.campPos != null && (Math.abs(feet.getX()-raid.campPos.getX())>=9
+                    || Math.abs(feet.getZ()-raid.campPos.getZ())>=9)) return false;
             for (int y=-1;y<=6;y++) {
                 BlockPos p=feet.above(y);
                 if (p.getY()<level.getMinBuildHeight() || p.getY()>=level.getMaxBuildHeight()
@@ -61,8 +65,9 @@ public final class EnemyCoreSite {
     /** Keep future construction and player obstructions out of the saved walking ring. */
     public static boolean reserved(RaidSavedData.RaidState raid, BlockPos pos) {
         BlockPos core=EnemyCore.position(raid);
+        int radius=raid.campaign.getBoolean("EnemyCoreClearanceRing")?3:2;
         return EnemyCoreApproach.reserved(raid,pos) || raid.campaign.getBoolean("EnemyCoreCourtyard") && core!=null
-                && Math.abs(pos.getX()-core.getX())<=2 && Math.abs(pos.getZ()-core.getZ())<=2
+                && Math.abs(pos.getX()-core.getX())<=radius && Math.abs(pos.getZ()-core.getZ())<=radius
                 && pos.getY()>=core.getY()-2 && pos.getY()<=core.getY()+5;
     }
 }

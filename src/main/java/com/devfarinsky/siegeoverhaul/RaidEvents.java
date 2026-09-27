@@ -3125,6 +3125,7 @@ public final class RaidEvents {
         BlockPos camp = findWarCampPosition(level, anchor, point.pos(), state.approachAngle, state);
         if (camp == null) return;
         state.campPos = camp;
+        state.campaign.putInt("CampLayoutVersion", 1);
         // v4.36.0: on hostile terrain, queue the paving so the crew
         // visibly lays down dirt over time (blocks per tick, with sound
         // and dirt particles) instead of a single instant slap. The
@@ -3210,13 +3211,18 @@ public final class RaidEvents {
             }
         }
 
-        // 2) Central campfire — reinforcement heart.
-        BlockPos campfire = surfacePosition(level, cx, cz);
+        Direction front = gateOnXAxis
+                ? (gateWallCoord > 0 ? Direction.EAST : Direction.WEST)
+                : (gateWallCoord > 0 ? Direction.SOUTH : Direction.NORTH);
+        // Keep the centre free for the sanctuary; supplies occupy the side courtyard.
+        BlockPos fireSite = com.devfarinsky.siegeoverhaul.camp.CampStarterLayout.campfire(camp, front);
+        BlockPos campfire = surfacePosition(level, fireSite.getX(), fireSite.getZ());
         placeCampBlock(level, state, campfire, Blocks.CAMPFIRE);
         state.campfirePos = campfire;
 
         // 3) Supply barrel.
-        BlockPos barrel = surfacePosition(level, cx - 3, cz);
+        BlockPos supplySite = com.devfarinsky.siegeoverhaul.camp.CampStarterLayout.supplies(camp, front);
+        BlockPos barrel = surfacePosition(level, supplySite.getX(), supplySite.getZ());
         placeCampBlock(level, state, barrel, Blocks.BARREL);
         state.barrelPos = barrel;
 
@@ -3229,9 +3235,8 @@ public final class RaidEvents {
                 com.devfarinsky.siegeoverhaul.items.FactionBanners.FactionId.byIdOrDefault(state.factionId);
         net.minecraft.world.level.block.Block bannerBlock =
                 com.devfarinsky.siegeoverhaul.items.FactionBanners.standingBlockFor(faction);
-        int bannerDx = Mth.floor(Math.cos(frontAngle) * 4.0D);
-        int bannerDz = Mth.floor(Math.sin(frontAngle) * 4.0D);
-        BlockPos bannerBase = surfacePosition(level, cx + bannerDx, cz + bannerDz);
+        BlockPos bannerSite = com.devfarinsky.siegeoverhaul.camp.CampStarterLayout.banner(camp, front);
+        BlockPos bannerBase = surfacePosition(level, bannerSite.getX(), bannerSite.getZ());
         placeCampBlock(level, state, bannerBase, Blocks.STONE_BRICKS);
         placeFactionBanner(level, state, bannerBase.above(), bannerBlock, faction);
         state.bannerPos = bannerBase.above();
@@ -3256,11 +3261,8 @@ public final class RaidEvents {
                 buildWatchtower(level, state, wx, wz, cy);
             }
 
-            Direction front = gateOnXAxis
-                    ? (gateWallCoord > 0 ? Direction.EAST : Direction.WEST)
-                    : (gateWallCoord > 0 ? Direction.SOUTH : Direction.NORTH);
             // The forge occupies the forward quarter, away from the pavilions' entrance paths.
-            BlockPos forge = camp.relative(front, 4).relative(front.getClockWise(), 4);
+            BlockPos forge = com.devfarinsky.siegeoverhaul.camp.CampStarterLayout.forge(camp, front);
             buildForge(level, state, forge.getX(), forge.getZ(), cy);
 
             // Cardinal anchors keep pavilion footprints separate even on diagonal approaches.

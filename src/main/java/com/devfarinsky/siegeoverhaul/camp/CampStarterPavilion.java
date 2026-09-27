@@ -36,7 +36,7 @@ public final class CampStarterPavilion {
     }
 
     public static BlockPos anchor(BlockPos camp, Direction front, int side) {
-        return camp.relative(front, -5).relative(front.getClockWise(), side * 4);
+        return CampStarterLayout.pavilion(camp, front, side);
     }
 
     public static Map<Long, String> plan(ServerLevel level, RaidState raid, BlockPos requested, Direction front) {

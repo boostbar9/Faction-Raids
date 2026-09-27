@@ -57,11 +57,11 @@ class EnemyCoreApproachTest extends MinecraftTestSupport {
         for(int x=0;x<=2;x++)raid.pendingFortifications.put(new BlockPos(x,64,-9).asLong(),"minecraft:spruce_log");
         assertTrue(EnemyCoreApproach.plan(level,raid,camp,p->true).isEmpty());
     }
-    @Test void normalStarterCampStillHasAnAccessibleCoreSite() {
+    @Test void legacyStarterCampStillHasAnAccessibleCoreSite() {
         for(Direction front:Direction.Plane.HORIZONTAL) {
             var level=flat();var raid=raid(front);raid.factionId="crownfall_exiles";
             for(int side:new int[]{-1,1}) {
-                var center=com.devfarinsky.siegeoverhaul.camp.CampStarterPavilion.anchor(camp,front,side);
+                var center=camp.relative(front,-5).relative(front.getClockWise(),side*4);
                 var pavilion=com.devfarinsky.siegeoverhaul.camp.CampStarterPavilion.plan(level,raid,center,front);
                 assertFalse(pavilion.isEmpty());raid.pendingCampBlocks.putAll(pavilion);
             }

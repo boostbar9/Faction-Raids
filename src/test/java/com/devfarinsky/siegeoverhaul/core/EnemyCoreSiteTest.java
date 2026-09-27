@@ -12,7 +12,11 @@ import static org.mockito.Mockito.*;
 
 class EnemyCoreSiteTest extends MinecraftTestSupport {
     final BlockPos center=new BlockPos(32,64,32);
-    RaidSavedData.RaidState raid() { return new RaidSavedData.RaidState("team:test","siege_core",0); }
+    RaidSavedData.RaidState raid() {
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        raid.campaign.putInt("CampLayoutVersion",1);
+        return raid;
+    }
     ServerLevel flat() {
         var level=mock(ServerLevel.class); var border=new WorldBorder();
         when(level.getWorldBorder()).thenReturn(border);
@@ -69,6 +73,61 @@ class EnemyCoreSiteTest extends MinecraftTestSupport {
         raid.warGate.put("RoadBlocks",road);
         assertFalse(EnemyCoreSite.clear(level,raid,center,p->true));
     }
+    @Test void completeStarterLayoutLeavesCentralSanctuaryAndGateRouteClearInEveryOrientation() {
+        for(boolean loweredAccess:new boolean[]{false,true}) for(Direction front:Direction.Plane.HORIZONTAL) {
+            var level=flat(); var raid=raid(); raid.campPos=center;
+            raid.warGate.putInt("PerimeterGateFacing",front.get2DDataValue());
+            java.util.Set<BlockPos> low=new java.util.HashSet<>();
+            if(loweredAccess)for(int side:new int[]{-1,1})for(int width=-1;width<=1;width++)
+                low.add(center.relative(front,-3).relative(front.getClockWise(),side*6+width).atY(0));
+            when(level.getHeight(any(),anyInt(),anyInt())).thenAnswer(i->
+                    low.contains(new BlockPos((int)i.getArgument(1),0,(int)i.getArgument(2)))?63:64);
+            doAnswer(i->{BlockPos p=i.getArgument(0);
+                int surface=low.contains(p.atY(0))?63:64;
+                return (p.getY()<surface?Blocks.STONE:Blocks.AIR).defaultBlockState();}).when(level).getBlockState(any());
+            when(level.getFluidState(any())).thenReturn(net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState());
+            for(int side:new int[]{-1,1}) {
+                var site=com.devfarinsky.siegeoverhaul.camp.CampStarterPavilion.anchor(center,front,side);
+                var plan=com.devfarinsky.siegeoverhaul.camp.CampStarterPavilion.plan(level,raid,site,front);
+                assertFalse(plan.isEmpty(),front+" pavilion "+side);
+                if(loweredAccess)assertEquals("minecraft:spruce_planks",plan.get(site.relative(front,3).below().asLong()));
+                raid.pendingCampBlocks.putAll(plan);
+                com.devfarinsky.siegeoverhaul.camp.CampStarterPavilion.reserveEntrance(raid,site,front);
+            }
+            var fire=com.devfarinsky.siegeoverhaul.camp.CampStarterLayout.campfire(center,front);
+            var barrel=com.devfarinsky.siegeoverhaul.camp.CampStarterLayout.supplies(center,front);
+            var banner=com.devfarinsky.siegeoverhaul.camp.CampStarterLayout.banner(center,front);
+            when(level.getBlockState(fire)).thenReturn(Blocks.CAMPFIRE.defaultBlockState());
+            when(level.getBlockState(barrel)).thenReturn(Blocks.BARREL.defaultBlockState());
+            when(level.getBlockState(banner)).thenReturn(Blocks.STONE_BRICKS.defaultBlockState());
+            when(level.getBlockState(banner.above())).thenReturn(Blocks.RED_BANNER.defaultBlockState());
+            var forge=com.devfarinsky.siegeoverhaul.camp.CampStarterLayout.forge(center,front);
+            for(int z=-1;z<=1;z++)raid.pendingCampBlocks.put(forge.offset(0,0,z).asLong(),"minecraft:anvil");
+            for(int x=-9;x<=9;x++)for(int z=-9;z<=9;z++) {
+                if(Math.abs(x)!=9 && Math.abs(z)!=9)continue;
+                int depth=x*front.getStepX()+z*front.getStepZ();
+                int side=x*front.getClockWise().getStepX()+z*front.getClockWise().getStepZ();
+                if(depth==9 && Math.abs(side)<=1)continue;
+                for(int y=0;y<2;y++)raid.pendingFortifications.put(center.offset(x,y,z).asLong(),"minecraft:spruce_log");
+            }
+            assertTrue(EnemyCoreSite.clear(level,raid,center,p->true),front.toString());
+            assertTrue(EnemyCoreApproach.plan(level,raid,center,p->true).isPresent(),front+" gate route");
+            // The old central fire forced every camp to use a fallback core site.
+            when(level.getBlockState(center)).thenReturn(Blocks.CAMPFIRE.defaultBlockState());
+            assertFalse(EnemyCoreSite.clear(level,raid,center,p->true));
+            verify(level,never()).setBlock(any(),any(),anyInt());
+        }
+    }
+    @Test void rejectsAdjacentBuildingsAndWallClipping() {
+        var level=flat(); var raid=raid(); raid.campPos=center;
+        raid.pendingCampBlocks.put(center.east(3).above(6).asLong(),"minecraft:stone");
+        assertFalse(EnemyCoreSite.clear(level,raid,center,p->true));
+        raid.pendingCampBlocks.clear();
+        assertTrue(EnemyCoreSite.clear(level,raid,center,p->true));
+        assertFalse(EnemyCoreSite.clear(level,raid,center.east(6),p->true));
+        when(level.getBlockState(center.west(3).above())).thenReturn(Blocks.STONE.defaultBlockState());
+        assertFalse(EnemyCoreSite.clear(level,raid,center,p->true));
+    }
     @Test void queuedCellsAreIndexedOncePerColumn() {
         var raid=raid();
         raid.pendingCampBlocks.put(center.asLong(),"minecraft:stone");
@@ -84,10 +143,13 @@ class EnemyCoreSiteTest extends MinecraftTestSupport {
         var raid=raid(); raid.campaign.putLong("EnemyCore",center.asLong()); raid.campaign.putInt("EnemyCaptureTicks",123);
         assertFalse(EnemyCoreSite.reserved(raid,center));
         raid.campaign.putBoolean("EnemyCoreCourtyard",true);
+        assertFalse(EnemyCoreSite.reserved(raid,center.east(3))); // Existing camps retain their old footprint.
+        raid.campaign.putBoolean("EnemyCoreClearanceRing",true);
         var loaded=RaidSavedData.RaidState.load(raid.save());
         assertEquals(center,EnemyCore.position(loaded)); assertEquals(123,loaded.campaign.getInt("EnemyCaptureTicks"));
         assertTrue(EnemyCoreSite.reserved(loaded,center.east().above(5)));
         assertTrue(EnemyCoreSite.reserved(loaded,center.below()));
-        assertFalse(EnemyCoreSite.reserved(loaded,center.east(3)));
+        assertTrue(EnemyCoreSite.reserved(loaded,center.east(3)));
+        assertFalse(EnemyCoreSite.reserved(loaded,center.east(4)));
     }
 }

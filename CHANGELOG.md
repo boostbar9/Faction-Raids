@@ -1,3 +1,10 @@
+# 4.49.6 — Clearer camp courtyards
+
+- New camps leave the central sanctuary clear instead of placing the campfire in the core's preferred spot.
+- Starter pavilions sit farther back and apart; supplies, the banner and forge occupy the side courtyards in every camp orientation.
+- Core placement requires an unobstructed ring around the sanctuary and keeps that space clear of later construction.
+- Existing camp positions and capture progress are preserved.
+
 # 4.49.5 — Blessed supplies and Curios
 
 - Optional Curios 5.14.1+ support: wear Forge Ember, Owl Seal or Sun Laurel in the charm slot for a passive defense or health bonus. Equipping never spends charges; no new required dependency.
