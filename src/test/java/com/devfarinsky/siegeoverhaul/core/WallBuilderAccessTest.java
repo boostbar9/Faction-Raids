@@ -25,9 +25,12 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         protected Builder(EntityType<? extends Mob> type, Level level) { super(type, level); }
     }
     public abstract static class Area extends Entity {
+        public java.util.List<Cell> stackToPlace;
+        public java.util.List<Cell> stackToPlaceMultiBlock;
         protected Area(EntityType<?> type, Level level) { super(type,level); }
         public java.util.UUID getPlayerUUID() { return null; }
     }
+    public record Cell(BlockPos pos) { public BlockPos getPos() { return pos; } }
     public enum State { MOVE_TO_WORK_AREA }
     public static class NativeGoal extends Goal {
         public BlockPos blockPos;
@@ -83,6 +86,8 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         var goal=new WallBuilderAccess(worker,original); var area=mock(Area.class);
         var data=new net.minecraft.nbt.CompoundTag(); var owner=java.util.UUID.randomUUID();
         var id=java.util.UUID.randomUUID();worker.currentBuildArea=area;
+        area.stackToPlace=java.util.List.of(new Cell(new BlockPos(0,64,0)));
+        area.stackToPlaceMultiBlock=java.util.List.of();
         when(worker.level()).thenReturn(level);when(worker.getPersistentData()).thenReturn(data);
         when(area.isAlive()).thenReturn(true);when(area.getUUID()).thenReturn(id);
         when(area.getOnPos()).thenReturn(new BlockPos(0,60,0));
@@ -91,7 +96,8 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         goal.tick();verifyNoInteractions(nav);
         data.putUUID(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID,id);
         data.putUUID(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_OWNER,owner);
-        goal.tick();verify(nav).createPath(anySet(),eq(0));
+        goal.tick();verify(nav).createPath(argThat(sites -> !sites.isEmpty()
+                && !sites.contains(new BlockPos(0,64,0))),eq(0));
         clearInvocations(nav);when(worker.getFollowState()).thenReturn(1);
         when(level.getGameTime()).thenReturn(80L);goal.tick();verifyNoInteractions(nav);
         when(worker.getFollowState()).thenReturn(6);when(worker.getOwnerUUID()).thenReturn(java.util.UUID.randomUUID());

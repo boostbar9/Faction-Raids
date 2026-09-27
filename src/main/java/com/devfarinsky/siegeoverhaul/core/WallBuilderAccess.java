@@ -23,6 +23,8 @@ public final class WallBuilderAccess extends Goal {
     private final Field areaField, blockField, stateField;
     private long nextSearch, nextRoute;
     private BlockPos lastTarget, destination;
+    private Entity reservedArea;
+    private Set<Long> reservedColumns = Set.of();
 
     WallBuilderAccess(Mob worker, Goal delegate) throws ReflectiveOperationException {
         this.worker = worker;
@@ -62,6 +64,7 @@ public final class WallBuilderAccess extends Goal {
                 || worker.isLeashed() || worker.getTarget() != null) return;
         try {
             Object current = areaField.get(worker);
+            if (current != reservedArea) { reservedArea = null; reservedColumns = Set.of(); }
             var data = worker.getPersistentData();
             if (!(current instanceof Entity area) || !area.isAlive()
                     || !data.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
@@ -74,6 +77,19 @@ public final class WallBuilderAccess extends Goal {
             BlockPos target = blockField.get(delegate) instanceof BlockPos p ? p : null;
             if (state instanceof Enum<?> e && e.name().equals("MOVE_TO_WORK_AREA")) target = area.getOnPos();
             if (target == null) return;
+            if (reservedArea != area) {
+                var columns = new java.util.HashSet<Long>();
+                for (String fieldName : new String[]{"stackToPlace", "stackToPlaceMultiBlock"}) {
+                    Object cells = area.getClass().getField(fieldName).get(area);
+                    if (!(cells instanceof Iterable<?> iterable)) return;
+                    for (Object cell : iterable) {
+                        BlockPos pos = (BlockPos) cell.getClass().getMethod("getPos").invoke(cell);
+                        columns.add(pos.atY(0).asLong());
+                    }
+                }
+                reservedColumns = columns;
+                reservedArea = area;
+            }
             route(level, target);
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             // Keep native behavior when a companion changes its public job state.
@@ -98,6 +114,7 @@ public final class WallBuilderAccess extends Goal {
         lastTarget = target.immutable();
         destination = null;
         Set<BlockPos> candidates = standingSites(level, worker, target);
+        candidates.removeIf(p -> reservedColumns.contains(p.atY(0).asLong()));
         if (candidates.isEmpty()) return;
         var path = nav.createPath(candidates, 0);
         if (path != null && path.canReach() && nav.moveTo(path, 0.8)) destination = path.getTarget();
