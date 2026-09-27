@@ -36,4 +36,20 @@ class HeroCastingModelTest extends MinecraftTestSupport {
         assertEquals(.5F,HeroCastVisuals.poseWeight(1,6));assertEquals(0,HeroCastVisuals.poseWeight(1,12));
         assertEquals(0,HeroCastVisuals.poseWeight(2,0));
     }
+    @Test void heldWeaponTransformsFollowNativeHandsDuringCasting() {
+        var root=LayerDefinition.create(HumanoidModel.createMesh(CubeDeformation.NONE,0),64,64).bakeRoot();
+        var nativeModel=new HumanoidModel<LivingEntity>(root);
+        var adapter=new HeroCastingModel<>(nativeModel);
+        for (int phase : new int[]{0,1}) {
+            HeroCastingModel.applyPose(adapter,phase,1);
+            for (var hand : net.minecraft.world.entity.HumanoidArm.values()) {
+                var expected=new com.mojang.blaze3d.vertex.PoseStack();
+                var actual=new com.mojang.blaze3d.vertex.PoseStack();
+                nativeModel.translateToHand(hand,expected);
+                adapter.translateToHand(hand,actual);
+                assertTrue(expected.last().pose().equals(actual.last().pose(),0.00001F),hand+" phase "+phase);
+                assertFalse(actual.last().pose().equals(new org.joml.Matrix4f(),0.00001F));
+            }
+        }
+    }
 }
