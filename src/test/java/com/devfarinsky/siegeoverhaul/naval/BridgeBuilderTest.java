@@ -344,7 +344,7 @@ class BridgeBuilderTest extends MinecraftTestSupport {
             var cancelled = RaidSavedData.RaidState.load(loaded.save());
             assertNull(cancelled.bridgePlan);
             assertEquals(1, cancelled.bridgeAttempts); assertEquals(1, cancelled.bridgeBlocksSpent);
-            assertEquals(400, cancelled.bridgeNextAttempt);
+            assertEquals(100, cancelled.bridgeNextAttempt);
             var old = RaidSavedData.RaidState.load(new CompoundTag());
             assertNull(old.bridgePlan); assertEquals(0, old.bridgeAttempts); assertEquals(0, old.bridgeBlocksSpent);
         }
@@ -478,3 +478,4 @@ class BridgeBuilderTest extends MinecraftTestSupport {
         }
     }
 }
+
