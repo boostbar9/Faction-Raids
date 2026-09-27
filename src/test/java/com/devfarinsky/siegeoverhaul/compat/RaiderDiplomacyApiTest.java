@@ -20,12 +20,17 @@ class RaiderDiplomacyApiTest extends MinecraftTestSupport {
     public static class DiplomacyManager {
         final Map<String, Map<String, Status>> relations = new HashMap<>();
         int writes;
+        int notices;
         public Status getRelation(String a, String b) {
             return relations.getOrDefault(a, Map.of()).getOrDefault(b, Status.NEUTRAL);
         }
         public void setRelation(String a, String b, Status status, ServerLevel level) {
+            setRelation(a, b, status, level, true);
+        }
+        public void setRelation(String a, String b, Status status, ServerLevel level, boolean notify) {
             relations.computeIfAbsent(a, key -> new HashMap<>()).put(b, status);
             writes++;
+            if (notify) notices++;
         }
     }
     public static class Events {
@@ -44,7 +49,7 @@ class RaiderDiplomacyApiTest extends MinecraftTestSupport {
                 "statusClass", Status.class,
                 "diplomacyManagerField", RaiderDiplomacy.resolveManagerField(Events.class, DiplomacyManager.class),
                 "getRelation", DiplomacyManager.class.getMethod("getRelation", String.class, String.class),
-                "setRelation", DiplomacyManager.class.getMethod("setRelation", String.class, String.class, Status.class, ServerLevel.class));
+                "setRelation", DiplomacyManager.class.getMethod("setRelation", String.class, String.class, Status.class, ServerLevel.class, boolean.class));
         for (var entry : values.entrySet()) {
             Field field = RaiderDiplomacy.class.getDeclaredField(entry.getKey());
             field.setAccessible(true);
@@ -68,12 +73,17 @@ class RaiderDiplomacyApiTest extends MinecraftTestSupport {
             assertEquals("ENEMY", RaiderDiplomacy.currentRelation(enemy, "blue"));
             var manager = Events.recruitsDiplomacyManager;
             assertEquals(2, manager.writes);
+            assertEquals(1, manager.notices, "one native toast already reaches both teams");
+            RaiderDiplomacy.markEnemy(server, "team:blue", host);
+            assertEquals(2, manager.writes, "repeated start is idempotent");
             RaiderDiplomacy.maintainEnemy(server, "team:blue", host);
             assertEquals(2, manager.writes, "unchanged relations must not broadcast again");
             manager.setRelation(enemy, "blue", Status.ALLY, server.overworld());
             RaiderDiplomacy.maintainEnemy(server, "team:blue", host);
             assertEquals("ENEMY", RaiderDiplomacy.currentRelation(enemy, "blue"));
+            assertEquals(2, manager.notices, "maintenance repair is silent after the player change");
             RaiderDiplomacy.resetRelation(server, "team:blue", host);
+            assertEquals(3, manager.notices, "peace is announced once");
             assertEquals("NEUTRAL", RaiderDiplomacy.currentRelation("blue", enemy));
             assertEquals("NEUTRAL", RaiderDiplomacy.currentRelation(enemy, "blue"));
             assertFalse(manager.relations.containsKey("team:blue"));

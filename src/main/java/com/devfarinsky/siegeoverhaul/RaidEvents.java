@@ -4355,9 +4355,9 @@ public final class RaidEvents {
      * is >= 1, so healthy raiders keep their fast direct path.
      */
     /** Rotate a bounded scan through the complete neighborhood instead of starving one side forever. */
-    private static void moveToRaidObjective(ServerLevel level, Mob mob, RaidSavedData.RaidState state,
+    static void moveToRaidObjective(ServerLevel level, Mob mob, RaidSavedData.RaidState state,
                                            Vec3 objective, double speed) {
-        if ("siege_core".equals(state.defensePointName) && state.breached
+        if ("siege_core".equals(state.defensePointName)
                 && com.devfarinsky.siegeoverhaul.raid.CoreApproach.moveTo(level,mob,objective,speed)) return;
         mob.getNavigation().moveTo(objective.x,objective.y,objective.z,speed);
     }

@@ -62,3 +62,11 @@ Tests cover admission flags, refusal/existing-passenger handling, diagonal terra
 ## Commissioned wall projections (4.49.0)
 
 Workers commit `29d26e1df6475fc8d043dc5d455f67b2fd1e9982` renders the shovel independently, but only renders BuildArea structure NBT when focused, showBox is true, or getAlwaysShowProjection() is true. Territory commissions previously never set the latter. Small new wall jobs now call the native setAlwaysShowProjection(true); jobs over 1,024 blocks keep manual projection because the native renderer parses/renders the full blueprint each frame. Missing presentation APIs do not fail the build job. The commission reports the actual native marker coordinates and explains closing the HUD and approaching it. Blueprint origins and all world build positions remain unchanged. This is an in-world job projection, not a pre-purchase HUD preview. Native entity tracking/frustum and ownership visibility rules still apply.
+
+## Player wall access and diplomacy notices (4.49.7)
+
+Rechecked the same pinned Workers 2.0.3 and Recruits 1.15.2 source commits above. Workers BuilderWorkGoal MOVE_TO_WORK_AREA navigates to getOnPos() and tests horizontal squared distance <20. Perimeter origins use global minY, which can be underground at the origin corner on sloped claims. The commissioned-job wrapper delegates native lifecycle and, only for failed routes on the same owned saved job, finds reachable standing space inside that horizontal threshold. Blueprint cells, inventory, supply fetching and day/night schedule are unchanged. Restored jobs install the same wrapper.
+
+Recruits stores each direction separately, but notifyPlayersInTeam sends to both factions. Use the existing five-argument setRelation overload: one notice per two-way transition, silent active-siege repairs, no writes for unchanged directions. Native events, cancellation and persistence remain in Recruits.
+
+Regression fixtures cover buried marker access, failed/unloaded/unsafe paths, bounded search, native scheduling delegation, duplicate notifications and silent repairs. These are not companion-binary integration tests or interactive gameplay testing.

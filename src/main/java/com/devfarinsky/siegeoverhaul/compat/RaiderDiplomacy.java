@@ -45,10 +45,9 @@ public final class RaiderDiplomacy {
             statusClass  = Class.forName("com.talhanation.recruits.world.RecruitsDiplomacyManager$DiplomacyStatus");
             diplomacyManagerField = resolveManagerField(
                     Class.forName("com.talhanation.recruits.FactionEvents"), managerClass);
-            // (String, String, DiplomacyStatus, ServerLevel) - the notify-players
-            // toast is desirable so pick the short overload when it exists.
+            // Each native notification reaches BOTH factions. Control it explicitly.
             setRelation = managerClass.getMethod("setRelation",
-                    String.class, String.class, statusClass, ServerLevel.class);
+                    String.class, String.class, statusClass, ServerLevel.class, boolean.class);
             getRelation = managerClass.getMethod("getRelation", String.class, String.class);
             available = true;
         } catch (ReflectiveOperationException ex) {
@@ -73,6 +72,11 @@ public final class RaiderDiplomacy {
      * before starting a siege; Recruits stores relations by raw faction id.
      */
     public static void setRelation(MinecraftServer server, String playerTeam, String raiderTeam, String statusName) {
+        setRelation(server, playerTeam, raiderTeam, statusName, true);
+    }
+
+    private static void setRelation(MinecraftServer server, String playerTeam, String raiderTeam,
+                                    String statusName, boolean notify) {
         String playerFaction = factionId(playerTeam);
         String raiderFaction = factionId(raiderTeam);
         if (server == null || playerFaction == null || raiderFaction == null || statusName == null) return;
@@ -84,8 +88,12 @@ public final class RaiderDiplomacy {
             Object manager = diplomacyManagerField.get(null);
             if (manager == null) return;
             Object status = Enum.valueOf(statusClass.asSubclass(Enum.class), statusName);
-            setRelation.invoke(manager, playerFaction, raiderFaction, status, level);
-            setRelation.invoke(manager, raiderFaction, playerFaction, status, level);
+            boolean forward = !status.equals(getRelation.invoke(manager, playerFaction, raiderFaction));
+            boolean reverse = !status.equals(getRelation.invoke(manager, raiderFaction, playerFaction));
+            if (forward) setRelation.invoke(manager, playerFaction, raiderFaction, status, level, notify);
+            // If a listener cancels the first direction, the second still merits its own notice.
+            boolean changed = forward && status.equals(getRelation.invoke(manager, playerFaction, raiderFaction));
+            if (reverse) setRelation.invoke(manager, raiderFaction, playerFaction, status, level, notify && !changed);
         } catch (ReflectiveOperationException | RuntimeException ex) {
             FactionLogger.LOG.debug("Diplomacy set {} <-> {} failed: {}", playerFaction, raiderFaction, ex.getMessage());
         }
@@ -107,7 +115,7 @@ public final class RaiderDiplomacy {
         String raiderTeam = RaiderFactions.id(raiderFactionKey);
         String forward = currentRelation(playerTeam, raiderTeam);
         String reverse = currentRelation(raiderTeam, playerTeam);
-        if (needsEnemyRepair(forward, reverse)) setRelation(server, playerTeam, raiderTeam, ENEMY);
+        if (needsEnemyRepair(forward, reverse)) setRelation(server, playerTeam, raiderTeam, ENEMY, false);
     }
 
     static boolean needsEnemyRepair(String forward, String reverse) {

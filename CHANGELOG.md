@@ -1,3 +1,9 @@
+## 4.49.7
+- Commissioned wall builders can route to reachable ground beside a buried blueprint marker or unreachable work cell. Native materials, work hours and owner commands remain in control.
+- Reachable floor beside a core is used even before the breach phase completes, rather than routing to the solid core block.
+- Raiders no longer treat thin roofs as cave terrain or abandon a reachable indoor route for cave recovery.
+- Diplomacy sends one notification for a two-way change; active-siege repairs are silent and unchanged relations are not rewritten.
+
 # 4.49.6 — Clearer camp courtyards
 
 - New camps leave the central sanctuary clear instead of placing the campfire in the core's preferred spot.
