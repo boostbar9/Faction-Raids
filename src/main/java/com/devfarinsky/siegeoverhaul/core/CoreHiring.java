@@ -149,7 +149,7 @@ public final class CoreHiring {
         Item item = id == null ? null : ForgeRegistries.ITEMS.getValue(id);
         return item == null || item == Items.AIR ? Items.EMERALD : item;
     }
-    static void prepareHero(Mob recruit,int role,boolean hired) throws ReflectiveOperationException {
+    public static void prepareHero(Mob recruit,int role,boolean hired) throws ReflectiveOperationException {
         if (!isHero(role)) throw new IllegalArgumentException("Unknown hero role");
         recruit.getClass().getMethod("setXpLevel",int.class).invoke(recruit,10);
         var health=recruit.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);

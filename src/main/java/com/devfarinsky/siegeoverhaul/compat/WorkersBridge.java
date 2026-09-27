@@ -473,6 +473,17 @@ public final class WorkersBridge {
         }
     }
 
+    /** Enable the native wall hologram only for modest plans; old Workers builds remain compatible. */
+    public static boolean enableWallProjection(Object area, int blockCount) {
+        if (area == null || blockCount <= 0 || blockCount > 1024) return false;
+        try {
+            area.getClass().getMethod("setAlwaysShowProjection", boolean.class).invoke(area, true);
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            return false; // Optional presentation API; never reject an otherwise valid paid job.
+        }
+    }
+
     public static void startBlueprint(Entity area, net.minecraft.nbt.CompoundTag blueprint) throws ReflectiveOperationException {
         call(area, "setStructureNBT", net.minecraft.nbt.CompoundTag.class, blueprint);
         call(area, "setFreeArea", boolean.class, false);

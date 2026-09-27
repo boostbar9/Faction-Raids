@@ -153,6 +153,21 @@ public final class HeroTraits {
         tag.putInt(OLYMPIAN_IDENTITY_SCHEMA_TAG,OLYMPIAN_IDENTITY_SCHEMA);
     }
     public static void equip(Mob mob,int role,SimpleContainer inventory) {
+        var gear = equipment(role);
+        EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS,
+                EquipmentSlot.FEET, EquipmentSlot.OFFHAND, EquipmentSlot.MAINHAND};
+        for (int i = 0; i < slots.length; i++) {
+            if (gear.getItem(i).isEmpty()) continue;
+            inventory.setItem(i, gear.getItem(i));
+            mob.setItemSlot(slots[i], gear.getItem(i));
+        }
+        mob.getPersistentData().putInt("SiegeHeroRole",role);
+        ensureOlympianIdentity(mob,role);
+    }
+    /** Fresh native-compatible equipment, shared by heroes and the creative catalog. */
+    public static SimpleContainer equipment(int role) {
+        if (!CoreHiring.isHero(role)) throw new IllegalArgumentException("Unknown hero role");
+        var inventory = new SimpleContainer(6);
         int base = CoreHiring.heroBase(role);
         int tier = CoreHiring.heroTier(role);
         Item[] armor={Items.DIAMOND_HELMET,Items.DIAMOND_CHESTPLATE,Items.DIAMOND_LEGGINGS,Items.DIAMOND_BOOTS};
@@ -165,7 +180,7 @@ public final class HeroTraits {
             ItemStack stack=armor(role,armor[i]);
             // Epic Knights compat protection scales with rarity: 4 base + 1 per tier.
             stack=com.devfarinsky.siegeoverhaul.compat.EpicKnightsCompatibility.armor(stack, 4 + tier, slots[i], shell);
-            inventory.setItem(i,stack);mob.setItemSlot(slots[i],stack);
+            inventory.setItem(i,stack);
         }
         // Mages carry a blaze rod for the visible staff look; ranged carry bow/crossbow; melee sword.
         Item weaponItem;
@@ -180,7 +195,7 @@ public final class HeroTraits {
         weapon.enchant(Enchantments.UNBREAKING, mage(role) ? 3 : 2);
         weapon.setHoverName(Component.literal(weaponName(role)).withStyle(nameColor(tier)));
         com.devfarinsky.siegeoverhaul.items.OlympianWeaponSkins.identifyHero(weapon,role);
-        inventory.setItem(5, weapon); mob.setItemSlot(EquipmentSlot.MAINHAND, weapon);
+        inventory.setItem(5, weapon);
         // Shield in offhand for shield-based heroes (base==1) that aren't mages.
         if (base == 1 && !mage(role)) {
             ItemStack shield = new ItemStack(Items.SHIELD); CompoundTag be = new CompoundTag();
@@ -188,10 +203,9 @@ public final class HeroTraits {
             var patterns = new net.minecraft.nbt.ListTag(); CompoundTag pattern = new CompoundTag();
             pattern.putString("Pattern", "bo"); pattern.putInt("Color", DyeColor.YELLOW.getId()); patterns.add(pattern); be.put("Patterns", patterns);
             shield.getOrCreateTag().put("BlockEntityTag", be); shield.enchant(Enchantments.UNBREAKING, 2);
-            inventory.setItem(4, shield); mob.setItemSlot(EquipmentSlot.OFFHAND, shield);
+            inventory.setItem(4, shield);
         }
-        mob.getPersistentData().putInt("SiegeHeroRole",role);
-        ensureOlympianIdentity(mob,role);
+        return inventory;
     }
     static boolean ready(long now,long next) { return next<=now || next>now+1200; }
     static int role(Mob mob) {

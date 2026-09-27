@@ -272,6 +272,7 @@ public final class TerritoryFortification {
             }
             CompoundTag blueprint = blueprint(blocks, min, max);
             WorkersBridge.startBlueprint(build, blueprint);
+            boolean projectionVisible = WorkersBridge.enableWallProjection(build, blocks.size());
 
             // Report the exact material requirement to the player before we
             // charge, so an empty or wrong-material storage area produces an
@@ -325,6 +326,11 @@ public final class TerritoryFortification {
             player.sendSystemMessage(Component.literal(
                     "Fortify Perimeter commissioned. " + blocks.size() + " " + mat.label()
                             + " blocks queued for the builder."));
+            BlockPos marker = build.blockPosition();
+            player.sendSystemMessage(Component.literal("Wall shovel marker: " + marker.getX() + ", "
+                    + marker.getY() + ", " + marker.getZ() + ". Close the menu and approach this corner. "
+                    + (projectionVisible ? "The wall projection is enabled; right-click the shovel to change it."
+                    : "Look at the shovel to preview, or open it and enable Always show projection if available.")));
             if (unsafeColumns > 0) player.sendSystemMessage(Component.literal(
                     unsafeColumns + " unsafe perimeter sections were left out. Clear a walkable strip inside the boundary or adjust the claim, then commission those sections again."));
             if (protectedCells > 0) player.sendSystemMessage(Component.literal(

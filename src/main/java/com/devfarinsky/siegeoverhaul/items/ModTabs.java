@@ -13,26 +13,7 @@ import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.RegistryObject;
 
-/**
- * Registers a dedicated Siege Overhaul creative-mode tab.
- *
- * <p>The tab is a vanilla creative tab (not a HUD tab) so it lives inside
- * the standard Minecraft creative inventory next to every other mod's tab.
- * Contents are grouped in three visual bands:
- *
- * <ol>
- *   <li><b>Items</b>: our own registered items (guidebook, siege core,
- *       starter bags) plus the Warlord's Codex proxy.</li>
- *   <li><b>Mobs</b>: spawn eggs for every unit type used by the siege
- *       system. We do not register our own entity types (raiders are
- *       vanilla plus Recruits), so we surface the vanilla eggs and any
- *       Recruits eggs that are available at runtime. Missing eggs are
- *       skipped silently.</li>
- *   <li><b>Faction banners</b>: one pre-built banner per faction, ready
- *       to place. Uses {@link FactionBanners#itemStackFor(FactionBanners.FactionId)}
- *       so the banner carries the correct pattern data.</li>
- * </ol>
- */
+/** Dedicated creative catalog for Siege Overhaul items, Olympian equipment and unit eggs. */
 public final class ModTabs {
 
     public static final DeferredRegister<CreativeModeTab> TABS =
@@ -50,41 +31,8 @@ public final class ModTabs {
                         }
                         return new ItemStack(ModItems.GUIDEBOOK.get());
                     })
-                    .displayItems((params, output) -> {
-                        // ---- 1. Our own items ----
-                        output.accept(ModItems.GUIDEBOOK.get());
-                        output.accept(ModItems.SIEGE_CORE.get());
-                        output.accept(ModItems.SETTLEMENT_BAG.get());
-                        output.accept(ModItems.SURVIVAL_BAG.get());
-                        output.accept(ModItems.CATAPULT_CREW_KIT.get());
-                        output.accept(ModItems.BALLISTA_CREW_KIT.get());
-
-                        // ---- 2. Spawn eggs for vanilla raider units ----
-                        // The mob types the raid system spawns as enemy waves,
-                        // for testing defense loadouts.
-                        output.accept(Items.PILLAGER_SPAWN_EGG);
-                        output.accept(Items.VINDICATOR_SPAWN_EGG);
-                        output.accept(Items.EVOKER_SPAWN_EGG);
-                        output.accept(Items.WITCH_SPAWN_EGG);
-                        output.accept(Items.RAVAGER_SPAWN_EGG);
-
-                        // ---- 3. Our own recruit + hero spawn eggs ----
-                        // Each egg spawns a fully-outfitted unit in the same
-                        // gear it would arrive in through a Siege Core hire.
-                        // Recruits (0-3) first, then heroes ordered by rarity.
-                        for (RegistryObject<net.minecraft.world.item.Item> egg : ModItems.UNIT_EGGS) {
-                            if (egg.isPresent()) output.accept(egg.get());
-                        }
-
-                        // ---- 4. Faction banner loadout ----
-                        // One pre-built banner per faction, in canon order.
-                        for (FactionBanners.FactionId faction : FactionBanners.FactionId.values()) {
-                            ItemStack banner = FactionBanners.itemStackFor(faction);
-                            if (banner != null && !banner.isEmpty()) {
-                                output.accept(banner);
-                            }
-                        }
-                    })
+                    .displayItems((params, output) -> CreativeCatalog.entries(
+                            ModItems.ITEMS.getEntries().stream().map(RegistryObject::get).toList()).forEach(output::accept))
                     .build());
 
     private ModTabs() {}

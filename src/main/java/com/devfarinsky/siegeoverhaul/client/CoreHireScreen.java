@@ -1099,7 +1099,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             CommandFrame.divider(g, x + 9, y + 43, w - 18);
             text(g, "PERIMETER CONTRACTS", x + 9, y + 50,
                     Math.max(1, w / 3), CommandPalette.ACCENT_GOLD);
-            text(g, "Choose a material below to dispatch an equipped Workers 2 builder",
+            text(g, "Choose a material to start work; the wall projection is at its shovel marker",
                     x + w / 3, y + 50,
                     Math.max(1, w - w / 3 - 9), CommandPalette.TEXT);
         }
