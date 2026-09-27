@@ -91,8 +91,11 @@ public final class CampBuilder {
             Map.Entry<Long, String> job = iterator.next();
             BlockPos pos = BlockPos.of(job.getKey());
             if (worker != null && !withinReach(worker, pos)) break;
-            CampBlockState.decode(job.getValue()).filter(state -> !state.isAir())
-                    .ifPresent(state -> place.accept(pos, state));
+            var planned = CampBlockState.decode(job.getValue()).filter(state -> !state.isAir());
+            // Keep a malformed saved entry for diagnosis/recovery; do not silently
+            // skip a missing support and continue building the rest of the plan.
+            if (planned.isEmpty()) break;
+            place.accept(pos, planned.get());
             iterator.remove();
             count++;
         }

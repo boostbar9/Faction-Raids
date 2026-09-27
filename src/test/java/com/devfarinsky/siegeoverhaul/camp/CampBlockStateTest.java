@@ -36,6 +36,16 @@ class CampBlockStateTest extends MinecraftTestSupport {
             assertThrows(IllegalArgumentException.class,()->NativeCampConstruction.blueprint(Map.of(0L,id)));
         }
     }
+    @Test void invalidFallbackEntryIsRetainedAndStopsLaterPlacements() {
+        for(String encoded:List.of("minecraft:quartz_stairs[facing=invalid]","minecraft:air")) {
+            var raid=new RaidState("team:test","siege_core",0);
+            raid.pendingCampBlocks.put(0L,encoded);
+            raid.pendingCampBlocks.put(1L,"minecraft:stone");
+            var saved=new LinkedHashMap<>(raid.pendingCampBlocks);
+            assertEquals(0,CampBuilder.placeNearby(raid,null,4,(pos,state)->fail("Blocked plan must not continue")));
+            assertEquals(saved,raid.pendingCampBlocks);
+        }
+    }
     @Test void savedPlansReachNativeBlueprintAndFallbackWithoutLosingProperties() {
         var raid=new RaidState("team:test","siege_core",0);
         int y=64; for(var state:samples()) raid.pendingCampBlocks.put(new BlockPos(-4,y++,-7).asLong(),CampBlockState.encode(state));
