@@ -16,7 +16,7 @@ class FlankRoutesTest extends MinecraftTestSupport {
         when(mob.position()).thenReturn(new Vec3(0,64,0));when(mob.getY()).thenReturn(64D);when(mob.getNavigation()).thenReturn(nav);
         when(mob.getBoundingBox()).thenReturn(new net.minecraft.world.phys.AABB(0,64,0,0.6,66,0.6));
         when(level.getGameTime()).thenReturn(100L);when(level.hasChunkAt(any())).thenReturn(true);
-        var border=mock(net.minecraft.world.level.border.WorldBorder.class);when(level.getWorldBorder()).thenReturn(border);when(border.isWithinBounds(any(BlockPos.class))).thenReturn(true);
+        var border=mock(net.minecraft.world.level.border.WorldBorder.class);when(level.getWorldBorder()).thenReturn(border);when(border.isWithinBounds(any(BlockPos.class))).thenReturn(true);when(border.isWithinBounds(any(net.minecraft.world.phys.AABB.class))).thenReturn(true);
         when(level.getMinBuildHeight()).thenReturn(-64);when(level.getMaxBuildHeight()).thenReturn(320);
         when(level.getBlockState(any())).thenAnswer(a->((BlockPos)a.getArgument(0)).getY()<64?Blocks.STONE.defaultBlockState():Blocks.AIR.defaultBlockState());
         when(level.getFluidState(any())).thenReturn(Fluids.EMPTY.defaultFluidState());when(level.noCollision(eq(mob),any())).thenReturn(true);

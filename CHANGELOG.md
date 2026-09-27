@@ -1,3 +1,8 @@
+## 4.49.8
+- Stuck raiders reject unsafe or unreachable random fallback destinations and try the wider route before giving up.
+- Cached detours are discarded when their landing becomes blocked, flooded or unloaded.
+- Tempest, Inferno and Undertow spellbooks now have distinct lightning, fire and water artwork from Hungry22's Weekly Dot pack, with the original author notice and source credit included.
+
 ## 4.49.7
 - Commissioned wall builders can route to reachable ground beside a buried blueprint marker or unreachable work cell. Native materials, work hours and owner commands remain in control.
 - Stuck recovery no longer teleports raiders into the core approach area or onto much higher roofs.

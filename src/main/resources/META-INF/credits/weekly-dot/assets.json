@@ -1,0 +1,28 @@
+{
+  "author": "Hungry (Hungry22)",
+  "store": "More&Better",
+  "pack": "Weekly Dot - Pack 1",
+  "source": "https://mcmodels.net/products/13626/weekly-dot-pack-1",
+  "notice": "AUTHOR-NOTICE.txt",
+  "modifications": "PNG files are byte-for-byte copies. Native Forge item model references replace plugin configuration.",
+  "assets": [
+    {
+      "item": "tempest_spellbook",
+      "source": "en/itemsadder-type/plugins/ItemsAdder/contents/weekly_dot/resourcepack/pack1/textures/items/thunder_book.png",
+      "texture": "assets/siegeoverhaul/textures/item/weekly_dot/thunder_book.png",
+      "sha256": "110678524c4b2fb68137daed7d8f7f3ea772f6507ef6554fa5ece36819021eb3"
+    },
+    {
+      "item": "inferno_spellbook",
+      "source": "en/itemsadder-type/plugins/ItemsAdder/contents/weekly_dot/resourcepack/pack1/textures/items/fire_book.png",
+      "texture": "assets/siegeoverhaul/textures/item/weekly_dot/fire_book.png",
+      "sha256": "ccad0027bd703d10c726138ec27710f75ba1ebe68054c206bdad339cef20b189"
+    },
+    {
+      "item": "undertow_spellbook",
+      "source": "en/itemsadder-type/plugins/ItemsAdder/contents/weekly_dot/resourcepack/pack1/textures/items/water_book.png",
+      "texture": "assets/siegeoverhaul/textures/item/weekly_dot/water_book.png",
+      "sha256": "b34abaaab683744060fdbd052ac64ebf58912fdab773a32b23ac6ca05695c8ca"
+    }
+  ]
+}
