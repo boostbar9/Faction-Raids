@@ -1,3 +1,9 @@
+# 4.47.25 beta
+
+- Marching troops gain a temporary 20% base movement-speed bonus while unengaged and more than 64 blocks from the objective, including troops following native formation orders. Combat, occupation, passengers and working crews use their normal pace.
+- Ordinary infantry can build checked temporary crossings even far from the target. Dismounted melee recruits, archers and flankers share the same finite bridge job system.
+- Crossing searches run every five seconds and rotate through the army instead of repeatedly checking only the first troops. Saved material/attempt limits, safe shores, excluded claims and tracked cleanup still apply; only one crossing job runs per raid.
+
 # 4.47.24 beta
 
 - Enemy camps attempt checked sanctuary placement immediately when established, before the crew spawns. Players can capture the enemy core during preparation to stop the assault, using the same occupation and claim checks. Unsafe sites still wait for safe placement.

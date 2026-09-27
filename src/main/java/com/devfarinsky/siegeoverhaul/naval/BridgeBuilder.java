@@ -33,7 +33,7 @@ import java.util.Set;
 /** A finite, physical construction job for an existing wave member, never an extra spawned crew. */
 public final class BridgeBuilder {
     public static final String SPECIALIST_TAG = "SiegeBridgeBuilder";
-    private static final int SEARCH_INTERVAL = 400;
+    private static final int SEARCH_INTERVAL = 100;
     private static final int APPROACH_SCAN = 6;
     private static final int MAX_CANDIDATES = 12;
     /**
@@ -43,7 +43,7 @@ public final class BridgeBuilder {
      * versions stay eligible after a reload.
      */
     private static final Set<String> ORDINARY_ROLES = Set.of("marksman", "breacher",
-            "shieldman", "bowman", "crossbowman");
+            "shieldman", "bowman", "crossbowman", "recruit", "flanker", "assassin");
 
     private BridgeBuilder() {}
 
@@ -79,11 +79,14 @@ public final class BridgeBuilder {
         data.setDirty();
         int candidates = 0;
         Map<ChunkPos, Boolean> claims = new HashMap<>();
-        for (var id : state.raiders) {
+        var raiders = new java.util.ArrayList<>(state.raiders);
+        int cursor = Math.floorMod(state.campaign.getInt("BridgeScoutCursor"), Math.max(1, raiders.size()));
+        for (int checked = 0; checked < raiders.size() && candidates < MAX_CANDIDATES; checked++) {
+            var id = raiders.get((cursor + checked) % raiders.size());
+            state.campaign.putInt("BridgeScoutCursor", (cursor + checked + 1) % raiders.size());
             if (!(level.getEntity(id) instanceof Mob mob) || !eligible(mob, state)
-                    || mob.distanceToSqr(Vec3.atCenterOf(objective)) > 192 * 192
                     || RaiderLadderGoal.assigned(mob)) continue;
-            if (++candidates > MAX_CANDIDATES) break;
+            candidates++;
             if (hasObjectiveRoute(mob, objective)) continue;
             BridgePlan plan = discover(level, mob, objective, anchor, claims, RaidConfig.MAX_BRIDGE_SPAN.get(),
                     RaidConfig.MAX_BRIDGE_BLOCKS_PER_RAID.get() - state.bridgeBlocksSpent);

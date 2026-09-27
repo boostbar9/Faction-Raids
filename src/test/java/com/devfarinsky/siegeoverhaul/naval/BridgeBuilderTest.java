@@ -175,6 +175,48 @@ class BridgeBuilderTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void distantInfantryCanBridgeBeforeReachingTheOldObjectiveRadius() {
+        BlockPos far=new BlockPos(800,64,0);
+        when(mob.distanceToSqr(any(Vec3.class))).thenReturn(800.0*800);
+        try(var saves=mockStatic(RaidSavedData.class);var claims=mockStatic(ClaimBridge.class);
+            var formations=mockStatic(RecruitsFormationBridge.class)) {
+            saves.when(()->RaidSavedData.get(level.getServer())).thenReturn(data);
+            gap(3,true); Path shore=mock(Path.class);when(shore.canReach()).thenReturn(true);
+            when(navigation.createPath(start,0)).thenReturn(shore);
+            BridgeBuilder.tick(level,state,far);
+            assertNotNull(state.bridgePlan);assertEquals(far,state.bridgePlan.objective);
+            assertEquals(1,state.bridgeAttempts);assertEquals(0,state.bridgeBlocksSpent);
+        }
+    }
+    @Test void searchRotatesPastTheFirstTwelveAndWaitsFiveSecondsBetweenBatches() {
+        try(var saves=mockStatic(RaidSavedData.class);var claims=mockStatic(ClaimBridge.class);
+            var formations=mockStatic(RecruitsFormationBridge.class);
+            var bridge=mockStatic(BridgeBuilder.class,CALLS_REAL_METHODS)) {
+            saves.when(()->RaidSavedData.get(level.getServer())).thenReturn(data);
+            state.raiders.clear();
+            for(int i=0;i<12;i++) {
+                var unit=mock(Mob.class);var id=UUID.randomUUID();state.raiders.add(id);
+                when(level.getEntity(id)).thenReturn(unit);
+                bridge.when(()->BridgeBuilder.eligible(unit,state)).thenReturn(true);
+                bridge.when(()->BridgeBuilder.hasObjectiveRoute(unit,objective)).thenReturn(true);
+            }
+            state.raiders.add(mob.getUUID());
+            // Start at the first of twelve other soldiers, leaving the bridge candidate last.
+            var order=new java.util.ArrayList<>(state.raiders);
+            state.campaign.putInt("BridgeScoutCursor",(order.indexOf(mob.getUUID())+1)%order.size());
+            gap(3,true);Path shore=mock(Path.class);when(shore.canReach()).thenReturn(true);
+            when(navigation.createPath(start,0)).thenReturn(shore);
+            BridgeBuilder.tick(level,state,objective);assertNull(state.bridgePlan);
+            assertEquals(100,state.bridgeNextAttempt);
+            var saved=RaidSavedData.RaidState.load(state.save());
+            assertEquals(state.campaign.getInt("BridgeScoutCursor"),saved.campaign.getInt("BridgeScoutCursor"));
+            when(level.getGameTime()).thenReturn(99L);
+            BridgeBuilder.tick(level,state,objective);assertNull(state.bridgePlan);
+            when(level.getGameTime()).thenReturn(100L);
+            BridgeBuilder.tick(level,state,objective);assertNotNull(state.bridgePlan);
+            assertEquals(mob.getUUID(),state.bridgePlan.builder);
+        }
+    }
     @Test void promotionConservesPopulationCombatRoleAndReservesAttemptBeforeConstruction() {
         try (var saves = mockStatic(RaidSavedData.class); var claims = mockStatic(ClaimBridge.class);
              var formations = mockStatic(RecruitsFormationBridge.class)) {
@@ -198,13 +240,13 @@ class BridgeBuilderTest extends MinecraftTestSupport {
     @Test void excludesCaptainsHeroesOperatorsGuardsScoutsAndNonMembers() {
         assertTrue(BridgeBuilder.eligible(mob, state));
         var tags = mob.getPersistentData();
-        for (String role : List.of("captain", "commander", "hero", "warcaster", "cavalry", "scout", "flanker")) {
+        for (String role : List.of("captain", "commander", "hero", "warcaster", "cavalry", "scout")) {
             tags.putString(ModConstants.Tags.RAID_ROLE, role);
             assertFalse(BridgeBuilder.eligible(mob, state));
         }
         // The roles RaidEvents actually writes for rank-and-file troops must
         // qualify, otherwise no wave ever produces a bridge builder.
-        for (String role : List.of("marksman", "breacher", "shieldman", "bowman", "crossbowman")) {
+        for (String role : List.of("marksman", "breacher", "shieldman", "bowman", "crossbowman", "recruit", "flanker", "assassin")) {
             tags.putString(ModConstants.Tags.RAID_ROLE, role);
             assertTrue(BridgeBuilder.eligible(mob, state), role);
         }
@@ -302,7 +344,7 @@ class BridgeBuilderTest extends MinecraftTestSupport {
             var cancelled = RaidSavedData.RaidState.load(loaded.save());
             assertNull(cancelled.bridgePlan);
             assertEquals(1, cancelled.bridgeAttempts); assertEquals(1, cancelled.bridgeBlocksSpent);
-            assertEquals(400, cancelled.bridgeNextAttempt);
+            assertEquals(100, cancelled.bridgeNextAttempt);
             var old = RaidSavedData.RaidState.load(new CompoundTag());
             assertNull(old.bridgePlan); assertEquals(0, old.bridgeAttempts); assertEquals(0, old.bridgeBlocksSpent);
         }
@@ -436,3 +478,4 @@ class BridgeBuilderTest extends MinecraftTestSupport {
         }
     }
 }
+
