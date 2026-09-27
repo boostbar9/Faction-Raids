@@ -96,7 +96,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         goal.tick();verifyNoInteractions(nav);
         data.putUUID(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID,id);
         data.putUUID(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_OWNER,owner);
-        goal.tick();verify(nav).createPath(argThat(sites -> !sites.isEmpty()
+        goal.tick();verify(nav).createPath(argThat((java.util.Set<BlockPos> sites) -> !sites.isEmpty()
                 && !sites.contains(new BlockPos(0,64,0))),eq(0));
         clearInvocations(nav);when(worker.getFollowState()).thenReturn(1);
         when(level.getGameTime()).thenReturn(80L);goal.tick();verifyNoInteractions(nav);
