@@ -1,3 +1,11 @@
+# 4.48.0 beta
+
+- Tempest, Inferno and Undertow now have a visible one-second casting wind-up, a release pose and expanding tidal or fire rings. A cast stops if its target dies, disappears or becomes friendly.
+- Added client settings for casting poses, particle density, effect distance, sound volume and reduced flashes.
+- Hero weapons and tagged Olympian loot now use original 3D warblade, spear, staff, bow, crossbow and tool designs. Existing item stats, enchantments and saved items are preserved; ordinary equipment keeps its normal appearance.
+- Bow and crossbow skins show their draw stages. Vanilla tridents, shields and armor keep their existing renderers.
+- Server and clients must update together. Minecraft 1.20.1 Forge, Java 17 and companion requirements are unchanged.
+
 # 4.47.27 beta
 
 - Camp scouting now has a four-minute active-time limit for each search pass. Slow or unavailable terrain can no longer keep preparation paused for hours; after the natural and enabled earthworks searches fail, preparation begins for the existing camp-less assault.

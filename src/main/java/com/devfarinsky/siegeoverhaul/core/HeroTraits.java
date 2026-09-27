@@ -179,6 +179,7 @@ public final class HeroTraits {
         else if (!mage(role)) weapon.enchant(Enchantments.SHARPNESS, 2 + Math.max(0, tier - 1));
         weapon.enchant(Enchantments.UNBREAKING, mage(role) ? 3 : 2);
         weapon.setHoverName(Component.literal(weaponName(role)).withStyle(nameColor(tier)));
+        com.devfarinsky.siegeoverhaul.items.OlympianWeaponSkins.identifyHero(weapon,role);
         inventory.setItem(5, weapon); mob.setItemSlot(EquipmentSlot.MAINHAND, weapon);
         // Shield in offhand for shield-based heroes (base==1) that aren't mages.
         if (base == 1 && !mage(role)) {
@@ -193,7 +194,7 @@ public final class HeroTraits {
         ensureOlympianIdentity(mob,role);
     }
     static boolean ready(long now,long next) { return next<=now || next>now+1200; }
-    private static int role(Mob mob) {
+    static int role(Mob mob) {
         var tag=mob.getPersistentData();
         if (EnemyHeroes.active(mob)) return tag.getInt("SiegeHeroRole");
         if(!tag.getBoolean("SiegeHiredHero") || EnemyHiringProtection.enemy(mob))return -1;
@@ -268,6 +269,7 @@ public final class HeroTraits {
         if(!(event.getEntity() instanceof Mob mob) || !(mob.level() instanceof ServerLevel level)) return;
         if (mob.getPersistentData().contains(WILDSONG_ATTACK_SPEED_TAG))
             refreshWildsongAttackSpeed(level, mob, level.getGameTime());
+        if (HeroCasting.tick(level,mob)) return;
         if (mob.tickCount % 20 != 0) return;
         // Summons are not recruit heroes. Process their saved deadline before hero/AI gates,
         // including legacy wolves incorrectly stamped as hired heroes in 4.19/4.20.
@@ -285,6 +287,11 @@ public final class HeroTraits {
         if (!mob.isAlive() || mob.isNoAi()) return;
         int r = role(mob); if (r < 0) return;
         ensureOlympianIdentity(mob,r);
+        var held=mob.getMainHandItem();
+        if(held!=null && !held.isEmpty() && held.hasCustomHoverName()
+                && weaponName(r).equals(held.getHoverName().getString())
+                && !held.getOrCreateTag().contains(com.devfarinsky.siegeoverhaul.items.OlympianWeaponSkins.HERO_ROLE))
+            com.devfarinsky.siegeoverhaul.items.OlympianWeaponSkins.identifyHero(held,r);
         long now = level.getGameTime();
         var tag = mob.getPersistentData();
         // Hephaestus' Ward: shield the most-hurt ally in a 6-block bubble every 30s.
@@ -309,27 +316,8 @@ public final class HeroTraits {
         }
         // Offensive spells require a live, visible enemy, not a stale native AI target.
         if ((r == 22 || r >= 27) && (mob.getTarget() == null || !hostile(mob,mob.getTarget()))) return;
-        // Poseidon's Tempest: tidal nova every 15s, with a visible enemy in its six-block reach.
-        if (r == 22 && ready(now, tag.getLong("SiegeHeroNext"))) {
-            var foes=enemies(level,mob,6);
-            if (foes.isEmpty()) return;
-            tag.putLong("SiegeHeroNext", now + 300);
-            signature(level,mob,r,36,2.0);
-            burst(level,mob.getX(),mob.getY()+.5,mob.getZ(),net.minecraft.core.particles.ParticleTypes.CLOUD,12,1.5,.04);
-            for (var enemy : foes) enemy.hurt(level.damageSources().indirectMagic(mob, mob), 5);
-            return;
-        }
-        // Ares' Inferno: burning battle fury within eight blocks, every 20s.
-        if (r == 27 && ready(now, tag.getLong("SiegeHeroNext"))) {
-            var foes = enemies(level, mob, 8);
-            if (foes.isEmpty()) return;
-            tag.putLong("SiegeHeroNext", now + 400);
-            for (var enemy : foes) {
-                burst(level,enemy.getX(),enemy.getY()+1,enemy.getZ(),net.minecraft.core.particles.ParticleTypes.FLAME,12,.5,.04);
-                enemy.hurt(level.damageSources().indirectMagic(mob, mob), 6);
-                enemy.setSecondsOnFire(4);
-            }
-            signature(level,mob,r,16,.8);
+        if (HeroCasting.supported(r)) {
+            HeroCasting.begin(level,mob,r);
             return;
         }
         // Artemis' Hounds (28): summon two wolves for 30s, 45s cooldown; saved deadline identifies summons.
@@ -349,17 +337,7 @@ public final class HeroTraits {
             level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.WOLF_HOWL, net.minecraft.sounds.SoundSource.HOSTILE, 1.5F, 0.5F);
             return;
         }
-        // Poseidon's Undertow: four seconds of heavy slowing, every 30s.
-        if (r == 29 && ready(now, tag.getLong("SiegeHeroNext"))) {
-            var foes=enemies(level,mob,10);
-            if (foes.isEmpty()) return;
-            tag.putLong("SiegeHeroNext", now + 600);
-            for (var enemy : foes) {
-                enemy.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 80, 4));
-                burst(level, enemy.getX(), enemy.getY() + .3, enemy.getZ(), net.minecraft.core.particles.ParticleTypes.SPLASH, 12, 0.6, 0.05);
-            }
-            signature(level,mob,r,16,.8);
-        }
+
     }
     @SubscribeEvent
     public static void hit(LivingDamageEvent event) {

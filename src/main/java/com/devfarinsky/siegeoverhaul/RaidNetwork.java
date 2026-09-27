@@ -19,7 +19,7 @@ public final class RaidNetwork {
     // discovered units/factions, and War Journal rows to DashboardSync.
     // Bump whenever the wire format changes so mismatched builds refuse to connect
     // instead of silently corrupting the dashboard payload.
-    private static final String PROTOCOL = "14";
+    private static final String PROTOCOL = "15";
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(SiegeOverhaul.MOD_ID, "main"))
             .networkProtocolVersion(() -> PROTOCOL)
@@ -29,6 +29,13 @@ public final class RaidNetwork {
     private static int messageId;
 
     public static void init() {
+        CHANNEL.messageBuilder(HeroCast.class,messageId++,NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(HeroCast::encode).decoder(HeroCast::decode)
+                .consumerMainThread((packet,supplier) -> {
+                    DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
+                            () -> () -> com.devfarinsky.siegeoverhaul.client.HeroCastVisuals.accept(packet));
+                    supplier.get().setPacketHandled(true);
+                }).add();
         CHANNEL.messageBuilder(CoreDetails.class,messageId++,NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(CoreDetails::encode)
                 .decoder(CoreDetails::decode)
@@ -67,6 +74,27 @@ public final class RaidNetwork {
                 .decoder(DashboardAction::decode)
                 .consumerMainThread(DashboardAction::handle)
                 .add();
+    }
+
+    public record HeroCast(int entityId,java.util.UUID uuid,int role,long start,int phase,double x,double y,double z) {
+        public HeroCast {
+            if(uuid==null || !com.devfarinsky.siegeoverhaul.core.HeroCasting.supported(role)
+                    || phase<0 || phase>2 || !Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z))
+                throw new IllegalArgumentException("Invalid hero cast");
+        }
+        public void encode(FriendlyByteBuf b) {
+            b.writeVarInt(entityId);b.writeUUID(uuid);b.writeVarInt(role);b.writeLong(start);b.writeByte(phase);
+            b.writeDouble(x);b.writeDouble(y);b.writeDouble(z);
+        }
+        public static HeroCast decode(FriendlyByteBuf b) {
+            return new HeroCast(b.readVarInt(),b.readUUID(),b.readVarInt(),b.readLong(),b.readUnsignedByte(),b.readDouble(),b.readDouble(),b.readDouble());
+        }
+    }
+    public static void sendHeroCast(net.minecraft.world.entity.Mob hero,HeroCast packet) {
+        CHANNEL.send(PacketDistributor.TRACKING_ENTITY.with(() -> hero),packet);
+    }
+    public static void sendHeroCast(ServerPlayer player,HeroCast packet) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),packet);
     }
 
     public record CoreDetails(int menuId,String faction,java.util.List<String> members,int[] ledger) {

@@ -65,8 +65,14 @@ public final class SiegeOverhaulConfigScreen extends Screen {
         viewportHeight = this.height - viewportTop - 34;
 
         addRenderableWidget(Button.builder(Component.literal("Done"),
-                b -> onClose()).bounds(this.width / 2 - 100, this.height - 28, 200, 20).build());
+                b -> onClose()).bounds(spec == com.devfarinsky.siegeoverhaul.RaidConfig.SPEC ? this.width / 2 + 5 : this.width / 2 - 100,
+                        this.height - 28, spec == com.devfarinsky.siegeoverhaul.RaidConfig.SPEC ? 150 : 200, 20).build());
 
+        if (spec == com.devfarinsky.siegeoverhaul.RaidConfig.SPEC) {
+            addRenderableWidget(Button.builder(Component.literal("Hero visuals"),
+                    b -> minecraft.setScreen(new SiegeOverhaulConfigScreen(this, com.devfarinsky.siegeoverhaul.HeroVisualConfig.SPEC)))
+                    .bounds(this.width / 2 - 155,this.height-28,150,20).build());
+        }
         layoutWidgets();
     }
 
