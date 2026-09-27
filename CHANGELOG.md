@@ -1,5 +1,6 @@
 ## 4.49.7
 - Commissioned wall builders can route to reachable ground beside a buried blueprint marker or unreachable work cell. Native materials, work hours and owner commands remain in control.
+- Stuck recovery no longer teleports raiders into the core approach area or onto much higher roofs.
 - Reachable floor beside a core is used even before the breach phase completes, rather than routing to the solid core block.
 - Raiders no longer treat thin roofs as cave terrain or abandon a reachable indoor route for cave recovery.
 - Diplomacy sends one notification for a two-way change; active-siege repairs are silent and unchanged relations are not rewritten.
