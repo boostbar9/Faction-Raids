@@ -13,6 +13,20 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class WorkersBridgeTest extends MinecraftTestSupport {
+    public static class WorkStateApi {
+        public Object currentBuildArea;
+        public boolean isFleeing;
+        public int state=6;
+        public int getFollowState() {return state;}
+    }
+    @Test void recoveryRequiresTheExactJobAndRespectsOwnerCommands() {
+        var worker=new WorkStateApi();var area=new Object();worker.currentBuildArea=area;
+        assertTrue(WorkersBridge.workingOnApi(worker,area));
+        assertFalse(WorkersBridge.workingOnApi(worker,new Object()));
+        worker.state=3;assertFalse(WorkersBridge.workingOnApi(worker,area));
+        worker.state=6;worker.isFleeing=true;assertFalse(WorkersBridge.workingOnApi(worker,area));
+        assertFalse(WorkersBridge.workingOnApi(new Object(),area));
+    }
     @Test
     void workers2ApiReceivesRaiderOwnerAndNonWorkingHoldMode() throws Exception {
         Workers2Api worker = new Workers2Api();

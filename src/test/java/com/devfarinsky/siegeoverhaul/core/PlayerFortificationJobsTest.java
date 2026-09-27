@@ -202,6 +202,21 @@ class PlayerFortificationJobsTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void activeCommissionOnlyRecoversItsExactWorkingBuilder() {
+        try (JobFixture f = new JobFixture(); var recovery = mockStatic(BuilderGroundRecovery.class)) {
+            PlayerFortificationJobs.link(f.builder,f.area,f.owner);
+            f.bridge.when(() -> WorkersBridge.hasActiveBuildArea(f.builder)).thenReturn(true);
+            f.bridge.when(() -> WorkersBridge.workingOn(f.builder,f.area)).thenReturn(true);
+            PlayerFortificationJobs.tick(f.level,f.builder);
+            recovery.verify(() -> BuilderGroundRecovery.tick(f.level,f.builder));
+            recovery.clearInvocations();
+            f.bridge.when(() -> WorkersBridge.workingOn(f.builder,f.area)).thenReturn(false);
+            PlayerFortificationJobs.tick(f.level,f.builder);
+            recovery.verify(() -> BuilderGroundRecovery.tick(any(),any()),never());
+            recovery.verify(() -> BuilderGroundRecovery.reset(f.builder));
+        }
+    }
+
     private static final class JobFixture implements AutoCloseable {
         final ServerLevel level = mock(ServerLevel.class);
         final Mob builder = mock(Mob.class);

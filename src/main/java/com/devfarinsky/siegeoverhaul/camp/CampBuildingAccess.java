@@ -27,9 +27,15 @@ final class CampBuildingAccess {
     static Optional<Map<Long, String>> plan(ServerLevel level, RaidSavedData.RaidState raid,
                                            BlockPos center, Direction entrance,
                                            Predicate<BlockPos> allowed) {
+        return plan(level, raid, center, entrance, allowed, 3);
+    }
+
+    static Optional<Map<Long, String>> plan(ServerLevel level, RaidSavedData.RaidState raid,
+                                           BlockPos center, Direction entrance,
+                                           Predicate<BlockPos> allowed, int radius) {
         Map<Long, String> result = new LinkedHashMap<>();
         int previous = center.getY(); // Pavilion floor block, not the NPC's feet.
-        for (int depth = 4; depth <= 7; depth++) {
+        for (int depth = radius + 1; depth <= radius + 4; depth++) {
             BlockPos row = center.relative(entrance, depth);
             int[] ground = new int[3];
             int floor = previous - 1;
@@ -59,13 +65,14 @@ final class CampBuildingAccess {
                     BlockPos p = column.atY(y);
                     if (EnemyCoreSite.reserved(raid, p) || CampStructures.accessColumn(raid,p)
                             || raid.campBlocks.containsKey(p.asLong())
+                            || raid.pendingCampBlocks.containsKey(p.asLong())
                             || raid.pendingFortifications.containsKey(p.asLong())
                             || !level.getFluidState(p).isEmpty() || level.getBlockEntity(p) != null
                             || !CampVegetation.replaceable(level.getBlockState(p))) return Optional.empty();
                     if (y <= floor) result.put(p.asLong(), "minecraft:spruce_planks");
                 }
             }
-            if (depth >= 5 && meetsGround) return Optional.of(result);
+            if (depth >= radius + 2 && meetsGround) return Optional.of(result);
             previous = floor;
         }
         return Optional.empty();

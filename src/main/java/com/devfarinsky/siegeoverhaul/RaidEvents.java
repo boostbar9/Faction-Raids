@@ -3301,19 +3301,21 @@ public final class RaidEvents {
                 buildWatchtower(level, state, wx, wz, cy);
             }
 
-            // Forge cluster (single queued build).
-            buildForge(level, state, cx, cz, cy);
+            Direction front = gateOnXAxis
+                    ? (gateWallCoord > 0 ? Direction.EAST : Direction.WEST)
+                    : (gateWallCoord > 0 ? Direction.SOUTH : Direction.NORTH);
+            // The forge occupies the forward quarter, away from the pavilions' entrance paths.
+            BlockPos forge = camp.relative(front, 4).relative(front.getClockWise(), 4);
+            buildForge(level, state, forge.getX(), forge.getZ(), cy);
 
-            // Two barracks tents (one queued build each).
-            double rearAngle = frontAngle + Math.PI;
-            int rearDx = Mth.floor(Math.cos(rearAngle) * 5.0D);
-            int rearDz = Mth.floor(Math.sin(rearAngle) * 5.0D);
-            int perpX = Mth.floor(-Math.sin(rearAngle) * 3.0D);
-            int perpZ = Mth.floor(Math.cos(rearAngle) * 3.0D);
-            for (int tent = -1; tent <= 1; tent += 2) {
-                final int tx = cx + rearDx + perpX * tent;
-                final int tz = cz + rearDz + perpZ * tent;
-                buildTent(level, state, tx, tz, cy);
+            // Cardinal anchors keep pavilion footprints separate even on diagonal approaches.
+            for (int side : new int[]{-1, 1}) {
+                BlockPos pavilion = com.devfarinsky.siegeoverhaul.camp.CampStarterPavilion.anchor(camp, front, side);
+                var plan = com.devfarinsky.siegeoverhaul.camp.CampStarterPavilion.plan(level, state, pavilion, front);
+                if (!plan.isEmpty()) {
+                    state.pendingCampBlocks.putAll(plan);
+                    com.devfarinsky.siegeoverhaul.camp.CampStarterPavilion.reserveEntrance(state, pavilion, front);
+                }
             }
             com.devfarinsky.siegeoverhaul.camp.WarGate.plan(level,state,point.pos());
         } finally {
@@ -3388,7 +3390,8 @@ public final class RaidEvents {
         for (int dy = 0; dy < 4; dy++) {
             placeCampBlock(level, state, base.above(dy), Blocks.SPRUCE_LOG);
         }
-        placeCampBlock(level, state, base.above(4), Blocks.RED_BANNER);
+        placeCampBlock(level, state, base.above(4), com.devfarinsky.siegeoverhaul.items.FactionBanners.standingBlockFor(
+                com.devfarinsky.siegeoverhaul.items.FactionBanners.FactionId.byIdOrDefault(state.factionId)));
     }
 
     /**
@@ -3401,65 +3404,12 @@ public final class RaidEvents {
      */
     private static void buildForge(ServerLevel level, RaidSavedData.RaidState state,
                                    int cx, int cz, int campY) {
-        BlockPos anvil = campPlanePosition(level, cx + 3, cz, campY);
-        BlockPos furnace = campPlanePosition(level, cx + 3, cz + 1, campY);
-        BlockPos craft = campPlanePosition(level, cx + 3, cz - 1, campY);
+        BlockPos anvil = campPlanePosition(level, cx, cz, campY);
+        BlockPos furnace = campPlanePosition(level, cx, cz + 1, campY);
+        BlockPos craft = campPlanePosition(level, cx, cz - 1, campY);
         if (anvil != null) placeCampBlock(level, state, anvil, Blocks.ANVIL);
         if (furnace != null) placeCampBlock(level, state, furnace, Blocks.FURNACE);
         if (craft != null) placeCampBlock(level, state, craft, Blocks.CRAFTING_TABLE);
-    }
-
-    /**
-     * Places one dark-oak-and-wool tent centered on the given world column.
-     * The tent is 5 wide, 5 deep, and 4 tall with an open front. Called from
-     * {@link #buildWarCamp} to place the two barracks tents.
-     *
-     * <p>v2.17.0: the floor Y is now the camp plane Y, not the local
-     * heightmap under the tent center. Previously a tent placed on a
-     * gentle rise ended up with its walls half-buried on the uphill side
-     * and floating on the downhill side. If the local terrain deviates
-     * from the plane by more than 3 blocks we skip the tent entirely.
-     */
-    private static void buildTent(ServerLevel level, RaidSavedData.RaidState state, int cx, int cz, int campY) {
-        BlockPos anchor = campPlanePosition(level, cx, cz, campY);
-        if (anchor == null) return;
-        int floorY = anchor.getY();
-        for (int dx = -2; dx <= 2; dx++) {
-            for (int dz = -2; dz <= 2; dz++) {
-                placeCampBlock(level, state, new BlockPos(cx + dx, floorY, cz + dz),
-                        Blocks.DARK_OAK_PLANKS);
-            }
-        }
-        for (int dx : new int[]{-2, 2}) {
-            for (int dz : new int[]{-2, 2}) {
-                for (int dy = 1; dy <= 3; dy++) {
-                    placeCampBlock(level, state, new BlockPos(cx + dx, floorY + dy, cz + dz),
-                            Blocks.SPRUCE_LOG);
-                }
-            }
-        }
-        // Canopy roof.
-        for (int dx = -2; dx <= 2; dx++) {
-            for (int dz = -2; dz <= 2; dz++) {
-                placeCampBlock(level, state, new BlockPos(cx + dx, floorY + 4, cz + dz),
-                        Blocks.RED_WOOL);
-            }
-        }
-        // Rear + side walls; leaves front (dz = -2) open.
-        for (int dx = -2; dx <= 2; dx++) {
-            for (int dy = 1; dy <= 3; dy++) {
-                placeCampBlock(level, state, new BlockPos(cx + dx, floorY + dy, cz + 2),
-                        Blocks.RED_WOOL);
-            }
-        }
-        for (int dz = -1; dz <= 1; dz++) {
-            for (int dy = 1; dy <= 3; dy++) {
-                placeCampBlock(level, state, new BlockPos(cx - 2, floorY + dy, cz + dz),
-                        Blocks.RED_WOOL);
-                placeCampBlock(level, state, new BlockPos(cx + 2, floorY + dy, cz + dz),
-                        Blocks.RED_WOOL);
-            }
-        }
     }
 
     /**
