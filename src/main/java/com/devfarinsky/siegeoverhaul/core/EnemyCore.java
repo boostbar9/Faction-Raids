@@ -122,13 +122,8 @@ public final class EnemyCore {
             BlockState before = level.getBlockState(entry.getKey());
             if (!CampVegetation.replaceable(before) || before.hasBlockEntity() || !before.getFluidState().isEmpty()) return false;
             changes.add(new CampTerrain.Change(entry.getKey(), before, entry.getValue()));
-            if (before.getBlock() instanceof net.minecraft.world.level.block.DoublePlantBlock) {
-                BlockPos upper = entry.getKey().above();
-                BlockState plant = level.getBlockState(upper);
-                if (plant.is(before.getBlock())) changes.add(new CampTerrain.Change(upper, plant,
-                        net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()));
-            }
         }
+        appendPlantPartners(level,changes);
         if (!CampTerrain.apply(level, raid, new CampTerrain.Plan(changes))) return false;
         // CampTerrain records legacy IDs. These new directional steps also retain
         // their expected state so cleanup preserves later player rotations.
@@ -141,6 +136,23 @@ public final class EnemyCore {
         RaidSavedData.get(level.getServer()).setDirty();
         FactionLogger.LOG.info("Enemy Siege Core keep raised at clear camp site {} for {}", core, raid.teamKey);
         return true;
+    }
+    /** Snapshot paired vegetation before any neighbor update can remove its other half. */
+    static void appendPlantPartners(ServerLevel level,List<CampTerrain.Change> changes) {
+        Set<BlockPos> planned=new HashSet<>();changes.forEach(change->planned.add(change.pos()));
+        for(var change:List.copyOf(changes)) {
+            var before=change.before();
+            if(!(before.getBlock() instanceof net.minecraft.world.level.block.DoublePlantBlock))continue;
+            boolean lower=before.getValue(net.minecraft.world.level.block.DoublePlantBlock.HALF)
+                    ==net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER;
+            BlockPos partner=lower?change.pos().above():change.pos().below();
+            if(planned.contains(partner))continue;
+            BlockState other=level.getBlockState(partner);
+            if(other.is(before.getBlock())) {
+                changes.add(new CampTerrain.Change(partner,other,net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()));
+                planned.add(partner);
+            }
+        }
     }
     private static BlockState state(String id) {
         if (id.equals("siegeoverhaul:siege_core")) return CoreBlocks.CORE.get().defaultBlockState();

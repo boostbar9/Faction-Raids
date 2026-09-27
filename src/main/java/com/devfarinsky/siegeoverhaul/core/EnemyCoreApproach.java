@@ -103,10 +103,15 @@ public final class EnemyCoreApproach {
                 if(state.is(Blocks.WATER) || state.is(Blocks.LAVA)
                         || !state.getFluidState().isEmpty() || state.hasBlockEntity())return Optional.empty();
                 if(h==-1) {
+                    var road=raid.warGate.getCompound("RoadBlocks");
+                    boolean roadFloor=road.contains(Long.toString(cell.asLong()))
+                            && com.devfarinsky.siegeoverhaul.camp.CampTerrain.matchesPlaced(state,road.getString(Long.toString(cell.asLong())));
+                    if(raid.campBlocks.containsKey(cell.asLong()) && !roadFloor
+                            && !com.devfarinsky.siegeoverhaul.camp.CampRoad.soil(state))return Optional.empty();
                     if(!state.isFaceSturdy(level,cell,Direction.UP) || state.is(Blocks.MAGMA_BLOCK)
                             || state.is(Blocks.CACTUS))return Optional.empty();
-                } else if(!state.getCollisionShape(level,cell).isEmpty() || state.is(Blocks.FIRE)
-                        || state.is(Blocks.SOUL_FIRE) || state.is(Blocks.SWEET_BERRY_BUSH)
+                } else if(!(state.isAir() || com.devfarinsky.siegeoverhaul.camp.CampVegetation.plant(state))
+                        || !state.getCollisionShape(level,cell).isEmpty() || state.is(Blocks.WITHER_ROSE)
                         || raid.pendingCampBlocks.containsKey(cell.asLong()) || raid.pendingFortifications.containsKey(cell.asLong()))return Optional.empty();
             }
             return Optional.of(p);

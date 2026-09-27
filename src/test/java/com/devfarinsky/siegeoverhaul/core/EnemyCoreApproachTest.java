@@ -94,6 +94,55 @@ class EnemyCoreApproachTest extends MinecraftTestSupport {
         when(level.getBlockState(threshold.below())).thenReturn(Blocks.AIR.defaultBlockState());
         assertTrue(EnemyCoreApproach.plan(level,raid,camp,p->true).isEmpty());
     }
+    @Test void completedPalisadeCannotBecomeARouteOverTheWall() {
+        var level=flat();var raid=raid(Direction.NORTH);
+        Map<BlockPos,net.minecraft.world.level.block.state.BlockState> blocks=new HashMap<>();
+        for(int x=-11;x<=11;x++)for(int y=64;y<=65;y++) {
+            BlockPos p=new BlockPos(x,y,-9);blocks.put(p,Blocks.SPRUCE_LOG.defaultBlockState());
+            raid.recordCampBlock(p.asLong(),"minecraft:spruce_log",new net.minecraft.nbt.CompoundTag());
+        }
+        doAnswer(i->{int x=i.getArgument(1),z=i.getArgument(2);return z==-9?66:z<=-6?65:64;})
+                .when(level).getHeight(any(),anyInt(),anyInt());
+        doAnswer(i->{BlockPos p=i.getArgument(0);int floor=p.getZ()<=-6?65:64;
+            return blocks.getOrDefault(p,(p.getY()<floor?Blocks.STONE:Blocks.AIR).defaultBlockState());})
+                .when(level).getBlockState(any());
+        assertTrue(EnemyCoreApproach.plan(level,raid,camp,p->true).isEmpty());
+    }
+    @Test void existingRoadFloorsRemainWalkableAndMayBeRepavedAtSameHeight() {
+        var level=flat();var raid=raid(Direction.NORTH);
+        doAnswer(i->((BlockPos)i.getArgument(0)).getY()<64?Blocks.GRASS_BLOCK.defaultBlockState():Blocks.AIR.defaultBlockState())
+                .when(level).getBlockState(any());
+        var approach=EnemyCoreApproach.plan(level,raid,camp,p->true).orElseThrow();EnemyCoreApproach.save(raid,approach);
+        assertTrue(com.devfarinsky.siegeoverhaul.camp.CampRoad.plan(level,raid,camp.north(20).below(),Direction.NORTH).isPresent());
+        assertTrue(com.devfarinsky.siegeoverhaul.camp.CampRoad.plan(level,raid,camp.north(20).above(),Direction.NORTH).isEmpty());
+        BlockPos floor=camp.north(8).below();
+        when(level.getBlockState(floor)).thenReturn(Blocks.STONE_BRICKS.defaultBlockState());
+        raid.recordCampBlock(floor.asLong(),"minecraft:stone_bricks",new net.minecraft.nbt.CompoundTag());
+        var road=new net.minecraft.nbt.CompoundTag();road.putString(Long.toString(floor.asLong()),"minecraft:stone_bricks");raid.warGate.put("RoadBlocks",road);
+        assertTrue(EnemyCoreApproach.plan(level,raid,camp,p->true).isPresent());
+    }
+    @Test void nonCollidingHazardsDoNotCountAsClearWalkingSpace() {
+        var level=flat();var raid=raid(Direction.NORTH);
+        for(var block:List.of(Blocks.NETHER_PORTAL,Blocks.COBWEB,Blocks.FIRE,Blocks.WITHER_ROSE,Blocks.LAVA)) {
+            when(level.getBlockState(camp.north(13))).thenReturn(block.defaultBlockState());
+            assertTrue(EnemyCoreApproach.plan(level,raid,camp,p->true).isEmpty(),block.toString());
+        }
+    }
+    @Test void bothPlantHalvesAreRecordedBeforeTransactionalStepPlacement() {
+        var level=flat();var raid=raid(Direction.NORTH);BlockPos step=camp.north(3);
+        var lower=Blocks.TALL_GRASS.defaultBlockState();
+        var upper=lower.setValue(DoublePlantBlock.HALF,net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER);
+        Map<BlockPos,net.minecraft.world.level.block.state.BlockState> blocks=new HashMap<>();blocks.put(step,lower);blocks.put(step.above(),upper);
+        doAnswer(i->{BlockPos p=i.getArgument(0);return blocks.getOrDefault(p,(p.getY()<64?Blocks.STONE:Blocks.AIR).defaultBlockState());}).when(level).getBlockState(any());
+        when(level.setBlock(any(),any(),anyInt())).thenAnswer(i->{blocks.put(i.getArgument(0),i.getArgument(1));return true;});
+        var changes=new ArrayList<com.devfarinsky.siegeoverhaul.camp.CampTerrain.Change>();
+        changes.add(new com.devfarinsky.siegeoverhaul.camp.CampTerrain.Change(step,lower,Blocks.STONE_BRICK_STAIRS.defaultBlockState()));
+        EnemyCore.appendPlantPartners(level,changes);assertEquals(2,changes.size());
+        assertTrue(com.devfarinsky.siegeoverhaul.camp.CampTerrain.apply(level,raid,new com.devfarinsky.siegeoverhaul.camp.CampTerrain.Plan(changes)));
+        var loaded=RaidSavedData.RaidState.load(raid.save());
+        assertEquals("lower",loaded.campBlocks.get(step.asLong()).getCompound("Original").getCompound("Properties").getString("half"));
+        assertEquals("upper",loaded.campBlocks.get(step.above().asLong()).getCompound("Original").getCompound("Properties").getString("half"));
+    }
     @Test void unloadedColumnsAreNeverHeightQueriedAndPlanningDoesNotMutate() {
         var level=flat();var raid=raid(Direction.NORTH);
         when(level.hasChunkAt(any())).thenReturn(false);
