@@ -34,6 +34,8 @@ class CampBuilderAccessTest extends MinecraftTestSupport {
             when(level.getMinBuildHeight()).thenReturn(-64);
             when(level.getMaxBuildHeight()).thenReturn(320);
             when(level.getWorldBorder()).thenReturn(border);
+            when(border.getMinX()).thenReturn(-30000000D);when(border.getMaxX()).thenReturn(30000000D);
+            when(border.getMinZ()).thenReturn(-30000000D);when(border.getMaxZ()).thenReturn(30000000D);
             when(border.isWithinBounds(any(BlockPos.class))).thenReturn(true);
             when(level.getHeight(any(), anyInt(), anyInt())).thenReturn(64);
             when(level.getBlockState(any())).thenAnswer(c -> {
@@ -165,6 +167,29 @@ class CampBuilderAccessTest extends MinecraftTestSupport {
             CampBuilder.tick(s.level,s.raid,(p,b)->placed.add(p));
             assertEquals(List.of(s.center),placed);assertTrue(s.raid.pendingCampBlocks.isEmpty());
         }
+    }
+
+    @Test void fractionalWorldBorderRejectsBodyEvenWhenItsBlocksPass() {
+        var s=new Site();when(s.border.getMaxX()).thenReturn(0.7D);
+        assertFalse(CampBuilderAccess.safe(s.level,s.raid,s.center,s.body(s.center),s.worker));
+        verify(s.level,never()).getBlockState(any());
+        when(s.border.getMaxX()).thenReturn(30000000D);when(s.border.getMinZ()).thenReturn(0.3D);
+        assertFalse(CampBuilderAccess.safe(s.level,s.raid,s.center,s.body(s.center),s.worker));
+    }
+
+    @Test void livingOccupantsBlockStandingButSelfDeadAndSpectatorsDoNot() {
+        var s=new Site();var other=mock(net.minecraft.world.entity.LivingEntity.class);
+        when(s.worker.isAlive()).thenReturn(true);when(other.isAlive()).thenReturn(true);
+        when(s.level.getEntitiesOfClass(eq(net.minecraft.world.entity.LivingEntity.class),any(AABB.class),any()))
+                .thenAnswer(c -> {
+                    java.util.function.Predicate<net.minecraft.world.entity.LivingEntity> filter=c.getArgument(2);
+                    return java.util.stream.Stream.of(s.worker,other).filter(filter).toList();
+                });
+        assertFalse(CampBuilderAccess.safe(s.level,s.raid,s.center,s.body(s.center),s.worker));
+        when(other.isSpectator()).thenReturn(true);
+        assertTrue(CampBuilderAccess.safe(s.level,s.raid,s.center,s.body(s.center),s.worker));
+        when(other.isSpectator()).thenReturn(false);when(other.isAlive()).thenReturn(false);
+        assertTrue(CampBuilderAccess.safe(s.level,s.raid,s.center,s.body(s.center),s.worker));
     }
 
 }

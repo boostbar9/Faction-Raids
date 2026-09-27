@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
@@ -59,6 +60,9 @@ final class CampBuilderAccess {
 
     static boolean safe(ServerLevel level, RaidState raid, BlockPos feet, AABB body, Mob worker) {
         if (body.minY <= level.getMinBuildHeight() || body.maxY > level.getMaxBuildHeight()) return false;
+        var border = level.getWorldBorder();
+        if (body.minX < border.getMinX() || body.maxX > border.getMaxX()
+                || body.minZ < border.getMinZ() || body.maxZ > border.getMaxZ()) return false;
         // Check the entire body and support before reading any block in it. A wider
         // companion entity must not cross an unloaded chunk or the world border.
         for (BlockPos pos : BlockPos.betweenClosed((int)Math.floor(body.minX), feet.getY() - 1,
@@ -79,6 +83,7 @@ final class CampBuilderAccess {
                     || !state.getFluidState().isEmpty() || state.is(Blocks.WATER) || state.is(Blocks.LAVA)
                     || state.is(Blocks.WITHER_ROSE) || (!state.isAir() && !CampVegetation.plant(state))) return false;
         }
-        return level.noCollision(worker, body);
+        return level.noCollision(worker, body) && level.getEntitiesOfClass(LivingEntity.class, body,
+                entity -> entity != worker && entity.isAlive() && !entity.isSpectator()).isEmpty();
     }
 }
