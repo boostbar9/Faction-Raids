@@ -27,6 +27,7 @@ public final class SiegeOverhaul {
     public SiegeOverhaul() {
         IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, RaidConfig.SPEC);
+        ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, HeroVisualConfig.SPEC);
         // v4.18.0: enable in-game config screen. Forge does not surface a
         // Config button in the Mods list unless the mod registers a
         // ConfigScreenHandler extension point. Registered only on the client
