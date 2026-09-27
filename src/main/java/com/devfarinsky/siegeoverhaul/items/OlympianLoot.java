@@ -8,17 +8,21 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionUtils;
 import net.minecraft.world.item.alchemy.Potions;
 import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
 
-/** The sealed-box armory. All powers use ordinary, compatible vanilla enchantments. */
+/** Sealed-box equipment, practical supplies and registered utility relics. */
 final class OlympianLoot {
     static final int ARMORY_SIZE = 12;
-    static final int SUPPLY_TYPES = 8;
+    static final int SUPPLY_TYPES = 15;
+    static final int RELIC_FIRST = 12;
+    static final int AMMUNITION = 0;
     private static final String PATRON = "SiegeOlympianPatron";
 
     private OlympianLoot() {}
@@ -115,20 +119,30 @@ final class OlympianLoot {
                                 "Orchard of the Hesperides", tier, "A golden harvest, guarded no longer.");
     }
 
+    static ItemStack supplies(LootBoxItem.Tier tier, int choice, ItemStack equipment) {
+        // Infinity only preserves ordinary arrows, not spectral or tipped arrows.
+        if (choice == AMMUNITION && equipment.getItem() instanceof BowItem
+                && EnchantmentHelper.getItemEnchantmentLevel(Enchantments.INFINITY_ARROWS, equipment) > 0) {
+            return named(new ItemStack(Items.ARROW, 16 + tier.ordinal() * 8), "Apollo's Sunbow Arrows", tier,
+                    "Keep one in your quiver. Infinity uses ordinary arrows.");
+        }
+        return supplies(tier, choice);
+    }
+
     static ItemStack supplies(LootBoxItem.Tier tier, int choice) {
         int rank = tier.ordinal();
         return switch (choice) {
             case 0 -> named(new ItemStack(Items.SPECTRAL_ARROW, 16 + rank * 8), "Artemis' Moonlit Arrows", tier,
-                    "Mark your quarry with light.");
+                    "Outlines targets on hit. Consumed even with Infinity.");
             case 1 -> named(new ItemStack(Items.EXPERIENCE_BOTTLE, 4 + rank * 4), "Athena's Lessons", tier,
-                    "Wisdom earned by those who came before.");
+                    "Throw for experience. Repairs equipped Mending gear.");
             case 2 -> named(new ItemStack(rank >= 2 ? Items.IRON_BLOCK : Items.IRON_INGOT, rank >= 2 ? 3 + rank : 8 + rank * 4),
                     "Hephaestus' Forge Stock", tier, "For the next blade, the next wall, the next war.");
-            case 3 -> named(new ItemStack(Items.COOKED_BEEF, 16 + rank * 8), "Dionysus' Victory Feast", tier,
-                    "Share it with the ones who held the line.");
+            case 3 -> named(new ItemStack(Items.STONE_BRICKS, 32 + rank * 8), "Athena's Rampart Stone", tier,
+                    "Close a breach, raise cover or extend a crossing.");
             case 4 -> named(PotionUtils.setPotion(new ItemStack(Items.SPLASH_POTION),
                             rank >= 2 ? Potions.STRONG_HEALING : Potions.HEALING),
-                    "Apollo's Healing Draught", tier, "Sunlight, bottled for a darker hour.");
+                    "Apollo's Healing Draught", tier, "Splash to restore health. Can also heal living enemies.");
             case 5 -> named(PotionUtils.setPotion(new ItemStack(Items.POTION),
                             rank >= 2 ? Potions.LONG_SWIFTNESS : Potions.SWIFTNESS),
                     "Hermes' Road Draught", tier, "There is still time to reach the gate.");
@@ -137,6 +151,17 @@ final class OlympianLoot {
                     "Artemis' Snaring Arrows", tier, "Let the quarry take the slower path.");
             case 7 -> named(new ItemStack(rank >= 2 ? Items.DIAMOND : Items.GOLD_INGOT, 3 + rank),
                     "Hera's Tribute", tier, "The queen remembers those who serve.");
+            case 8 -> named(PotionUtils.setPotion(new ItemStack(Items.POTION),
+                            rank >= 2 ? Potions.LONG_FIRE_RESISTANCE : Potions.FIRE_RESISTANCE),
+                    "Hephaestus' Furnace Draught", tier, "Protection from fire and lava, straight from the forge.");
+            case 9 -> named(PotionUtils.setPotion(new ItemStack(Items.POTION),
+                            rank >= 2 ? Potions.LONG_WATER_BREATHING : Potions.WATER_BREATHING),
+                    "Poseidon's Deep Breath", tier, "Breathe beneath the waves. Reach the shore alive.");
+            case 10 -> named(new ItemStack(Items.SCAFFOLDING, 16 + rank * 8), "Hephaestus' Work Platforms", tier,
+                    "Stack from solid ground to reach walls and rooftops.");
+            case 11 -> named(new ItemStack(Items.LADDER, 12 + rank * 4), "Hermes' Wall Ladders", tier,
+                    "A way up the battlements. Attach to solid block faces.");
+            case 12, 13, 14 -> new ItemStack(OlympianRelics.item(OlympianRelics.Kind.values()[choice - RELIC_FIRST]), rank >= 2 ? 2 : 1);
             default -> throw new IllegalArgumentException("Unknown Olympian supply entry: " + choice);
         };
     }

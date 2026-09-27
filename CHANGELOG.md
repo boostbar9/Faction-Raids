@@ -1,3 +1,11 @@
+# 4.49.4 — Olympian utility relics
+
+- Added three real consumable relics with separate item IDs, 3D models and activation effects: Hephaestus' Forge Ember repairs equipment in the other hand; Athena's Owl Seal outlines nearby siege enemies; Apollo's Sun Laurel removes five combat afflictions while preserving beneficial effects.
+- Every sealed box includes one relic stack alongside its enchanted equipment and provisions. Rare/Epic boxes supply two uses; lower tiers supply one. Total reward stacks and box prices (16/48/96 emeralds) stay the same.
+- Added stone bricks, scaffolding, ladders, fire-resistance and water-breathing supplies. Extra steak is replaced by building stone; the guaranteed food reward remains.
+- Infinity Sunbows receive ordinary arrows whenever the ammunition category rolls. All new rewards are in the Creative catalog.
+- Relics are server-authoritative, have 10-second cooldowns, and are spent only when their action succeeds. No terrain edits, PvP targeting or new dependencies.
+
 # 4.49.3 — Olympian weapon presentation
 
 - Refined Olympian blades with bright cutting edges, slimmer grips and distinct deity guards; caster staves now have eight different head designs.

@@ -32,6 +32,10 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class OlympianLootTest extends MinecraftTestSupport {
+    private OlympianRelicRegistryFixture relicRegistry;
+    @org.junit.jupiter.api.BeforeEach void bindRelicRegistry() { relicRegistry = new OlympianRelicRegistryFixture(); }
+    @org.junit.jupiter.api.AfterEach void closeRelicRegistry() { relicRegistry.close(); }
+
     @ParameterizedTest @EnumSource(LootBoxItem.Tier.class)
     void everyPatronHasCompatibleUsefulEnchantsAndPersistentIdentity(LootBoxItem.Tier tier) {
         var names = new HashSet<String>();

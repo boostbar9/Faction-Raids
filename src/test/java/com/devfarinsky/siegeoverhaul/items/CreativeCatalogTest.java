@@ -13,6 +13,10 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class CreativeCatalogTest extends MinecraftTestSupport {
+    private OlympianRelicRegistryFixture relicRegistry;
+    @org.junit.jupiter.api.BeforeEach void bindRelicRegistry() { relicRegistry = new OlympianRelicRegistryFixture(); }
+    @org.junit.jupiter.api.AfterEach void closeRelicRegistry() { relicRegistry.close(); }
+
     @Test void catalogHasAllRewardVariantsAndOnlyFreshSingleUniqueStacks() {
         var entries = CreativeCatalog.entries(List.of(Items.BOOK, Items.BOOK));
         assertFalse(entries.isEmpty());
@@ -23,6 +27,7 @@ class CreativeCatalogTest extends MinecraftTestSupport {
         for(var tier:LootBoxItem.Tier.values()) {
             for(int i=0;i<OlympianLoot.ARMORY_SIZE;i++) assertPresent(entries,OlympianLoot.armory(tier,i));
             assertPresent(entries,OlympianLoot.provisions(tier));
+            assertPresent(entries,OlympianLoot.supplies(tier,OlympianLoot.AMMUNITION,OlympianLoot.armory(tier,4)));
             for(int i=0;i<OlympianLoot.SUPPLY_TYPES;i++) assertPresent(entries,OlympianLoot.supplies(tier,i));
         }
         entries.get(0).getOrCreateTag().putBoolean("mutated",true);
