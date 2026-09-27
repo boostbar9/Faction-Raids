@@ -139,8 +139,8 @@ class CampTerrainTest extends MinecraftTestSupport {
     }
     @Test void dryBeachSedimentsSupportCampsAndGateRoads() {
         for(var material:List.of(Blocks.SAND,Blocks.RED_SAND,Blocks.GRAVEL,Blocks.CLAY)) {
-            when(level.getBlockState(any())).thenAnswer(c -> ((BlockPos)c.getArgument(0)).getY()<64
-                    ? material.defaultBlockState() : Blocks.AIR.defaultBlockState());
+            doAnswer(c -> ((BlockPos)c.getArgument(0)).getY()<64
+                    ? material.defaultBlockState() : Blocks.AIR.defaultBlockState()).when(level).getBlockState(any());
             var plan=CampTerrain.plan(level,center,p->false).orElseThrow();
             assertTrue(plan.changes().isEmpty(),"A flat beach should not need earthworks");
             raid.campPos=center;
@@ -177,10 +177,10 @@ class CampTerrainTest extends MinecraftTestSupport {
     @Test void dryShoreOnEitherSideCanBeFoundWithoutAcceptingWater() {
         BlockPos scout=new BlockPos(8,64,8);
         for(int sign:new int[]{-1,1}) {
-            when(level.getBlockState(any())).thenAnswer(c->{
+            doAnswer(c->{
                 BlockPos p=c.getArgument(0);
                 return (p.getY()>=64?Blocks.AIR:sign*(p.getX()-8)>5?Blocks.WATER:Blocks.SAND).defaultBlockState();
-            });
+            }).when(level).getBlockState(any());
             boolean found=false;
             for(int attempt=0;attempt<25;attempt++) {
                 BlockPos site=CampLoading.localCandidate(scout,attempt,true);
