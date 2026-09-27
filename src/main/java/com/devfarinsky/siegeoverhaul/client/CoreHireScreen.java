@@ -1406,10 +1406,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             badgeWidth = drawBadge(g, "REWARDS HIDDEN", x + w - 7, y + 5,
                     CommandPalette.ACCENT_ARCANE);
         }
-        text(g, "RELIQUARY PROTOCOL", x + 9, y + 7,
+        text(g, "OLYMPIAN ARMORY", x + 9, y + 7,
                 Math.max(1, w - badgeWidth - 24), CommandPalette.ACCENT_STEEL);
         if (h >= 30) {
-            text(g, "Purchases deliver a sealed box; its item remains unknown until the reveal",
+            text(g, "Every box holds enchanted Olympian equipment and supplies. Open it to discover your prize.",
                     x + 9, y + 19, w - 18, CommandPalette.TEXT_MUTED);
         }
         if (h >= 48) {
@@ -1425,7 +1425,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
         if (h >= 82) {
             CommandFrame.divider(g, x + 9, y + 72, w - 18);
-            text(g, "Treasury funded  ·  server-authoritative roll  ·  no reward previews",
+            text(g, "Paid from the faction Treasury  ·  Equipment, provisions and distinct supplies",
                     x + 9, y + 79, w - 18, CommandPalette.TEXT_DIM);
         }
     }

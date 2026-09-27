@@ -12,7 +12,6 @@ import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.item.Rarity;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.util.RandomSource;
@@ -73,11 +72,9 @@ public final class LootBoxItem extends Item {
         }
 
         List<ItemStack> loot = roll(serverLevel.getRandom(), tier);
-        for (ItemStack item : loot) {
-            if (!sp.getInventory().add(item.copy())) {
-                sp.drop(item.copy(), false);
-            }
-        }
+        // Consume first so opening the last box also frees its inventory slot.
+        if (!sp.getAbilities().instabuild) stack.shrink(1);
+        deliver(sp, loot);
 
         // Chest-open cue + a small burst of firework-star particles above
         // the player so opening a box has a moment of pop, not just a
@@ -88,121 +85,59 @@ public final class LootBoxItem extends Item {
                 sp.getX(), sp.getY() + 1.6D, sp.getZ(),
                 18, 0.35D, 0.25D, 0.35D, 0.02D);
 
+        serverLevel.sendParticles(OlympianLoot.revealParticle(loot.get(0)),
+                sp.getX(), sp.getY() + 1.2D, sp.getZ(),
+                12, 0.4D, 0.3D, 0.4D, 0.02D);
+        serverLevel.playSound(null, sp.getX(), sp.getY(), sp.getZ(),
+                SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.PLAYERS, 0.6F, 0.9F + tier.ordinal() * 0.15F);
+
         // Announce the tier in chat so the player knows what they just
         // opened - the item name is already color-tinted by vanilla Rarity.
         sp.displayClientMessage(
                 Component.literal("Opened a ")
                         .append(Component.literal(tier.label + " Loot Box").withStyle(tier.color))
-                        .append(Component.literal(" and received " + loot.size() + " item"
-                                + (loot.size() == 1 ? "" : "s") + ".")),
+                        .append(Component.literal(": "))
+                        .append(loot.get(0).getHoverName().copy())
+                        .append(Component.literal(" and " + (loot.size() - 1) + " supply stacks.")),
                 false);
 
-        if (!sp.getAbilities().instabuild) {
-            stack.shrink(1);
-        }
         return InteractionResultHolder.consume(stack);
     }
 
     @Override
     public void appendHoverText(ItemStack stack, @Nullable Level level, List<Component> tooltip, TooltipFlag flag) {
         tooltip.add(Component.literal(tier.label + " rarity").withStyle(tier.color));
+        tooltip.add(Component.literal("Enchanted Olympian equipment and supplies").withStyle(ChatFormatting.GRAY));
         tooltip.add(Component.literal("Right-click to open").withStyle(ChatFormatting.GRAY));
     }
 
-    // ---- Loot tables -------------------------------------------------------
+    /** Inventory.add mutates its argument: only the remaining count may be dropped. */
+    static void deliver(ServerPlayer player, List<ItemStack> loot) {
+        for (ItemStack reward : loot) {
+            ItemStack remaining = reward.copy();
+            player.getInventory().add(remaining);
+            if (!remaining.isEmpty()) player.drop(remaining, false);
+        }
+        player.getInventory().setChanged();
+    }
 
-    /**
-     * Deterministic per-tier loot table. Each tier rolls 3-6 stacks and always
-     * includes at least one "featured" pick from a curated pool, plus filler
-     * from a broader pool. Higher tiers pull from a strictly better pool -
-     * COMMON never rolls netherite, EPIC never rolls dirt.
-     *
-     * Kept intentionally simple (no JSON loot tables, no data-driven
-     * randomness) so opening a box is fast and predictable and doesn't
-     * depend on datapack load order.
-     */
+    /** One armory piece, guaranteed provisions, then distinct supply categories (3-7 total stacks). */
     public static List<ItemStack> roll(RandomSource rng, Tier tier) {
-        List<ItemStack> out = new ArrayList<>();
-        int rolls = switch (tier) {
-            case COMMON -> 3 + rng.nextInt(2);   // 3-4
-            case UNCOMMON -> 4 + rng.nextInt(2); // 4-5
-            case RARE -> 5 + rng.nextInt(2);     // 5-6
-            case EPIC -> 6 + rng.nextInt(2);     // 6-7
-        };
-        // First roll is always from the featured pool so every box has a
-        // headline drop, not just filler.
-        out.add(featured(rng, tier));
-        for (int i = 1; i < rolls; i++) {
-            out.add(filler(rng, tier));
+        int stacks = 3 + tier.ordinal() + rng.nextInt(2);
+        List<ItemStack> out = new ArrayList<>(stacks);
+        out.add(OlympianLoot.armory(tier, rng.nextInt(OlympianLoot.ARMORY_SIZE)));
+        out.add(OlympianLoot.provisions(tier));
+        // Sample without replacement so a chest cannot fill its extra slots with one repeated ration.
+        int[] choices = new int[OlympianLoot.SUPPLY_TYPES];
+        for (int i = 0; i < choices.length; i++) choices[i] = i;
+        for (int i = 0; i < stacks - 2; i++) {
+            int selected = i + rng.nextInt(choices.length - i);
+            int choice = choices[selected];
+            choices[selected] = choices[i];
+            choices[i] = choice;
+            out.add(OlympianLoot.supplies(tier, choice));
         }
         return out;
-    }
-
-    private static ItemStack featured(RandomSource rng, Tier tier) {
-        return switch (tier) {
-            case COMMON -> pick(rng,
-                    new ItemStack(Items.IRON_INGOT, 4 + rng.nextInt(4)),
-                    new ItemStack(Items.BREAD, 8 + rng.nextInt(8)),
-                    new ItemStack(Items.ARROW, 16 + rng.nextInt(16)),
-                    new ItemStack(Items.EMERALD, 1 + rng.nextInt(3)));
-            case UNCOMMON -> pick(rng,
-                    new ItemStack(Items.IRON_INGOT, 8 + rng.nextInt(8)),
-                    new ItemStack(Items.GOLD_INGOT, 4 + rng.nextInt(4)),
-                    new ItemStack(Items.EMERALD, 4 + rng.nextInt(4)),
-                    new ItemStack(Items.EXPERIENCE_BOTTLE, 4 + rng.nextInt(4)),
-                    new ItemStack(Items.COOKED_BEEF, 12 + rng.nextInt(8)));
-            case RARE -> pick(rng,
-                    new ItemStack(Items.DIAMOND, 2 + rng.nextInt(3)),
-                    new ItemStack(Items.EMERALD, 8 + rng.nextInt(8)),
-                    new ItemStack(Items.GOLD_INGOT, 8 + rng.nextInt(8)),
-                    new ItemStack(Items.EXPERIENCE_BOTTLE, 8 + rng.nextInt(8)),
-                    new ItemStack(Items.GOLDEN_APPLE, 1 + rng.nextInt(2)));
-            case EPIC -> pick(rng,
-                    new ItemStack(Items.NETHERITE_INGOT, 1),
-                    new ItemStack(Items.DIAMOND, 6 + rng.nextInt(4)),
-                    new ItemStack(Items.EMERALD_BLOCK, 2 + rng.nextInt(3)),
-                    new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 1),
-                    new ItemStack(Items.TOTEM_OF_UNDYING, 1),
-                    new ItemStack(Items.EXPERIENCE_BOTTLE, 16 + rng.nextInt(8)));
-        };
-    }
-
-    private static ItemStack filler(RandomSource rng, Tier tier) {
-        return switch (tier) {
-            case COMMON -> pick(rng,
-                    new ItemStack(Items.ARROW, 8 + rng.nextInt(8)),
-                    new ItemStack(Items.BREAD, 4 + rng.nextInt(4)),
-                    new ItemStack(Items.OAK_PLANKS, 16 + rng.nextInt(16)),
-                    new ItemStack(Items.COBBLESTONE, 16 + rng.nextInt(16)),
-                    new ItemStack(Items.TORCH, 8 + rng.nextInt(8)),
-                    new ItemStack(Items.COAL, 4 + rng.nextInt(4)));
-            case UNCOMMON -> pick(rng,
-                    new ItemStack(Items.IRON_INGOT, 2 + rng.nextInt(3)),
-                    new ItemStack(Items.COOKED_BEEF, 8 + rng.nextInt(4)),
-                    new ItemStack(Items.STONE_BRICKS, 16 + rng.nextInt(16)),
-                    new ItemStack(Items.EMERALD, 1 + rng.nextInt(3)),
-                    new ItemStack(Items.OAK_LOG, 8 + rng.nextInt(8)),
-                    new ItemStack(Items.SPECTRAL_ARROW, 8 + rng.nextInt(8)));
-            case RARE -> pick(rng,
-                    new ItemStack(Items.GOLD_INGOT, 4 + rng.nextInt(4)),
-                    new ItemStack(Items.EMERALD, 3 + rng.nextInt(4)),
-                    new ItemStack(Items.ENDER_PEARL, 2 + rng.nextInt(3)),
-                    new ItemStack(Items.IRON_BLOCK, 1 + rng.nextInt(2)),
-                    new ItemStack(Items.EXPERIENCE_BOTTLE, 3 + rng.nextInt(4)),
-                    new ItemStack(Items.TIPPED_ARROW, 8 + rng.nextInt(4)));
-            case EPIC -> pick(rng,
-                    new ItemStack(Items.DIAMOND, 3 + rng.nextInt(3)),
-                    new ItemStack(Items.EMERALD_BLOCK, 1 + rng.nextInt(2)),
-                    new ItemStack(Items.GOLD_BLOCK, 1 + rng.nextInt(2)),
-                    new ItemStack(Items.ENDER_PEARL, 4 + rng.nextInt(4)),
-                    new ItemStack(Items.EXPERIENCE_BOTTLE, 8 + rng.nextInt(8)),
-                    new ItemStack(Items.GOLDEN_APPLE, 1 + rng.nextInt(3)));
-        };
-    }
-
-    @SafeVarargs
-    private static <T> T pick(RandomSource rng, T... options) {
-        return options[rng.nextInt(options.length)];
     }
 
     // ---- Wave-driven rolling ------------------------------------------------

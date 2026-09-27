@@ -1,3 +1,11 @@
+# 4.47.19 beta
+
+- Every sealed loot box now guarantees a named, enchanted Olympian armory piece plus provisions. Twelve patron identities span weapons, armor, shields and tools, with stronger materials and enchantments at higher rarities.
+- Rare and Epic boxes carry repairable relics such as Poseidon's Riptide trident, Zeus' returning thunderbolt and Hermes' fall-cushioning boots. Apollo's flaming Sunbow keeps Infinity instead of Mending. Armor has patron-colored trims; all abilities use vanilla enchantments.
+- Added useful themed supply bundles, real healing/speed potions and snaring arrows with working Slowness. Extra supply categories cannot repeat within one box. Epic boxes also guarantee an enchanted golden apple.
+- Opening a box names the armory prize and adds a short patron-colored particle/chime reveal. Contents stay hidden while sealed. Prices remain 16/48/96 emeralds and the existing rarity floors and wave-drop chances are unchanged.
+- Fixed partial inventory insertion duplicating the original reward in overflow drops. Opening the last box frees its slot before delivery.
+
 # 4.47.18 beta
 - Respect native vessel boarding rules and keep vanilla fallback boats at two crew members.
 - Check diagonal spawn-area corners, world borders and nearby entities before placing invasion vessels.
