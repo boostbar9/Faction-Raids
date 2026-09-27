@@ -26,4 +26,24 @@ class CampLoadingTest extends MinecraftTestSupport {
         assertTrue(RaidSavedData.RaidState.load(old).campCrewStarted);
         old.remove("CampPosition");assertFalse(RaidSavedData.RaidState.load(old).campCrewStarted);
     }
+    @Test void expandedLocalSearchIsSymmetricAndFitsLoadedNeighborhood() {
+        for(BlockPos scout:List.of(new BlockPos(8,64,8),new BlockPos(-24,64,-40))) {
+            Set<BlockPos> sites=new HashSet<>();int sumX=0,sumZ=0;ChunkPos chunk=new ChunkPos(scout);
+            for(int i=0;i<25;i++) {
+                BlockPos site=CampLoading.localCandidate(scout,i,true);assertTrue(sites.add(site));
+                sumX+=site.getX()-scout.getX();sumZ+=site.getZ()-scout.getZ();
+                for(int x:new int[]{-13,13})for(int z:new int[]{-13,13}) {
+                    ChunkPos edge=new ChunkPos(site.offset(x,0,z));
+                    assertTrue(Math.abs(edge.x-chunk.x)<=1 && Math.abs(edge.z-chunk.z)<=1);
+                }
+            }
+            assertEquals(0,sumX);assertEquals(0,sumZ);assertTrue(sites.contains(scout));
+            for(BlockPos site:sites)assertTrue(sites.contains(scout.offset(scout.getX()-site.getX(),0,scout.getZ()-site.getZ())));
+        }
+    }
+    @Test void ordinaryLocalSearchKeepsItsExistingNineSites() {
+        BlockPos scout=new BlockPos(8,64,8);
+        for(int i=0;i<9;i++)assertEquals(scout.offset((i%3-1)*6,0,(i/3-1)*6),CampLoading.localCandidate(scout,i,false));
+    }
+
 }

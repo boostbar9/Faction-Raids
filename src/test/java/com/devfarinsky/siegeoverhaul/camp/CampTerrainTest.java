@@ -137,4 +137,60 @@ class CampTerrainTest extends MinecraftTestSupport {
         assertTrue(CampTerrain.matchesPlaced(Blocks.DIRT.defaultBlockState(), "minecraft:grass_block"));
         assertFalse(CampTerrain.matchesPlaced(Blocks.CHEST.defaultBlockState(), "minecraft:dirt"));
     }
+    @Test void dryBeachSedimentsSupportCampsAndGateRoads() {
+        for(var material:List.of(Blocks.SAND,Blocks.RED_SAND,Blocks.GRAVEL,Blocks.CLAY)) {
+            when(level.getBlockState(any())).thenAnswer(c -> ((BlockPos)c.getArgument(0)).getY()<64
+                    ? material.defaultBlockState() : Blocks.AIR.defaultBlockState());
+            var plan=CampTerrain.plan(level,center,p->false).orElseThrow();
+            assertTrue(plan.changes().isEmpty(),"A flat beach should not need earthworks");
+            raid.campPos=center;
+            for(var side:net.minecraft.core.Direction.Plane.HORIZONTAL)
+                assertTrue(CampRoad.plan(level,raid,center.relative(side,17),side).isPresent(),material.toString());
+        }
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
+    @Test void gentleBeachCutsRetainOriginalSedimentAcrossReload() {
+        heights.put("1:0",65);heights.put("-1:0",63);
+        for(int y=62;y<=64;y++)edits.put(new BlockPos(1,y,0),Blocks.SAND.defaultBlockState());
+        edits.put(new BlockPos(-1,62,0),Blocks.CLAY.defaultBlockState());
+        var plan=CampTerrain.plan(level,center,p->false).orElseThrow();
+        assertTrue(CampTerrain.apply(level,raid,plan));
+        assertTrue(state(new BlockPos(1,64,0)).isAir());
+        assertTrue(state(new BlockPos(-1,63,0)).is(Blocks.DIRT));
+        var saved=RaidState.load(raid.save());
+        assertEquals("minecraft:sand",saved.campBlocks.get(new BlockPos(1,64,0).asLong())
+                .getCompound("Original").getString("Name"));
+        assertTrue(state(new BlockPos(1,63,0)).is(Blocks.SAND));
+    }
+
+    @Test void waterBetweenCoarseSamplesStillRejectsBeachWithoutMutation() {
+        for(int x=-13;x<=13;x++)for(int z=-13;z<=13;z++)
+            edits.put(new BlockPos(x,63,z),Blocks.SAND.defaultBlockState());
+        for(var fluid:List.of(Blocks.WATER,Blocks.LAVA)) {
+            edits.put(new BlockPos(8,63,8),fluid.defaultBlockState());
+            assertTrue(CampTerrain.plan(level,center,p->false).isEmpty());
+        }
+        verify(level,never()).setBlock(any(),any(),anyInt());assertTrue(raid.campBlocks.isEmpty());
+    }
+
+    @Test void dryShoreOnEitherSideCanBeFoundWithoutAcceptingWater() {
+        BlockPos scout=new BlockPos(8,64,8);
+        for(int sign:new int[]{-1,1}) {
+            when(level.getBlockState(any())).thenAnswer(c->{
+                BlockPos p=c.getArgument(0);
+                return (p.getY()>=64?Blocks.AIR:sign*(p.getX()-8)>5?Blocks.WATER:Blocks.SAND).defaultBlockState();
+            });
+            boolean found=false;
+            for(int attempt=0;attempt<25;attempt++) {
+                BlockPos site=CampLoading.localCandidate(scout,attempt,true);
+                if(CampTerrain.plan(level,site,p->false).isPresent()) {
+                    found=true;assertTrue(sign*(site.getX()-8)<=-7,"Accepted footprint touches water");
+                }
+            }
+            assertTrue(found,"Search must find the inland side regardless of coast direction");
+        }
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
 }

@@ -21,6 +21,14 @@ public final class CampLoading {
         ChunkPos chunk=new ChunkPos(new BlockPos(x,core.getY(),z));
         return new BlockPos(chunk.getMiddleBlockX(),core.getY(),chunk.getMiddleBlockZ());
     }
+    /** Balanced local search that keeps the full radius-13 terrain check inside the loaded 3x3 chunks. */
+    public static BlockPos localCandidate(BlockPos scout, int attempt, boolean expanded) {
+        int width = expanded ? 5 : 3;
+        int spacing = expanded ? 4 : 6;
+        int index = Math.floorMod(attempt, width * width);
+        return scout.offset((index % width - width / 2) * spacing, 0,
+                (index / width - width / 2) * spacing);
+    }
     public static void keep(ServerLevel level,BlockPos pos) {
         // Radius 3 keeps the 3x3 camp neighborhood entity-ticking, with vanilla's surrounding load margin.
         ChunkPos chunk=new ChunkPos(pos);

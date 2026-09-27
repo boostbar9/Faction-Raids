@@ -3466,7 +3466,11 @@ public final class RaidEvents {
                     : Math.max(max, 128) + ((attempt - 32) / 24) * 32 + level.random.nextInt(16);
             int x = anchor.getX() + Mth.floor(Math.cos(angle) * distance);
             int z = anchor.getZ() + Mth.floor(Math.sin(angle) * distance);
-            if(remote) { x=state.campSearchPos.getX()+(attempt%3-1)*6; z=state.campSearchPos.getZ()+(attempt/3-1)*6; }
+            if (remote) {
+                BlockPos local = com.devfarinsky.siegeoverhaul.camp.CampLoading.localCandidate(
+                        state.campSearchPos, attempt, state.campTerraformed);
+                x = local.getX(); z = local.getZ();
+            }
             if (!level.hasChunk(x >> 4, z >> 4)) { rejChunk++; continue; }
             if (!excludedChunks.isEmpty()
                     && excludedChunks.contains(new net.minecraft.world.level.ChunkPos(x >> 4, z >> 4))) { rejExcluded++; continue; }
