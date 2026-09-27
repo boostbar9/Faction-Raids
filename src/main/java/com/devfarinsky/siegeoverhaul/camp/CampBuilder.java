@@ -69,6 +69,10 @@ public final class CampBuilder {
             BlockPos stand = CampBuilderAccess.workPosition(level, raid, worker, target);
             if (stand == null || !WorkersBridge.moveBuilder(worker, stand)) continue;
             worker.getLookControl().setLookAt(target.getX() + 0.5, target.getY() + 0.5, target.getZ() + 0.5);
+            // Wait until the worker reaches safe footing. Being within four blocks
+            // is not enough if it is still standing inside the pending wall.
+            if (!stand.equals(worker.blockPosition()) || !CampBuilderAccess.safe(level, raid,
+                    worker.blockPosition(), worker.getBoundingBox(), worker)) continue;
             int placed = placeNearby(raid, worker.position(), BLOCKS_PER_BUILDER, place);
             if (placed > 0) worker.swing(InteractionHand.MAIN_HAND);
         }

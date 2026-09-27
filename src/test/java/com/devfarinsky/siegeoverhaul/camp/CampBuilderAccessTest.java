@@ -142,4 +142,29 @@ class CampBuilderAccessTest extends MinecraftTestSupport {
         assertEquals(1,s.raid.pendingCampBlocks.size());
         assertEquals(s.raid.pendingCampBlocks,RaidState.load(s.raid.save()).pendingCampBlocks);
     }
+    @Test void fallbackWaitsForArrivalBeforePlacingBlocksAroundTheWorker() {
+        var s=new Site();UUID id=UUID.randomUUID();s.raid.campWorkers.add(id);s.raid.campUsesWorkers=true;
+        s.raid.pendingCampBlocks.put(s.center.asLong(),"minecraft:stone_bricks");
+        when(s.level.getEntity(id)).thenReturn(s.worker);when(s.worker.isAlive()).thenReturn(true);
+        when(s.worker.getLookControl()).thenReturn(mock(net.minecraft.world.entity.ai.control.LookControl.class));
+        when(s.worker.blockPosition()).thenReturn(s.center);
+        BlockPos stand=s.center.east();Path path=mock(Path.class);
+        when(path.canReach()).thenReturn(true);when(path.getTarget()).thenReturn(stand);
+        when(s.navigation.createPath(anySet(),eq(0))).thenReturn(path);
+        var placed=new ArrayList<BlockPos>();
+        try(var claims=mockStatic(com.devfarinsky.siegeoverhaul.compat.CampClaims.class);
+            var bridge=mockStatic(WorkersBridge.class)) {
+            claims.when(()->com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(s.level,s.raid)).thenReturn(true);
+            bridge.when(WorkersBridge::available).thenReturn(true);
+            bridge.when(()->WorkersBridge.moveBuilder(s.worker,stand)).thenReturn(true);
+            CampBuilder.tick(s.level,s.raid,(p,b)->placed.add(p));
+            assertTrue(placed.isEmpty());assertEquals(1,s.raid.pendingCampBlocks.size());
+            when(s.worker.position()).thenReturn(Vec3.atBottomCenterOf(stand));
+            when(s.worker.blockPosition()).thenReturn(stand);
+            when(s.worker.getBoundingBox()).thenReturn(s.body(stand));
+            CampBuilder.tick(s.level,s.raid,(p,b)->placed.add(p));
+            assertEquals(List.of(s.center),placed);assertTrue(s.raid.pendingCampBlocks.isEmpty());
+        }
+    }
+
 }
