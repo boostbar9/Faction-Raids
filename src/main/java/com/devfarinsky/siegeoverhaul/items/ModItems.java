@@ -40,6 +40,10 @@ public final class ModItems {
             () -> new CrewDeploymentItem(1,
                     new Item.Properties().stacksTo(1).rarity(Rarity.RARE)));
 
+    public static final RegistryObject<Item> TEMPEST_BOOK = ITEMS.register("tempest_spellbook", () -> new OlympianSpellBookItem(22));
+    public static final RegistryObject<Item> INFERNO_BOOK = ITEMS.register("inferno_spellbook", () -> new OlympianSpellBookItem(27));
+    public static final RegistryObject<Item> UNDERTOW_BOOK = ITEMS.register("undertow_spellbook", () -> new OlympianSpellBookItem(29));
+
     // v4.33.0: rarity-tiered loot boxes handed out for wave clears. Four
     // separate registrations rather than NBT-tagged variants so each tier
     // gets its own model, texture, and vanilla-rarity name color for free.

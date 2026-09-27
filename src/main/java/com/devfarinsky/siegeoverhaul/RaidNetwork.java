@@ -90,7 +90,7 @@ public final class RaidNetwork {
             return new HeroCast(b.readVarInt(),b.readUUID(),b.readVarInt(),b.readLong(),b.readUnsignedByte(),b.readDouble(),b.readDouble(),b.readDouble());
         }
     }
-    public static void sendHeroCast(net.minecraft.world.entity.Mob hero,HeroCast packet) {
+    public static void sendHeroCast(net.minecraft.world.entity.LivingEntity hero,HeroCast packet) {
         CHANNEL.send(PacketDistributor.TRACKING_ENTITY.with(() -> hero),packet);
     }
     public static void sendHeroCast(ServerPlayer player,HeroCast packet) {

@@ -92,5 +92,8 @@
   "item.siegeoverhaul.spawn_egg_talon": "Orion, Artemis' Skyhunter Spawn Egg",
   "item.siegeoverhaul.spawn_egg_solmyra": "Elara, Apollo's Chosen Spawn Egg",
   "item.siegeoverhaul.spawn_egg_umbros": "Actaeon, Artemis' Hounds Spawn Egg",
-  "item.siegeoverhaul.spawn_egg_chronos": "Kleon, Hermes' Hourglass Spawn Egg"
+  "item.siegeoverhaul.spawn_egg_chronos": "Kleon, Hermes' Hourglass Spawn Egg",
+  "item.siegeoverhaul.tempest_spellbook": "Poseidon's Tempest — Spellbook",
+  "item.siegeoverhaul.inferno_spellbook": "Ares' Inferno — Spellbook",
+  "item.siegeoverhaul.undertow_spellbook": "Poseidon's Undertow — Spellbook"
 }

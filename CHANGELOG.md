@@ -1,3 +1,10 @@
+## 4.49.0 — Olympian creative catalog
+
+- The Siege Overhaul creative tab includes every registered mod item, all loot-box tiers, named Olympian rewards, hero equipment and faction banners.
+- The Olympian Arts reference book explains all twenty hero powers and the distinction between hero abilities and held equipment.
+- Added Creative-only Tempest, Inferno and Undertow spellbooks with a one-second cast, saved cooldowns and existing casting effects. Only visible siege enemies are affected; no terrain damage.
+- Spawn eggs check placement, finish outfitting before insertion, and preserve the egg on failed or cancelled spawns. Spawned units retain native Recruits hiring and commands.
+
 # 4.48.1 beta
 
 - Olympian crossbows now show a rocket when loaded with fireworks and a bolt when loaded with arrows.

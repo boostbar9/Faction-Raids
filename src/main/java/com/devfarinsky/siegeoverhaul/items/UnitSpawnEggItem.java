@@ -25,33 +25,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.List;
 
-/**
- * A Siege Overhaul spawn egg for a specific unit role.
- *
- * <p>Not a real vanilla {@link net.minecraft.world.item.SpawnEggItem}. That
- * class hard-binds to a single {@link EntityType}, which would force us to
- * register 24 distinct entity types just to give each role its own egg. Our
- * roles all share the same handful of underlying Recruits entity types
- * (recruit / shieldman / bowman / crossbowman) plus one wizard role for
- * mage heroes; what changes per egg is the equipment, name and stats we
- * apply after spawn.
- *
- * <p>On use, the egg:
- * <ol>
- *   <li>Resolves the correct Recruits entity type via the role's
- *       {@link CoreHiring#heroBase(int)} mapping.</li>
- *   <li>Spawns the entity one block above the clicked face.</li>
- *   <li>Runs {@link RecruitPersonality#prepare} for a plain recruit role
- *       (0-3) or {@link CoreHiring#prepareHero}-equivalent inline for a
- *       hero role (10-29) so the unit gets its rarity gear, name and
- *       stat bump.</li>
- *   <li>Consumes one from the stack in survival.</li>
- * </ol>
- *
- * <p>Missing Recruits (mod not loaded, or entity type not registered) is a
- * clean no-op: the item stays in the player's hand, and a chat message
- * explains why nothing spawned.
- */
+/** Role-specific native Recruits egg. Outfitting completes before the entity enters the world. */
 public final class UnitSpawnEggItem extends Item {
 
     /** Role id as used by {@link CoreHiring} (0-3 for recruits, 10-29 for heroes). */
@@ -59,6 +33,7 @@ public final class UnitSpawnEggItem extends Item {
 
     public UnitSpawnEggItem(int role, Rarity rarity) {
         super(new Item.Properties().stacksTo(16).rarity(rarity));
+        if (!(role >= 0 && role <= 3) && !CoreHiring.isHero(role)) throw new IllegalArgumentException("Unknown unit role");
         this.role = role;
     }
 
@@ -80,95 +55,61 @@ public final class UnitSpawnEggItem extends Item {
         // tab; guard anyway so a future role change doesn't silently spawn
         // a worker entity for a hero base.
         String ns = typeRole < CoreOffers.WORKER_START ? "recruits" : "workers";
-        EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(
-                new ResourceLocation(ns, CoreHiring.IDS[typeRole]));
+        var typeId = new ResourceLocation(ns, CoreHiring.IDS[typeRole]);
+        EntityType<?> type = ForgeRegistries.ENTITY_TYPES.containsKey(typeId)
+                ? ForgeRegistries.ENTITY_TYPES.getValue(typeId) : null;
         if (type == null) {
             if (ctx.getPlayer() != null) {
                 ctx.getPlayer().sendSystemMessage(Component.literal(
-                        "Villager Recruits isn't installed, so this spawn egg has nothing to spawn."
+                        "The matching Villager Recruits unit type is unavailable."
                 ).withStyle(ChatFormatting.RED));
             }
             return InteractionResult.FAIL;
         }
 
-        // Spawn one block above the clicked face. This matches vanilla
-        // spawn-egg placement; if that block is solid, fall back to the
-        // clicked block itself.
-        Direction face = ctx.getClickedFace();
-        BlockPos pos = ctx.getClickedPos().relative(face);
-        if (!level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()) {
-            pos = ctx.getClickedPos();
-        }
-
-        Mob mob;
-        try {
-            if (!(type.create(server) instanceof Mob created)) {
-                return InteractionResult.FAIL;
-            }
-            mob = created;
-            mob.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5,
-                    ctx.getPlayer() == null ? 0f : ctx.getPlayer().getYRot(), 0f);
-            mob.finalizeSpawn(server, server.getCurrentDifficultyAt(pos),
-                    MobSpawnType.SPAWN_EGG, null, null);
-            server.addFreshEntity(mob);
-
-            equip(mob);
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            if (ctx.getPlayer() != null) {
-                ctx.getPlayer().sendSystemMessage(Component.literal(
-                        "Couldn't outfit that unit: " + e.getClass().getSimpleName()
-                ).withStyle(ChatFormatting.RED));
-            }
-            return InteractionResult.FAIL;
-        }
-
-        ItemStack held = ctx.getItemInHand();
-        if (ctx.getPlayer() == null || !ctx.getPlayer().isCreative()) {
-            held.shrink(1);
-        }
-        return InteractionResult.CONSUME;
+        return spawn(server, ctx, type);
     }
 
-    /**
-     * Run the same outfit + hero-prep code paths that {@link CoreHiring#hire}
-     * runs, minus the treasury / faction / cost checks. This egg is a
-     * creative-mode debug tool, so it always succeeds.
-     */
-    private void equip(Mob mob) throws ReflectiveOperationException {
-        Object inv = mob.getClass().getMethod("getInventory").invoke(mob);
-        if (!(inv instanceof SimpleContainer container)) {
-            throw new IllegalStateException("Recruit inventory missing");
-        }
-
-        if (CoreHiring.isHero(role)) {
-            // Mirror CoreHiring.prepareHero without invoking it directly
-            // (that method is package-private inside core). Same effects:
-            // xp level 10, HP floor 60, +4 attack, hero-tier gear via
-            // HeroTraits.equip, bread + arrows for ranged tiers, marker
-            // flag so downstream code recognizes the hero.
-            mob.getClass().getMethod("setXpLevel", int.class).invoke(mob, 10);
-            var health = mob.getAttribute(
-                    net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
-            if (health != null) health.setBaseValue(Math.max(health.getBaseValue(), 60));
-            mob.setHealth(mob.getMaxHealth());
-            var attack = mob.getAttribute(
-                    net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
-            if (attack != null) attack.setBaseValue(attack.getBaseValue() + 4);
-            HeroTraits.equip(mob, role, container);
-            container.addItem(new ItemStack(net.minecraft.world.item.Items.BREAD, 32));
-            if (role >= 12) {
-                container.addItem(new ItemStack(net.minecraft.world.item.Items.ARROW, 64));
+    InteractionResult spawn(ServerLevel server, UseOnContext ctx, EntityType<?> type) {
+        BlockPos clicked = ctx.getClickedPos();
+        BlockPos pos = server.getBlockState(clicked).getCollisionShape(server, clicked).isEmpty()
+                ? clicked : clicked.relative(ctx.getClickedFace());
+        Mob mob = null;
+        try {
+            if (!server.hasChunkAt(pos) || !server.getWorldBorder().isWithinBounds(pos)
+                    || server.isOutsideBuildHeight(pos) || server.isOutsideBuildHeight(pos.above()))
+                return InteractionResult.FAIL;
+            if (!(type.create(server) instanceof Mob created)) return InteractionResult.FAIL;
+            mob = created;
+            mob.moveTo(pos.getX() + .5, pos.getY(), pos.getZ() + .5,
+                    ctx.getPlayer() == null ? 0 : ctx.getPlayer().getYRot(), 0);
+            if (!server.noCollision(mob) || !server.getEntities(mob, mob.getBoundingBox()).isEmpty()) {
+                mob.discard();
+                if (ctx.getPlayer() != null) ctx.getPlayer().displayClientMessage(
+                        Component.literal("Clear a little more room for this unit."), true);
+                return InteractionResult.FAIL;
             }
-            mob.getPersistentData().putBoolean("SiegeHiredHero", true);
-            mob.setCustomName(Component.literal(CoreHiring.NAMES[role])
-                    .withStyle(tierColor(CoreHiring.heroTier(role))));
-            mob.setCustomNameVisible(false);
-        } else {
-            // Plain recruit role 0-3: give it the standard trimmed armor,
-            // matching weapon and (for shieldman) a shield. RecruitPersonality
-            // also gives it a random first name.
-            RecruitPersonality.prepare(mob, role, container);
+            mob.finalizeSpawn(server, server.getCurrentDifficultyAt(pos), MobSpawnType.SPAWN_EGG, null, null);
+            if (CoreHiring.isHero(role)) CoreHiring.prepareHero(mob, role, true);
+            else {
+                Object inventory = mob.getClass().getMethod("getInventory").invoke(mob);
+                if (!(inventory instanceof SimpleContainer container)) throw new IllegalStateException("Recruit inventory missing");
+                RecruitPersonality.prepare(mob, role, container);
+            }
+            mob.setPersistenceRequired();
+            if (!server.noCollision(mob) || !server.addFreshEntity(mob)) {
+                mob.discard();
+                return InteractionResult.FAIL;
+            }
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            if (mob != null) mob.discard();
+            com.devfarinsky.siegeoverhaul.FactionLogger.LOG.warn("Could not spawn unit role {}", role, ex);
+            if (ctx.getPlayer() != null) ctx.getPlayer().sendSystemMessage(
+                    Component.literal("That unit could not be prepared. Your egg was kept.").withStyle(ChatFormatting.RED));
+            return InteractionResult.FAIL;
         }
+        if (ctx.getPlayer() == null || !ctx.getPlayer().getAbilities().instabuild) ctx.getItemInHand().shrink(1);
+        return InteractionResult.CONSUME;
     }
 
     private static ChatFormatting tierColor(int tier) {
@@ -198,7 +139,7 @@ public final class UnitSpawnEggItem extends Item {
                 .withStyle(CoreHiring.isHero(role)
                         ? tierColor(CoreHiring.heroTier(role))
                         : ChatFormatting.GRAY));
-        tooltip.add(Component.literal("Right-click to spawn.")
+        tooltip.add(Component.literal("Spawns an outfitted unit. Hire it through its usual recruit menu.")
                 .withStyle(ChatFormatting.DARK_GRAY));
     }
 }
