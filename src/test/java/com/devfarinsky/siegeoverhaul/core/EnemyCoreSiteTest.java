@@ -131,6 +131,8 @@ class EnemyCoreSiteTest extends MinecraftTestSupport {
         var raid=raid(); raid.campaign.putLong("EnemyCore",center.asLong()); raid.campaign.putInt("EnemyCaptureTicks",123);
         assertFalse(EnemyCoreSite.reserved(raid,center));
         raid.campaign.putBoolean("EnemyCoreCourtyard",true);
+        assertFalse(EnemyCoreSite.reserved(raid,center.east(3))); // Existing camps retain their old footprint.
+        raid.campaign.putBoolean("EnemyCoreClearanceRing",true);
         var loaded=RaidSavedData.RaidState.load(raid.save());
         assertEquals(center,EnemyCore.position(loaded)); assertEquals(123,loaded.campaign.getInt("EnemyCaptureTicks"));
         assertTrue(EnemyCoreSite.reserved(loaded,center.east().above(5)));
