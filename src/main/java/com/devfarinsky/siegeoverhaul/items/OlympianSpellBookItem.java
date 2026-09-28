@@ -81,9 +81,10 @@ public final class OlympianSpellBookItem extends Item {
         }
     }
     @Override public void appendHoverText(ItemStack stack, Level level, List<Component> tooltip, TooltipFlag flag) {
-        tooltip.add(Component.literal("Creative spell · hold use for 1 second").withStyle(ChatFormatting.GOLD));
-        tooltip.add(Component.literal("Affects visible siege enemies within " + radius() + " blocks.").withStyle(ChatFormatting.GRAY));
-        tooltip.add(Component.literal(role == 29 ? "Slowness V for 4 seconds." : role == 22 ? "5 magic damage." : "6 magic damage and 4 seconds of fire.").withStyle(ChatFormatting.GRAY));
-        tooltip.add(Component.literal("Cooldown: " + cooldown() / 20 + "s. Releasing early cancels.").withStyle(ChatFormatting.DARK_GRAY));
+        tooltip.add(Component.literal("Creative spellbook").withStyle(ChatFormatting.GOLD));
+        tooltip.add(Component.literal("Hold use for 1s to cast.").withStyle(ChatFormatting.GRAY));
+        tooltip.add(Component.literal(role == 29 ? "Slowness V • 4 seconds" : role == 22 ? "5 magic damage" : "6 magic damage • Burns for 4s").withStyle(ChatFormatting.AQUA));
+        tooltip.add(Component.literal("Visible siege enemies • Area extends " + radius() + " blocks").withStyle(ChatFormatting.GRAY));
+        tooltip.add(Component.literal("Cooldown: " + cooldown() / 20 + "s • Release early to cancel").withStyle(ChatFormatting.DARK_GRAY));
     }
 }

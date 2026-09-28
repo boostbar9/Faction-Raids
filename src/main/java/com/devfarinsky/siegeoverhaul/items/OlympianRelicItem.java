@@ -104,26 +104,31 @@ public final class OlympianRelicItem extends Item {
         return marked > 0;
     }
     @Override public void appendHoverText(ItemStack stack, Level level, List<Component> tooltip, TooltipFlag flag) {
+        tooltip.add(Component.literal("Olympian relic").withStyle(ChatFormatting.GOLD));
         switch (kind) {
             case FORGE -> {
-                tooltip.add(Component.literal("Use with damaged gear in your other hand.").withStyle(ChatFormatting.GRAY));
-                tooltip.add(Component.literal("Repairs 25% of max durability, up to 80 points.").withStyle(ChatFormatting.GOLD));
+                tooltip.add(Component.literal("Use: repair gear in your other hand.").withStyle(ChatFormatting.GRAY));
+                tooltip.add(Component.literal("Restores 25% max durability • maximum 80 points").withStyle(ChatFormatting.AQUA));
             }
             case WATCH -> {
-                tooltip.add(Component.literal("Use to outline up to 8 siege enemies within 16 blocks.").withStyle(ChatFormatting.GRAY));
-                tooltip.add(Component.literal("Visible through walls to nearby players for 10 seconds.").withStyle(ChatFormatting.GOLD));
+                tooltip.add(Component.literal("Use: reveal nearby siege enemies.").withStyle(ChatFormatting.GRAY));
+                tooltip.add(Component.literal("Up to 8 targets • 16 blocks • 10 seconds").withStyle(ChatFormatting.AQUA));
+                tooltip.add(Component.literal("Outlines are visible through walls.").withStyle(ChatFormatting.GRAY));
             }
             case CLEANSE -> {
-                tooltip.add(Component.literal("Use to remove poison, wither, blindness,").withStyle(ChatFormatting.GRAY));
-                tooltip.add(Component.literal("weakness and slowness. Keeps beneficial effects.").withStyle(ChatFormatting.GOLD));
+                tooltip.add(Component.literal("Use: cleanse harmful effects.").withStyle(ChatFormatting.GRAY));
+                tooltip.add(Component.literal("Poison, wither, blindness, weakness, slowness").withStyle(ChatFormatting.AQUA));
+                tooltip.add(Component.literal("Keeps your beneficial effects.").withStyle(ChatFormatting.GRAY));
             }
         }
-        tooltip.add(Component.literal("Optional Curios charm: " + switch (kind) {
-            case FORGE -> "+1 armor toughness while equipped.";
-            case WATCH -> "+2 armor while equipped.";
-            case CLEANSE -> "+1 maximum heart while equipped.";
+        tooltip.add(Component.literal("Consumed on success • Cooldown: 10s").withStyle(ChatFormatting.DARK_GRAY));
+        tooltip.add(Component.empty());
+        tooltip.add(Component.literal("Curios charm (optional)").withStyle(ChatFormatting.GOLD));
+        tooltip.add(Component.literal(switch (kind) {
+            case FORGE -> "+1 armor toughness";
+            case WATCH -> "+2 armor";
+            case CLEANSE -> "+1 maximum heart";
         }).withStyle(ChatFormatting.AQUA));
-        tooltip.add(Component.literal("Equip in the Curios screen; wearing does not consume it.").withStyle(ChatFormatting.GRAY));
-        tooltip.add(Component.literal("Consumed on success · 10 second cooldown").withStyle(ChatFormatting.DARK_GRAY));
+        tooltip.add(Component.literal("Equip in a charm slot. Not consumed while worn.").withStyle(ChatFormatting.GRAY));
     }
 }

@@ -198,7 +198,7 @@ final class OlympianLoot {
         stack.setHoverName(Component.literal(name).withStyle(s -> s.withColor(tier.color).withItalic(false)));
         ListTag lines = new ListTag();
         for (String line : lore) lines.add(StringTag.valueOf(Component.Serializer.toJson(
-                Component.literal(line).withStyle(ChatFormatting.GRAY))));
+                Component.literal(line).withStyle(style -> style.withColor(ChatFormatting.GRAY).withItalic(false)))));
         stack.getOrCreateTagElement("display").put("Lore", lines);
         return stack;
     }
