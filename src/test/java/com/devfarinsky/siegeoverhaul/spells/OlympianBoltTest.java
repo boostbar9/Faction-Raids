@@ -58,7 +58,7 @@ class OlympianBoltTest extends MinecraftTestSupport {
             return (p.getX()>>4)==(p.getZ()>>4); // Only endpoint chunks (0,0) and (1,1).
         });
         assertFalse(OlympianBolt.loadedTravel(level,new Vec3(15,64,14),new Vec3(3,0,3)));
-        when(level.hasChunkAt(any())).thenReturn(true);
+        doReturn(true).when(level).hasChunkAt(any());
         assertTrue(OlympianBolt.loadedTravel(level,new Vec3(15,64,14),new Vec3(3,0,3)));
         assertFalse(OlympianBolt.loadedTravel(level,new Vec3(15,64,14),new Vec3(100,0,0)));
         verify(level,never()).getChunk(anyInt(),anyInt());
