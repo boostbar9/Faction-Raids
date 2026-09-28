@@ -76,7 +76,7 @@ class HirePlacementTest extends MinecraftTestSupport {
         when(level.hasChunkAt(any())).thenAnswer(i -> ((BlockPos)i.getArgument(0)).getX() >= 0);
         assertFalse(HirePlacement.safe(level,recruit,feet,p -> true));
         verify(level,never()).getBlockState(any());
-        when(level.hasChunkAt(any())).thenReturn(true);
+        doReturn(true).when(level).hasChunkAt(any());
         assertFalse(HirePlacement.safe(level,recruit,feet,p -> p.getX() >= 0));
         assertTrue(HirePlacement.safe(level,recruit,feet,p -> true));
     }
