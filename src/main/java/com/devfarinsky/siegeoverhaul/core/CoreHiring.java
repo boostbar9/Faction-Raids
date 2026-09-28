@@ -185,13 +185,10 @@ public final class CoreHiring {
                     for (int dy = -1; dy <= 1 && !found; dy++) {
                         BlockPos pos = core.offset(dx, dy, dz);
                         var level = player.serverLevel();
-                        if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)
-                                || level.isOutsideBuildHeight(pos) || level.isOutsideBuildHeight(pos.above())
-                                || !level.getFluidState(pos).isEmpty() || !level.getFluidState(pos.above()).isEmpty()
-                                || !level.getBlockState(pos.below()).isFaceSturdy(level, pos.below(), net.minecraft.core.Direction.UP)) continue;
-                        if (starterGuard && !SiegeCore.claimed(level, pos, SiegeCore.key(player))) continue;
+                        if (!HirePlacement.safe(level, recruit, pos,
+                                cell -> !starterGuard || SiegeCore.claimed(level, cell, SiegeCore.key(player)))) continue;
                         recruit.moveTo(pos.getX()+.5, pos.getY(), pos.getZ()+.5, player.getYRot(), 0);
-                        found = level.noCollision(recruit) && level.getEntities(recruit, recruit.getBoundingBox()).isEmpty();
+                        found = true;
                     }
                 }
             }

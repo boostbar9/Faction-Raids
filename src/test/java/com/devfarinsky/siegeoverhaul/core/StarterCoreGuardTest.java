@@ -154,4 +154,38 @@ class StarterCoreGuardTest extends MinecraftTestSupport {
             guard.verify(() -> StarterCoreGuard.onCoreTick(level, BlockPos.ZERO));
         }
     }
+    @Test void staleOfflineAndIneligiblePendingRecordsDoNotMaskValidDelivery() throws Exception {
+        var level = mock(ServerLevel.class);
+        var server = mock(MinecraftServer.class);
+        var players = mock(net.minecraft.server.players.PlayerList.class);
+        when(level.getServer()).thenReturn(server); when(server.getPlayerList()).thenReturn(players);
+        var data = new RaidSavedData();
+        for (int i = 0; i < 3; i++) data.siegeCores.put("team:" + i, new CompoundTag());
+        // Use the actual map iteration order: stale first, transferred second, eligible last.
+        var records = new java.util.ArrayList<>(data.siegeCores.values());
+        var formerOwner = mock(ServerPlayer.class); var owner = mock(ServerPlayer.class);
+        for (int i = 0; i < records.size(); i++) {
+            var id = java.util.UUID.randomUUID();
+            records.get(i).putLong("Position", BlockPos.ZERO.asLong());
+            records.get(i).putUUID(StarterCoreGuard.PENDING_OWNER, id);
+            if (i == 1) when(players.getPlayer(id)).thenReturn(formerOwner);
+            if (i == 2) when(players.getPlayer(id)).thenReturn(owner);
+        }
+        var field = ServerPlayer.class.getField("server");
+        field.setAccessible(true); field.set(owner, server);
+        String key = new java.util.ArrayList<>(data.siegeCores.keySet()).get(2);
+        try (var saved = mockStatic(RaidSavedData.class); var cores = mockStatic(SiegeCore.class);
+             var hiring = mockStatic(CoreHiring.class)) {
+            saved.when(() -> RaidSavedData.get(server)).thenReturn(data);
+            cores.when(() -> SiegeCore.canUse(owner, BlockPos.ZERO)).thenReturn(true);
+            cores.when(() -> SiegeCore.key(owner)).thenReturn(key);
+            hiring.when(() -> CoreHiring.hireStarterGuard(owner, BlockPos.ZERO)).thenReturn(true);
+            StarterCoreGuard.onCoreTick(level, BlockPos.ZERO);
+            cores.verify(() -> SiegeCore.canUse(formerOwner, BlockPos.ZERO));
+            hiring.verify(() -> CoreHiring.hireStarterGuard(owner, BlockPos.ZERO));
+            assertTrue(data.coreGuardGrants.contains(key));
+            assertFalse(records.get(2).contains(StarterCoreGuard.PENDING_OWNER));
+        }
+    }
+
 }

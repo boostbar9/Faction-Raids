@@ -1,3 +1,8 @@
+## 4.50.5 — Safe arrivals for hired units
+- Core Guards, recruits, heroes and workers avoid damaging floors, fire, freezing powder snow and fluid-filled spawn spaces.
+- Placement checks the unit's full body, footing, loaded chunks and world border. Starter Core Guards also remain fully inside their faction's claim.
+- A stale pending guard record no longer blocks delivery for another valid core record at the same location. Failed placements preserve the free guard grant and do not charge for a hire.
+
 ## 4.50.4 — More useful items
 - Aimed spellbook projectiles pass through friendly troops, players and other ineligible entities, while still stopping at blocks and damaging only siege enemies.
 - Forge Embers prioritize damaged gear in the other hand, then the most worn equipped armor piece. Repair remains 25% of maximum durability, with the cap raised from 80 to 400 points. Failed repairs do not consume a charge.
