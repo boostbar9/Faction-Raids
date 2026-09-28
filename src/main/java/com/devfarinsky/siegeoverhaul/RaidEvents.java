@@ -53,8 +53,6 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.entity.PathfinderMob;
-import net.minecraft.world.entity.ai.goal.OpenDoorGoal;
-import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 import net.minecraft.world.entity.ai.util.DefaultRandomPos;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.storage.loot.LootParams;
@@ -288,15 +286,7 @@ public final class RaidEvents {
      */
     private static void attachRaiderAI(Mob mob) {
         com.devfarinsky.siegeoverhaul.raid.RaidMarchDiscipline.install(mob);
-        // Recruits' custom ground navigator can route through a doorway, but
-        // without both the navigation flag and an OpenDoorGoal the closed
-        // door remains an impassable node. Let ordinary entrances work before
-        // the bounded physical-breach fallback considers any block damage.
-        if (mob.getNavigation() instanceof GroundPathNavigation ground) {
-            ground.setCanOpenDoors(true);
-            ground.setCanPassDoors(true);
-            mob.goalSelector.addGoal(1, new OpenDoorGoal(mob, true));
-        }
+        com.devfarinsky.siegeoverhaul.raid.RaiderDoors.install(mob);
         mob.getPersistentData().remove(com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal.CHARGING);
         mob.goalSelector.addGoal(0,new com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal(mob));
         // Parkour: leap short obstacles. Only meaningful for PathfinderMobs

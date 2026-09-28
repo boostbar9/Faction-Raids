@@ -42,7 +42,7 @@ public final class HeroCastVisuals {
         // Late trackers see the current pose without replaying a stale charging sound.
         if(age<=2 && HeroVisualConfig.VOLUME.get()>0) {
             SoundEvent sound=packet.phase()==0?SoundEvents.BEACON_POWER_SELECT:
-                    packet.role()==27?SoundEvents.BLAZE_SHOOT:SoundEvents.TRIDENT_RIPTIDE_1;
+                    packet.role()==27?SoundEvents.BLAZE_SHOOT:packet.role()==22?SoundEvents.TRIDENT_THUNDER:SoundEvents.CONDUIT_ATTACK_TARGET;
             world.playLocalSound(packet.x(),packet.y(),packet.z(),sound,SoundSource.HOSTILE,
                     HeroVisualConfig.VOLUME.get().floatValue(),packet.phase()==0?.7F:1.1F,false);
         }
@@ -78,7 +78,7 @@ public final class HeroCastVisuals {
             for(int i=0;i<count;i++) {
                 double angle=(age*.35)+(i*Math.PI*2/count);
                 double radius=cast.phase()==0?.6:HeroCasting.radius(cast.role())*Math.min(1,age/(double)HeroCasting.RELEASE);
-                world.addParticle(cast.role()==27?ParticleTypes.FLAME:ParticleTypes.SPLASH,
+                world.addParticle(cast.role()==27?ParticleTypes.FLAME:cast.role()==22?ParticleTypes.ELECTRIC_SPARK:ParticleTypes.BUBBLE_POP,
                         origin.x+Math.cos(angle)*radius,origin.y+(cast.phase()==0?1.2:.2),
                         origin.z+Math.sin(angle)*radius,0,.025,0);
             }
@@ -97,26 +97,28 @@ public final class HeroCastVisuals {
             if(age<0 || age>=duration)continue;
             Vec3 origin=cast.phase()==0?living.getPosition(event.getPartialTick()):new Vec3(cast.x(),cast.y(),cast.z());
             if(camera.distanceToSqr(origin)>square(HeroVisualConfig.DISTANCE.get()))continue;
-            float radius=cast.phase()==0?.65F:(float)(HeroCasting.radius(cast.role())*age/duration);
             float alpha=(HeroVisualConfig.REDUCED_FLASHES.get()?.18F:.42F)*(1-age/(duration*1.3F));
             pose.pushPose();pose.translate(origin.x-camera.x,origin.y-camera.y+.12,origin.z-camera.z);
             var v=buffers.getBuffer(RenderType.lightning());
-            ring(pose.last().pose(),v,radius,cast.role(),alpha);
-            if(cast.phase()==0) {pose.translate(0,1.15,0);ring(pose.last().pose(),v,.35F,cast.role(),alpha*.7F);}
+            Matrix4f matrix=pose.last().pose();
+            HeroCastShape.emit(cast.role(),cast.phase(),age,(x1,y1,z1,x2,y2,z2) ->
+                    ribbon(matrix,v,x1,y1,z1,x2,y2,z2,cast.role(),alpha));
             pose.popPose();drew=true;
         }
         if(drew)buffers.endBatch(RenderType.lightning());
     }
-    private static void ring(Matrix4f matrix,VertexConsumer vertices,float radius,int role,float alpha) {
-        for(int i=0;i<32;i++) {
-            double a=i*Math.PI/16,b=(i+1)*Math.PI/16;
-            vertex(matrix,vertices,a,radius,role,alpha);vertex(matrix,vertices,a,Math.max(0,radius-.075F),role,alpha);
-            vertex(matrix,vertices,b,Math.max(0,radius-.075F),role,alpha);vertex(matrix,vertices,b,radius,role,alpha);
-        }
+    private static void ribbon(Matrix4f matrix,VertexConsumer v,double x1,double y1,double z1,
+                               double x2,double y2,double z2,int role,float alpha) {
+        // Crossed strips keep the silhouette visible from above and at ground level.
+        double width=role==27?.13:.055;
+        point(matrix,v,x1-width,y1,z1,role,alpha);point(matrix,v,x1+width,y1,z1,role,alpha);
+        point(matrix,v,x2+width,y2,z2,role,alpha);point(matrix,v,x2-width,y2,z2,role,alpha);
+        point(matrix,v,x1,y1-width,z1-width,role,alpha);point(matrix,v,x1,y1+width,z1+width,role,alpha);
+        point(matrix,v,x2,y2+width,z2+width,role,alpha);point(matrix,v,x2,y2-width,z2-width,role,alpha);
     }
-    private static void vertex(Matrix4f m,VertexConsumer v,double angle,float radius,int role,float alpha) {
-        v.vertex(m,(float)Math.cos(angle)*radius,0,(float)Math.sin(angle)*radius)
-                .color(role==27?1F:.2F,role==27?.22F:.8F,role==27?.08F:1F,alpha).endVertex();
+    private static void point(Matrix4f m,VertexConsumer v,double x,double y,double z,int role,float alpha) {
+        v.vertex(m,(float)x,(float)y,(float)z)
+                .color(role==27?1F:role==22?.6F:.12F,role==27?.3F:role==22?.75F:.9F,role==27?.06F:1F,alpha).endVertex();
     }
     private static double square(double n) {return n*n;}
 }

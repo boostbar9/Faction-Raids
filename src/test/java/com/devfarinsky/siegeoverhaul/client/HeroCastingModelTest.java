@@ -21,6 +21,19 @@ class HeroCastingModelTest extends MinecraftTestSupport {
         nativeModel.rightArm.xRot=.4F;HeroCastingModel.applyPose(adapter,1,0);
         assertEquals(.4F,adapter.rightArm.xRot);
     }
+    @Test void schoolsHaveDistinctPosesAndKeepWeaponAndArmorPartsShared() {
+        var poses=new java.util.HashSet<String>();
+        for(int role:new int[]{22,27,29}) {
+            var nativeModel=new HumanoidModel<LivingEntity>(LayerDefinition.create(HumanoidModel.createMesh(CubeDeformation.NONE,0),64,64).bakeRoot());
+            var adapter=new HeroCastingModel<>(nativeModel);
+            HeroCastingModel.applyPose(adapter,role,0,1);
+            poses.add(adapter.rightArm.xRot+":"+adapter.leftArm.xRot+":"+adapter.rightArm.zRot);
+            assertSame(nativeModel.rightArm,adapter.rightArm);
+            float rotation=adapter.rightArm.xRot;HeroCastingModel.applyPose(adapter,role,1,0);
+            assertEquals(rotation,adapter.rightArm.xRot);
+        }
+        assertEquals(3,poses.size());
+    }
     @Test void nativePreparationStateIsNotLostBeforeSetup() {
         var root=LayerDefinition.create(HumanoidModel.createMesh(CubeDeformation.NONE,0),64,64).bakeRoot();
         var nativeModel=new HumanoidModel<LivingEntity>(root) {

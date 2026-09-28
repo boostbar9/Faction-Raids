@@ -48,7 +48,7 @@ public final class HeroCastingModel<T extends LivingEntity> extends HumanoidMode
         var cast=HeroCastVisuals.current(entity);
         if(cast!=null && HeroVisualConfig.ANIMATIONS.get() && !entity.isPassenger() && !entity.isSleeping()) {
             float elapsed=entity.level().getGameTime()-cast.start()+(age-entity.tickCount);
-            applyPose(this,cast.phase(),HeroCastVisuals.poseWeight(cast.phase(),elapsed));
+            applyPose(this,cast.role(),cast.phase(),HeroCastVisuals.poseWeight(cast.phase(),elapsed));
         }
     }
     static void applyPose(HumanoidModel<?> model,int phase,float weight) {
@@ -57,6 +57,22 @@ public final class HeroCastingModel<T extends LivingEntity> extends HumanoidMode
         model.leftArm.xRot+=(arm-model.leftArm.xRot)*weight;
         model.rightArm.zRot+=(-.35F-model.rightArm.zRot)*weight;
         model.leftArm.zRot+=(.35F-model.leftArm.zRot)*weight;
+    }
+    static void applyPose(HumanoidModel<?> model,int role,int phase,float weight) {
+        if(role==22) { // Raise the weapon to call the storm; the free arm braces the release.
+            blend(model.rightArm,phase==0?-2.7F:-1.4F,-.2F,weight);
+            blend(model.leftArm,phase==0?-.7F:-1.1F,.55F,weight);
+        } else if(role==27) { // Draw the fire inward, then thrust both hands forward.
+            blend(model.rightArm,phase==0?-1.2F:-1.75F,-.65F,weight);
+            blend(model.leftArm,phase==0?-1.2F:-1.75F,.65F,weight);
+        } else if(role==29) { // Wide arms sweep the tide together.
+            blend(model.rightArm,-1.05F,phase==0?-1.1F:-.25F,weight);
+            blend(model.leftArm,-1.05F,phase==0?1.1F:.25F,weight);
+        }
+    }
+    private static void blend(ModelPart arm,float x,float z,float weight) {
+        float w=Math.max(0,Math.min(1,weight));
+        arm.xRot+=(x-arm.xRot)*w;arm.zRot+=(z-arm.zRot)*w;
     }
     @Override public void renderToBuffer(PoseStack pose,VertexConsumer vertices,int light,int overlay,float r,float g,float b,float a) {
         copyPropertiesTo(original);original.renderToBuffer(pose,vertices,light,overlay,r,g,b,a);
