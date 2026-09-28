@@ -44,6 +44,7 @@ public final class SiegeCore {
         String key = key(player);
         CompoundTag core = data.siegeCores.computeIfAbsent(key, k -> new CompoundTag());
         core.putLong("Position", pos.asLong());
+        if (!data.coreGuardGrants.contains(key)) core.putUUID(StarterCoreGuard.PENDING_OWNER, player.getUUID());
         CoreOffers.refresh(core, player.server.overworld().getGameTime(), player.serverLevel().random);
         RaidSavedData.Anchor old = data.anchors.get(key);
         long next = old == null ? player.server.overworld().getGameTime() + RaidConfig.MIN_COOLDOWN_MINUTES.get() * 1200L : old.nextRaidGameTime();

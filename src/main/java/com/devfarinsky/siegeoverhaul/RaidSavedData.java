@@ -25,11 +25,13 @@ public final class RaidSavedData extends SavedData {
     // v12 added pendingSpoils + raidNotifyOptOut (3.2.0 multiplayer polish).
     // v13 added persistent camp construction jobs and crew (3.4.0).
     // Old saves load cleanly because all new fields default to empty collections.
-    public static final int DATA_VERSION = 21;
+    public static final int DATA_VERSION = 22;
     public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
     public static final String HOME_POINT = "home";
     public final Set<UUID> campClaimLeases = new HashSet<>();
     public final Map<String, CompoundTag> siegeCores = new HashMap<>();
+    /** Lifetime grants, independent of core positions, raid outcomes and entity survival. */
+    public final Set<String> coreGuardGrants = new HashSet<>();
     public final Map<String, Anchor> anchors = new HashMap<>();
     public final Map<String, RaidState> raids = new HashMap<>();
     /**
@@ -71,6 +73,8 @@ public final class RaidSavedData extends SavedData {
 
     public static RaidSavedData load(CompoundTag root) {
         RaidSavedData data = new RaidSavedData();
+        ListTag guardGrants = root.getList("CoreGuardGrants", Tag.TAG_STRING);
+        for (int i = 0; i < guardGrants.size(); i++) data.coreGuardGrants.add(guardGrants.getString(i));
         ListTag leases = root.getList("CampClaimLeases", Tag.TAG_COMPOUND);
         for (int i=0;i<leases.size();i++) if (leases.getCompound(i).hasUUID("Id")) data.campClaimLeases.add(leases.getCompound(i).getUUID("Id"));
         CompoundTag cores = root.getCompound("SiegeCores");
@@ -124,6 +128,9 @@ public final class RaidSavedData extends SavedData {
     @Override
     public CompoundTag save(CompoundTag root) {
         root.putInt("DataVersion", DATA_VERSION);
+        ListTag guardGrants = new ListTag();
+        coreGuardGrants.forEach(key -> guardGrants.add(StringTag.valueOf(key)));
+        root.put("CoreGuardGrants", guardGrants);
         ListTag leases = new ListTag();
         campClaimLeases.forEach(id -> { CompoundTag entry = new CompoundTag(); entry.putUUID("Id", id); leases.add(entry); });
         root.put("CampClaimLeases", leases);

@@ -49,7 +49,14 @@ public final class CoreBlocks {
             if(random.nextInt(4)==0)level.addParticle(net.minecraft.core.particles.ParticleTypes.END_ROD,pos.getX()+.5,pos.getY()+1.05,pos.getZ()+.5,0,.01,0);
         }
         @Override public void setPlacedBy(Level level, BlockPos pos, BlockState state, LivingEntity entity, ItemStack stack) {
-            if (entity instanceof ServerPlayer player) SiegeCore.placed(player, pos);
+            if (entity instanceof ServerPlayer player) {
+                SiegeCore.placed(player, pos);
+                level.scheduleTick(pos, this, 1);
+            }
+        }
+        @Override public void tick(BlockState state, net.minecraft.server.level.ServerLevel level,
+                                   BlockPos pos, net.minecraft.util.RandomSource random) {
+            StarterCoreGuard.onCoreTick(level, pos);
         }
         @Override public boolean canEntityDestroy(BlockState state, net.minecraft.world.level.BlockGetter level, BlockPos pos, net.minecraft.world.entity.Entity entity) { return false; }
         @Override public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
@@ -59,8 +66,11 @@ public final class CoreBlocks {
                 return InteractionResult.sidedSuccess(level.isClientSide);
             }
             if (player instanceof ServerPlayer sp) {
-                if (SiegeCore.canUse(sp, pos)) sp.openMenu(new SimpleMenuProvider(
-                        (id, inv, p) -> new CoreHireMenu(id, inv, pos), Component.literal("Siege Core • Arcane Command")));
+                if (SiegeCore.canUse(sp, pos)) {
+                    StarterCoreGuard.tryGrant(sp, pos);
+                    sp.openMenu(new SimpleMenuProvider(
+                            (id, inv, p) -> new CoreHireMenu(id, inv, pos), Component.literal("Siege Core • Arcane Command")));
+                }
                 else {
                     var data=com.devfarinsky.siegeoverhaul.RaidSavedData.get(sp.server);
                     var raid=data.raids.get(SiegeCore.key(sp));

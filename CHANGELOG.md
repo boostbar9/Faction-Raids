@@ -1,3 +1,9 @@
+## 4.50.3 — Starter Core Guard
+- A faction's first usable Siege Core grants one free native hired shieldman named Core Guard, with an iron sword, shield, basic armor and eight bread. Native ownership, unit limits, hold-position behavior and normal commands remain in control.
+- The lifetime faction grant survives saves, core relocation and the guard's death. No replacement guards or recurring supplies are generated.
+- Placement delivery waits until the next block tick. Blocked spawns, rejected hiring and unavailable placers preserve the grant; open the owned core to retry. Existing factions can receive their one guard by opening their core after updating.
+- The starter guard does not debit personal funds or the Treasury. Later hires and native ongoing upkeep retain their normal rules.
+
 ## 4.50.1 — Commissioned builder jobs
 - Hired wall builders keep their assigned blueprint when starting work or returning from a supply trip, instead of switching to another nearby construction site.
 - Wall approach paths now wait for Workers' asynchronous pathfinder to finish. Stale, blocked and timed-out results are discarded safely.
