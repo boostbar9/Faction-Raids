@@ -1,5 +1,5 @@
 ## 4.49.11 — Camp construction safety
-- Native camp construction waits when a living NPC occupies an unfinished blueprint cell, preventing guards and workers from being built into walls.
+- Native camp construction waits when a guard or visiting living entity occupies an unfinished blueprint cell. Active construction crew keeps its native movement to avoid self-blocking.
 - Removed the obsolete future-rebrand startup announcement and stopped identifying the current config as a legacy file.
 - No changes to combat, loot prices, dependencies or saved items.
 

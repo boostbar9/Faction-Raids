@@ -310,7 +310,9 @@ public final class NativeCampConstruction {
         }
         if (bounds == null) return false;
         for (var entity : level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, bounds)) {
-            if (!entity.isAlive() || entity.isSpectator()) continue;
+            // The native crew must keep ticking to leave its own work cells. Canceling
+            // its ticks for self-occupancy would freeze the entire job indefinitely.
+            if (!entity.isAlive() || entity.isSpectator() || raid.campWorkers.contains(entity.getUUID())) continue;
             AABB body = entity.getBoundingBox();
             for (long key : raid.pendingCampBlocks.keySet()) {
                 BlockPos pos = BlockPos.of(key);

@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 class CampOccupancyTest extends MinecraftTestSupport {
-    @Test void guardsWorkersAndAnimalsBlockConstructionUntilTheyLeave() {
+    @Test void guardsAndVisitorsBlockConstructionUntilTheyLeave() {
         var level=mock(ServerLevel.class);var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
         var cell=new BlockPos(0,65,0);raid.pendingCampBlocks.put(cell.asLong(),"minecraft:stone_bricks");
         var mob=mock(LivingEntity.class);when(mob.isAlive()).thenReturn(true);
@@ -39,5 +39,14 @@ class CampOccupancyTest extends MinecraftTestSupport {
         assertFalse(NativeCampConstruction.occupiedBlueprint(level,raid));
         raid.pendingCampBlocks.clear();clearInvocations(level);
         assertFalse(NativeCampConstruction.occupiedBlueprint(level,raid));verifyNoInteractions(level);
+    }
+    @Test void nativeCrewDoesNotFreezeItsOwnEscapeMovement() {
+        var level=mock(ServerLevel.class);var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        raid.pendingCampBlocks.put(BlockPos.ZERO.asLong(),"minecraft:stone_bricks");
+        var worker=mock(LivingEntity.class);var id=java.util.UUID.randomUUID();
+        when(worker.getUUID()).thenReturn(id);when(worker.isAlive()).thenReturn(true);raid.campWorkers.add(id);
+        when(level.getEntitiesOfClass(eq(LivingEntity.class),any(AABB.class))).thenReturn(List.of(worker));
+        assertFalse(NativeCampConstruction.occupiedBlueprint(level,raid));
+        verify(worker,never()).getBoundingBox();
     }
 }
