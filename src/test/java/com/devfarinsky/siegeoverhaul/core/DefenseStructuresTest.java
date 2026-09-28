@@ -115,7 +115,7 @@ class DefenseStructuresTest extends MinecraftTestSupport {
     }
     @Test void occupiedBlockCellsAreRejected() {
         var level = clearLevel();
-        when(level.getEntities(isNull(), any(AABB.class), any())).thenReturn(List.of(mock(Entity.class)));
+        when(level.getEntities(isNull(Entity.class), any(AABB.class), any())).thenReturn(List.of(mock(Entity.class)));
         assertNotNull(DefenseStructures.siteProblem(level, tower(), p -> true));
     }
     @Test void anotherUnstartedDefenseReservesItsEmptyFootprint() {
