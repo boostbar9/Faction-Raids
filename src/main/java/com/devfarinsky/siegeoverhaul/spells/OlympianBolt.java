@@ -49,7 +49,7 @@ public class OlympianBolt extends ThrowableItemProjectile {
         // Never load chunks for a travelling spell, and never resume orphaned casts after logout.
         if(!level().isClientSide && ((distance+=getDeltaMovement().length())>48 || ++age>40 || !(getOwner() instanceof Player owner)
                 || !owner.isAlive() || owner.isSpectator() || !owner.getAbilities().instabuild
-                || !loadedTravel(level(),position(),getDeltaMovement())))){discard();return;}
+                || !loadedTravel(level(),position(),getDeltaMovement()))){discard();return;}
         super.tick();
         if(level().isClientSide && !isRemoved() && com.devfarinsky.siegeoverhaul.HeroVisualConfig.PARTICLES.get()>0) {
             var particle=switch(kind()){case ICE->ParticleTypes.SNOWFLAKE;case WATER->ParticleTypes.SPLASH;
