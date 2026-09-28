@@ -31,41 +31,54 @@ public final class DefenseStructures {
         if (player.getInventory().contains(plan)) return fail(player, "You already have this defense plan.");
         // Plans are free, have no crafting uses, and never drop repeatedly from a full inventory.
         if (!player.getInventory().add(plan)) return fail(player, "Make room in your inventory for the plan.");
-        player.sendSystemMessage(Component.literal(kind.label + " plan collected. Use it on level ground in your claim. "
+        player.sendSystemMessage(Component.literal(kind.label + " plan collected. Use it to preview, sneak-use to rotate, then use the same ground anchor to confirm. "
                 + kind.price + " Treasury emeralds are charged only when your builder accepts the job."));
         return true;
     }
 
+    public record Preparation(Mob builder, DefenseBlueprint.Plan plan, String problem) {
+        static Preparation failed(String problem) { return new Preparation(null, null, problem); }
+    }
+
     public static boolean commission(ServerPlayer player, BlockPos origin, Direction facing, DefenseBlueprint.Kind kind) {
+        Preparation result = prepare(player, origin, facing, kind);
+        if (result.problem() != null) return fail(player, result.problem());
+        return startJob(player, result.builder(), result.plan(), kind);
+    }
+
+    /** Same read-only checks for preview and final confirmation; no payment or worker changes. */
+    public static Preparation prepare(ServerPlayer player, BlockPos origin, Direction facing, DefenseBlueprint.Kind kind) {
         ServerLevel level = player.serverLevel();
         String key = SiegeCore.key(player);
         if (!player.isAlive() || player.isSpectator() || !player.mayBuild()
                 || !level.dimension().equals(Level.OVERWORLD) || SiegeCore.point(player.server, key) == null)
-            return fail(player, "You need an active Siege Core in your faction's Overworld claim.");
+            return Preparation.failed("You need an active Siege Core in your faction's Overworld claim.");
         if (!WorkersBridge.available() || !RecruitsClaimsBridge.available())
-            return fail(player, "Defense construction requires Villager Recruits and Workers 2.");
+            return Preparation.failed("Defense construction requires Villager Recruits and Workers 2.");
         var anchor = RaidSavedData.get(player.server).anchors.get(key);
         var claim = anchor == null ? java.util.Optional.<RecruitsClaimsBridge.ClaimSnapshot>empty()
                 : RecruitsClaimsBridge.resolveDefendingClaim(level, anchor);
-        if (claim.isEmpty()) return fail(player, "Your core needs a valid faction claim.");
+        if (claim.isEmpty()) return Preparation.failed("Your core needs a valid faction claim.");
         var nativeClaim = claim.get();
         var identity = anchor.withIdentity(nativeClaim.ownerFactionStringId(), anchor.teamDisplay());
         var plan = DefenseBlueprint.create(kind, origin, facing);
-        String problem = siteProblem(level, plan, p -> nativeClaim.chunks().contains(new net.minecraft.world.level.ChunkPos(p))
-                && !ClaimBridge.isForeignClaim(level, p, identity) && level.mayInteract(player, p));
-        if (problem != null) return fail(player, problem);
+        var permissions = new java.util.HashMap<net.minecraft.world.level.ChunkPos, Boolean>();
+        String problem = siteProblem(level, plan, p -> permissions.computeIfAbsent(new net.minecraft.world.level.ChunkPos(p),
+                chunk -> nativeClaim.chunks().contains(chunk) && !ClaimBridge.isForeignClaim(level, chunk, identity))
+                && level.mayInteract(player, p));
+        if (problem != null) return Preparation.failed(problem);
 
         var search = TerritoryFortification.findNearbyBuilder(level, player, origin, true);
         Mob builder = search.builder();
-        if (builder == null) return fail(player, search.reason().replace("core", "placement"));
+        if (builder == null) return Preparation.failed(search.reason().replace("core", "placement"));
         Entity storage = TerritoryFortification.findPlayerStorageArea(level, player, builder.blockPosition(), nativeClaim.chunks());
         if (storage == null || !WorkersBridge.hasBuilderStorage(storage))
-            return fail(player, "Set up your own Workers storage area inside this claim, within 64 blocks of the builder, with Builders enabled.");
+            return Preparation.failed("Set up your own Workers storage area inside this claim, within 64 blocks of the builder, with Builders enabled.");
         if (TerritoryFortification.withinStorageRange(plan.footprint(), storage.blockPosition()).size() != plan.footprint().size())
-            return fail(player, "Move your storage area within 64 blocks of the whole structure.");
+            return Preparation.failed("Move your storage area within 64 blocks of the whole structure.");
         if (!player.isCreative() && PaymentSource.available(player, kind.price) < kind.price)
-            return fail(player, "You need " + kind.price + " emeralds in the faction Treasury.");
-        return startJob(player, builder, plan, kind);
+            return Preparation.failed("You need " + kind.price + " emeralds in the faction Treasury.");
+        return new Preparation(builder, plan, null);
     }
 
     /** Checks empty access space too, so the passage and stepped approach cannot start obstructed. */
@@ -116,6 +129,7 @@ public final class DefenseStructures {
                     max.getZ() - min.getZ() + 1, max.getY() - min.getY() + 1);
             build.getPersistentData().putLong(SITE_MIN, min.asLong());
             build.getPersistentData().putLong(SITE_MAX, max.asLong());
+            ConstructionReport.remember(build, kind.label, plan.blocks().size());
             PlayerFortificationJobs.link(builder, build, player.getUUID());
             if (!player.serverLevel().addFreshEntity(build)) throw new IllegalStateException("Build area rejected");
             WorkersBridge.startBlueprint(build, TerritoryFortification.blueprint(plan.blocks(), min, max));

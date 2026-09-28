@@ -260,6 +260,7 @@ public final class TerritoryFortification {
             // enemy CAMP_AREA_TEAM marker: the enemy reload hook discards
             // areas whose key has no active hostile raid, which used to erase
             // commissioned wall jobs after a server/chunk reload.
+            ConstructionReport.remember(build, mat.label() + " Perimeter", blocks.size());
             PlayerFortificationJobs.link(builder, build, owner);
 
             // Spawn the buildarea into the level BEFORE calling setStartBuild.

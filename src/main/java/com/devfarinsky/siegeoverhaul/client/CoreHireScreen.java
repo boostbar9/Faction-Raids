@@ -84,6 +84,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private final Button[] hire = new Button[4];
     private final Button[] siegeYard = new Button[2];
     private final Button[] territoryBuffs = new Button[4];
+    private Button constructionReport;
     private final Button[] defensePlans = new Button[DefenseBlueprint.Kind.values().length];
     private final Button[] fortifyButtons = new Button[TerritoryFortification.MATERIALS.length];
     private final Button[] boxes = new Button[3];
@@ -277,6 +278,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     layout.territoryCardWidth() - 16, 18, false, () -> false));
         }
 
+        constructionReport = addRenderableWidget(new CoreButton(Component.literal("Construction report"),
+                b -> action(83), layout.territoryCardX(3) + 8, layout.territoryButtonY(3),
+                layout.territoryCardWidth() - 16, 18, false, () -> false));
+
         // Persistent path for beta feedback. Minecraft shows its normal
         // external-link confirmation before opening CurseForge comments.
         int feedbackW = layout.feedbackWidth();
@@ -440,6 +445,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                                     + "  ·  " + SiegeYard.PRICES[i] + "e"
                             : shortLabel + "  ·  unavailable"));
         }
+        constructionReport.visible = tab == CoreCommandPage.DEFENSES;
         for (Button plan : defensePlans) {
             plan.visible = tab == CoreCommandPage.DEFENSES;
             plan.active = true;
@@ -602,6 +608,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             }
         }
         if (tab == CoreCommandPage.DEFENSES) {
+            if (constructionReport.isMouseOver(mx, my)) tooltip(g,
+                    "Closes this menu and prints progress, native supply requests and locations for your loaded commissioned jobs within 128 blocks. Also available through /siegeoverhaul builds.", tooltipX, tooltipY);
             for (int i = 0; i < defensePlans.length; i++) {
                 if (over(mx, my, layout.territoryCardX(i), layout.territoryCardY(i),
                         layout.territoryCardWidth(), layout.territoryCardHeight())) {
@@ -609,7 +617,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     tooltip(g, kind.label + " | " + kind.description + " | " + kind.dimensions()
                             + " | " + kind.price + " Treasury emeralds on placement + "
                             + DefenseBlueprint.create(kind, net.minecraft.core.BlockPos.ZERO, net.minecraft.core.Direction.SOUTH).materials()
-                            + ". Plan collection is free. Your idle builder must be within 16 blocks of the site; supply a Workers storage area with Builders enabled.",
+                            + ". Plan collection and preview are free. Use the same anchor again to pay and build. Your idle builder must be within 16 blocks of the site; supply a Workers storage area with Builders enabled.",
                             tooltipX, tooltipY);
                 }
             }
@@ -1101,10 +1109,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
         int x = layout.territoryCardX(3), y = layout.territoryCardY(3);
         CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_STEEL);
-        text(g, "YOUR BUILDER + SUPPLIES", x + 8, y + 9, w - 16, CommandPalette.TEXT);
-        drawWrappedText(g, "Use a plan on level ground. Builds away from you.", x + 8, y + 24,
-                w - 16, Math.max(1, (h - 28) / 10), CommandPalette.TEXT_MUTED);
-        text(g, "Plans are free. Hover a structure for costs and space needed.", layout.x() + 10,
+        text(g, "YOUR CONSTRUCTION", x + 8, y + 9, w - 16, CommandPalette.TEXT);
+        if (h >= 60) text(g, "Progress, supplies and locations", x + 8, y + 25, w - 16, CommandPalette.TEXT_MUTED);
+        text(g, "Use ground to preview; sneak-use rotates. Use the anchor again to confirm.", layout.x() + 10,
                 layout.contentBottom() - 18, layout.width() - 20, CommandPalette.TEXT_MUTED);
     }
 
