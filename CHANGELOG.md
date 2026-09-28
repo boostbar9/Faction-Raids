@@ -1,3 +1,9 @@
+## 4.50.3 — Starter Core Guard
+- A faction's first usable Siege Core grants one free native hired shieldman named Core Guard, with an iron sword, shield, basic armor and eight bread. Native ownership, unit limits, hold-position behavior and normal commands remain in control.
+- The lifetime faction grant survives saves, core relocation and the guard's death. No replacement guards or recurring supplies are generated.
+- Placement delivery waits until the next block tick. Blocked spawns, rejected hiring and unavailable placers preserve the grant; open the owned core to retry. Existing factions can receive their one guard by opening their core after updating.
+- The starter guard does not debit personal funds or the Treasury. Later hires and native ongoing upkeep retain their normal rules.
+
 ## 4.50.2 — Larger battles, gentler opening enemies
 - Preserve full army sizes, defender/equipment scaling, staged squads and population caps.
 - Newly spawned invading NPCs in waves 1-4 have 40%, 30%, 20% and 10% less health and deal the same percentage less attributed damage, including melee and arrows. Wave five onward retains existing strength and scaling; reductions never repeat at later endless-siege chapters.

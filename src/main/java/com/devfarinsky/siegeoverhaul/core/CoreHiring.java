@@ -165,6 +165,12 @@ public final class CoreHiring {
         recruit.getPersistentData().putBoolean(hired ? "SiegeHiredHero" : "SiegeEnemyHero",true);
     }
     public static boolean hire(ServerPlayer player, BlockPos core, int role) {
+        return hire(player, core, role, false);
+    }
+    static boolean hireStarterGuard(ServerPlayer player, BlockPos core) {
+        return hire(player, core, 1, true);
+    }
+    private static boolean hire(ServerPlayer player, BlockPos core, int role, boolean starterGuard) {
         if (role < 0 || role >= NAMES.length) return false;
         int typeRole = isHero(role) ? heroBase(role) : role;
         Mob mob = null;
@@ -180,14 +186,18 @@ public final class CoreHiring {
                         BlockPos pos = core.offset(dx, dy, dz);
                         var level = player.serverLevel();
                         if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)
+                                || level.isOutsideBuildHeight(pos) || level.isOutsideBuildHeight(pos.above())
                                 || !level.getFluidState(pos).isEmpty() || !level.getFluidState(pos.above()).isEmpty()
                                 || !level.getBlockState(pos.below()).isFaceSturdy(level, pos.below(), net.minecraft.core.Direction.UP)) continue;
+                        if (starterGuard && !SiegeCore.claimed(level, pos, SiegeCore.key(player))) continue;
                         recruit.moveTo(pos.getX()+.5, pos.getY(), pos.getZ()+.5, player.getYRot(), 0);
                         found = level.noCollision(recruit) && level.getEntities(recruit, recruit.getBoundingBox()).isEmpty();
                     }
                 }
             }
-            if (!found) { recruit.discard(); player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Clear a safe space beside the core for your new unit.")); return false; }
+            if (!found) { recruit.discard(); player.sendSystemMessage(net.minecraft.network.chat.Component.literal(starterGuard
+                    ? "Clear a safe space in your claim beside the core, then open it to receive your free Core Guard."
+                    : "Clear a safe space beside the core for your new unit.")); return false; }
             recruit.finalizeSpawn(player.serverLevel(), player.serverLevel().getCurrentDifficultyAt(recruit.blockPosition()), MobSpawnType.EVENT, null, null);
             // v4.18.0 Iron Levy territory buff: extra 4 HP (2 hearts) on all fresh hires.
             if (TerritoryBuffs.has(player.server.overworld() == null ? null
@@ -202,7 +212,8 @@ public final class CoreHiring {
                 Object inventory = recruit.getClass().getMethod("getInventory").invoke(recruit);
                 if (!(inventory instanceof net.minecraft.world.SimpleContainer container))
                     throw new IllegalStateException("Recruit inventory missing");
-                RecruitPersonality.prepare(recruit, role, container);
+                if (starterGuard) StarterCoreGuard.prepare(recruit, container);
+                else RecruitPersonality.prepare(recruit, role, container);
             }
             if (role >= CoreOffers.WORKER_START && role < 10) {
                 Object inventory = recruit.getClass().getMethod("getInventory").invoke(recruit);
@@ -215,8 +226,8 @@ public final class CoreHiring {
             int price = Math.max(0, cost(role));
             recruit.getClass().getMethod("setCost", int.class).invoke(recruit, price);
             // Check shared Treasury funds only.
-            long combined = PaymentSource.available(player, price);
-            if (!player.isCreative() && combined < price) {
+            long combined = starterGuard ? price : PaymentSource.available(player, price);
+            if (!starterGuard && !player.isCreative() && combined < price) {
                 recruit.discard();
                 player.sendSystemMessage(net.minecraft.network.chat.Component.literal("You need " + price + " emeralds in the faction Treasury."));
                 return false;
@@ -226,9 +237,9 @@ public final class CoreHiring {
             var faction = Class.forName("com.talhanation.recruits.FactionEvents").getMethod("addNPCToData", net.minecraft.server.level.ServerLevel.class, String.class, int.class);
             recruit.setPersistenceRequired();
             if (!player.serverLevel().addFreshEntity(recruit)) { recruit.discard(); return false; }
-            if (!Boolean.TRUE.equals(hire.invoke(recruit, player, null, true))) { recruit.discard(); return false; }
+            if (!Boolean.TRUE.equals(hire.invoke(recruit, player, null, !starterGuard))) { recruit.discard(); return false; }
             // Debit only the shared Treasury.
-            if (!PaymentSource.consume(player, price)) {
+            if (!starterGuard && !PaymentSource.consume(player, price)) {
                 recruit.discard();
                 return false;
             }

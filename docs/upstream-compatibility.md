@@ -1,5 +1,13 @@
 # Recruits and Workers source compatibility review
 
+## Starter Core Guard (4.50.3)
+
+Rechecked Recruits `cff03e085d65653406a8b6ddcdd0ebff615c3e48` (1.15.2) on 2026-09-28. `AbstractRecruitEntity.hire(Player, RecruitsGroup, boolean)` posts the cancellable hired event, enforces the native player/faction unit limit, assigns owner and team, increments the player's unit count, resets the payment timer, and calls `setFollowState(2)` / `setAggroState(0)`. The boolean controls dialogue, not cost bypass. Follow state 2 stores the recruit's current position; `RecruitHoldPosGoal` returns it to that position. The guard uses this existing hiring path with native dialogue disabled and a dedicated confirmation, rather than rewriting ownership, counts or AI. Regular commands remain available.
+
+The one-time guard skips only Siege Core's initial Treasury payment. Its normal configured hire cost remains on the entity, and native payment/food/upkeep logic is unchanged. Gear occupies native inventory slots 0-5; eight bread go in slot 6. No hero attributes, immortality or resupply loop is added. Spawn search stays bounded, loaded, dry, collision-free and inside the faction's claim. Delivery is deferred to the core's next block tick so a reverted placement cannot grant a recruit; opening a valid core retries failures. A separate saved faction-grant ledger survives relocation, missing cores and entity death.
+
+Regression tests cover grant persistence, retries, reentrant native callbacks, eligibility, finite equipment, free-grant dispatch and deferred placement. They do not execute companion binaries or constitute an interactive Minecraft playtest.
+
 Reviewed 2026-09-26 against Siege Overhaul 4.47.16, with the diplomacy correction in 4.47.17.
 
 ## Pinned upstream references
