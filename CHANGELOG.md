@@ -1,3 +1,9 @@
+## 4.50.2 — Larger battles, gentler opening enemies
+- Preserve full army sizes, defender/equipment scaling, staged squads and population caps.
+- Newly spawned invading NPCs in waves 1-4 have 40%, 30%, 20% and 10% less health and deal the same percentage less attributed damage, including melee and arrows. Wave five onward retains existing strength and scaling; reductions never repeat at later endless-siege chapters.
+- Enemy heroes cannot join the first three waves. Existing spawned mobs and already queued wave budgets are preserved.
+- New `gentleOpeningWaves` server setting defaults to true, including on existing configurations. Disable it to restore the previous opening balance for future spawns and hero planning.
+
 ## 4.50.1 — Commissioned builder jobs
 - Hired wall builders keep their assigned blueprint when starting work or returning from a supply trip, instead of switching to another nearby construction site.
 - Wall approach paths now wait for Workers' asynchronous pathfinder to finish. Stale, blocked and timed-out results are discarded safely.
