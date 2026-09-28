@@ -1,3 +1,10 @@
+## 4.49.9 — Doors and Olympian casting
+
+- Siege raiders can open nearby wooden doors along their path with Recruits' asynchronous navigation. Opened doors stay open for following troops; iron doors still need breaching.
+- Door checks are bounded, server-owned and respect foreign claims. Friendly recruits retain their own door behavior.
+- Storm, fire and tide casts have original branching bolts, flame plumes and curling wave geometry, distinct arm poses and release sounds.
+- Existing spell timing, damage, cooldowns, friendly-fire rules, reduced-flash settings and particle limits remain intact.
+
 ## 4.49.8
 - Stuck raiders reject unsafe or unreachable random fallback destinations and try the wider route before giving up.
 - Cached detours are discarded when their landing becomes blocked, flooded or unloaded.
