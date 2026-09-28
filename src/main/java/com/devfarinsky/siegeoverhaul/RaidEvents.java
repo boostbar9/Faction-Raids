@@ -332,6 +332,14 @@ public final class RaidEvents {
         }
     }
 
+    /** Reduce attributed opening-raider hits, including arrows, on the server. */
+    @SubscribeEvent
+    public static void onOpeningRaiderDamage(LivingHurtEvent event) {
+        if (!(event.getEntity().level() instanceof ServerLevel)) return;
+        event.setAmount(com.devfarinsky.siegeoverhaul.raid.OpeningRaidBalance.outgoingDamage(
+                event.getSource().getEntity(), event.getAmount()));
+    }
+
     /**
      * v2.25.0 shout-to-allies. When a raider is hurt by a defender, alert
      * every allied raider (same RAID_TEAM_TAG) within shoutRadius blocks
@@ -2577,7 +2585,8 @@ public final class RaidEvents {
         com.devfarinsky.siegeoverhaul.core.EnemyHeroes.plan(state, state.factionId,
                 EndlessSiege.active(state) ? EndlessSiege.chapterWave(nextWave) : nextWave,
                 EndlessSiege.active(state) ? 5 : RaidConfig.WAVES.get(), wanted,
-                RaidConfig.USE_RECRUIT_INVADERS.get(), RaidConfig.ENEMY_HERO_CHANCE_PERCENT.get(),
+                RaidConfig.USE_RECRUIT_INVADERS.get() && com.devfarinsky.siegeoverhaul.raid.OpeningRaidBalance.heroesAllowed(
+                        nextWave, RaidConfig.GENTLE_OPENING_WAVES.get()), RaidConfig.ENEMY_HERO_CHANCE_PERCENT.get(),
                 RaidConfig.ENABLE_COMMANDER.get(), RaidConfig.ENABLE_ILLUSIONERS.get(), level.random);
 
         // Build the progressive composition for this wave. This picks role
@@ -2884,6 +2893,8 @@ public final class RaidEvents {
             var damage = raider.getAttribute(Attributes.ATTACK_DAMAGE);
             if (damage != null) damage.setBaseValue(damage.getBaseValue() * (1 + .15 * escalation));
         }
+        com.devfarinsky.siegeoverhaul.raid.OpeningRaidBalance.apply(
+                raider, state.wave, RaidConfig.GENTLE_OPENING_WAVES.get());
     }
 
     /**
