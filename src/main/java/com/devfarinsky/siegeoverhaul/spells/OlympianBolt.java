@@ -40,7 +40,10 @@ public class OlympianBolt extends ThrowableItemProjectile {
         bolt.setPos(caster.getEyePosition());
         double speed=kind==LIGHTNING?4:kind==FIRE?1.2:kind==WATER?1.6:2;
         bolt.setDeltaMovement(caster.getLookAngle().normalize().scale(speed));
-        level.addFreshEntity(bolt);
+        if (level.addFreshEntity(bolt)) level.playSound(null,caster.blockPosition(),
+                kind==FIRE?net.minecraft.sounds.SoundEvents.FIRECHARGE_USE:kind==ICE?net.minecraft.sounds.SoundEvents.SNOWBALL_THROW:
+                kind==WATER?net.minecraft.sounds.SoundEvents.GENERIC_SPLASH:net.minecraft.sounds.SoundEvents.TRIDENT_THROW,
+                net.minecraft.sounds.SoundSource.PLAYERS,kind==WATER?.2F:.6F,1.1F);
     }
     @Override public void tick(){
         // Never load chunks for a travelling spell, and never resume orphaned casts after logout.

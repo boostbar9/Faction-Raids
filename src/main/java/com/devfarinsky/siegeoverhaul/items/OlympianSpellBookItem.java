@@ -58,7 +58,7 @@ public final class OlympianSpellBookItem extends Item {
         tag.remove(START); tag.remove(ROLE); // Remove before damage callbacks: never release twice.
         if (!valid) { HeroCastPackets.send(player, role, server.getGameTime(), 2); return stack; }
         if (role != 29) com.devfarinsky.siegeoverhaul.spells.OlympianBolt.launch(server, player, role);
-        HeroCastPackets.send(player, role, server.getGameTime(), 1);
+        HeroCastPackets.send(player, role, server.getGameTime(), 2); // Flight/impact effects replace the old caster-centered blast.
         return stack;
     }
 
