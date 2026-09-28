@@ -7,6 +7,7 @@ Reviewed Recruits 1.15.2 source commit `cff03e085d65653406a8b6ddcdd0ebff615c3e48
 - `RecruitPathNavigation` extends `AsyncGroundPathNavigation`, which extends `AsyncPathNavigation` / `PathNavigation`, not vanilla `GroundPathNavigation`.
 - Its node evaluators already support doors, including the async evaluator factory.
 - Our previous vanilla-ground installation skipped these recruits entirely.
+- `AbstractRecruitEntity.registerGoals` installs an anonymous `RecruitsOpenDoorGoal(this, true)` at priority 6. It extends `RecruitsDoorInteractGoal`; matching `RecruitsOpenDoorGoal` through the superclass chain removes this actual installed goal, including its anonymous subclass.
 - Native `RecruitsDoorInteractGoal.canUse` checks `GoalUtils.hasGroundPathNavigation` before its own custom navigator check. This vanilla gate rejects the custom hierarchy.
 
 The original Siege `RaiderDoors` goal works from the common path/node API and explicit supported navigator hierarchy. It inspects at most four nearby nodes (plus their upper blocks), checks every five game ticks, and opens intact wooden doors within 2.5 blocks without waiting for collision. It does not scan buildings, destroy blocks, force iron doors, change paths, or take MOVE/LOOK ownership. Foreign claims remain protected. Existing native door-close goals are replaced only for tagged active siege troops at AI installation; friendly recruits are unchanged. Opened entrances remain open so trailing soldiers can pass.

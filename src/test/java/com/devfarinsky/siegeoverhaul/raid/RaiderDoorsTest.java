@@ -48,6 +48,9 @@ class RaiderDoorsTest extends MinecraftTestSupport {
         when(mob.getNavigation()).thenReturn(navigation);
         var field=Mob.class.getDeclaredField("goalSelector");field.setAccessible(true);
         field.set(mob,new GoalSelector(()->net.minecraft.util.profiling.InactiveProfiler.INSTANCE));
+        mob.goalSelector.addGoal(6,new com.talhanation.recruits.entities.ai.navigation.RecruitsOpenDoorGoal() {
+            @Override public boolean canUse() {return false;}
+        });
         RaiderDoors.install(mob);RaiderDoors.install(mob);
         assertEquals(1,mob.goalSelector.getAvailableGoals().size());
         verify(evaluator,times(2)).setCanOpenDoors(true);verify(evaluator,times(2)).setCanPassDoors(true);
