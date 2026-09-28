@@ -67,7 +67,13 @@ class CaptureBeaconTest extends MinecraftTestSupport {
         when(level.dimension()).thenReturn(Level.OVERWORLD);when(level.getGameTime()).thenReturn(200L);
         when(level.players()).thenReturn(List.of(near,far,foreign));
         when(far.distanceToSqr(any(net.minecraft.world.phys.Vec3.class))).thenReturn(193D*193);
-        try(var keys=mockStatic(SiegeCore.class);var network=mockStatic(RaidNetwork.class)) {
+        // Plain JUnit lacks Forge's transformed NetworkEvent constructor. Substitute
+        // channel registration only; the real audience selection and packets run below.
+        var builder=mock(net.minecraftforge.network.NetworkRegistry.ChannelBuilder.class,RETURNS_SELF);
+        when(builder.simpleChannel()).thenReturn(mock(net.minecraftforge.network.simple.SimpleChannel.class));
+        try(var registration=mockStatic(net.minecraftforge.network.NetworkRegistry.ChannelBuilder.class)) {
+            registration.when(()->net.minecraftforge.network.NetworkRegistry.ChannelBuilder.named(any())).thenReturn(builder);
+            try(var keys=mockStatic(SiegeCore.class);var network=mockStatic(RaidNetwork.class)) {
             keys.when(()->SiegeCore.key(near)).thenReturn("team:blue");keys.when(()->SiegeCore.key(far)).thenReturn("team:blue");
             keys.when(()->SiegeCore.key(foreign)).thenReturn("team:red");
             var pos=new BlockPos(0,64,0);
@@ -75,7 +81,8 @@ class CaptureBeaconTest extends MinecraftTestSupport {
             network.verify(()->RaidNetwork.sendCaptureBeam(near,packet(0,50,200)));
             CaptureBeacon.send(level,"team:blue",pos,0,2400,0);
             network.verify(()->RaidNetwork.sendCaptureBeam(near,packet(0,-1,200)));
-            network.verifyNoMoreInteractions();
+                network.verifyNoMoreInteractions();
+            }
         }
         verify(level,never()).getChunk(anyInt(),anyInt());
         verify(level,never()).setBlock(any(),any(),anyInt());
