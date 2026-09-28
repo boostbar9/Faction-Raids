@@ -24,7 +24,7 @@ public final class CreativeCatalog {
             for (int entry = 0; entry < OlympianLoot.ARMORY_SIZE; entry++) add(result, OlympianLoot.armory(tier, entry));
             add(result, OlympianLoot.provisions(tier));
             add(result, OlympianLoot.supplies(tier, OlympianLoot.AMMUNITION, OlympianLoot.armory(tier, 4)));
-            for (int entry = 0; entry < OlympianLoot.SUPPLY_TYPES; entry++) add(result, OlympianLoot.supplies(tier, entry));
+            for (int entry : OlympianLoot.AVAILABLE_SUPPLIES) add(result, OlympianLoot.supplies(tier, entry));
         }
         for (var faction : FactionBanners.FactionId.values()) add(result, FactionBanners.itemStackFor(faction));
         return result;
@@ -43,7 +43,7 @@ public final class CreativeCatalog {
         tag.putString("title", "The Olympian Arts");
         tag.putString("author", "Siege Overhaul");
         var pages = new ListTag();
-        page(pages, "The Olympian Arts\n\nHero powers belong to the hero, not the weapon. Their equipment retains its enchantments when used by a player.\n\nCreative spellbooks let you cast Tempest, Inferno and Undertow against siege enemies. Hold use for one second; release early to cancel.");
+        page(pages, "The Olympian Arts\n\nHero powers belong to the hero, not the weapon. Their equipment retains its enchantments when used by a player.\n\nCreative spellbooks let you cast aimed lightning, fireballs, ice bolts and water streams against siege enemies. Hold use to charge; keep holding Undertow to channel.");
         for (int role = CoreHiring.HERO_ID_MIN; role <= CoreHiring.HERO_ID_MAX; role++)
             page(pages, CoreHiring.NAMES[role] + "\n\n" + HeroTraits.description(role) + ".\n\nWeapon: " + HeroTraits.weaponName(role) + ".\n\nUse the matching spawn egg to summon this hero. Hire and command them through Villager Recruits.");
         tag.put("pages", pages);

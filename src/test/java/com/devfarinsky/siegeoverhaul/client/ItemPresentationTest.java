@@ -21,44 +21,6 @@ class ItemPresentationTest extends MinecraftTestSupport {
     private static String source(String name) throws Exception {
         return Files.readString(Path.of("src/main/resources/assets/siegeoverhaul/models/item/olympian",name+".json"));
     }
-    @Test void everyActualGripMeetsTheSamePalmInBothHands() throws Exception {
-        for(var patron:OlympianWeaponSkins.PATRONS)for(var shape:OlympianWeaponSkins.SHAPES) {
-            String name=patron+"_"+shape,source=source(name);
-            var model=BlockModel.fromString(source);
-            var elements=JsonParser.parseString(source).getAsJsonObject().getAsJsonArray("elements");
-            // Bows are held at their central riser; other models use the first handle cuboid.
-            var grip=elements.get(0).getAsJsonObject();
-            if(shape.startsWith("bow")) {
-                for(var element:elements) {
-                    var box=element.getAsJsonObject();
-                    if(box.getAsJsonArray("from").toString().equals("[7,6,7]")
-                            && box.getAsJsonArray("to").toString().equals("[9,10,9]"))grip=box;
-                }
-            }
-            for(boolean left:new boolean[]{false,true}) {
-                var point=new Vector4f();
-                float[] coords=new float[3];
-                for(int axis=0;axis<3;axis++)coords[axis]=(grip.getAsJsonArray("from").get(axis).getAsFloat()
-                        +grip.getAsJsonArray("to").get(axis).getAsFloat())/32f-.5f;
-                point.set(coords[0],coords[1],coords[2],1);
-                var pose=new PoseStack();
-                model.getTransforms().getTransform(left?ItemDisplayContext.THIRD_PERSON_LEFT_HAND:ItemDisplayContext.THIRD_PERSON_RIGHT_HAND).apply(left,pose);
-                point.mul(pose.last().pose());
-                assertEquals(0,point.x,0.00001,name+" left="+left);
-                assertEquals(2f/16,point.y,0.00001,name+" left="+left);
-                assertEquals(0,point.z,0.00001,name+" left="+left);
-            }
-        }
-    }
-    @Test void drawAndLoadedStatesDoNotJumpInsideEitherHand() throws Exception {
-        for(var patron:OlympianWeaponSkins.PATRONS)for(var family:List.of("bow","crossbow")) {
-            var idle=JsonParser.parseString(source(patron+"_"+family)).getAsJsonObject().getAsJsonObject("display");
-            for(var shape:OlympianWeaponSkins.SHAPES)if(shape.startsWith(family+"_")) {
-                var display=JsonParser.parseString(source(patron+"_"+shape)).getAsJsonObject().getAsJsonObject("display");
-                for(var hand:List.of("thirdperson_righthand","thirdperson_lefthand"))assertEquals(idle.get(hand),display.get(hand));
-            }
-        }
-    }
     @Test void longDescriptionsFitWidthAndKeepAllWords() {
         String text="Hold use to cast a storm that strikes visible siege enemies. Cooldown: 15s.";
         var lines=new ArrayList<Component>(List.of(Component.literal("Tempest"),Component.literal(text)));

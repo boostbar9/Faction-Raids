@@ -78,7 +78,7 @@ public final class HeroCastVisuals {
             for(int i=0;i<count;i++) {
                 double angle=(age*.35)+(i*Math.PI*2/count);
                 double radius=cast.phase()==0?.6:HeroCasting.radius(cast.role())*Math.min(1,age/(double)HeroCasting.RELEASE);
-                world.addParticle(cast.role()==27?ParticleTypes.FLAME:cast.role()==22?ParticleTypes.ELECTRIC_SPARK:ParticleTypes.BUBBLE_POP,
+                world.addParticle(cast.role()==30?ParticleTypes.SNOWFLAKE:cast.role()==27?ParticleTypes.FLAME:cast.role()==22?ParticleTypes.ELECTRIC_SPARK:ParticleTypes.BUBBLE_POP,
                         origin.x+Math.cos(angle)*radius,origin.y+(cast.phase()==0?1.2:.2),
                         origin.z+Math.sin(angle)*radius,0,.025,0);
             }

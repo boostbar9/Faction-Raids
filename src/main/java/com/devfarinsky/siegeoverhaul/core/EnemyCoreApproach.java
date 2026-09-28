@@ -19,6 +19,10 @@ public final class EnemyCoreApproach {
         Plan { steps=Map.copyOf(steps);feet=Map.copyOf(feet); }
     }
     static Optional<Plan> plan(ServerLevel level, RaidState raid, BlockPos base, Predicate<BlockPos> allowed) {
+        var full=plan(level,raid,base,allowed,false);
+        return full.isPresent()?full:plan(level,raid,base,allowed,true);
+    }
+    private static Optional<Plan> plan(ServerLevel level,RaidState raid,BlockPos base,Predicate<BlockPos> allowed,boolean narrow) {
         if(raid.campPos==null)return Optional.empty();
         Direction front=CampPerimeter.mainGateSide(raid);
         BlockPos start=raid.campPos.relative(front,13);
@@ -26,25 +30,47 @@ public final class EnemyCoreApproach {
         // Try the avenue-facing stair first, then the other three sides.
         for(Direction entrance:List.of(front,front.getClockWise(),front.getCounterClockWise(),front.getOpposite())) {
             BlockPos end=base.relative(entrance,3);
-            var first=feet(level,raid,start,base,allowed,ground);
             var last=feet(level,raid,end,base,allowed,ground);
-            if(first.isEmpty() || last.isEmpty() || last.get().getY()!=base.getY())continue;
+            if(last.isEmpty() || last.get().getY()!=base.getY())continue;
             Map<BlockPos,BlockPos> previous=new LinkedHashMap<>();
             ArrayDeque<BlockPos> queue=new ArrayDeque<>();
-            previous.put(first.get(),first.get());queue.add(first.get());
+            if (!narrow) {
+                var first=feet(level,raid,start,base,allowed,ground);
+                if(first.isPresent()){previous.put(first.get(),first.get());queue.add(first.get());}
+            } else {
+                // Existing diagonal camps can have an offset three-wide starter
+                // gate. A one-wide walkable route is sufficient to capture a core;
+                // do not require an unbuilt outer avenue to exist first.
+                for(int lateral=-8;lateral<=8;lateral++) {
+                    var gate=raid.campPos.relative(front,9).relative(front.getClockWise(),lateral);
+                    var inside=feet(level,raid,gate,base,allowed,ground);
+                    var outside=feet(level,raid,gate.relative(front),base,allowed,ground);
+                    if(inside.isPresent() && outside.isPresent() && Math.abs(inside.get().getY()-outside.get().getY())<=1) {
+                        previous.put(inside.get(),inside.get());queue.add(inside.get());
+                    }
+                }
+            }
             while(!queue.isEmpty() && previous.size()<=512) {
                 BlockPos current=queue.remove();
-                if(!wide(level,raid,current,base,end,allowed,ground))continue;
+                if(!wide(level,raid,current,base,end,allowed,ground,narrow?0:1))continue;
                 if(current.equals(last.get())) {
                     Map<Long,Integer> reserved=new LinkedHashMap<>();
                     for(BlockPos p=current;;p=previous.get(p)) {
-                        for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++) {
+                        int width=narrow && !p.equals(end)?0:1;
+                        for(int x=-width;x<=width;x++)for(int z=-width;z<=width;z++) {
                             BlockPos column=p.offset(x,0,z);
                             if(insideKeep(column,base))continue;
                             BlockPos standing=feet(level,raid,column,base,allowed,ground).orElseThrow();
                             reserved.put(columnKey(standing),standing.getY());
                         }
-                        if(p.equals(first.get()))break;
+                        if(p.equals(previous.get(p))) {
+                            if(narrow) {
+                                // Keep the verified outer threshold clear of later construction too.
+                                BlockPos threshold=feet(level,raid,p.relative(front),base,allowed,ground).orElseThrow();
+                                reserved.put(columnKey(threshold),threshold.getY());
+                            }
+                            break;
+                        }
                     }
                     Map<BlockPos,BlockState> steps=new LinkedHashMap<>();
                     for(int side=-1;side<=1;side++) {
@@ -64,9 +90,10 @@ public final class EnemyCoreApproach {
         return Optional.empty();
     }
     private static boolean wide(ServerLevel level,RaidState raid,BlockPos p,BlockPos base,BlockPos end,
-                                Predicate<BlockPos> allowed,Map<Long,Optional<BlockPos>> ground) {
+                                Predicate<BlockPos> allowed,Map<Long,Optional<BlockPos>> ground,int width) {
         if(Math.abs(p.getX()-base.getX())<=3 && Math.abs(p.getZ()-base.getZ())<=3 && !p.equals(end))return false;
-        for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++) {
+        if(p.equals(end))width=1; // all three stairs still need full clearance
+        for(int x=-width;x<=width;x++)for(int z=-width;z<=width;z++) {
             BlockPos column=p.offset(x,0,z);
             if(p.equals(end) && insideKeep(column,base))continue;
             var standing=feet(level,raid,column,base,allowed,ground);

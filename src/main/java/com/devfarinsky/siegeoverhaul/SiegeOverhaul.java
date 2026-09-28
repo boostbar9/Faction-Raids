@@ -39,6 +39,7 @@ public final class SiegeOverhaul {
         com.devfarinsky.siegeoverhaul.core.CoreBlocks.BLOCKS.register(modBus);
         com.devfarinsky.siegeoverhaul.core.CoreMenus.MENUS.register(modBus);
         ModItems.register(modBus);
+        com.devfarinsky.siegeoverhaul.spells.OlympianBolt.TYPES.register(modBus);
         modBus.addListener((net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent event) -> {
             if (net.minecraftforge.fml.ModList.get().isLoaded("curios"))
                 event.enqueueWork(com.devfarinsky.siegeoverhaul.compat.CuriosCompat::register);

@@ -23,6 +23,9 @@ final class OlympianLoot {
     static final int SUPPLY_TYPES = 15;
     static final int RELIC_FIRST = 12;
     static final int AMMUNITION = 0;
+    static boolean availableSupply(int choice) { return choice != 2 && choice != 3 && choice != 7 && choice != 10 && choice != 11; }
+    static final int[] AVAILABLE_SUPPLIES = java.util.stream.IntStream.range(0, SUPPLY_TYPES)
+            .filter(OlympianLoot::availableSupply).toArray();
     private static final String PATRON = "SiegeOlympianPatron";
 
     private OlympianLoot() {}

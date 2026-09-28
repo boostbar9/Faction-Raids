@@ -78,7 +78,7 @@ public final class RaidNetwork {
 
     public record HeroCast(int entityId,java.util.UUID uuid,int role,long start,int phase,double x,double y,double z) {
         public HeroCast {
-            if(uuid==null || !com.devfarinsky.siegeoverhaul.core.HeroCasting.supported(role)
+            if(uuid==null || (!com.devfarinsky.siegeoverhaul.core.HeroCasting.supported(role) && role != 30)
                     || phase<0 || phase>2 || !Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z))
                 throw new IllegalArgumentException("Invalid hero cast");
         }

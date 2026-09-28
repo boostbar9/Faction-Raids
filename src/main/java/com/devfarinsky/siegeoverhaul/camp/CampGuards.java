@@ -101,6 +101,11 @@ public final class CampGuards {
                                 .relative(WarGate.facing(raid).getClockWise(),nbt.getInt("SiegeGuardSlot")==0?2:-2).above();
                         if(safePost(level,raid,gate)) { nbt.putLong("SiegeGuardPost",gate.asLong());nbt.putBoolean("SiegeWarGatePost",true); }
                     }
+                    if (nbt.getInt("SiegeGuardSlot") >= 2 && nbt.getInt("SiegeGuardSlot") < 4
+                            && com.devfarinsky.siegeoverhaul.core.EnemyCore.position(raid) != null) {
+                        candidates(raid,nbt.getInt("SiegeGuardSlot")).stream().filter(p -> safePost(level,raid,p))
+                                .findFirst().ifPresent(p -> nbt.putLong("SiegeGuardPost",p.asLong()));
+                    }
                     BlockPos post=BlockPos.of(nbt.getLong("SiegeGuardPost"));
                     if (!safePost(level,raid,post)) {
                         post=candidates(raid,nbt.getInt("SiegeGuardSlot")).stream().filter(p -> safePost(level,raid,p)).findFirst().orElse(post);
@@ -163,6 +168,9 @@ public final class CampGuards {
         BlockPos ideal=slot>=4
                 ? raid.campPos.relative(front,CampPerimeter.RADIUS-1).relative(side,slot%2==0?3:-3)
                 : raid.campPos.relative(front,slot<2?7:-5).relative(side,slot%2==0?4:-4);
+        BlockPos core=com.devfarinsky.siegeoverhaul.core.EnemyCore.position(raid);
+        if (slot>=2 && slot<4 && core!=null)
+            ideal=core.relative(front.getOpposite(),1).relative(side,slot==2?1:-1);
         List<BlockPos> positions=new ArrayList<>();
         // Prefer the assigned horizontal post, but follow small rises and dips.
         addElevations(positions,ideal);

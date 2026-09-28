@@ -11,7 +11,7 @@ public final class HeroCastShape {
     private HeroCastShape() {}
     public static void emit(int role,int phase,float age,Segment out) {
         int duration=phase==0?HeroCasting.WINDUP:HeroCasting.RELEASE;
-        if(!HeroCasting.supported(role) || phase<0 || phase>1 || !Float.isFinite(age) || age<0 || age>=duration)return;
+        if((!HeroCasting.supported(role) && role!=30) || phase<0 || phase>1 || !Float.isFinite(age) || age<0 || age>=duration)return;
         double progress=age/duration;
         if(phase==0) {
             double radius=.45+.25*progress;
@@ -20,7 +20,12 @@ public final class HeroCastShape {
                 out.line(Math.cos(a)*radius,.1,Math.sin(a)*radius,Math.cos(b)*radius,.1,Math.sin(b)*radius);
             }
             // Each charge has its own upright crest above the hands.
-            if(role==22) {
+            if(role==30) {
+                for(int i=0;i<6;i++) {
+                    double a=i*Math.PI/3;
+                    out.line(0,2.2,0,Math.cos(a)*.45,2.2+Math.sin(a)*.45,0);
+                }
+            } else if(role==22) {
                 out.line(.2,2.65,0,-.16,2.22,0);out.line(-.16,2.22,0,.16,2.22,0);out.line(.16,2.22,0,-.2,1.8,0);
             } else if(role==27) {
                 out.line(0,1.8,0,-.3,2.2,0);out.line(-.3,2.2,0,0,2.8,0);

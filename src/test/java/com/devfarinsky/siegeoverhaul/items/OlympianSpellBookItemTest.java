@@ -55,33 +55,27 @@ class OlympianSpellBookItemTest extends MinecraftTestSupport {
         void start(){book.use(level,player,InteractionHand.MAIN_HAND);}
         void finish(){when(level.getGameTime()).thenReturn(120L);book.finishUsingItem(stack,level,player);}
     }
-    @Test void booksReleaseCorrectEffectsOnceAndPreserveTheItem() {
-        try(var packets=mockStatic(HeroCastPackets.class)) {
-            for(int role:new int[]{22,27,29}) {
-                var f=new Fixture(role);f.start();verify(f.enemy,never()).hurt(any(),anyFloat());f.finish();f.finish();
-                if(role==29)verify(f.enemy,times(1)).addEffect(argThat(e->e.getAmplifier()==4 && e.getDuration()==80));
-                else verify(f.enemy,times(1)).hurt(f.damage,role==22?5F:6F);
-                verify(f.enemy,times(role==27?1:0)).setSecondsOnFire(4);assertEquals(1,f.stack.getCount());
+    @Test void aimedBooksLaunchExactlyOnceAfterCharging() {
+        try(var packets=mockStatic(HeroCastPackets.class);var bolts=mockStatic(com.devfarinsky.siegeoverhaul.spells.OlympianBolt.class)) {
+            for(int role:new int[]{22,27,30}) {
+                var f=new Fixture(role);f.start();f.finish();f.finish();
+                bolts.verify(()->com.devfarinsky.siegeoverhaul.spells.OlympianBolt.launch(f.level,f.player,role),times(1));
+                verify(f.enemy,never()).hurt(any(),anyFloat());assertEquals(1,f.stack.getCount());
             }
         }
     }
-    @Test void denseSiegesUseTheSameAreaCoverageAsHeroCasts() {
-        try(var packets=mockStatic(HeroCastPackets.class)) {
-            var f=new Fixture(22);
-            var targets=new ArrayList<LivingEntity>();
-            for(int i=0;i<40;i++) {
-                var target=mock(Mob.class);
-                when(target.isAlive()).thenReturn(true);
-                when(target.getPersistentData()).thenReturn(f.enemyTag.copy());
-                when(f.player.hasLineOfSight(target)).thenReturn(true);
-                targets.add(target);
+    @Test void waterChannelIsBoundedAndStopsImmediatelyOnRelease() {
+        try(var packets=mockStatic(HeroCastPackets.class);var bolts=mockStatic(com.devfarinsky.siegeoverhaul.spells.OlympianBolt.class)) {
+            var f=new Fixture(29);f.start();
+            for(int tick=0;tick<80;tick++) {
+                when(f.level.getGameTime()).thenReturn(100L+tick);
+                f.book.onUseTick(f.level,f.player,f.stack,60-tick);
+                f.book.onUseTick(f.level,f.player,f.stack,60-tick);
             }
-            when(f.level.getEntitiesOfClass(eq(LivingEntity.class),any(AABB.class),any())).thenAnswer(call->{
-                Predicate<LivingEntity> filter=call.getArgument(2);
-                return targets.stream().filter(filter).toList();
-            });
-            f.start();f.finish();
-            for(var target:targets)verify(target,times(1)).hurt(f.damage,5F);
+            bolts.verify(()->com.devfarinsky.siegeoverhaul.spells.OlympianBolt.launch(f.level,f.player,29),times(8));
+            f.book.releaseUsing(f.stack,f.level,f.player,20);
+            when(f.level.getGameTime()).thenReturn(140L);f.book.onUseTick(f.level,f.player,f.stack,20);
+            bolts.verifyNoMoreInteractions();
         }
     }
     @Test void survivalSpectatorsAndCooldownCannotStartACast() {
@@ -103,19 +97,6 @@ class OlympianSpellBookItemTest extends MinecraftTestSupport {
                 if(cancel)f.book.releaseUsing(f.stack,f.level,f.player,10);else f.abilities.instabuild=false;
                 f.finish();verify(f.enemy,never()).hurt(any(),anyFloat());assertEquals(500,f.tag.getLong("SiegeCreativeSpellNext27"));
             }
-        }
-    }
-    @Test void friendlyHiddenAndUnmarkedUnitsAreProtectedAtRelease() {
-        try(var packets=mockStatic(HeroCastPackets.class)) {
-            for(int reason=0;reason<4;reason++) {
-                var f=new Fixture(22);f.start();
-                if(reason==0)when(f.player.isAlliedTo(f.enemy)).thenReturn(true);
-                if(reason==1)when(f.player.hasLineOfSight(f.enemy)).thenReturn(false);
-                if(reason==2)f.enemyTag.remove(ModConstants.Tags.RAID_TEAM);
-                if(reason==3)when(f.enemy.isAlive()).thenReturn(false);
-                f.finish();verify(f.enemy,never()).hurt(any(),anyFloat());
-            }
-            var f=new Fixture(22);assertFalse(OlympianSpellBookItem.eligible(f.player,mock(Player.class)));
         }
     }
 }

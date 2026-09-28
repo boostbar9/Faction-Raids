@@ -42,59 +42,19 @@ class OlympianWeaponSkinsTest extends MinecraftTestSupport {
         loaded.getTag().remove("CustomModelData");loaded.getTag().putInt(OlympianWeaponSkins.HERO_ROLE,1000);
         assertEquals("",OlympianWeaponSkins.patron(loaded));
     }
-    @Test void allDeclaredModelsParseAndHaveBoundedGeometryAndTextureReferences() throws Exception {
+    @Test void skinsUseVanillaParentsAndReadableOriginalTextures() throws Exception {
         for(var patron:OlympianWeaponSkins.PATRONS)for(var shape:OlympianWeaponSkins.SHAPES) {
             var path=Path.of("src/main/resources/assets/siegeoverhaul/models/item/olympian",patron+"_"+shape+".json");
-            assertNotNull(net.minecraft.client.renderer.block.model.BlockModel.fromString(Files.readString(path)));
             var json=JsonParser.parseString(Files.readString(path)).getAsJsonObject();
-            var textures=json.getAsJsonObject("textures");
-            for(var element:json.getAsJsonArray("elements")) {
-                var box=element.getAsJsonObject();
-                for(int axis=0;axis<3;axis++) {
-                    double from=box.getAsJsonArray("from").get(axis).getAsDouble(),to=box.getAsJsonArray("to").get(axis).getAsDouble();
-                    assertTrue(from>=-16 && to<=32 && to>from,path.toString());
-                }
-                for(var face:box.getAsJsonObject("faces").entrySet())
-                    assertTrue(textures.has(face.getValue().getAsJsonObject().get("texture").getAsString().substring(1)));
-            }
-            for(var texture:textures.entrySet())assertTrue(texture.getValue().getAsString().startsWith("minecraft:block/"));
-            assertTrue(json.getAsJsonObject("display").has("firstperson_righthand"));
+            assertNotNull(net.minecraft.client.renderer.block.model.BlockModel.fromString(Files.readString(path)));
+            String family=shape.startsWith("crossbow")?"crossbow":shape.startsWith("bow")?"bow":"handheld";
+            assertEquals("minecraft:item/"+family,json.get("parent").getAsString());
+            assertFalse(json.has("elements"));assertFalse(json.has("display"),"Use vanilla grip, scale and both hand poses");
+            if(!family.equals("handheld"))assertTrue(json.getAsJsonArray("overrides").isEmpty());
+            var texture=javax.imageio.ImageIO.read(Path.of("src/main/resources/assets/siegeoverhaul/textures/item/olympian",patron+"_"+shape+".png").toFile());
+            assertEquals(32,texture.getWidth());assertEquals(32,texture.getHeight());
+            int visible=0;for(int x=0;x<32;x++)for(int y=0;y<32;y++)if((texture.getRGB(x,y)>>>24)>0)visible++;
+            assertTrue(visible>35 && visible<600,path.toString());
         }
     }
-    @Test void crossbowStringsStayAttachedThroughoutLoading() throws Exception {
-        for (var patron : OlympianWeaponSkins.PATRONS) {
-            for (var suffix : new String[]{"", "_1", "_2", "_3", "_loaded", "_rocket"}) {
-                var path = Path.of("src/main/resources/assets/siegeoverhaul/models/item/olympian",
-                        patron + "_crossbow" + suffix + ".json");
-                var json = JsonParser.parseString(Files.readString(path)).getAsJsonObject();
-                double angle = suffix.equals("_2") ? 22.5
-                        : suffix.equals("_3") || suffix.equals("_loaded") || suffix.equals("_rocket") ? 45 : 0;
-                double joinZ = 9 - 6 * Math.tan(Math.toRadians(angle));
-                int strings = 0;
-                for (var element : json.getAsJsonArray("elements")) {
-                    var box = element.getAsJsonObject();
-                    if (!box.has("rotation") || !box.getAsJsonObject("rotation").get("axis").getAsString().equals("y")
-                            || !box.getAsJsonObject("faces").getAsJsonObject("north").get("texture").getAsString().equals("#string")) continue;
-                    var rotation = box.getAsJsonObject("rotation");
-                    var origin = rotation.getAsJsonArray("origin");
-                    double ox = origin.get(0).getAsDouble(), oz = origin.get(2).getAsDouble();
-                    double radians = Math.toRadians(rotation.get("angle").getAsDouble());
-                    boolean left = ox < 8;
-                    for (int end = 0; end < 2; end++) {
-                        double x = box.getAsJsonArray(end == 0 ? "from" : "to").get(0).getAsDouble();
-                        double z = (box.getAsJsonArray("from").get(2).getAsDouble()
-                                + box.getAsJsonArray("to").get(2).getAsDouble()) / 2;
-                        double worldX = ox + Math.cos(radians) * (x - ox) + Math.sin(radians) * (z - oz);
-                        double worldZ = oz - Math.sin(radians) * (x - ox) + Math.cos(radians) * (z - oz);
-                        boolean tip = left ? end == 0 : end == 1;
-                        assertEquals(tip ? (left ? 2 : 14) : 8, worldX, 0.00001, path.toString());
-                        assertEquals(tip ? 9 : joinZ, worldZ, 0.00001, path.toString());
-                    }
-                    strings++;
-                }
-                assertEquals(2, strings, path.toString());
-            }
-        }
-    }
-
 }

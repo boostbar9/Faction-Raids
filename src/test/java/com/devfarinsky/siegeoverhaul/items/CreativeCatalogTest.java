@@ -28,7 +28,7 @@ class CreativeCatalogTest extends MinecraftTestSupport {
             for(int i=0;i<OlympianLoot.ARMORY_SIZE;i++) assertPresent(entries,OlympianLoot.armory(tier,i));
             assertPresent(entries,OlympianLoot.provisions(tier));
             assertPresent(entries,OlympianLoot.supplies(tier,OlympianLoot.AMMUNITION,OlympianLoot.armory(tier,4)));
-            for(int i=0;i<OlympianLoot.SUPPLY_TYPES;i++) assertPresent(entries,OlympianLoot.supplies(tier,i));
+            for(int i:OlympianLoot.AVAILABLE_SUPPLIES) assertPresent(entries,OlympianLoot.supplies(tier,i));
         }
         entries.get(0).getOrCreateTag().putBoolean("mutated",true);
         assertFalse(CreativeCatalog.entries(List.of(Items.BOOK)).get(0).hasTag());

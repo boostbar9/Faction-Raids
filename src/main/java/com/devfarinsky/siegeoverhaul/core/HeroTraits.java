@@ -133,7 +133,10 @@ public final class HeroTraits {
         // the boolean contract and keep the schema in its own numeric field.
         int schema=tag.getInt(OLYMPIAN_IDENTITY_SCHEMA_TAG);
         if(schema<=0) schema=tag.getInt(OLYMPIAN_IDENTITY_TAG);
-        if(schema>=OLYMPIAN_IDENTITY_SCHEMA) {
+        Component savedName=mob.getCustomName();
+        boolean nativeDefault=savedName==null || java.util.Set.of("Recruit","Shieldman","Bowman","Crossbowman")
+                .contains(savedName.getString());
+        if(schema>=OLYMPIAN_IDENTITY_SCHEMA && !nativeDefault) {
             tag.putBoolean(OLYMPIAN_IDENTITY_TAG,true);
             tag.putInt(OLYMPIAN_IDENTITY_SCHEMA_TAG,schema);
             return;
@@ -144,7 +147,7 @@ public final class HeroTraits {
         String currentText=current==null?"":current.getString();
         boolean generatedEnemyLabel=("Enemy Hero · "+legacy).equals(currentText)
                 || ("Enemy Hero · "+previous).equals(currentText);
-        if(current==null || legacy.equals(currentText) || previous.equals(currentText) || generatedEnemyLabel) {
+        if(nativeDefault || legacy.equals(currentText) || previous.equals(currentText) || generatedEnemyLabel) {
             String replacement=generatedEnemyLabel?"Enemy Hero · "+CoreHiring.NAMES[role]:CoreHiring.NAMES[role];
             ChatFormatting color=generatedEnemyLabel?ChatFormatting.LIGHT_PURPLE:nameColor(CoreHiring.heroTier(role));
             mob.setCustomName(Component.literal(replacement).withStyle(color));
