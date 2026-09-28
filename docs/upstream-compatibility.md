@@ -70,3 +70,15 @@ Rechecked the same pinned Workers 2.0.3 and Recruits 1.15.2 source commits above
 Recruits stores each direction separately, but notifyPlayersInTeam sends to both factions. Use the existing five-argument setRelation overload: one notice per two-way transition, silent active-siege repairs, no writes for unchanged directions. Native events, cancellation and persistence remain in Recruits.
 
 Regression fixtures cover buried marker access, failed/unloaded/unsafe paths, bounded search, native scheduling delegation, duplicate notifications and silent repairs. These are not companion-binary integration tests or interactive gameplay testing.
+
+## Commissioned builder lifecycle (4.50.1)
+
+Rechecked Workers `29d26e1df6475fc8d043dc5d455f67b2fd1e9982` and Recruits `cff03e085d65653406a8b6ddcdd0ebff615c3e48` on 2026-09-28.
+
+- `BuilderWorkGoal.start()` selects a work area again after sleep or supply collection. `SELECT_WORK_AREA` searches for other eligible areas even when `currentBuildArea` is already set. For a live, owned, explicitly linked commission, `WallBuilderAccess` now performs the native selection initialization and proceeds to `MOVE_TO_WORK_AREA` without searching for a replacement. This includes resetting the package-private completion latch, area activity/time and stale block target. Unlinked, reassigned, transferred, removed and completed jobs keep native selection.
+- Workers' `WorkersGroundPathNavigation` extends Recruits' `AsyncPathNavigation`. `AsyncPath.canReach()` returns false until `isProcessed()` is true. Surface approach searches now retain pending paths, inspect readiness on the server tick and validate the endpoint before installation. Results expire after 100 ticks; stopping/changing jobs or targets discards them. Search cadence remains bounded, and active native paths are left alone.
+- Native material requests, storage visits, placement, completion, sleep and owner-command scheduling stay delegated. No new block placer, inventory supplier or free materials were added. Existing terrain planning, saved job IDs and prices are unchanged.
+
+Before adding other commissioned structures, reuse the native `BuildArea` handoff and ownership/persistence contract. Cover asymmetric blueprint coordinates, multi-block materials, reachable approaches, storage interruption/resumption and completion followed by a second job. Do not generalize the wall planner's natural-ground/column assumptions to arbitrary structures without corresponding checks.
+
+The regression fixtures reproduce the inspected selection/restart and deferred-path contracts independently; they do not execute companion JARs. This source review does not establish source-to-release byte correspondence or certify terrain navigation in a running Minecraft world.
