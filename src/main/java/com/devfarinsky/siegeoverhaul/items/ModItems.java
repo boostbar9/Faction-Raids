@@ -40,6 +40,21 @@ public final class ModItems {
             () -> new CrewDeploymentItem(1,
                     new Item.Properties().stacksTo(1).rarity(Rarity.RARE)));
 
+    public static final RegistryObject<Item> BARRICADE_PLAN = ITEMS.register("barricade_plan",
+            () -> new DefensePlanItem(com.devfarinsky.siegeoverhaul.core.DefenseBlueprint.Kind.BARRICADE));
+    public static final RegistryObject<Item> WATCHTOWER_PLAN = ITEMS.register("watchtower_plan",
+            () -> new DefensePlanItem(com.devfarinsky.siegeoverhaul.core.DefenseBlueprint.Kind.WATCHTOWER));
+    public static final RegistryObject<Item> GATEHOUSE_PLAN = ITEMS.register("gatehouse_plan",
+            () -> new DefensePlanItem(com.devfarinsky.siegeoverhaul.core.DefenseBlueprint.Kind.GATEHOUSE));
+
+    public static RegistryObject<Item> defensePlan(com.devfarinsky.siegeoverhaul.core.DefenseBlueprint.Kind kind) {
+        return switch (kind) {
+            case BARRICADE -> BARRICADE_PLAN;
+            case WATCHTOWER -> WATCHTOWER_PLAN;
+            case GATEHOUSE -> GATEHOUSE_PLAN;
+        };
+    }
+
     public static final RegistryObject<Item> TEMPEST_BOOK = ITEMS.register("tempest_spellbook", () -> new OlympianSpellBookItem(22));
     public static final RegistryObject<Item> INFERNO_BOOK = ITEMS.register("inferno_spellbook", () -> new OlympianSpellBookItem(27));
     public static final RegistryObject<Item> FROST_BOOK = ITEMS.register("frost_spellbook", () -> new OlympianSpellBookItem(30));

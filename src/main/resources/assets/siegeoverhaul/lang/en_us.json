@@ -99,5 +99,8 @@
   "item.siegeoverhaul.forge_ember": "Hephaestus' Forge Ember",
   "item.siegeoverhaul.owl_seal": "Athena's Owl Seal",
   "item.siegeoverhaul.sun_laurel": "Apollo's Sun Laurel",
-  "item.siegeoverhaul.frost_spellbook": "Demeter's Winter Bolt"
+  "item.siegeoverhaul.frost_spellbook": "Demeter's Winter Bolt",
+  "item.siegeoverhaul.barricade_plan": "Archer Barricade Plan",
+  "item.siegeoverhaul.watchtower_plan": "Watchtower Plan",
+  "item.siegeoverhaul.gatehouse_plan": "Gatehouse Plan"
 }

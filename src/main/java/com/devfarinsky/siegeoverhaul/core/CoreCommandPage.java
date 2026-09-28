@@ -6,6 +6,7 @@ public enum CoreCommandPage {
     LOOT("Loot", "Olympian Reliquary", "Unseal divine spoils and prepare battlefield blessings"),
     TREASURY("Treasury", "Faction Treasury", "Manage shared wealth, rewards and faction activity"),
     TERRITORY("Territory", "Kingdom Development", "Commission permanent upgrades and perimeter works"),
+    DEFENSES("Defenses", "Defense Works", "Collect a plan, choose a site and commission your builder"),
     INTEL("Intel", "Warlord Intelligence", "Study units, enemy hosts and defensive doctrine");
 
     private final String label, title, description;
