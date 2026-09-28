@@ -293,11 +293,46 @@ public final class NativeCampConstruction {
                 return pause(raid, "Player inside blueprint");
             }
         }
+        if (occupiedBlueprint(level, raid)) return pause(raid, "Living entity inside blueprint");
         if (!raid.constructionPauseReason.isEmpty()) {
             FactionLogger.LOG.info("Camp builders for {} resumed", raid.teamKey);
             raid.constructionPauseReason = "";
         }
         return true;
+    }
+
+    /** One local entity query, independent of blueprint cell count. No relocation or damage immunity. */
+    static boolean occupiedBlueprint(ServerLevel level, RaidSavedData.RaidState raid) {
+        AABB bounds = null;
+        for (long key : raid.pendingCampBlocks.keySet()) {
+            AABB cell = new AABB(BlockPos.of(key));
+            bounds = bounds == null ? cell : bounds.minmax(cell);
+        }
+        if (bounds == null) return false;
+        for (var entity : level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, bounds)) {
+            // The native crew must keep ticking to leave its own work cells. Canceling
+            // its ticks for self-occupancy would freeze the entire job indefinitely.
+            if (!entity.isAlive() || entity.isSpectator() || raid.campWorkers.contains(entity.getUUID())) continue;
+            AABB body = entity.getBoundingBox();
+            int minX=(int)Math.floor(Math.max(body.minX,bounds.minX));
+            int minY=(int)Math.floor(Math.max(body.minY,bounds.minY));
+            int minZ=(int)Math.floor(Math.max(body.minZ,bounds.minZ));
+            int maxX=(int)Math.floor(Math.nextDown(Math.min(body.maxX,bounds.maxX)));
+            int maxY=(int)Math.floor(Math.nextDown(Math.min(body.maxY,bounds.maxY)));
+            int maxZ=(int)Math.floor(Math.nextDown(Math.min(body.maxZ,bounds.maxZ)));
+            if(minX>maxX || minY>maxY || minZ>maxZ)continue;
+            long volume=(long)(maxX-minX+1)*(maxY-minY+1)*(maxZ-minZ+1);
+            // Ordinary NPCs touch only a handful of cells. Giant modded entities
+            // fall back to the finite blueprint, rather than scanning their volume.
+            Iterable<BlockPos> cells=volume<=raid.pendingCampBlocks.size()
+                    ? BlockPos.betweenClosed(minX,minY,minZ,maxX,maxY,maxZ)
+                    : raid.pendingCampBlocks.keySet().stream().map(BlockPos::of).toList();
+            for (BlockPos pos : cells) {
+                if (raid.pendingCampBlocks.containsKey(pos.asLong()) && body.intersects(new AABB(pos))
+                        && level.hasChunkAt(pos) && level.getBlockState(pos).isAir()) return true;
+            }
+        }
+        return false;
     }
 
     private static boolean pause(RaidSavedData.RaidState raid, String reason) {

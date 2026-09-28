@@ -208,6 +208,12 @@ class NativeCampConstructionTest extends MinecraftTestSupport {
             assertFalse(NativeCampConstruction.safeToTick(level, raid));
             assertTrue(NativeCampConstruction.active(raid));
             org.mockito.Mockito.when(level.players()).thenReturn(java.util.List.of());
+            org.mockito.Mockito.when(level.getEntitiesOfClass(org.mockito.ArgumentMatchers.eq(net.minecraft.world.entity.LivingEntity.class),
+                    org.mockito.ArgumentMatchers.any(net.minecraft.world.phys.AABB.class))).thenReturn(java.util.List.of(player));
+            assertFalse(NativeCampConstruction.safeToTick(level, raid));
+            assertEquals("Living entity inside blueprint",raid.constructionPauseReason);
+            org.mockito.Mockito.when(level.getEntitiesOfClass(org.mockito.ArgumentMatchers.eq(net.minecraft.world.entity.LivingEntity.class),
+                    org.mockito.ArgumentMatchers.any(net.minecraft.world.phys.AABB.class))).thenReturn(java.util.List.of());
             assertTrue(NativeCampConstruction.safeToTick(level, raid));
             try(var corpses=org.mockito.Mockito.mockStatic(com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.class)) {
                 corpses.when(()->com.devfarinsky.siegeoverhaul.compat.CorpseCompatibility.blocksAny(org.mockito.ArgumentMatchers.eq(level),org.mockito.ArgumentMatchers.any())).thenReturn(true);
