@@ -2,7 +2,7 @@
 No animation replacement and no geometry derived from building-block textures.
 """
 from pathlib import Path
-import json
+import json, math
 from PIL import Image, ImageDraw
 root=Path(__file__).resolve().parents[1]/'src/main/resources/assets/siegeoverhaul'
 out=root/'models/item/olympian';tex=root/'textures/item/olympian'
@@ -20,7 +20,15 @@ shapes=['blade','spear','staff','bow','bow_1','bow_2','bow_3','crossbow','crossb
 for patron,(metal,gem,trim) in palettes.items():
  for shape in shapes:
   im=Image.new('RGBA',(32,32));d=ImageDraw.Draw(im)
-  def line(points,color,width=2): d.line(points,fill=color,width=width)
+  def bowpoint(p):
+   x,y=p[0]-16,p[1]-16
+   return (round(16+(-x-y)*.52),round(16+(x-y)*.52))
+  def line(points,color,width=2):
+   if family=='bow':points=[bowpoint(p) for p in points]
+   d.line(points,fill=color,width=width)
+  def bowbox(rect,color):
+   x1,y1,x2,y2=rect
+   d.polygon([bowpoint(p) for p in [(x1,y1),(x2,y1),(x2,y2),(x1,y2)]],fill=color)
   family=shape.split('_')[0]
   parent='handheld'
   # Diagonal silhouettes fit vanilla item/generated extrusion and hand anchors.
@@ -52,11 +60,11 @@ for patron,(metal,gem,trim) in palettes.items():
    line(limb,'#253242',5);line(limb,metal,3)
    line([(20,2),(20+stage*3,16),(20,30)],'#e0d9c0',1)
    line([(10,13),(10,19)],'#654638',3)
-   for y in (6,25): d.rectangle((13,y,15,y+1),fill=trim)
-   d.rectangle((8,15,9,17),fill=gem)
+   for y in (6,25): bowbox((13,y,15,y+1),trim)
+   bowbox((8,15,10,17),gem)
    if stage:
     line([(5,16),(21+stage*3,16)],'#aa8355',1)
-    d.polygon([(2,16),(6,14),(6,18)],fill='#e4e7e8')
+    d.polygon([bowpoint(p) for p in [(2,16),(6,14),(6,18)]],fill='#e4e7e8')
   else:
    parent='crossbow';stage=int(shape[-1]) if shape[-1].isdigit() else 3 if shape.endswith(('loaded','rocket')) else 0
    line([(7,27),(24,10)],'#253242',6);line([(7,26),(23,10)],'#875d43',4)
@@ -67,8 +75,6 @@ for patron,(metal,gem,trim) in palettes.items():
    if shape.endswith(('loaded','rocket')):
     line([(10,22),(27,5)],'#b09268',2)
     d.polygon([(26,3),(29,3),(29,6)],fill='#eb6450' if shape.endswith('rocket') else '#e9eef1')
-  if family=='bow':
-   im=im.rotate(-135,resample=Image.Resampling.NEAREST,expand=True).resize((32,32),Image.Resampling.NEAREST)
   im.save(tex/(patron+'_'+shape+'.png'))
   model={'parent':'minecraft:item/'+parent,'textures':{'layer0':'siegeoverhaul:item/olympian/'+patron+'_'+shape}}
   # Parent bow/crossbow predicates must not redirect the skin back to vanilla.

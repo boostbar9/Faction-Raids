@@ -3,10 +3,10 @@ import com.devfarinsky.siegeoverhaul.RaidSavedData;
 import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
-class GuardPostTest {
+class GuardPostTest extends com.devfarinsky.siegeoverhaul.MinecraftTestSupport {
     @Test void sanctuarySentriesFollowSavedCoreAndLeaveItsFrontClear() {
         for(int degrees=0;degrees<360;degrees+=45) {
-            var raid=new RaidSavedData.RaidState();raid.campPos=new BlockPos(100,64,100);raid.approachAngle=Math.toRadians(degrees);
+            var raid=new RaidSavedData.RaidState("team:test","siege_core",0);raid.campPos=new BlockPos(100,64,100);raid.approachAngle=Math.toRadians(degrees);
             var core=raid.campPos.offset(2,1,-2);raid.campaign.putLong("EnemyCore",core.asLong());
             var front=CampPerimeter.mainGateSide(raid);var side=front.getClockWise();
             assertEquals(core.relative(front.getOpposite()).relative(side),CampGuards.candidates(raid,2).get(0));
