@@ -25,7 +25,7 @@ class CreativeCatalogTest extends MinecraftTestSupport {
             for(int j=0;j<i;j++) assertFalse(ItemStack.isSameItemSameTags(entries.get(i),entries.get(j)));
         }
         for(var tier:LootBoxItem.Tier.values()) {
-            for(int i=0;i<OlympianLoot.ARMORY_SIZE;i++) assertPresent(entries,OlympianLoot.armory(tier,i));
+            for(int i:OlympianLoot.availableArmory(tier)) assertPresent(entries,OlympianLoot.armory(tier,i));
             assertPresent(entries,OlympianLoot.provisions(tier));
             assertPresent(entries,OlympianLoot.supplies(tier,OlympianLoot.AMMUNITION,OlympianLoot.armory(tier,4)));
             for(int i:OlympianLoot.AVAILABLE_SUPPLIES) assertPresent(entries,OlympianLoot.supplies(tier,i));

@@ -1,6 +1,8 @@
-# Blessed supplies and battlefield boxes
+# Battlefield boxes and legacy blessed supplies
 
-Newly opened boxes and Creative catalog entries carry saved supply powers. Hold sneak and use the item in air to activate. The tooltip lists the cost, effects and durations. Normal use, eating, shooting, crafting and placement retain their vanilla behavior. Crafted outputs and placed blocks do not carry these item powers forward. Previously opened untagged supplies are unchanged.
+As of 4.50.4, newly opened boxes and Creative catalog entries use ordinary food, potion and ammunition actions. They no longer carry alternate sneak-use powers. This avoids spending valuable food or long-duration potions on weaker short buffs. Tidehook fishing rods, Harvest hoes and Deep Breath underwater draughts are retired from new rewards and the catalog; combat tridents remain available at Rare and Epic tiers. Previously saved items are not rewritten or removed.
+
+The table below documents legacy blessed supplies that already have saved powers. Hold sneak and use those items in air to activate. Their tooltips retain the costs, effects and durations. Normal use, eating, shooting, crafting and placement retain their vanilla behavior. Crafted outputs and placed blocks do not carry these item powers forward.
 
 All supply powers share a ten-second server-side cooldown saved on the player. A power spends only the stated quantity, and only when at least one effect applies. Stronger active effects are preserved; equal effects with enough time remaining are not refreshed. Creative can demonstrate powers without spending supplies. There is no passive inventory scan. Activation sends a small enchantment-particle burst and chime.
 

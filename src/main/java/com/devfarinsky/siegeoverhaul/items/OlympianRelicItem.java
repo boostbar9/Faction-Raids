@@ -11,6 +11,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.effect.*;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.*;
 import net.minecraft.world.level.Level;
@@ -41,7 +42,7 @@ public final class OlympianRelicItem extends Item {
         if (player.getCooldowns().isOnCooldown(this) || next > now && next <= now + COOLDOWN)
             return InteractionResultHolder.fail(stack);
         boolean applied = switch (kind) {
-            case FORGE -> repair(player.getItemInHand(hand == InteractionHand.MAIN_HAND ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND));
+            case FORGE -> repairEquipment(player, hand);
             case WATCH -> reveal(server, player);
             case CLEANSE -> cleanse(player);
         };
@@ -49,7 +50,7 @@ public final class OlympianRelicItem extends Item {
             // Bound repeated area scans without spending a relic on an empty search.
             player.getCooldowns().addCooldown(this, 20);
             player.displayClientMessage(Component.literal(switch (kind) {
-                case FORGE -> "Hold damaged equipment in your other hand.";
+                case FORGE -> "Hold damaged gear in your other hand or wear damaged armor.";
                 case WATCH -> "No unmarked siege enemies within 16 blocks.";
                 case CLEANSE -> "No poison, wither, blindness, weakness or slowness to cleanse.";
             }), true);
@@ -71,9 +72,24 @@ public final class OlympianRelicItem extends Item {
         return InteractionResultHolder.consume(player.getItemInHand(hand));
     }
 
+    static boolean repairEquipment(Player player, InteractionHand hand) {
+        var other = player.getItemInHand(hand == InteractionHand.MAIN_HAND ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND);
+        if (repair(other)) return true;
+        ItemStack worn = ItemStack.EMPTY;
+        double mostDamage = 0;
+        for (var slot : new EquipmentSlot[]{EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD}) {
+            var armor = player.getItemBySlot(slot);
+            if (!armor.isEmpty() && armor.isDamageableItem() && armor.isDamaged()) {
+                double fraction = (double) armor.getDamageValue() / armor.getMaxDamage();
+                if (fraction > mostDamage) { worn = armor; mostDamage = fraction; }
+            }
+        }
+        return repair(worn);
+    }
+
     static boolean repair(ItemStack target) {
         if (target.isEmpty() || !target.isDamageableItem() || !target.isDamaged()) return false;
-        int amount = Math.min(80, Math.max(1, target.getMaxDamage() / 4));
+        int amount = Math.min(400, Math.max(1, target.getMaxDamage() / 4));
         int before = target.getDamageValue();
         target.setDamageValue(Math.max(0, before - amount));
         return target.getDamageValue() < before;
@@ -98,7 +114,7 @@ public final class OlympianRelicItem extends Item {
         for (var target : targets) {
             if (marked >= WATCH_LIMIT) break;
             var current = target.getEffect(MobEffects.GLOWING);
-            if (current != null && current.getDuration() >= COOLDOWN) continue;
+            if (current != null && (current.isInfiniteDuration() || current.getDuration() >= COOLDOWN)) continue;
             if (target.addEffect(new MobEffectInstance(MobEffects.GLOWING, COOLDOWN))) marked++;
         }
         return marked > 0;
@@ -108,7 +124,8 @@ public final class OlympianRelicItem extends Item {
         switch (kind) {
             case FORGE -> {
                 tooltip.add(Component.literal("Use: repair gear in your other hand.").withStyle(ChatFormatting.GRAY));
-                tooltip.add(Component.literal("Restores 25% max durability • maximum 80 points").withStyle(ChatFormatting.AQUA));
+                tooltip.add(Component.literal("Otherwise repairs your most worn armor piece.").withStyle(ChatFormatting.GRAY));
+                tooltip.add(Component.literal("Restores 25% max durability • maximum 400 points").withStyle(ChatFormatting.AQUA));
             }
             case WATCH -> {
                 tooltip.add(Component.literal("Use: reveal nearby siege enemies.").withStyle(ChatFormatting.GRAY));

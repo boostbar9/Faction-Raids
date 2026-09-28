@@ -127,7 +127,8 @@ public final class LootBoxItem extends Item {
     public static List<ItemStack> roll(RandomSource rng, Tier tier) {
         int stacks = 3 + tier.ordinal() + rng.nextInt(2);
         List<ItemStack> out = new ArrayList<>(stacks);
-        ItemStack equipment = OlympianLoot.armory(tier, rng.nextInt(OlympianLoot.ARMORY_SIZE));
+        int[] armory = OlympianLoot.availableArmory(tier);
+        ItemStack equipment = OlympianLoot.armory(tier, armory[rng.nextInt(armory.length)]);
         out.add(equipment);
         out.add(OlympianLoot.provisions(tier));
         int support = OlympianLoot.RELIC_FIRST + rng.nextInt(OlympianRelics.Kind.values().length);

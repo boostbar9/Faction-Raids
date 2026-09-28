@@ -17,7 +17,7 @@ import net.minecraftforge.eventbus.api.*;
 import net.minecraftforge.fml.common.Mod;
 import java.util.*;
 
-/** Saved supply identity, explicit activation, and bounded server-side blessings. */
+/** Compatibility for saved blessed supplies; new rewards use ordinary item actions. */
 @Mod.EventBusSubscriber(modid = SiegeOverhaul.MOD_ID)
 public final class OlympianSupplyPowers {
     static final String POWER = "SiegeSupplyPower";

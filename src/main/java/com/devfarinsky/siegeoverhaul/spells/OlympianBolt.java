@@ -76,6 +76,11 @@ public class OlympianBolt extends ThrowableItemProjectile {
         return target!=owner && !(target instanceof Player) && target.isAlive() && !target.isSpectator()
                 && !owner.isAlliedTo(target) && EnemyHiringProtection.enemy(target);
     }
+    @Override protected boolean canHitEntity(Entity target) {
+        // Friendly troops must not absorb casts fired from behind a defensive line.
+        return getOwner() instanceof Player owner && target instanceof LivingEntity living
+                && eligible(owner, living) && super.canHitEntity(target);
+    }
     @Override protected void onHit(HitResult hit){
         if(level().isClientSide)return;
         if(getOwner() instanceof Player owner && owner.isAlive() && owner.getAbilities().instabuild && !owner.isSpectator()){
