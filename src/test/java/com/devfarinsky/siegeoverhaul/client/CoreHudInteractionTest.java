@@ -83,4 +83,60 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
         assertFalse(buttons[CoreCommandPage.ARMY.ordinal()].visible);
         assertSame(buttons[CoreCommandPage.INTEL.ordinal()], screen.getFocused());
     }
+    @Test void changingTheIntelFilterResetsEveryScrollPositionAndDrag() throws Exception {
+        var screen = new CoreHireScreen(mock(CoreHireMenu.class), mock(Inventory.class), Component.literal("Command"));
+        set(screen, "intelOffsets", new int[]{20, 80, 100});
+        set(screen, "intelOffset", 60);
+        set(screen, "intelMaxOffset", 300);
+        set(screen, "intelDragging", true);
+        invoke(screen, "filterIntel", String.class, "builder");
+        assertEquals("builder", get(screen, "intelQuery"));
+        assertArrayEquals(new int[3], (int[]) get(screen, "intelOffsets"));
+        assertEquals(0, get(screen, "intelOffset"));
+        assertEquals(0, get(screen, "intelMaxOffset"));
+        assertEquals(false, get(screen, "intelDragging"));
+        invoke(screen, "selectIntelSection", int.class, 2);
+        assertEquals(0, get(screen, "intelOffset"));
+        assertEquals("builder", get(screen, "intelQuery"));
+    }
+
+    @Test void largestSignedBankDeltasRenderInsideGraphAndKeepCorrectTotals() throws Exception {
+        var menu = mock(CoreHireMenu.class);
+        when(menu.bankLedger()).thenReturn(new int[]{Integer.MAX_VALUE, Integer.MAX_VALUE,
+                Integer.MIN_VALUE, Integer.MIN_VALUE});
+        var screen = new CoreHireScreen(menu, mock(Inventory.class), Component.literal("Command"));
+        var font = mock(net.minecraft.client.gui.Font.class);
+        when(font.plainSubstrByWidth(anyString(), anyInt())).thenAnswer(call -> call.getArgument(0));
+        var fontField = net.minecraft.client.gui.screens.Screen.class.getDeclaredField("font");
+        fontField.setAccessible(true);
+        fontField.set(screen, font);
+        var graphics = mock(net.minecraft.client.gui.GuiGraphics.class);
+        var call = CoreHireScreen.class.getDeclaredMethod("drawBankGraph",
+                net.minecraft.client.gui.GuiGraphics.class, int.class, int.class, int.class, int.class);
+        call.setAccessible(true);
+        call.invoke(screen, graphics, 10, 20, 180, 100);
+        var y1 = org.mockito.ArgumentCaptor.forClass(Integer.class);
+        var y2 = org.mockito.ArgumentCaptor.forClass(Integer.class);
+        verify(graphics, atLeastOnce()).fill(anyInt(), y1.capture(), anyInt(), y2.capture(), anyInt());
+        for (int i = 0; i < y1.getAllValues().size(); i++) {
+            assertTrue(y1.getAllValues().get(i) >= 20);
+            assertTrue(y2.getAllValues().get(i) <= 120);
+            assertTrue(y2.getAllValues().get(i) >= y1.getAllValues().get(i));
+        }
+        verify(graphics).drawString(eq(font), eq("+4294967294  /  -4294967296 over last 4"),
+                anyInt(), anyInt(), anyInt(), eq(false));
+    }
+
+    @Test void typingInventoryHotkeyInSearchDoesNotCloseTheHub() throws Exception {
+        var screen = new CoreHireScreen(mock(CoreHireMenu.class), mock(Inventory.class), Component.literal("Command"));
+        var search = mock(net.minecraft.client.gui.components.EditBox.class);
+        when(search.isFocused()).thenReturn(true);
+        set(screen, "tab", CoreCommandPage.INTEL);
+        set(screen, "intelSearch", search);
+        try (var keys = mockStatic(net.minecraft.client.gui.screens.Screen.class)) {
+            assertTrue(screen.keyPressed(org.lwjgl.glfw.GLFW.GLFW_KEY_E, 0, 0));
+            verify(search).keyPressed(org.lwjgl.glfw.GLFW.GLFW_KEY_E, 0, 0);
+        }
+    }
+
 }

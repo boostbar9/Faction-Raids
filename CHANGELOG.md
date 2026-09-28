@@ -1,3 +1,11 @@
+## 4.50.9 — Clearer Command Center tabs
+- Army cards give names more room and show hire costs directly on their buttons, including compact screens.
+- Loot rows separate titles, reveal progress and purchase controls at small GUI sizes; rewards remain hidden until unsealing finishes.
+- Territory cards show their upgrade descriptions. Defenses show footprints, commission costs and construction-report scope on roomy screens.
+- Treasury distinguishes online and offline members, keeps roster headings clear of scroll counts, and handles large activity totals safely.
+- Intel adds search and Clear controls across Units, Enemy Lore and How to Play, with Ctrl+F focus and corrected banking, territory and native builder guidance.
+- Purchases, plans, prices and server authority are unchanged.
+
 ## 4.50.8 — Defense previews and construction reports
 - Defense plans now preview before charging: use ground to select the near-center anchor, sneak-use to rotate, use the same anchor again to confirm, or use in air to cancel. Previews expire after two minutes and are bound to the owner and dimension.
 - Held plans show a transparent block outline, red terrain obstructions, a yellow confirmation anchor, exact material counts and the Treasury price. Server checks refresh once per second and run again on confirmation.

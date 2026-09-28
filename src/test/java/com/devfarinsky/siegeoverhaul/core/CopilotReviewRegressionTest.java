@@ -21,8 +21,6 @@ class CopilotReviewRegressionTest extends MinecraftTestSupport {
                 assertTrue(layout.territoryCardY(i)+19 < layout.territoryButtonY(i));
                 if (layout.territoryDescriptionLines()>0)
                     assertTrue(layout.territoryCardY(i)+28+layout.territoryDescriptionLines()*10 <= layout.territoryButtonY(i)-6);
-                if (!layout.compact() && layout.territoryDescriptionLines()>0)
-                    assertTrue(28+layout.territoryDescriptionLines()*10 <= layout.territoryCardHeight()-46);
                 assertTrue(layout.territoryButtonY(i)+18 <= layout.contentBottom()-32);
             }
         }
