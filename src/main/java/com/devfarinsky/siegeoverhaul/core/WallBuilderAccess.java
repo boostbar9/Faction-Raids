@@ -12,15 +12,26 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import net.minecraft.world.level.pathfinder.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-/** Adjust only failed native movement for a commissioned wall; Workers still performs the job. */
+/** Keep commissioned jobs assigned and repair failed approaches; Workers performs construction. */
 public final class WallBuilderAccess extends Goal {
     private final Mob worker;
     private final Goal delegate;
-    private final Field areaField, blockField, stateField;
+    private final Field areaField, blockField, stateField, workDoneField;
+    private Path pendingPath;
+    private Set<BlockPos> pendingSites = Set.of();
+    private long pendingUntil;
+    private static final ClassValue<java.util.Optional<Method>> PATH_READY = new ClassValue<>() {
+        @Override protected java.util.Optional<Method> computeValue(Class<?> type) {
+            try { return java.util.Optional.of(type.getMethod("isProcessed")); }
+            catch (NoSuchMethodException ignored) { return java.util.Optional.empty(); }
+        }
+    };
     private long nextSearch, nextRoute;
     private BlockPos lastTarget, destination;
     private Entity reservedArea;
@@ -32,7 +43,20 @@ public final class WallBuilderAccess extends Goal {
         areaField = worker.getClass().getField("currentBuildArea");
         blockField = delegate.getClass().getField("blockPos");
         stateField = delegate.getClass().getField("state");
+        workDoneField = findWorkDone(delegate.getClass());
         setFlags(delegate.getFlags());
+    }
+
+    private static Field findWorkDone(Class<?> type) throws ReflectiveOperationException {
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+            try {
+                Field field = current.getDeclaredField("workDone");
+                if (field.getType() != boolean.class) throw new NoSuchFieldException("workDone boolean");
+                field.setAccessible(true);
+                return field;
+            } catch (NoSuchFieldException ignored) { }
+        }
+        throw new NoSuchFieldException("workDone");
     }
 
     public static void install(Mob worker) {
@@ -57,22 +81,19 @@ public final class WallBuilderAccess extends Goal {
     @Override public boolean isInterruptable() { return delegate.isInterruptable(); }
     @Override public boolean requiresUpdateEveryTick() { return delegate.requiresUpdateEveryTick(); }
     @Override public void start() { delegate.start(); }
-    @Override public void stop() { delegate.stop(); destination = null; lastTarget = null; }
+    @Override public void stop() { delegate.stop(); destination = null; lastTarget = null; pendingPath = null; pendingSites = Set.of(); }
     @Override public void tick() {
+        retainCommission();
         delegate.tick();
         if (!(worker.level() instanceof ServerLevel level) || worker.isPassenger()
                 || worker.isLeashed() || worker.getTarget() != null) return;
         try {
             Object current = areaField.get(worker);
-            if (current != reservedArea) { reservedArea = null; reservedColumns = Set.of(); }
-            var data = worker.getPersistentData();
-            if (!(current instanceof Entity area) || !area.isAlive()
-                    || !data.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
-                    || !area.getUUID().equals(data.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID))
-                    || !data.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER)
-                    || !data.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER).equals(WorkersBridge.readOwner(area))
-                    || !data.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER).equals(WorkersBridge.readWorkerOwner(worker))
-                    || !WorkersBridge.workingOn(worker, area)) return;
+            if (current != reservedArea) {
+                reservedArea = null; reservedColumns = Set.of();
+                pendingPath = null; pendingSites = Set.of(); destination = null; lastTarget = null;
+            }
+            if (!(current instanceof Entity area) || !isCommission(area)) return;
             Object state = stateField.get(delegate);
             BlockPos target = blockField.get(delegate) instanceof BlockPos p ? p : null;
             if (state instanceof Enum<?> e && e.name().equals("MOVE_TO_WORK_AREA")) target = area.getOnPos();
@@ -96,18 +117,79 @@ public final class WallBuilderAccess extends Goal {
         }
     }
 
+    private boolean isCommission(Entity area) {
+        var data = worker.getPersistentData();
+        return area.isAlive() && !area.isRemoved()
+                && data.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
+                && area.getUUID().equals(data.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID))
+                && data.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER)
+                && data.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER).equals(WorkersBridge.readOwner(area))
+                && data.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER).equals(WorkersBridge.readWorkerOwner(worker))
+                && WorkersBridge.workingOn(worker, area);
+    }
+
+    /** Native SELECT_WORK_AREA otherwise replaces currentBuildArea with a competing nearby job. */
+    private void retainCommission() {
+        if (!(worker.level() instanceof ServerLevel)) return;
+        try {
+            Object state = stateField.get(delegate);
+            if (!(state instanceof Enum<?> selection) || !selection.name().equals("SELECT_WORK_AREA")) return;
+            if (!(areaField.get(worker) instanceof Entity area) || !isCommission(area)
+                    || Boolean.TRUE.equals(area.getClass().getMethod("isDone").invoke(area))) return;
+            Method eligible = java.util.Arrays.stream(area.getClass().getMethods())
+                    .filter(method -> method.getName().equals("canWorkHere") && method.getParameterCount() == 1
+                            && method.getParameterTypes()[0].isInstance(worker)).findFirst().orElseThrow();
+            if (!Boolean.TRUE.equals(eligible.invoke(area, worker))) return;
+            Object move = java.util.Arrays.stream(selection.getDeclaringClass().getEnumConstants())
+                    .filter(value -> value.name().equals("MOVE_TO_WORK_AREA")).findFirst().orElseThrow();
+            // Resolve the complete native selection contract before changing anything.
+            Method active = area.getClass().getMethod("setBeingWorkedOn", boolean.class);
+            Method time = area.getClass().getMethod("setTime", int.class);
+            active.invoke(area, true);
+            time.invoke(area, 0);
+            workDoneField.setBoolean(delegate, false);
+            blockField.set(delegate, null); // A supply interruption may leave the previous block target.
+            stateField.set(delegate, move);
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            // Unsupported companion versions retain their own selection behavior.
+        }
+    }
+
+    private static boolean pathReady(Path path) {
+        try {
+            var ready = PATH_READY.get(path.getClass());
+            return ready.isEmpty() || Boolean.TRUE.equals(ready.get().invoke(path));
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return false; }
+    }
+
     void route(ServerLevel level, BlockPos target, int nativeReachSquared) {
         double dx = worker.getX() - (target.getX() + 0.5), dz = worker.getZ() - (target.getZ() + 0.5);
         if (dx * dx + dz * dz < nativeReachSquared) return;
+        if (!target.equals(lastTarget)) {
+            pendingPath = null;
+            pendingSites = Set.of();
+            destination = null;
+        }
         var nav = worker.getNavigation();
         var existing = nav.getPath();
-        if (existing != null && !existing.isDone() && existing.canReach()) return;
+        if (existing != null && (!pathReady(existing) || (!existing.isDone() && existing.canReach()))) return;
         long now = level.getGameTime();
         if (now < nextRoute && now >= nextRoute - 10) return;
         nextRoute = now + 10;
+        if (pendingPath != null) {
+            if (now <= pendingUntil && !pathReady(pendingPath)) return;
+            Path ready = pendingPath;
+            Set<BlockPos> sites = pendingSites;
+            pendingPath = null;
+            pendingSites = Set.of();
+            if (now <= pendingUntil && pathReady(ready) && ready.canReach()
+                    && sites.contains(ready.getTarget())
+                    && standingSites(level, worker, target).contains(ready.getTarget())
+                    && moveToSite(ready.getTarget())) destination = ready.getTarget();
+            return;
+        }
         if (now < nextSearch && now >= nextSearch - 40) {
-            if (target.equals(lastTarget) && destination != null) nav.moveTo(destination.getX()+0.5,
-                    destination.getY(), destination.getZ()+0.5, 0.8);
+            if (target.equals(lastTarget) && destination != null) moveToSite(destination);
             return;
         }
         nextSearch = now + 40;
@@ -117,7 +199,21 @@ public final class WallBuilderAccess extends Goal {
         candidates.removeIf(p -> reservedColumns.contains(p.atY(0).asLong()));
         if (candidates.isEmpty()) return;
         var path = nav.createPath(candidates, 0);
-        if (path != null && path.canReach() && nav.moveTo(path, 0.8)) destination = path.getTarget();
+        if (path == null) return;
+        if (!pathReady(path)) {
+            pendingPath = path;
+            pendingSites = Set.copyOf(candidates);
+            pendingUntil = now + 100;
+        } else if (path.canReach() && candidates.contains(path.getTarget()) && moveToSite(path.getTarget())) {
+            destination = path.getTarget();
+        }
+    }
+
+    private boolean moveToSite(BlockPos site) {
+        // The multi-target path is a reachability probe. A late-installed AsyncPath misses
+        // native target/reach-range callbacks; let native moveTo own its movement path.
+        // Integer coordinates also avoid upstream truncation of negative half-coordinates.
+        return worker.getNavigation().moveTo(site.getX(), site.getY(), site.getZ(), 0.8);
     }
 
     /** At most 49 columns, inside native horizontal reach; never dig or move the blueprint. */

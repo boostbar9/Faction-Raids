@@ -29,12 +29,17 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         public java.util.List<Cell> stackToPlaceMultiBlock;
         protected Area(EntityType<?> type, Level level) { super(type,level); }
         public java.util.UUID getPlayerUUID() { return null; }
+        public boolean isDone() { return false; }
+        public boolean canWorkHere(Builder builder) { return false; }
+        public void setBeingWorkedOn(boolean value) { }
+        public void setTime(int value) { }
     }
     public record Cell(BlockPos pos) { public BlockPos getPos() { return pos; } }
-    public enum State { MOVE_TO_WORK_AREA }
+    public enum State { SELECT_WORK_AREA, MOVE_TO_WORK_AREA, DONE }
     public static class NativeGoal extends Goal {
         public BlockPos blockPos;
         public Object state;
+        boolean workDone;
         @Override public boolean canUse() { return false; }
     }
     private final Builder worker = mock(Builder.class);
@@ -63,8 +68,8 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         assertTrue(sites.stream().allMatch(p -> p.getY()==64 && p.distSqr(new BlockPos(0,64,0))<16));
         Path path=mock(Path.class); when(path.canReach()).thenReturn(true);
         when(path.getTarget()).thenReturn(new BlockPos(1,64,0));
-        when(nav.createPath(anySet(),eq(0))).thenReturn(path); when(nav.moveTo(path,0.8)).thenReturn(true);
-        goal.route(level,marker,20); verify(nav).moveTo(path,0.8);
+        when(nav.createPath(anySet(),eq(0))).thenReturn(path); when(nav.moveTo(1,64,0,0.8)).thenReturn(true);
+        goal.route(level,marker,20); verify(nav).moveTo(1,64,0,0.8);
         when(level.getGameTime()).thenReturn(10L);goal.route(level,marker,20);
         verify(nav,times(1)).createPath(anySet(),eq(0));
         verify(level,never()).setBlock(any(),any(),anyInt());
@@ -80,6 +85,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         assertTrue(WallBuilderAccess.standingSites(level,worker,marker).isEmpty());
         terrain(); Path unreachable=mock(Path.class);when(nav.createPath(anySet(),eq(0))).thenReturn(unreachable);
         goal.route(level,marker,20); verify(nav,never()).moveTo(any(Path.class),anyDouble());
+            verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
     }
     @Test void correctionRunsOnlyForTheLinkedOwnedActiveWallJob() throws Exception {
         terrain(); var original=new NativeGoal(); original.state=State.MOVE_TO_WORK_AREA;
@@ -120,4 +126,135 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         assertTrue(goal.canUse());assertTrue(goal.canContinueToUse());goal.start();goal.tick();goal.stop();
         verify(original).start();verify(original).tick();verify(original).stop();verifyNoInteractions(level);
     }
+    /** Contract fixture: native selection replaces an existing area with the next eligible one. */
+    public static class SelectingGoal extends NativeGoal {
+        final Builder builder;
+        Entity competing;
+        int selections;
+        SelectingGoal(Builder builder, Entity competing) { this.builder = builder; this.competing = competing; }
+        @Override public void start() { state = State.SELECT_WORK_AREA; }
+        @Override public void tick() {
+            if (state == State.SELECT_WORK_AREA) {
+                selections++;
+                if (competing != null) builder.currentBuildArea = competing;
+                workDone = false;
+                state = State.MOVE_TO_WORK_AREA;
+            }
+        }
+    }
+    private Area commission() {
+        terrain();
+        var area = mock(Area.class);
+        var owner = java.util.UUID.randomUUID(); var id = java.util.UUID.randomUUID();
+        var data = new net.minecraft.nbt.CompoundTag();
+        data.putUUID(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID, id);
+        data.putUUID(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_OWNER, owner);
+        when(worker.level()).thenReturn(level); when(worker.getPersistentData()).thenReturn(data);
+        when(worker.getOwnerUUID()).thenReturn(owner); when(worker.getFollowState()).thenReturn(6);
+        when(area.getPlayerUUID()).thenReturn(owner); when(area.getUUID()).thenReturn(id);
+        when(area.canWorkHere(worker)).thenReturn(true);
+        when(area.isAlive()).thenReturn(true); when(area.getOnPos()).thenReturn(new BlockPos(0,60,0));
+        area.stackToPlace = java.util.List.of(); area.stackToPlaceMultiBlock = java.util.List.of();
+        worker.currentBuildArea = area;
+        return area;
+    }
+    @Test void assignedWallSurvivesCompetingBlueprintAndSupplyRestart() throws Exception {
+        var wall = commission(); var other = mock(Area.class);
+        var original = new SelectingGoal(worker, other);
+        var goal = new WallBuilderAccess(worker, original);
+        for (int trip = 0; trip < 3; trip++) {
+            original.workDone = true;
+            original.blockPos = new BlockPos(50,20,50);
+            goal.start(); goal.tick();
+            assertSame(wall, worker.currentBuildArea);
+            assertEquals(State.MOVE_TO_WORK_AREA, original.state);
+            assertFalse(original.workDone, "Native completion latch must reset for resumed/new jobs");
+            assertNull(original.blockPos, "Discard the previous job's movement target");
+            goal.stop();
+        }
+        assertEquals(0, original.selections);
+        verify(wall, times(3)).setBeingWorkedOn(true);
+        verify(wall, times(3)).setTime(0);
+        verify(other, never()).setBeingWorkedOn(anyBoolean());
+        verify(worker, never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+        verify(level, never()).setBlock(any(),any(),anyInt());
+    }
+    @Test void unlinkedManualTransferredRemovedAndCompletedAreasKeepNativeSelection() throws Exception {
+        for (int scenario = 0; scenario < 6; scenario++) {
+            var wall = commission(); var other = mock(Area.class);
+            switch (scenario) {
+                case 0 -> worker.getPersistentData().remove(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID);
+                case 1 -> worker.currentBuildArea = other;
+                case 2 -> when(worker.getOwnerUUID()).thenReturn(java.util.UUID.randomUUID());
+                case 3 -> when(wall.isRemoved()).thenReturn(true);
+                case 4 -> when(wall.isDone()).thenReturn(true);
+                case 5 -> when(wall.canWorkHere(worker)).thenReturn(false);
+            }
+            var original = new SelectingGoal(worker, other); var goal = new WallBuilderAccess(worker, original);
+            goal.start(); goal.tick();
+            assertEquals(1, original.selections);
+            assertSame(other, worker.currentBuildArea);
+            verify(wall, never()).setBeingWorkedOn(anyBoolean());
+        }
+    }
+    public abstract static class DelayedPath extends Path {
+        protected DelayedPath() { super(java.util.List.of(), BlockPos.ZERO, false); }
+        public abstract boolean isProcessed();
+    }
+    @Test void delayedNativePathIsRetainedUntilReadyWithoutRepeatedSearch() throws Exception {
+        terrain(); var goal = new WallBuilderAccess(worker, new NativeGoal());
+        var target = new BlockPos(0,60,0); var endpoint = new BlockPos(1,64,0);
+        var path = mock(DelayedPath.class);
+        when(nav.createPath(anySet(),eq(0))).thenReturn(path);
+        goal.route(level,target,20);
+        when(level.getGameTime()).thenReturn(40L); goal.route(level,target,20);
+        verify(nav, never()).moveTo(any(Path.class),anyDouble());
+        verify(nav, never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+        verify(path, never()).getTarget();
+        when(path.isProcessed()).thenReturn(true); when(path.canReach()).thenReturn(true);
+        when(path.getTarget()).thenReturn(endpoint); when(nav.moveTo(1,64,0,0.8)).thenReturn(true);
+        when(level.getGameTime()).thenReturn(50L); goal.route(level,target,20);
+        verify(nav).moveTo(1,64,0,0.8); verify(nav,times(1)).createPath(anySet(),eq(0));
+        verify(nav,never()).moveTo(any(Path.class),anyDouble());
+    }
+    @Test void staleStoppedTimedOutAndUnsafeDelayedRoutesCannotBeInstalled() throws Exception {
+        for (int scenario = 0; scenario < 5; scenario++) {
+            reset(nav); terrain();
+            var goal = new WallBuilderAccess(worker,new NativeGoal());
+            var target = new BlockPos(0,60,0); var path = mock(DelayedPath.class);
+            when(nav.createPath(anySet(),eq(0))).thenReturn(path);
+            when(level.getGameTime()).thenReturn(0L); goal.route(level,target,20);
+            when(nav.createPath(anySet(),eq(0))).thenReturn(null);
+            when(path.isProcessed()).thenReturn(true); when(path.canReach()).thenReturn(true);
+            when(path.getTarget()).thenReturn(new BlockPos(1,64,0));
+            when(level.getGameTime()).thenReturn(10L);
+            switch (scenario) {
+                case 0 -> target = new BlockPos(3,60,0);
+                case 1 -> goal.stop();
+                case 2 -> when(level.getGameTime()).thenReturn(110L);
+                case 3 -> when(level.noCollision(eq(worker),any(AABB.class))).thenReturn(false);
+                case 4 -> when(path.canReach()).thenReturn(false);
+            }
+            goal.route(level,target,20);
+            verify(nav,never()).moveTo(any(Path.class),anyDouble());
+            verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+        }
+    }
+    @Test void existingAsyncNavigationIsLeftAloneWhileItProcesses() throws Exception {
+        terrain(); var goal = new WallBuilderAccess(worker,new NativeGoal());
+        when(nav.getPath()).thenReturn(mock(DelayedPath.class));
+        goal.route(level,new BlockPos(0,60,0),20);
+        verify(nav,never()).createPath(anySet(),anyInt());
+    }
+
+    @Test void negativeEndpointUsesNativeMovementWithoutTruncatingIntoAnotherColumn() throws Exception {
+        terrain(); var goal = new WallBuilderAccess(worker,new NativeGoal());
+        var path = mock(Path.class); when(path.canReach()).thenReturn(true);
+        when(path.getTarget()).thenReturn(new BlockPos(-1,64,-2));
+        when(nav.createPath(anySet(),eq(0))).thenReturn(path);
+        goal.route(level,new BlockPos(-2,60,-2),20);
+        verify(nav).moveTo(-1,64,-2,0.8);
+        verify(nav,never()).moveTo(any(Path.class),anyDouble());
+    }
+
 }

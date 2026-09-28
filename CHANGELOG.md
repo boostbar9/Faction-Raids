@@ -1,3 +1,8 @@
+## 4.50.1 — Commissioned builder jobs
+- Hired wall builders keep their assigned blueprint when starting work or returning from a supply trip, instead of switching to another nearby construction site.
+- Wall approach paths now wait for Workers' asynchronous pathfinder to finish. Stale, blocked and timed-out results are discarded safely.
+- Workers still controls materials, construction, sleep and owner commands. Wall prices and saved blueprints are unchanged.
+
 ## 4.50.0 — Olympian armory and aimed spellbooks
 - Replaced bulky weapon cuboids with original pixel skins using vanilla handheld, bow and crossbow models and draw stages.
 - Creative spellbooks now fire aimed lightning, fireballs and ice bolts; holding Undertow channels a water stream. Projectiles stop at blocks, spare players/allies and never damage terrain.
