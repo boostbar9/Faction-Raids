@@ -63,7 +63,14 @@ public final class EnemyCoreApproach {
                             BlockPos standing=feet(level,raid,column,base,allowed,ground).orElseThrow();
                             reserved.put(columnKey(standing),standing.getY());
                         }
-                        if(p.equals(previous.get(p)))break;
+                        if(p.equals(previous.get(p))) {
+                            if(narrow) {
+                                // Keep the verified outer threshold clear of later construction too.
+                                BlockPos threshold=feet(level,raid,p.relative(front),base,allowed,ground).orElseThrow();
+                                reserved.put(columnKey(threshold),threshold.getY());
+                            }
+                            break;
+                        }
                     }
                     Map<BlockPos,BlockState> steps=new LinkedHashMap<>();
                     for(int side=-1;side<=1;side++) {

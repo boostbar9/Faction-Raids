@@ -80,3 +80,17 @@ for patron,(metal,gem,trim) in palettes.items():
   # Parent bow/crossbow predicates must not redirect the skin back to vanilla.
   if parent in ('bow','crossbow'):model['overrides']=[]
   (out/(patron+'_'+shape+'.json')).write_text(json.dumps(model,indent=2)+'\n')
+
+# Original frost-book cover, distinct from the credited water-book asset.
+book=Image.new('RGBA',(32,32));d=ImageDraw.Draw(book)
+d.polygon([(5,7),(22,3),(28,7),(28,25),(11,30),(5,26)],fill='#202c43')
+d.polygon([(7,10),(24,6),(27,8),(27,24),(11,28),(7,25)],fill='#d7e5e9')
+for y in (13,17,21,25):d.line([(11,y),(26,y-4)],fill='#92a6b9')
+d.polygon([(5,6),(22,2),(27,6),(27,22),(10,27),(5,23)],fill='#315675')
+d.polygon([(9,7),(22,4),(25,6),(25,21),(10,25)],fill='#487e99')
+d.line([(6,7),(6,22),(9,25)],fill='#8db9ce',width=2)
+d.line([(11,8),(22,5),(24,7),(24,20),(12,23)],fill='#a6d9e5',width=1)
+for points in [[(17,9),(17,20)],[(12,16),(22,13)],[(13,11),(21,18)]]:d.line(points,fill='#f2fcff',width=1)
+for p in [(16,10),(18,19),(13,15),(21,14),(14,12),(20,17)]:d.point(p,fill='#f2fcff')
+d.rectangle((23,13,28,15),fill='#c0c5a3');d.point((27,14),fill='#effaff')
+book.save(root/'textures/item/frost_spellbook.png')

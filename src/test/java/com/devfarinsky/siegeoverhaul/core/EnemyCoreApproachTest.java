@@ -115,7 +115,10 @@ class EnemyCoreApproachTest extends MinecraftTestSupport {
             raid.pendingFortifications.put(camp.offset(x,0,z).asLong(),"minecraft:spruce_log");
         }
         var saved=new java.util.LinkedHashMap<>(raid.pendingFortifications);
-        assertTrue(EnemyCoreApproach.plan(level,raid,camp,p->true).isPresent());
+        var plan=EnemyCoreApproach.plan(level,raid,camp,p->true).orElseThrow();
+        EnemyCoreApproach.save(raid,plan);
+        assertTrue(java.util.stream.IntStream.rangeClosed(6,8).anyMatch(x ->
+                EnemyCoreApproach.reserved(raid,camp.north(10).east(x))), "Protect the outer gate threshold too");
         assertEquals(saved,raid.pendingFortifications);verify(level,never()).setBlock(any(),any(),anyInt());
     }
     @Test void completedPalisadeCannotBecomeARouteOverTheWall() {

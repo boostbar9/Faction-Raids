@@ -136,7 +136,7 @@ class OlympianRelicItemTest extends MinecraftTestSupport {
         creative.use();assertEquals(2,creative.held.getCount());assertEquals(40,creative.gear.getDamageValue());
     }
     @ParameterizedTest @EnumSource(LootBoxItem.Tier.class)
-    void everyBoxHasARealRelicCategoryWithBoundedCountsAndAllSuppliesRemainReachable(LootBoxItem.Tier tier) {
+    void everyBoxHasARealRelicCategoryWithBoundedCountsAndActiveSuppliesRemainReachable(LootBoxItem.Tier tier) {
         try(var registry=new OlympianRelicRegistryFixture()) {
             var seen=new HashSet<Item>();
             for(int seed=0;seed<500;seed++) {
@@ -146,7 +146,8 @@ class OlympianRelicItemTest extends MinecraftTestSupport {
                 assertTrue(rewards.size()>=3+tier.ordinal() && rewards.size()<=4+tier.ordinal());
                 for(int i=2;i<rewards.size();i++)seen.add(rewards.get(i).getItem());
             }
-            for(int pick=0;pick<OlympianLoot.SUPPLY_TYPES;pick++)assertTrue(seen.contains(OlympianLoot.supplies(tier,pick).getItem()));
+            for(int pick:OlympianLoot.AVAILABLE_SUPPLIES)assertTrue(seen.contains(OlympianLoot.supplies(tier,pick).getItem()), "Missing active supply " + pick);
+            for(int pick:new int[]{2,3,7,10,11})assertFalse(seen.contains(OlympianLoot.supplies(tier,pick).getItem()), "Retired supply " + pick);
             assertSame(tier.ordinal()>=2?Potions.LONG_FIRE_RESISTANCE:Potions.FIRE_RESISTANCE,PotionUtils.getPotion(OlympianLoot.supplies(tier,8)));
             assertSame(tier.ordinal()>=2?Potions.LONG_WATER_BREATHING:Potions.WATER_BREATHING,PotionUtils.getPotion(OlympianLoot.supplies(tier,9)));
             var sunbow=OlympianLoot.armory(tier,4);var ammo=OlympianLoot.supplies(tier,0,sunbow);
