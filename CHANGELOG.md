@@ -1,3 +1,10 @@
+## 4.49.10 — Held items and readable tooltips
+
+- All 128 Olympian weapon models use third-person transforms anchored to their actual grips, with matching left/right hands and stable bow/crossbow draw states.
+- Relic, spellbook, spawn-egg and supply descriptions separate activation, effect and cooldown information.
+- Long Siege item descriptions wrap to the GUI width while retaining colors, enchantments and attribute information.
+- New Olympian loot lore uses upright text. Item powers, prices, saves and dependency requirements are unchanged.
+
 ## 4.49.9 — Doors and Olympian casting
 
 - Siege raiders can open nearby wooden doors along their path with Recruits' asynchronous navigation. Opened doors stay open for following troops; iron doors still need breaching.

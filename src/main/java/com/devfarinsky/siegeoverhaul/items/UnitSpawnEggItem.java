@@ -139,7 +139,8 @@ public final class UnitSpawnEggItem extends Item {
                 .withStyle(CoreHiring.isHero(role)
                         ? tierColor(CoreHiring.heroTier(role))
                         : ChatFormatting.GRAY));
-        tooltip.add(Component.literal("Spawns an outfitted unit. Hire it through its usual recruit menu.")
-                .withStyle(ChatFormatting.DARK_GRAY));
+        tooltip.add(Component.literal("Use: spawn an outfitted unit.")
+                .withStyle(ChatFormatting.GRAY));
+        tooltip.add(Component.literal("Hire through its recruit menu.").withStyle(ChatFormatting.DARK_GRAY));
     }
 }

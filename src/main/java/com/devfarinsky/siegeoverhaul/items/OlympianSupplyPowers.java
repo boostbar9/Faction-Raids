@@ -61,15 +61,16 @@ public final class OlympianSupplyPowers {
         stack.getOrCreateTag().putString(POWER,power.name());
         var display=stack.getOrCreateTagElement("display");
         var lore=display.getList("Lore",Tag.TAG_STRING);
-        line(lore,"Sneak-use in air: spend " + power.cost(stack) + " for:",ChatFormatting.GOLD);
+        line(lore,"Sneak-use in air • Cost: " + power.cost(stack),ChatFormatting.GOLD);
         for(var buff:power.buffs)line(lore,buff.description(),ChatFormatting.AQUA);
-        if(power==Power.TRIBUTE)line(lore,"Luck improves eligible fishing treasure rolls, not mob loot.",ChatFormatting.GRAY);
-        line(lore,"10s shared supply cooldown. Normal use stays vanilla.",ChatFormatting.DARK_GRAY);
+        if(power==Power.TRIBUTE)line(lore,"Luck affects eligible fishing treasure, not mob drops.",ChatFormatting.GRAY);
+        line(lore,"Shared cooldown: 10s",ChatFormatting.DARK_GRAY);
+        line(lore,"Normal item use remains available.",ChatFormatting.GRAY);
         display.put("Lore",lore);
         return stack;
     }
     private static void line(ListTag lore,String text,ChatFormatting color) {
-        lore.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal(text).withStyle(color))));
+        lore.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal(text).withStyle(style -> style.withColor(color).withItalic(false)))));
     }
     static Power power(ItemStack stack) {
         if(stack.isEmpty() || !stack.hasTag())return null;

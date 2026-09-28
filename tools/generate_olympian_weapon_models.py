@@ -43,6 +43,19 @@ def fit_icon(models):
  scale=min(0.9,14/max(high[a]-low[a] for a in (0,1)))
  return {'rotation':rotation,'translation':[round(-(lo+hi)*scale/2,5) for lo,hi in zip(low,high)],'scale':[round(scale,5)]*3}
 
+def held_profile(shape, left=False):
+ # Anchor the actual grip, not the center of the icon, at a consistent palm point.
+ family=shape.split('_')[0]
+ grip=(8,8,8) if family=='bow' else (8,4.25,8)
+ scale=.65 if family in ('staff','spear','hook') else .75
+ rotation=[0,-90,0] if family=='bow' else [90,0,0]
+ offset=rotate([(v-8)*scale for v in grip],rotation)
+ translation=[round(t-v,5) for t,v in zip((0,2,0),offset)]
+ if left:
+  rotation=[rotation[0],-rotation[1],-rotation[2]]
+  translation[0]=-translation[0]
+ return {'rotation':rotation,'translation':translation,'scale':[scale]*3}
+
 models={}
 
 shapes=['blade','spear','staff','bow','bow_1','bow_2','bow_3','crossbow','crossbow_1','crossbow_2','crossbow_3','crossbow_loaded','crossbow_rocket','pick','hoe','hook']
@@ -142,6 +155,8 @@ for patron,palette in palettes.items():
    for hand in ['righthand','lefthand']:
     display['thirdperson_'+hand]={'rotation':[90,0,0],'translation':[0,2,0],'scale':[.65,.65,.65]}
     display['firstperson_'+hand]={'rotation':[0,180,0],'translation':[0,1,0],'scale':[.65,.65,.65]}
+  display['thirdperson_righthand']=held_profile(shape)
+  display['thirdperson_lefthand']=held_profile(shape,True)
   model={'gui_light':'front','textures':{'metal':'minecraft:block/'+palette[0],'gem':'minecraft:block/'+palette[1],'trim':'minecraft:block/'+palette[2],'edge':'minecraft:block/iron_block','grip':'minecraft:block/black_concrete','string':'minecraft:block/white_concrete','particle':'minecraft:block/'+palette[0]},'display':display,'elements':elems}
   models[patron+'_'+shape]=model
 # Share GUI framing per weapon family, including all animation variants.
