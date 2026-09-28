@@ -136,6 +136,10 @@ public final class WallBuilderAccess extends Goal {
             if (!(state instanceof Enum<?> selection) || !selection.name().equals("SELECT_WORK_AREA")) return;
             if (!(areaField.get(worker) instanceof Entity area) || !isCommission(area)
                     || Boolean.TRUE.equals(area.getClass().getMethod("isDone").invoke(area))) return;
+            Method eligible = java.util.Arrays.stream(area.getClass().getMethods())
+                    .filter(method -> method.getName().equals("canWorkHere") && method.getParameterCount() == 1
+                            && method.getParameterTypes()[0].isInstance(worker)).findFirst().orElseThrow();
+            if (!Boolean.TRUE.equals(eligible.invoke(area, worker))) return;
             Object move = java.util.Arrays.stream(selection.getDeclaringClass().getEnumConstants())
                     .filter(value -> value.name().equals("MOVE_TO_WORK_AREA")).findFirst().orElseThrow();
             // Resolve the complete native selection contract before changing anything.
@@ -181,12 +185,11 @@ public final class WallBuilderAccess extends Goal {
             if (now <= pendingUntil && pathReady(ready) && ready.canReach()
                     && sites.contains(ready.getTarget())
                     && standingSites(level, worker, target).contains(ready.getTarget())
-                    && nav.moveTo(ready, 0.8)) destination = ready.getTarget();
+                    && moveToSite(ready.getTarget())) destination = ready.getTarget();
             return;
         }
         if (now < nextSearch && now >= nextSearch - 40) {
-            if (target.equals(lastTarget) && destination != null) nav.moveTo(destination.getX()+0.5,
-                    destination.getY(), destination.getZ()+0.5, 0.8);
+            if (target.equals(lastTarget) && destination != null) moveToSite(destination);
             return;
         }
         nextSearch = now + 40;
@@ -201,9 +204,16 @@ public final class WallBuilderAccess extends Goal {
             pendingPath = path;
             pendingSites = Set.copyOf(candidates);
             pendingUntil = now + 100;
-        } else if (path.canReach() && candidates.contains(path.getTarget()) && nav.moveTo(path, 0.8)) {
+        } else if (path.canReach() && candidates.contains(path.getTarget()) && moveToSite(path.getTarget())) {
             destination = path.getTarget();
         }
+    }
+
+    private boolean moveToSite(BlockPos site) {
+        // The multi-target path is a reachability probe. A late-installed AsyncPath misses
+        // native target/reach-range callbacks; let native moveTo own its movement path.
+        // Integer coordinates also avoid upstream truncation of negative half-coordinates.
+        return worker.getNavigation().moveTo(site.getX(), site.getY(), site.getZ(), 0.8);
     }
 
     /** At most 49 columns, inside native horizontal reach; never dig or move the blueprint. */
