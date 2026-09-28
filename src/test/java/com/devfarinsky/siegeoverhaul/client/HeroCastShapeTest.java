@@ -23,7 +23,10 @@ class HeroCastShapeTest {
             var points=geometry(role,phase,age);assertTrue(points.size()<=HeroCastShape.MAX_SEGMENTS);
             for(var line:points)for(double n:line)assertTrue(Double.isFinite(n)&&Math.abs(n)<=11);
         }
-        for(int role:new int[]{22,27,29})assertTrue(geometry(role,1,5).stream().anyMatch(p->Math.abs(p.get(1)-p.get(4))>.1));
+        for(int role:new int[]{22,27,29}) {
+            var heights=geometry(role,1,5).stream().flatMap(p->java.util.stream.Stream.of(p.get(1),p.get(4))).mapToDouble(Double::doubleValue).summaryStatistics();
+            assertTrue(heights.getMax()-heights.getMin()>.5);
+        }
     }
     @Test void cancelledExpiredAndInvalidCastsEmitNothing() {
         assertTrue(geometry(22,2,0).isEmpty());assertTrue(geometry(22,1,12).isEmpty());

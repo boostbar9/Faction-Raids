@@ -53,6 +53,28 @@ class RaiderDoorsTest extends MinecraftTestSupport {
         verify(evaluator,times(2)).setCanOpenDoors(true);verify(evaluator,times(2)).setCanPassDoors(true);
         assertTrue(mob.goalSelector.getAvailableGoals().iterator().next().getGoal().getFlags().isEmpty());
     }
+    @Test void activeSiegeOpensDoorWithoutClosingItAndHonorsThrottle() throws ReflectiveOperationException {
+        var nav=mock(com.talhanation.recruits.pathfinding.AsyncGroundPathNavigation.class);
+        when(nav.getNodeEvaluator()).thenReturn(mock(NodeEvaluator.class));when(nav.getPath()).thenReturn(path());
+        when(mob.getNavigation()).thenReturn(nav);when(mob.isAlive()).thenReturn(true);
+        when(level.getRandom()).thenReturn(net.minecraft.util.RandomSource.create(1));
+        when(level.getGameTime()).thenReturn(100L);
+        var tag=new net.minecraft.nbt.CompoundTag();tag.putString(com.devfarinsky.siegeoverhaul.ModConstants.Tags.RAID_TEAM,"team:test");
+        when(mob.getPersistentData()).thenReturn(tag);
+        var field=Mob.class.getDeclaredField("goalSelector");field.setAccessible(true);
+        field.set(mob,new GoalSelector(()->net.minecraft.util.profiling.InactiveProfiler.INSTANCE));
+        RaiderDoors.install(mob);var goal=mob.goalSelector.getAvailableGoals().iterator().next().getGoal();
+        var data=new com.devfarinsky.siegeoverhaul.RaidSavedData();
+        data.raids.put("team:test",new com.devfarinsky.siegeoverhaul.RaidSavedData.RaidState("team:test","siege_core",0));
+        try(var saves=mockStatic(com.devfarinsky.siegeoverhaul.RaidSavedData.class);
+            var claims=mockStatic(com.devfarinsky.siegeoverhaul.compat.ClaimBridge.class)) {
+            saves.when(()->com.devfarinsky.siegeoverhaul.RaidSavedData.get(level.getServer())).thenReturn(data);
+            assertTrue(goal.canUse());goal.start();assertFalse(goal.canContinueToUse());goal.stop();
+            verify(level,times(1)).setBlock(eq(entrance),argThat(state->state.getValue(DoorBlock.OPEN)),eq(10));
+            assertFalse(goal.canUse()); // same tick never performs a second scan/open
+            when(level.getGameTime()).thenReturn(105L);data.raids.clear();assertFalse(goal.canUse());
+        }
+    }
     @Test void findsDoorWithoutHorizontalCollisionAndAfterPassingItsNode() {
         assertFalse(mob.horizontalCollision);
         var path=path();assertEquals(entrance,RaiderDoors.find(level,mob,path,p->true));
