@@ -23,9 +23,14 @@ final class OlympianLoot {
     static final int SUPPLY_TYPES = 15;
     static final int RELIC_FIRST = 12;
     static final int AMMUNITION = 0;
-    static boolean availableSupply(int choice) { return choice != 2 && choice != 3 && choice != 7 && choice != 10 && choice != 11; }
+    static boolean availableSupply(int choice) { return choice != 2 && choice != 3 && choice != 7 && choice != 9 && choice != 10 && choice != 11; }
     static final int[] AVAILABLE_SUPPLIES = java.util.stream.IntStream.range(0, SUPPLY_TYPES)
             .filter(OlympianLoot::availableSupply).toArray();
+    // Stable legacy indices keep saved variants and their models compatible.
+    static int[] availableArmory(LootBoxItem.Tier tier) {
+        return java.util.stream.IntStream.range(0, ARMORY_SIZE)
+                .filter(choice -> choice != 7 && (choice != 1 || tier.ordinal() >= 2)).toArray();
+    }
     private static final String PATRON = "SiegeOlympianPatron";
 
     private OlympianLoot() {}
@@ -120,16 +125,15 @@ final class OlympianLoot {
                                 "Eat well. The walls will need you.")
                         : named(new ItemStack(Items.GOLDEN_APPLE, tier == LootBoxItem.Tier.RARE ? 3 : 2),
                                 "Orchard of the Hesperides", tier, "A golden harvest, guarded no longer.");
-        return OlympianSupplyPowers.imbue(food, tier == LootBoxItem.Tier.EPIC ? OlympianSupplyPowers.Power.AMBROSIA
-                : tier == LootBoxItem.Tier.COMMON ? OlympianSupplyPowers.Power.HARVEST : OlympianSupplyPowers.Power.ORCHARD);
+        return food;
     }
 
     static ItemStack supplies(LootBoxItem.Tier tier, int choice, ItemStack equipment) {
         // Infinity only preserves ordinary arrows, not spectral or tipped arrows.
         if (choice == AMMUNITION && equipment.getItem() instanceof BowItem
                 && EnchantmentHelper.getItemEnchantmentLevel(Enchantments.INFINITY_ARROWS, equipment) > 0) {
-            return OlympianSupplyPowers.imbue(named(new ItemStack(Items.ARROW, 16 + tier.ordinal() * 8), "Apollo's Sunbow Arrows", tier,
-                    "Keep one in your quiver. Infinity uses ordinary arrows."), OlympianSupplyPowers.Power.MOON_SIGHT);
+            return named(new ItemStack(Items.ARROW, 16 + tier.ordinal() * 8), "Apollo's Sunbow Arrows", tier,
+                    "Keep one in your quiver. Infinity uses ordinary arrows.");
         }
         return supplies(tier, choice);
     }
@@ -169,7 +173,9 @@ final class OlympianLoot {
             case 12, 13, 14 -> new ItemStack(OlympianRelics.item(OlympianRelics.Kind.values()[choice - RELIC_FIRST]), rank >= 2 ? 2 : 1);
             default -> throw new IllegalArgumentException("Unknown Olympian supply entry: " + choice);
         };
-        return choice < RELIC_FIRST ? OlympianSupplyPowers.imbue(supply, OlympianSupplyPowers.Power.values()[choice]) : supply;
+        // New supplies use their normal food, potion and ammunition behavior.
+        // OlympianSupplyPowers remains registered solely for existing saved blessings.
+        return supply;
     }
 
     static SimpleParticleType revealParticle(ItemStack item) {

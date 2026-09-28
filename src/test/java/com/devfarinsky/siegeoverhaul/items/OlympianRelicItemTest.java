@@ -38,12 +38,13 @@ class OlympianRelicItemTest extends MinecraftTestSupport {
         final CompoundTag data=new CompoundTag();
         final OlympianRelicItem relic;
         Fixture(OlympianRelics.Kind kind) {
-            relic=item(kind);gear.setDamageValue(120);gear.enchant(Enchantments.SHARPNESS,3);
+            relic=item(kind);gear.setDamageValue(500);gear.enchant(Enchantments.SHARPNESS,3);
             when(player.getItemInHand(InteractionHand.MAIN_HAND)).thenReturn(held);
             when(player.getItemInHand(InteractionHand.OFF_HAND)).thenReturn(gear);
             when(player.getAbilities()).thenReturn(abilities);when(player.getPersistentData()).thenReturn(data);
             when(player.getCooldowns()).thenReturn(mock(ItemCooldowns.class));
             when(player.getInventory()).thenReturn(new Inventory(player));
+            when(player.getItemBySlot(any())).thenReturn(ItemStack.EMPTY);
             when(player.isAlive()).thenReturn(true);when(level.getGameTime()).thenReturn(100L);
             when(player.getBoundingBox()).thenReturn(new AABB(0,64,0,1,66,1));
             when(level.getEntitiesOfClass(eq(LivingEntity.class),any(AABB.class),any())).thenReturn(List.of());
@@ -53,11 +54,11 @@ class OlympianRelicItemTest extends MinecraftTestSupport {
     @Test void emberRepairsOtherHandOnceWithoutChangingEnchantsOrSpendingExtraCharges() {
         var f=new Fixture(OlympianRelics.Kind.FORGE);var saved=f.gear.save(new CompoundTag());
         assertEquals(InteractionResult.CONSUME,f.use().getResult());
-        assertEquals(40,f.gear.getDamageValue());assertEquals(1,f.held.getCount());
-        saved.getCompound("tag").putInt("Damage",40);
+        assertEquals(110,f.gear.getDamageValue());assertEquals(1,f.held.getCount());
+        saved.getCompound("tag").putInt("Damage",110);
         assertEquals(saved,f.gear.save(new CompoundTag()));
         assertEquals(300,f.data.getLong("SiegeRelicNextFORGE"));
-        assertEquals(InteractionResult.FAIL,f.use().getResult());assertEquals(40,f.gear.getDamageValue());
+        assertEquals(InteractionResult.FAIL,f.use().getResult());assertEquals(110,f.gear.getDamageValue());
         assertEquals(1,f.held.getCount());
     }
     @Test void emberSupportsOffhandActivationAndSmallRepairsWithoutUnderflow() {
@@ -70,6 +71,26 @@ class OlympianRelicItemTest extends MinecraftTestSupport {
         assertFalse(OlympianRelicItem.repair(new ItemStack(Items.STONE)));
         var tool=new ItemStack(Items.WOODEN_PICKAXE);tool.setDamageValue(40);
         assertTrue(OlympianRelicItem.repair(tool));assertEquals(40-tool.getMaxDamage()/4,tool.getDamageValue());
+    }
+    @Test void emberFallsBackToMostWornArmorAndRepairsOnlyOnePiece() {
+        var f=new Fixture(OlympianRelics.Kind.FORGE);f.gear.setDamageValue(0);
+        var chest=new ItemStack(Items.NETHERITE_CHESTPLATE);chest.setDamageValue(chest.getMaxDamage()/2);
+        var boots=new ItemStack(Items.LEATHER_BOOTS);boots.setDamageValue(50);
+        when(f.player.getItemBySlot(EquipmentSlot.CHEST)).thenReturn(chest);
+        when(f.player.getItemBySlot(EquipmentSlot.FEET)).thenReturn(boots);
+        int chestBefore=chest.getDamageValue();
+        assertEquals(InteractionResult.CONSUME,f.use().getResult());
+        assertEquals(50-boots.getMaxDamage()/4,boots.getDamageValue());
+        assertEquals(chestBefore,chest.getDamageValue());assertEquals(1,f.held.getCount());
+    }
+    @Test void emberPrioritizesOtherHandAndCapsLargeRepairs() {
+        var f=new Fixture(OlympianRelics.Kind.FORGE);
+        var sword=new ItemStack(Items.NETHERITE_SWORD);sword.setDamageValue(900);
+        var armor=new ItemStack(Items.LEATHER_CHESTPLATE);armor.setDamageValue(50);
+        when(f.player.getItemInHand(InteractionHand.OFF_HAND)).thenReturn(sword);
+        when(f.player.getItemBySlot(EquipmentSlot.CHEST)).thenReturn(armor);
+        f.use();assertEquals(500,sword.getDamageValue());assertEquals(50,armor.getDamageValue());
+        assertEquals(1,f.held.getCount());
     }
     @Test void failedActionsNeverConsumeOrCreateTheLongCooldown() {
         for(var kind:OlympianRelics.Kind.values()) {
@@ -118,6 +139,8 @@ class OlympianRelicItemTest extends MinecraftTestSupport {
         when(enemy.getEffect(MobEffects.GLOWING)).thenReturn(new MobEffectInstance(MobEffects.GLOWING,400));
         when(f.level.getEntitiesOfClass(eq(LivingEntity.class),any(AABB.class),any())).thenReturn(List.of(enemy));
         f.use();assertEquals(2,f.held.getCount());verify(enemy,never()).addEffect(any());
+        when(enemy.getEffect(MobEffects.GLOWING)).thenReturn(new MobEffectInstance(MobEffects.GLOWING,-1));
+        f.use();assertEquals(2,f.held.getCount());verify(enemy,never()).addEffect(any());
         when(enemy.getEffect(MobEffects.GLOWING)).thenReturn(null);
         when(enemy.addEffect(any())).thenReturn(false); // Forge can cancel the effect.
         f.use();assertEquals(2,f.held.getCount());assertTrue(f.data.isEmpty());
@@ -130,10 +153,10 @@ class OlympianRelicItemTest extends MinecraftTestSupport {
             if(reason==2)f.data.putLong("SiegeRelicNextFORGE",200);
             var level=reason==3?mock(net.minecraft.world.level.Level.class):f.level;
             f.relic.use(level,f.player,InteractionHand.MAIN_HAND);
-            assertEquals(120,f.gear.getDamageValue());assertEquals(2,f.held.getCount());
+            assertEquals(500,f.gear.getDamageValue());assertEquals(2,f.held.getCount());
         }
         var creative=new Fixture(OlympianRelics.Kind.FORGE);creative.abilities.instabuild=true;
-        creative.use();assertEquals(2,creative.held.getCount());assertEquals(40,creative.gear.getDamageValue());
+        creative.use();assertEquals(2,creative.held.getCount());assertEquals(110,creative.gear.getDamageValue());
     }
     @ParameterizedTest @EnumSource(LootBoxItem.Tier.class)
     void everyBoxHasARealRelicCategoryWithBoundedCountsAndActiveSuppliesRemainReachable(LootBoxItem.Tier tier) {

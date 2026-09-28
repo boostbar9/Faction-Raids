@@ -1,3 +1,10 @@
+## 4.50.4 — More useful items
+- Aimed spellbook projectiles pass through friendly troops, players and other ineligible entities, while still stopping at blocks and damaging only siege enemies.
+- Forge Embers prioritize damaged gear in the other hand, then the most worn equipped armor piece. Repair remains 25% of maximum durability, with the cap raised from 80 to 400 points. Failed repairs do not consume a charge.
+- Owl Seals no longer attempt to refresh permanent enemy outlines.
+- Removed Tidehook fishing rods, Harvest hoes and Deep Breath underwater draughts from new loot boxes and the creative catalog. Poseidon's higher-tier combat tridents remain available. Reward stack counts and box prices are unchanged.
+- New provisions, ammunition and potions use their ordinary actions without the weaker alternate sneak-use blessings. Existing saved blessed supplies and retired gear remain usable; no registry entries or saved items are deleted.
+
 ## 4.50.3 — Starter Core Guard
 - A faction's first usable Siege Core grants one free native hired shieldman named Core Guard, with an iron sword, shield, basic armor and eight bread. Native ownership, unit limits, hold-position behavior and normal commands remain in control.
 - The lifetime faction grant survives saves, core relocation and the guard's death. No replacement guards or recurring supplies are generated.

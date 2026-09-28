@@ -21,7 +21,7 @@ public final class CreativeCatalog {
             for (int slot = 0; slot < equipment.getContainerSize(); slot++) add(result, equipment.getItem(slot));
         }
         for (var tier : LootBoxItem.Tier.values()) {
-            for (int entry = 0; entry < OlympianLoot.ARMORY_SIZE; entry++) add(result, OlympianLoot.armory(tier, entry));
+            for (int entry : OlympianLoot.availableArmory(tier)) add(result, OlympianLoot.armory(tier, entry));
             add(result, OlympianLoot.provisions(tier));
             add(result, OlympianLoot.supplies(tier, OlympianLoot.AMMUNITION, OlympianLoot.armory(tier, 4)));
             for (int entry : OlympianLoot.AVAILABLE_SUPPLIES) add(result, OlympianLoot.supplies(tier, entry));

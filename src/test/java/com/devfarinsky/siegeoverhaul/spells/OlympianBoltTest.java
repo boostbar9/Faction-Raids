@@ -33,6 +33,22 @@ class OlympianBoltTest extends MinecraftTestSupport {
             verify(level,never()).setBlock(any(),any(),anyInt());
         }
     }
+    @Test void friendlyLinesAndNonTargetsCannotInterceptSpells() {
+        var player=mock(Player.class);var target=mock(Mob.class);
+        var tag=new CompoundTag();tag.putString(ModConstants.Tags.RAID_TEAM,"enemy");
+        when(target.getPersistentData()).thenReturn(tag);when(target.isAlive()).thenReturn(true);
+        when(target.canBeHitByProjectile()).thenReturn(true);
+        var bolt=mock(OlympianBolt.class,CALLS_REAL_METHODS);doReturn(player).when(bolt).getOwner();
+        assertTrue(bolt.canHitEntity(target));
+        when(player.isAlliedTo(target)).thenReturn(true);assertFalse(bolt.canHitEntity(target));
+        when(player.isAlliedTo(target)).thenReturn(false);tag.remove(ModConstants.Tags.RAID_TEAM);
+        assertFalse(bolt.canHitEntity(target));
+        assertFalse(bolt.canHitEntity(mock(Player.class)));
+        assertFalse(bolt.canHitEntity(mock(net.minecraft.world.entity.item.ItemEntity.class)));
+        tag.putString(ModConstants.Tags.RAID_TEAM,"enemy");when(target.canBeHitByProjectile()).thenReturn(false);
+        assertFalse(bolt.canHitEntity(target));
+        doReturn(null).when(bolt).getOwner();assertFalse(bolt.canHitEntity(target));
+    }
     @Test void solidImpactConsumesTheBoltWithoutChangingAnyBlocks() {
         var level=mock(ServerLevel.class);var player=mock(Player.class);
         when(player.isAlive()).thenReturn(true);var abilities=new net.minecraft.world.entity.player.Abilities();abilities.instabuild=true;
