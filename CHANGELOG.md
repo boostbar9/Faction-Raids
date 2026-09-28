@@ -1,3 +1,9 @@
+## 4.50.6 — Capture beacon
+- Enemy core captures show a 96-block beacon beam to nearby defending faction members. Its color smoothly follows progress: red at 0%, orange at 25%, yellow at 50%, lime at 75%, green at 100%.
+- Ties keep the current color; lost progress reverses the colors. Completion stays green briefly, then expires. Interrupted effects expire within three seconds, and world changes clear them.
+- Uses vanilla beacon geometry and texture with no terrain changes or beacon gameplay effects. Updates once per second, renders within 192 blocks, and has a bounded client cache.
+- Added a client Capture beacon toggle. Network protocol updated; server and clients must use matching versions.
+
 ## 4.50.5 — Safe arrivals for hired units
 - Core Guards, recruits, heroes and workers avoid damaging floors, fire, freezing powder snow, portals and fluid-filled spawn spaces.
 - Placement checks the unit's full body, footing, loaded chunks and world border. Starter Core Guards also remain fully inside their faction's claim.

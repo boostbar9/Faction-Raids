@@ -189,6 +189,7 @@ public final class EnemyCore {
         int progress = CoreControl.advance(before, maximum, counts[1], counts[0]);
         raid.campaign.putInt("EnemyCaptureTicks", progress);
         if (progress != before) data.setDirty();
+        CaptureBeacon.send(level,raid.teamKey,pos,progress,maximum,counts[1]);
         if (progress > 0 && level.getGameTime() % 100 == 0) for (var player : level.players())
             if (raid.teamKey.equals(SiegeCore.key(player))) player.displayClientMessage(Component.literal(
                     "Enemy core capture: " + progress * 100 / maximum + "% | " + counts[1] + " allies / " + counts[0] + " enemies"), true);

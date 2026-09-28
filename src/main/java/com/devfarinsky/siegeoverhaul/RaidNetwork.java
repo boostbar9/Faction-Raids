@@ -19,7 +19,7 @@ public final class RaidNetwork {
     // discovered units/factions, and War Journal rows to DashboardSync.
     // Bump whenever the wire format changes so mismatched builds refuse to connect
     // instead of silently corrupting the dashboard payload.
-    private static final String PROTOCOL = "15";
+    private static final String PROTOCOL = "16";
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(SiegeOverhaul.MOD_ID, "main"))
             .networkProtocolVersion(() -> PROTOCOL)
@@ -29,6 +29,13 @@ public final class RaidNetwork {
     private static int messageId;
 
     public static void init() {
+        CHANNEL.messageBuilder(CaptureBeam.class,messageId++,NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(CaptureBeam::encode).decoder(CaptureBeam::decode)
+                .consumerMainThread((packet,supplier) -> {
+                    DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
+                            () -> () -> com.devfarinsky.siegeoverhaul.client.CaptureBeaconRenderer.accept(packet));
+                    supplier.get().setPacketHandled(true);
+                }).add();
         CHANNEL.messageBuilder(HeroCast.class,messageId++,NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(HeroCast::encode).decoder(HeroCast::decode)
                 .consumerMainThread((packet,supplier) -> {
@@ -74,6 +81,22 @@ public final class RaidNetwork {
                 .decoder(DashboardAction::decode)
                 .consumerMainThread(DashboardAction::handle)
                 .add();
+    }
+
+    public record CaptureBeam(ResourceLocation dimension,net.minecraft.core.BlockPos pos,int percent,long time) {
+        public CaptureBeam {
+            if(dimension==null || pos==null || percent< -1 || percent>100) throw new IllegalArgumentException("Invalid capture beam");
+            pos=pos.immutable();
+        }
+        public void encode(FriendlyByteBuf b) {
+            b.writeResourceLocation(dimension);b.writeBlockPos(pos);b.writeByte(percent);b.writeLong(time);
+        }
+        public static CaptureBeam decode(FriendlyByteBuf b) {
+            return new CaptureBeam(b.readResourceLocation(),b.readBlockPos(),b.readByte(),b.readLong());
+        }
+    }
+    public static void sendCaptureBeam(ServerPlayer player,CaptureBeam packet) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),packet);
     }
 
     public record HeroCast(int entityId,java.util.UUID uuid,int role,long start,int phase,double x,double y,double z) {
