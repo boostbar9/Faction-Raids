@@ -17,10 +17,9 @@ import java.util.Random;
 /**
  * Centralized banner descriptors for the five Olympian war hosts.
  *
- * <p>A "banner" here is really a two-layer stack: a base dye color plus one
- * vanilla pattern composition (the faction emblem) tinted a contrasting overlay color.
- * Siege Overhaul composes this stack into an ItemStack (for loot drops) or
- * directly into a BlockEntity NBT chunk (for camp-planted banners) via
+ * <p>A banner combines a base dye color with three or four vanilla pattern
+ * layers. The same faction composition is written into item stacks (loot,
+ * shields and map identities) and camp banner block-entity NBT through
  * {@link #applyToBlockEntityTag(CompoundTag, FactionId)}.</p>
  *
  * <p>The enum constants and string ids intentionally retain their pre-4.44
@@ -29,11 +28,11 @@ import java.util.Random;
  *
  * <p>The five Olympian hosts and their color language:</p>
  * <ul>
- *   <li><b>Poseidon's Tide</b>: blue base + cyan wave</li>
- *   <li><b>Warhost of Ares</b>: red base + black war-fang</li>
- *   <li><b>Forgeguard of Hephaestus</b>: black base + orange forge flame</li>
- *   <li><b>Aegis Order of Athena</b>: white base + light-blue owl crown</li>
- *   <li><b>Silver Hunt of Artemis</b>: green base + light-gray crossed weapons</li>
+ *   <li><b>Poseidon's Tide</b>: blue base with cyan and pale-blue bands</li>
+ *   <li><b>Warhost of Ares</b>: red base with a black cross and gold diamond</li>
+ *   <li><b>Forgeguard of Hephaestus</b>: black base with red/orange flame points and a gold center</li>
+ *   <li><b>Aegis Order of Athena</b>: white base with a blue diamond and gold center</li>
+ *   <li><b>Silver Hunt of Artemis</b>: green base with a pale moon above the horizon</li>
  * </ul>
  *
  * <p>The corresponding standing/wall banner Blocks
