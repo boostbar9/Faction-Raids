@@ -403,6 +403,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     @Override
     protected void containerTick() {
         super.containerTick();
+        if (intelSearch != null && intelSearch.visible) intelSearch.tick();
         updateControlState();
         if (waitingTicks > 0) waitingTicks--;
         if (menu.lootSequence() != seenLoot) {
@@ -881,7 +882,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             case TREASURY -> "Every transaction is faction-wide and recorded in recent activity";
             case DEFENSES -> "Free plans · pay on placement · supply your builder through Workers storage";
             case TERRITORY -> "Permanent decrees affect every member · contracts dispatch equipped builders";
-            case INTEL -> "Scroll the archive or switch dossiers without leaving the command center";
+            case INTEL -> "Search this section · Ctrl+F focuses search · scroll to read matching entries";
             default -> "";
         };
     }
