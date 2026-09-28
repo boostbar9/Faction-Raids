@@ -37,9 +37,9 @@ public record CoreHireLayout(int x, int y, int width, int height,
      * grow into, instead of inflating every card with dead space.
      */
     private static final int FULL_MARKET_HEIGHT = 56;
-    private static final int COMPACT_MARKET_HEIGHT = 26;
-    private static final int MIN_MARKET_HEIGHT = 24;
-    private static final int FULL_TERRITORY_CARD_HEIGHT = 74;
+    private static final int COMPACT_MARKET_HEIGHT = 40;
+    private static final int MIN_MARKET_HEIGHT = 40;
+    private static final int FULL_TERRITORY_CARD_HEIGHT = 92;
     private static final int COMPACT_TERRITORY_CARD_HEIGHT = 52;
     private static final int MIN_TERRITORY_CARD_HEIGHT = 46;
 
@@ -158,7 +158,7 @@ public record CoreHireLayout(int x, int y, int width, int height,
     public int territoryDescriptionLines() {
         // Description text starts 28px into the card and must end at least
         // 6px above the purchase button, which sits 24px from the bottom.
-        return Math.max(0, (territoryCardHeight() - 28 - (compact ? 30 : 46)) / 10);
+        return Math.max(0, (territoryCardHeight() - 28 - 30) / 10);
     }
 
     /** First free pixel row below the Territory card grid. */
@@ -185,7 +185,7 @@ public record CoreHireLayout(int x, int y, int width, int height,
     }
 
     /** First free pixel row below the three Loot rows. */
-    public int marketFreeTop() { return marketY(2) + marketHeight() + rowGap(); }
+    public int marketFreeTop() { return Math.min(contentBottom(), marketY(2) + marketHeight() + rowGap()); }
 
     /** Height of the free Loot band left above the footer. */
     public int marketFreeHeight() { return Math.max(0, contentBottom() - marketFreeTop()); }

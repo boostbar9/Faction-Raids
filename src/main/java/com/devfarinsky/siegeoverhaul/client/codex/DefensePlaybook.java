@@ -24,12 +24,12 @@ public final class DefensePlaybook {
             new Tip("Setup","Claim land, place a Siege Core",
                     "You need the Recruits mod. Create or join a faction and claim at least one chunk in the Overworld. Place a single Siege Core anywhere inside your claim. Every raid that spawns for your faction will march on that core."),
             new Tip("Setup","Open the Command Center",
-                    "Right-click the Siege Core to open the Command Center. That's the tabbed UI for hiring, banking, checking your roster, viewing territory, and reading intel. Press Escape or click the X in the corner to close."),
+                    "Right-click the Siege Core to open the Command Center. That's the tabbed UI for hiring, banking, checking your roster, improving territory and planning defenses, and reading intel. Press Escape or click the X in the corner to close."),
             // === Economy ===
             new Tip("Bank","Your Purse vs the Bank",
                     "Your Purse (top right) is the emeralds in your pocket. The Treasury tab holds your faction funds. Deposit emeralds there before shopping. All Command Center purchases use only the Treasury; emeralds in your purse are never spent automatically."),
             new Tip("Bank","Deposit early, deposit often",
-                    "The bank earns interest at the start of every siege wave, so emeralds sitting in the bank grow while emeralds in your pocket don't. Drop your loot in as soon as you get back to base."),
+                    "The bank earns daily interest in game time. Treasury shows the rate, next payout and countdown. Deposit spare emeralds to fund hires, upgrades and construction with your faction."),
             // === Hiring ===
             new Tip("Hire","Two offers, one worker, one hero",
                     "The Army tab always shows two recruit offers, one worker, and one featured hero. Stock is shared across your whole faction and rotates every 15 minutes, so coordinate purchases with your team."),
@@ -47,13 +47,15 @@ public final class DefensePlaybook {
             new Tip("Defend","Read the Objective HUD",
                     "The action bar at the top of your screen during a raid tells you what the raiders are doing right now: scouting, breaching, capturing, or retreating. If it says Breaching, they're at a door or gate. If it says Capturing, get bodies into the core ring."),
             // === Territory ===
-            new Tip("Territory","See your claims",
-                    "The Territory tab shows a live top-down map of your surroundings with faction claim overlays. Zoom with the scroll wheel. This is your best planning tool for placing forward camps or blocking bridges."),
-            new Tip("Territory","Waypoints and shortcuts",
-                    "Press M in the world for the full territory map with waypoint markers on claim centers. Handy for teleporting attention across a large front without alt-tabbing to a map mod."),
+            new Tip("Territory","Permanent faction upgrades",
+                    "The Territory tab offers four permanent faction decrees. Read their effects before buying; Active means your faction already owns that upgrade. The bottom row commissions perimeter fortifications in your chosen material."),
+            new Tip("Builders","Preview a defense before paying",
+                    "Collect a free plan from Defenses. Use it on ground to preview, sneak-use to rotate, and use the same anchor again to confirm. Use in air to cancel. Payment happens only when an owned idle builder accepts the commission."),
+            new Tip("Builders","Supply the construction site",
+                    "Stock cobblestone and oak planks in your Workers storage area with Builders enabled. Commissioned jobs use native Workers construction and work hours. Look at the floating shovel marker for its structure projection. Open Construction report to check your loaded jobs within 128 blocks."),
             // === Intel ===
             new Tip("Intel","Know your enemy",
-                    "The Intel tab lists every raider unit: their tag, stats, behavior, counter, and drops. Read it before the first wave so you're not surprised by sappers or siege engineers."),
+                    "Search within each Intel section to find units, enemy lore or instructions. The unit archive lists raiders: their tag, stats, behavior, counter, and drops. Read it before the first wave so you're not surprised by sappers or siege engineers."),
             new Tip("Intel","Faction lore matters",
                     "Each Olympian host fights differently: Poseidon's Tide lands from the water, Ares presses the breach, Hephaestus fields siege craft, Athena coordinates captains, and Artemis hunts from range."),
             // === Recapture and counterattack ===
