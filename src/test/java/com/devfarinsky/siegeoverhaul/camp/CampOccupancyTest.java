@@ -49,4 +49,17 @@ class CampOccupancyTest extends MinecraftTestSupport {
         assertFalse(NativeCampConstruction.occupiedBlueprint(level,raid));
         verify(worker,never()).getBoundingBox();
     }
+    @Test void entrantBetweenWorkerTicksIsNotHiddenByClearCache() {
+        var level=mock(ServerLevel.class);var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        raid.pendingCampBlocks.put(BlockPos.ZERO.asLong(),"minecraft:stone_bricks");
+        var guard=mock(LivingEntity.class);when(guard.isAlive()).thenReturn(true);
+        when(guard.getBoundingBox()).thenReturn(new AABB(-100,-100,-100,100,100,100));
+        when(level.getEntitiesOfClass(eq(LivingEntity.class),any(AABB.class)))
+                .thenReturn(List.of()).thenReturn(List.of(guard));
+        when(level.hasChunkAt(BlockPos.ZERO)).thenReturn(true);
+        when(level.getBlockState(BlockPos.ZERO)).thenReturn(Blocks.AIR.defaultBlockState());
+        assertFalse(NativeCampConstruction.occupiedBlueprint(level,raid));
+        assertTrue(NativeCampConstruction.occupiedBlueprint(level,raid));
+        verify(level,times(1)).getBlockState(any());
+    }
 }

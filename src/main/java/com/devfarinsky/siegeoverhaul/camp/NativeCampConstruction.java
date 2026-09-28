@@ -314,10 +314,22 @@ public final class NativeCampConstruction {
             // its ticks for self-occupancy would freeze the entire job indefinitely.
             if (!entity.isAlive() || entity.isSpectator() || raid.campWorkers.contains(entity.getUUID())) continue;
             AABB body = entity.getBoundingBox();
-            for (long key : raid.pendingCampBlocks.keySet()) {
-                BlockPos pos = BlockPos.of(key);
-                if (body.intersects(new AABB(pos)) && level.hasChunkAt(pos)
-                        && level.getBlockState(pos).isAir()) return true;
+            int minX=(int)Math.floor(Math.max(body.minX,bounds.minX));
+            int minY=(int)Math.floor(Math.max(body.minY,bounds.minY));
+            int minZ=(int)Math.floor(Math.max(body.minZ,bounds.minZ));
+            int maxX=(int)Math.floor(Math.nextDown(Math.min(body.maxX,bounds.maxX)));
+            int maxY=(int)Math.floor(Math.nextDown(Math.min(body.maxY,bounds.maxY)));
+            int maxZ=(int)Math.floor(Math.nextDown(Math.min(body.maxZ,bounds.maxZ)));
+            if(minX>maxX || minY>maxY || minZ>maxZ)continue;
+            long volume=(long)(maxX-minX+1)*(maxY-minY+1)*(maxZ-minZ+1);
+            // Ordinary NPCs touch only a handful of cells. Giant modded entities
+            // fall back to the finite blueprint, rather than scanning their volume.
+            Iterable<BlockPos> cells=volume<=raid.pendingCampBlocks.size()
+                    ? BlockPos.betweenClosed(minX,minY,minZ,maxX,maxY,maxZ)
+                    : raid.pendingCampBlocks.keySet().stream().map(BlockPos::of).toList();
+            for (BlockPos pos : cells) {
+                if (raid.pendingCampBlocks.containsKey(pos.asLong()) && body.intersects(new AABB(pos))
+                        && level.hasChunkAt(pos) && level.getBlockState(pos).isAir()) return true;
             }
         }
         return false;
