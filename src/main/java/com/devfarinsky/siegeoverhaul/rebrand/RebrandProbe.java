@@ -65,13 +65,6 @@ public final class RebrandProbe {
         if (emitted) return;
         emitted = true;
 
-        // ---- Deprecation banner ---------------------------------------
-        // One-time, single line. Server admins skim logs; a wall of text
-        // gets ignored. Anyone who wants detail can read the linked doc.
-        LOG.info("[Faction Raids] Heads up: v3.0.0 will rename this mod to "
-                + "'The Siege Overhaul'. Your saves and config will migrate "
-                + "automatically on the v3.0 upgrade. See release notes for details.");
-
         // ---- Persistence probe ---------------------------------------
         // Bounded work: three cheap checks. If any throws, we swallow
         // (logged) and keep going - a diagnostic must never break startup.
@@ -82,18 +75,18 @@ public final class RebrandProbe {
             probeConfigFile(server, findings);
 
             if (findings.isEmpty()) {
-                LOG.info("[Faction Raids] Rebrand probe: no legacy persistence "
-                        + "surfaces detected on this server. Clean world.");
+                LOG.info("[SiegeOverhaul] Rebrand probe: no legacy persistence "
+                        + "surfaces detected on this server.");
             } else {
-                LOG.info("[Faction Raids] Rebrand probe: found {} legacy "
-                        + "persistence surface(s) that v3.0.0 will migrate:",
+                LOG.info("[SiegeOverhaul] Rebrand probe: found {} legacy "
+                        + "persistence surface(s) retained on disk (may be migration backups):",
                         findings.size());
                 for (String f : findings) {
-                    LOG.info("[Faction Raids]   - {}", f);
+                    LOG.info("[SiegeOverhaul]   - {}", f);
                 }
             }
         } catch (Throwable t) {
-            LOG.warn("[Faction Raids] Rebrand probe failed (non-fatal): {}",
+            LOG.warn("[SiegeOverhaul] Rebrand probe failed (non-fatal): {}",
                     t.getMessage());
         }
     }
@@ -123,7 +116,7 @@ public final class RebrandProbe {
                 findings.add("SavedData: data/factionraids_data.dat (" + sz + " bytes)");
             }
         } catch (IOException e) {
-            LOG.warn("[Faction Raids] SavedData probe I/O error: {}", e.getMessage());
+            LOG.warn("[SiegeOverhaul] SavedData probe I/O error: {}", e.getMessage());
         }
     }
 
@@ -157,20 +150,20 @@ public final class RebrandProbe {
         try {
             Path worldScoped = server.getWorldPath(LevelResource.ROOT)
                     .resolve("serverconfig")
-                    .resolve(SiegeOverhaul.MOD_ID + "-common.toml");
+                    .resolve("factionraids-common.toml");
             if (Files.isRegularFile(worldScoped)) {
                 findings.add("Config (world-scoped): serverconfig/"
                         + worldScoped.getFileName());
             }
             Path globalConfigDir = net.minecraftforge.fml.loading.FMLPaths.CONFIGDIR.get();
             if (globalConfigDir != null) {
-                Path global = globalConfigDir.resolve(SiegeOverhaul.MOD_ID + "-common.toml");
+                Path global = globalConfigDir.resolve("factionraids-common.toml");
                 if (Files.isRegularFile(global)) {
                     findings.add("Config (global): " + global.getFileName());
                 }
             }
         } catch (Throwable t) {
-            LOG.warn("[Faction Raids] Config probe error: {}", t.getMessage());
+            LOG.warn("[SiegeOverhaul] Config probe error: {}", t.getMessage());
         }
     }
 }

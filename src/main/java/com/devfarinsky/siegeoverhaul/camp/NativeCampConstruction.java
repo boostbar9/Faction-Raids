@@ -293,11 +293,32 @@ public final class NativeCampConstruction {
                 return pause(raid, "Player inside blueprint");
             }
         }
+        if (occupiedBlueprint(level, raid)) return pause(raid, "Living entity inside blueprint");
         if (!raid.constructionPauseReason.isEmpty()) {
             FactionLogger.LOG.info("Camp builders for {} resumed", raid.teamKey);
             raid.constructionPauseReason = "";
         }
         return true;
+    }
+
+    /** One local entity query, independent of blueprint cell count. No relocation or damage immunity. */
+    static boolean occupiedBlueprint(ServerLevel level, RaidSavedData.RaidState raid) {
+        AABB bounds = null;
+        for (long key : raid.pendingCampBlocks.keySet()) {
+            AABB cell = new AABB(BlockPos.of(key));
+            bounds = bounds == null ? cell : bounds.minmax(cell);
+        }
+        if (bounds == null) return false;
+        for (var entity : level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, bounds)) {
+            if (!entity.isAlive() || entity.isSpectator()) continue;
+            AABB body = entity.getBoundingBox();
+            for (long key : raid.pendingCampBlocks.keySet()) {
+                BlockPos pos = BlockPos.of(key);
+                if (body.intersects(new AABB(pos)) && level.hasChunkAt(pos)
+                        && level.getBlockState(pos).isAir()) return true;
+            }
+        }
+        return false;
     }
 
     private static boolean pause(RaidSavedData.RaidState raid, String reason) {
