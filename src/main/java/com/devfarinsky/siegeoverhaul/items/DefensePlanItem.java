@@ -40,7 +40,7 @@ public final class DefensePlanItem extends Item {
                 player.displayClientMessage(Component.literal("Use the top of a ground block to set the anchor."), true);
                 return InteractionResult.FAIL;
             }
-            BlockPos origin = context.getClickedPos().above();
+            BlockPos origin = kind.anchor(context.getClickedPos().above());
             long now = player.level().getGameTime();
             if (selection != null && selection.canConfirm(origin, now)) {
                 if (!DefenseStructures.commission(player, origin, selection.facing(), kind)) return InteractionResult.FAIL;
@@ -90,9 +90,10 @@ public final class DefensePlanItem extends Item {
     }
     @Override public void appendHoverText(ItemStack stack, Level level, List<Component> tooltip, TooltipFlag flag) {
         tooltip.add(Component.literal(kind.description).withStyle(ChatFormatting.GRAY));
+        if (kind.modular()) tooltip.add(Component.literal("Snaps to a 5 x 5 grid. Join open ends at the same ground height.").withStyle(ChatFormatting.AQUA));
         tooltip.add(Component.literal(kind.dimensions()).withStyle(ChatFormatting.GOLD));
         tooltip.add(Component.literal("Use ground to preview; use the same anchor again to confirm.").withStyle(ChatFormatting.GRAY));
-        tooltip.add(Component.literal("Sneak-use rotates. Use in air cancels. Builds away from the anchor.").withStyle(ChatFormatting.GRAY));
+        tooltip.add(Component.literal(kind.modular() ? "Sneak-use rotates. Use in air cancels. Grid anchor is the tile center." : "Sneak-use rotates. Use in air cancels. Builds away from the anchor.").withStyle(ChatFormatting.GRAY));
         tooltip.add(Component.literal("Requires your idle builder within 16 blocks and Workers storage.").withStyle(ChatFormatting.GRAY));
         tooltip.add(Component.literal(kind.price + " Treasury emeralds on placement + "
                 + DefenseBlueprint.create(kind, BlockPos.ZERO, Direction.SOUTH).materials()).withStyle(ChatFormatting.YELLOW));

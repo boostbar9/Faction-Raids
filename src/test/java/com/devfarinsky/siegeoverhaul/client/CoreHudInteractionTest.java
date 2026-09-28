@@ -139,4 +139,20 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void constructionPagesKeepEveryRowAboveNavigationAtAllScales() throws Exception {
+        var menu = mock(CoreHireMenu.class);
+        when(menu.construction()).thenReturn(java.util.Collections.nCopies(12,
+                new ConstructionReport.Job("Wall", 0, "0%", "", "Working", "")));
+        var screen = new CoreHireScreen(menu, mock(Inventory.class), Component.literal("Command"));
+        var rowsMethod = CoreHireScreen.class.getDeclaredMethod("constructionRows");
+        var heightMethod = CoreHireScreen.class.getDeclaredMethod("constructionRowHeight");
+        rowsMethod.setAccessible(true); heightMethod.setAccessible(true);
+        for (int w : new int[]{240,320,640,1920}) for (int h : new int[]{180,240,360,1080}) {
+            var layout = CoreHireLayout.fit(w,h); set(screen,"layout",layout);
+            int rows = (int) rowsMethod.invoke(screen), rowH = (int) heightMethod.invoke(screen);
+            assertTrue(rows > 0);
+            assertTrue(layout.contentY() + 24 + rows * rowH <= layout.contentBottom() - 20);
+        }
+    }
+
 }

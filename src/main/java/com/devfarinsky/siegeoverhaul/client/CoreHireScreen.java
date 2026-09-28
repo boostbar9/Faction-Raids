@@ -89,7 +89,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private final Button[] siegeYard = new Button[2];
     private final Button[] territoryBuffs = new Button[4];
     private Button constructionReport;
-    private final Button[] defensePlans = new Button[DefenseBlueprint.Kind.values().length];
+    private final Button[] defensePlans = new Button[3];
+    private Button defenseCatalog, constructionBack, constructionPrevious, constructionNext;
+    private boolean constructionView;
+    private int defensePage, constructionPage;
     private final Button[] fortifyButtons = new Button[TerritoryFortification.MATERIALS.length];
     private final Button[] boxes = new Button[3];
     private final Button[] buffs = new Button[3];
@@ -288,13 +291,26 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             final int index = i;
             int cx = layout.territoryCardX(i), cy = layout.territoryCardY(i);
             defensePlans[i] = addRenderableWidget(new CoreButton(Component.literal("Free plan"),
-                    b -> action(80 + index), cx + 8, cy + layout.territoryCardHeight() - 24,
+                    b -> action(90 + defensePage * 3 + index), cx + 8, cy + layout.territoryCardHeight() - 24,
                     layout.territoryCardWidth() - 16, 18, false, () -> false));
         }
 
-        constructionReport = addRenderableWidget(new CoreButton(Component.literal("Construction report"),
-                b -> action(83), layout.territoryCardX(3) + 8, layout.territoryButtonY(3),
+        constructionReport = addRenderableWidget(new CoreButton(Component.literal("Live construction"),
+                b -> showConstruction(true), layout.territoryCardX(3) + 8, layout.territoryButtonY(3),
                 layout.territoryCardWidth() - 16, 18, false, () -> false));
+
+        defenseCatalog = addRenderableWidget(new CoreButton(Component.literal("Wall pieces >"),
+                b -> { defensePage = 1 - defensePage; updateControlState(); }, layout.x() + 10,
+                layout.contentBottom() - 22, layout.width() - 20, 20, false, () -> false));
+        constructionBack = addRenderableWidget(new CoreButton(Component.literal("< Plans"),
+                b -> showConstruction(false), layout.x() + 10, layout.contentY(), 82, 18, false, () -> false));
+        int jobsNavW = (layout.width() - 26) / 2;
+        constructionPrevious = addRenderableWidget(new CoreButton(Component.literal("< Previous"),
+                b -> { constructionPage--; updateControlState(); }, layout.x() + 10,
+                layout.contentBottom() - 20, jobsNavW, 18, false, () -> false));
+        constructionNext = addRenderableWidget(new CoreButton(Component.literal("Next >"),
+                b -> { constructionPage++; updateControlState(); }, layout.x() + 16 + jobsNavW,
+                layout.contentBottom() - 20, jobsNavW, 18, false, () -> false));
 
         // Persistent path for beta feedback. Minecraft shows its normal
         // external-link confirmation before opening CurseForge comments.
@@ -333,11 +349,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     false, () -> false));
         }
         updateControlState();
+        if (tab == CoreCommandPage.DEFENSES && constructionView) action(84);
     }
 
     private void selectPage(CoreCommandPage page) {
         if (tab == page) return;
+        if (tab == CoreCommandPage.DEFENSES && constructionView) action(85);
         tab = page;
+        if (tab == CoreCommandPage.DEFENSES && constructionView) action(84);
         confirmBox = -1;
         intelDragging = false;
         setFocused(null); // Never leave keyboard focus on a now-hidden purchase action.
@@ -345,6 +364,17 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         updateControlState();
         setFocused(pageButtons[tab.ordinal()]);
     }
+
+    private void showConstruction(boolean show) {
+        constructionView = show;
+        action(show ? 84 : 85);
+        setFocused(null);
+        updateControlState();
+    }
+
+    private int constructionRowHeight() { return layout.compact() ? 52 : 68; }
+    private int constructionRows() { return Math.max(1, (layout.contentBottom() - layout.contentY() - 48) / constructionRowHeight()); }
+    private int constructionPages() { return Math.max(1, (menu.construction().size() + constructionRows() - 1) / constructionRows()); }
 
     private void movePage(int direction) {
         var strip = layout.tabs(PAGES.length, tab.ordinal());
@@ -481,9 +511,16 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                                     + "  ·  " + SiegeYard.PRICES[i] + "e"
                             : shortLabel + "  ·  unavailable"));
         }
-        constructionReport.visible = tab == CoreCommandPage.DEFENSES;
+        boolean plansVisible = tab == CoreCommandPage.DEFENSES && !constructionView;
+        boolean jobsVisible = tab == CoreCommandPage.DEFENSES && constructionView;
+        constructionPage = Math.max(0, Math.min(constructionPage, constructionPages() - 1));
+        constructionReport.visible = defenseCatalog.visible = plansVisible;
+        defenseCatalog.setMessage(Component.literal(defensePage == 0 ? "Wall pieces >" : "< Defensive structures"));
+        constructionBack.visible = constructionPrevious.visible = constructionNext.visible = jobsVisible;
+        constructionPrevious.active = constructionPage > 0;
+        constructionNext.active = constructionPage + 1 < constructionPages();
         for (Button plan : defensePlans) {
-            plan.visible = tab == CoreCommandPage.DEFENSES;
+            plan.visible = plansVisible;
             plan.active = true;
         }
         for (int i = 0; i < territoryBuffs.length; i++) {
@@ -643,18 +680,30 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 }
             }
         }
-        if (tab == CoreCommandPage.DEFENSES) {
+        if (tab == CoreCommandPage.DEFENSES && !constructionView) {
             if (constructionReport.isMouseOver(mx, my)) tooltip(g,
-                    "Closes this menu and prints progress, native supply requests and locations for your loaded commissioned jobs within 128 blocks. Also available through /siegeoverhaul builds.", tooltipX, tooltipY);
+                    "Shows your loaded commissioned jobs within 128 blocks, refreshed every two seconds. Hover a job for its full status, location and current supply requests. Chat report: /siegeoverhaul builds.", tooltipX, tooltipY);
             for (int i = 0; i < defensePlans.length; i++) {
                 if (over(mx, my, layout.territoryCardX(i), layout.territoryCardY(i),
                         layout.territoryCardWidth(), layout.territoryCardHeight())) {
-                    var kind = DefenseBlueprint.Kind.values()[i];
+                    var kind = DefenseBlueprint.Kind.values()[defensePage * 3 + i];
                     tooltip(g, kind.label + " | " + kind.description + " | " + kind.dimensions()
                             + " | " + kind.price + " Treasury emeralds on placement + "
                             + DefenseBlueprint.create(kind, net.minecraft.core.BlockPos.ZERO, net.minecraft.core.Direction.SOUTH).materials()
                             + ". Plan collection and preview are free. Use the same anchor again to pay and build. Your idle builder must be within 16 blocks of the site; supply a Workers storage area with Builders enabled.",
                             tooltipX, tooltipY);
+                }
+            }
+        }
+        if (tab == CoreCommandPage.DEFENSES && constructionView) {
+            int first = constructionPage * constructionRows();
+            for (int row = 0; row < constructionRows() && first + row < menu.construction().size(); row++) {
+                if (over(mx, my, layout.x() + 10, layout.contentY() + 24 + row * constructionRowHeight(),
+                        layout.width() - 20, constructionRowHeight() - 4)) {
+                    var job = menu.construction().get(first + row);
+                    tooltip(g, job.label() + " | " + job.progressText() + " | " + job.location()
+                            + " | " + job.activity() + " | Requested now: "
+                            + (job.supplies().isBlank() ? "No active requests reported" : job.supplies()), tooltipX, tooltipY);
                 }
             }
         }
@@ -864,7 +913,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     menu.seconds() / 60, menu.seconds() % 60);
             case LOOT -> String.format(Locale.ROOT, "Treasury %,de", menu.bank());
             case TREASURY -> String.format(Locale.ROOT, "Balance %,de", menu.bank());
-            case DEFENSES -> "3 building plans";
+            case DEFENSES -> constructionView ? "Your nearby jobs" : "Plans " + (defensePage + 1) + "/2";
             case TERRITORY -> ownedTerritoryBuffs() + "/" + TerritoryBuffs.COUNT + " active";
             case INTEL -> switch (intelSection) {
                 case 0 -> "Unit archive";
@@ -1141,10 +1190,39 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 (int) Math.ceil(bottom * scale));
     }
 
+    private void drawConstruction(GuiGraphics g) {
+        text(g, "Your jobs · 128 blocks · 2s refresh", layout.x() + 100, layout.contentY() + 5,
+                layout.width() - 112, CommandPalette.TEXT_MUTED);
+        var jobs = menu.construction();
+        if (jobs.isEmpty()) {
+            drawWrappedText(g, menu.constructionLoaded()
+                            ? "No loaded jobs nearby. Move closer to your builder or site. Completed markers may disappear."
+                            : "Loading your construction...", layout.x() + 18, layout.contentY() + 34,
+                    layout.width() - 36, 4, CommandPalette.TEXT_MUTED);
+            return;
+        }
+        constructionPage = Math.max(0, Math.min(constructionPage, constructionPages() - 1));
+        int first = constructionPage * constructionRows();
+        for (int row = 0; row < constructionRows() && first + row < jobs.size(); row++) {
+            var job = jobs.get(first + row);
+            int x = layout.x() + 10, y = layout.contentY() + 24 + row * constructionRowHeight();
+            int w = layout.width() - 20, h = constructionRowHeight() - 4;
+            CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_TEAL);
+            text(g, (first + row + 1) + "/" + jobs.size() + "  " + job.label(), x + 8, y + 5, w - 16, CommandPalette.TEXT);
+            text(g, job.progressText(), x + 8, y + 17, w - 16, CommandPalette.ACCENT_TEAL);
+            text(g, job.activity(), x + 8, y + 29, w - 16, CommandPalette.TEXT_MUTED);
+            if (!layout.compact()) text(g, "Supplies: " + (job.supplies().isBlank()
+                    ? "No active requests reported" : job.supplies()), x + 8, y + 41, w - 16, CommandPalette.ACCENT_GOLD);
+            if (job.percent() >= 0) CommandFrame.progress(g, x + 8, y + h - 6, w - 16, 3,
+                    job.percent() / 100f, CommandPalette.ACCENT_TEAL);
+        }
+    }
+
     private void drawDefenses(GuiGraphics g, int mouseX, int mouseY) {
+        if (constructionView) { drawConstruction(g); return; }
         int w = layout.territoryCardWidth(), h = layout.territoryCardHeight();
         for (int i = 0; i < defensePlans.length; i++) {
-            var kind = DefenseBlueprint.Kind.values()[i];
+            var kind = DefenseBlueprint.Kind.values()[defensePage * 3 + i];
             int x = layout.territoryCardX(i), y = layout.territoryCardY(i);
             CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_TEAL,
                     over(mouseX, mouseY, x, y, w, h));
@@ -1162,10 +1240,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         if (h >= 84) {
             text(g, "Progress, supplies and builder status", x + 8, y + 24, w - 16, CommandPalette.TEXT_MUTED);
             text(g, "Your loaded jobs within 128 blocks", x + 8, y + 36, w - 16, CommandPalette.TEXT_DIM);
-            text(g, "Opens the report in chat", x + 8, y + 48, w - 16, CommandPalette.ACCENT_GOLD);
+            text(g, "Progress and supply requests in this hub", x + 8, y + 48, w - 16, CommandPalette.ACCENT_GOLD);
         }
-        text(g, "Use ground to preview; sneak-use rotates. Use the anchor again to confirm.", layout.x() + 10,
-                layout.contentBottom() - 18, layout.width() - 20, CommandPalette.TEXT_MUTED);
+
     }
 
     private void drawTerritory(GuiGraphics g, int mouseX, int mouseY) {

@@ -43,6 +43,12 @@ class ConstructionReportTest extends MinecraftTestSupport {
             bridge.when(() -> WorkersBridge.isBuildArea(any())).thenReturn(true);
             bridge.when(() -> WorkersBridge.readOwner(ours)).thenReturn(owner);
             bridge.when(() -> WorkersBridge.readOwner(foreign)).thenReturn(UUID.randomUUID());
+            var jobs = ConstructionReport.snapshot(player);
+            assertEquals(1, jobs.size());
+            assertEquals("Our tower", jobs.get(0).label());
+            assertEquals(-1, jobs.get(0).percent());
+            verify(player, never()).sendSystemMessage(any(Component.class));
+            assertEquals(before, ours.getPersistentData());
             assertEquals(1, ConstructionReport.report(player));
             var messages = ArgumentCaptor.forClass(Component.class);
             verify(player, atLeastOnce()).sendSystemMessage(messages.capture());

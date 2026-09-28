@@ -19,7 +19,7 @@ public final class RaidNetwork {
     // discovered units/factions, and War Journal rows to DashboardSync.
     // Bump whenever the wire format changes so mismatched builds refuse to connect
     // instead of silently corrupting the dashboard payload.
-    private static final String PROTOCOL = "16";
+    private static final String PROTOCOL = "17";
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(SiegeOverhaul.MOD_ID, "main"))
             .networkProtocolVersion(() -> PROTOCOL)
@@ -50,6 +50,16 @@ public final class RaidNetwork {
                     DistExecutor.unsafeRunWhenOn(Dist.CLIENT,() -> () -> {
                         var player=net.minecraft.client.Minecraft.getInstance().player;
                         if(player!=null && player.containerMenu instanceof com.devfarinsky.siegeoverhaul.core.CoreHireMenu menu && menu.containerId==p.menuId()) menu.details(p.faction(),p.members(),p.ledger());
+                    });
+                    supplier.get().setPacketHandled(true);
+                }).add();
+        CHANNEL.messageBuilder(ConstructionDetails.class, messageId++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(ConstructionDetails::encode).decoder(ConstructionDetails::decode)
+                .consumerMainThread((packet, supplier) -> {
+                    DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
+                        var player = net.minecraft.client.Minecraft.getInstance().player;
+                        if (player != null && player.containerMenu instanceof com.devfarinsky.siegeoverhaul.core.CoreHireMenu menu
+                                && menu.containerId == packet.menuId()) menu.construction(packet.jobs());
                     });
                     supplier.get().setPacketHandled(true);
                 }).add();
@@ -118,6 +128,31 @@ public final class RaidNetwork {
     }
     public static void sendHeroCast(ServerPlayer player,HeroCast packet) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),packet);
+    }
+
+    public record ConstructionDetails(int menuId, java.util.List<com.devfarinsky.siegeoverhaul.core.ConstructionReport.Job> jobs) {
+        public ConstructionDetails { jobs = java.util.List.copyOf(jobs.stream().limit(12).toList()); }
+        public void encode(FriendlyByteBuf buffer) {
+            buffer.writeVarInt(menuId); buffer.writeVarInt(jobs.size());
+            for (var job : jobs) {
+                buffer.writeUtf(job.label(), 256); buffer.writeVarInt(job.percent());
+                buffer.writeUtf(job.progressText(), 256); buffer.writeUtf(job.location(), 256);
+                buffer.writeUtf(job.activity(), 256); buffer.writeUtf(job.supplies(), 256);
+            }
+        }
+        public static ConstructionDetails decode(FriendlyByteBuf buffer) {
+            int id = buffer.readVarInt(), count = buffer.readVarInt();
+            if (count < 0 || count > 12) throw new IllegalArgumentException("Invalid construction list size");
+            var jobs = new java.util.ArrayList<com.devfarinsky.siegeoverhaul.core.ConstructionReport.Job>();
+            for (int i = 0; i < count; i++) jobs.add(new com.devfarinsky.siegeoverhaul.core.ConstructionReport.Job(
+                    buffer.readUtf(256), buffer.readVarInt(), buffer.readUtf(256), buffer.readUtf(256),
+                    buffer.readUtf(256), buffer.readUtf(256)));
+            return new ConstructionDetails(id, jobs);
+        }
+    }
+    public static void constructionDetails(ServerPlayer player, int menuId,
+            java.util.List<com.devfarinsky.siegeoverhaul.core.ConstructionReport.Job> jobs) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new ConstructionDetails(menuId, jobs));
     }
 
     public record CoreDetails(int menuId,String faction,java.util.List<String> members,int[] ledger) {
