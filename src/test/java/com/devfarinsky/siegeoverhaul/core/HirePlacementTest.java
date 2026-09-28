@@ -44,7 +44,8 @@ class HirePlacementTest extends MinecraftTestSupport {
     @Test void hazardousSupportAndNonCollidingBodyHazardsAreRejected() {
         for (Block hazard : new Block[]{Blocks.MAGMA_BLOCK, Blocks.CAMPFIRE, Blocks.SOUL_CAMPFIRE,
                 Blocks.CACTUS, Blocks.FIRE, Blocks.SOUL_FIRE, Blocks.SWEET_BERRY_BUSH,
-                Blocks.WITHER_ROSE, Blocks.POWDER_SNOW, Blocks.WATER, Blocks.LAVA}) {
+                Blocks.WITHER_ROSE, Blocks.POWDER_SNOW, Blocks.WATER, Blocks.LAVA,
+                Blocks.NETHER_PORTAL, Blocks.END_PORTAL, Blocks.END_GATEWAY}) {
             when(level.getBlockState(feet.below())).thenReturn(hazard.defaultBlockState());
             assertFalse(HirePlacement.safe(level,recruit,feet,p -> true), "Floor: " + hazard);
             when(level.getBlockState(feet.below())).thenReturn(Blocks.STONE.defaultBlockState());

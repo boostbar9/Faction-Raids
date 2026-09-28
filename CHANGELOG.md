@@ -1,5 +1,5 @@
 ## 4.50.5 — Safe arrivals for hired units
-- Core Guards, recruits, heroes and workers avoid damaging floors, fire, freezing powder snow and fluid-filled spawn spaces.
+- Core Guards, recruits, heroes and workers avoid damaging floors, fire, freezing powder snow, portals and fluid-filled spawn spaces.
 - Placement checks the unit's full body, footing, loaded chunks and world border. Starter Core Guards also remain fully inside their faction's claim.
 - A stale pending guard record no longer blocks delivery for another valid core record at the same location. Failed placements preserve the free guard grant and do not charge for a hire.
 

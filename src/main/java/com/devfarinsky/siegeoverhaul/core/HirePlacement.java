@@ -46,6 +46,7 @@ final class HirePlacement {
         return state.is(Blocks.WATER) || state.is(Blocks.LAVA) || state.is(Blocks.MAGMA_BLOCK) || state.is(Blocks.CAMPFIRE) || state.is(Blocks.SOUL_CAMPFIRE)
                 || state.is(Blocks.CACTUS) || state.is(Blocks.FIRE) || state.is(Blocks.SOUL_FIRE)
                 || state.is(Blocks.SWEET_BERRY_BUSH) || state.is(Blocks.WITHER_ROSE)
-                || state.is(Blocks.POWDER_SNOW);
+                || state.is(Blocks.POWDER_SNOW) || state.is(Blocks.NETHER_PORTAL)
+                || state.is(Blocks.END_PORTAL) || state.is(Blocks.END_GATEWAY);
     }
 }
