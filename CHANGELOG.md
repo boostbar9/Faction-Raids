@@ -1,3 +1,9 @@
+## 4.50.10 — Live construction and modular walls
+- Defenses now includes an in-hub live construction list with progress, builder activity, current supply requests and hover details for marker/builder locations. Lists refresh every two seconds while viewed and cover up to twelve of your loaded nearby commissioned jobs.
+- Added Wall Section, Wall Corner and Wall Stairs plans, costing 90 / 90 / 100 Treasury emeralds when commissioned. Matching raised walkways snap to a five-block world grid; rotate pieces to line up their open ends at the same ground height.
+- Two plan pages keep all six designs accessible on small screens. Existing structures, chat reports, job ownership, native Workers materials/work hours and shovel projections are preserved.
+- Placement previews and final checks still protect existing blocks, claims, entities and unloaded terrain. Client and server must update together (network protocol 17).
+
 ## 4.50.9 — Clearer Command Center tabs
 - Army cards give names more room and show hire costs directly on their buttons, including compact screens.
 - Loot rows separate titles, reveal progress and purchase controls at small GUI sizes; rewards remain hidden until unsealing finishes.

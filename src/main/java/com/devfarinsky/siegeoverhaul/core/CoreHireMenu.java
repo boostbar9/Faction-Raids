@@ -20,6 +20,15 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     private final SimpleContainer display = new SimpleContainer(6);
     private final ContainerData data = new SimpleContainerData(32);
     private long shownAt = Long.MIN_VALUE;
+    private boolean watchingConstruction;
+    private long constructionAt = Long.MIN_VALUE;
+    private java.util.List<ConstructionReport.Job> construction = java.util.List.of();
+    private boolean constructionLoaded;
+    public java.util.List<ConstructionReport.Job> construction() { return construction; }
+    public boolean constructionLoaded() { return constructionLoaded; }
+    public void construction(java.util.List<ConstructionReport.Job> jobs) {
+        construction = java.util.List.copyOf(jobs); constructionLoaded = true;
+    }
     private long lastActionAt = -1;
     private String sentRoster = "";
     private String factionName = "Faction";
@@ -149,6 +158,10 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     }
     @Override public boolean clickMenuButton(Player player,int button) {
         if(owner==null || player!=owner || !stillValid(player))return false;
+        if (button == 84 || button == 85) {
+            watchingConstruction = button == 84;
+            return true;
+        }
         long now=owner.server.overworld().getGameTime();
         if(lastActionAt>=0 && now-lastActionAt<5)return false;
         lastActionAt=now;
@@ -164,6 +177,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         else if(button>=60 && button<=63) changed=TerritoryBuffs.purchase(owner, pos, button-60);
         else if(button>=70 && button<=72) changed=TerritoryFortification.commission(owner, pos, button-70);
         else if(button>=80 && button<=82) changed=DefenseStructures.givePlan(owner, button-80);
+        else if(button>=90 && button<90+DefenseBlueprint.Kind.values().length) changed=DefenseStructures.givePlan(owner, button-90);
         else if(button==83) { owner.closeContainer(); ConstructionReport.report(owner); return true; }
         if(!changed)return false;
         owner.inventoryMenu.broadcastChanges();refresh();broadcastChanges();return true;
@@ -171,6 +185,13 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     @Override public void broadcastChanges() {
         if (owner != null) inventorySync.broadcast(owner);
         if (owner != null && owner.server.overworld().getGameTime() - shownAt >= 20) refresh();
+        if (owner != null && watchingConstruction && stillValid(owner)) {
+            long now = owner.server.overworld().getGameTime();
+            if (constructionAt == Long.MIN_VALUE || now < constructionAt || now - constructionAt >= 40) {
+                constructionAt = now;
+                com.devfarinsky.siegeoverhaul.RaidNetwork.constructionDetails(owner, containerId, ConstructionReport.snapshot(owner));
+            }
+        }
         super.broadcastChanges();
     }
 

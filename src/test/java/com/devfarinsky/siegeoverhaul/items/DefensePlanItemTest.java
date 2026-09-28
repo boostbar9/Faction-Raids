@@ -75,6 +75,21 @@ class DefensePlanItemTest extends MinecraftTestSupport {
             assertEquals(new BlockPos(2, 1, 0), f.selection().origin()); f.noCommission();
         }
     }
+    @Test void wallPreviewAndConfirmationUseTheSameSnappedGridAnchor() throws Exception {
+        try (Fixture f = new Fixture()) {
+            var field = DefensePlanItem.class.getDeclaredField("kind"); field.setAccessible(true);
+            field.set(f.item, DefenseBlueprint.Kind.WALL);
+            when(f.context.getClickedPos()).thenReturn(new BlockPos(2, 0, -2));
+            f.item.useOn(f.context);
+            assertEquals(BlockPos.ZERO.above(), f.selection().origin());
+            f.noCommission();
+            when(f.level.getGameTime()).thenReturn(40L);
+            f.structures.when(() -> DefenseStructures.commission(f.player, BlockPos.ZERO.above(), Direction.EAST,
+                    DefenseBlueprint.Kind.WALL)).thenReturn(true);
+            assertEquals(InteractionResult.CONSUME, f.item.useOn(f.context));
+            assertEquals(0, f.stack.getCount());
+        }
+    }
     private static class Fixture implements AutoCloseable {
         final DefensePlanItem item = mock(DefensePlanItem.class, CALLS_REAL_METHODS);
         final UseOnContext context = mock(UseOnContext.class);

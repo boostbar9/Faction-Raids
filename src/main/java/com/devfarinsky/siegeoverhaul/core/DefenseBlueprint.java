@@ -15,13 +15,21 @@ public final class DefenseBlueprint {
         WATCHTOWER("Watchtower", 5, 9, 6, 300,
                 "An open firing deck with a broad stepped approach."),
         GATEHOUSE("Gatehouse", 9, 9, 6, 450,
-                "A raised fighting deck over an open three-block passage. No moving gate.");
+                "A raised fighting deck over an open three-block passage. No moving gate."),
+        WALL("Wall Section", 5, 5, 6, 90, "A raised wall walk with open ends. Snaps to a five-block grid."),
+        CORNER("Wall Corner", 5, 5, 6, 90, "Turns the wall walk right. Rotate to connect matching openings."),
+        STAIRS("Wall Stairs", 5, 5, 6, 100, "A stepped approach to the wall walk. The far end joins a wall.");
 
         public final String label, description;
         public final int width, depth, height, price;
         Kind(String label, int width, int depth, int height, int price, String description) {
             this.label = label; this.width = width; this.depth = depth;
             this.height = height; this.price = price; this.description = description;
+        }
+        public boolean modular() { return ordinal() >= WALL.ordinal(); }
+        public BlockPos anchor(BlockPos clicked) {
+            return modular() ? new BlockPos(Math.floorDiv(clicked.getX() + 2, 5) * 5,
+                    clicked.getY(), Math.floorDiv(clicked.getZ() + 2, 5) * 5) : clicked;
         }
         public String dimensions() { return width + " wide x " + depth + " deep x " + height + " clear"; }
     }
@@ -43,7 +51,7 @@ public final class DefenseBlueprint {
         var footprint = new java.util.ArrayList<BlockPos>();
         int half = kind.width / 2;
         for (int x = -half; x <= half; x++) for (int z = 0; z < kind.depth; z++) {
-            BlockPos base = origin.relative(right, x).relative(forward, z);
+            BlockPos base = origin.relative(right, x).relative(forward, kind.modular() ? z - 2 : z);
             footprint.add(base);
             for (int y = 0; y < kind.height; y++) {
                 String material = material(kind, x, y, z);
@@ -60,6 +68,18 @@ public final class DefenseBlueprint {
 
     private static String material(Kind kind, int x, int y, int z) {
         String stone = "minecraft:cobblestone", wood = "minecraft:oak_planks";
+        if (kind.modular()) {
+            if (kind == Kind.STAIRS) {
+                if (Math.abs(x) <= 1 && y <= Math.min(z, 3)) return stone;
+                return Math.abs(x) == 2 && z == 4 && y <= 4 ? stone : null;
+            }
+            if (y < 3) return stone;
+            if (y == 3) return wood;
+            if (y != 4) return null;
+            boolean rail = kind == Kind.WALL ? Math.abs(x) == 2
+                    : x == -2 || z == 4 || x == 2 && z == 0;
+            return rail ? stone : null;
+        }
         if (kind == Kind.BARRICADE) {
             if (z == 2 && (y == 0 || y == 1 && Math.abs(x) % 2 == 1)) return stone;
             return z == 1 && y == 0 ? wood : null;

@@ -47,11 +47,21 @@ public final class ModItems {
     public static final RegistryObject<Item> GATEHOUSE_PLAN = ITEMS.register("gatehouse_plan",
             () -> new DefensePlanItem(com.devfarinsky.siegeoverhaul.core.DefenseBlueprint.Kind.GATEHOUSE));
 
+    public static final RegistryObject<Item> WALL_PLAN = ITEMS.register("wall_plan",
+            () -> new DefensePlanItem(com.devfarinsky.siegeoverhaul.core.DefenseBlueprint.Kind.WALL));
+    public static final RegistryObject<Item> CORNER_PLAN = ITEMS.register("corner_plan",
+            () -> new DefensePlanItem(com.devfarinsky.siegeoverhaul.core.DefenseBlueprint.Kind.CORNER));
+    public static final RegistryObject<Item> STAIRS_PLAN = ITEMS.register("stairs_plan",
+            () -> new DefensePlanItem(com.devfarinsky.siegeoverhaul.core.DefenseBlueprint.Kind.STAIRS));
+
     public static RegistryObject<Item> defensePlan(com.devfarinsky.siegeoverhaul.core.DefenseBlueprint.Kind kind) {
         return switch (kind) {
             case BARRICADE -> BARRICADE_PLAN;
             case WATCHTOWER -> WATCHTOWER_PLAN;
             case GATEHOUSE -> GATEHOUSE_PLAN;
+            case WALL -> WALL_PLAN;
+            case CORNER -> CORNER_PLAN;
+            case STAIRS -> STAIRS_PLAN;
         };
     }
 
