@@ -164,6 +164,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         else if(button>=60 && button<=63) changed=TerritoryBuffs.purchase(owner, pos, button-60);
         else if(button>=70 && button<=72) changed=TerritoryFortification.commission(owner, pos, button-70);
         else if(button>=80 && button<=82) changed=DefenseStructures.givePlan(owner, button-80);
+        else if(button==83) { owner.closeContainer(); ConstructionReport.report(owner); return true; }
         if(!changed)return false;
         owner.inventoryMenu.broadcastChanges();refresh();broadcastChanges();return true;
     }

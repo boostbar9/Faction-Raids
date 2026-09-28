@@ -1,3 +1,9 @@
+## 4.50.8 — Defense previews and construction reports
+- Defense plans now preview before charging: use ground to select the near-center anchor, sneak-use to rotate, use the same anchor again to confirm, or use in air to cancel. Previews expire after two minutes and are bound to the owner and dimension.
+- Held plans show a transparent block outline, red terrain obstructions, a yellow confirmation anchor, exact material counts and the Treasury price. Server checks refresh once per second and run again on confirmation.
+- The Defenses tab offers a Construction report, also available through `/siegeoverhaul builds`. It lists progress, native material requests, work/rest/order status, and builder/marker coordinates for your loaded commissioned jobs within 128 blocks.
+- Reports and previews do not provide materials, move workers or change native work schedules. Existing plans, jobs and prices are preserved.
+
 ## 4.50.7 — Player-built defenses
 - The core's new Defenses tab offers free Archer Barricade, Watchtower and Gatehouse plans. Use a plan on level ground to choose the near-center anchor; the structure extends in your facing direction.
 - Commissions cost 120 / 300 / 450 Treasury emeralds only after an owned idle builder accepts the job. Players supply cobblestone and oak planks through their own Workers storage area with Builders enabled.

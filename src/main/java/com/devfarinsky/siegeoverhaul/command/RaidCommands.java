@@ -80,6 +80,8 @@ public final class RaidCommands {
                         .then(Commands.argument("point", StringArgumentType.word())
                                 .executes(ctx -> RaidEvents.startOwnRaidCmd(ctx.getSource(),
                                         StringArgumentType.getString(ctx, "point")))))
+                .then(Commands.literal("builds")
+                        .executes(ctx -> com.devfarinsky.siegeoverhaul.core.ConstructionReport.report(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("status")
                         .executes(ctx -> RaidEvents.statusCmd(ctx.getSource())))
                 .then(Commands.literal("debug")
