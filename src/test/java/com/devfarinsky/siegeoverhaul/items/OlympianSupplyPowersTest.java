@@ -38,11 +38,15 @@ class OlympianSupplyPowersTest extends MinecraftTestSupport {
                     assertTrue(ItemStack.matches(stack,ItemStack.of(stack.save(new CompoundTag()))));
                     var loreTags=stack.getTagElement("display").getList("Lore",Tag.TAG_STRING);
                     var lore=new StringBuilder();
-                    for(int line=0;line<loreTags.size();line++)lore.append(net.minecraft.network.chat.Component.Serializer.fromJson(loreTags.getString(line)).getString()).append('\n');
+                    for(int line=0;line<loreTags.size();line++) {
+                        var component=net.minecraft.network.chat.Component.Serializer.fromJson(loreTags.getString(line));
+                        assertNotNull(component);assertEquals(Boolean.FALSE,component.getStyle().isItalic());
+                        lore.append(component.getString()).append('\n');
+                    }
                     String visibleLore=lore.toString();
-                    assertTrue(visibleLore.contains("Sneak-use in air: spend "+power.cost(stack)));
+                    assertTrue(visibleLore.contains("Sneak-use in air • Cost: "+power.cost(stack)));
                     for(var buff:power.buffs)assertTrue(visibleLore.contains(buff.description()));
-                    assertTrue(visibleLore.contains("10s shared supply cooldown"));
+                    assertTrue(visibleLore.contains("Shared cooldown: 10s"));
                 }
             }
         }
