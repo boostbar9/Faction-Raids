@@ -1,0 +1,247 @@
+name: Publish tested 4.49.10 beta to CurseForge
+
+on:
+  push:
+    branches: [publish/curseforge-v4.49.10]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v4.49.10
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify successful merged-main build and identical PR tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          import json, os, urllib.request
+
+          def get(path):
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'Accept': 'application/vnd.github+json'},
+              )
+              with urllib.request.urlopen(request) as response:
+                  return json.load(response)
+
+          source_sha = '9bbb5a7511efc1ccbdf1ccfc418b310b3772812f'
+          source_tree = '0ed021863ca9e1dadc3a53f01ecbc3a6b93d3cc3'
+          pr_head_sha = 'c00a86e556a83768dc929b8104b76ce718f16706'
+          run = get('actions/runs/36370221702')
+          assert run['status'] == 'completed' and run['conclusion'] == 'success'
+          assert run['event'] == 'push' and run['head_branch'] == 'main'
+          assert run['head_sha'] == source_sha
+          pr = get('pulls/213')
+          assert pr['merged'] and pr['merge_commit_sha'] == source_sha
+          assert pr['head']['sha'] == pr_head_sha
+          for sha in (run['head_sha'], pr['merge_commit_sha'], pr_head_sha):
+              assert get('git/commits/' + sha)['tree']['sha'] == source_tree
+          CHECK
+
+      - name: Download exact tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 36370221702
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Download regression results
+        uses: actions/download-artifact@v4
+        with:
+          name: regression-test-results
+          run-id: 36370221702
+          github-token: ${{ github.token }}
+          path: regression
+
+      - name: Verify tested bytes, metadata, dependencies, and regressions
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib, json
+          import xml.etree.ElementTree as ET
+
+          jar = Path('dist/siegeoverhaul-4.49.10.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == '923e547336e1b3165d6653d959fe73dc9b3a899f27275cdbfa2405ea50190bca'
+          Path('verified-sha256.txt').write_text(digest)
+          with zipfile.ZipFile(jar) as archive:
+              assert archive.testzip() is None
+              entries = set(archive.namelist())
+              for entry in (
+                  'com/devfarinsky/siegeoverhaul/RaidEvents.class',
+                  'com/devfarinsky/siegeoverhaul/raid/RaiderDoors.class',
+                  'com/devfarinsky/siegeoverhaul/client/HeroCastShape.class',
+                  'com/devfarinsky/siegeoverhaul/client/ItemTooltipLayout.class',
+                  'com/devfarinsky/siegeoverhaul/items/OlympianLoot.class',
+                  'com/devfarinsky/siegeoverhaul/items/OlympianRelicItem.class',
+                  'com/devfarinsky/siegeoverhaul/items/OlympianRelics.class',
+                  'com/devfarinsky/siegeoverhaul/items/OlympianSupplyPowers.class',
+                  'com/devfarinsky/siegeoverhaul/items/EnemyLootDrops.class',
+                  'com/devfarinsky/siegeoverhaul/compat/CuriosCompat.class',
+                  'data/curios/tags/items/charm.json',
+                  'data/siegeoverhaul/curios/entities/players.json',
+                  'assets/siegeoverhaul/models/item/forge_ember.json',
+                  'assets/siegeoverhaul/models/item/owl_seal.json',
+                  'assets/siegeoverhaul/models/item/sun_laurel.json',
+                  'com/devfarinsky/siegeoverhaul/items/LootBoxItem.class',
+                  'com/devfarinsky/siegeoverhaul/naval/NavalFleet.class',
+                  'com/devfarinsky/siegeoverhaul/siege/EngineerSupplies.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampDevelopment.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampScouting.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampStructures.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampStarterPavilion.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampStarterLayout.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampBlockState.class',
+                  'com/devfarinsky/siegeoverhaul/core/BuilderGroundRecovery.class',
+                  'com/devfarinsky/siegeoverhaul/core/WallBuilderAccess.class',
+                  'com/devfarinsky/siegeoverhaul/camp/NativeCampConstruction.class',
+                  'com/devfarinsky/siegeoverhaul/narrative/OlympianPresentation.class',
+                  'com/devfarinsky/siegeoverhaul/compat/RaiderDiplomacy.class',
+                  'com/devfarinsky/siegeoverhaul/core/CaptureRing.class',
+                  'com/devfarinsky/siegeoverhaul/core/EnemyCoreApproach.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampBuilderAccess.class',
+                  'com/devfarinsky/siegeoverhaul/core/CoreOccupation.class',
+                  'com/devfarinsky/siegeoverhaul/compat/WorkersBridge.class',
+                  'com/devfarinsky/siegeoverhaul/compat/CampClaims.class',
+                  'com/devfarinsky/siegeoverhaul/core/PlayerFortificationJobs.class',
+                  'com/devfarinsky/siegeoverhaul/client/CoreHireScreen.class',
+                  'com/devfarinsky/siegeoverhaul/core/CoreCommandPage.class',
+                  'com/devfarinsky/siegeoverhaul/core/CoreTabStrip.class',
+                  'com/devfarinsky/siegeoverhaul/core/HeroCasting.class',
+                  'com/devfarinsky/siegeoverhaul/core/HeroCastPackets.class',
+                  'com/devfarinsky/siegeoverhaul/client/HeroCastVisuals.class',
+                  'com/devfarinsky/siegeoverhaul/client/HeroCastingModel.class',
+                  'com/devfarinsky/siegeoverhaul/client/OlympianWeaponModels.class',
+                  'com/devfarinsky/siegeoverhaul/items/OlympianWeaponSkins.class',
+                  'com/devfarinsky/siegeoverhaul/items/CreativeCatalog.class',
+                  'com/devfarinsky/siegeoverhaul/items/OlympianSpellBookItem.class',
+                  'com/devfarinsky/siegeoverhaul/items/UnitSpawnEggItem.class',
+                  'assets/siegeoverhaul/models/item/tempest_spellbook.json',
+                  'assets/siegeoverhaul/models/item/inferno_spellbook.json',
+                  'assets/siegeoverhaul/models/item/undertow_spellbook.json',
+              ):
+                  assert entry in entries, entry
+              assert b'm_20148_' in archive.read(
+                  'com/devfarinsky/siegeoverhaul/core/PlayerFortificationJobs.class'
+              ), 'Expected reobfuscated Minecraft method name'
+              models = [n for n in entries if n.startswith('assets/siegeoverhaul/models/item/olympian/') and n.endswith('.json')]
+              assert len(models) == 128, len(models)
+              model_digest = hashlib.sha256()
+              for name in sorted(models):
+                  model_digest.update(Path(name).name.encode())
+                  model_digest.update(bytes([0]))
+                  model_digest.update(archive.read(name))
+                  model = json.loads(archive.read(name))
+                  assert len(model['elements']) <= 24
+                  assert all('uv' in face for element in model['elements'] for face in element['faces'].values())
+              assert model_digest.hexdigest() == '3d03355ed2d5d9121ddce2cedc2f72e51ffda8cec398a9f4bddb22b035f377f4'
+
+              credits = 'META-INF/credits/weekly-dot/'
+              manifest = json.loads(archive.read(credits + 'assets.json'))
+              assert manifest['author'] == 'Hungry (Hungry22)'
+              notice = archive.read(credits + manifest['notice']).decode()
+              assert 'BY-NC-SA' in notice and 'Hungry22' in notice
+              assert 'Copying, distribution, and modifications are allowed' in notice
+              assert archive.read(credits + 'README.txt')
+              assert {a['item'] for a in manifest['assets']} == {'tempest_spellbook', 'inferno_spellbook', 'undertow_spellbook'}
+              for asset in manifest['assets']:
+                  assert hashlib.sha256(archive.read(asset['texture'])).hexdigest() == asset['sha256']
+                  model = json.loads(archive.read('assets/siegeoverhaul/models/item/' + asset['item'] + '.json'))
+                  assert model['parent'] == 'minecraft:item/generated'
+                  assert model['textures']['layer0'] == 'siegeoverhaul:' + asset['texture'].removeprefix('assets/siegeoverhaul/textures/').removesuffix('.png')
+
+              data = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+          mod = data['mods'][0]
+          assert mod['modId'] == 'siegeoverhaul' and mod['version'] == '4.49.10'
+          assert mod['displayTest'] == 'MATCH_VERSION'
+          dependencies = {entry['modId']: entry for entry in data['dependencies']['siegeoverhaul']}
+          for mod_id in ('recruits', 'workers', 'smallships', 'siegeweapons'):
+              assert dependencies[mod_id]['mandatory'] and dependencies[mod_id]['side'] == 'BOTH', mod_id
+          assert dependencies['recruits']['versionRange'] == '[1.15.2,)'
+          assert dependencies['workers']['versionRange'] == '[2.0.3,)'
+          for mod_id in ('ftbchunks', 'openpartiesandclaims', 'corpse', 'magistuarmory', 'musketmod', 'curios'):
+              assert not dependencies[mod_id]['mandatory'] and dependencies[mod_id]['side'] == 'BOTH', mod_id
+          assert dependencies['curios']['versionRange'] == '[5.14.1,6)'
+          assert not any(n.startswith('top/theillusivec4/curios/') for n in entries), 'Curios must not be bundled'
+          totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0)
+          reports = list(Path('regression').rglob('TEST-*.xml'))
+          assert reports
+          for report in reports:
+              result = ET.parse(report).getroot()
+              for key in totals:
+                  totals[key] += int(result.get(key, 0))
+          assert totals == {'tests': 708, 'failures': 0, 'errors': 0, 'skipped': 0}, totals
+          print('Verified', jar.name, digest, totals)
+          CHECK
+
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.49.10.jar
+          name: The Siege Overhaul v4.49.10 beta - Held Items and Clearer Tooltips
+          version: v4.49.10
+          version-type: beta
+          changelog: |
+            # 4.49.10 beta
+
+            - Olympian weapons use grip-aligned third-person placement in both hands.
+            - Bows and crossbows keep their grip position throughout drawing and loading.
+            - Relics, spellbooks and supplies have clearer activation, effect and cooldown descriptions.
+            - Long Siege tooltips wrap while preserving colors and vanilla attributes; new loot lore uses upright text.
+            - Item powers, loot prices, saved items and dependencies are unchanged.
+            - Forge build and 708 automated tests passed. No interactive Minecraft playtest was performed.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            ftb-chunks-forge(optional)
+            open-parties-and-claims(optional)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+            curios(optional)
+          fail-mode: fail
+
+      - name: Record accepted upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os, hashlib
+          from pathlib import Path
+          digest = hashlib.sha256(Path('dist/siegeoverhaul-4.49.10.jar').read_bytes()).hexdigest()
+          assert digest == Path('verified-sha256.txt').read_text()
+          result = {
+              'version': '4.49.10',
+              'file_id': os.environ['RELEASE_FILE_ID'],
+              'url': os.environ['RELEASE_URL'],
+              'source': '9bbb5a7511efc1ccbdf1ccfc418b310b3772812f',
+              'source_tree': '0ed021863ca9e1dadc3a53f01ecbc3a6b93d3cc3',
+              'pr_head': 'c00a86e556a83768dc929b8104b76ce718f16706',
+              'build_run': 36370221702,
+              'tests': 708,
+              'sha256': digest,
+          }
+          assert result['file_id'] and result['url']
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Accepted upload (moderation/public availability separate): ' + json.dumps(result) + '\n')
+          RECEIPT
