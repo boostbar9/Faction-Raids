@@ -52,20 +52,21 @@ public final class FactionUniforms {
         tag.putInt("Base",id.baseColor.getId());
         shield.getOrCreateTag().put("BlockEntityTag",tag);
         shield.getOrCreateTag().putString(FACTION,id.id);
+        shield.getOrCreateTag().putInt("SiegeBannerSchema",2);
     }
     private static void applyShields(Mob mob,String faction) {
         try {
             if(mob.getClass().getMethod("getInventory").invoke(mob) instanceof SimpleContainer inventory) {
                 for(int i=0;i<inventory.getContainerSize();i++) {
                     ItemStack stack=inventory.getItem(i);
-                    if(stack.is(Items.SHIELD) && !faction.equals(stack.getOrCreateTag().getString(FACTION))) {
+                    if(stack.is(Items.SHIELD) && (!faction.equals(stack.getOrCreateTag().getString(FACTION)) || stack.getOrCreateTag().getInt("SiegeBannerSchema")<2)) {
                         decorateShield(stack,faction); inventory.setChanged();
                     }
                 }
             }
             for(EquipmentSlot slot:new EquipmentSlot[]{EquipmentSlot.MAINHAND,EquipmentSlot.OFFHAND}) {
                 ItemStack stack=mob.getItemBySlot(slot);
-                if(stack.is(Items.SHIELD) && !faction.equals(stack.getOrCreateTag().getString(FACTION))) decorateShield(stack,faction);
+                if(stack.is(Items.SHIELD) && (!faction.equals(stack.getOrCreateTag().getString(FACTION)) || stack.getOrCreateTag().getInt("SiegeBannerSchema")<2)) decorateShield(stack,faction);
             }
         } catch(ReflectiveOperationException ex) { FactionLogger.LOG.debug("Shield inventory unavailable",ex); }
     }

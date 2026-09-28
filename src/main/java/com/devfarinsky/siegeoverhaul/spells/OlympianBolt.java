@@ -23,7 +23,7 @@ public class OlympianBolt extends ThrowableItemProjectile {
     public static final DeferredRegister<EntityType<?>> TYPES=DeferredRegister.create(ForgeRegistries.ENTITY_TYPES,SiegeOverhaul.MOD_ID);
     public static final RegistryObject<EntityType<OlympianBolt>> TYPE=TYPES.register("olympian_bolt",()->
             EntityType.Builder.<OlympianBolt>of(OlympianBolt::new,MobCategory.MISC).sized(.25F,.25F)
-                    .clientTrackingRange(64).updateInterval(1).build("siegeoverhaul:olympian_bolt"));
+                    .clientTrackingRange(4).updateInterval(1).build("siegeoverhaul:olympian_bolt"));
     private static final EntityDataAccessor<Integer> KIND=SynchedEntityData.defineId(OlympianBolt.class,EntityDataSerializers.INT);
     public static final int LIGHTNING=22,FIRE=27,WATER=29,ICE=30;
     private int age;

@@ -6,7 +6,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 class HeroCastPacketTest {
     @Test void roundTripPreservesTrackingIdentityOriginAndPhase() {
-        for(int role:new int[]{22,27,29})for(int phase=0;phase<=2;phase++) {
+        for(int role:new int[]{22,27,29,30})for(int phase=0;phase<=2;phase++) {
             var packet=new RaidNetwork.HeroCast(42,UUID.randomUUID(),role,1984L,phase,-15.2,64,345.3);
             var buffer=new FriendlyByteBuf(Unpooled.buffer());
             try {packet.encode(buffer);assertEquals(packet,RaidNetwork.HeroCast.decode(buffer));assertEquals(0,buffer.readableBytes());}

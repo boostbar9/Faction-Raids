@@ -2,7 +2,7 @@
 - Replaced bulky weapon cuboids with original pixel skins using vanilla handheld, bow and crossbow models and draw stages.
 - Creative spellbooks now fire aimed lightning, fireballs and ice bolts; holding Undertow channels a water stream. Projectiles stop at blocks, spare players/allies and never damage terrain.
 - Restored hero names after native spawning and repaired untouched generic names on saved heroes while preserving player renames.
-- Aligned new starter camp entrances with the sanctuary approach and later perimeter; positioned two sentries beside the saved enemy core.
+- Aligned new starter camp entrances with the sanctuary approach and later perimeter; allowed safe single-file access through existing offset gates before the outer avenue is built; positioned two sentries beside the saved enemy core.
 - Switched new faction standards, shields and map identities to vanilla banner compositions.
 - Removed Forge Stock, building blocks, ladders, scaffolding and tribute materials from new loot rolls and the creative catalog. Existing saved items remain usable; box prices stay 16/48/96 emeralds.
 - Reserved separate space for decree descriptions and purchase status.

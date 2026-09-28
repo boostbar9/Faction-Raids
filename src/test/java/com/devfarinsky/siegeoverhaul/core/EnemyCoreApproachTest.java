@@ -149,6 +149,7 @@ class EnemyCoreApproachTest extends MinecraftTestSupport {
         var level=flat();var raid=raid(Direction.NORTH);
         for(var block:List.of(Blocks.NETHER_PORTAL,Blocks.COBWEB,Blocks.FIRE,Blocks.WITHER_ROSE,Blocks.LAVA)) {
             when(level.getBlockState(camp.north(13))).thenReturn(block.defaultBlockState());
+            for(int x=-8;x<=8;x++)when(level.getBlockState(camp.north(9).east(x))).thenReturn(block.defaultBlockState());
             assertTrue(EnemyCoreApproach.plan(level,raid,camp,p->true).isEmpty(),block.toString());
         }
     }
