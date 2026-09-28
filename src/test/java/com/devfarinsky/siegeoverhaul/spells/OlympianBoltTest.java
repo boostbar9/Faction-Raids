@@ -51,4 +51,16 @@ class OlympianBoltTest extends MinecraftTestSupport {
         bolt.tick();verify(bolt).discard();verify(level,never()).getChunk(anyInt(),anyInt());
         assertFalse(bolt.shouldBeSaved());
     }
+    @Test void diagonalFlightChecksIntermediateChunksWithoutLoadingThem() {
+        var level=mock(ServerLevel.class);
+        when(level.hasChunkAt(any())).thenAnswer(call->{
+            net.minecraft.core.BlockPos p=call.getArgument(0);
+            return (p.getX()>>4)==(p.getZ()>>4); // Only endpoint chunks (0,0) and (1,1).
+        });
+        assertFalse(OlympianBolt.loadedTravel(level,new Vec3(15,64,14),new Vec3(3,0,3)));
+        when(level.hasChunkAt(any())).thenReturn(true);
+        assertTrue(OlympianBolt.loadedTravel(level,new Vec3(15,64,14),new Vec3(3,0,3)));
+        assertFalse(OlympianBolt.loadedTravel(level,new Vec3(15,64,14),new Vec3(100,0,0)));
+        verify(level,never()).getChunk(anyInt(),anyInt());
+    }
 }

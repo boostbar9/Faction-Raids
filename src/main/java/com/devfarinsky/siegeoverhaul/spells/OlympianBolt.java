@@ -49,8 +49,7 @@ public class OlympianBolt extends ThrowableItemProjectile {
         // Never load chunks for a travelling spell, and never resume orphaned casts after logout.
         if(!level().isClientSide && ((distance+=getDeltaMovement().length())>48 || ++age>40 || !(getOwner() instanceof Player owner)
                 || !owner.isAlive() || owner.isSpectator() || !owner.getAbilities().instabuild
-                || !level().hasChunkAt(blockPosition())
-                || !level().hasChunkAt(BlockPos.containing(position().add(getDeltaMovement()))))){discard();return;}
+                || !loadedTravel(level(),position(),getDeltaMovement())))){discard();return;}
         super.tick();
         if(level().isClientSide && !isRemoved() && com.devfarinsky.siegeoverhaul.HeroVisualConfig.PARTICLES.get()>0) {
             var particle=switch(kind()){case ICE->ParticleTypes.SNOWFLAKE;case WATER->ParticleTypes.SPLASH;
@@ -59,6 +58,19 @@ public class OlympianBolt extends ThrowableItemProjectile {
             Vec3 delta=getDeltaMovement();
             for(int i=0;i<(com.devfarinsky.siegeoverhaul.HeroVisualConfig.PARTICLES.get()==1?1:3);i++)level().addParticle(particle,getX()-delta.x*i/3,getY()-delta.y*i/3,getZ()-delta.z*i/3,0,0,0);
         }
+    }
+    static boolean loadedTravel(Level level,Vec3 from,Vec3 motion) {
+        Vec3 to=from.add(motion);
+        // A diagonal step can cross a third chunk even when both endpoints are loaded.
+        // Include the bolt's half-width, and bound the lookup rectangle to four chunks.
+        int minX=net.minecraft.util.Mth.floor(Math.min(from.x,to.x)-.125)>>4;
+        int maxX=net.minecraft.util.Mth.floor(Math.max(from.x,to.x)+.125)>>4;
+        int minZ=net.minecraft.util.Mth.floor(Math.min(from.z,to.z)-.125)>>4;
+        int maxZ=net.minecraft.util.Mth.floor(Math.max(from.z,to.z)+.125)>>4;
+        if(maxX-minX>1 || maxZ-minZ>1)return false;
+        for(int x=minX;x<=maxX;x++)for(int z=minZ;z<=maxZ;z++)
+            if(!level.hasChunkAt(new BlockPos(x<<4,net.minecraft.util.Mth.floor(from.y),z<<4)))return false;
+        return true;
     }
     public static boolean eligible(Player owner,LivingEntity target){
         return target!=owner && !(target instanceof Player) && target.isAlive() && !target.isSpectator()
