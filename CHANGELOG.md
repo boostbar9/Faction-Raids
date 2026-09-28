@@ -1,3 +1,9 @@
+## 4.50.7 — Player-built defenses
+- The core's new Defenses tab offers free Archer Barricade, Watchtower and Gatehouse plans. Use a plan on level ground to choose the near-center anchor; the structure extends in your facing direction.
+- Commissions cost 120 / 300 / 450 Treasury emeralds only after an owned idle builder accepts the job. Players supply cobblestone and oak planks through their own Workers storage area with Builders enabled.
+- Barricades provide a firing step; watchtowers have an open deck and broad steps; gatehouses have a raised deck over an open three-block passage. Station defenders with normal recruit commands.
+- Whole-site checks protect claims, existing blocks, fluids, entities, world borders and build heights. Reuses native Workers blueprints, supply trips, work hours and persistent player-job recovery; failed placements keep the plan.
+
 ## 4.50.6 — Capture beacon
 - Enemy core captures show a 96-block beacon beam to nearby defending faction members. Its color smoothly follows progress: red at 0%, orange at 25%, yellow at 50%, lime at 75%, green at 100%.
 - Ties keep the current color; lost progress reverses the colors. Completion stays green briefly, then expires. Interrupted effects expire within three seconds, and world changes clear them.

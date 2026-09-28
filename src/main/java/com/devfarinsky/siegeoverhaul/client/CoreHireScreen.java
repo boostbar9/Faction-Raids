@@ -34,7 +34,7 @@ import java.util.Map;
  * {@link CommandPalette}. Controls use readable labels; only real Minecraft
  * item sprites are used where an icon communicates a concrete item.
  *
- * <p>Five tabs share the window:
+ * <p>Six tabs share the window:
  * <ul>
  *   <li><b>Army &amp; Heroes</b> — four rotating hire cards with live armored
  *       entity previews, readable kit details and siege deployment kits.</li>
@@ -44,6 +44,7 @@ import java.util.Map;
  *       metrics, a scrollable roster and recent activity.</li>
  *   <li><b>Territory</b> — permanent faction-wide upgrades and builder
  *       fortification contracts.</li>
+ *   <li><b>Defenses</b> — placeable construction plans for hired builders.</li>
  *   <li><b>Intel</b> — units, enemy lore and the field playbook.</li>
  * </ul>
  */
@@ -83,6 +84,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private final Button[] hire = new Button[4];
     private final Button[] siegeYard = new Button[2];
     private final Button[] territoryBuffs = new Button[4];
+    private final Button[] defensePlans = new Button[DefenseBlueprint.Kind.values().length];
     private final Button[] fortifyButtons = new Button[TerritoryFortification.MATERIALS.length];
     private final Button[] boxes = new Button[3];
     private final Button[] buffs = new Button[3];
@@ -267,6 +269,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     false, () -> false));
         }
 
+        for (int i = 0; i < defensePlans.length; i++) {
+            final int index = i;
+            int cx = layout.territoryCardX(i), cy = layout.territoryCardY(i);
+            defensePlans[i] = addRenderableWidget(new CoreButton(Component.literal("Collect plan"),
+                    b -> action(80 + index), cx + 8, cy + layout.territoryCardHeight() - 24,
+                    layout.territoryCardWidth() - 16, 18, false, () -> false));
+        }
+
         // Persistent path for beta feedback. Minecraft shows its normal
         // external-link confirmation before opening CurseForge comments.
         int feedbackW = layout.feedbackWidth();
@@ -430,6 +440,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                                     + "  ·  " + SiegeYard.PRICES[i] + "e"
                             : shortLabel + "  ·  unavailable"));
         }
+        for (Button plan : defensePlans) {
+            plan.visible = tab == CoreCommandPage.DEFENSES;
+            plan.active = true;
+        }
         for (int i = 0; i < territoryBuffs.length; i++) {
             territoryBuffs[i].visible = tab == CoreCommandPage.TERRITORY;
             boolean owned = menu.hasTerritoryBuff(i);
@@ -583,6 +597,19 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                             + " emeralds " + (deposit
                                     ? "from your purse into the shared faction Treasury."
                                     : "from the shared faction Treasury into your purse."),
+                            tooltipX, tooltipY);
+                }
+            }
+        }
+        if (tab == CoreCommandPage.DEFENSES) {
+            for (int i = 0; i < defensePlans.length; i++) {
+                if (over(mx, my, layout.territoryCardX(i), layout.territoryCardY(i),
+                        layout.territoryCardWidth(), layout.territoryCardHeight())) {
+                    var kind = DefenseBlueprint.Kind.values()[i];
+                    tooltip(g, kind.label + " | " + kind.description + " | " + kind.dimensions()
+                            + " | " + kind.price + " Treasury emeralds on placement + "
+                            + DefenseBlueprint.create(kind, net.minecraft.core.BlockPos.ZERO, net.minecraft.core.Direction.SOUTH).materials()
+                            + ". Plan collection is free. Your idle builder must be within 16 blocks of the site; supply a Workers storage area with Builders enabled.",
                             tooltipX, tooltipY);
                 }
             }
@@ -741,6 +768,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             drawFaction(g);
         } else if (tab == CoreCommandPage.TERRITORY) {
             drawTerritory(g, mx, my);
+        } else if (tab == CoreCommandPage.DEFENSES) {
+            drawDefenses(g, mx, my);
         } else if (tab == CoreCommandPage.INTEL) {
             drawIntel(g, mx, my);
         }
@@ -779,7 +808,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         return switch (tab) {
             case LOOT -> CommandPalette.ACCENT_ARCANE;
             case TREASURY -> CommandPalette.ACCENT_EMERALD;
-            case TERRITORY -> CommandPalette.ACCENT_TEAL;
+            case TERRITORY, DEFENSES -> CommandPalette.ACCENT_TEAL;
             case INTEL -> CommandPalette.ACCENT_STEEL;
             default -> CommandPalette.ACCENT_GOLD;
         };
@@ -791,6 +820,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     menu.seconds() / 60, menu.seconds() % 60);
             case LOOT -> String.format(Locale.ROOT, "Treasury %,de", menu.bank());
             case TREASURY -> String.format(Locale.ROOT, "Balance %,de", menu.bank());
+            case DEFENSES -> "3 building plans";
             case TERRITORY -> ownedTerritoryBuffs() + "/" + TerritoryBuffs.COUNT + " active";
             case INTEL -> switch (intelSection) {
                 case 0 -> "Unit archive";
@@ -806,6 +836,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             case ARMY -> "Four faction-wide offers · purchases deploy from the shared Treasury";
             case LOOT -> "Rewards stay concealed until opened · purchases use the shared Treasury";
             case TREASURY -> "Every transaction is faction-wide and recorded in recent activity";
+            case DEFENSES -> "Free plans · pay on placement · supply your builder through Workers storage";
             case TERRITORY -> "Permanent decrees affect every member · contracts dispatch equipped builders";
             case INTEL -> "Scroll the archive or switch dossiers without leaving the command center";
             default -> "";
@@ -852,6 +883,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             case ARMY -> "Shared stock rotates every 15 minutes";
             case LOOT -> "Loot & blessings draw from the faction Treasury";
             case TREASURY -> "Interest " + menu.interestRate() / 100.0 + "% per in-game day";
+            case DEFENSES -> "Collect a plan, then use it on level ground in your claim";
             case TERRITORY -> "Faction-wide upgrades apply to every member";
             case INTEL -> "Unit reference, enemy lore and field guidance";
             default -> "";
@@ -1054,6 +1086,26 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 (int) Math.floor(top * scale),
                 (int) Math.ceil(right * scale),
                 (int) Math.ceil(bottom * scale));
+    }
+
+    private void drawDefenses(GuiGraphics g, int mouseX, int mouseY) {
+        int w = layout.territoryCardWidth(), h = layout.territoryCardHeight();
+        for (int i = 0; i < defensePlans.length; i++) {
+            var kind = DefenseBlueprint.Kind.values()[i];
+            int x = layout.territoryCardX(i), y = layout.territoryCardY(i);
+            CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_TEAL,
+                    over(mouseX, mouseY, x, y, w, h));
+            text(g, kind.label, x + 8, y + 9, w - 16, CommandPalette.ACCENT_TEAL);
+            if (h >= 60) text(g, kind.price + "e on placement + materials", x + 8, y + 25,
+                    w - 16, CommandPalette.TEXT_MUTED);
+        }
+        int x = layout.territoryCardX(3), y = layout.territoryCardY(3);
+        CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_STEEL);
+        text(g, "YOUR BUILDER + SUPPLIES", x + 8, y + 9, w - 16, CommandPalette.TEXT);
+        drawWrappedText(g, "Use a plan on level ground. Builds away from you.", x + 8, y + 24,
+                w - 16, Math.max(1, (h - 28) / 10), CommandPalette.TEXT_MUTED);
+        text(g, "Plans are free. Hover a structure for costs and space needed.", layout.x() + 10,
+                layout.contentBottom() - 18, layout.width() - 20, CommandPalette.TEXT_MUTED);
     }
 
     private void drawTerritory(GuiGraphics g, int mouseX, int mouseY) {

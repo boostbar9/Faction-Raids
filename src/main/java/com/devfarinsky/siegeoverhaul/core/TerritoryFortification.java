@@ -489,6 +489,10 @@ public final class TerritoryFortification {
      * none qualifies.</p>
      */
     static BuilderSearch findNearbyBuilder(ServerLevel level, ServerPlayer player, BlockPos center) {
+        return findNearbyBuilder(level, player, center, false);
+    }
+
+    static BuilderSearch findNearbyBuilder(ServerLevel level, ServerPlayer player, BlockPos center, boolean requireHired) {
         AABB area = new AABB(center).inflate(BUILDER_SEARCH_RADIUS);
         Mob best = null;
         double bestDistance = Double.MAX_VALUE;
@@ -502,7 +506,9 @@ public final class TerritoryFortification {
                 continue;
             }
             UUID owner = WorkersBridge.readWorkerOwner(m);
-            if (owner != null && !owner.equals(player.getUUID())) { sawForeign = true; continue; }
+            if (requireHired ? !player.getUUID().equals(owner) : owner != null && !owner.equals(player.getUUID())) {
+                sawForeign = true; continue;
+            }
             if (m.getPersistentData().hasUUID(
                     com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
                     || WorkersBridge.hasActiveBuildArea(m)) { sawBusy = true; continue; }
@@ -533,7 +539,7 @@ public final class TerritoryFortification {
      * toggled on because Workers 2's StorageArea.canWorkHere rejects builders
      * on any other type mask.</p>
      */
-    private static Entity findPlayerStorageArea(ServerLevel level, ServerPlayer player,
+    static Entity findPlayerStorageArea(ServerLevel level, ServerPlayer player,
                                                 BlockPos anchor, Set<ChunkPos> claim) {
         AABB box = new AABB(anchor).inflate(STORAGE_SEARCH_RADIUS);
         ResourceLocation wanted = new ResourceLocation("workers", "storagearea");
