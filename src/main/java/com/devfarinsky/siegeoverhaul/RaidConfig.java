@@ -19,6 +19,7 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue PREPARATION_MINUTES;
     public static final ForgeConfigSpec.IntValue WAVES;
     public static final ForgeConfigSpec.IntValue BASE_ENEMIES_PER_WAVE;
+    public static final ForgeConfigSpec.BooleanValue GENTLE_OPENING_WAVES;
     public static final ForgeConfigSpec.IntValue ENEMIES_PER_EXTRA_PLAYER;
     public static final ForgeConfigSpec.IntValue MAX_ACTIVE_RAIDERS;
     public static final ForgeConfigSpec.IntValue MAX_GLOBAL_RAIDERS;
@@ -244,6 +245,8 @@ public final class RaidConfig {
         WAVES = b.comment("Legacy invasion wave count. Siege Core campaigns are endless with a retreat vote every five waves.").defineInRange("waves", 5, 1, 12);
         BASE_ENEMIES_PER_WAVE = b.comment("Enemies per wave with one defending player.")
                 .defineInRange("baseEnemiesPerWave", 10, 1, 40);
+        GENTLE_OPENING_WAVES = b.comment("Reduce invading NPC health and outgoing damage by 40%, 30%, 20% and 10% during absolute waves 1-4 of each siege, returning to normal at wave 5. Army sizes are unchanged. Enemy heroes wait until wave 4. Applies to newly queued waves and newly spawned invaders; existing mobs are unchanged. Disable to retain the previous opening difficulty.")
+                .define("gentleOpeningWaves", true);
         ENEMIES_PER_EXTRA_PLAYER = b.comment("Additional enemies per wave for each extra online faction member.")
                 .defineInRange("enemiesPerExtraPlayer", 3, 0, 20);
         MAX_ACTIVE_RAIDERS = b.comment("Hard performance cap for this mod's living raiders per faction invasion.")
