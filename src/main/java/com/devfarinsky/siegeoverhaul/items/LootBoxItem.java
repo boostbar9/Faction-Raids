@@ -134,9 +134,9 @@ public final class LootBoxItem extends Item {
         out.add(OlympianLoot.supplies(tier, support, equipment));
         // Reserve a genuine utility relic, then sample remaining categories
         // without replacement. No extra stacks, duplicate categories or currency are added.
-        int[] choices = new int[OlympianLoot.SUPPLY_TYPES - 1];
+        int[] choices = new int[OlympianLoot.AVAILABLE_SUPPLIES.length - 1];
         for (int category = 0, at = 0; category < OlympianLoot.SUPPLY_TYPES; category++) {
-            if (category != support) choices[at++] = category;
+            if (category != support && OlympianLoot.availableSupply(category)) choices[at++] = category;
         }
         for (int i = 0; i < stacks - 3; i++) {
             int selected = i + rng.nextInt(choices.length - i);

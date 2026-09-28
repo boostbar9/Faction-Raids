@@ -158,7 +158,7 @@ public record CoreHireLayout(int x, int y, int width, int height,
     public int territoryDescriptionLines() {
         // Description text starts 28px into the card and must end at least
         // 6px above the purchase button, which sits 24px from the bottom.
-        return Math.max(0, (territoryCardHeight() - 28 - 30) / 10);
+        return Math.max(0, (territoryCardHeight() - 28 - (compact ? 30 : 46)) / 10);
     }
 
     /** First free pixel row below the Territory card grid. */

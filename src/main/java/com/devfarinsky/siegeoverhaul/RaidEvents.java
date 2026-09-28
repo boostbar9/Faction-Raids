@@ -3170,25 +3170,17 @@ public final class RaidEvents {
         // that side, centered on where the approach vector crosses the
         // ring. This guarantees a passable gap on every approach angle,
         // whether cardinal or diagonal.
-        final int gateHalfWidth = 1; // 1 -> gap is 3 blocks wide (\u00b11 + center)
-        final boolean gateOnXAxis = Math.abs(Math.cos(frontAngle)) >= Math.abs(Math.sin(frontAngle));
-        // Which side of the ring the gate cuts through, and where along that side.
-        final int gateWallCoord = gateOnXAxis
-                ? (Math.cos(frontAngle) >= 0 ? r : -r)
-                : (Math.sin(frontAngle) >= 0 ? r : -r);
-        // Where the approach vector crosses the chosen wall, clamped inside
-        // the wall span so we can never carve off the wall's corner.
-        final int gateCenterAlong = gateOnXAxis
-                ? Mth.clamp(Mth.floor(Math.sin(frontAngle) * r), -(r - gateHalfWidth), r - gateHalfWidth)
-                : Mth.clamp(Mth.floor(Math.cos(frontAngle) * r), -(r - gateHalfWidth), r - gateHalfWidth);
+        final int gateHalfWidth = 2;
+        Direction gateFacing = com.devfarinsky.siegeoverhaul.camp.CampPerimeter.mainGateSide(state);
+        final boolean gateOnXAxis = gateFacing.getAxis() == Direction.Axis.X;
+        final int gateWallCoord = (gateOnXAxis ? gateFacing.getStepX() : gateFacing.getStepZ()) * r;
+        final int gateCenterAlong = 0;
         for (int dx = -r; dx <= r; dx++) {
             for (int dz = -r; dz <= r; dz++) {
                 if (Math.abs(dx) != r && Math.abs(dz) != r) continue;
                 // Skip the gate slot: on the chosen wall, within the gate
                 // half-width of the crossing point.
-                boolean isGate = gateOnXAxis
-                        ? (dx == gateWallCoord && Math.abs(dz - gateCenterAlong) <= gateHalfWidth)
-                        : (dz == gateWallCoord && Math.abs(dx - gateCenterAlong) <= gateHalfWidth);
+                boolean isGate = com.devfarinsky.siegeoverhaul.camp.CampStarterLayout.gateCell(camp,camp.offset(dx,0,dz),gateFacing);
                 if (isGate) continue;
                 BlockPos ground = surfacePosition(level, cx + dx, cz + dz);
                 if (state.preparationTicks > 0) {

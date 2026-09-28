@@ -18,7 +18,7 @@ import java.util.Random;
  * Centralized banner descriptors for the five Olympian war hosts.
  *
  * <p>A "banner" here is really a two-layer stack: a base dye color plus one
- * custom pattern (the faction sigil) tinted a contrasting overlay color.
+ * vanilla pattern composition (the faction emblem) tinted a contrasting overlay color.
  * Siege Overhaul composes this stack into an ItemStack (for loot drops) or
  * directly into a BlockEntity NBT chunk (for camp-planted banners) via
  * {@link #applyToBlockEntityTag(CompoundTag, FactionId)}.</p>
@@ -150,19 +150,21 @@ public final class FactionBanners {
      * "Base" NBT entry.</p>
      */
     public static void applyToBlockEntityTag(CompoundTag beTag, FactionId faction) {
-        BannerPattern pattern = faction.patternOrNull();
-        if (pattern == null) return; // registry not populated yet; nothing to write
+        // Vanilla hash names: every faction banner, shield and map identity
+        // uses the same layered design, with no custom symbol texture required.
         ListTag patterns = new ListTag();
-        CompoundTag layer = new CompoundTag();
-        layer.putInt("Color", faction.patternColor.getId());
-        // Vanilla banner BlockEntity NBT stores each pattern layer as
-        // {"Color": <dye_id>, "Pattern": <hashname>}. The hashname is the
-        // short identifier we set on the BannerPattern at construction
-        // ("fr_bbw", "fr_hft", etc.). This form is what the vanilla
-        // BannerBlockEntity codec both reads and writes.
-        layer.putString("Pattern", pattern.getHashname());
-        patterns.add(layer);
+        switch (faction) {
+            case BLACKBAY_REAVERS -> { layer(patterns,"bs",DyeColor.CYAN); layer(patterns,"ts",DyeColor.LIGHT_BLUE); layer(patterns,"mc",DyeColor.WHITE); layer(patterns,"bo",DyeColor.BLUE); }
+            case HOLLOWFANG_CLAN -> { layer(patterns,"sc",DyeColor.BLACK); layer(patterns,"mr",DyeColor.YELLOW); layer(patterns,"bo",DyeColor.BLACK); }
+            case EMBERCHANT_ZEALOTS -> { layer(patterns,"bt",DyeColor.RED); layer(patterns,"bts",DyeColor.ORANGE); layer(patterns,"mc",DyeColor.YELLOW); layer(patterns,"bo",DyeColor.GRAY); }
+            case CROWNFALL_EXILES -> { layer(patterns,"cs",DyeColor.LIGHT_BLUE); layer(patterns,"mr",DyeColor.BLUE); layer(patterns,"mc",DyeColor.YELLOW); layer(patterns,"bo",DyeColor.LIGHT_BLUE); }
+            case WILDS_MARAUDERS -> { layer(patterns,"mc",DyeColor.WHITE); layer(patterns,"hh",DyeColor.GREEN); layer(patterns,"bo",DyeColor.LIGHT_GRAY); }
+        }
         beTag.put("Patterns", patterns);
+    }
+    private static void layer(ListTag patterns, String pattern, DyeColor color) {
+        CompoundTag layer = new CompoundTag();
+        layer.putString("Pattern", pattern); layer.putInt("Color", color.getId()); patterns.add(layer);
     }
 
     private static net.minecraft.world.item.Item bannerItemFor(FactionId faction) {

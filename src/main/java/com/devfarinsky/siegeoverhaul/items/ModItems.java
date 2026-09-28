@@ -42,6 +42,7 @@ public final class ModItems {
 
     public static final RegistryObject<Item> TEMPEST_BOOK = ITEMS.register("tempest_spellbook", () -> new OlympianSpellBookItem(22));
     public static final RegistryObject<Item> INFERNO_BOOK = ITEMS.register("inferno_spellbook", () -> new OlympianSpellBookItem(27));
+    public static final RegistryObject<Item> FROST_BOOK = ITEMS.register("frost_spellbook", () -> new OlympianSpellBookItem(30));
     public static final RegistryObject<Item> UNDERTOW_BOOK = ITEMS.register("undertow_spellbook", () -> new OlympianSpellBookItem(29));
 
     public static final RegistryObject<Item> FORGE_EMBER = ITEMS.register("forge_ember", () -> new OlympianRelicItem(OlympianRelics.Kind.FORGE));

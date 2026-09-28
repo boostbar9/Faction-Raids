@@ -13,21 +13,20 @@ import net.minecraft.world.item.*;
 import net.minecraft.world.level.Level;
 import java.util.List;
 
-/** Creative testing books for the three existing area casts. Never grants survival spell powers. */
+/** Creative casting books with aimed projectiles and a held water channel. */
 public final class OlympianSpellBookItem extends Item {
     private static final String START = "SiegeCreativeSpellStart";
     private static final String ROLE = "SiegeCreativeSpellRole";
     private final int role;
     public OlympianSpellBookItem(int role) {
         super(new Properties().stacksTo(1).rarity(Rarity.EPIC));
-        if (role != 22 && role != 27 && role != 29) throw new IllegalArgumentException("Unknown spell");
+        if (!com.devfarinsky.siegeoverhaul.spells.OlympianBolt.validKind(role)) throw new IllegalArgumentException("Unknown spell");
         this.role = role;
     }
     public int role() { return role; }
     private String cooldownKey() { return "SiegeCreativeSpellNext" + role; }
-    private int cooldown() { return role == 22 ? 300 : role == 27 ? 400 : 600; }
-    private int radius() { return role == 22 ? 6 : role == 27 ? 8 : 10; }
-    @Override public int getUseDuration(ItemStack stack) { return 20; }
+    private int cooldown() { return role == 22 ? 300 : role == 27 ? 400 : role == 30 ? 100 : 600; }
+    @Override public int getUseDuration(ItemStack stack) { return role == 29 ? 60 : 20; }
     @Override public UseAnim getUseAnimation(ItemStack stack) { return UseAnim.BOW; }
     @Override public boolean isFoil(ItemStack stack) { return true; }
 
@@ -54,24 +53,25 @@ public final class OlympianSpellBookItem extends Item {
         if (!(level instanceof ServerLevel server) || !(user instanceof Player player)) return stack;
         var tag = player.getPersistentData();
         long elapsed = server.getGameTime() - tag.getLong(START);
-        boolean valid = tag.contains(START) && tag.getInt(ROLE) == role && elapsed >= 20 && elapsed <= 25
+        boolean valid = tag.contains(START) && tag.getInt(ROLE) == role && elapsed >= getUseDuration(stack) && elapsed <= getUseDuration(stack) + 5
                 && player.getAbilities().instabuild && !player.isSpectator() && player.isAlive();
         tag.remove(START); tag.remove(ROLE); // Remove before damage callbacks: never release twice.
         if (!valid) { HeroCastPackets.send(player, role, server.getGameTime(), 2); return stack; }
-        var foes = server.getEntitiesOfClass(LivingEntity.class, player.getBoundingBox().inflate(radius()),
-                target -> eligible(player, target));
-        for (var target : foes) {
-            if (role == 29) target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 80, 4));
-            else if (target.hurt(server.damageSources().indirectMagic(player, player), role == 22 ? 5 : 6) && role == 27)
-                target.setSecondsOnFire(4);
-        }
+        if (role != 29) com.devfarinsky.siegeoverhaul.spells.OlympianBolt.launch(server, player, role);
         HeroCastPackets.send(player, role, server.getGameTime(), 1);
         return stack;
     }
 
-    static boolean eligible(Player player, LivingEntity target) {
-        return target != player && !(target instanceof Player) && target.isAlive()
-                && !player.isAlliedTo(target) && player.hasLineOfSight(target) && EnemyHiringProtection.enemy(target);
+    @Override public void onUseTick(Level level, LivingEntity user, ItemStack stack, int remaining) {
+        if (role != 29 || !(level instanceof ServerLevel) || !(user instanceof Player player)) return;
+        var tag=player.getPersistentData();
+        long age=level.getGameTime()-tag.getLong(START);
+        if (tag.contains(START) && tag.getInt(ROLE)==role && age>=20 && age<60 && age%5==0
+                && player.isAlive() && !player.isSpectator() && player.getAbilities().instabuild
+                && tag.getLong("SiegeWaterPulse")!=level.getGameTime()) {
+            tag.putLong("SiegeWaterPulse",level.getGameTime());
+            com.devfarinsky.siegeoverhaul.spells.OlympianBolt.launch(level,player,role);
+        }
     }
 
     @Override public void releaseUsing(ItemStack stack, Level level, LivingEntity user, int remaining) {
@@ -82,9 +82,9 @@ public final class OlympianSpellBookItem extends Item {
     }
     @Override public void appendHoverText(ItemStack stack, Level level, List<Component> tooltip, TooltipFlag flag) {
         tooltip.add(Component.literal("Creative spellbook").withStyle(ChatFormatting.GOLD));
-        tooltip.add(Component.literal("Hold use for 1s to cast.").withStyle(ChatFormatting.GRAY));
-        tooltip.add(Component.literal(role == 29 ? "Slowness V • 4 seconds" : role == 22 ? "5 magic damage" : "6 magic damage • Burns for 4s").withStyle(ChatFormatting.AQUA));
-        tooltip.add(Component.literal("Visible siege enemies • Area extends " + radius() + " blocks").withStyle(ChatFormatting.GRAY));
+        tooltip.add(Component.literal(role == 29 ? "Hold use: charge for 1s, then channel for 2s." : "Hold use for 1s. Aim to cast.").withStyle(ChatFormatting.GRAY));
+        tooltip.add(Component.literal(role == 29 ? "Water stream • Pushes and slows siege enemies" : role == 30 ? "Ice bolt • 6 damage • Slowness II for 4s" : role == 22 ? "Lightning bolt • 5 magic damage" : "Fireball • 6 damage • Burns for 4s").withStyle(ChatFormatting.AQUA));
+        tooltip.add(Component.literal("Range: up to 48 blocks • Stops at walls • No terrain damage").withStyle(ChatFormatting.GRAY));
         tooltip.add(Component.literal("Cooldown: " + cooldown() / 20 + "s • Release early to cancel").withStyle(ChatFormatting.DARK_GRAY));
     }
 }

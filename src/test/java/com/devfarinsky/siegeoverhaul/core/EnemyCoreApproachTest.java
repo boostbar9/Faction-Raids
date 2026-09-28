@@ -44,6 +44,20 @@ class EnemyCoreApproachTest extends MinecraftTestSupport {
             verify(level,never()).setBlock(any(),any(),anyInt());
         }
     }
+    @Test void diagonalStarterGateAlignsWithTheSanctuaryAndLaterPerimeter() {
+        for(int degrees=0;degrees<360;degrees+=15) {
+            var level=flat();var raid=raid(Direction.NORTH);raid.warGate.getAllKeys().stream().toList().forEach(raid.warGate::remove);
+            raid.approachAngle=Math.toRadians(degrees);
+            var front=com.devfarinsky.siegeoverhaul.camp.CampPerimeter.mainGateSide(raid);
+            for(int x=-9;x<=9;x++)for(int z=-9;z<=9;z++) {
+                if(Math.abs(x)!=9 && Math.abs(z)!=9)continue;
+                BlockPos p=camp.offset(x,0,z);
+                if(!com.devfarinsky.siegeoverhaul.camp.CampStarterLayout.gateCell(camp,p,front))
+                    raid.pendingFortifications.put(p.asLong(),"minecraft:spruce_log");
+            }
+            assertTrue(EnemyCoreApproach.plan(level,raid,camp,p->true).isPresent(),"Angle "+degrees);
+        }
+    }
     @Test void routeFindsOffsetStarterGateButCannotUseFutureWallAsExit() {
         var level=flat();var raid=raid(Direction.NORTH);
         for(int x=-9;x<=9;x++)for(int z=-9;z<=9;z++) {
@@ -82,17 +96,27 @@ class EnemyCoreApproachTest extends MinecraftTestSupport {
                     EnemyCoreSite.clear(level,raid,base,p->true) && EnemyCoreApproach.plan(level,raid,base,p->true).isPresent()),front.toString());
         }
     }
-    @Test void waterCliffsLowCeilingsAndClaimGapsBlockTheWholeEntrance() {
-        var level=flat();var raid=raid(Direction.NORTH);BlockPos threshold=camp.north(13);
-        assertTrue(EnemyCoreApproach.plan(level,raid,camp,p->!p.equals(threshold)).isEmpty());
-        when(level.getBlockState(threshold)).thenReturn(Blocks.WATER.defaultBlockState());
+    @Test void absentOuterAvenueDoesNotHideCoreButBlockedStarterThresholdsStillDo() {
+        var level=flat();var raid=raid(Direction.NORTH);
+        BlockPos outer=camp.north(13);
+        when(level.getBlockState(outer)).thenReturn(Blocks.WATER.defaultBlockState());
+        assertTrue(EnemyCoreApproach.plan(level,raid,camp,p->true).isPresent());
+        for(int x=-8;x<=8;x++) {
+            when(level.getBlockState(camp.north(9).east(x))).thenReturn(Blocks.WATER.defaultBlockState());
+        }
         assertTrue(EnemyCoreApproach.plan(level,raid,camp,p->true).isEmpty());
-        when(level.getBlockState(threshold)).thenReturn(Blocks.AIR.defaultBlockState());
-        when(level.getBlockState(threshold.above())).thenReturn(Blocks.STONE.defaultBlockState());
-        assertTrue(EnemyCoreApproach.plan(level,raid,camp,p->true).isEmpty());
-        when(level.getBlockState(threshold.above())).thenReturn(Blocks.AIR.defaultBlockState());
-        when(level.getBlockState(threshold.below())).thenReturn(Blocks.AIR.defaultBlockState());
-        assertTrue(EnemyCoreApproach.plan(level,raid,camp,p->true).isEmpty());
+        assertTrue(EnemyCoreApproach.plan(flat(),raid,camp,p->p.getZ()>camp.getZ()-9).isEmpty());
+    }
+    @Test void savedOffsetGateCanReachCoreWithoutDemolishingTheOldCamp() {
+        var level=flat();var raid=raid(Direction.NORTH);
+        for(int x=-9;x<=9;x++)for(int z=-9;z<=9;z++) {
+            if(Math.abs(x)!=9 && Math.abs(z)!=9)continue;
+            if(z==-9 && x>=6 && x<=8)continue;
+            raid.pendingFortifications.put(camp.offset(x,0,z).asLong(),"minecraft:spruce_log");
+        }
+        var saved=new java.util.LinkedHashMap<>(raid.pendingFortifications);
+        assertTrue(EnemyCoreApproach.plan(level,raid,camp,p->true).isPresent());
+        assertEquals(saved,raid.pendingFortifications);verify(level,never()).setBlock(any(),any(),anyInt());
     }
     @Test void completedPalisadeCannotBecomeARouteOverTheWall() {
         var level=flat();var raid=raid(Direction.NORTH);

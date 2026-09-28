@@ -1,3 +1,12 @@
+## 4.50.0 — Olympian armory and aimed spellbooks
+- Replaced bulky weapon cuboids with original pixel skins using vanilla handheld, bow and crossbow models and draw stages.
+- Creative spellbooks now fire aimed lightning, fireballs and ice bolts; holding Undertow channels a water stream. Projectiles stop at blocks, spare players/allies and never damage terrain.
+- Restored hero names after native spawning and repaired untouched generic names on saved heroes while preserving player renames.
+- Aligned new starter camp entrances with the sanctuary approach and later perimeter; positioned two sentries beside the saved enemy core.
+- Switched new faction standards, shields and map identities to vanilla banner compositions.
+- Removed Forge Stock, building blocks, ladders, scaffolding and tribute materials from new loot rolls and the creative catalog. Existing saved items remain usable; box prices stay 16/48/96 emeralds.
+- Reserved separate space for decree descriptions and purchase status.
+
 ## 4.49.11 — Camp construction safety
 - Native camp construction waits when a guard or visiting living entity occupies an unfinished blueprint cell. Active construction crew keeps its native movement to avoid self-blocking.
 - Removed the obsolete future-rebrand startup announcement and stopped identifying the current config as a legacy file.
