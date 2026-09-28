@@ -138,13 +138,19 @@ class StarterCoreGuardTest extends MinecraftTestSupport {
     @Test void placementSchedulesDeliveryInsteadOfSpawningBeforeForgeCanCancel() {
         ServerLevel level = mock(ServerLevel.class);
         ServerPlayer player = mock(ServerPlayer.class);
-        CoreBlocks.CoreBlock block = new CoreBlocks.CoreBlock();
+        // The JUnit bootstrap freezes registries before this test; exercise the real
+        // callbacks without constructing another registered Minecraft block.
+        CoreBlocks.CoreBlock block = mock(CoreBlocks.CoreBlock.class);
+        var state = net.minecraft.world.level.block.Blocks.STONE.defaultBlockState();
+        var random = net.minecraft.util.RandomSource.create(1);
+        doCallRealMethod().when(block).setPlacedBy(level, BlockPos.ZERO, state, player, ItemStack.EMPTY);
+        doCallRealMethod().when(block).tick(state, level, BlockPos.ZERO, random);
         try (var cores = mockStatic(SiegeCore.class); var guard = mockStatic(StarterCoreGuard.class)) {
-            block.setPlacedBy(level, BlockPos.ZERO, block.defaultBlockState(), player, ItemStack.EMPTY);
+            block.setPlacedBy(level, BlockPos.ZERO, state, player, ItemStack.EMPTY);
             cores.verify(() -> SiegeCore.placed(player, BlockPos.ZERO));
             verify(level).scheduleTick(BlockPos.ZERO, block, 1);
             guard.verifyNoInteractions();
-            block.tick(block.defaultBlockState(), level, BlockPos.ZERO, net.minecraft.util.RandomSource.create(1));
+            block.tick(state, level, BlockPos.ZERO, random);
             guard.verify(() -> StarterCoreGuard.onCoreTick(level, BlockPos.ZERO));
         }
     }
