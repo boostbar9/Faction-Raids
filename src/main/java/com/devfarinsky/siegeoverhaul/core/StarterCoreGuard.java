@@ -28,8 +28,7 @@ public final class StarterCoreGuard {
             if (!core.contains("Position") || core.getLong("Position") != pos.asLong()
                     || !core.hasUUID(PENDING_OWNER)) continue;
             ServerPlayer placer = level.getServer().getPlayerList().getPlayer(core.getUUID(PENDING_OWNER));
-            if (placer != null) tryGrant(placer, pos);
-            return;
+            if (placer != null && tryGrant(placer, pos)) return;
         }
     }
 
