@@ -145,13 +145,17 @@ class StarterCoreGuardTest extends MinecraftTestSupport {
         var random = net.minecraft.util.RandomSource.create(1);
         doCallRealMethod().when(block).setPlacedBy(level, BlockPos.ZERO, state, player, ItemStack.EMPTY);
         doCallRealMethod().when(block).tick(state, level, BlockPos.ZERO, random);
-        try (var cores = mockStatic(SiegeCore.class); var guard = mockStatic(StarterCoreGuard.class)) {
+        try (var cores = mockStatic(SiegeCore.class); var guard = mockStatic(StarterCoreGuard.class); var civilians = mockStatic(RaidSavedData.class)) {
+            var civilianData = new RaidSavedData();
+            civilians.when(() -> RaidSavedData.get(level.getServer())).thenReturn(civilianData);
             block.setPlacedBy(level, BlockPos.ZERO, state, player, ItemStack.EMPTY);
             cores.verify(() -> SiegeCore.placed(player, BlockPos.ZERO));
             verify(level).scheduleTick(BlockPos.ZERO, block, 1);
             guard.verifyNoInteractions();
+            civilians.verifyNoInteractions();
             block.tick(state, level, BlockPos.ZERO, random);
             guard.verify(() -> StarterCoreGuard.onCoreTick(level, BlockPos.ZERO));
+            civilians.verify(() -> RaidSavedData.get(level.getServer()));
         }
     }
     @Test void staleOfflineAndIneligiblePendingRecordsDoNotMaskValidDelivery() throws Exception {

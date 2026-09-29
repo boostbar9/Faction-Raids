@@ -170,7 +170,15 @@ public final class CoreHiring {
     static boolean hireStarterGuard(ServerPlayer player, BlockPos core) {
         return hire(player, core, 1, true);
     }
+    public static boolean hireOffer(ServerPlayer player,BlockPos core,int role,net.minecraft.nbt.CompoundTag kit) {
+        var stock=com.devfarinsky.siegeoverhaul.RaidSavedData.get(player.server).siegeCores.get(SiegeCore.key(player));
+        if(stock==null || !CoreOfferEquipment.matches(kit,role,stock.getLong("RefreshAt")))return false;
+        return hire(player,core,role,false,kit);
+    }
     private static boolean hire(ServerPlayer player, BlockPos core, int role, boolean starterGuard) {
+        return hire(player,core,role,starterGuard,null);
+    }
+    private static boolean hire(ServerPlayer player, BlockPos core, int role, boolean starterGuard,net.minecraft.nbt.CompoundTag kit) {
         if (role < 0 || role >= NAMES.length) return false;
         int typeRole = isHero(role) ? heroBase(role) : role;
         Mob mob = null;
@@ -217,6 +225,11 @@ public final class CoreHiring {
                 if (!(inventory instanceof net.minecraft.world.SimpleContainer container))
                     throw new IllegalStateException("Worker inventory missing");
                 WorkerStartingKit.prepare(recruit, role, container);
+            }
+            if (kit != null) {
+                Object inv = recruit.getClass().getMethod("getInventory").invoke(recruit);
+                if (!(inv instanceof net.minecraft.world.SimpleContainer nativeInventory)) throw new IllegalStateException("Missing native inventory");
+                CoreOfferEquipment.apply(recruit,nativeInventory,kit);
             }
             // Use the same configured price as native villager hiring trades. Some workers
             // still hard-code their spawn cost, so align the entity with the displayed trade.

@@ -60,7 +60,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private CoreCommandPage tab = CoreCommandPage.ARMY;
     private final Button[] pageButtons = new Button[PAGES.length];
     private final Button[] intelSections = new Button[3];
-    private Button previousPage, nextPage, treasuryShortcut;
+    private Button previousPage, nextPage, treasuryShortcut, civilianRecruit;
     private EditBox intelSearch;
     private Button clearIntelSearch;
     private String intelQuery = "";
@@ -176,6 +176,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         clearIntelSearch = addRenderableWidget(new CoreButton(Component.literal("Clear"),
                 b -> intelSearch.setValue(""), layout.x() + layout.width() - 57,
                 layout.contentY() + 23, 46, 18, false, () -> false));
+        civilianRecruit = addRenderableWidget(new CoreButton(Component.literal("Recruit civilian · 16e"),
+                b -> action(86),layout.x()+12,layout.contentBottom()-24,layout.width()-24,20,false,()->false));
         updateNavigation();
 
         // Close (X) button in the header for players who can't reach Escape
@@ -486,6 +488,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         for (Button section : intelSections) section.visible = tab == CoreCommandPage.INTEL;
         intelSearch.visible = clearIntelSearch.visible = tab == CoreCommandPage.INTEL;
         clearIntelSearch.active = !intelQuery.isEmpty();
+        civilianRecruit.visible = tab == CoreCommandPage.CIVILIANS;
+        civilianRecruit.active = canAfford(CoreCivilians.PRICE) && menu.civilians()<CivilianLedger.LIMIT;
         ((CoreButton) treasuryShortcut).setDetail(String.format(Locale.ROOT, "%,d", menu.bank()));
         for (int i = 0; i < 4; i++) {
             hire[i].visible = tab == CoreCommandPage.ARMY;
@@ -863,6 +867,22 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             drawTerritory(g, mx, my);
         } else if (tab == CoreCommandPage.DEFENSES) {
             drawDefenses(g, mx, my);
+        } else if (tab == CoreCommandPage.CIVILIANS) {
+            int tx=layout.x()+14, ty=layout.contentY()+8, tw=layout.width()-28;
+            text(g,menu.civilians()+" civilians · up to "+menu.civilians()+" emeralds per day",tx,ty,tw,CommandPalette.TEXT);
+            String[] lines={"Two settlers join your faction when you establish a core.",
+                "Provide beds and food to grow your population. Children inherit their parents' faction.",
+                "Each villager has a profession. Place matching workstations so they can restock trades.",
+                "Each living civilian earns 1 emerald per 24,000 game ticks for your Treasury. No real-time earnings while the server is stopped.",
+                "Civilians stay in your claims. Stranded civilians wait safely; their taxes pause. An owned core is required. Limit: 64."};
+            int yy=ty+20;
+            for(String line:lines) {
+                for(var part:font.split(Component.literal(line),tw)) {
+                    if(yy+font.lineHeight>=layout.contentBottom()-32)break;
+                    g.drawString(font,part,tx,yy,CommandPalette.TEXT_MUTED,false);yy+=font.lineHeight+2;
+                }
+                yy+=5;
+            }
         } else if (tab == CoreCommandPage.INTEL) {
             drawIntel(g, mx, my);
         }
@@ -911,6 +931,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         return switch (tab) {
             case ARMY -> String.format(Locale.ROOT, "Refresh %d:%02d",
                     menu.seconds() / 60, menu.seconds() % 60);
+            case CIVILIANS -> menu.civilians()+" / 64 residents";
             case LOOT -> String.format(Locale.ROOT, "Treasury %,de", menu.bank());
             case TREASURY -> String.format(Locale.ROOT, "Balance %,de", menu.bank());
             case DEFENSES -> constructionView ? "Your nearby jobs" : "Plans " + (defensePage + 1) + "/2";
@@ -1383,7 +1404,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // matching the reference kingdom-command mockup.
         int portrait = hirePortraitSize();
         int px = x + 6, py = y + 6;
-        EntityPortrait.draw(g, role, px, py, portrait, mouseX, mouseY);
+        EntityPortrait.draw(g, role, px, py, portrait, mouseX, mouseY, i, menu);
         // Heraldic bracket ornaments at each corner of the portrait.
         CommandFrame.cornerBracket(g, px + 1, py + 1, +1, +1);
         CommandFrame.cornerBracket(g, px + portrait - 2, py + 1, -1, +1);
@@ -1449,7 +1470,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int portrait = hirePortraitSize();
         int px = x + 5;
         int py = y + Math.max(4, (h - portrait) / 2 - 1);
-        EntityPortrait.draw(g, role, px, py, portrait, mouseX, mouseY);
+        EntityPortrait.draw(g, role, px, py, portrait, mouseX, mouseY, slot, menu);
 
         int infoLeft = px + portrait + 6;
         int infoWidth = Math.max(1, x + w - infoLeft - 5);

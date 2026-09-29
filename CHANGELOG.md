@@ -1,3 +1,9 @@
+## 4.51.0
+- Establish a settlement with two named civilians per faction. Recruit more in the Civilians tab for 16 Treasury emeralds.
+- Civilians use vanilla professions, trades, beds and breeding, with faction territory boundaries and saved ownership. Supply beds, food and matching workstations. Population is capped at 64 per faction.
+- Each living registered civilian contributes one emerald per full in-game day to the Treasury. Tax clocks and starter grants survive reloads and core relocation; occupation or a missing owned core pauses taxes.
+- Hire previews and purchases share server-saved equipment, including armor trims and compatible gear. Ordinary recruits and civilians use simple first names.
+
 ## 4.50.13
 - Camp leveling can cut natural soil mounds and fill hollows up to six blocks deep with solid dirt. Every changed block is tracked for cleanup.
 - Existing terrain-change budget, gentle boundary transitions, water, structure and claim protections remain enforced.
