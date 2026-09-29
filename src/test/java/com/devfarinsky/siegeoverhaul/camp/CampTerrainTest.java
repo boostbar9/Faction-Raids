@@ -64,8 +64,8 @@ class CampTerrainTest extends MinecraftTestSupport {
     }
 
     @Test void centralMoundDoesNotForceARejectableCampElevation() {
-        heights.put("0:0", 68);
-        BlockPos peak = new BlockPos(0,68,0);
+        heights.put("0:0", 71);
+        BlockPos peak = new BlockPos(0,71,0);
         assertTrue(CampTerrain.plan(level,peak,p->false).isEmpty());
         BlockPos balanced = CampTerrain.earthworksCenter(level,peak);
         assertEquals(new BlockPos(0,65,0),balanced);
@@ -89,8 +89,37 @@ class CampTerrainTest extends MinecraftTestSupport {
         assertEquals(center,CampTerrain.earthworksCenter(level,center));
         verify(level,never()).getHeight(any(),anyInt(),anyInt());
         when(level.hasChunkAt(any())).thenReturn(true);
-        heights.put("0:0",71);
+        heights.put("0:0",77);
         assertEquals(center,CampTerrain.earthworksCenter(level,center));
+    }
+
+    @Test void sixBlockHollowsGetSolidDirtAndMoundsAreCutWithSavedOriginals() {
+        heights.put("1:0", 70);
+        heights.put("-1:0", 58);
+        var plan = CampTerrain.plan(level, center, p -> false).orElseThrow();
+        assertEquals(12, plan.changes().size());
+        assertTrue(CampTerrain.apply(level, raid, plan));
+        var saved = RaidState.load(raid.save());
+        for (int y = 58; y < 64; y++) {
+            BlockPos fill = new BlockPos(-1,y,0);
+            assertTrue(state(fill).is(Blocks.DIRT));
+            assertEquals("minecraft:air", saved.campBlocks.get(fill.asLong())
+                    .getCompound("Original").getString("Name"));
+        }
+        for (int y = 64; y < 70; y++) assertTrue(state(new BlockPos(1,y,0)).isAir());
+        assertEquals(12, saved.campBlocks.size());
+    }
+
+    @Test void deepFillRejectsHiddenWaterContainersAndExcessiveWork() {
+        heights.put("-1:0",58);
+        for (var block : List.of(Blocks.WATER,Blocks.LAVA,Blocks.CHEST,Blocks.OAK_PLANKS)) {
+            edits.put(new BlockPos(-1,60,0),block.defaultBlockState());
+            assertTrue(CampTerrain.plan(level,center,p->false).isEmpty());
+        }
+        edits.clear(); heights.clear();
+        for (int x=-9;x<=9;x++) for (int z=-9;z<=9;z++) heights.put(x+":"+z,58);
+        assertTrue(CampTerrain.plan(level,center,p->false).isEmpty(),"Keep the finite mutation budget");
+        verify(level,never()).setBlock(any(),any(),anyInt());
     }
 
     @Test
@@ -123,7 +152,7 @@ class CampTerrainTest extends MinecraftTestSupport {
 
     @Test
     void excessiveExcavationAndSharpEdgeTransitionsAreRejected() {
-        heights.put("1:0", 68);
+        heights.put("1:0", 71);
         assertTrue(CampTerrain.plan(level, center, p -> false).isEmpty());
         heights.clear();
         heights.put("12:0", 67);

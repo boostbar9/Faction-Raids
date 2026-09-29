@@ -20,7 +20,7 @@ import java.util.function.Predicate;
 public final class CampTerrain {
     public static final int CAMP_RADIUS = 9;
     private static final int EDGE_WIDTH = 3;
-    private static final int MAX_CHANGE = 3;
+    private static final int MAX_CHANGE = 6;
     private static final int MAX_BLOCKS = 1024;
     private CampTerrain() {}
 
@@ -29,7 +29,7 @@ public final class CampTerrain {
         public Plan { changes = List.copyOf(changes); }
     }
 
-    /** Pick the least earthwork within the existing three-block cut/fill limit.
+    /** Pick the least earthwork within the six-block cut/fill limit.
      * A mound under the scout must not force the entire camp up to its peak.
      * This is only a height proposal; plan() still validates every block and claim.
      */
