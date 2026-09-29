@@ -1,3 +1,6 @@
+## 4.51.3
+- The final 32 camp-search attempts now sample distinct ground between existing search rings rather than revisit already rejected chunks. The same 200-site cap and maximum search distance remain.
+
 ## 4.51.2
 - Fallback camp planning measures ground beneath supported, canopy-covered tree trunks and clears qualifying timber and natural leaves within the work area, saving removed blocks for cleanup.
 - Shallow water up to three blocks deep can be filled with dirt over validated soil. Camps still require a dry approach, bounded earthworks, protected claims and no lava or containers.

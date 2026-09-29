@@ -15,7 +15,12 @@ public final class CampLoading {
     public static BlockPos candidate(BlockPos core,double angle,int attempt) {
         // Cover every direction at each distance; chunk-centered sites maximize useful loaded ground.
         double facing=angle+(attempt%24)*Math.PI*2/24;
-        int distance=160+((attempt/24)%7)*64;
+        int band=attempt/24;
+        // The 200-attempt search has seven full 24-direction rings plus 32
+        // attempts. Repeating ring zero after attempt 168 wastes the final
+        // loaded-site checks on already rejected chunks. Use the intervening
+        // radial half-rings; keep the existing first 168 sites and search cap.
+        int distance=band<7 ? 160+band*64 : 160+(band-7)*64+32;
         int x=core.getX()+(int)Math.round(Math.cos(facing)*distance);
         int z=core.getZ()+(int)Math.round(Math.sin(facing)*distance);
         ChunkPos chunk=new ChunkPos(new BlockPos(x,core.getY(),z));

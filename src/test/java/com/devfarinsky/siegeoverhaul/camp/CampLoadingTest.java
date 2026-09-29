@@ -15,7 +15,13 @@ class CampLoadingTest extends MinecraftTestSupport {
             assertTrue(distance>=145 && distance<=560);assertEquals(8,Math.floorMod(p.getX(),16));assertEquals(8,Math.floorMod(p.getZ(),16));
         }
         assertTrue(chunks.size()>150);
-        assertEquals(CampLoading.candidate(core,0,0),CampLoading.candidate(core,0,168));
+        Set<ChunkPos> all=new HashSet<>();
+        for(int i=0;i<CampScouting.MAX_CANDIDATES;i++) {
+            BlockPos site=CampLoading.candidate(core,0,i);
+            assertTrue(all.add(new ChunkPos(site)),"Repeated camp search chunk at attempt "+i);
+            assertTrue(Math.sqrt(site.distSqr(core))<=560);
+        }
+        assertEquals(CampScouting.MAX_CANDIDATES,all.size());
     }
     @Test void searchAndCrewStateSurviveReloadAndOldCampsDoNotDuplicateTheirCrew() {
         var raid=new RaidSavedData.RaidState("team:blue","siege_core",0);
