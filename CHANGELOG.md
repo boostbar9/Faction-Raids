@@ -1,3 +1,7 @@
+## 4.50.13
+- Camp leveling can cut natural soil mounds and fill hollows up to six blocks deep with solid dirt. Every changed block is tracked for cleanup.
+- Existing terrain-change budget, gentle boundary transitions, water, structure and claim protections remain enforced.
+
 ## 4.50.12 — Better earthwork elevations
 - Camp fallback searches choose a balanced ground height across the full site instead of forcing the camp to match a mound or hollow under the scout.
 - The existing three-block cut/fill limit, complete terrain validation, claim protection and restoration budget still apply. Water, structures and steep terrain remain grounds for rejection.

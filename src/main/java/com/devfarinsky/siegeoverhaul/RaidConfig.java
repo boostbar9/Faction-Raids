@@ -450,7 +450,7 @@ public final class RaidConfig {
                 .defineInRange("breachObjectiveRadius", 10, 4, 24);
         USE_RECRUIT_INVADERS = b.comment("Use Villager Recruits soldiers as the core enemy army, retaining a few vanilla special units.")
                 .define("useVillagerRecruitsArmy", true);
-        LEVEL_CAMP_TERRAIN = b.comment("Gently level camp soil by up to three blocks, with a three-block blended edge. Reject water, structures, steep sites and excluded claims. Requires cleanupTemporaryWarCamps so all earthworks can be restored.")
+        LEVEL_CAMP_TERRAIN = b.comment("Level camp soil and fill beneath it with dirt by up to six blocks, with a three-block blended edge. Reject water, structures, steep sites and excluded claims. Requires cleanupTemporaryWarCamps so all earthworks can be restored.")
                 .define("levelCampTerrain", true);
         CAMP_TERRAFORM = b.comment("Fallback terraforming when no naturally flat land is found within scouting range. Raiders pave water and level uneven ground with dirt to establish a foothold on hostile terrain (islands, coasts, cliffs). Player-placed blocks are never overwritten.")
                 .define("campTerraform", true);
