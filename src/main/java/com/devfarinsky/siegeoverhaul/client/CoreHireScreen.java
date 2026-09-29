@@ -869,12 +869,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             drawDefenses(g, mx, my);
         } else if (tab == CoreCommandPage.CIVILIANS) {
             int tx=layout.x()+14, ty=layout.contentY()+8, tw=layout.width()-28;
-            text(g,menu.civilians()+" civilians · "+menu.civilians()+" emeralds per full day",tx,ty,tw,CommandPalette.TEXT);
+            text(g,menu.civilians()+" civilians · up to "+menu.civilians()+" emeralds per day",tx,ty,tw,CommandPalette.TEXT);
             String[] lines={"Two settlers join your faction when you establish a core.",
                 "Provide beds and food to grow your population. Children inherit their parents' faction.",
                 "Each villager has a profession. Place matching workstations so they can restock trades.",
                 "Each living civilian earns 1 emerald per 24,000 game ticks for your Treasury. No real-time earnings while the server is stopped.",
-                "Civilians remain in your claims. Taxes pause without an owned core. Population limit: 64."};
+                "Civilians stay in your claims. Stranded civilians wait safely; their taxes pause. An owned core is required. Limit: 64."};
             int yy=ty+20;
             for(String line:lines) {
                 for(var part:font.split(Component.literal(line),tw)) {
