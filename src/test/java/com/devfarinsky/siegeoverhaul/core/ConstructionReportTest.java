@@ -20,6 +20,20 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 class ConstructionReportTest extends MinecraftTestSupport {
+    @Test void resubscribingRefreshesImmediatelyButRepeatedWatchDoesNot() throws Exception {
+        var menu = mock(CoreHireMenu.class, CALLS_REAL_METHODS);
+        var field = CoreHireMenu.class.getDeclaredField("constructionAt");
+        field.setAccessible(true);
+        field.setLong(menu, 100L);
+        menu.watchConstruction(true);
+        assertEquals(Long.MIN_VALUE, field.getLong(menu));
+        field.setLong(menu, 120L);
+        menu.watchConstruction(true);
+        assertEquals(120L, field.getLong(menu));
+        menu.watchConstruction(false);
+        menu.watchConstruction(true);
+        assertEquals(Long.MIN_VALUE, field.getLong(menu));
+    }
     @Test void reportsOnlyTheRequestersOwnedJobsAndDoesNotMutateAreas() {
         var level = mock(ServerLevel.class); var player = mock(ServerPlayer.class);
         var ours = mock(Entity.class); var foreign = mock(Entity.class);

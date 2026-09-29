@@ -1,3 +1,7 @@
+## 4.50.11 — Construction panel polish
+- Reopening Live construction fetches a fresh snapshot immediately instead of showing the previous result for up to two seconds.
+- Long construction labels and status text no longer cut an emoji or other supplementary Unicode character in half when sent to clients.
+
 ## 4.50.10 — Live construction and modular walls
 - Defenses now includes an in-hub live construction list with progress, builder activity, current supply requests and hover details for marker/builder locations. Lists refresh every two seconds while viewed and cover up to twelve of your loaded nearby commissioned jobs.
 - Added Wall Section, Wall Corner and Wall Stairs plans, costing 90 / 90 / 100 Treasury emeralds when commissioned. Matching raised walkways snap to a five-block world grid; rotate pieces to line up their open ends at the same ground height.
