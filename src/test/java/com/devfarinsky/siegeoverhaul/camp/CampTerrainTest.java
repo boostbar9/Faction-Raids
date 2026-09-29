@@ -204,6 +204,15 @@ class CampTerrainTest extends MinecraftTestSupport {
         verify(level,never()).setBlock(any(),any(),anyInt());
     }
 
+    @Test void ordinaryScoutingKeepsItsExistingClearanceAboveLowerShoulders() {
+        for(int x=-13;x<=13;x++)for(int z=-13;z<=13;z++)
+            heights.put(x+":"+z,64-Math.max(0,Math.min(3,Math.max(Math.abs(x),Math.abs(z))-9)));
+        edits.put(new BlockPos(12,69,0),Blocks.OAK_LEAVES.defaultBlockState());
+        var plan=CampTerrain.plan(level,center,p->false).orElseThrow();
+        assertTrue(plan.changes().stream().noneMatch(c->c.pos().equals(new BlockPos(12,69,0))));
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
     @Test void fallbackMeasuresGroundBelowTreesAndSnapshotsTrunksAndCanopy() {
         heights.put("1:0",72);
         // The fixture's heightmap reports the log top, not the actual ground at y=64.

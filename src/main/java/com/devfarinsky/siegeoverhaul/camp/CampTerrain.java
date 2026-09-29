@@ -114,7 +114,7 @@ public final class CampTerrain {
             heights.put(column, Math.max(low, Math.min(high, center.getY())));
         }
         int canopyTop = columns.values().stream().filter(CampGround.Column::tree)
-                .mapToInt(c -> c.top()+2).max().orElse(center.getY()+5);
+                .mapToInt(c -> c.top()+2).max().orElse(Integer.MIN_VALUE);
         List<Change> changes = new ArrayList<>();
         for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
             BlockPos column = center.offset(dx, 0, dz);
