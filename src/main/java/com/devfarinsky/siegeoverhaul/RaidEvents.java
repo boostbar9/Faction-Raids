@@ -3425,6 +3425,9 @@ public final class RaidEvents {
             if (!excludedChunks.isEmpty()
                     && excludedChunks.contains(new net.minecraft.world.level.ChunkPos(x >> 4, z >> 4))) { rejExcluded++; continue; }
             BlockPos center = surfacePosition(level, x, z);
+            if (state != null && state.campTerraformed && RaidConfig.LEVEL_CAMP_TERRAIN.get()
+                    && RaidConfig.CLEANUP_WAR_CAMPS.get())
+                center = com.devfarinsky.siegeoverhaul.camp.CampTerrain.earthworksCenter(level, center);
             if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.canClaim(level, center)
                     || com.devfarinsky.siegeoverhaul.compat.CampClaims.footprint(center).stream().anyMatch(excludedChunks::contains)) { rejClaim++; continue; }
             if (remote && RaidConfig.RESPECT_FOREIGN_CLAIMS.get() && anchorRecord!=null

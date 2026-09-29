@@ -29,6 +29,27 @@ public final class CampTerrain {
         public Plan { changes = List.copyOf(changes); }
     }
 
+    /** Pick the least earthwork within the existing three-block cut/fill limit.
+     * A mound under the scout must not force the entire camp up to its peak.
+     * This is only a height proposal; plan() still validates every block and claim.
+     */
+    public static BlockPos earthworksCenter(ServerLevel level, BlockPos center) {
+        int radius = CAMP_RADIUS + EDGE_WIDTH + 1;
+        int[] heights = new int[(radius * 2 + 1) * (radius * 2 + 1)];
+        int count = 0;
+        for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
+            BlockPos column = center.offset(dx, 0, dz);
+            if (!level.hasChunkAt(column) || !level.getWorldBorder().isWithinBounds(column)) return center;
+            heights[count++] = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    column.getX(), column.getZ());
+        }
+        Arrays.sort(heights);
+        int low = heights[count - 1] - MAX_CHANGE;
+        int high = heights[0] + MAX_CHANGE;
+        if (low > high) return center;
+        return new BlockPos(center.getX(), Math.max(low, Math.min(high, heights[count / 2])), center.getZ());
+    }
+
     /** Reject the entire site if even one column intersects water, structures or an excluded claim. */
     public static Optional<Plan> plan(ServerLevel level, BlockPos center, Predicate<BlockPos> excluded) {
         int radius = CAMP_RADIUS + EDGE_WIDTH;
