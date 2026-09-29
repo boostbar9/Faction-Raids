@@ -97,6 +97,7 @@ public final class CampTerrain {
         for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
             BlockPos column = center.offset(dx, 0, dz);
             int oldY = original.get(column), newY = heights.get(column);
+            if (Math.abs(newY - oldY) > MAX_CHANGE) return reject(rejected, Rejection.RELIEF);
             int bottom = Math.min(oldY, newY) - 1;
             int top = Math.max(oldY, newY) + 5;
             if (bottom < level.getMinBuildHeight() || top >= level.getMaxBuildHeight()) return reject(rejected, Rejection.HEIGHT_LIMIT);

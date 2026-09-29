@@ -187,6 +187,15 @@ class CampTerrainTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void smoothingCannotExceedTheSixBlockCutFillLimit() {
+        heights.put("13:0",67);
+        heights.put("12:0",58);
+        var reasons=new ArrayList<CampTerrain.Rejection>();
+        assertTrue(CampTerrain.plan(level,center,p->false,reasons::add).isEmpty());
+        assertEquals(List.of(CampTerrain.Rejection.RELIEF),reasons);
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
     private int plannedHeight(int x,int z) {
         for(int y=75;y>=50;y--)if(!state(new BlockPos(x,y,z)).isAir())return y+1;
         throw new AssertionError("Missing ground");
