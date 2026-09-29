@@ -101,7 +101,8 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         CompoundTag core = saved.siegeCores.get(SiegeCore.key(owner));
         data.set(32,CivilianLedger.count(CoreCivilians.ledger(saved,SiegeCore.key(owner))));
         long now = owner.server.overworld().getGameTime();
-        if (CoreOffers.refresh(core, now, owner.serverLevel().random)) saved.setDirty();
+        if (HeroProgress.migrate(core, saved.journals.get(SiegeCore.key(owner)))) saved.setDirty();
+        if (CoreOffers.refresh(core, now, owner.serverLevel().random, HeroProgress.tier(core))) saved.setDirty();
         long rotation = core.getLong("RefreshAt");
         int[] offers = core.getIntArray("Offers");
         for (int i = 0; i < 4; i++) {
@@ -156,7 +157,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         RaidSavedData saved = RaidSavedData.get(owner.server);
         CompoundTag core = saved.siegeCores.get(SiegeCore.key(owner));
         int offeredRole=index==3?core.getInt("HeroRole"):index>=0 && index<3?core.getIntArray("Offers")[index]:-1;
-        if (CoreOffers.canPurchase(core, index, expectedRotation)
+        if (CoreOffers.canPurchase(core, index, expectedRotation, HeroProgress.tier(core))
                 && CoreOfferEquipment.matches(core.getCompound("OfferEquipment"+index),offeredRole,expectedRotation)
                 && CoreHiring.hireOffer(owner, pos, index==3?core.getInt("HeroRole"):core.getIntArray("Offers")[index],core.getCompound("OfferEquipment"+index))) {
             core.putInt("Sold", core.getInt("Sold") | (1 << index));

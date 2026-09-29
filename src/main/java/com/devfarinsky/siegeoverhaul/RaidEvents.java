@@ -4934,6 +4934,14 @@ public final class RaidEvents {
         // that fled the wall still learns "a Ravager showed up" as soon as
         // they saw one, not only if they win.
         if (state != null) {
+            if (eligibleVictory) {
+                var core = data.siegeCores.get(teamKey);
+                if (core != null) {
+                    com.devfarinsky.siegeoverhaul.core.HeroProgress.migrate(core, data.journals.get(teamKey));
+                    com.devfarinsky.siegeoverhaul.core.HeroProgress.victory(core);
+                    data.setDirty();
+                }
+            }
             recordWarJournal(server, data, teamKey, state, victory, eligibleVictory);
             if (state.narrative != null) {
                 markFactionDiscovered(data, teamKey, state.narrative.factionId);

@@ -1,3 +1,8 @@
+## 4.51.5
+- Hero offers now unlock by eligible Siege Core victories: uncommon after one, rare after two, epic after four, legendary after six. Existing victory records seed the saved faction milestone; stale high-tier offers are safely rerolled before purchase.
+- New common and uncommon heroes receive iron armor and melee weapons. Rare and epic heroes retain diamond; legendary heroes retain Netherite.
+- Equipment issued by Siege Overhaul no longer drops when a tracked hero or core-hired soldier dies. Player-supplied replacement items still drop through Villager Recruits.
+
 ## 4.51.4
 - Fallback camp earthworks can fill water up to six blocks deep over natural soil, allowing a camp floor to extend onto shallow water near a dry gate approach. Deep water, structures, claims and excessive earthwork remain excluded; water is recorded for cleanup.
 

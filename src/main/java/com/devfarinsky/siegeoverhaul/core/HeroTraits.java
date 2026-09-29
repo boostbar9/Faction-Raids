@@ -174,23 +174,23 @@ public final class HeroTraits {
         int base = CoreHiring.heroBase(role);
         int tier = CoreHiring.heroTier(role);
         Item[] armor={Items.DIAMOND_HELMET,Items.DIAMOND_CHESTPLATE,Items.DIAMOND_LEGGINGS,Items.DIAMOND_BOOTS};
-        // Legendaries get netherite; Epics diamond; Rares diamond; Uncommons diamond; Commons iron.
+        // Strong armor arrives with the siege milestones that unlock higher hero tiers.
         if (tier == 4) armor = new Item[]{Items.NETHERITE_HELMET, Items.NETHERITE_CHESTPLATE, Items.NETHERITE_LEGGINGS, Items.NETHERITE_BOOTS};
-        else if (tier == 0) armor = new Item[]{Items.IRON_HELMET, Items.IRON_CHESTPLATE, Items.IRON_LEGGINGS, Items.IRON_BOOTS};
+        else if (tier <= 1) armor = new Item[]{Items.IRON_HELMET, Items.IRON_CHESTPLATE, Items.IRON_LEGGINGS, Items.IRON_BOOTS};
         EquipmentSlot[] slots={EquipmentSlot.HEAD,EquipmentSlot.CHEST,EquipmentSlot.LEGS,EquipmentSlot.FEET};
         int shell = shellColor(role);
         for(int i=0;i<4;i++){
             ItemStack stack=armor(role,armor[i]);
             // Epic Knights compat protection scales with rarity: 4 base + 1 per tier.
             stack=com.devfarinsky.siegeoverhaul.compat.EpicKnightsCompatibility.armor(stack, 4 + tier, slots[i], shell);
-            inventory.setItem(i,stack);
+            inventory.setItem(i,IssuedEquipment.issue(stack));
         }
         // Mages carry a blaze rod for the visible staff look; ranged carry bow/crossbow; melee sword.
         Item weaponItem;
         if (mage(role)) weaponItem = Items.BLAZE_ROD;
         else if (base == 2) weaponItem = Items.BOW;
         else if (base == 3) weaponItem = Items.CROSSBOW;
-        else weaponItem = Items.DIAMOND_SWORD;
+        else weaponItem = tier <= 1 ? Items.IRON_SWORD : Items.DIAMOND_SWORD;
         ItemStack weapon = new ItemStack(weaponItem);
         if (base == 2 && !mage(role)) weapon.enchant(Enchantments.POWER_ARROWS, 2 + Math.max(0, tier - 1));
         else if (base == 3 && !mage(role)) { weapon.enchant(Enchantments.QUICK_CHARGE, 2); weapon.enchant(Enchantments.PIERCING, 1 + Math.max(0, tier - 1)); }
@@ -198,7 +198,7 @@ public final class HeroTraits {
         weapon.enchant(Enchantments.UNBREAKING, mage(role) ? 3 : 2);
         weapon.setHoverName(Component.literal(weaponName(role)).withStyle(nameColor(tier)));
         com.devfarinsky.siegeoverhaul.items.OlympianWeaponSkins.identifyHero(weapon,role);
-        inventory.setItem(5, weapon);
+        inventory.setItem(5, IssuedEquipment.issue(weapon));
         // Shield in offhand for shield-based heroes (base==1) that aren't mages.
         if (base == 1 && !mage(role)) {
             ItemStack shield = new ItemStack(Items.SHIELD); CompoundTag be = new CompoundTag();
@@ -206,7 +206,7 @@ public final class HeroTraits {
             var patterns = new net.minecraft.nbt.ListTag(); CompoundTag pattern = new CompoundTag();
             pattern.putString("Pattern", "bo"); pattern.putInt("Color", DyeColor.YELLOW.getId()); patterns.add(pattern); be.put("Patterns", patterns);
             shield.getOrCreateTag().put("BlockEntityTag", be); shield.enchant(Enchantments.UNBREAKING, 2);
-            inventory.setItem(4, shield);
+            inventory.setItem(4, IssuedEquipment.issue(shield));
         }
         return inventory;
     }
