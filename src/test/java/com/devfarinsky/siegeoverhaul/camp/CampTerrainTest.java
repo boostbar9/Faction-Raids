@@ -187,6 +187,14 @@ class CampTerrainTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void diagonalUntouchedCornersDoNotConstrainThePlaneOrItsWalkableEdge() {
+        for(int x:new int[]{-13,13})for(int z:new int[]{-13,13})heights.put(x+":"+z,80);
+        assertEquals(center,CampTerrain.earthworksCenter(level,center));
+        var plan=CampTerrain.plan(level,center,p->false).orElseThrow();
+        assertTrue(plan.changes().isEmpty());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
     @Test void smoothingCannotExceedTheSixBlockCutFillLimit() {
         heights.put("13:0",67);
         heights.put("12:0",58);

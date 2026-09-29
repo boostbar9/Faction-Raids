@@ -39,10 +39,11 @@ public final class CampTerrain {
         for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
             BlockPos column = center.offset(dx, 0, dz);
             if (!level.hasChunkAt(column) || !level.getWorldBorder().isWithinBounds(column)) return center;
+            if (Math.abs(dx) == radius && Math.abs(dz) == radius) continue;
             heights[count++] = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
                     column.getX(), column.getZ());
         }
-        Arrays.sort(heights);
+        Arrays.sort(heights, 0, count);
         int low = heights[count - 1] - MAX_CHANGE;
         int high = heights[0] + MAX_CHANGE;
         if (low > high) return center;
@@ -68,6 +69,7 @@ public final class CampTerrain {
                 if (!level.hasChunkAt(column)) return reject(rejected, Rejection.UNLOADED);
                 if (!level.getWorldBorder().isWithinBounds(column)) return reject(rejected, Rejection.BORDER);
                 if (excluded.test(column)) return reject(rejected, Rejection.CLAIM);
+                if (Math.abs(dx) == radius + 1 && Math.abs(dz) == radius + 1) continue;
                 int oldY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.getX(), column.getZ());
                 if (Math.abs(oldY - center.getY()) > MAX_CHANGE) return reject(rejected, Rejection.RELIEF);
                 original.put(column, oldY);
