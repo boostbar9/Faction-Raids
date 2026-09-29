@@ -155,6 +155,7 @@ jobs:
                   'com/devfarinsky/siegeoverhaul/siege/EngineerSupplies.class',
                   'com/devfarinsky/siegeoverhaul/camp/CampDevelopment.class',
                   'com/devfarinsky/siegeoverhaul/camp/CampScouting.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampLoading.class',
                   'com/devfarinsky/siegeoverhaul/camp/CampStructures.class',
                   'com/devfarinsky/siegeoverhaul/camp/CampStarterPavilion.class',
                   'com/devfarinsky/siegeoverhaul/camp/CampStarterLayout.class',
