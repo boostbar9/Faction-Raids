@@ -116,7 +116,7 @@ class HeroTraitsTest extends MinecraftTestSupport {
 
     @Test void distinctiveLoadoutsLiveInNativeEquipmentSlots() {
         // Every hero has: a stored role tag, an enchanted mainhand weapon
-        // that matches its base (sword/shield -> DIAMOND_SWORD, bow -> BOW,
+        // that matches its base and tier (early melee -> IRON_SWORD, bow -> BOW,
         // crossbow -> CROSSBOW, mage -> BLAZE_ROD), and shield-based non-mages
         // carry a shield in the offhand. Trims are unique across the roster.
         var trims=new java.util.HashSet<String>();
@@ -129,8 +129,12 @@ class HeroTraitsTest extends MinecraftTestSupport {
             assertTrue(inventory.getItem(5).isEnchanted());
             int base=CoreHiring.heroBase(role);
             boolean mage=role==22||role==23||role==24||role>=27;
-            Item expected= mage?Items.BLAZE_ROD : base==2?Items.BOW : base==3?Items.CROSSBOW : Items.DIAMOND_SWORD;
+            Item expected= mage?Items.BLAZE_ROD : base==2?Items.BOW : base==3?Items.CROSSBOW
+                    : CoreHiring.heroTier(role)<=1?Items.IRON_SWORD:Items.DIAMOND_SWORD;
             assertEquals(expected,inventory.getItem(5).getItem());
+            assertEquals(CoreHiring.heroTier(role)==4?Items.NETHERITE_CHESTPLATE
+                    :CoreHiring.heroTier(role)<=1?Items.IRON_CHESTPLATE:Items.DIAMOND_CHESTPLATE,
+                    inventory.getItem(1).getItem());
             if(base==1 && !mage) assertTrue(inventory.getItem(4).is(Items.SHIELD));
             else assertTrue(inventory.getItem(4).isEmpty());
             verify(mob).setItemSlot(EquipmentSlot.MAINHAND,inventory.getItem(5));

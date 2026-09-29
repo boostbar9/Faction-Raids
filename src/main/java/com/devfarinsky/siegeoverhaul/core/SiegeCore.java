@@ -47,7 +47,8 @@ public final class SiegeCore {
         core.remove("CoreRemoved");
         core.putUUID("CivilianPendingOwner", player.getUUID());
         if (!data.coreGuardGrants.contains(key)) core.putUUID(StarterCoreGuard.PENDING_OWNER, player.getUUID());
-        CoreOffers.refresh(core, player.server.overworld().getGameTime(), player.serverLevel().random);
+        HeroProgress.migrate(core, data.journals.get(key));
+        CoreOffers.refresh(core, player.server.overworld().getGameTime(), player.serverLevel().random, HeroProgress.tier(core));
         RaidSavedData.Anchor old = data.anchors.get(key);
         long next = old == null ? player.server.overworld().getGameTime() + RaidConfig.MIN_COOLDOWN_MINUTES.get() * 1200L : old.nextRaidGameTime();
         var point = new RaidSavedData.DefensePoint("siege_core", Level.OVERWORLD.location(), pos.immutable());

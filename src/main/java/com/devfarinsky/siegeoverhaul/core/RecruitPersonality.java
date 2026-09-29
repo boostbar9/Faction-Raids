@@ -37,17 +37,17 @@ public final class RecruitPersonality {
             trim.putString("pattern", "minecraft:sentry");
             stack.getOrCreateTag().put("Trim", trim);
             stack = com.devfarinsky.siegeoverhaul.compat.EpicKnightsCompatibility.armor(stack,outfit,slots[i],color);
-            inventory.setItem(i, stack);
+            inventory.setItem(i, IssuedEquipment.issue(stack));
             mob.setItemSlot(slots[i], stack);
         }
         var musket = role == 3 && random.nextInt(3) == 0 ? com.devfarinsky.siegeoverhaul.compat.MusketCompatibility.kit() : null;
         ItemStack weapon = new ItemStack(musket != null ? musket.weapon() : role == 2 ? Items.BOW : role == 3 ? Items.CROSSBOW : Items.IRON_SWORD);
         weapon.setHoverName(Component.literal(name + "'s " + (musket != null ? "Musket" : role == 2 ? "Bow" : role == 3 ? "Crossbow" : "Sword")));
-        inventory.setItem(5, weapon);
+        inventory.setItem(5, IssuedEquipment.issue(weapon));
         mob.setItemSlot(EquipmentSlot.MAINHAND, weapon);
         if (role == 1) {
             ItemStack shield = new ItemStack(Items.SHIELD);
-            inventory.setItem(4, shield);
+            inventory.setItem(4, IssuedEquipment.issue(shield));
             mob.setItemSlot(EquipmentSlot.OFFHAND, shield);
         }
         inventory.setItem(6, new ItemStack(Items.BREAD, 8));

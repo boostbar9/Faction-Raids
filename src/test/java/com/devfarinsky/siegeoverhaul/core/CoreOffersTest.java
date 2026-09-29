@@ -6,6 +6,40 @@ import net.minecraft.util.RandomSource;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 class CoreOffersTest extends MinecraftTestSupport {
+    @Test void heroTiersRequireEligibleFactionVictoriesAcrossReloads() {
+        CompoundTag core=new CompoundTag();
+        var journal=new RaidSavedData.WarJournal("team:test");
+        journal.record(new RaidSavedData.WarJournal.Entry(1,"ares","Ares","",5,5,"victory_practice",0));
+        journal.record(new RaidSavedData.WarJournal.Entry(2,"ares","Ares","",5,5,"victory",25));
+        assertTrue(HeroProgress.migrate(core,journal));
+        assertEquals(1,HeroProgress.tier(core));
+        assertFalse(HeroProgress.migrate(core,journal));
+        var saved=new RaidSavedData(); saved.siegeCores.put("team:test",core);
+        var restored=RaidSavedData.load(saved.save(new CompoundTag())).siegeCores.get("team:test");
+        assertEquals(1,HeroProgress.tier(restored));
+        HeroProgress.victory(restored); assertEquals(2,HeroProgress.tier(restored));
+        HeroProgress.victory(restored); assertEquals(2,HeroProgress.tier(restored));
+        HeroProgress.victory(restored); assertEquals(3,HeroProgress.tier(restored));
+        HeroProgress.victory(restored); HeroProgress.victory(restored);
+        assertEquals(4,HeroProgress.tier(restored));
+    }
+    @Test void newAndOldOffersCannotBypassTierCap() {
+        for(int tier=0;tier<=4;tier++)for(int seed=0;seed<20;seed++) {
+            CompoundTag stock=new CompoundTag();
+            CoreOffers.refresh(stock,100,RandomSource.create(seed),tier);
+            assertTrue(CoreHiring.heroTier(stock.getInt("HeroRole"))<=tier);
+        }
+        CompoundTag old=new CompoundTag();
+        CoreOffers.refresh(old,100,RandomSource.create(9));
+        old.putInt("HeroRole",29); // unsold, pre-upgrade legendary offer
+        assertFalse(CoreOffers.canPurchase(old,3,18100,0));
+        assertTrue(CoreOffers.refresh(old,200,RandomSource.create(2),0));
+        assertTrue(CoreHiring.heroTier(old.getInt("HeroRole"))==0);
+        assertEquals(18100,old.getLong("RefreshAt"));
+        old.putInt("HeroRole",29);
+        old.putInt("Sold",8);
+        assertFalse(CoreOffers.refresh(old,201,RandomSource.create(2),0));
+    }
     @Test void exactRoleWeights() {
         int[] counts = new int[4];
         for (int i=0;i<100;i++) counts[CoreOffers.role(i)]++;

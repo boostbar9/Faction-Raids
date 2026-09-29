@@ -26,6 +26,25 @@ public final class CoreOffers {
         2, 1, 1              // Legendary
     };
     public static int hero(int roll) { return 10 + weighted(roll,HERO_WEIGHTS); }
+    public static int heroForTier(int roll, int maxTier) {
+        int cap = Math.max(0, Math.min(4, maxTier));
+        int total = 0;
+        for (int i = 0; i < HERO_WEIGHTS.length; i++)
+            if (CoreHiring.heroTier(i + 10) <= cap) total += HERO_WEIGHTS[i];
+        if (roll < 0 || roll >= total) throw new IllegalArgumentException("roll");
+        for (int i = 0; i < HERO_WEIGHTS.length; i++) {
+            if (CoreHiring.heroTier(i + 10) > cap) continue;
+            roll -= HERO_WEIGHTS[i];
+            if (roll < 0) return i + 10;
+        }
+        throw new IllegalStateException("No eligible hero");
+    }
+    private static int heroRoll(RandomSource random, int maxTier) {
+        int total = 0;
+        for (int i = 0; i < HERO_WEIGHTS.length; i++)
+            if (CoreHiring.heroTier(i + 10) <= maxTier) total += HERO_WEIGHTS[i];
+        return heroForTier(random.nextInt(total), maxTier);
+    }
     private CoreOffers() {}
     public static int role(int roll) { return weighted(roll, RECRUIT_WEIGHTS); }
     public static int worker(int roll) { return WORKER_START + weighted(roll, WORKER_WEIGHTS); }
@@ -44,7 +63,15 @@ public final class CoreOffers {
         return index >= 0 && index < 4 && (index < 3 || (hero >= 10 && hero <= 29)) && valid(stock.getIntArray("Offers"))
                 && rotation == stock.getLong("RefreshAt") && (stock.getInt("Sold") & (1 << index)) == 0;
     }
+    public static boolean canPurchase(CompoundTag stock, int index, long rotation, int maxTier) {
+        return canPurchase(stock, index, rotation) && (index != 3
+                || CoreHiring.heroTier(stock.getInt("HeroRole")) <= maxTier);
+    }
     public static boolean refresh(CompoundTag stock, long now, RandomSource random) {
+        return refresh(stock, now, random, 4);
+    }
+    public static boolean refresh(CompoundTag stock, long now, RandomSource random, int maxTier) {
+        maxTier = Math.max(0, Math.min(4, maxTier));
         int[] existing = stock.getIntArray("Offers");
         // Migrate only the civilian slot. Preserve both military offers, sold bits and deadline.
         if (!stock.contains("OfferSchema") && existing.length == 3
@@ -53,20 +80,20 @@ public final class CoreOffers {
             existing[2] = worker(random.nextInt(100));
             stock.putIntArray("Offers", existing);
             stock.putInt("OfferSchema", 2);
-            stock.putInt("HeroRole",hero(random.nextInt(100)));
+            stock.putInt("HeroRole",heroRoll(random,maxTier));
             return true;
         }
         if (valid(existing) && now < stock.getLong("RefreshAt")) {
             int hero = stock.getInt("HeroRole");
-            if (hero < 10 || hero > 29) {
-                stock.putInt("HeroRole",hero(random.nextInt(100))); return true;
+            if (hero < 10 || hero > 29 || (stock.getInt("Sold") & 8) == 0 && CoreHiring.heroTier(hero) > maxTier) {
+                stock.putInt("HeroRole",heroRoll(random,maxTier)); return true;
             }
             return false;
         }
         stock.putIntArray("Offers", new int[]{role(random.nextInt(100)), role(random.nextInt(100)), worker(random.nextInt(100))});
         stock.putInt("OfferSchema", 2);
         stock.putInt("Sold", 0);
-        stock.putInt("HeroRole",hero(random.nextInt(100)));
+        stock.putInt("HeroRole",heroRoll(random,maxTier));
         long previous = stock.getLong("RefreshAt");
         long next = previous > 0 && previous <= now
                 ? previous + ((now - previous) / ROTATION_TICKS + 1) * ROTATION_TICKS : now + ROTATION_TICKS;
