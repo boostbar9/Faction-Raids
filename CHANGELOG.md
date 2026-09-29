@@ -1,3 +1,8 @@
+## 4.51.2
+- Fallback camp planning measures ground beneath supported, canopy-covered tree trunks and clears qualifying timber and natural leaves within the work area, saving removed blocks for cleanup.
+- Shallow water up to three blocks deep can be filled with dirt over validated soil. Camps still require a dry approach, bounded earthworks, protected claims and no lava or containers.
+- Stop the legacy paver from reworking an already validated and restored-tracked camp floor and shoulders.
+
 ## 4.51.1
 - Camp earthworks now smooth the approach shoulder against real surrounding ground instead of rejecting every uneven step outside the camp. The camp floor remains level, with dirt support and walkable transitions.
 - Camp search logs now identify terrain rejection reasons, including water, protected blocks, excessive relief, edge transitions and work budgets.
