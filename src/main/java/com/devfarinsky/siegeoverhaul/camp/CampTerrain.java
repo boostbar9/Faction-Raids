@@ -67,6 +67,12 @@ public final class CampTerrain {
 
     public static Optional<Plan> plan(ServerLevel level, BlockPos center, Predicate<BlockPos> excluded,
                                     java.util.function.Consumer<Rejection> rejected, boolean fallback) {
+        return plan(level,center,excluded,rejected,fallback,null);
+    }
+
+    public static Optional<Plan> plan(ServerLevel level, BlockPos center, Predicate<BlockPos> excluded,
+                                    java.util.function.Consumer<Rejection> rejected, boolean fallback,
+                                    net.minecraft.core.Direction gateSide) {
         int radius = CAMP_RADIUS + EDGE_WIDTH;
         Map<BlockPos, Integer> original = new HashMap<>();
         Map<BlockPos, CampGround.Column> columns = new HashMap<>();
@@ -87,7 +93,7 @@ public final class CampTerrain {
                 if (Math.max(Math.abs(dx), Math.abs(dz)) > radius) boundary.add(column);
             }
         }
-        if (fallback && !dryExit(level,center,original,radius+1)) return reject(rejected,Rejection.NO_LAND_EXIT);
+        if (fallback && !dryExit(level,center,original,radius+1,gateSide)) return reject(rejected,Rejection.NO_LAND_EXIT);
         // Extend the fixed flat camp and actual untouched boundary with one-block slopes.
         // Independent ring clamps can leave two-block steps along a ring. Use all boundary
         // constraints instead, and leave unrelated steps BETWEEN untouched columns alone.
@@ -150,8 +156,9 @@ public final class CampTerrain {
         return Optional.of(new Plan(changes));
     }
 
-    private static boolean dryExit(ServerLevel level,BlockPos center,Map<BlockPos,Integer> heights,int edge) {
+    private static boolean dryExit(ServerLevel level,BlockPos center,Map<BlockPos,Integer> heights,int edge,net.minecraft.core.Direction gateSide) {
         for(var direction:net.minecraft.core.Direction.Plane.HORIZONTAL) {
+            if(gateSide!=null && direction!=gateSide)continue;
             boolean dry=true;
             for(int offset=-1;offset<=1;offset++) {
                 BlockPos p=center.relative(direction,edge).relative(direction.getClockWise(),offset);

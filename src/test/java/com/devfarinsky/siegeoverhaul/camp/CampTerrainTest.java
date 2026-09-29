@@ -265,6 +265,14 @@ class CampTerrainTest extends MinecraftTestSupport {
         verify(level,never()).setBlock(any(),any(),anyInt());
     }
 
+    @Test void fallbackRequiresDryGroundOnTheActualGateSide() {
+        for(int z=-1;z<=1;z++)edits.put(new BlockPos(13,63,z),Blocks.WATER.defaultBlockState());
+        var reasons=new ArrayList<CampTerrain.Rejection>();
+        assertTrue(CampTerrain.plan(level,center,p->false,reasons::add,true,net.minecraft.core.Direction.EAST).isEmpty());
+        assertEquals(List.of(CampTerrain.Rejection.NO_LAND_EXIT),reasons);
+        assertTrue(CampTerrain.plan(level,center,p->false,r->{},true,net.minecraft.core.Direction.WEST).isPresent());
+    }
+
     @Test void fallbackStillRequiresClaimsAndTheOriginalMutationBudget() {
         assertTrue(CampTerrain.plan(level,center,p->true,r->{},true).isEmpty());
         for(int x=-10;x<=10;x++)for(int z=-10;z<=10;z++)for(int y=61;y<64;y++)

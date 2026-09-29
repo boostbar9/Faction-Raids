@@ -3455,7 +3455,8 @@ public final class RaidEvents {
             if (RaidConfig.LEVEL_CAMP_TERRAIN.get() && RaidConfig.CLEANUP_WAR_CAMPS.get()) {
                 var terrain = com.devfarinsky.siegeoverhaul.camp.CampTerrain.plan(level, center,
                         pos -> excludedChunks.contains(new net.minecraft.world.level.ChunkPos(pos)),
-                        reason -> terrainReasons.merge(reason, 1, Integer::sum), terraformFallback);
+                        reason -> terrainReasons.merge(reason, 1, Integer::sum), terraformFallback,
+                        state == null ? null : com.devfarinsky.siegeoverhaul.camp.CampPerimeter.mainGateSide(state));
                 if (terrain.isEmpty()) { rejTerrainPlan++; continue; }
                 if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.create(level, state, center)) { rejClaimCreate++; continue; }
                 if (!com.devfarinsky.siegeoverhaul.camp.CampTerrain.apply(level, state, terrain.get())) {
