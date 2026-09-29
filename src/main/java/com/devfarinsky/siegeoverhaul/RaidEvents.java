@@ -3136,7 +3136,8 @@ public final class RaidEvents {
         // background while the palisade rises. Recorded blocks flow
         // through the normal cleanup ledger so raid end restores the
         // original water / cliff terrain.
-        if (state.campTerraformed && RaidConfig.CAMP_TERRAFORM.get()) {
+        if (state.campTerraformed && RaidConfig.CAMP_TERRAFORM.get()
+                && !(RaidConfig.LEVEL_CAMP_TERRAIN.get() && RaidConfig.CLEANUP_WAR_CAMPS.get())) {
             // Two-phase paving: level the palisade footprint (rings 0..10)
             // synchronously so the fence has solid ground immediately,
             // then queue the outer polish rings (11..12) for over-time
@@ -3429,7 +3430,7 @@ public final class RaidEvents {
             BlockPos center = surfacePosition(level, x, z);
             if (state != null && state.campTerraformed && RaidConfig.LEVEL_CAMP_TERRAIN.get()
                     && RaidConfig.CLEANUP_WAR_CAMPS.get())
-                center = com.devfarinsky.siegeoverhaul.camp.CampTerrain.earthworksCenter(level, center);
+                center = com.devfarinsky.siegeoverhaul.camp.CampTerrain.earthworksCenter(level, center, true);
             if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.canClaim(level, center)
                     || com.devfarinsky.siegeoverhaul.compat.CampClaims.footprint(center).stream().anyMatch(excludedChunks::contains)) { rejClaim++; continue; }
             if (remote && RaidConfig.RESPECT_FOREIGN_CLAIMS.get() && anchorRecord!=null
@@ -3454,7 +3455,7 @@ public final class RaidEvents {
             if (RaidConfig.LEVEL_CAMP_TERRAIN.get() && RaidConfig.CLEANUP_WAR_CAMPS.get()) {
                 var terrain = com.devfarinsky.siegeoverhaul.camp.CampTerrain.plan(level, center,
                         pos -> excludedChunks.contains(new net.minecraft.world.level.ChunkPos(pos)),
-                        reason -> terrainReasons.merge(reason, 1, Integer::sum));
+                        reason -> terrainReasons.merge(reason, 1, Integer::sum), terraformFallback);
                 if (terrain.isEmpty()) { rejTerrainPlan++; continue; }
                 if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.create(level, state, center)) { rejClaimCreate++; continue; }
                 if (!com.devfarinsky.siegeoverhaul.camp.CampTerrain.apply(level, state, terrain.get())) {

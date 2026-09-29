@@ -204,6 +204,77 @@ class CampTerrainTest extends MinecraftTestSupport {
         verify(level,never()).setBlock(any(),any(),anyInt());
     }
 
+    @Test void fallbackMeasuresGroundBelowTreesAndSnapshotsTrunksAndCanopy() {
+        heights.put("1:0",72);
+        // The fixture's heightmap reports the log top, not the actual ground at y=64.
+        for(int y=63;y<72;y++)edits.put(new BlockPos(1,y,0),
+                (y==63?Blocks.GRASS_BLOCK:Blocks.OAK_LOG).defaultBlockState());
+        edits.put(new BlockPos(1,72,0),Blocks.OAK_LEAVES.defaultBlockState());
+        edits.put(new BlockPos(2,72,0),Blocks.OAK_LEAVES.defaultBlockState());
+        assertTrue(CampTerrain.plan(level,center,p->false).isEmpty());
+        assertEquals(center,CampTerrain.earthworksCenter(level,new BlockPos(0,72,0),true));
+        var plan=CampTerrain.plan(level,center,p->false,r->{},true).orElseThrow();
+        assertEquals(10,plan.changes().size());
+        assertTrue(CampTerrain.apply(level,raid,plan));
+        assertTrue(state(new BlockPos(1,64,0)).isAir());
+        assertTrue(state(new BlockPos(2,72,0)).isAir());
+        var saved=RaidState.load(raid.save());
+        assertEquals("minecraft:oak_log",saved.campBlocks.get(new BlockPos(1,64,0).asLong()).getCompound("Original").getString("Name"));
+        assertEquals("minecraft:oak_leaves",saved.campBlocks.get(new BlockPos(2,72,0).asLong()).getCompound("Original").getString("Name"));
+    }
+
+    @Test void fallbackDoesNotClearBareTimberPlayerLeavesOrWaterloggedLeaves() {
+        for(var block:List.of(Blocks.OAK_LOG,Blocks.STRIPPED_OAK_LOG,Blocks.OAK_PLANKS,Blocks.CHEST)) {
+            edits.put(new BlockPos(2,64,2),block.defaultBlockState());
+            assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isEmpty());
+        }
+        edits.put(new BlockPos(2,64,2),Blocks.OAK_LEAVES.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT,true));
+        assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isEmpty());
+        edits.put(new BlockPos(2,64,2),Blocks.OAK_LEAVES.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LeavesBlock.WATERLOGGED,true));
+        assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isEmpty());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
+    @Test void shallowPondFallbackFillsToSolidGroundAndSavesWater() {
+        for(int y=61;y<64;y++)edits.put(new BlockPos(2,y,2),Blocks.WATER.defaultBlockState());
+        assertTrue(CampTerrain.plan(level,center,p->false).isEmpty());
+        var plan=CampTerrain.plan(level,center,p->false,r->{},true).orElseThrow();
+        assertEquals(3,plan.changes().size());assertTrue(CampTerrain.apply(level,raid,plan));
+        var saved=RaidState.load(raid.save());
+        for(int y=61;y<64;y++) {
+            BlockPos pos=new BlockPos(2,y,2);assertTrue(state(pos).is(Blocks.DIRT));
+            assertEquals("minecraft:water",saved.campBlocks.get(pos.asLong()).getCompound("Original").getString("Name"));
+        }
+    }
+
+    @Test void fallbackRefusesDeepWaterLavaUnderwaterContainersAndAnIsolatedWaterSite() {
+        for(int y=60;y<64;y++)edits.put(new BlockPos(2,y,2),Blocks.WATER.defaultBlockState());
+        assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isEmpty());
+        edits.clear();edits.put(new BlockPos(2,63,2),Blocks.LAVA.defaultBlockState());
+        assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isEmpty());
+        edits.put(new BlockPos(2,63,2),Blocks.WATER.defaultBlockState());
+        edits.put(new BlockPos(2,62,2),Blocks.CHEST.defaultBlockState());
+        assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isEmpty());
+        edits.clear();
+        for(int x=-13;x<=13;x++)for(int z=-13;z<=13;z++)edits.put(new BlockPos(x,63,z),Blocks.WATER.defaultBlockState());
+        var reasons=new ArrayList<CampTerrain.Rejection>();
+        assertTrue(CampTerrain.plan(level,center,p->false,reasons::add,true).isEmpty());
+        assertEquals(List.of(CampTerrain.Rejection.NO_LAND_EXIT),reasons);
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
+    @Test void fallbackStillRequiresClaimsAndTheOriginalMutationBudget() {
+        assertTrue(CampTerrain.plan(level,center,p->true,r->{},true).isEmpty());
+        for(int x=-10;x<=10;x++)for(int z=-10;z<=10;z++)for(int y=61;y<64;y++)
+            edits.put(new BlockPos(x,y,z),Blocks.WATER.defaultBlockState());
+        var reasons=new ArrayList<CampTerrain.Rejection>();
+        assertTrue(CampTerrain.plan(level,center,p->false,reasons::add,true).isEmpty());
+        assertEquals(List.of(CampTerrain.Rejection.BUDGET),reasons);
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
     private int plannedHeight(int x,int z) {
         for(int y=75;y>=50;y--)if(!state(new BlockPos(x,y,z)).isAir())return y+1;
         throw new AssertionError("Missing ground");
