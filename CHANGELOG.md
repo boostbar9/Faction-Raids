@@ -1,3 +1,7 @@
+## 4.51.1
+- Camp earthworks now smooth the approach shoulder against real surrounding ground instead of rejecting every uneven step outside the camp. The camp floor remains level, with dirt support and walkable transitions.
+- Camp search logs now identify terrain rejection reasons, including water, protected blocks, excessive relief, edge transitions and work budgets.
+
 ## 4.51.0
 - Establish a settlement with two named civilians per faction. Recruit more in the Civilians tab for 16 Treasury emeralds.
 - Civilians use vanilla professions, trades, beds and breeding, with faction territory boundaries and saved ownership. Supply beds, food and matching workstations. Population is capped at 64 per faction.
