@@ -6,6 +6,9 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.minecraft.client.renderer.block.model.ItemOverrides;
+import net.minecraft.client.renderer.block.model.ItemTransforms;
+import net.minecraft.world.item.ItemDisplayContext;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.*;
@@ -38,13 +41,28 @@ public final class OlympianWeaponModels {
             String item=loc.getPath();
             if(item.endsWith("_sword") || item.endsWith("_pickaxe") || item.endsWith("_hoe")
                     || Set.of("bow","crossbow","blaze_rod","fishing_rod").contains(item))
-                models.put(loc,new SkinnedModel(entry.getValue(),skins));
+                models.put(loc,new SkinnedModel(entry.getValue(),skins,item));
         }
     }
     static final class SkinnedModel extends BakedModelWrapper<BakedModel> {
         private final ItemOverrides overrides;
-        SkinnedModel(BakedModel original,Map<String,BakedModel> skins) {
+        SkinnedModel(BakedModel original,Map<String,BakedModel> skins) {this(original,skins,"");}
+        SkinnedModel(BakedModel original,Map<String,BakedModel> skins,String item) {
             super(original);
+            // An override model's own transform is normally used after resolution.
+            // Keep the native bow/crossbow hand transforms even when a skin is selected.
+            Map<String,BakedModel> heldSkins=skins;
+            if(item.equals("bow") || item.equals("crossbow")) {
+                heldSkins=new HashMap<>(skins);
+                for(String patron:OlympianWeaponSkins.PATRONS)for(String shape:OlympianWeaponSkins.SHAPES) {
+                    if(shape.equals(item) || shape.startsWith(item+"_")) {
+                        String key=patron+"_"+shape;
+                        BakedModel skin=skins.get(key);
+                        if(skin!=null)heldSkins.put(key,new NativeGripModel(skin,original));
+                    }
+                }
+            }
+            Map<String,BakedModel> resolvedSkins=heldSkins;
             overrides=new ItemOverrides() {
                 @Override public BakedModel resolve(BakedModel model,ItemStack stack,@Nullable ClientLevel level,@Nullable LivingEntity entity,int seed) {
                     String patron=OlympianWeaponSkins.patron(stack),shape=OlympianWeaponSkins.shape(stack);
@@ -65,7 +83,7 @@ public final class OlympianWeaponModels {
                                 suffix = "_" + stage;
                             }
                         }
-                        var selected=skins.get(patron+"_"+shape+suffix);
+                        var selected=resolvedSkins.get(patron+"_"+shape+suffix);
                         if(selected!=null)return selected;
                     }
                     return original.getOverrides().resolve(original,stack,level,entity,seed);
@@ -73,5 +91,16 @@ public final class OlympianWeaponModels {
             };
         }
         @Override public ItemOverrides getOverrides(){return overrides;}
+    }
+
+    /** Render the custom art using the real item's baked third-person and first-person pose. */
+    static final class NativeGripModel extends BakedModelWrapper<BakedModel> {
+        private final BakedModel nativeModel;
+        NativeGripModel(BakedModel skin,BakedModel nativeModel) {super(skin);this.nativeModel=nativeModel;}
+        @Override public ItemTransforms getTransforms() {return nativeModel.getTransforms();}
+        @Override public BakedModel applyTransform(ItemDisplayContext context,PoseStack pose,boolean leftHand) {
+            nativeModel.applyTransform(context,pose,leftHand);
+            return this;
+        }
     }
 }

@@ -1,3 +1,6 @@
+## 4.51.5
+- Keep vanilla bow and crossbow hand poses when rendering Olympian weapon skins, including drawn and loaded variants.
+
 ## 4.51.4
 - Fallback camp earthworks can fill water up to six blocks deep over natural soil, allowing a camp floor to extend onto shallow water near a dry gate approach. Deep water, structures, claims and excessive earthwork remain excluded; water is recorded for cleanup.
 
