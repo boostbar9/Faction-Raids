@@ -113,6 +113,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
             display.setItem(i, new ItemStack(CoreHiring.icon(role)));
             try { data.set(i + 4, Math.min(32767, Math.max(0, CoreHiring.cost(role)))); }
             catch (ReflectiveOperationException | RuntimeException ex) { data.set(i + 4, -1); }
+            if(!kit.contains("Items",9))data.set(i+4,-1);
         }
         try { display.setItem(4, new ItemStack(CoreHiring.currency())); }
         catch (ReflectiveOperationException | RuntimeException ex) { display.setItem(4, ItemStack.EMPTY); }

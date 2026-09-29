@@ -7,6 +7,14 @@ import java.util.UUID;
 public final class CivilianLedger {
     public static final int LIMIT = 64;
     private CivilianLedger() {}
+    static boolean grantStarter(CompoundTag ledger,java.util.function.BooleanSupplier spawn) {
+        int before=Math.max(0,ledger.getInt("Starters"));
+        if(before>=2)return false;
+        ledger.putInt("Starters",before+1);
+        boolean success=false;
+        try {success=spawn.getAsBoolean();return success;}
+        finally {if(!success)ledger.putInt("Starters",before);}
+    }
     static CompoundTag residents(CompoundTag ledger) {
         if (!ledger.contains("Residents",10)) ledger.put("Residents",new CompoundTag());
         return ledger.getCompound("Residents");

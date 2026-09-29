@@ -35,6 +35,15 @@ class CivilianLedgerTest extends MinecraftTestSupport {
         assertEquals(0,CivilianLedger.settle(ledger,core,100,true));
         assertEquals(1,CivilianLedger.settle(ledger,core,24100,true));
     }
+    @Test void starterGrantsRetryFailuresAndCannotRepeatAfterSaving() {
+        var ledger=new CompoundTag();
+        assertFalse(CivilianLedger.grantStarter(ledger,()->false));assertEquals(0,ledger.getInt("Starters"));
+        assertThrows(IllegalStateException.class,()->CivilianLedger.grantStarter(ledger,()->{throw new IllegalStateException();}));
+        assertEquals(0,ledger.getInt("Starters"));
+        assertTrue(CivilianLedger.grantStarter(ledger,()->true));
+        var restored=ledger.copy();assertTrue(CivilianLedger.grantStarter(restored,()->true));
+        assertFalse(CivilianLedger.grantStarter(restored,()->{fail("Already granted both civilians");return true;}));
+    }
     @Test void populationAndTreasuryAreBounded() {
         var ledger=new CompoundTag();var core=new CompoundTag();
         for(int i=0;i<64;i++)assertTrue(CivilianLedger.register(ledger,UUID.randomUUID(),0));

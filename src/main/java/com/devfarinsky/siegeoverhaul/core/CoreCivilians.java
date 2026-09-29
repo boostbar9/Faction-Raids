@@ -42,12 +42,8 @@ public final class CoreCivilians {
     public static void tryStarters(ServerPlayer player,BlockPos core) {
         if(!SiegeCore.canUse(player,core))return;
         var data=RaidSavedData.get(player.server);var ledger=ledger(data,SiegeCore.key(player));
-        while(ledger.getInt("Starters")<2) {
-            int before=Math.max(0,ledger.getInt("Starters"));
-            ledger.putInt("Starters",before+1); // reserve before entity callbacks
-            if(!spawn(player,core,false)){ledger.putInt("Starters",before);break;}
-            data.setDirty();
-        }
+        while(CivilianLedger.grantStarter(ledger,()->spawn(player,core,false)))data.setDirty();
+        data.setDirty();
     }
     public static boolean recruit(ServerPlayer player,BlockPos core) {
         return SiegeCore.canUse(player,core) && spawn(player,core,true);
@@ -117,9 +113,10 @@ public final class CoreCivilians {
         if(SiegeCore.claimed(level,here,key)) {
             if(v.onGround() && !v.isInWaterOrBubble() && level.noCollision(v))v.getPersistentData().putLong(SAFE,here.asLong());
         } else {
+            v.getNavigation().stop();v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
             BlockPos safe=BlockPos.of(v.getPersistentData().getLong(SAFE));
             if(SiegeCore.claimed(level,safe,key) && HirePlacement.safe(level,v,safe,p->SiegeCore.claimed(level,p,key))) {
-                v.stopRiding();v.getNavigation().stop();v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                v.stopRiding();
                 v.teleportTo(safe.getX()+.5,safe.getY(),safe.getZ()+.5);v.setDeltaMovement(0,0,0);
             }
         }

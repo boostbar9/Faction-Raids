@@ -66,15 +66,20 @@ public final class EntityPortrait {
         boolean changed = !java.util.Objects.equals(ROLES.get(offer),role);
         ItemStack[] old=KITS.get(offer);
         for(int i=0;i<6;i++)if(old==null || !ItemStack.matches(old[i],menu.previewEquipment(offer,i)))changed=true;
-        if(changed) {CACHE.remove(offer);FAILED.remove(offer);}
+        if(changed) {
+            CACHE.remove(offer);FAILED.remove(offer);
+            ItemStack[] snapshot=new ItemStack[6];
+            for(int i=0;i<6;i++)snapshot[i]=menu.previewEquipment(offer,i).copy();
+            KITS.put(offer,snapshot);ROLES.put(offer,role);
+        }
         LivingEntity entity = getOrCreate(role,offer);
         if(entity!=null && changed) {
-            ItemStack[] snapshot=new ItemStack[6];
-            for(int i=0;i<6;i++) {
-                snapshot[i]=menu.previewEquipment(offer,i).copy();
-                entity.setItemSlot(com.devfarinsky.siegeoverhaul.core.CoreOfferEquipment.SLOTS[i],snapshot[i]);
+            try {
+                for(int i=0;i<6;i++)entity.setItemSlot(
+                        com.devfarinsky.siegeoverhaul.core.CoreOfferEquipment.SLOTS[i],KITS.get(offer)[i].copy());
+            } catch(RuntimeException failure) {
+                FAILED.add(offer);CACHE.remove(offer);entity=null;
             }
-            KITS.put(offer,snapshot);ROLES.put(offer,role);
         }
         if (entity == null) {
             drawFallback(g, role, x, y, size);
@@ -152,12 +157,7 @@ public final class EntityPortrait {
             if (CoreHiring.isHero(role)) {
                 living.getPersistentData().putBoolean("SiegeHiredHero", true);
             }
-            // Use the same loadout code as a purchased unit so optional Epic
-            // Knights armor, hero equipment and recruit kits are visible in
-            // the preview. The preview stays client-only and never enters the
-            // world. Fall back to a vanilla display kit if a dependency's
-            // client entity does not expose its inventory yet.
-            // The server-synchronized equipment is applied by draw().
+            // draw() applies the server-synchronized offered equipment.
             CACHE.put(offer, living);
             return living;
         } catch (Throwable t) {
@@ -168,127 +168,6 @@ public final class EntityPortrait {
 
     static int entityRole(int role) {
         return CoreHiring.isHero(role) ? CoreHiring.heroBase(role) : role;
-    }
-
-    /**
-     * Apply the same client-safe loadout pipeline used when a unit is hired,
-     * including compatible equipment supplied by companion mods.
-     */
-    private static boolean applyActualKit(LivingEntity entity, int role) {
-        if (!(entity instanceof Mob mob)) return false;
-        try {
-            Object value = mob.getClass().getMethod("getInventory").invoke(mob);
-            if (!(value instanceof SimpleContainer inventory)) return false;
-            if (CoreHiring.isHero(role)) {
-                HeroTraits.equip(mob, role, inventory);
-            } else if (role < CoreOffers.WORKER_START) {
-                RecruitPersonality.prepare(mob, role, inventory);
-            } else {
-                WorkerStartingKit.prepare(mob, role, inventory);
-                // Workers keep their finite supplies in native cargo slots.
-                // Put one of those real starter tools in the preview's hand
-                // so the card communicates the job without inventing armor.
-                ItemStack displayTool = switch (role) {
-                    case 4 -> new ItemStack(Items.DIAMOND_HOE);
-                    case 5 -> new ItemStack(Items.DIAMOND_AXE);
-                    case 6, 7 -> new ItemStack(Items.DIAMOND_PICKAXE);
-                    case 8 -> new ItemStack(Items.BREAD);
-                    default -> ItemStack.EMPTY;
-                };
-                if (!displayTool.isEmpty()) mob.setItemSlot(EquipmentSlot.MAINHAND, displayTool);
-            }
-            return true;
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    private static void applyFallbackKit(LivingEntity e, int role) {
-        // Vanilla-only display fallback for entities whose mod inventory is
-        // unavailable during client-side preview construction.
-        ItemStack head = ItemStack.EMPTY;
-        ItemStack chest = ItemStack.EMPTY;
-        ItemStack legs = ItemStack.EMPTY;
-        ItemStack feet = ItemStack.EMPTY;
-        ItemStack main = ItemStack.EMPTY;
-        ItemStack off = ItemStack.EMPTY;
-        if (CoreHiring.isHero(role)) {
-            int tier = CoreHiring.heroTier(role);
-            int base = CoreHiring.heroBase(role);
-            ItemStack armor = new ItemStack(tier >= 4 ? Items.NETHERITE_HELMET
-                    : tier == 0 ? Items.IRON_HELMET : Items.DIAMOND_HELMET);
-            head = armor;
-            chest = new ItemStack(tier >= 4 ? Items.NETHERITE_CHESTPLATE
-                    : tier == 0 ? Items.IRON_CHESTPLATE : Items.DIAMOND_CHESTPLATE);
-            legs = new ItemStack(tier >= 4 ? Items.NETHERITE_LEGGINGS
-                    : tier == 0 ? Items.IRON_LEGGINGS : Items.DIAMOND_LEGGINGS);
-            feet = new ItemStack(tier >= 4 ? Items.NETHERITE_BOOTS
-                    : tier == 0 ? Items.IRON_BOOTS : Items.DIAMOND_BOOTS);
-            main = new ItemStack(base == 2 ? Items.BOW
-                    : base == 3 ? Items.CROSSBOW : Items.DIAMOND_SWORD);
-            if (base == 1) off = new ItemStack(Items.SHIELD);
-        } else switch (role) {
-            case 0 -> { // Recruit
-                head = new ItemStack(Items.LEATHER_HELMET);
-                chest = new ItemStack(Items.LEATHER_CHESTPLATE);
-                main = new ItemStack(Items.IRON_SWORD);
-                off = new ItemStack(Items.SHIELD);
-            }
-            case 1 -> { // Shieldman
-                head = new ItemStack(Items.IRON_HELMET);
-                chest = new ItemStack(Items.IRON_CHESTPLATE);
-                legs = new ItemStack(Items.IRON_LEGGINGS);
-                main = new ItemStack(Items.IRON_SWORD);
-                off = new ItemStack(Items.SHIELD);
-            }
-            case 2 -> { // Archer
-                head = new ItemStack(Items.LEATHER_HELMET);
-                chest = new ItemStack(Items.LEATHER_CHESTPLATE);
-                main = new ItemStack(Items.BOW);
-            }
-            case 3 -> { // Crossbowman
-                head = new ItemStack(Items.CHAINMAIL_HELMET);
-                chest = new ItemStack(Items.CHAINMAIL_CHESTPLATE);
-                main = new ItemStack(Items.CROSSBOW);
-            }
-            case 4 -> { // Farmer
-                main = new ItemStack(Items.IRON_HOE);
-                off = new ItemStack(Items.WHEAT_SEEDS);
-            }
-            case 5 -> { // Lumberjack
-                head = new ItemStack(Items.LEATHER_HELMET);
-                main = new ItemStack(Items.IRON_AXE);
-            }
-            case 6 -> { // Miner
-                head = new ItemStack(Items.IRON_HELMET);
-                main = new ItemStack(Items.IRON_PICKAXE);
-                off = new ItemStack(Items.TORCH);
-            }
-            case 7 -> { // Builder
-                head = new ItemStack(Items.LEATHER_HELMET);
-                main = new ItemStack(Items.OAK_PLANKS);
-            }
-            case 8 -> { // Cook
-                main = new ItemStack(Items.IRON_SWORD);
-                off = new ItemStack(Items.BREAD);
-            }
-            case 9 -> { // Courier
-                feet = new ItemStack(Items.LEATHER_BOOTS);
-                main = new ItemStack(Items.FILLED_MAP);
-            }
-            default -> { /* leave bare */ }
-        }
-        try {
-            if (!head.isEmpty()) e.setItemSlot(EquipmentSlot.HEAD, head);
-            if (!chest.isEmpty()) e.setItemSlot(EquipmentSlot.CHEST, chest);
-            if (!legs.isEmpty()) e.setItemSlot(EquipmentSlot.LEGS, legs);
-            if (!feet.isEmpty()) e.setItemSlot(EquipmentSlot.FEET, feet);
-            if (!main.isEmpty()) e.setItemSlot(EquipmentSlot.MAINHAND, main);
-            if (!off.isEmpty()) e.setItemSlot(EquipmentSlot.OFFHAND, off);
-        } catch (Throwable t) {
-            // Some modded entities override setItemSlot with strict checks;
-            // ignore, portrait still renders without the kit.
-        }
     }
 
     /** Called on screen close so cached entities do not keep client resources alive between opens. */
