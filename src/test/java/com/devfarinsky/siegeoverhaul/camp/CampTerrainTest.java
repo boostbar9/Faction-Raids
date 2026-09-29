@@ -258,8 +258,23 @@ class CampTerrainTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void fallbackCanAnchorCampInSixDeepWaterNearDryShore() {
+        for(int x=-3;x<=3;x++)for(int z=-3;z<=3;z++)for(int y=58;y<64;y++)
+            edits.put(new BlockPos(x,y,z),Blocks.WATER.defaultBlockState());
+        assertTrue(CampTerrain.plan(level,center,p->false).isEmpty());
+        var plan=CampTerrain.plan(level,center,p->false,r->{},true,net.minecraft.core.Direction.EAST).orElseThrow();
+        assertEquals(7*7*6,plan.changes().size());
+        assertTrue(CampTerrain.apply(level,raid,plan));
+        var saved=RaidState.load(raid.save());
+        for(int y=58;y<64;y++) {
+            var pos=new BlockPos(0,y,0);
+            assertTrue(state(pos).is(Blocks.DIRT));
+            assertEquals("minecraft:water",saved.campBlocks.get(pos.asLong()).getCompound("Original").getString("Name"));
+        }
+    }
+
     @Test void fallbackRefusesDeepWaterLavaUnderwaterContainersAndAnIsolatedWaterSite() {
-        for(int y=60;y<64;y++)edits.put(new BlockPos(2,y,2),Blocks.WATER.defaultBlockState());
+        for(int y=57;y<64;y++)edits.put(new BlockPos(2,y,2),Blocks.WATER.defaultBlockState());
         assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isEmpty());
         edits.clear();edits.put(new BlockPos(2,63,2),Blocks.LAVA.defaultBlockState());
         assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isEmpty());

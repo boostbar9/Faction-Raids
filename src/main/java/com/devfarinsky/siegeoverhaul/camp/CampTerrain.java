@@ -20,6 +20,7 @@ public final class CampTerrain {
     public static final int CAMP_RADIUS = 9;
     private static final int EDGE_WIDTH = 3;
     private static final int MAX_CHANGE = 6;
+    private static final int MAX_WATER_DEPTH = 6;
     private static final int MAX_BLOCKS = 1024;
     private CampTerrain() {}
 
@@ -125,7 +126,7 @@ public final class CampTerrain {
             if(wet) {
                 if(newY<oldY)return reject(rejected,Rejection.FLUID);
                 int depth=0;
-                while(depth<3 && CampGround.water(level.getBlockState(column.atY(oldY-depth-1))))depth++;
+                while(depth<MAX_WATER_DEPTH && CampGround.water(level.getBlockState(column.atY(oldY-depth-1))))depth++;
                 bottom=Math.min(bottom,oldY-depth-1);
                 if(newY-(oldY-depth)>MAX_CHANGE)return reject(rejected,Rejection.RELIEF);
                 if(!isSoil(level.getBlockState(column.atY(bottom))))return reject(rejected,Rejection.FLUID);

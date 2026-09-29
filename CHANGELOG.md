@@ -1,3 +1,6 @@
+## 4.51.4
+- Fallback camp earthworks can fill water up to six blocks deep over natural soil, allowing a camp floor to extend onto shallow water near a dry gate approach. Deep water, structures, claims and excessive earthwork remain excluded; water is recorded for cleanup.
+
 ## 4.51.3
 - The final 32 camp-search attempts now sample distinct ground between existing search rings rather than revisit already rejected chunks. The same 200-site cap and maximum search distance remain.
 
