@@ -63,6 +63,36 @@ class CampTerrainTest extends MinecraftTestSupport {
                 .getCompound("Original").getString("Name"));
     }
 
+    @Test void centralMoundDoesNotForceARejectableCampElevation() {
+        heights.put("0:0", 68);
+        BlockPos peak = new BlockPos(0,68,0);
+        assertTrue(CampTerrain.plan(level,peak,p->false).isEmpty());
+        BlockPos balanced = CampTerrain.earthworksCenter(level,peak);
+        assertEquals(new BlockPos(0,65,0),balanced);
+        assertTrue(CampTerrain.plan(level,balanced,p->false).isPresent());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
+    @Test void chosenEarthworkPlaneStillRejectsWaterAndPlayerBlocks() {
+        heights.put("0:0",68);
+        BlockPos plane = CampTerrain.earthworksCenter(level,new BlockPos(0,68,0));
+        for (var block : List.of(Blocks.CHEST,Blocks.OAK_PLANKS,Blocks.WATER,Blocks.LAVA)) {
+            edits.put(new BlockPos(2,64,2),block.defaultBlockState());
+            assertTrue(CampTerrain.plan(level,plane,p->false).isEmpty(),block.toString());
+        }
+        assertTrue(CampTerrain.plan(level,plane,p->true).isEmpty());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
+    @Test void earthworkPlaneDoesNotReadUnloadedColumnsOrRelaxSteepTerrain() {
+        when(level.hasChunkAt(any())).thenReturn(false);
+        assertEquals(center,CampTerrain.earthworksCenter(level,center));
+        verify(level,never()).getHeight(any(),anyInt(),anyInt());
+        when(level.hasChunkAt(any())).thenReturn(true);
+        heights.put("0:0",71);
+        assertEquals(center,CampTerrain.earthworksCenter(level,center));
+    }
+
     @Test
     void ordinaryTallGrassDoesNotPreventAnOtherwiseSafeCamp() {
         edits.put(new BlockPos(2,64,2),Blocks.TALL_GRASS.defaultBlockState());

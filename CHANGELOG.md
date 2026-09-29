@@ -1,3 +1,7 @@
+## 4.50.12 — Better earthwork elevations
+- Camp fallback searches choose a balanced ground height across the full site instead of forcing the camp to match a mound or hollow under the scout.
+- The existing three-block cut/fill limit, complete terrain validation, claim protection and restoration budget still apply. Water, structures and steep terrain remain grounds for rejection.
+
 ## 4.50.11 — Construction panel polish
 - Reopening Live construction fetches a fresh snapshot immediately instead of showing the previous result for up to two seconds.
 - Long construction labels and status text no longer cut an emoji or other supplementary Unicode character in half when sent to clients.
