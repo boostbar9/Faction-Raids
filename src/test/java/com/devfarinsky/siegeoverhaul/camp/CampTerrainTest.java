@@ -110,6 +110,14 @@ class CampTerrainTest extends MinecraftTestSupport {
         assertEquals(12, saved.campBlocks.size());
     }
 
+    @Test void untouchedOuterBoundaryMustUseItsRealHeight() {
+        for (int x=-13;x<=13;x++) for (int z=-13;z<=13;z++)
+            if (Math.max(Math.abs(x),Math.abs(z))>=10) heights.put(x+":"+z,69);
+        assertTrue(CampTerrain.plan(level,center,p->false).isEmpty(),
+                "The planned edge at 67 must not pretend untouched ground at 69 was lowered");
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
     @Test void deepFillRejectsHiddenWaterContainersAndExcessiveWork() {
         heights.put("-1:0",58);
         for (var block : List.of(Blocks.WATER,Blocks.LAVA,Blocks.CHEST,Blocks.OAK_PLANKS)) {

@@ -62,7 +62,7 @@ public final class CampTerrain {
                         || excluded.test(column)) return Optional.empty();
                 int oldY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.getX(), column.getZ());
                 int distance = Math.max(Math.abs(dx), Math.abs(dz));
-                int newY = targetHeight(center.getY(), oldY, distance);
+                int newY = distance > radius ? oldY : targetHeight(center.getY(), oldY, distance);
                 if (Math.abs(oldY - center.getY()) > MAX_CHANGE) return Optional.empty();
                 heights.put(column, newY);
                 if (distance > radius) continue; // Unmodified boundary, used to check the transition.
