@@ -71,6 +71,8 @@ public final class CoreCivilians {
         if(!CivilianLedger.register(ledger,villager.getUUID(),level.getGameTime())) {villager.discard();return false;}
         if(!level.addFreshEntity(villager)) {CivilianLedger.remove(ledger,villager.getUUID());villager.discard();return false;}
         if(paid && !PaymentSource.consume(player,PRICE)) {villager.discard();CivilianLedger.remove(ledger,villager.getUUID());return false;}
+        var team=level.getScoreboard().getPlayerTeam(key.substring(5));
+        if(team!=null)level.getScoreboard().addPlayerToTeam(villager.getStringUUID(),team);
         data.setDirty();return true;
     }
     private static void initialize(Villager villager,String key,BlockPos safe) {
@@ -104,6 +106,10 @@ public final class CoreCivilians {
         String key=v.getPersistentData().getString(OWNER);if(key.isEmpty())return;
         var data=RaidSavedData.get(level.getServer());
         if(!CivilianLedger.register(ledger(data,key),v.getUUID(),level.getGameTime()))event.setCanceled(true);
+        if(!event.isCanceled() && key.startsWith("team:")) {
+            var team=level.getScoreboard().getPlayerTeam(key.substring(5));
+            if(team!=null)level.getScoreboard().addPlayerToTeam(v.getStringUUID(),team);
+        }
         data.setDirty();
     }
     @SubscribeEvent public static void tick(LivingEvent.LivingTickEvent event) {
@@ -123,7 +129,7 @@ public final class CoreCivilians {
         if(v.tickCount%100==0) {
             name(v);
             for(var memory:java.util.List.of(MemoryModuleType.HOME,MemoryModuleType.JOB_SITE,MemoryModuleType.POTENTIAL_JOB_SITE,MemoryModuleType.MEETING_POINT))
-                v.getBrain().getMemory(memory).ifPresent(pos->{if(!pos.dimension().equals(level.dimension()) || !SiegeCore.claimed(level,pos.pos(),key))v.getBrain().eraseMemory(memory);});
+                v.getBrain().getMemory(memory).ifPresent(pos->{if(!pos.dimension().equals(level.dimension()) || !SiegeCore.claimed(level,pos.pos(),key)){v.releasePoi(memory);v.getBrain().eraseMemory(memory);}});
         }
     }
     @SubscribeEvent public static void dimension(EntityTravelToDimensionEvent event) {
