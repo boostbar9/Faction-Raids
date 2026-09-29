@@ -44,6 +44,7 @@ public final class SiegeCore {
         String key = key(player);
         CompoundTag core = data.siegeCores.computeIfAbsent(key, k -> new CompoundTag());
         core.putLong("Position", pos.asLong());
+        core.remove("CoreRemoved");
         core.putUUID("CivilianPendingOwner", player.getUUID());
         if (!data.coreGuardGrants.contains(key)) core.putUUID(StarterCoreGuard.PENDING_OWNER, player.getUUID());
         CoreOffers.refresh(core, player.server.overworld().getGameTime(), player.serverLevel().random);

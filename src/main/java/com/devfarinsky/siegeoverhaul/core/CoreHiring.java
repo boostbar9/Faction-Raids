@@ -171,7 +171,8 @@ public final class CoreHiring {
         return hire(player, core, 1, true);
     }
     public static boolean hireOffer(ServerPlayer player,BlockPos core,int role,net.minecraft.nbt.CompoundTag kit) {
-        if(!kit.contains("Items",9))return false;
+        var stock=com.devfarinsky.siegeoverhaul.RaidSavedData.get(player.server).siegeCores.get(SiegeCore.key(player));
+        if(stock==null || !CoreOfferEquipment.matches(kit,role,stock.getLong("RefreshAt")))return false;
         return hire(player,core,role,false,kit);
     }
     private static boolean hire(ServerPlayer player, BlockPos core, int role, boolean starterGuard) {

@@ -27,6 +27,15 @@ class CoreOfferEquipmentTest extends MinecraftTestSupport {
         verify(delivered).setCustomName(Component.literal("Bob"));
         inventory.getItem(0).shrink(1);assertEquals(1,CoreOfferEquipment.item(kit,0).getCount());
     }
+    @Test void staleRotationsWrongRolesAndMissingMetadataCannotBePurchased() {
+        var kit=new CompoundTag();kit.put("Items",new net.minecraft.nbt.ListTag());
+        assertFalse(CoreOfferEquipment.matches(kit,0,0));
+        for(int i=0;i<6;i++)kit.getList("Items",10).add(new CompoundTag());
+        kit.putInt("Role",2);kit.putLong("Rotation",18000L);
+        assertTrue(CoreOfferEquipment.matches(kit,2,18000L));
+        assertFalse(CoreOfferEquipment.matches(kit,3,18000L));
+        assertFalse(CoreOfferEquipment.matches(kit,2,36000L));
+    }
     @Test void missingOfferCannotSilentlyGenerateDifferentGear() {
         assertThrows(IllegalArgumentException.class,()->CoreOfferEquipment.apply(mock(Mob.class),new SimpleContainer(8),new CompoundTag()));
     }

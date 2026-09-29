@@ -32,6 +32,12 @@ public final class CoreCivilians {
     public static CompoundTag ledger(RaidSavedData data,String key) {
         return data.civilianFactions.computeIfAbsent(key,k->new CompoundTag());
     }
+    public static void coreRemoved(ServerLevel level,BlockPos pos) {
+        if(!level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD))return;
+        var data=RaidSavedData.get(level.getServer());
+        for(var core:data.siegeCores.values())if(core.contains("Position") && core.getLong("Position")==pos.asLong())core.putBoolean("CoreRemoved",true);
+        data.setDirty();
+    }
     public static void onCoreTick(ServerLevel level,BlockPos pos) {
         var data=RaidSavedData.get(level.getServer());
         for(var core:data.siegeCores.values()) if(core.contains("Position") && core.getLong("Position")==pos.asLong() && core.hasUUID("CivilianPendingOwner")) {
@@ -117,20 +123,44 @@ public final class CoreCivilians {
         String key=v.getPersistentData().getString(OWNER);if(key.isEmpty())return;
         BlockPos here=v.blockPosition();
         if(SiegeCore.claimed(level,here,key)) {
+            waiting(v,level,key,false);
             if(v.onGround() && !v.isInWaterOrBubble() && level.noCollision(v))v.getPersistentData().putLong(SAFE,here.asLong());
         } else {
             v.getNavigation().stop();v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
             BlockPos safe=BlockPos.of(v.getPersistentData().getLong(SAFE));
-            if(SiegeCore.claimed(level,safe,key) && HirePlacement.safe(level,v,safe,p->SiegeCore.claimed(level,p,key))) {
-                v.stopRiding();
-                v.teleportTo(safe.getX()+.5,safe.getY(),safe.getZ()+.5);v.setDeltaMovement(0,0,0);
+            boolean usable=SiegeCore.claimed(level,safe,key) && HirePlacement.safe(level,v,safe,p->SiegeCore.claimed(level,p,key));
+            if(!usable && v.tickCount%100==0) {
+                safe=recovery(level,v,key);usable=safe!=null;
             }
+            if(usable) {
+                v.stopRiding();v.teleportTo(safe.getX()+.5,safe.getY(),safe.getZ()+.5);v.setDeltaMovement(0,0,0);
+                v.getPersistentData().putLong(SAFE,safe.asLong());waiting(v,level,key,false);
+            } else {waiting(v,level,key,true);v.setDeltaMovement(0,0,0);}
+
         }
         if(v.tickCount%100==0) {
             name(v);
             for(var memory:java.util.List.of(MemoryModuleType.HOME,MemoryModuleType.JOB_SITE,MemoryModuleType.POTENTIAL_JOB_SITE,MemoryModuleType.MEETING_POINT))
                 v.getBrain().getMemory(memory).ifPresent(pos->{if(!pos.dimension().equals(level.dimension()) || !SiegeCore.claimed(level,pos.pos(),key)){v.releasePoi(memory);v.getBrain().eraseMemory(memory);}});
         }
+    }
+    static BlockPos recovery(ServerLevel level,Villager v,String key) {
+        var core=RaidSavedData.get(level.getServer()).siegeCores.get(key);
+        if(core==null || !core.contains("Position"))return null;
+        BlockPos origin=BlockPos.of(core.getLong("Position"));
+        for(int dx:new int[]{0,2,-2,4,-4})for(int dz:new int[]{0,2,-2,4,-4})for(int dy:new int[]{0,1,-1}) {
+            BlockPos site=origin.offset(dx,dy,dz);
+            if(SiegeCore.claimed(level,site,key) && HirePlacement.safe(level,v,site,p->SiegeCore.claimed(level,p,key)))return site;
+        }
+        return null;
+    }
+    private static void waiting(Villager v,ServerLevel level,String key,boolean waiting) {
+        var tag=v.getPersistentData();if(tag.getBoolean("SiegeCivilianWaiting")==waiting)return;
+        var data=RaidSavedData.get(level.getServer());
+        CivilianLedger.pause(ledger(data,key),v.getUUID(),waiting,level.getGameTime());
+        if(waiting){tag.putBoolean("SiegeCivilianWasNoAi",v.isNoAi());v.setNoAi(true);}
+        else {v.setNoAi(tag.getBoolean("SiegeCivilianWasNoAi"));tag.remove("SiegeCivilianWasNoAi");}
+        tag.putBoolean("SiegeCivilianWaiting",waiting);data.setDirty();
     }
     @SubscribeEvent public static void dimension(EntityTravelToDimensionEvent event) {
         if(event.getEntity() instanceof Villager && !event.getEntity().getPersistentData().getString(OWNER).isEmpty())event.setCanceled(true);
@@ -148,7 +178,7 @@ public final class CoreCivilians {
         for(var entry:data.civilianFactions.entrySet()) {
             var core=data.siegeCores.get(entry.getKey());if(core==null){CivilianLedger.settle(entry.getValue(),new CompoundTag(),now,false);continue;}
             BlockPos pos=BlockPos.of(core.getLong("Position"));
-            boolean eligible=core.contains("Position") && !core.getBoolean("Occupied")
+            boolean eligible=core.contains("Position") && !core.getBoolean("CoreRemoved") && !core.getBoolean("Occupied")
                     && SiegeCore.claimed(server.overworld(),pos,entry.getKey())
                     && (!server.overworld().hasChunkAt(pos) || server.overworld().getBlockState(pos).is(CoreBlocks.CORE.get()));
             CivilianLedger.settle(entry.getValue(),core,now,eligible);

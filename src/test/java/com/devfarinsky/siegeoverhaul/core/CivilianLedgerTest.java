@@ -35,6 +35,14 @@ class CivilianLedgerTest extends MinecraftTestSupport {
         assertEquals(0,CivilianLedger.settle(ledger,core,100,true));
         assertEquals(1,CivilianLedger.settle(ledger,core,24100,true));
     }
+    @Test void waitingCiviliansDoNotAccrueBackTaxes() {
+        var ledger=new CompoundTag();var core=new CompoundTag();UUID id=UUID.randomUUID();
+        CivilianLedger.register(ledger,id,0);CivilianLedger.pause(ledger,id,true,100);
+        assertEquals(0,CivilianLedger.settle(ledger,core,48000,true));
+        CivilianLedger.pause(ledger,id,false,48010);
+        assertEquals(0,CivilianLedger.settle(ledger,core,72009,true));
+        assertEquals(1,CivilianLedger.settle(ledger,core,72010,true));
+    }
     @Test void starterGrantsRetryFailuresAndCannotRepeatAfterSaving() {
         var ledger=new CompoundTag();
         assertFalse(CivilianLedger.grantStarter(ledger,()->false));assertEquals(0,ledger.getInt("Starters"));

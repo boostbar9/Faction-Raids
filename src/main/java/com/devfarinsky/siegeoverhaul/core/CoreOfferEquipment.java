@@ -18,6 +18,7 @@ public final class CoreOfferEquipment {
         String key="OfferEquipment"+index;
         CompoundTag saved=core.getCompound(key);
         if(saved.getLong("Rotation")==core.getLong("RefreshAt") && saved.getInt("Role")==role && saved.contains("Items",9))return saved;
+        core.remove(key); // never leave a stale kit purchasable after regeneration fails
         Mob mob=null;
         try {
             int base=CoreHiring.isHero(role)?CoreHiring.heroBase(role):role;
@@ -42,6 +43,10 @@ public final class CoreOfferEquipment {
         result.put("Items",items);
         if(mob.hasCustomName())result.putString("Name",Component.Serializer.toJson(mob.getCustomName()));
         return result;
+    }
+    public static boolean matches(CompoundTag kit,int role,long rotation) {
+        return kit.getList("Items",10).size()>=6 && kit.contains("Role",3) && kit.getInt("Role")==role
+                && kit.contains("Rotation",4) && kit.getLong("Rotation")==rotation;
     }
     public static ItemStack item(CompoundTag kit,int index) {
         var items=kit.getList("Items",10);return index<items.size()?ItemStack.of(items.getCompound(index)):ItemStack.EMPTY;

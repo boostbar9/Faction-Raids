@@ -155,7 +155,9 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         refresh();
         RaidSavedData saved = RaidSavedData.get(owner.server);
         CompoundTag core = saved.siegeCores.get(SiegeCore.key(owner));
+        int offeredRole=index==3?core.getInt("HeroRole"):index>=0 && index<3?core.getIntArray("Offers")[index]:-1;
         if (CoreOffers.canPurchase(core, index, expectedRotation)
+                && CoreOfferEquipment.matches(core.getCompound("OfferEquipment"+index),offeredRole,expectedRotation)
                 && CoreHiring.hireOffer(owner, pos, index==3?core.getInt("HeroRole"):core.getIntArray("Offers")[index],core.getCompound("OfferEquipment"+index))) {
             core.putInt("Sold", core.getInt("Sold") | (1 << index));
             saved.setDirty();

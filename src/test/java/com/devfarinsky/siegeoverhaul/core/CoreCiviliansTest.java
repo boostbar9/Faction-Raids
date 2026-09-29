@@ -39,6 +39,32 @@ class CoreCiviliansTest extends MinecraftTestSupport {
             CoreCivilians.removed(new EntityLeaveLevelEvent(v,level));assertEquals(0,CivilianLedger.count(ledger));
         }
     }
+    @Test void removingCorePersistsTaxSuspensionWithoutDeletingTreasuryOrGrants() {
+        ServerLevel level=mock(ServerLevel.class);when(level.dimension()).thenReturn(Level.OVERWORLD);
+        MinecraftServer server=mock(MinecraftServer.class);when(level.getServer()).thenReturn(server);
+        var data=new RaidSavedData();var core=new CompoundTag();core.putLong("Position",BlockPos.ZERO.asLong());core.putLong("BankEmeralds",42);
+        data.siegeCores.put("team:test",core);CoreCivilians.ledger(data,"team:test").putInt("Starters",2);
+        try(var saved=mockStatic(RaidSavedData.class)) {
+            saved.when(()->RaidSavedData.get(server)).thenReturn(data);
+            CoreCivilians.coreRemoved(level,BlockPos.ZERO);
+            assertTrue(core.getBoolean("CoreRemoved"));assertEquals(42,core.getLong("BankEmeralds"));
+            var savedTag=data.save(new CompoundTag());
+            assertTrue(savedTag.getCompound("SiegeCores").getCompound("team:test").getBoolean("CoreRemoved"));
+            assertEquals(2,savedTag.getCompound("CivilianFactions").getCompound("team:test").getInt("Starters"));
+        }
+    }
+    @Test void lostClaimRecoverySearchesOnlyValidatedSitesAroundCurrentCore() {
+        ServerLevel level=mock(ServerLevel.class);MinecraftServer server=mock(MinecraftServer.class);when(level.getServer()).thenReturn(server);
+        Villager v=mock(Villager.class);var data=new RaidSavedData();var core=new CompoundTag();core.putLong("Position",new BlockPos(100,64,100).asLong());
+        data.siegeCores.put("team:test",core);BlockPos site=new BlockPos(102,64,100);
+        try(var saved=mockStatic(RaidSavedData.class);var claims=mockStatic(SiegeCore.class);var placement=mockStatic(HirePlacement.class)) {
+            saved.when(()->RaidSavedData.get(server)).thenReturn(data);
+            assertNull(CoreCivilians.recovery(level,v,"team:test"));
+            claims.when(()->SiegeCore.claimed(level,site,"team:test")).thenReturn(true);
+            placement.when(()->HirePlacement.safe(eq(level),eq(v),eq(site),any())).thenReturn(true);
+            assertEquals(site,CoreCivilians.recovery(level,v,"team:test"));
+        }
+    }
     @SuppressWarnings({"rawtypes","unchecked"})
     @Test void crossingClaimBoundaryReturnsToValidatedLastSafeGround() {
         Villager v=mock(Villager.class);ServerLevel level=mock(ServerLevel.class);when(v.level()).thenReturn(level);

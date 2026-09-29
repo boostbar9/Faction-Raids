@@ -26,12 +26,20 @@ public final class CivilianLedger {
         if(entries.size()>=LIMIT) return false;
         entries.putLong(key,now); return true;
     }
-    static void remove(CompoundTag ledger,UUID id) { residents(ledger).remove(id.toString()); }
+    static void remove(CompoundTag ledger,UUID id) { residents(ledger).remove(id.toString()); ledger.getCompound("Paused").remove(id.toString()); }
+    static void pause(CompoundTag ledger,UUID id,boolean paused,long now) {
+        if(!ledger.contains("Paused",10))ledger.put("Paused",new CompoundTag());
+        var pauses=ledger.getCompound("Paused");String key=id.toString();
+        if(pauses.getBoolean(key)!=paused) {
+            residents(ledger).putLong(key,now);
+            if(paused)pauses.putBoolean(key,true);else pauses.remove(key);
+        }
+    }
     static long settle(CompoundTag ledger,CompoundTag core,long now,boolean eligible) {
         long total=0;var entries=residents(ledger);
         for(String id:entries.getAllKeys()) {
             long last=entries.getLong(id);
-            if(now<last || !eligible) { entries.putLong(id,now); continue; }
+            if(now<last || !eligible || ledger.getCompound("Paused").getBoolean(id)) { entries.putLong(id,now); continue; }
             long days=(now-last)/FactionBank.DAY_TICKS;
             if(days<=0)continue;
             total+=days; entries.putLong(id,last+days*FactionBank.DAY_TICKS);
