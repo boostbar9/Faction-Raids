@@ -43,7 +43,12 @@ public final class ConstructionReport {
             activity = bounded(activity); supplies = bounded(supplies);
             percent = Math.max(-1, Math.min(100, percent));
         }
-        private static String bounded(String text) { return text == null ? "" : text.substring(0, Math.min(256, text.length())); }
+        private static String bounded(String text) {
+            if (text == null || text.length() <= 256) return text == null ? "" : text;
+            int end = 256;
+            if (Character.isHighSurrogate(text.charAt(end - 1)) && Character.isLowSurrogate(text.charAt(end))) end--;
+            return text.substring(0, end);
+        }
     }
 
     /** No chunk loads, payments, orders or mutations; at most twelve owned nearby jobs. */

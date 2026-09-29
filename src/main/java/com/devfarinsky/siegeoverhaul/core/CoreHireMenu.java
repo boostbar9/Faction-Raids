@@ -159,7 +159,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     @Override public boolean clickMenuButton(Player player,int button) {
         if(owner==null || player!=owner || !stillValid(player))return false;
         if (button == 84 || button == 85) {
-            watchingConstruction = button == 84;
+            watchConstruction(button == 84);
             return true;
         }
         long now=owner.server.overworld().getGameTime();
@@ -181,6 +181,10 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         else if(button==83) { owner.closeContainer(); ConstructionReport.report(owner); return true; }
         if(!changed)return false;
         owner.inventoryMenu.broadcastChanges();refresh();broadcastChanges();return true;
+    }
+    void watchConstruction(boolean watch) {
+        if (watch && !watchingConstruction) constructionAt = Long.MIN_VALUE;
+        watchingConstruction = watch;
     }
     @Override public void broadcastChanges() {
         if (owner != null) inventorySync.broadcast(owner);

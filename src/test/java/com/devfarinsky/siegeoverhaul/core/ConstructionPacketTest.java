@@ -36,4 +36,14 @@ class ConstructionPacketTest extends MinecraftTestSupport {
             } finally { buffer.release(); }
         }
     }
+    @Test void truncatedNamesKeepSurrogatePairsIntactThroughPacketEncoding() {
+        String name = "x".repeat(255) + "\uD83D\uDEE1" + " suffix";
+        var job = new ConstructionReport.Job(name, 0, "", "", "", "");
+        assertEquals("x".repeat(255), job.label());
+        var buffer = new FriendlyByteBuf(Unpooled.buffer());
+        try {
+            new RaidNetwork.ConstructionDetails(1, List.of(job)).encode(buffer);
+            assertEquals(job, RaidNetwork.ConstructionDetails.decode(buffer).jobs().get(0));
+        } finally { buffer.release(); }
+    }
 }
