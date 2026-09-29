@@ -57,6 +57,7 @@ public final class CoreBlocks {
         @Override public void tick(BlockState state, net.minecraft.server.level.ServerLevel level,
                                    BlockPos pos, net.minecraft.util.RandomSource random) {
             StarterCoreGuard.onCoreTick(level, pos);
+            CoreCivilians.onCoreTick(level,pos);
         }
         @Override public boolean canEntityDestroy(BlockState state, net.minecraft.world.level.BlockGetter level, BlockPos pos, net.minecraft.world.entity.Entity entity) { return false; }
         @Override public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
@@ -68,6 +69,7 @@ public final class CoreBlocks {
             if (player instanceof ServerPlayer sp) {
                 if (SiegeCore.canUse(sp, pos)) {
                     StarterCoreGuard.tryGrant(sp, pos);
+                    CoreCivilians.tryStarters(sp,pos);
                     sp.openMenu(new SimpleMenuProvider(
                             (id, inv, p) -> new CoreHireMenu(id, inv, pos), Component.literal("Siege Core • Arcane Command")));
                 }

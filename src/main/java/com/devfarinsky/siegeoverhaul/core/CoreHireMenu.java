@@ -17,8 +17,8 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     private final ServerPlayer owner;
     private final CoreInventorySync inventorySync = new CoreInventorySync();
     private final BlockPos pos;
-    private final SimpleContainer display = new SimpleContainer(6);
-    private final ContainerData data = new SimpleContainerData(32);
+    private final SimpleContainer display = new SimpleContainer(30);
+    private final ContainerData data = new SimpleContainerData(33);
     private long shownAt = Long.MIN_VALUE;
     private boolean watchingConstruction;
     private long constructionAt = Long.MIN_VALUE;
@@ -45,6 +45,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     }
     private int wide(int low) { return (data.get(low) & 0xffff) | (data.get(low+1) & 0xffff) << 16; }
     private void wide(int low,int value) { data.set(low,value & 0xffff); data.set(low+1,(value >>> 16) & 0xffff); }
+    public int civilians() { return data.get(32); }
     public int bank() { return wide(18); }
     public int interestRate() { return data.get(20); }
     public int nextWave() { return wide(21); }
@@ -66,7 +67,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         super(CoreMenus.HIRING.get(), id);
         this.owner = inventory.player instanceof ServerPlayer sp ? sp : null;
         this.pos = pos == null ? null : pos.immutable();
-        for (int i = 0; i < 6; i++) addSlot(new Slot(display, i, -1000, -1000) {
+        for (int i = 0; i < 30; i++) addSlot(new Slot(display, i, -1000, -1000) {
             @Override public boolean mayPlace(ItemStack stack) { return false; }
             @Override public boolean mayPickup(Player player) { return false; }
         });
@@ -83,6 +84,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     public int lootBox() { return data.get(15)-1; }
     public int lootTier() { return data.get(17); }
     public ItemStack lootReward() { return display.getItem(5); }
+    public ItemStack previewEquipment(int offer,int slot) { return display.getItem(6+offer*6+slot); }
     public int role(int slot) { return data.get(slot); }
     public int cost(int slot) { return data.get(slot + 4); }
     public boolean sold(int slot) { return (data.get(8) & (1 << slot)) != 0; }
@@ -97,6 +99,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         if (owner == null || !stillValid(owner)) return;
         RaidSavedData saved = RaidSavedData.get(owner.server);
         CompoundTag core = saved.siegeCores.get(SiegeCore.key(owner));
+        data.set(32,CivilianLedger.count(CoreCivilians.ledger(saved,SiegeCore.key(owner))));
         long now = owner.server.overworld().getGameTime();
         if (CoreOffers.refresh(core, now, owner.serverLevel().random)) saved.setDirty();
         long rotation = core.getLong("RefreshAt");
@@ -104,6 +107,9 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         for (int i = 0; i < 4; i++) {
             int role=i==3?core.getInt("HeroRole"):offers[i];
             data.set(i, role);
+            var kit=CoreOfferEquipment.ensure(core,i,role,owner.serverLevel());
+            for(int equip=0;equip<6;equip++)display.setItem(6+i*6+equip,CoreOfferEquipment.item(kit,equip));
+            saved.setDirty();
             display.setItem(i, new ItemStack(CoreHiring.icon(role)));
             try { data.set(i + 4, Math.min(32767, Math.max(0, CoreHiring.cost(role)))); }
             catch (ReflectiveOperationException | RuntimeException ex) { data.set(i + 4, -1); }
@@ -149,7 +155,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         RaidSavedData saved = RaidSavedData.get(owner.server);
         CompoundTag core = saved.siegeCores.get(SiegeCore.key(owner));
         if (CoreOffers.canPurchase(core, index, expectedRotation)
-                && CoreHiring.hire(owner, pos, index==3?core.getInt("HeroRole"):core.getIntArray("Offers")[index])) {
+                && CoreHiring.hireOffer(owner, pos, index==3?core.getInt("HeroRole"):core.getIntArray("Offers")[index],core.getCompound("OfferEquipment"+index))) {
             core.putInt("Sold", core.getInt("Sold") | (1 << index));
             saved.setDirty();
         }
@@ -178,6 +184,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         else if(button>=70 && button<=72) changed=TerritoryFortification.commission(owner, pos, button-70);
         else if(button>=80 && button<=82) changed=DefenseStructures.givePlan(owner, button-80);
         else if(button>=90 && button<90+DefenseBlueprint.Kind.values().length) changed=DefenseStructures.givePlan(owner, button-90);
+        else if(button==86) changed=CoreCivilians.recruit(owner,pos);
         else if(button==83) { owner.closeContainer(); ConstructionReport.report(owner); return true; }
         if(!changed)return false;
         owner.inventoryMenu.broadcastChanges();refresh();broadcastChanges();return true;

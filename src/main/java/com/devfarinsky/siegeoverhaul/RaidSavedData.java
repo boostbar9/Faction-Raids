@@ -32,6 +32,7 @@ public final class RaidSavedData extends SavedData {
     public final Map<String, CompoundTag> siegeCores = new HashMap<>();
     /** Lifetime grants, independent of core positions, raid outcomes and entity survival. */
     public final Set<String> coreGuardGrants = new HashSet<>();
+    public final Map<String, CompoundTag> civilianFactions = new HashMap<>();
     public final Map<String, Anchor> anchors = new HashMap<>();
     public final Map<String, RaidState> raids = new HashMap<>();
     /**
@@ -73,6 +74,8 @@ public final class RaidSavedData extends SavedData {
 
     public static RaidSavedData load(CompoundTag root) {
         RaidSavedData data = new RaidSavedData();
+        CompoundTag civilians = root.getCompound("CivilianFactions");
+        for (String key : civilians.getAllKeys()) data.civilianFactions.put(key,civilians.getCompound(key).copy());
         ListTag guardGrants = root.getList("CoreGuardGrants", Tag.TAG_STRING);
         for (int i = 0; i < guardGrants.size(); i++) data.coreGuardGrants.add(guardGrants.getString(i));
         ListTag leases = root.getList("CampClaimLeases", Tag.TAG_COMPOUND);
@@ -128,6 +131,9 @@ public final class RaidSavedData extends SavedData {
     @Override
     public CompoundTag save(CompoundTag root) {
         root.putInt("DataVersion", DATA_VERSION);
+        CompoundTag civilians = new CompoundTag();
+        civilianFactions.forEach((key,value)->civilians.put(key,value.copy()));
+        root.put("CivilianFactions",civilians);
         ListTag guardGrants = new ListTag();
         coreGuardGrants.forEach(key -> guardGrants.add(StringTag.valueOf(key)));
         root.put("CoreGuardGrants", guardGrants);

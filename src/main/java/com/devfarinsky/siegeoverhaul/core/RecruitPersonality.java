@@ -10,7 +10,7 @@ import net.minecraft.world.item.*;
 /** One-time starting identity and finite supplies for ordinary core-hired soldiers. */
 public final class RecruitPersonality {
     private static final String MARKER = "SiegeCoreOutfitted";
-    private static final String[] FIRST = {"Bobby", "Fernan", "Sam", "Nora", "Ben", "Mia", "Tom", "Anna", "Leo", "Emma", "Jack", "Lucy", "Finn", "Rose", "Max", "Lily", "Owen", "Ruby", "Alex", "Ada", "Oscar", "Molly", "Henry", "Ella", "Charlie", "Zoe", "Fred", "Ivy", "George", "Sophie", "Daniel", "Clara"};
+    private static final String[] FIRST = {"Bob", "Dan", "Sam", "Nora", "Ben", "Mia", "Tom", "Anna", "Leo", "Emma", "Jack", "Lucy", "Finn", "Rose", "Max", "Lily", "Owen", "Ruby", "Alex", "Ada", "Oscar", "Molly", "Henry", "Ella", "Charlie", "Zoe", "Fred", "Ivy", "George", "Sophie", "Daniel", "Clara"};
     private static final String[] MATERIALS = {"copper", "iron", "gold", "redstone"};
     private RecruitPersonality() {}
 

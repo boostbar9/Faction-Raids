@@ -44,12 +44,15 @@ public final class EntityPortrait {
     /** Roles that failed to create so we do not retry every frame. */
     private static final java.util.Set<Integer> FAILED = new java.util.HashSet<>();
 
+    private static final Map<Integer, ItemStack[]> KITS = new HashMap<>();
+    private static final Map<Integer, Integer> ROLES = new HashMap<>();
+
     /**
      * Draw the mob for {@code role} centred on the given square. Falls back to
      * a role-item preview when the entity cannot be constructed on the client.
      */
     public static void draw(GuiGraphics g, int role, int x, int y, int size,
-                            float mouseX, float mouseY) {
+                            float mouseX, float mouseY, int offer, com.devfarinsky.siegeoverhaul.core.CoreHireMenu menu) {
         // Stable card backdrop shared by the entity and failure paths.
         g.fill(x, y, x + size, y + size, 0xff0e0906);
         g.fillGradient(x + 1, y + 1, x + size - 1, y + size - 1,
@@ -60,7 +63,19 @@ public final class EntityPortrait {
         g.fill(x, y, x + 1, y + size, b);
         g.fill(x + size - 1, y, x + size, y + size, b);
 
-        LivingEntity entity = getOrCreate(role);
+        boolean changed = !java.util.Objects.equals(ROLES.get(offer),role);
+        ItemStack[] old=KITS.get(offer);
+        for(int i=0;i<6;i++)if(old==null || !ItemStack.matches(old[i],menu.previewEquipment(offer,i)))changed=true;
+        if(changed) {CACHE.remove(offer);FAILED.remove(offer);}
+        LivingEntity entity = getOrCreate(role,offer);
+        if(entity!=null && changed) {
+            ItemStack[] snapshot=new ItemStack[6];
+            for(int i=0;i<6;i++) {
+                snapshot[i]=menu.previewEquipment(offer,i).copy();
+                entity.setItemSlot(com.devfarinsky.siegeoverhaul.core.CoreOfferEquipment.SLOTS[i],snapshot[i]);
+            }
+            KITS.put(offer,snapshot);ROLES.put(offer,role);
+        }
         if (entity == null) {
             drawFallback(g, role, x, y, size);
             return;
@@ -86,8 +101,8 @@ public final class EntityPortrait {
                     lookX, lookY, entity);
         } catch (Throwable t) {
             // Any renderer NPE from a mod with strict client init: fall back.
-            FAILED.add(role);
-            CACHE.remove(role);
+            FAILED.add(offer);
+            CACHE.remove(offer);
             drawFallback(g, role, x, y, size);
         }
     }
@@ -101,9 +116,9 @@ public final class EntityPortrait {
                 iconSize);
     }
 
-    private static LivingEntity getOrCreate(int role) {
-        if (FAILED.contains(role)) return null;
-        LivingEntity cached = CACHE.get(role);
+    private static LivingEntity getOrCreate(int role,int offer) {
+        if (FAILED.contains(offer)) return null;
+        LivingEntity cached = CACHE.get(offer);
         if (cached != null) return cached;
 
         Minecraft mc = Minecraft.getInstance();
@@ -112,7 +127,7 @@ public final class EntityPortrait {
 
         int typeRole = entityRole(role);
         if (typeRole < 0 || typeRole >= CoreHiring.IDS.length) {
-            FAILED.add(role);
+            FAILED.add(offer);
             return null;
         }
         String namespace = typeRole < CoreOffers.WORKER_START ? "recruits" : "workers";
@@ -120,14 +135,14 @@ public final class EntityPortrait {
         ResourceLocation id = new ResourceLocation(namespace, path);
         EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(id);
         if (type == null) {
-            FAILED.add(role);
+            FAILED.add(offer);
             return null;
         }
         try {
             Entity created = type.create(level);
             if (!(created instanceof LivingEntity living)) {
                 if (created != null) created.discard();
-                FAILED.add(role);
+                FAILED.add(offer);
                 return null;
             }
             // Position at origin; the GUI renderer ignores world position.
@@ -142,11 +157,11 @@ public final class EntityPortrait {
             // the preview. The preview stays client-only and never enters the
             // world. Fall back to a vanilla display kit if a dependency's
             // client entity does not expose its inventory yet.
-            if (!applyActualKit(living, role)) applyFallbackKit(living, role);
-            CACHE.put(role, living);
+            // The server-synchronized equipment is applied by draw().
+            CACHE.put(offer, living);
             return living;
         } catch (Throwable t) {
-            FAILED.add(role);
+            FAILED.add(offer);
             return null;
         }
     }
@@ -278,6 +293,7 @@ public final class EntityPortrait {
 
     /** Called on screen close so cached entities do not keep client resources alive between opens. */
     public static void clear() {
+        KITS.clear(); ROLES.clear();
         CACHE.clear();
         FAILED.clear();
     }
