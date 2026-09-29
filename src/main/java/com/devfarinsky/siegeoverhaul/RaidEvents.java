@@ -3407,6 +3407,8 @@ public final class RaidEvents {
         // step. Coastal / rocky / island terrain often has many rejects in
         // one 6-block box because a single hilly sample kills the whole
         // 21x21 footprint; more jitter lets us find a workable center.
+        var terrainReasons = new java.util.EnumMap<com.devfarinsky.siegeoverhaul.camp.CampTerrain.Rejection, Integer>(
+                com.devfarinsky.siegeoverhaul.camp.CampTerrain.Rejection.class);
         int cap = remote ? (state != null && state.campTerraformed ? 25 : 9) : 128;
         for (int attempt = 0; attempt < cap; attempt++) {
             // First prefer the invasion approach, then search the surrounding ring for clear terrain.
@@ -3451,7 +3453,8 @@ public final class RaidEvents {
             }
             if (RaidConfig.LEVEL_CAMP_TERRAIN.get() && RaidConfig.CLEANUP_WAR_CAMPS.get()) {
                 var terrain = com.devfarinsky.siegeoverhaul.camp.CampTerrain.plan(level, center,
-                        pos -> excludedChunks.contains(new net.minecraft.world.level.ChunkPos(pos)));
+                        pos -> excludedChunks.contains(new net.minecraft.world.level.ChunkPos(pos)),
+                        reason -> terrainReasons.merge(reason, 1, Integer::sum));
                 if (terrain.isEmpty()) { rejTerrainPlan++; continue; }
                 if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.create(level, state, center)) { rejClaimCreate++; continue; }
                 if (!com.devfarinsky.siegeoverhaul.camp.CampTerrain.apply(level, state, terrain.get())) {
@@ -3463,10 +3466,10 @@ public final class RaidEvents {
             return center;
         }
         FactionLogger.LOG.info("Camp site search failed: cap={} remote={} terraform={} "+
-                "rejects[chunk={}, excluded={}, claim={}, foreign={}, surface={}, navalGuard={}, terrainPlan={}, claimCreate={}, terrainApply={}]",
+                "rejects[chunk={}, excluded={}, claim={}, foreign={}, surface={}, navalGuard={}, terrainPlan={}, claimCreate={}, terrainApply={}] terrainReasons={}",
                 cap, remote, state != null && state.campTerraformed,
                 rejChunk, rejExcluded, rejClaim, rejForeign, rejSurface,
-                rejNavalGuard, rejTerrainPlan, rejClaimCreate, rejTerrainApply);
+                rejNavalGuard, rejTerrainPlan, rejClaimCreate, rejTerrainApply, terrainReasons);
         return null;
     }
 

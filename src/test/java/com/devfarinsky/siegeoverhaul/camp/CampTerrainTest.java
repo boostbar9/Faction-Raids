@@ -159,12 +159,48 @@ class CampTerrainTest extends MinecraftTestSupport {
     }
 
     @Test
-    void excessiveExcavationAndSharpEdgeTransitionsAreRejected() {
+    void excessiveExcavationIsRejectedButShoulderMoundsAreLeveled() {
         heights.put("1:0", 71);
         assertTrue(CampTerrain.plan(level, center, p -> false).isEmpty());
         heights.clear();
         heights.put("12:0", 67);
-        assertTrue(CampTerrain.plan(level, center, p -> false).isEmpty());
+        var plan = CampTerrain.plan(level, center, p -> false).orElseThrow();
+        assertEquals(3, plan.changes().size());
+        assertTrue(CampTerrain.apply(level, raid, plan));
+        assertTrue(state(new BlockPos(12,64,0)).isAir());
+    }
+
+    @Test void unevenUntouchedBoundaryGetsAContinuousShoulderWithoutChangingOutsideGround() {
+        heights.put("13:0",66);
+        var plan=CampTerrain.plan(level,center,p->false).orElseThrow();
+        assertTrue(plan.changes().stream().noneMatch(c->Math.abs(c.pos().getX())>12||Math.abs(c.pos().getZ())>12));
+        assertTrue(CampTerrain.apply(level,raid,plan));
+        assertTrue(state(new BlockPos(12,64,0)).is(Blocks.DIRT));
+        assertTrue(state(new BlockPos(13,65,0)).is(Blocks.GRASS_BLOCK));
+        for(int x=-12;x<=12;x++)for(int z=-12;z<=12;z++) {
+            int height=plannedHeight(x,z);
+            if(Math.max(Math.abs(x),Math.abs(z))<=9)assertEquals(64,height);
+            for(var direction:net.minecraft.core.Direction.Plane.HORIZONTAL) {
+                int adjacent=plannedHeight(x+direction.getStepX(),z+direction.getStepZ());
+                assertTrue(Math.abs(height-adjacent)<=1,"Unwalkable shoulder at "+x+":"+z);
+            }
+        }
+    }
+
+    private int plannedHeight(int x,int z) {
+        for(int y=75;y>=50;y--)if(!state(new BlockPos(x,y,z)).isAir())return y+1;
+        throw new AssertionError("Missing ground");
+    }
+
+    @Test void diagnosticsIdentifyTheFirstFailureWithoutMutatingTerrain() {
+        var reasons=new ArrayList<CampTerrain.Rejection>();
+        edits.put(new BlockPos(2,63,2),Blocks.WATER.defaultBlockState());
+        assertTrue(CampTerrain.plan(level,center,p->false,reasons::add).isEmpty());
+        assertEquals(List.of(CampTerrain.Rejection.FLUID),reasons);
+        edits.clear();reasons.clear();heights.put("13:0",70);
+        assertTrue(CampTerrain.plan(level,center,p->false,reasons::add).isEmpty());
+        assertEquals(List.of(CampTerrain.Rejection.EDGE),reasons);
+        verify(level,never()).setBlock(any(),any(),anyInt());
     }
 
     @Test
