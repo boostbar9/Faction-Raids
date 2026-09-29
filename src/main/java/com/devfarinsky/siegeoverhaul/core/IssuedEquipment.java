@@ -30,7 +30,8 @@ public final class IssuedEquipment {
     public static void onDeath(LivingDeathEvent event) {
         if (event.getEntity().level().isClientSide || !(event.getEntity() instanceof Mob mob)) return;
         var data=mob.getPersistentData();
-        if (!data.getBoolean("SiegeCoreOutfitted") && !data.contains("SiegeHeroRole")) return;
+        if (!data.getBoolean("SiegeCoreOutfitted") && !data.contains("SiegeHeroRole")
+                && !data.getBoolean("SiegeUniformApplied")) return;
         // Recruits drops its whole native inventory after super.die(), including
         // equipment whose vanilla slot drop chance is zero. Clear only our
         // tagged issue; a player's replacement equipment remains recoverable.

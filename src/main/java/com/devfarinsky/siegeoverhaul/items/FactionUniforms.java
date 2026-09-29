@@ -81,7 +81,7 @@ public final class FactionUniforms {
             RecruitsBridge.assignToRaidersFaction(mob); // Repair legacy role-glow teams that broke native diplomacy.
             EquipmentSlot[] slots={EquipmentSlot.HEAD,EquipmentSlot.CHEST,EquipmentSlot.LEGS,EquipmentSlot.FEET};
             for(int i=0;i<slots.length;i++) {
-                ItemStack stack=armor(faction,role,slots[i]);
+                ItemStack stack=com.devfarinsky.siegeoverhaul.core.IssuedEquipment.issue(armor(faction,role,slots[i]));
                 container.setItem(i,stack);
                 mob.setItemSlot(slots[i],stack);
                 mob.setDropChance(slots[i],0.0F);
