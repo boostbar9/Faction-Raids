@@ -14,7 +14,7 @@ final class CampGround {
     record Column(int ground, int top, boolean tree) {}
     static boolean leaves(BlockState s) {
         return s.getBlock() instanceof LeavesBlock && !s.getValue(LeavesBlock.PERSISTENT)
-                && s.getFluidState().isEmpty();
+                && !s.getValue(LeavesBlock.WATERLOGGED) && s.getFluidState().isEmpty();
     }
     static boolean trunk(BlockState s) {
         boolean log=s.is(Blocks.OAK_LOG)||s.is(Blocks.SPRUCE_LOG)||s.is(Blocks.BIRCH_LOG)
