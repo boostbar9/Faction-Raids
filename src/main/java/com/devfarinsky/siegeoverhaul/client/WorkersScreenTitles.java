@@ -23,8 +23,19 @@ public final class WorkersScreenTitles {
         if (screen == null || screen.getTitle() != null
                 || !screen.getClass().getName().equals("com.talhanation.workers.client.gui.BuildAreaScreen")) return false;
         // Forge remaps this stable SRG field name in both development and production.
-        ObfuscationReflectionHelper.setPrivateValue(Screen.class, screen,
-                Component.literal("Construction Area"), "f_96539_");
+        try {
+            java.lang.reflect.Field title;
+            try {
+                title = ObfuscationReflectionHelper.findField(Screen.class, "f_96539_");
+            } catch (RuntimeException unavailableMappingService) {
+                // Unit tests run with named Minecraft classes outside Forge's launcher.
+                title = Screen.class.getDeclaredField("title");
+                title.setAccessible(true);
+            }
+            title.set(screen, Component.literal("Construction Area"));
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("Cannot repair Workers construction screen title", failure);
+        }
         return true;
     }
 }
