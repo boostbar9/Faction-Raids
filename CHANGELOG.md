@@ -1,3 +1,8 @@
+## 4.51.9
+- Scouts keep their lookout, retreat route and observation progress after chunk reload or server restart.
+- Unloaded scouts are recalled when they return after their mission expires, scouting is disabled, their core is removed or the raid begins.
+- Scouts from older saves without route data retire safely instead of returning with pillager combat AI. Intel and bounty records remain intact.
+
 ## 4.51.8
 - Prevent a narration crash when opening an unnamed Villager Workers build area: its screen receives a Construction Area title. Existing named areas keep their title.
 
