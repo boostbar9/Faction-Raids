@@ -1,3 +1,7 @@
+## 4.51.7
+- Expired scouting missions retain their promised attacker identity and paid bounty until the next raid. This prevents repeated scout parties in one cooldown and keeps recovered intel accurate after saving and reloading.
+- Expired missions no longer spawn a party after a restart. Disabling scouting recalls loaded scouts; starting a raid also recalls any loaded scouts before consuming their mission.
+
 ## 4.51.6
 - Civilian taxes now appear as identifiable Treasury activity, with a saved last payout and lifetime total. Online faction members receive one aggregated chat notice when taxes are deposited.
 - The House of Civilians displays a villager preview and explains the 16-emerald Treasury housing fee, daily taxes, and assigned resident identity.

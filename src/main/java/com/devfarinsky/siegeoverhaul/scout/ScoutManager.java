@@ -146,22 +146,31 @@ public final class ScoutManager {
                 data.setDirty();
                 continue;
             }
+            // Close before spawning: an expired mission loaded after a restart
+            // must not briefly create scouts, reroll its intel, or reset its bounty.
+            if (!RaidConfig.SCOUTING_ENABLED.get() || now >= m.expireGameTime) {
+                if (closeWindow(server, m)) data.setDirty();
+                continue;
+            }
             if (!m.spawned && now >= m.spawnGameTime) {
                 spawnScouts(server, anchor, m);
                 m.spawned = true;
                 data.setDirty();
             }
-            // Expired: mission window closed. Any straggling scouts flee/despawn.
-            if (now >= m.expireGameTime) {
-                despawnLiveScouts(server, m);
-                it.remove();
-                data.setDirty();
-            } else if (m.spawned) {
+            if (m.spawned) {
                 // Prune UUIDs of scouts that quietly died or unloaded so the
                 // saved mission stays small.
                 pruneDeadScoutUuids(server, m);
             }
         }
+    }
+
+    /** Retain the intel and bounty ledger until beginRaid consumes them. */
+    static boolean closeWindow(MinecraftServer server, ScoutMission mission) {
+        boolean changed = !mission.spawned || !mission.scoutUuids.isEmpty();
+        if (!mission.scoutUuids.isEmpty()) despawnLiveScouts(server, mission);
+        mission.spawned = true;
+        return changed;
     }
 
     // -------- Spawning --------------------------------------------------
@@ -431,6 +440,8 @@ public final class ScoutManager {
                                                             RaidSavedData.RaidState raid) {
         ScoutMission m = data.scoutMissions.remove(teamKey);
         if (m == null) return null;
+        var server = net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer();
+        if (server != null && !m.scoutUuids.isEmpty()) despawnLiveScouts(server, m);
         if (raid != null && m.bountyPaid > 0) {
             int already = Math.max(0, raid.campaign.getInt("BountyPaid"));
             long combined = (long) already + m.bountyPaid;
