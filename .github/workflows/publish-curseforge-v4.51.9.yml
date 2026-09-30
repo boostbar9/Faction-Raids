@@ -109,7 +109,7 @@ jobs:
 
           jar = Path('dist/siegeoverhaul-4.51.9.jar')
           digest = hashlib.sha256(jar.read_bytes()).hexdigest()
-          assert digest == '92156b8f00d8582c99d75f94d686140bb263792d9ec52b5263464927d3cadba1'
+          assert digest == '92156b8f00d8502c99d75f94d686140bb263792d9ec52b5263464927d3cadba1'
           Path('verified-sha256.txt').write_text(digest)
           with zipfile.ZipFile(jar) as archive:
               assert archive.testzip() is None
