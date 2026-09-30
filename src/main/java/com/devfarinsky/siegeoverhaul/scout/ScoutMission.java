@@ -37,7 +37,7 @@ public final class ScoutMission {
 
     /**
      * Game time at which the mission expires. Living scouts flee back and
-     * despawn; the mission entry is cleared. Prevents scouts from lingering
+     * despawn; intel and bounty records remain until the raid. Prevents scouts from lingering
      * indefinitely if defenders never engage them.
      */
     public long expireGameTime;
