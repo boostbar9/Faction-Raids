@@ -176,7 +176,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         clearIntelSearch = addRenderableWidget(new CoreButton(Component.literal("Clear"),
                 b -> intelSearch.setValue(""), layout.x() + layout.width() - 57,
                 layout.contentY() + 23, 46, 18, false, () -> false));
-        civilianRecruit = addRenderableWidget(new CoreButton(Component.literal("Recruit civilian · 16e"),
+        civilianRecruit = addRenderableWidget(new CoreButton(Component.literal("House a civilian · 16e"),
                 b -> action(86),layout.x()+12,layout.contentBottom()-24,layout.width()-24,20,false,()->false));
         updateNavigation();
 
@@ -869,13 +869,21 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             drawDefenses(g, mx, my);
         } else if (tab == CoreCommandPage.CIVILIANS) {
             int tx=layout.x()+14, ty=layout.contentY()+8, tw=layout.width()-28;
-            text(g,menu.civilians()+" civilians · up to "+menu.civilians()+" emeralds per day",tx,ty,tw,CommandPalette.TEXT);
-            String[] lines={"Two settlers join your faction when you establish a core.",
-                "Provide beds and food to grow your population. Children inherit their parents' faction.",
-                "Each villager has a profession. Place matching workstations so they can restock trades.",
-                "Each living civilian earns 1 emerald per 24,000 game ticks for your Treasury. No real-time earnings while the server is stopped.",
-                "Civilians stay in your claims. Stranded civilians wait safely; their taxes pause. An owned core is required. Limit: 64."};
-            int yy=ty+20;
+            int portrait=Math.min(74,Math.max(32,(layout.contentBottom()-ty-35)/2));
+            CivilianPortrait.draw(g,tx,ty,portrait,mx,my);
+            int infoX=tx+portrait+10, infoW=Math.max(20,tw-portrait-10);
+            text(g,"A home for a new resident",infoX,ty,infoW,CommandPalette.ACCENT_GOLD);
+            text(g,"Housing fee: 16 emeralds from Treasury",infoX,ty+14,infoW,CommandPalette.TEXT);
+            text(g,"Name, profession and appearance",infoX,ty+27,infoW,CommandPalette.TEXT_MUTED);
+            text(g,"are assigned on arrival.",infoX,ty+39,infoW,CommandPalette.TEXT_MUTED);
+            int yy=ty+portrait+8;
+            text(g,menu.civilians()+" / 64 residents · up to "+menu.civilians()+" emeralds daily",tx,yy,tw,CommandPalette.TEXT);
+            yy+=16;
+            text(g,String.format(Locale.ROOT,"Taxes deposited: %,d emeralds",menu.totalCivilianTaxes()),tx,yy,tw,CommandPalette.ACCENT_EMERALD);
+            yy+=16;
+            String[] lines={"Two residents join when you establish a core. Give them beds, food and workstations for trades.",
+                "Each living resident pays 1 emerald per full Minecraft day into the faction Treasury.",
+                "Civilians stay within your claims. Taxes pause while a civilian is stranded or the core is occupied."};
             for(String line:lines) {
                 for(var part:font.split(Component.literal(line),tw)) {
                     if(yy+font.lineHeight>=layout.contentBottom()-32)break;
@@ -1700,7 +1708,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             int metricW = (cardsW - gap * 2) / 3;
             drawMetricCard(g, x + 10, bankY, metricW, bankCardH,
                     "TREASURY", String.format(Locale.ROOT, "%,de", menu.bank()),
-                    menu.factionName(), CommandPalette.ACCENT_EMERALD);
+                    String.format(Locale.ROOT, "Civilian taxes +%,de", menu.lastCivilianTaxes()), CommandPalette.ACCENT_EMERALD);
             drawMetricCard(g, x + 10 + metricW + gap, bankY, metricW, bankCardH,
                     "NEXT REWARD", String.format(Locale.ROOT, "+%,de", menu.nextReward()),
                     "Wave " + menu.nextWave(), CommandPalette.ACCENT_TEAL);
@@ -1928,6 +1936,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     @Override
     public void onClose() {
         EntityPortrait.clear();
+        CivilianPortrait.clear();
         super.onClose();
     }
 

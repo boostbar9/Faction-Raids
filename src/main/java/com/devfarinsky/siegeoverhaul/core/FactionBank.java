@@ -59,6 +59,18 @@ public final class FactionBank {
         TreasuryNotifications.changed(core, accepted);
         return accepted;
     }
+    /** One identifiable civilian payout, capped to the Treasury's remaining capacity. */
+    public static long creditTaxes(CompoundTag core, long amount) {
+        if (core == null || amount <= 0) return 0;
+        long paid = creditQuietly(core, amount);
+        if (paid > 0) {
+            record(core, (int) paid);
+            core.putLong("CivilianTaxesLast", paid);
+            core.putLong("CivilianTaxesTotal", Math.min(LIMIT, Math.max(0, core.getLong("CivilianTaxesTotal")) + paid));
+            TreasuryNotifications.taxes(core, paid);
+        }
+        return paid;
+    }
     private static long creditQuietly(CompoundTag core, long amount) {
         long accepted = Math.min(Math.max(0, amount), LIMIT - balance(core));
         core.putLong("BankEmeralds", balance(core) + accepted);

@@ -1,3 +1,7 @@
+## 4.51.6
+- Civilian taxes now appear as identifiable Treasury activity, with a saved last payout and lifetime total. Online faction members receive one aggregated chat notice when taxes are deposited.
+- The House of Civilians displays a villager preview and explains the 16-emerald Treasury housing fee, daily taxes, and assigned resident identity.
+
 ## 4.51.5
 - Hero offers now unlock by eligible Siege Core victories: uncommon after one, rare after two, epic after four, legendary after six. Existing victory records seed the saved faction milestone; stale high-tier offers are safely rerolled before purchase.
 - New common and uncommon heroes receive iron armor and melee weapons. Rare and epic heroes retain diamond; legendary heroes retain Netherite.

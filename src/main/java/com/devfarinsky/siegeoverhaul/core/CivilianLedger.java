@@ -44,8 +44,7 @@ public final class CivilianLedger {
             if(days<=0)continue;
             total+=days; entries.putLong(id,last+days*FactionBank.DAY_TICKS);
         }
-        long paid=FactionBank.credit(core,total);
-        FactionBank.record(core,(int)paid);
+        long paid=FactionBank.creditTaxes(core,total);
         return paid;
     }
 }

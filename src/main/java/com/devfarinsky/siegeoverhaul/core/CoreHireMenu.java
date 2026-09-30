@@ -18,7 +18,7 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     private final CoreInventorySync inventorySync = new CoreInventorySync();
     private final BlockPos pos;
     private final SimpleContainer display = new SimpleContainer(30);
-    private final ContainerData data = new SimpleContainerData(33);
+    private final ContainerData data = new SimpleContainerData(37);
     private long shownAt = Long.MIN_VALUE;
     private boolean watchingConstruction;
     private long constructionAt = Long.MIN_VALUE;
@@ -46,6 +46,8 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     private int wide(int low) { return (data.get(low) & 0xffff) | (data.get(low+1) & 0xffff) << 16; }
     private void wide(int low,int value) { data.set(low,value & 0xffff); data.set(low+1,(value >>> 16) & 0xffff); }
     public int civilians() { return data.get(32); }
+    public int lastCivilianTaxes() { return wide(33); }
+    public int totalCivilianTaxes() { return wide(35); }
     public int bank() { return wide(18); }
     public int interestRate() { return data.get(20); }
     public int nextWave() { return wide(21); }
@@ -100,6 +102,8 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         RaidSavedData saved = RaidSavedData.get(owner.server);
         CompoundTag core = saved.siegeCores.get(SiegeCore.key(owner));
         data.set(32,CivilianLedger.count(CoreCivilians.ledger(saved,SiegeCore.key(owner))));
+        wide(33, (int) Math.min(Integer.MAX_VALUE, Math.max(0, core.getLong("CivilianTaxesLast"))));
+        wide(35, (int) Math.min(Integer.MAX_VALUE, Math.max(0, core.getLong("CivilianTaxesTotal"))));
         long now = owner.server.overworld().getGameTime();
         if (HeroProgress.migrate(core, saved.journals.get(SiegeCore.key(owner)))) saved.setDirty();
         if (CoreOffers.refresh(core, now, owner.serverLevel().random, HeroProgress.tier(core))) saved.setDirty();

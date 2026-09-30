@@ -16,7 +16,7 @@ import java.util.List;
 /** Server-side Treasury notices, delivered after purchase handlers finish their feedback. */
 @Mod.EventBusSubscriber(modid = SiegeOverhaul.MOD_ID)
 public final class TreasuryNotifications {
-    private record Notice(String faction, long delta) {}
+    private record Notice(String faction, long delta, boolean tax) {}
     private static final List<Notice> PENDING = new ArrayList<>();
     private TreasuryNotifications() {}
 
@@ -26,7 +26,15 @@ public final class TreasuryNotifications {
         if (server == null || !server.isSameThread()) return;
         // Identity matters: a detached preview or copied save must never announce a transaction.
         RaidSavedData.get(server).siegeCores.forEach((key, live) -> {
-            if (live == core) PENDING.add(new Notice(key, delta));
+            if (live == core) PENDING.add(new Notice(key, delta, false));
+        });
+    }
+    static void taxes(CompoundTag core, long amount) {
+        if (amount <= 0) return;
+        var server = ServerLifecycleHooks.getCurrentServer();
+        if (server == null || !server.isSameThread()) return;
+        RaidSavedData.get(server).siegeCores.forEach((key, live) -> {
+            if (live == core) PENDING.add(new Notice(key, amount, true));
         });
     }
 
@@ -45,16 +53,24 @@ public final class TreasuryNotifications {
         PENDING.clear();
         for (var player : event.getServer().getPlayerList().getPlayers()) {
             String faction = SiegeCore.key(player);
-            long gained = 0, spent = 0;
+            long gained = 0, spent = 0, taxes = 0;
             for (var notice : notices) if (notice.faction().equals(faction)) {
-                if (notice.delta() > 0) gained += notice.delta();
+                if (notice.tax()) taxes += notice.delta();
+                else if (notice.delta() > 0) gained += notice.delta();
                 else spent += notice.delta();
             }
-            if (gained != 0 || spent != 0) {
+            if (gained != 0 || spent != 0 || taxes != 0) {
                 var summary = Component.empty();
                 if (gained != 0) summary.append(message(gained));
                 if (gained != 0 && spent != 0) summary.append(Component.literal(" | ").withStyle(ChatFormatting.GRAY));
                 if (spent != 0) summary.append(message(spent));
+                if (taxes != 0) {
+                    if (gained != 0 || spent != 0) summary.append(Component.literal(" | ").withStyle(ChatFormatting.GRAY));
+                    summary.append(Component.literal("[Treasury] ").withStyle(ChatFormatting.GOLD))
+                            .append(Component.literal(String.format(java.util.Locale.ROOT,
+                                    "+%,d emerald%s collected from civilian taxes", taxes, taxes == 1 ? "" : "s"))
+                                    .withStyle(ChatFormatting.GREEN));
+                }
                 // v4.30.0: chat only. The action-bar copy stomped the raid
                 // objective HUD every time a purchase or bounty landed.
                 player.sendSystemMessage(summary);
