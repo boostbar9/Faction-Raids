@@ -17,6 +17,9 @@ class CivilianLedgerTest extends MinecraftTestSupport {
         assertEquals(0,CivilianLedger.settle(ledger,core,24100,true));
         assertEquals(1,CivilianLedger.settle(ledger,core,24200,true));
         assertEquals(2,FactionBank.balance(core));
+        assertArrayEquals(new int[]{1,1},FactionBank.ledgerDeltas(core));
+        assertEquals(1,core.getLong("CivilianTaxesLast"));
+        assertEquals(2,core.getLong("CivilianTaxesTotal"));
     }
     @Test void deathStopsIncomeWhileReloadPreservesClocksAndStarterCount() {
         var data=new RaidSavedData();var ledger=CoreCivilians.ledger(data,"team:test");
@@ -59,6 +62,9 @@ class CivilianLedgerTest extends MinecraftTestSupport {
         core.putLong("BankEmeralds",FactionBank.LIMIT-2);
         assertEquals(2,CivilianLedger.settle(ledger,core,24000,true));
         assertEquals(FactionBank.LIMIT,FactionBank.balance(core));
+        assertArrayEquals(new int[]{2},FactionBank.ledgerDeltas(core));
+        assertEquals(2,core.getLong("CivilianTaxesTotal"));
         assertEquals(0,CivilianLedger.settle(ledger,core,24000,true));
+        assertArrayEquals(new int[]{2},FactionBank.ledgerDeltas(core));
     }
 }
