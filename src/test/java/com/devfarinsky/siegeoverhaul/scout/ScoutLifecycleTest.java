@@ -39,7 +39,10 @@ class ScoutLifecycleTest extends MinecraftTestSupport {
         verify(level, times(2)).getGameTime();
         verifyNoMoreInteractions(level);
         // Scheduling sees the retained entry, and the following raid consumes it once.
-        var restored = RaidSavedData.load(data.save(new CompoundTag()));
+        var saved = new CompoundTag();
+        ScoutManager.save(data, saved);
+        var restored = new RaidSavedData();
+        ScoutManager.load(restored, saved);
         var raid = new RaidSavedData.RaidState(mission.teamKey, "siege_core", 0);
         assertEquals("athena", ScoutManager.consumePreviewedNarrative(restored, mission.teamKey, raid).factionId);
         assertEquals(12, raid.campaign.getInt("BountyPaid"));
