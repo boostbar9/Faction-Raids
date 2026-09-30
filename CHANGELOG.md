@@ -1,3 +1,6 @@
+## 4.51.8
+- Prevent a narration crash when opening an unnamed Villager Workers build area: its screen receives a Construction Area title. Existing named areas keep their title.
+
 ## 4.51.7
 - Expired scouting missions retain their promised attacker identity and paid bounty until the next raid. This prevents repeated scout parties in one cooldown and keeps recovered intel accurate after saving and reloading.
 - Expired missions no longer spawn a party after a restart. Disabling scouting recalls loaded scouts; starting a raid also recalls any loaded scouts before consuming their mission.
