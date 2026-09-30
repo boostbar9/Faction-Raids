@@ -173,6 +173,33 @@ public final class ScoutManager {
         return changed;
     }
 
+    /** Restore non-combat AI, or recall scouts that were unloaded when their mission ended. */
+    public static boolean reloadScout(ServerLevel level, RaidSavedData data, Mob scout) {
+        if (!scout.getPersistentData().getBoolean(ModConstants.Tags.SCOUT)) return false;
+        String team = scout.getPersistentData().getString(ModConstants.Tags.RAID_TEAM);
+        ScoutMission mission = data.scoutMissions.get(team);
+        RaiderScoutGoal goal = null;
+        if (RaidConfig.SCOUTING_ENABLED.get() && mission != null && mission.spawned
+                && mission.scoutUuids.contains(scout.getUUID())
+                && level.getGameTime() < mission.expireGameTime
+                && data.anchors.containsKey(team) && !data.raids.containsKey(team)
+                && com.devfarinsky.siegeoverhaul.core.SiegeCore.point(level.getServer(), team) != null
+                && scout instanceof PathfinderMob pathfinder) {
+            goal = RaiderScoutGoal.restore(pathfinder);
+        }
+        if (goal == null) {
+            // Old scouts lack a saved route. Retire them rather than restore vanilla combat AI.
+            scout.discard();
+            if (mission != null && mission.scoutUuids.remove(scout.getUUID())) data.setDirty();
+            return true;
+        }
+        scout.goalSelector.removeAllGoals(ignored -> true);
+        scout.targetSelector.removeAllGoals(ignored -> true);
+        scout.setTarget(null);
+        scout.goalSelector.addGoal(0, goal);
+        return false;
+    }
+
     // -------- Spawning --------------------------------------------------
 
     private static void spawnScouts(MinecraftServer server, RaidSavedData.Anchor anchor, ScoutMission m) {

@@ -2,6 +2,7 @@ package com.devfarinsky.siegeoverhaul;
 
 import com.devfarinsky.siegeoverhaul.core.EndlessSiege;
 import com.devfarinsky.siegeoverhaul.core.FactionBank;
+import com.devfarinsky.siegeoverhaul.scout.ScoutManager;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -206,6 +207,12 @@ public final class RaidEvents {
             return;
         }
         if (!(event.getEntity() instanceof Mob mob)) return;
+        if (mob.getPersistentData().getBoolean(ModConstants.Tags.SCOUT)) {
+            if (event.loadedFromDisk() && ScoutManager.reloadScout(level, RaidSavedData.get(level.getServer()), mob)) {
+                event.setCanceled(true);
+            }
+            return; // Scouts never receive soldier AI or wave bookkeeping.
+        }
         String guardTeam = mob.getPersistentData().getString(com.devfarinsky.siegeoverhaul.camp.CampGuards.TEAM_TAG);
         if (!guardTeam.isBlank()) {
             RaidSavedData.RaidState guardRaid = RaidSavedData.get(level.getServer()).raids.get(guardTeam);
@@ -248,10 +255,6 @@ public final class RaidEvents {
         }
         String teamKey = mob.getPersistentData().getString(RAID_TEAM_TAG);
         if (teamKey.isBlank()) return;
-        // v2.26.0 scouts carry RAID_TEAM_TAG for friendly-fire logic but are
-        // not part of any active raid. Skip raid bookkeeping so we do not
-        // discard them here and do not count them as wave spawns/kills.
-        if (mob.getPersistentData().getBoolean(ModConstants.Tags.SCOUT)) return;
         RaidSavedData data = RaidSavedData.get(level.getServer());
         RaidSavedData.RaidState state = data.raids.get(teamKey);
         if (state == null) {

@@ -1,6 +1,8 @@
 package com.devfarinsky.siegeoverhaul.scout;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.goal.Goal;
@@ -22,6 +24,8 @@ import java.util.EnumSet;
  * mechanic feel like a reward for a hunt, not a fight.
  */
 public final class RaiderScoutGoal extends Goal {
+
+    private static final String ROUTE_TAG = "SiegeScoutRoute";
 
     private enum Phase { APPROACH, OBSERVE, FLEE }
 
@@ -51,6 +55,40 @@ public final class RaiderScoutGoal extends Goal {
         this.observeTicks = observeTicks;
         this.speed = speed;
         this.setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK));
+        saveRoute();
+    }
+
+    /** Custom goals are not saved by vanilla; keep the small route/state on the entity. */
+    private void saveRoute() {
+        CompoundTag route = owner.getPersistentData().getCompound(ROUTE_TAG);
+        route.putLong("Lookout", lookout.asLong());
+        route.putLong("Return", spawnPos.asLong());
+        route.putInt("ObserveTicks", observeTicks);
+        route.putString("Phase", phase.name());
+        route.putInt("Remaining", observeTicksRemaining);
+        route.putInt("StuckTicks", stuckCheckCooldown);
+        route.putDouble("LastDistance", lastDistSq);
+        owner.getPersistentData().put(ROUTE_TAG, route);
+    }
+
+    static RaiderScoutGoal restore(PathfinderMob owner) {
+        CompoundTag route = owner.getPersistentData().getCompound(ROUTE_TAG).copy();
+        if (!route.contains("Lookout", Tag.TAG_LONG) || !route.contains("Return", Tag.TAG_LONG)
+                || !route.contains("ObserveTicks", Tag.TAG_INT)) return null;
+        Phase savedPhase;
+        try { savedPhase = Phase.valueOf(route.getString("Phase")); }
+        catch (IllegalArgumentException invalid) { return null; }
+        int ticks = route.getInt("ObserveTicks");
+        if (ticks < 0 || ticks > 12000) return null;
+        var goal = new RaiderScoutGoal(owner, BlockPos.of(route.getLong("Lookout")),
+                BlockPos.of(route.getLong("Return")), ticks, 1.0);
+        goal.phase = savedPhase;
+        goal.observeTicksRemaining = Math.max(0, Math.min(ticks, route.getInt("Remaining")));
+        goal.stuckCheckCooldown = Math.max(0, Math.min(59, route.getInt("StuckTicks")));
+        double distance = route.getDouble("LastDistance");
+        goal.lastDistSq = Double.isFinite(distance) && distance > 0 ? distance : Double.MAX_VALUE;
+        goal.saveRoute();
+        return goal;
     }
 
     @Override
@@ -61,7 +99,9 @@ public final class RaiderScoutGoal extends Goal {
 
     @Override
     public void start() {
-        owner.getNavigation().moveTo(lookout.getX() + 0.5, lookout.getY(), lookout.getZ() + 0.5, speed);
+        if (phase == Phase.FLEE) startFlee();
+        else if (phase == Phase.OBSERVE) owner.getNavigation().stop();
+        else owner.getNavigation().moveTo(lookout.getX() + 0.5, lookout.getY(), lookout.getZ() + 0.5, speed);
     }
 
     @Override
@@ -71,6 +111,7 @@ public final class RaiderScoutGoal extends Goal {
             case OBSERVE -> tickObserve();
             case FLEE -> tickFlee();
         }
+        saveRoute();
     }
 
     private void tickApproach() {
@@ -156,6 +197,7 @@ public final class RaiderScoutGoal extends Goal {
         if (phase != Phase.FLEE) {
             phase = Phase.FLEE;
             startFlee();
+            saveRoute();
         }
     }
 
