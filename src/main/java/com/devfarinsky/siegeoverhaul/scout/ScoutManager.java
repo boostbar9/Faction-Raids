@@ -22,12 +22,10 @@ import net.minecraft.world.entity.monster.Pillager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.WrittenBookItem;
-import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -210,22 +208,21 @@ public final class ScoutManager {
         int distance = RaidConfig.SCOUT_SPAWN_DISTANCE.get();
         int count = 1 + level.random.nextInt(RaidConfig.SCOUT_PARTY_SIZE.get());
         double approachAngle = level.random.nextDouble() * Math.PI * 2.0;
-        // Spawn scouts as a tight group so they arrive together.
-        BlockPos spawnGround = level.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                new BlockPos(
-                        anchorPos.getX() + (int) Math.round(Math.cos(approachAngle) * distance),
-                        0,
-                        anchorPos.getZ() + (int) Math.round(Math.sin(approachAngle) * distance)));
-        BlockPos lookout = RaiderScoutGoal.findLookoutNear(level, anchorPos,
+        // Keep both ends of the route on loaded, dry, walkable terrain. If no
+        // safe route endpoints are available, skip this party rather than put
+        // scouts in water, inside a slope, on a tree or on an isolated roof.
+        BlockPos spawnGround = ScoutPlacement.findSpawn(level, anchorPos, distance, approachAngle);
+        if (spawnGround == null) return;
+        BlockPos lookout = ScoutPlacement.findLookout(level, anchorPos, spawnGround,
                 Math.max(40, distance / 2));
+        if (lookout == null) return;
+        List<BlockPos> partyPositions = ScoutPlacement.partyPositions(level, spawnGround, count);
         int observeTicks = RaidConfig.SCOUT_OBSERVE_SECONDS.get() * 20;
         double speed = 1.0;
-        for (int i = 0; i < count; i++) {
+        for (BlockPos partyPosition : partyPositions) {
             Pillager scout = EntityType.PILLAGER.create(level);
             if (scout == null) continue;
-            BlockPos jitter = spawnGround.offset(
-                    level.random.nextInt(5) - 2, 0, level.random.nextInt(5) - 2);
-            scout.setPos(jitter.getX() + 0.5, jitter.getY(), jitter.getZ() + 0.5);
+            scout.setPos(partyPosition.getX() + 0.5, partyPosition.getY(), partyPosition.getZ() + 0.5);
             // Overwrite the default vanilla goal stack with our scout goal
             // ONLY. Vanilla pillager targeting would otherwise cause it
             // to open fire the moment it saw a player, breaking the

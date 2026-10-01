@@ -7,7 +7,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.EnumSet;
@@ -201,25 +200,4 @@ public final class RaiderScoutGoal extends Goal {
         }
     }
 
-    /** Utility for finding a nearby raised lookout position at world-surface height. */
-    public static BlockPos findLookoutNear(Level level, BlockPos center, int searchRadius) {
-        BlockPos.MutableBlockPos best = new BlockPos.MutableBlockPos(center.getX(), center.getY(), center.getZ());
-        int bestY = Integer.MIN_VALUE;
-        // Sample 12 points in a ring around the target and pick the highest surface.
-        // A raised point makes the scout more visible to defenders (fair play)
-        // and looks better narratively than crouching in the woods.
-        for (int i = 0; i < 12; i++) {
-            double angle = i * (Math.PI / 6.0);
-            int dx = (int) Math.round(Math.cos(angle) * searchRadius);
-            int dz = (int) Math.round(Math.sin(angle) * searchRadius);
-            BlockPos sample = level.getHeightmapPos(
-                    net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                    new BlockPos(center.getX() + dx, 0, center.getZ() + dz));
-            if (sample.getY() > bestY) {
-                bestY = sample.getY();
-                best.set(sample);
-            }
-        }
-        return best.immutable();
-    }
 }

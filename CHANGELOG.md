@@ -1,3 +1,8 @@
+## 4.51.10
+- Scout parties now choose loaded, dry, walkable spawn and lookout ground, rejecting water, trees, hazards, isolated pillars and unsafe world boundaries.
+- Every scout receives a separately measured surface position, preventing party members from spawning inside slopes or above holes when the terrain height changes across the group.
+- Lookouts stay on the party's incoming side of the territory instead of selecting an unrelated high roof or mountain across the defended base.
+
 ## 4.51.9
 - Scouts keep their lookout, retreat route and observation progress after chunk reload or server restart.
 - Unloaded scouts are recalled when they return after their mission expires, scouting is disabled, their core is removed or the raid begins.
