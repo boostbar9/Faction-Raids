@@ -74,4 +74,11 @@ class ScoutPlacementTest extends MinecraftTestSupport {
                 new BlockPos(100, 64, 0), 40);
         assertEquals(new BlockPos(40, 64, 0), lookout);
     }
+
+    @Test void entireScoutBodyMustFitInsideWorldBorder() {
+        border.setCenter(0.5, 0.5);
+        border.setSize(0.5);
+        assertTrue(border.isWithinBounds(new BlockPos(0, 64, 0)));
+        assertNull(ScoutPlacement.surface(level, 0, 0));
+    }
 }

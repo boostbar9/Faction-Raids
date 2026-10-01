@@ -3,11 +3,13 @@ package com.devfarinsky.siegeoverhaul.scout;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -81,10 +83,14 @@ final class ScoutPlacement {
         BlockPos column = new BlockPos(x, level.getMinBuildHeight(), z);
         if (!level.hasChunkAt(column)) return null;
         int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
-        if (y <= level.getMinBuildHeight() || y + 1 >= level.getMaxBuildHeight()) return null;
+        double halfWidth = EntityType.PILLAGER.getWidth() / 2.0;
+        AABB body = new AABB(x + 0.5 - halfWidth, y, z + 0.5 - halfWidth,
+                x + 0.5 + halfWidth, y + EntityType.PILLAGER.getHeight(), z + 0.5 + halfWidth);
+        var border = level.getWorldBorder();
+        if (body.minY < level.getMinBuildHeight() || body.maxY > level.getMaxBuildHeight()
+                || body.minX < border.getMinX() || body.maxX > border.getMaxX()
+                || body.minZ < border.getMinZ() || body.maxZ > border.getMaxZ()) return null;
         BlockPos feet = new BlockPos(x, y, z);
-        if (!level.getWorldBorder().isWithinBounds(feet)
-                || !level.getWorldBorder().isWithinBounds(feet.above())) return null;
         BlockPos floorPos = feet.below();
         BlockState floor = level.getBlockState(floorPos);
         // Use block shape classes rather than data-pack tags: placement can run
