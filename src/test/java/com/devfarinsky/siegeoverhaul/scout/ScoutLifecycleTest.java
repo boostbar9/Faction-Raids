@@ -16,6 +16,31 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class ScoutLifecycleTest extends MinecraftTestSupport {
+    @Test void failedSpawnRetriesWithoutConsumingMissionAndPersistsNextAttempt() {
+        var mission = new ScoutMission("team:test", 100, 1000, null);
+
+        ScoutManager.recordSpawnAttempt(mission, false, 100);
+
+        assertFalse(mission.spawned);
+        assertEquals(100 + ScoutManager.SPAWN_RETRY_TICKS, mission.spawnGameTime);
+        var restored = ScoutMission.load(mission.save());
+        assertNotNull(restored);
+        assertFalse(restored.spawned);
+        assertEquals(mission.spawnGameTime, restored.spawnGameTime);
+    }
+
+    @Test void retryIsBoundedByExpiryAndSuccessfulAttemptClosesMission() {
+        var mission = new ScoutMission("team:test", 100, 250, null);
+
+        ScoutManager.recordSpawnAttempt(mission, false, 200);
+        assertEquals(250, mission.spawnGameTime);
+        assertFalse(mission.spawned);
+
+        ScoutManager.recordSpawnAttempt(mission, true, 250);
+        assertTrue(mission.spawned);
+        assertEquals(250, mission.spawnGameTime);
+    }
+
     @Test void expiredUnspawnedMissionDoesNotSpawnAndKeepsIntelAndBountyAfterReload() {
         var server = mock(MinecraftServer.class);
         var level = mock(ServerLevel.class);

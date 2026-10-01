@@ -56,6 +56,9 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public final class ScoutManager {
 
+    /** Delay before retrying a scout party whose terrain is not currently available. */
+    static final long SPAWN_RETRY_TICKS = 10L * 20L;
+
     private ScoutManager() {}
 
     // -------- Persistence hooks (called from RaidSavedData) ------------
@@ -151,8 +154,7 @@ public final class ScoutManager {
                 continue;
             }
             if (!m.spawned && now >= m.spawnGameTime) {
-                spawnScouts(server, anchor, m);
-                m.spawned = true;
+                recordSpawnAttempt(m, spawnScouts(server, anchor, m), now);
                 data.setDirty();
             }
             if (m.spawned) {
@@ -200,10 +202,23 @@ public final class ScoutManager {
 
     // -------- Spawning --------------------------------------------------
 
-    private static void spawnScouts(MinecraftServer server, RaidSavedData.Anchor anchor, ScoutMission m) {
+    /**
+     * Complete a due spawn attempt. A temporarily unloaded or unsuitable area
+     * is retried instead of consuming the mission without ever creating a scout.
+     * The existing expiration time bounds retries and keeps old saves compatible.
+     */
+    static void recordSpawnAttempt(ScoutMission mission, boolean spawned, long now) {
+        if (spawned) {
+            mission.spawned = true;
+            return;
+        }
+        mission.spawnGameTime = Math.min(mission.expireGameTime, now + SPAWN_RETRY_TICKS);
+    }
+
+    private static boolean spawnScouts(MinecraftServer server, RaidSavedData.Anchor anchor, ScoutMission m) {
         ServerLevel level = server.overworld();
         var core = com.devfarinsky.siegeoverhaul.core.SiegeCore.point(server, anchor.teamKey());
-        if (core == null) return;
+        if (core == null) return false;
         BlockPos anchorPos = core.pos();
         int distance = RaidConfig.SCOUT_SPAWN_DISTANCE.get();
         int count = 1 + level.random.nextInt(RaidConfig.SCOUT_PARTY_SIZE.get());
@@ -212,10 +227,10 @@ public final class ScoutManager {
         // safe route endpoints are available, skip this party rather than put
         // scouts in water, inside a slope, on a tree or on an isolated roof.
         BlockPos spawnGround = ScoutPlacement.findSpawn(level, anchorPos, distance, approachAngle);
-        if (spawnGround == null) return;
+        if (spawnGround == null) return false;
         BlockPos lookout = ScoutPlacement.findLookout(level, anchorPos, spawnGround,
                 Math.max(40, distance / 2));
-        if (lookout == null) return;
+        if (lookout == null) return false;
         List<BlockPos> partyPositions = ScoutPlacement.partyPositions(level, spawnGround, count);
         int observeTicks = RaidConfig.SCOUT_OBSERVE_SECONDS.get() * 20;
         double speed = 1.0;
@@ -262,6 +277,7 @@ public final class ScoutManager {
                         .withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC), true);
             }
         }
+        return !m.scoutUuids.isEmpty();
     }
 
     // -------- Death / hurt handlers -------------------------------------
