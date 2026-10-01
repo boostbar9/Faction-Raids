@@ -3,8 +3,9 @@ package com.devfarinsky.siegeoverhaul.scout;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LeavesBlock;
+import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 
@@ -86,7 +87,11 @@ final class ScoutPlacement {
                 || !level.getWorldBorder().isWithinBounds(feet.above())) return null;
         BlockPos floorPos = feet.below();
         BlockState floor = level.getBlockState(floorPos);
-        if (floor.is(BlockTags.LOGS) || floor.is(BlockTags.LEAVES) || dangerous(floor)
+        // Use block shape classes rather than data-pack tags: placement can run
+        // during early world startup, and a trunk top is never a useful route
+        // even if another pack has not finished binding its log tags yet.
+        if (floor.getBlock() instanceof RotatedPillarBlock || floor.getBlock() instanceof LeavesBlock
+                || dangerous(floor)
                 || !floor.getFluidState().isEmpty()
                 || !floor.isFaceSturdy(level, floorPos, Direction.UP)) return null;
         for (int dy = 0; dy <= 1; dy++) {
