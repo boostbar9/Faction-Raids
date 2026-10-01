@@ -1,3 +1,4 @@
+# Release-only workflow; exact artifact and source-tree checks run before upload.
 name: Publish tested 4.51.11 beta to CurseForge
 
 on:
