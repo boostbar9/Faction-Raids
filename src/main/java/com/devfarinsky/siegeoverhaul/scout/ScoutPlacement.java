@@ -84,12 +84,12 @@ final class ScoutPlacement {
         if (!level.hasChunkAt(column)) return null;
         int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
         double halfWidth = EntityType.PILLAGER.getWidth() / 2.0;
-        AABB body = new AABB(x + 0.5 - halfWidth, y, z + 0.5 - halfWidth,
+        AABB scoutBody = new AABB(x + 0.5 - halfWidth, y, z + 0.5 - halfWidth,
                 x + 0.5 + halfWidth, y + EntityType.PILLAGER.getHeight(), z + 0.5 + halfWidth);
         var border = level.getWorldBorder();
-        if (body.minY < level.getMinBuildHeight() || body.maxY > level.getMaxBuildHeight()
-                || body.minX < border.getMinX() || body.maxX > border.getMaxX()
-                || body.minZ < border.getMinZ() || body.maxZ > border.getMaxZ()) return null;
+        if (scoutBody.minY < level.getMinBuildHeight() || scoutBody.maxY > level.getMaxBuildHeight()
+                || scoutBody.minX < border.getMinX() || scoutBody.maxX > border.getMaxX()
+                || scoutBody.minZ < border.getMinZ() || scoutBody.maxZ > border.getMaxZ()) return null;
         BlockPos feet = new BlockPos(x, y, z);
         BlockPos floorPos = feet.below();
         BlockState floor = level.getBlockState(floorPos);
