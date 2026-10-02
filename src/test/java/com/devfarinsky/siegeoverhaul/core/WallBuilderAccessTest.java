@@ -17,6 +17,51 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class WallBuilderAccessTest extends MinecraftTestSupport {
+    @Test void reachableNativeCaveEndpointIsStoppedAndReplacedWithSurfaceApproach() throws Exception {
+        terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
+        var cave=mock(Path.class);when(cave.canReach()).thenReturn(true);
+        when(cave.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(0,60,0));
+        when(nav.getPath()).thenReturn(cave);
+        var surface=mock(Path.class);when(surface.canReach()).thenReturn(true);
+        when(surface.getTarget()).thenReturn(new BlockPos(1,64,0));
+        when(nav.createPath(anySet(),eq(0))).thenReturn(surface);
+        goal.route(level,new BlockPos(0,60,0),20);
+        verify(nav).stop();verify(nav).moveTo(1,64,0,0.8);
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+    @Test void reachableSurfaceEndpointKeepsItsNativeMovementPath() throws Exception {
+        terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
+        var path=mock(Path.class);when(path.canReach()).thenReturn(true);
+        when(path.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(1,64,0));
+        when(nav.getPath()).thenReturn(path);
+        goal.route(level,new BlockPos(0,60,0),20);
+        verify(nav,never()).stop();verify(nav,never()).createPath(anySet(),anyInt());
+    }
+    @Test void horizontalReachDoesNotKeepWorkerDirectlyBelowBuriedJob() throws Exception {
+        terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
+        when(worker.getX()).thenReturn(0.5);when(worker.getZ()).thenReturn(0.5);
+        when(worker.position()).thenReturn(new Vec3(0.5,60,0.5));
+        when(worker.getBoundingBox()).thenReturn(new AABB(0.2,60,0.2,0.8,61.8,0.8));
+        var path=mock(Path.class);when(path.canReach()).thenReturn(true);
+        when(path.getTarget()).thenReturn(new BlockPos(1,64,0));
+        when(nav.createPath(anySet(),eq(0))).thenReturn(path);
+        goal.route(level,new BlockPos(0,60,0),20);
+        verify(nav).moveTo(1,64,0,0.8);
+        verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+    }
+    @Test void cachedStandingSpaceIsNotReusedAfterItsFloorBecomesHazardous() throws Exception {
+        terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
+        var path=mock(Path.class);when(path.canReach()).thenReturn(true);
+        when(path.getTarget()).thenReturn(new BlockPos(1,64,0));
+        when(nav.createPath(anySet(),eq(0))).thenReturn(path);
+        when(nav.moveTo(1,64,0,0.8)).thenReturn(true);
+        goal.route(level,new BlockPos(0,60,0),20);
+        clearInvocations(nav);
+        doReturn(Blocks.MAGMA_BLOCK.defaultBlockState()).when(level).getBlockState(new BlockPos(1,63,0));
+        when(level.getGameTime()).thenReturn(10L);
+        goal.route(level,new BlockPos(0,60,0),20);
+        verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+    }
     public abstract static class Builder extends Mob {
         public Entity currentBuildArea;
         public boolean isFleeing;
@@ -157,6 +202,27 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         area.stackToPlace = java.util.List.of(); area.stackToPlaceMultiBlock = java.util.List.of();
         worker.currentBuildArea = area;
         return area;
+    }
+
+    public static class ApproachingGoal extends NativeGoal {
+        int ticks;
+        @Override public void tick() { ticks++; state=State.DONE; }
+    }
+    @Test void nativePhaseCannotAdvanceFromDirectlyUnderneathTheOwnedMarker() throws Exception {
+        var area=commission();area.stackToPlace=java.util.List.of(new Cell(new BlockPos(0,64,0)));
+        when(worker.getX()).thenReturn(0.5);when(worker.getZ()).thenReturn(0.5);
+        when(worker.position()).thenReturn(new Vec3(0.5,60,0.5));
+        when(worker.getBoundingBox()).thenReturn(new AABB(0.2,60,0.2,0.8,61.8,0.8));
+        var nativeGoal=new ApproachingGoal();nativeGoal.state=State.MOVE_TO_WORK_AREA;
+        var goal=new WallBuilderAccess(worker,nativeGoal);
+        var path=mock(Path.class);when(path.canReach()).thenReturn(true);
+        when(path.getTarget()).thenReturn(new BlockPos(1,64,0));
+        when(nav.createPath(anySet(),eq(0))).thenReturn(path);
+        goal.tick();assertEquals(0,nativeGoal.ticks);assertEquals(State.MOVE_TO_WORK_AREA,nativeGoal.state);
+        verify(nav).moveTo(1,64,0,0.8);
+        when(worker.position()).thenReturn(new Vec3(1.5,64,0.5));
+        when(worker.getBoundingBox()).thenReturn(new AABB(1.2,64,0.2,1.8,65.8,0.8));
+        goal.tick();assertEquals(1,nativeGoal.ticks);
     }
     @Test void assignedWallSurvivesCompetingBlueprintAndSupplyRestart() throws Exception {
         var wall = commission(); var other = mock(Area.class);

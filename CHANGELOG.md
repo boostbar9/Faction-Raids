@@ -1,3 +1,7 @@
+## 4.51.14
+- Commissioned wall builders no longer keep a reachable path whose endpoint is underground or unsafe; they try validated surface standing space instead.
+- Being horizontally close to a buried job no longer suppresses surface access recovery, and cached work positions are rechecked before reuse. Native supplies, construction and ownership remain unchanged.
+
 ## 4.51.13
 - Coastal camp earthworks now try alternate dry entrances before rejecting a site whose preferred gate faces water.
 - Successful site selection saves the dry entrance for the gate, approach road and perimeter; failed earthworks leave no saved entrance. Existing camps retain their established gate orientation.

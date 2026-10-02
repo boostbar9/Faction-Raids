@@ -84,6 +84,7 @@ public final class WallBuilderAccess extends Goal {
     @Override public void stop() { delegate.stop(); destination = null; lastTarget = null; pendingPath = null; pendingSites = Set.of(); }
     @Override public void tick() {
         retainCommission();
+        if (recoverBuriedApproach()) return;
         delegate.tick();
         if (!(worker.level() instanceof ServerLevel level) || worker.isPassenger()
                 || worker.isLeashed() || worker.getTarget() != null) return;
@@ -98,19 +99,7 @@ public final class WallBuilderAccess extends Goal {
             BlockPos target = blockField.get(delegate) instanceof BlockPos p ? p : null;
             if (state instanceof Enum<?> e && e.name().equals("MOVE_TO_WORK_AREA")) target = area.getOnPos();
             if (target == null) return;
-            if (reservedArea != area) {
-                var columns = new java.util.HashSet<Long>();
-                for (String fieldName : new String[]{"stackToPlace", "stackToPlaceMultiBlock"}) {
-                    Object cells = area.getClass().getField(fieldName).get(area);
-                    if (!(cells instanceof Iterable<?> iterable)) return;
-                    for (Object cell : iterable) {
-                        BlockPos pos = (BlockPos) cell.getClass().getMethod("getPos").invoke(cell);
-                        columns.add(pos.atY(0).asLong());
-                    }
-                }
-                reservedColumns = columns;
-                reservedArea = area;
-            }
+            if (!reserveColumns(area)) return;
             route(level, target, state instanceof Enum<?> e && e.name().equals("MOVE_TO_WORK_AREA") ? 20 : 40);
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             // Keep native behavior when a companion changes its public job state.
@@ -126,6 +115,40 @@ public final class WallBuilderAccess extends Goal {
                 && data.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER).equals(WorkersBridge.readOwner(area))
                 && data.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER).equals(WorkersBridge.readWorkerOwner(worker))
                 && WorkersBridge.workingOn(worker, area);
+    }
+
+    /** Do not let native horizontal reach advance construction while below the marker. */
+    private boolean recoverBuriedApproach() {
+        if (!(worker.level() instanceof ServerLevel level) || worker.isPassenger()
+                || worker.isLeashed() || worker.getTarget() != null) return false;
+        try {
+            if (!(stateField.get(delegate) instanceof Enum<?> state)
+                    || !state.name().equals("MOVE_TO_WORK_AREA")
+                    || !(areaField.get(worker) instanceof Entity area) || !isCommission(area)) return false;
+            BlockPos target=area.getOnPos();
+            double dx=worker.getX()-(target.getX()+0.5), dz=worker.getZ()-(target.getZ()+0.5);
+            if (dx*dx+dz*dz >= 20 || safeStandingSite(level,worker,BlockPos.containing(worker.position()))) return false;
+            if (!reserveColumns(area)) return false;
+            route(level,target,20);
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return false; }
+    }
+
+    private boolean reserveColumns(Entity area) throws ReflectiveOperationException {
+        if (reservedArea == area) return true;
+        reservedArea=null;reservedColumns=Set.of();
+        pendingPath=null;pendingSites=Set.of();destination=null;lastTarget=null;
+        var columns=new java.util.HashSet<Long>();
+        for (String name : new String[]{"stackToPlace", "stackToPlaceMultiBlock"}) {
+            Object cells=area.getClass().getField(name).get(area);
+            if (!(cells instanceof Iterable<?> iterable)) return false;
+            for (Object cell : iterable) {
+                BlockPos pos=(BlockPos)cell.getClass().getMethod("getPos").invoke(cell);
+                columns.add(pos.atY(0).asLong());
+            }
+        }
+        reservedColumns=columns;reservedArea=area;
+        return true;
     }
 
     /** Native SELECT_WORK_AREA otherwise replaces currentBuildArea with a competing nearby job. */
@@ -164,7 +187,10 @@ public final class WallBuilderAccess extends Goal {
 
     void route(ServerLevel level, BlockPos target, int nativeReachSquared) {
         double dx = worker.getX() - (target.getX() + 0.5), dz = worker.getZ() - (target.getZ() + 0.5);
-        if (dx * dx + dz * dz < nativeReachSquared) return;
+        // Native reach is horizontal only. Being directly below the job is
+        // not a safe work position, even when its distance check passes.
+        if (dx * dx + dz * dz < nativeReachSquared
+                && safeStandingSite(level, worker, BlockPos.containing(worker.position()))) return;
         if (!target.equals(lastTarget)) {
             pendingPath = null;
             pendingSites = Set.of();
@@ -172,7 +198,17 @@ public final class WallBuilderAccess extends Goal {
         }
         var nav = worker.getNavigation();
         var existing = nav.getPath();
-        if (existing != null && (!pathReady(existing) || (!existing.isDone() && existing.canReach()))) return;
+        if (existing != null && !pathReady(existing)) return;
+        if (existing != null && !existing.isDone() && existing.canReach()) {
+            var end = existing.getEndNode();
+            BlockPos feet = end == null ? null : new BlockPos(end.x,end.y,end.z);
+            if (feet != null && feet.distSqr(target.atY(feet.getY())) < nativeReachSquared
+                    && !reservedColumns.contains(feet.atY(0).asLong())
+                    && safeStandingSite(level,worker,feet)) return;
+            // A reachable cave endpoint still sends the builder underground.
+            // Stop that route before probing loaded surface standing space.
+            nav.stop();
+        }
         long now = level.getGameTime();
         if (now < nextRoute && now >= nextRoute - 10) return;
         nextRoute = now + 10;
@@ -189,7 +225,8 @@ public final class WallBuilderAccess extends Goal {
             return;
         }
         if (now < nextSearch && now >= nextSearch - 40) {
-            if (target.equals(lastTarget) && destination != null) moveToSite(destination);
+            if (target.equals(lastTarget) && destination != null
+                    && safeStandingSite(level,worker,destination)) moveToSite(destination);
             return;
         }
         nextSearch = now + 40;
@@ -224,15 +261,23 @@ public final class WallBuilderAccess extends Goal {
             if (dx*dx+dz*dz >= 16 || !level.hasChunkAt(column)) continue;
             int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.getX(), column.getZ());
             if (Math.abs(y-target.getY()) > 12 || y <= level.getMinBuildHeight() || y+2 >= level.getMaxBuildHeight()) continue;
-            BlockPos feet = column.atY(y), floor = feet.below();
-            var support = level.getBlockState(floor);
-            if (!support.isFaceSturdy(level, floor, Direction.UP) || !support.getFluidState().isEmpty()
-                    || support.is(Blocks.MAGMA_BLOCK) || support.is(Blocks.CAMPFIRE) || support.is(Blocks.SOUL_CAMPFIRE)
-                    || support.is(Blocks.CACTUS) || !level.getWorldBorder().isWithinBounds(feet)
-                    || !level.getBlockState(feet).isAir() || !level.getBlockState(feet.above()).isAir()) continue;
-            var body = worker.getBoundingBox().move(Vec3.atBottomCenterOf(feet).subtract(worker.position()));
-            if (level.getWorldBorder().isWithinBounds(body) && level.noCollision(worker, body)) sites.add(feet);
+            BlockPos feet = column.atY(y);
+            if (safeStandingSite(level,worker,feet)) sites.add(feet);
         }
         return sites;
+    }
+
+    private static boolean safeStandingSite(ServerLevel level, Mob worker, BlockPos feet) {
+        if (!level.hasChunkAt(feet) || feet.getY() <= level.getMinBuildHeight()
+                || feet.getY()+2 >= level.getMaxBuildHeight()
+                || level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,feet.getX(),feet.getZ()) != feet.getY()) return false;
+        BlockPos floor=feet.below();
+        var support=level.getBlockState(floor);
+        if (!support.isFaceSturdy(level,floor,Direction.UP) || !support.getFluidState().isEmpty()
+                || support.is(Blocks.MAGMA_BLOCK) || support.is(Blocks.CAMPFIRE) || support.is(Blocks.SOUL_CAMPFIRE)
+                || support.is(Blocks.CACTUS) || !level.getBlockState(feet).isAir()
+                || !level.getBlockState(feet.above()).isAir()) return false;
+        var body=worker.getBoundingBox().move(Vec3.atBottomCenterOf(feet).subtract(worker.position()));
+        return level.getWorldBorder().isWithinBounds(body) && level.noCollision(worker,body);
     }
 }

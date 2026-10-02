@@ -1,5 +1,9 @@
 # Recruits and Workers source compatibility review
 
+## Player wall surface approaches (4.51.14)
+
+Rechecked Workers `29d26e1df6475fc8d043dc5d455f67b2fd1e9982`, `entities/ai/BuilderWorkGoal.java`. `moveToPosition` uses horizontal reach (20 for the area, 40 for block work) and otherwise navigates to the exact target Y. A reachable cave path can therefore approach a buried marker, while a worker directly underneath can pass the reach check. The commissioned-job wrapper now checks the completed path's endpoint against loaded, dry, collision-free surface footing before retaining it; horizontal proximity alone does not suppress correction from underground. Pending native async paths remain untouched until processed, safe native paths are retained, and cached standing destinations are revalidated. This does not grant excavation permission or change blueprint targets, material fetching, inventory, ownership or native build execution. Source/API regression coverage is not interactive companion-mod playtesting.
+
 ## Starter Core Guard (4.50.3)
 
 Rechecked Recruits `cff03e085d65653406a8b6ddcdd0ebff615c3e48` (1.15.2) on 2026-09-28. `AbstractRecruitEntity.hire(Player, RecruitsGroup, boolean)` posts the cancellable hired event, enforces the native player/faction unit limit, assigns owner and team, increments the player's unit count, resets the payment timer, and calls `setFollowState(2)` / `setAggroState(0)`. The boolean controls dialogue, not cost bypass. Follow state 2 stores the recruit's current position; `RecruitHoldPosGoal` returns it to that position. The guard uses this existing hiring path with native dialogue disabled and a dedicated confirmation, rather than rewriting ownership, counts or AI. Regular commands remain available.
