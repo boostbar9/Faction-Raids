@@ -1,3 +1,10 @@
+## 4.51.18 — Packet validation and snapshots
+
+- Reject negative dashboard collection counts and counts that cannot fit in the received payload before allocating entries.
+- Treasury ledger packets now copy their input and output arrays so queued snapshots and their equality/hash values remain stable.
+- Army map faction names truncate without splitting supplementary Unicode characters.
+- Packet layout and protocol version remain unchanged; valid existing payloads still decode.
+
 ## 4.51.17 — Prepared camp foundations and exits
 
 - Difficult-site fallback clears confirmed natural trees and canopy in the camp and entrance, with saved originals for cleanup.
@@ -1216,3 +1223,4 @@ No gameplay changes. Pure internal refactor to make future features easier and s
 - Added abandonment-based defeat instead of villager-based defeat.
 - Added hard per-invasion mob caps for integrated-server performance.
 - Added administrator stop command and player test command.
+
