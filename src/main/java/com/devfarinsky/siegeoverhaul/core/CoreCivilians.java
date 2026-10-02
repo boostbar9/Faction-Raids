@@ -39,26 +39,46 @@ public final class CoreCivilians {
         data.setDirty();
     }
     public static void onCoreTick(ServerLevel level,BlockPos pos) {
+        if(!level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD))return;
         var data=RaidSavedData.get(level.getServer());
-        for(var core:data.siegeCores.values()) if(core.contains("Position") && core.getLong("Position")==pos.asLong() && core.hasUUID("CivilianPendingOwner")) {
+        for(var entry:data.siegeCores.entrySet()) {
+            var core=entry.getValue();
+            if(!core.contains("Position") || core.getLong("Position")!=pos.asLong() || !core.hasUUID("CivilianPendingOwner"))continue;
+            if(ledger(data,entry.getKey()).getInt("Starters")>=2) {
+                core.remove("CivilianPendingOwner");data.setDirty();return;
+            }
             var player=level.getServer().getPlayerList().getPlayer(core.getUUID("CivilianPendingOwner"));
-            if(player!=null)tryStarters(player,pos);
+            if(player!=null)tryStarters(player,pos,false);
+            // Placement schedules one initial tick. Retry only the unfinished, loaded core;
+            // native block ticks survive saving without loading chunks or polling every frame.
+            if(core.hasUUID("CivilianPendingOwner"))level.scheduleTick(pos,CoreBlocks.CORE.get(),100);
+            return;
         }
     }
     public static void tryStarters(ServerPlayer player,BlockPos core) {
+        tryStarters(player,core,true);
+    }
+    private static void tryStarters(ServerPlayer player,BlockPos core,boolean feedback) {
         if(!SiegeCore.canUse(player,core))return;
         var data=RaidSavedData.get(player.server);var ledger=ledger(data,SiegeCore.key(player));
-        while(CivilianLedger.grantStarter(ledger,()->spawn(player,core,false)))data.setDirty();
-        data.setDirty();
+        while(CivilianLedger.grantStarter(ledger,()->spawn(player,core,false,feedback)))data.setDirty();
+        var savedCore=data.siegeCores.get(SiegeCore.key(player));
+        if(ledger.getInt("Starters")>=2) {
+            if(savedCore!=null && savedCore.hasUUID("CivilianPendingOwner")) {
+                savedCore.remove("CivilianPendingOwner");data.setDirty();
+            }
+        } else if(feedback && savedCore!=null && savedCore.hasUUID("CivilianPendingOwner")) {
+            player.serverLevel().scheduleTick(core,CoreBlocks.CORE.get(),100);
+        }
     }
     public static boolean recruit(ServerPlayer player,BlockPos core) {
-        return SiegeCore.canUse(player,core) && spawn(player,core,true);
+        return SiegeCore.canUse(player,core) && spawn(player,core,true,true);
     }
-    private static boolean spawn(ServerPlayer player,BlockPos core,boolean paid) {
+    private static boolean spawn(ServerPlayer player,BlockPos core,boolean paid,boolean feedback) {
         ServerLevel level=player.serverLevel();String key=SiegeCore.key(player);
         var data=RaidSavedData.get(player.server);var ledger=ledger(data,key);
         if(CivilianLedger.count(ledger)>=CivilianLedger.LIMIT) {
-            player.sendSystemMessage(Component.literal("Your faction has reached its 64-civilian limit."));return false;
+            if(feedback)player.sendSystemMessage(Component.literal("Your faction has reached its 64-civilian limit."));return false;
         }
         if(paid && PaymentSource.available(player,PRICE)<PRICE && !player.isCreative())return false;
         Villager villager=EntityType.VILLAGER.create(level);if(villager==null)return false;
@@ -70,7 +90,7 @@ public final class CoreCivilians {
                 if(HirePlacement.safe(level,villager,candidate,p->SiegeCore.claimed(level,p,key))) {site=candidate;break;}
             }
         }
-        if(site==null) {villager.discard();player.sendSystemMessage(Component.literal("Clear safe ground inside your claim beside the core for civilians."));return false;}
+        if(site==null) {villager.discard();if(feedback)player.sendSystemMessage(Component.literal("Clear safe ground inside your claim beside the core for civilians."));return false;}
         villager.moveTo(site.getX()+.5,site.getY(),site.getZ()+.5,0,0);
         villager.finalizeSpawn(level,level.getCurrentDifficultyAt(site),MobSpawnType.EVENT,null,null);
         initialize(villager,key,site);

@@ -2,6 +2,13 @@
 - Commissioned wall builders no longer keep a reachable path whose endpoint is underground or unsafe; they try validated surface standing space instead.
 - Being horizontally close to a buried job no longer suppresses surface access recovery, and cached work positions are rechecked before reuse. Native supplies, construction and ownership remain unchanged.
 
+## 4.51.15 — Starting civilian arrivals
+
+- If the core cannot safely place both starting civilians, it retries every five seconds while loaded. The placer must still be nearby and able to use the core; no terrain or chunks are forced open.
+- Automatic retries are quiet. Opening the core still explains blocked space or a full population, and resumes retries for older pending grants.
+- Completed lifetime grants clear their pending owner and stop retrying. Reloading, moving the core, or losing residents never grants replacement starters.
+
+
 ## 4.51.13
 - Coastal camp earthworks now try alternate dry entrances before rejecting a site whose preferred gate faces water.
 - Successful site selection saves the dry entrance for the gate, approach road and perimeter; failed earthworks leave no saved entrance. Existing camps retain their established gate orientation.
