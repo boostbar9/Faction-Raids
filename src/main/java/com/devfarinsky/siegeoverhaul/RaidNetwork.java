@@ -166,13 +166,9 @@ public final class RaidNetwork {
                 System.arraycopy(ledger, ledger.length - 64, trimmed, 0, 64);
                 ledger = trimmed;
             }
+            else ledger = ledger.clone();
         }
-        private static String bounded(String text,int limit) {
-            if(text==null)return "";
-            int end=Math.min(text.length(),limit);
-            if(end>0 && end<text.length() && Character.isHighSurrogate(text.charAt(end-1)))end--;
-            return text.substring(0,end);
-        }
+        @Override public int[] ledger() { return ledger.clone(); }
         public void encode(FriendlyByteBuf buffer) {
             buffer.writeVarInt(menuId);buffer.writeUtf(faction,128);
             buffer.writeCollection(members,(out,name)->out.writeUtf(name,64));
@@ -214,7 +210,7 @@ public final class RaidNetwork {
         public record Marker(int id, int x, int z, boolean equipment) {}
 
         public ArmyMarkers {
-            faction = faction == null ? "" : faction.substring(0, Math.min(faction.length(), 64));
+            faction = bounded(faction, 64);
             markers = markers == null ? java.util.List.of()
                     : markers.stream().filter(java.util.Objects::nonNull).limit(LIMIT).toList();
         }
@@ -346,17 +342,19 @@ public final class RaidNetwork {
                     buffer.readBoolean(), buffer.readBoolean()));
         }
 
-        private static java.util.List<String> readStringList(FriendlyByteBuf buffer) {
-            int n = buffer.readVarInt();
-            if (n <= 0) return java.util.List.of();
+        static java.util.List<String> readStringList(FriendlyByteBuf buffer) {
+            int n = readCount(buffer, 1);
+            if (n == 0) return java.util.List.of();
             java.util.List<String> list = new java.util.ArrayList<>(n);
             for (int i = 0; i < n; i++) list.add(buffer.readUtf());
             return java.util.List.copyOf(list);
         }
 
-        private static java.util.List<RaidEvents.JournalRow> readJournalRows(FriendlyByteBuf buffer) {
-            int n = buffer.readVarInt();
-            if (n <= 0) return java.util.List.of();
+        static java.util.List<RaidEvents.JournalRow> readJournalRows(FriendlyByteBuf buffer) {
+            // A row needs a long, four string lengths, and three VarInts even
+            // when every string is empty and each VarInt uses one byte.
+            int n = readCount(buffer, Long.BYTES + 4 + 3);
+            if (n == 0) return java.util.List.of();
             java.util.List<RaidEvents.JournalRow> rows = new java.util.ArrayList<>(n);
             for (int i = 0; i < n; i++) {
                 rows.add(new RaidEvents.JournalRow(
@@ -365,6 +363,15 @@ public final class RaidNetwork {
                         buffer.readUtf(), buffer.readVarInt()));
             }
             return java.util.List.copyOf(rows);
+        }
+
+        private static int readCount(FriendlyByteBuf buffer, int minimumEntryBytes) {
+            int count = buffer.readVarInt();
+            // Validate against the actual payload before allocating. This keeps
+            // valid wire formats unchanged without trusting a remote capacity.
+            if (count < 0 || count > buffer.readableBytes() / minimumEntryBytes)
+                throw new IllegalArgumentException("Invalid dashboard list size");
+            return count;
         }
 
         private static void handle(DashboardSync packet, Supplier<NetworkEvent.Context> contextSupplier) {
@@ -404,6 +411,12 @@ public final class RaidNetwork {
     public record CorePurchase(int menuId, int index, long rotation) {}
     public static void purchaseCoreOffer(int menuId, int index, long rotation) {
         CHANNEL.sendToServer(new CorePurchase(menuId, index, rotation));
+    }
+    private static String bounded(String text, int limit) {
+        if (text == null) return "";
+        int end = Math.min(text.length(), limit);
+        if (end > 0 && end < text.length() && Character.isHighSurrogate(text.charAt(end - 1))) end--;
+        return text.substring(0, end);
     }
     private RaidNetwork() {}
 }
