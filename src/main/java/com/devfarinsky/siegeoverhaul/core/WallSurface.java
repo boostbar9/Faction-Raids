@@ -14,17 +14,31 @@ final class WallSurface {
     private WallSurface() {}
 
     static BlockPos base(ServerLevel level, Set<ChunkPos> claim, BlockPos column) {
-        BlockPos base = ground(level, column);
-        if (base == null || base.getY() + TerritoryFortification.WALL_HEIGHT
-                + TerritoryFortification.CORNER_EXTRA > level.getMaxBuildHeight()) return null;
+        BlockPos surface = ground(level, column);
+        if (surface == null) return null;
+        BlockPos best = null;
         // An actual surface cannot be clamped to core height: that creates jobs
         // inside hills, or suspended over ravines. Reject inaccessible sections.
         for (int dx=-1; dx<=1; dx++) for (int dz=-1; dz<=1; dz++) {
             if (dx==0 && dz==0) continue;
-            BlockPos neighbor = base.offset(dx,0,dz);
+            BlockPos neighbor = surface.offset(dx,0,dz);
             if (!interior(claim, neighbor)) continue;
             BlockPos stand = ground(level, neighbor);
-            if (stand == null || Math.abs(stand.getY() - base.getY()) > 1) continue;
+            if (stand == null) continue;
+            // Raise shallow low spots to accessible interior ground. Never lower
+            // the blueprint into a hill or fill a gap deeper than our budget.
+            BlockPos base = surface.atY(Math.max(surface.getY(), stand.getY()));
+            if (base.getY() - surface.getY() > TerritoryFortification.FOUNDATION_DEPTH
+                    || Math.abs(stand.getY() - base.getY()) > 1
+                    || base.getY() + TerritoryFortification.WALL_HEIGHT
+                    + TerritoryFortification.CORNER_EXTRA > level.getMaxBuildHeight()) continue;
+            boolean foundationClear = true;
+            for (int y=surface.getY(); y<base.getY(); y++) {
+                BlockPos fill = surface.atY(y);
+                if (!TerritoryFortification.safeWallReplacement(level.getBlockState(fill))
+                        || !level.getWorldBorder().isWithinBounds(fill)) { foundationClear=false; break; }
+            }
+            if (!foundationClear) continue;
             boolean clear = true;
             for (int dy = 0; dy < 2; dy++) {
                 BlockPos p = stand.above(dy);
@@ -32,9 +46,9 @@ final class WallSurface {
                         || !TerritoryFortification.safeWallReplacement(level.getBlockState(p))
                         || level.getBlockState(p).is(Blocks.WITHER_ROSE)) { clear = false; break; }
             }
-            if (clear) return base;
+            if (clear && (best == null || base.getY() < best.getY())) best = base;
         }
-        return null;
+        return best;
     }
 
     private static boolean interior(Set<ChunkPos> claim, BlockPos p) {

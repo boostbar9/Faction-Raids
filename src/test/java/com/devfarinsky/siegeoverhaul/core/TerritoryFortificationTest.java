@@ -12,6 +12,24 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class TerritoryFortificationTest extends MinecraftTestSupport {
+    @Test void raisedWallPreviewContainsDirtBelowWallAtExactWorldPositions() {
+        var base=new BlockPos(-16,64,5);
+        var min=base.below(4);var max=base.above(2);
+        var cells=new java.util.LinkedHashMap<Long,String>();
+        for (int y=min.getY();y<=max.getY();y++) {
+            var cell=base.atY(y);
+            cells.put(cell.asLong(),TerritoryFortification.wallCellMaterial(base,cell,"minecraft:stone_bricks"));
+        }
+        var plan=TerritoryFortification.blueprint(cells,min,max);
+        int dirt=0,wall=0;
+        for (var value:plan.getList("blocks",net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            var cell=(net.minecraft.nbt.CompoundTag)value;
+            var actual=new BlockPos(min.getX()+cell.getInt("x"),min.getY()+cell.getInt("y"),min.getZ()+cell.getInt("z"));
+            assertEquals(cells.get(actual.asLong()),cell.getCompound("state").getString("Name"));
+            if (cell.getCompound("state").getString("Name").equals("minecraft:dirt")) dirt++;else wall++;
+        }
+        assertEquals(4,dirt);assertEquals(3,wall);
+    }
     @Test void wallCommissionDoesNotAuthorizeMiningExistingBuildingsOrFluids() {
         for(var block:java.util.List.of(Blocks.STONE_BRICKS,Blocks.OAK_PLANKS,Blocks.GLASS,
                 Blocks.OAK_LOG,Blocks.CHEST,Blocks.WATER,Blocks.LAVA))
