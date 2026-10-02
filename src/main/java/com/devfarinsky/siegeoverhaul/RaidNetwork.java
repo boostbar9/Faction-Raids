@@ -157,9 +157,9 @@ public final class RaidNetwork {
 
     public record CoreDetails(int menuId,String faction,java.util.List<String> members,int[] ledger) {
         public CoreDetails {
-            faction=bounded(faction,128);
+            faction=PacketText.bounded(faction,128);
             members=members==null?java.util.List.of():members.stream().filter(java.util.Objects::nonNull)
-                    .limit(100).map(name->bounded(name,64)).toList();
+                    .limit(100).map(name->PacketText.bounded(name,64)).toList();
             if (ledger == null) ledger = new int[0];
             if (ledger.length > 64) {
                 int[] trimmed = new int[64];
@@ -210,7 +210,7 @@ public final class RaidNetwork {
         public record Marker(int id, int x, int z, boolean equipment) {}
 
         public ArmyMarkers {
-            faction = bounded(faction, 64);
+            faction = PacketText.bounded(faction, 64);
             markers = markers == null ? java.util.List.of()
                     : markers.stream().filter(java.util.Objects::nonNull).limit(LIMIT).toList();
         }
@@ -412,11 +412,14 @@ public final class RaidNetwork {
     public static void purchaseCoreOffer(int menuId, int index, long rotation) {
         CHANNEL.sendToServer(new CorePurchase(menuId, index, rotation));
     }
-    private static String bounded(String text, int limit) {
-        if (text == null) return "";
-        int end = Math.min(text.length(), limit);
-        if (end > 0 && end < text.length() && Character.isHighSurrogate(text.charAt(end - 1))) end--;
-        return text.substring(0, end);
+    // Keep packet-only utilities separate from CHANNEL initialization.
+    private static final class PacketText {
+        private static String bounded(String text, int limit) {
+            if (text == null) return "";
+            int end = Math.min(text.length(), limit);
+            if (end > 0 && end < text.length() && Character.isHighSurrogate(text.charAt(end - 1))) end--;
+            return text.substring(0, end);
+        }
     }
     private RaidNetwork() {}
 }
