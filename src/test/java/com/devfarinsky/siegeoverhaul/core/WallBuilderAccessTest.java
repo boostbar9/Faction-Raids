@@ -75,12 +75,13 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         protected Area(EntityType<?> type, Level level) { super(type,level); }
         public java.util.UUID getPlayerUUID() { return null; }
         public boolean isDone() { return false; }
+        public boolean getFreeArea() { return false; }
         public boolean canWorkHere(Builder builder) { return false; }
         public void setBeingWorkedOn(boolean value) { }
         public void setTime(int value) { }
     }
     public record Cell(BlockPos pos) { public BlockPos getPos() { return pos; } }
-    public enum State { SELECT_WORK_AREA, MOVE_TO_WORK_AREA, DONE }
+    public enum State { SELECT_WORK_AREA, MOVE_TO_WORK_AREA, PREPARE_BREAK_BLOCKS, DONE }
     public static class NativeGoal extends Goal {
         public BlockPos blockPos;
         public Object state;
@@ -207,6 +208,48 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
     public static class ApproachingGoal extends NativeGoal {
         int ticks;
         @Override public void tick() { ticks++; state=State.DONE; }
+    }
+    @Test void nearWallStartsNativePreparationWithoutVisitingFarBlueprintCorner() throws Exception {
+        var area=commission();when(worker.getZ()).thenReturn(0.5);
+        when(area.getOnPos()).thenReturn(new BlockPos(200,20,200));
+        area.stackToPlace=java.util.List.of(new Cell(new BlockPos(21,64,0)),new Cell(new BlockPos(200,20,200)));
+        var nativeGoal=new NativeGoal();nativeGoal.state=State.MOVE_TO_WORK_AREA;
+        nativeGoal.blockPos=new BlockPos(200,20,200);
+        new WallBuilderAccess(worker,nativeGoal).tick();
+        assertEquals(State.PREPARE_BREAK_BLOCKS,nativeGoal.state);assertNull(nativeGoal.blockPos);
+        verify(nav).stop();verify(nav,never()).createPath(anySet(),anyInt());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+        assertEquals(2,area.stackToPlace.size(),"Workers must still consume supplies and construct the plan");
+    }
+    @Test void farWorkerRoutesToNearestRemainingWallInsteadOfItsBlueprintCorner() throws Exception {
+        var area=commission();when(worker.getZ()).thenReturn(0.5);
+        when(area.getOnPos()).thenReturn(new BlockPos(200,20,200));
+        area.stackToPlace=java.util.List.of(new Cell(new BlockPos(0,64,0)),new Cell(new BlockPos(200,20,200)));
+        var nativeGoal=new ApproachingGoal();nativeGoal.state=State.MOVE_TO_WORK_AREA;
+        new WallBuilderAccess(worker,nativeGoal).tick();
+        assertEquals(0,nativeGoal.ticks);
+        verify(nav).createPath(argThat((java.util.Set<BlockPos> sites)->!sites.isEmpty()
+                && sites.stream().allMatch(p->Math.abs(p.getX())<=3 && Math.abs(p.getZ())<=3)
+                && !sites.contains(new BlockPos(0,64,0))),eq(0));
+    }
+    @Test void manualClearingPhaseRemainsNativeEvenWithNearWall() throws Exception {
+        var area=commission();when(area.getFreeArea()).thenReturn(true);when(worker.getZ()).thenReturn(0.5);
+        area.stackToPlace=java.util.List.of(new Cell(new BlockPos(21,64,0)));
+        var nativeGoal=new NativeGoal();nativeGoal.state=State.MOVE_TO_WORK_AREA;
+        new WallBuilderAccess(worker,nativeGoal).tick();
+        assertEquals(State.MOVE_TO_WORK_AREA,nativeGoal.state);
+    }
+    @Test void supplyRestartReevaluatesRemainingWorkInsteadOfCompletedWallSection() throws Exception {
+        var area=commission();when(worker.getZ()).thenReturn(0.5);
+        area.stackToPlace=java.util.List.of(new Cell(new BlockPos(21,64,0)));
+        var nativeGoal=new NativeGoal();nativeGoal.state=State.MOVE_TO_WORK_AREA;
+        var goal=new WallBuilderAccess(worker,nativeGoal);goal.tick();
+        assertEquals(State.PREPARE_BREAK_BLOCKS,nativeGoal.state);
+        goal.stop();goal.start();nativeGoal.state=State.MOVE_TO_WORK_AREA;
+        area.stackToPlace=java.util.List.of(new Cell(new BlockPos(0,64,0)));
+        clearInvocations(nav);goal.tick();
+        assertEquals(State.MOVE_TO_WORK_AREA,nativeGoal.state);
+        verify(nav).createPath(anySet(),eq(0));
     }
     @Test void nativePhaseCannotAdvanceFromDirectlyUnderneathTheOwnedMarker() throws Exception {
         var area=commission();area.stackToPlace=java.util.List.of(new Cell(new BlockPos(0,64,0)));

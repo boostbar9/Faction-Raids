@@ -73,6 +73,23 @@ class CampTerrainTest extends MinecraftTestSupport {
         verify(level,never()).setBlock(any(),any(),anyInt());
     }
 
+    @Test void naturalWalkableCornerSlopesAreNotRejectedAsSevenBlockEarthworks() {
+        for (int x=-13;x<=13;x++) for (int z=-13;z<=13;z++)
+            heights.put(x+":"+z,64+Math.max(0,Math.abs(x)-9)+Math.max(0,Math.abs(z)-9));
+        assertEquals(center,CampTerrain.earthworksCenter(level,center));
+        var plan=CampTerrain.plan(level,center,p->false).orElseThrow();
+        assertTrue(plan.changes().isEmpty(),"This terrain already has a flat camp and walkable transition");
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
+    @Test void transitionReliefStillBoundsActualCutAndFillToSixBlocks() {
+        heights.put("10:0",77);
+        var reasons=new ArrayList<CampTerrain.Rejection>();
+        assertTrue(CampTerrain.plan(level,center,p->false,reasons::add).isEmpty());
+        assertEquals(List.of(CampTerrain.Rejection.RELIEF),reasons);
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
     @Test void chosenEarthworkPlaneStillRejectsWaterAndPlayerBlocks() {
         heights.put("0:0",68);
         BlockPos plane = CampTerrain.earthworksCenter(level,new BlockPos(0,68,0));

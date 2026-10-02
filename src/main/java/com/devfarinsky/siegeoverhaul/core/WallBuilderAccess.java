@@ -36,6 +36,7 @@ public final class WallBuilderAccess extends Goal {
     private BlockPos lastTarget, destination;
     private Entity reservedArea;
     private Set<Long> reservedColumns = Set.of();
+    private BlockPos approachTarget;
 
     WallBuilderAccess(Mob worker, Goal delegate) throws ReflectiveOperationException {
         this.worker = worker;
@@ -80,10 +81,11 @@ public final class WallBuilderAccess extends Goal {
     @Override public boolean canContinueToUse() { return delegate.canContinueToUse(); }
     @Override public boolean isInterruptable() { return delegate.isInterruptable(); }
     @Override public boolean requiresUpdateEveryTick() { return delegate.requiresUpdateEveryTick(); }
-    @Override public void start() { delegate.start(); }
-    @Override public void stop() { delegate.stop(); destination = null; lastTarget = null; pendingPath = null; pendingSites = Set.of(); }
+    @Override public void start() { reservedArea = null; approachTarget = null; delegate.start(); }
+    @Override public void stop() { delegate.stop(); reservedArea = null; approachTarget = null; destination = null; lastTarget = null; pendingPath = null; pendingSites = Set.of(); }
     @Override public void tick() {
         retainCommission();
+        if (approachCommission()) return;
         if (recoverBuriedApproach()) return;
         delegate.tick();
         if (!(worker.level() instanceof ServerLevel level) || worker.isPassenger()
@@ -104,6 +106,31 @@ public final class WallBuilderAccess extends Goal {
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             // Keep native behavior when a companion changes its public job state.
         }
+    }
+
+    /** The blueprint corner is a coordinate origin, not necessarily a reachable workplace. */
+    private boolean approachCommission() {
+        if (!(worker.level() instanceof ServerLevel level) || worker.isPassenger()
+                || worker.isLeashed() || worker.getTarget() != null) return false;
+        try {
+            if (!(stateField.get(delegate) instanceof Enum<?> state)
+                    || !state.name().equals("MOVE_TO_WORK_AREA")
+                    || !(areaField.get(worker) instanceof Entity area) || !isCommission(area)
+                    || !Boolean.FALSE.equals(area.getClass().getMethod("getFreeArea").invoke(area))) return false;
+            Object prepare = java.util.Arrays.stream(state.getDeclaringClass().getEnumConstants())
+                    .filter(value -> value.name().equals("PREPARE_BREAK_BLOCKS")).findFirst().orElseThrow();
+            if (!reserveColumns(area) || approachTarget == null) return false;
+            double dx = worker.getX() - (approachTarget.getX()+0.5);
+            double dz = worker.getZ() - (approachTarget.getZ()+0.5);
+            if (dx*dx+dz*dz < 20 && safeStandingSite(level,worker,BlockPos.containing(worker.position()))) {
+                worker.getNavigation().stop();
+                blockField.set(delegate,null);
+                stateField.set(delegate,prepare);
+                return false; // Workers scans the plan, requests supplies and places every block.
+            }
+            route(level,approachTarget,20);
+            return true; // Do not let the delegate replace this route with the corner marker.
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return false; }
     }
 
     private boolean isCommission(Entity area) {
@@ -136,7 +163,7 @@ public final class WallBuilderAccess extends Goal {
 
     private boolean reserveColumns(Entity area) throws ReflectiveOperationException {
         if (reservedArea == area) return true;
-        reservedArea=null;reservedColumns=Set.of();
+        reservedArea=null;reservedColumns=Set.of();approachTarget=null;
         pendingPath=null;pendingSites=Set.of();destination=null;lastTarget=null;
         var columns=new java.util.HashSet<Long>();
         for (String name : new String[]{"stackToPlace", "stackToPlaceMultiBlock"}) {
@@ -145,10 +172,17 @@ public final class WallBuilderAccess extends Goal {
             for (Object cell : iterable) {
                 BlockPos pos=(BlockPos)cell.getClass().getMethod("getPos").invoke(cell);
                 columns.add(pos.atY(0).asLong());
+                if (approachTarget == null || horizontalDistance(pos) < horizontalDistance(approachTarget))
+                    approachTarget = pos.immutable();
             }
         }
         reservedColumns=columns;reservedArea=area;
         return true;
+    }
+
+    private double horizontalDistance(BlockPos pos) {
+        double dx=worker.getX()-(pos.getX()+0.5), dz=worker.getZ()-(pos.getZ()+0.5);
+        return dx*dx+dz*dz;
     }
 
     /** Native SELECT_WORK_AREA otherwise replaces currentBuildArea with a competing nearby job. */
