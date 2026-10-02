@@ -203,6 +203,27 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         worker.currentBuildArea = area;
         return area;
     }
+
+    public static class ApproachingGoal extends NativeGoal {
+        int ticks;
+        @Override public void tick() { ticks++; state=State.DONE; }
+    }
+    @Test void nativePhaseCannotAdvanceFromDirectlyUnderneathTheOwnedMarker() throws Exception {
+        var area=commission();area.stackToPlace=java.util.List.of(new Cell(new BlockPos(0,64,0)));
+        when(worker.getX()).thenReturn(0.5);when(worker.getZ()).thenReturn(0.5);
+        when(worker.position()).thenReturn(new Vec3(0.5,60,0.5));
+        when(worker.getBoundingBox()).thenReturn(new AABB(0.2,60,0.2,0.8,61.8,0.8));
+        var nativeGoal=new ApproachingGoal();nativeGoal.state=State.MOVE_TO_WORK_AREA;
+        var goal=new WallBuilderAccess(worker,nativeGoal);
+        var path=mock(Path.class);when(path.canReach()).thenReturn(true);
+        when(path.getTarget()).thenReturn(new BlockPos(1,64,0));
+        when(nav.createPath(anySet(),eq(0))).thenReturn(path);
+        goal.tick();assertEquals(0,nativeGoal.ticks);assertEquals(State.MOVE_TO_WORK_AREA,nativeGoal.state);
+        verify(nav).moveTo(1,64,0,0.8);
+        when(worker.position()).thenReturn(new Vec3(1.5,64,0.5));
+        when(worker.getBoundingBox()).thenReturn(new AABB(1.2,64,0.2,1.8,65.8,0.8));
+        goal.tick();assertEquals(1,nativeGoal.ticks);
+    }
     @Test void assignedWallSurvivesCompetingBlueprintAndSupplyRestart() throws Exception {
         var wall = commission(); var other = mock(Area.class);
         var original = new SelectingGoal(worker, other);

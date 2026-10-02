@@ -84,6 +84,7 @@ public final class WallBuilderAccess extends Goal {
     @Override public void stop() { delegate.stop(); destination = null; lastTarget = null; pendingPath = null; pendingSites = Set.of(); }
     @Override public void tick() {
         retainCommission();
+        if (recoverBuriedApproach()) return;
         delegate.tick();
         if (!(worker.level() instanceof ServerLevel level) || worker.isPassenger()
                 || worker.isLeashed() || worker.getTarget() != null) return;
@@ -98,19 +99,7 @@ public final class WallBuilderAccess extends Goal {
             BlockPos target = blockField.get(delegate) instanceof BlockPos p ? p : null;
             if (state instanceof Enum<?> e && e.name().equals("MOVE_TO_WORK_AREA")) target = area.getOnPos();
             if (target == null) return;
-            if (reservedArea != area) {
-                var columns = new java.util.HashSet<Long>();
-                for (String fieldName : new String[]{"stackToPlace", "stackToPlaceMultiBlock"}) {
-                    Object cells = area.getClass().getField(fieldName).get(area);
-                    if (!(cells instanceof Iterable<?> iterable)) return;
-                    for (Object cell : iterable) {
-                        BlockPos pos = (BlockPos) cell.getClass().getMethod("getPos").invoke(cell);
-                        columns.add(pos.atY(0).asLong());
-                    }
-                }
-                reservedColumns = columns;
-                reservedArea = area;
-            }
+            if (!reserveColumns(area)) return;
             route(level, target, state instanceof Enum<?> e && e.name().equals("MOVE_TO_WORK_AREA") ? 20 : 40);
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             // Keep native behavior when a companion changes its public job state.
@@ -126,6 +115,40 @@ public final class WallBuilderAccess extends Goal {
                 && data.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER).equals(WorkersBridge.readOwner(area))
                 && data.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER).equals(WorkersBridge.readWorkerOwner(worker))
                 && WorkersBridge.workingOn(worker, area);
+    }
+
+    /** Do not let native horizontal reach advance construction while below the marker. */
+    private boolean recoverBuriedApproach() {
+        if (!(worker.level() instanceof ServerLevel level) || worker.isPassenger()
+                || worker.isLeashed() || worker.getTarget() != null) return false;
+        try {
+            if (!(stateField.get(delegate) instanceof Enum<?> state)
+                    || !state.name().equals("MOVE_TO_WORK_AREA")
+                    || !(areaField.get(worker) instanceof Entity area) || !isCommission(area)) return false;
+            BlockPos target=area.getOnPos();
+            double dx=worker.getX()-(target.getX()+0.5), dz=worker.getZ()-(target.getZ()+0.5);
+            if (dx*dx+dz*dz >= 20 || safeStandingSite(level,worker,BlockPos.containing(worker.position()))) return false;
+            if (!reserveColumns(area)) return false;
+            route(level,target,20);
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return false; }
+    }
+
+    private boolean reserveColumns(Entity area) throws ReflectiveOperationException {
+        if (reservedArea == area) return true;
+        reservedArea=null;reservedColumns=Set.of();
+        pendingPath=null;pendingSites=Set.of();destination=null;lastTarget=null;
+        var columns=new java.util.HashSet<Long>();
+        for (String name : new String[]{"stackToPlace", "stackToPlaceMultiBlock"}) {
+            Object cells=area.getClass().getField(name).get(area);
+            if (!(cells instanceof Iterable<?> iterable)) return false;
+            for (Object cell : iterable) {
+                BlockPos pos=(BlockPos)cell.getClass().getMethod("getPos").invoke(cell);
+                columns.add(pos.atY(0).asLong());
+            }
+        }
+        reservedColumns=columns;reservedArea=area;
+        return true;
     }
 
     /** Native SELECT_WORK_AREA otherwise replaces currentBuildArea with a competing nearby job. */
