@@ -1,0 +1,217 @@
+# Release-only workflow; exact artifact and source-tree checks run before upload.
+name: Publish tested 4.51.14 beta to CurseForge
+
+on:
+  push:
+    branches: [publish/curseforge-v4.51.14]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v4.51.14
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prevent duplicate release uploads
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          import json, os, urllib.request, urllib.parse
+          def get(path):
+              request = urllib.request.Request('https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(request) as response:
+                  return json.load(response)
+          current = int(os.environ['GITHUB_RUN_ID'])
+          params = urllib.parse.urlencode({'branch': 'publish/curseforge-v4.51.14', 'event': 'push', 'per_page': 100})
+          runs = get('actions/runs?' + params)['workflow_runs']
+          already_published = False
+          for run in runs:
+              if run['id'] == current or run['name'] != os.environ['GITHUB_WORKFLOW']:
+                  continue
+              for job in get('actions/runs/' + str(run['id']) + '/jobs')['jobs']:
+                  if any(step['name'] == 'Publish to CurseForge' and step['conclusion'] == 'success' for step in job['steps']):
+                      already_published = True
+          if int(os.environ.get('GITHUB_RUN_ATTEMPT', '1')) > 1:
+              for attempt in range(1, int(os.environ['GITHUB_RUN_ATTEMPT'])):
+                  for job in get(f'actions/runs/{current}/attempts/{attempt}/jobs')['jobs']:
+                      if any(step['name'] == 'Publish to CurseForge' and step['conclusion'] == 'success' for step in job['steps']):
+                          already_published = True
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('publish=' + str(not already_published).lower() + '\n')
+          print('Prior upload found; skipping duplicate.' if already_published else 'No prior successful upload; publishing once.')
+          CHECK
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Verify successful tested build and identical merged tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          import json, os, urllib.request
+          def get(path):
+              request = urllib.request.Request('https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(request) as response:
+                  return json.load(response)
+          tested_sha = '2394ae32bdd43b95c68c7ec27771433843a0d1cc'
+          merged_sha = 'a4f8181bf335e50d14d33426beb99990ebd1be41'
+          source_tree = '31db5f266a0f0eb426722d0baf6a53d4ad3452b8'
+          run = get('actions/runs/36960327288')
+          assert run['status'] == 'completed' and run['conclusion'] == 'success'
+          assert run['event'] == 'push' and run['head_sha'] == merged_sha
+          pr = get('pulls/244')
+          assert pr['merged'] and pr['merge_commit_sha'] == merged_sha and pr['head']['sha'] == tested_sha
+          assert get('branches/main')['commit']['sha'] == merged_sha
+          for sha in (run['head_sha'], pr['merge_commit_sha'], tested_sha):
+              assert get('git/commits/' + sha)['tree']['sha'] == source_tree
+          CHECK
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download exact tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: 36960327288
+          github-token: ${{ github.token }}
+          path: dist
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download regression results
+        uses: actions/download-artifact@v4
+        with:
+          name: regression-test-results
+          run-id: 36960327288
+          github-token: ${{ github.token }}
+          path: regression
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Verify tested bytes, metadata, dependencies, and regressions
+        run: |
+          python3 - <<'CHECK'
+          from pathlib import Path
+          import hashlib, zipfile, tomllib
+          import xml.etree.ElementTree as ET
+          jar = Path('dist/siegeoverhaul-4.51.14.jar')
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == '650f26612cc07e1d2dc7f4a6b67a685ededd6eedf874d323067bab860234cfc8'
+          Path('verified-sha256.txt').write_text(digest)
+          with zipfile.ZipFile(jar) as archive:
+              assert archive.testzip() is None
+              entries = set(archive.namelist())
+              for entry in (
+                  'com/devfarinsky/siegeoverhaul/RaidEvents.class',
+                  'com/devfarinsky/siegeoverhaul/scout/ScoutManager.class',
+                  'com/devfarinsky/siegeoverhaul/scout/RaiderScoutGoal.class',
+                  'com/devfarinsky/siegeoverhaul/scout/ScoutPlacement.class',
+                  'com/devfarinsky/siegeoverhaul/core/WallSurface.class',
+                  'com/devfarinsky/siegeoverhaul/core/TerritoryFortification.class',
+                  'com/devfarinsky/siegeoverhaul/camp/CampTerrain.class',
+                  'com/devfarinsky/siegeoverhaul/core/PlayerFortificationJobs.class',
+                  'com/devfarinsky/siegeoverhaul/compat/WorkersBridge.class',
+                  'com/devfarinsky/siegeoverhaul/naval/NavalFleet.class',
+              ):
+                  assert entry in entries, entry
+              assert b'm_20148_' in archive.read('com/devfarinsky/siegeoverhaul/core/PlayerFortificationJobs.class')
+              assert b'SiegeScoutRoute' in archive.read('com/devfarinsky/siegeoverhaul/scout/RaiderScoutGoal.class')
+              assert b'minecraft:dirt' in archive.read('com/devfarinsky/siegeoverhaul/core/TerritoryFortification.class')
+              for name in ('CampTerrain', 'CampPerimeter', 'WarGate'):
+                  assert b'CampEntranceFacing' in archive.read('com/devfarinsky/siegeoverhaul/camp/' + name + '.class')
+              access = archive.read('com/devfarinsky/siegeoverhaul/core/WallBuilderAccess.class')
+              assert b'recoverBuriedApproach' in access and b'safeStandingSite' in access
+              data = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+          mod = data['mods'][0]
+          assert mod['modId'] == 'siegeoverhaul' and mod['version'] == '4.51.14'
+          assert mod['displayTest'] == 'MATCH_VERSION'
+          dependencies = {entry['modId']: entry for entry in data['dependencies']['siegeoverhaul']}
+          for mod_id in ('recruits', 'workers', 'smallships', 'siegeweapons'):
+              assert dependencies[mod_id]['mandatory'] and dependencies[mod_id]['side'] == 'BOTH', mod_id
+          assert dependencies['recruits']['versionRange'] == '[1.15.2,)'
+          assert dependencies['workers']['versionRange'] == '[2.0.3,)'
+          for mod_id in ('ftbchunks', 'openpartiesandclaims', 'corpse', 'magistuarmory', 'musketmod', 'curios'):
+              assert not dependencies[mod_id]['mandatory'] and dependencies[mod_id]['side'] == 'BOTH', mod_id
+          assert dependencies['curios']['versionRange'] == '[5.14.1,6)'
+          assert not any(n.startswith('top/theillusivec4/curios/') for n in entries)
+          totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0)
+          reports = list(Path('regression').rglob('TEST-*.xml'))
+          assert reports
+          for report in reports:
+              result = ET.parse(report).getroot()
+              for key in totals:
+                  totals[key] += int(result.get(key, 0))
+          assert totals == {'tests': 876, 'failures': 0, 'errors': 0, 'skipped': 0}, totals
+          print('Verified', jar.name, digest, totals)
+          CHECK
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.51.14.jar
+          name: The Siege Overhaul v4.51.14 beta - Surface Wall Builder Recovery
+          version: v4.51.14
+          version-type: beta
+          changelog: |
+            # 4.51.14 beta
+
+            - Commissioned wall builders replace reachable underground approach endpoints with validated surface routes.
+            - Builders directly beneath their work marker wait for a safe approach before advancing construction.
+            - Cached standing positions are rechecked for changed ground and hazards.
+            - Native supplies, ownership and construction are preserved. Automatic excavation and scaffolding are not included.
+            - Forge build and 876 automated tests passed. No interactive Minecraft playtest performed.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            ftb-chunks-forge(optional)
+            open-parties-and-claims(optional)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+            curios(optional)
+          fail-mode: fail
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Record accepted upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          import json, os, hashlib
+          from pathlib import Path
+          digest = hashlib.sha256(Path('dist/siegeoverhaul-4.51.14.jar').read_bytes()).hexdigest()
+          assert digest == Path('verified-sha256.txt').read_text()
+          result = {
+              'version': '4.51.14',
+              'file_id': os.environ['RELEASE_FILE_ID'],
+              'url': os.environ['RELEASE_URL'],
+              'reviewed_source': '2394ae32bdd43b95c68c7ec27771433843a0d1cc',
+              'tested_source': 'a4f8181bf335e50d14d33426beb99990ebd1be41',
+              'merged_source': 'a4f8181bf335e50d14d33426beb99990ebd1be41',
+              'source_tree': '31db5f266a0f0eb426722d0baf6a53d4ad3452b8',
+              'build_run': 36960327288,
+              'tests': 876,
+              'sha256': digest,
+          }
+          assert result['file_id'] and result['url']
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Accepted upload (moderation/public availability separate): ' + json.dumps(result) + '\n')
+          RECEIPT
+
