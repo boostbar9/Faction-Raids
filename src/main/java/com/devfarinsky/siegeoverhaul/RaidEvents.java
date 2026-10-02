@@ -3445,7 +3445,9 @@ public final class RaidEvents {
             boolean terraformFallback = state != null && state.campTerraformed;
             if (terraformFallback) {
                 if (!com.devfarinsky.siegeoverhaul.camp.CampTerraforming.acceptableForTerraforming(
-                        level, center, anchor, RaidConfig.CAMP_TERRAFORM_MAX_DEPTH.get())) { rejSurface++; continue; }
+                        level, center, anchor, RaidConfig.LEVEL_CAMP_TERRAIN.get() && RaidConfig.CLEANUP_WAR_CAMPS.get()
+                                ? Math.max(RaidConfig.CAMP_TERRAFORM_MAX_DEPTH.get(), com.devfarinsky.siegeoverhaul.camp.CampTerrain.FALLBACK_MAX_CHANGE)
+                                : RaidConfig.CAMP_TERRAFORM_MAX_DEPTH.get())) { rejSurface++; continue; }
             } else if (!validCampSurface(level, center, anchor)) { rejSurface++; continue; }
             // v2.16.1 - keep the palisade clear of the boat spawn. The
             // camp footprint is 19x19 (9 per side + gate); anything closer

@@ -9,6 +9,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
@@ -38,6 +39,12 @@ class CampTerrainTest extends MinecraftTestSupport {
             edits.put(((BlockPos)c.getArgument(0)).immutable(), c.getArgument(1));
             return true;
         });
+    }
+
+    @AfterEach void releaseRecordedTerrainQueries() {
+        // Large forest/pond fixtures record tens of thousands of reads. Assertions
+        // are complete; do not retain their invocation history across the suite.
+        clearInvocations(level);
     }
 
     private BlockState state(BlockPos pos) {
@@ -299,7 +306,7 @@ class CampTerrainTest extends MinecraftTestSupport {
         edits.put(new BlockPos(2,62,2),Blocks.CHEST.defaultBlockState());
         assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isEmpty());
         edits.clear();
-        for(int x=-13;x<=13;x++)for(int z=-13;z<=13;z++)edits.put(new BlockPos(x,63,z),Blocks.WATER.defaultBlockState());
+        for(int x=-27;x<=27;x++)for(int z=-27;z<=27;z++)edits.put(new BlockPos(x,63,z),Blocks.WATER.defaultBlockState());
         var reasons=new ArrayList<CampTerrain.Rejection>();
         assertTrue(CampTerrain.plan(level,center,p->false,reasons::add,true).isEmpty());
         assertEquals(List.of(CampTerrain.Rejection.NO_LAND_EXIT),reasons);
@@ -307,7 +314,7 @@ class CampTerrainTest extends MinecraftTestSupport {
     }
 
     @Test void fallbackRotatesWaterFacingEntranceAndPersistsOnlyAfterSuccessfulApply() {
-        for(int z=-1;z<=1;z++)edits.put(new BlockPos(13,63,z),Blocks.WATER.defaultBlockState());
+        for(int x=17;x<=27;x++)for(int z=-1;z<=1;z++)edits.put(new BlockPos(x,63,z),Blocks.WATER.defaultBlockState());
         var reasons=new ArrayList<CampTerrain.Rejection>();
         var plan=CampTerrain.plan(level,center,p->false,reasons::add,true,net.minecraft.core.Direction.EAST).orElseThrow();
         assertEquals(net.minecraft.core.Direction.SOUTH,plan.entrance());
@@ -329,9 +336,9 @@ class CampTerrainTest extends MinecraftTestSupport {
         assertFalse(raid.campaign.contains("CampEntranceFacing"));
     }
 
-    @Test void fallbackStillRequiresClaimsAndTheOriginalMutationBudget() {
+    @Test void fallbackStillRequiresClaimsAndItsFiniteExpandedMutationBudget() {
         assertTrue(CampTerrain.plan(level,center,p->true,r->{},true).isEmpty());
-        for(int x=-10;x<=10;x++)for(int z=-10;z<=10;z++)for(int y=61;y<64;y++)
+        for(int x=-16;x<=16;x++)for(int z=-16;z<=16;z++)for(int y=59;y<64;y++)
             edits.put(new BlockPos(x,y,z),Blocks.WATER.defaultBlockState());
         var reasons=new ArrayList<CampTerrain.Rejection>();
         assertTrue(CampTerrain.plan(level,center,p->false,reasons::add,true).isEmpty());
@@ -342,6 +349,119 @@ class CampTerrainTest extends MinecraftTestSupport {
     private int plannedHeight(int x,int z) {
         for(int y=75;y>=50;y--)if(!state(new BlockPos(x,y,z)).isAir())return y+1;
         throw new AssertionError("Missing ground");
+    }
+
+    @Test void fallbackLevelsLargerNaturalMoundWithoutRelaxingOrdinaryScouting() {
+        heights.put("0:0",74);
+        assertTrue(CampTerrain.plan(level,center,p->false).isEmpty());
+        assertEquals(center,CampTerrain.earthworksCenter(level,center,true));
+        var plan=CampTerrain.plan(level,center,p->false,r->{},true).orElseThrow();
+        assertEquals(10,plan.changes().size());assertTrue(CampTerrain.apply(level,raid,plan));
+        assertTrue(state(new BlockPos(0,64,0)).isAir());
+        assertEquals(10,RaidState.load(raid.save()).campBlocks.size());
+    }
+
+    @Test void fallbackBuildsSupportedDirtFoundationAcrossLargeShallowPond() {
+        for(int x=-16;x<=16;x++)for(int z=-16;z<=16;z++)for(int y=61;y<64;y++)
+            edits.put(new BlockPos(x,y,z),Blocks.WATER.defaultBlockState());
+        var plan=CampTerrain.plan(level,center,p->false,r->{},true).orElseThrow();
+        assertEquals(31*31*3+3*3,plan.changes().size());assertTrue(CampTerrain.apply(level,raid,plan));
+        for(int y=61;y<64;y++)assertTrue(state(new BlockPos(0,y,0)).is(Blocks.DIRT));
+        assertTrue(state(new BlockPos(0,60,0)).is(Blocks.DIRT));
+        var saved=RaidState.load(raid.save());
+        assertEquals("minecraft:water",saved.campBlocks.get(new BlockPos(0,61,0).asLong()).getCompound("Original").getString("Name"));
+    }
+
+    @Test void shallowWaterVegetationIsFilledAndItsOriginalPlantStateIsSaved() {
+        for(var plant:List.of(Blocks.KELP,Blocks.KELP_PLANT,Blocks.SEAGRASS,Blocks.TALL_SEAGRASS)) {
+            edits.clear();edits.put(new BlockPos(0,61,0),Blocks.WATER.defaultBlockState());
+            edits.put(new BlockPos(0,62,0),Blocks.WATER.defaultBlockState());
+            edits.put(new BlockPos(0,63,0),plant.defaultBlockState());
+            var plan=CampTerrain.plan(level,center,p->false,r->{},true).orElseThrow();
+            assertEquals(3,plan.changes().size());
+            assertTrue(plan.changes().stream().allMatch(c->c.after().is(Blocks.DIRT)));
+            assertTrue(plan.changes().stream().anyMatch(c->c.before().is(plant)));
+        }
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
+    @Test void fallbackBuildsCausewayToDryLandingAndSavesWater() {
+        for(var side:net.minecraft.core.Direction.Plane.HORIZONTAL)
+            for(int distance=17;distance<=19;distance++)for(int offset=-1;offset<=1;offset++)
+                for(int y=61;y<64;y++)edits.put(center.relative(side,distance)
+                        .relative(side.getClockWise(),offset).atY(y),Blocks.WATER.defaultBlockState());
+        var plan=CampTerrain.plan(level,center,p->false,r->{},true,net.minecraft.core.Direction.EAST).orElseThrow();
+        assertEquals(net.minecraft.core.Direction.EAST,plan.entrance());assertEquals(27,plan.changes().size());
+        assertTrue(CampTerrain.apply(level,raid,plan));
+        for(int distance=17;distance<=19;distance++)for(int y=61;y<64;y++)
+            assertTrue(state(new BlockPos(distance,y,0)).is(Blocks.DIRT));
+        assertTrue(state(new BlockPos(20,63,0)).is(Blocks.GRASS_BLOCK));
+        assertEquals("minecraft:water",RaidState.load(raid.save()).campBlocks.get(new BlockPos(18,62,0).asLong()).getCompound("Original").getString("Name"));
+    }
+
+    @Test void confirmedTreesAtEntranceAreClearedAndSavedWithCampCanopy() {
+        for(int x=17;x<=19;x++)for(int z=-1;z<=1;z++) {
+            heights.put(x+":"+z,70);
+            for(int y=63;y<70;y++)edits.put(new BlockPos(x,y,z),(y==63?Blocks.GRASS_BLOCK:Blocks.OAK_LOG).defaultBlockState());
+            edits.put(new BlockPos(x,70,z),Blocks.OAK_LEAVES.defaultBlockState());
+        }
+        var plan=CampTerrain.plan(level,center,p->false,r->{},true,net.minecraft.core.Direction.EAST).orElseThrow();
+        assertEquals(net.minecraft.core.Direction.EAST,plan.entrance());assertTrue(CampTerrain.apply(level,raid,plan));
+        assertTrue(state(new BlockPos(18,64,0)).isAir());
+        assertEquals("minecraft:oak_log",RaidState.load(raid.save()).campBlocks.get(new BlockPos(18,64,0).asLong()).getCompound("Original").getString("Name"));
+    }
+
+    @Test void tallConfirmedNaturalTreesAreClearedButUnboundedTimberIsRejected() {
+        heights.put("0:0",88);
+        for(int y=63;y<88;y++)edits.put(new BlockPos(0,y,0),(y==63?Blocks.GRASS_BLOCK:Blocks.SPRUCE_LOG).defaultBlockState());
+        edits.put(new BlockPos(0,88,0),Blocks.SPRUCE_LEAVES.defaultBlockState());
+        assertEquals(center,CampTerrain.earthworksCenter(level,center,true));
+        var plan=CampTerrain.plan(level,center,p->false,r->{},true).orElseThrow();
+        assertEquals(25,plan.changes().size());
+        edits.clear();heights.put("0:0",104);
+        for(int y=63;y<104;y++)edits.put(new BlockPos(0,y,0),(y==63?Blocks.GRASS_BLOCK:Blocks.SPRUCE_LOG).defaultBlockState());
+        edits.put(new BlockPos(0,104,0),Blocks.SPRUCE_LEAVES.defaultBlockState());
+        assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isEmpty());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
+    @Test void searchPrefilterUsesSameGroundSurveyForDenseTallForest() {
+        for(int x=-9;x<=9;x+=3)for(int z=-9;z<=9;z+=3) {
+            heights.put(x+":"+z,88);
+            for(int y=63;y<88;y++)edits.put(new BlockPos(x,y,z),(y==63?Blocks.GRASS_BLOCK:Blocks.SPRUCE_LOG).defaultBlockState());
+            edits.put(new BlockPos(x,88,z),Blocks.SPRUCE_LEAVES.defaultBlockState());
+        }
+        assertTrue(CampTerraforming.acceptableForTerraforming(level,center,center,12));
+        assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isPresent());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
+    @Test void exitNeverExcavatesPlayerBlocksOrCrossesExcludedClaims() {
+        for(var side:net.minecraft.core.Direction.Plane.HORIZONTAL)
+            edits.put(center.relative(side,18),Blocks.CHEST.defaultBlockState());
+        assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isEmpty());
+        edits.clear();
+        assertTrue(CampTerrain.plan(level,center,p->Math.max(Math.abs(p.getX()),Math.abs(p.getZ()))>=18,r->{},true).isEmpty());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
+    @Test void entranceRequiresThreeDryRowsRatherThanAnIsolatedLandingBlock() {
+        for(var side:net.minecraft.core.Direction.Plane.HORIZONTAL)
+            for(int distance=17;distance<=27;distance++)if(distance!=19)
+                for(int offset=-1;offset<=1;offset++)edits.put(center.relative(side,distance)
+                        .relative(side.getClockWise(),offset).below(),Blocks.WATER.defaultBlockState());
+        var reasons=new ArrayList<CampTerrain.Rejection>();
+        assertTrue(CampTerrain.plan(level,center,p->false,reasons::add,true).isEmpty());
+        assertEquals(List.of(CampTerrain.Rejection.NO_LAND_EXIT),reasons);
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
+    @Test void exitDoesNotSurveyUnloadedColumnsOrInstallIncompleteCauseway() {
+        when(level.hasChunkAt(any())).thenAnswer(i->Math.max(Math.abs(((BlockPos)i.getArgument(0)).getX()),
+                Math.abs(((BlockPos)i.getArgument(0)).getZ()))<=17);
+        assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isEmpty());
+        verify(level,never()).getHeight(any(),eq(18),anyInt());
+        verify(level,never()).setBlock(any(),any(),anyInt());
     }
 
     @Test void diagnosticsIdentifyTheFirstFailureWithoutMutatingTerrain() {

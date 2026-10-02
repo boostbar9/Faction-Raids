@@ -334,9 +334,7 @@ public final class CampTerraforming {
                 // logs, so a dense forest reads as tall terrain. Walk
                 // down through log / leaf blocks to find the true ground
                 // height, and use that for the variance check.
-                int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                        column.getX(), column.getZ());
-                y = seeThroughTrees(level, column.getX(), column.getZ(), y);
+                int y = CampGround.survey(level,column,true).ground();
                 if (Math.abs(y - center.getY()) > maxVariance) { if (++used > rejectSlack) return false; continue; }
                 // Reject if a player build sits inside the footprint.
                 BlockState surface = level.getBlockState(new BlockPos(column.getX(), y - 1, column.getZ()));
@@ -350,23 +348,6 @@ public final class CampTerraforming {
             }
         }
         return true;
-    }
-
-    /**
-     * v4.40.0 - trees fool the MOTION_BLOCKING heightmap into reporting a
-     * high ground. Walk down from {@code topY} past any log / leaf
-     * blocks until we hit real terrain, so a forest camp doesn't reject
-     * on 'height variance' when the actual ground below the canopy is
-     * perfectly flat.
-     */
-    private static int seeThroughTrees(ServerLevel level, int x, int z, int topY) {
-        for (int dy = 0; dy < 16; dy++) {
-            int y = topY - dy;
-            BlockState state = level.getBlockState(new BlockPos(x, y - 1, z));
-            if (isTreeMaterial(state)) continue;
-            return y;
-        }
-        return topY;
     }
 
     /** v4.40.0 - is this block part of a tree the terraformer should chop? */
