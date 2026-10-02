@@ -48,6 +48,8 @@ public final class WarGate {
         if(!raid.warGate.isEmpty() || raid.campPos==null)return false;
         Vec3 d=Vec3.atCenterOf(objective).subtract(Vec3.atCenterOf(raid.campPos));
         Direction preferred=Math.abs(d.x)>=Math.abs(d.z)?(d.x>=0?Direction.EAST:Direction.WEST):(d.z>=0?Direction.SOUTH:Direction.NORTH);
+        if (raid.campaign.contains("CampEntranceFacing", net.minecraft.nbt.Tag.TAG_INT))
+            preferred=Direction.from2DDataValue(raid.campaign.getInt("CampEntranceFacing"));
         for(Direction front:new Direction[]{preferred,preferred.getClockWise(),preferred.getCounterClockWise(),preferred.getOpposite()})
         for(int distance:new int[]{14,17,20,24}) {
             BlockPos c=raid.campPos.relative(front,distance);int y=Integer.MIN_VALUE;

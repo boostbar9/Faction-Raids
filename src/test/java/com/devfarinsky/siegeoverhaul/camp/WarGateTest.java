@@ -13,6 +13,26 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 class WarGateTest extends MinecraftTestSupport {
+    @Test void gateAndRoadPreferTheSavedDryEntranceOverTheObjectiveDirection() {
+        ServerLevel level=mock(ServerLevel.class);
+        when(level.hasChunkAt(any())).thenReturn(true);
+        when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(64);
+        when(level.getBlockState(any())).thenAnswer(a->((BlockPos)a.getArgument(0)).getY()<64
+                ?Blocks.DIRT.defaultBlockState():Blocks.AIR.defaultBlockState());
+        when(level.getFluidState(any())).thenReturn(net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState());
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        raid.campPos=new BlockPos(8,64,8);
+        raid.campaign.putInt("CampEntranceFacing",Direction.SOUTH.get2DDataValue());
+        raid=RaidSavedData.RaidState.load(raid.save());
+        try(var roads=mockStatic(CampRoad.class);var assembly=mockStatic(GateAssembly.class)) {
+            roads.when(()->CampRoad.plan(eq(level),any(),any(),eq(Direction.SOUTH)))
+                    .thenReturn(Optional.of(new CampRoad.Plan(Map.of(),Map.of(),Set.of())));
+            assembly.when(()->GateAssembly.install(eq(level),any())).thenReturn(true);
+            assertTrue(WarGate.plan(level,raid,new BlockPos(100,64,8)));
+            assertEquals(Direction.SOUTH,WarGate.facing(raid));
+            assertEquals(Direction.SOUTH,CampPerimeter.mainGateSide(raid));
+        }
+    }
     @Test void savedEnemyKeepIsProtectedEvenWithoutWarGateCenter() {
         var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
         BlockPos core=new BlockPos(8,65,8);

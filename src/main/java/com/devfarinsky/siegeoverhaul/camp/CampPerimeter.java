@@ -79,6 +79,8 @@ public final class CampPerimeter {
         if (raid.warGate.contains("PerimeterGateFacing", net.minecraft.nbt.Tag.TAG_INT))
             return Direction.from2DDataValue(raid.warGate.getInt("PerimeterGateFacing"));
         if (raid.warGate.contains("Center", net.minecraft.nbt.Tag.TAG_LONG)) return WarGate.facing(raid);
+        if (raid.campaign.contains("CampEntranceFacing", net.minecraft.nbt.Tag.TAG_INT))
+            return Direction.from2DDataValue(raid.campaign.getInt("CampEntranceFacing"));
         double x = -Math.cos(raid.approachAngle), z = -Math.sin(raid.approachAngle);
         return Math.abs(x) >= Math.abs(z)
                 ? (x >= 0 ? Direction.EAST : Direction.WEST)

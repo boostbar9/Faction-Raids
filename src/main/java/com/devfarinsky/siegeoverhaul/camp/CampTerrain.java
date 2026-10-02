@@ -25,7 +25,8 @@ public final class CampTerrain {
     private CampTerrain() {}
 
     public record Change(BlockPos pos, BlockState before, BlockState after) {}
-    public record Plan(List<Change> changes) {
+    public record Plan(List<Change> changes, net.minecraft.core.Direction entrance) {
+        public Plan(List<Change> changes) { this(changes, null); }
         public Plan { changes = List.copyOf(changes); }
     }
 
@@ -94,7 +95,15 @@ public final class CampTerrain {
                 if (Math.max(Math.abs(dx), Math.abs(dz)) > radius) boundary.add(column);
             }
         }
-        if (fallback && !dryExit(level,center,original,radius+1,gateSide)) return reject(rejected,Rejection.NO_LAND_EXIT);
+        net.minecraft.core.Direction entrance = null;
+        if (fallback) {
+            var preferred = gateSide == null ? net.minecraft.core.Direction.NORTH : gateSide;
+            for (var direction : new net.minecraft.core.Direction[]{preferred, preferred.getClockWise(),
+                    preferred.getCounterClockWise(), preferred.getOpposite()}) {
+                if (dryExit(level,center,original,radius+1,direction)) { entrance=direction; break; }
+            }
+            if (entrance == null) return reject(rejected,Rejection.NO_LAND_EXIT);
+        }
         // Extend the fixed flat camp and actual untouched boundary with one-block slopes.
         // Independent ring clamps can leave two-block steps along a ring. Use all boundary
         // constraints instead, and leave unrelated steps BETWEEN untouched columns alone.
@@ -154,7 +163,7 @@ public final class CampTerrain {
                 if (changes.size() > MAX_BLOCKS) return reject(rejected, Rejection.BUDGET);
             }
         }
-        return Optional.of(new Plan(changes));
+        return Optional.of(new Plan(changes, entrance));
     }
 
     private static boolean dryExit(ServerLevel level,BlockPos center,Map<BlockPos,Integer> heights,int edge,net.minecraft.core.Direction gateSide) {
@@ -225,6 +234,8 @@ public final class CampTerrain {
                 return false;
             }
         }
+        if (plan.entrance() != null)
+            raid.campaign.putInt("CampEntranceFacing", plan.entrance().get2DDataValue());
         return true;
     }
 
