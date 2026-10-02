@@ -1,3 +1,7 @@
+## 4.51.12
+- Wall commissions can raise shallow perimeter depressions to accessible interior work height, using dirt foundations supplied and constructed through Workers 2.
+- Foundation planning stays within eight blocks of natural ground and preserves buildings, fluids and deep gaps. The preview and material list include the dirt needed.
+
 ## 4.51.11
 - Scout missions now retry temporary placement failures instead of being silently consumed when their scheduled chunks are unloaded or no safe route endpoint is available.
 - Retries preserve the promised attacking faction, intel and bounty state, and remain bounded by the mission's original expiration time.

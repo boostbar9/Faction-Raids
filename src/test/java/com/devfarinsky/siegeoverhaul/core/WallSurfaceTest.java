@@ -42,6 +42,32 @@ class WallSurfaceTest extends MinecraftTestSupport {
         s.heights=p->p.getX()==0?80:64;assertNull(s.base(0,5));
         s.heights=p->p.getX()==0?65:64;assertEquals(new BlockPos(0,65,5),s.base(0,5));
     }
+    @Test void shallowDepressionsReceiveSupportedDirtFoundationsAtInteriorWorkHeight() {
+        var s=new Site();
+        for (int depth : new int[]{2,4,8}) {
+            s.heights=p->p.getX()==0?64-depth:64;
+            BlockPos base=s.base(0,5);
+            assertEquals(new BlockPos(0,64,5),base);
+            assertEquals(depth,TerritoryFortification.foundationDepth(s.level,base));
+            for (int y=64-depth;y<64;y++)
+                assertEquals("minecraft:dirt",TerritoryFortification.wallCellMaterial(base,new BlockPos(0,y,5),"minecraft:stone_bricks"));
+            assertEquals("minecraft:stone_bricks",TerritoryFortification.wallCellMaterial(base,base,"minecraft:stone_bricks"));
+        }
+        verify(s.level,never()).setBlock(any(),any(),anyInt());
+    }
+    @Test void foundationCannotFillThroughPlayerBlocksFluidsOrHazards() {
+        var s=new Site();s.heights=p->p.getX()==0?60:64;
+        for (var block:List.of(Blocks.OAK_PLANKS,Blocks.CHEST,Blocks.WATER,Blocks.LAVA,Blocks.OAK_LOG)) {
+            s.edits.put(new BlockPos(0,62,5),block.defaultBlockState());
+            assertNull(s.base(0,5),block.toString());
+        }
+        s.edits.clear();s.heights=p->p.getX()==0?55:64;
+        assertNull(s.base(0,5),"Nine-block gap exceeds the foundation budget");
+    }
+    @Test void lowestAccessibleWorkSiteAvoidsUnnecessaryDirtFill() {
+        var s=new Site();s.heights=p->p.getX()==0?60:p.getZ()==4?60:64;
+        assertEquals(new BlockPos(0,60,5),s.base(0,5));
+    }
     @Test void workSpaceOnAnotherFutureWallColumnDoesNotQualify() {
         var s=new Site();
         for(int z=4;z<=6;z++)s.edits.put(new BlockPos(1,65,z),Blocks.COBWEB.defaultBlockState());

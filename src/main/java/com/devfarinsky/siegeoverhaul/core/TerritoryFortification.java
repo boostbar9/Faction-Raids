@@ -195,7 +195,7 @@ public final class TerritoryFortification {
         // any column that sits above a pit or ledge left the builder trying
         // to walk on missing ground: Workers 2's pathfinder either falls into
         // the pit or never converges, so the whole wall stalls behind the
-        // gap. Filling the gap with wall material closes the perimeter and
+        // gap. Filling the gap with supplied dirt supports the perimeter and
         // gives the builder something to stand on for the next column.
         Map<BlockPos, Integer> foundationBelow = new HashMap<>();
         for (BlockPos base : wallColumns) {
@@ -232,9 +232,10 @@ public final class TerritoryFortification {
                 // A commission is not permission to mine an existing house.
                 // Native Workers can clear cells in its blueprint; omit solid
                 // obstructions, not only containers, before handing it the job.
-                if (existing.getBlock() == block) continue;
+                String cellMaterial = wallCellMaterial(base, p, mat.blockId());
+                if (ForgeRegistries.BLOCKS.getKey(existing.getBlock()).toString().equals(cellMaterial)) continue;
                 if (!safeWallReplacement(existing)) { protectedCells++; continue; }
-                blocks.put(p.asLong(), mat.blockId());
+                blocks.put(p.asLong(), cellMaterial);
             }
         }
         if (blocks.isEmpty()) {
@@ -324,10 +325,10 @@ public final class TerritoryFortification {
                 itemLine.append(s.getCount()).append(" x ").append(itemName);
                 if (primaryItem == null) primaryItem = itemName;
             }
-            boolean materialMismatch = primaryItem != null && !primaryItem.equalsIgnoreCase(mat.label());
+            boolean materialMismatch = required.size() == 1 && primaryItem != null && !primaryItem.equalsIgnoreCase(mat.label());
             player.sendSystemMessage(Component.literal(
-                    "Fortify Perimeter commissioned. " + blocks.size() + " " + mat.label()
-                            + " blocks queued for the builder."));
+                    "Fortify Perimeter commissioned. " + blocks.size()
+                            + " blocks queued, including any dirt foundations."));
             BlockPos marker = build.blockPosition();
             player.sendSystemMessage(Component.literal("Wall shovel marker: " + marker.getX() + ", "
                     + marker.getY() + ", " + marker.getZ() + ". Close the menu and approach this corner. "
@@ -385,6 +386,11 @@ public final class TerritoryFortification {
     static boolean safeWallReplacement(BlockState state) {
         return !state.hasBlockEntity() && state.getFluidState().isEmpty()
                 && (state.isAir() || com.devfarinsky.siegeoverhaul.camp.CampVegetation.plant(state));
+    }
+
+    /** Foundations use supplied dirt; visible walls retain the chosen material. */
+    static String wallCellMaterial(BlockPos base, BlockPos cell, String wallMaterial) {
+        return cell.getY() < base.getY() ? "minecraft:dirt" : wallMaterial;
     }
 
     /**
