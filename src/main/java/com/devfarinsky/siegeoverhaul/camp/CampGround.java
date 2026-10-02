@@ -40,7 +40,9 @@ final class CampGround {
         return new Column(top,top,false);
     }
     static boolean water(BlockState state) {
-        return state.is(Blocks.WATER); // Never lava or waterlogged player blocks.
+        return state.is(Blocks.WATER) || state.is(Blocks.KELP) || state.is(Blocks.KELP_PLANT)
+                || state.is(Blocks.SEAGRASS) || state.is(Blocks.TALL_SEAGRASS);
+        // Only water and natural aquatic vegetation; never lava or waterlogged player blocks.
     }
     private CampGround() {}
 }

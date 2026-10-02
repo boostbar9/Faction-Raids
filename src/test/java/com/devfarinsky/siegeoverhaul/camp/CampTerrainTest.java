@@ -365,6 +365,19 @@ class CampTerrainTest extends MinecraftTestSupport {
         assertEquals("minecraft:water",saved.campBlocks.get(new BlockPos(0,61,0).asLong()).getCompound("Original").getString("Name"));
     }
 
+    @Test void shallowWaterVegetationIsFilledAndItsOriginalPlantStateIsSaved() {
+        for(var plant:List.of(Blocks.KELP,Blocks.KELP_PLANT,Blocks.SEAGRASS,Blocks.TALL_SEAGRASS)) {
+            edits.clear();edits.put(new BlockPos(0,61,0),Blocks.WATER.defaultBlockState());
+            edits.put(new BlockPos(0,62,0),Blocks.WATER.defaultBlockState());
+            edits.put(new BlockPos(0,63,0),plant.defaultBlockState());
+            var plan=CampTerrain.plan(level,center,p->false,r->{},true).orElseThrow();
+            assertEquals(3,plan.changes().size());
+            assertTrue(plan.changes().stream().allMatch(c->c.after().is(Blocks.DIRT)));
+            assertTrue(plan.changes().stream().anyMatch(c->c.before().is(plant)));
+        }
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
     @Test void fallbackBuildsCausewayToDryLandingAndSavesWater() {
         for(var side:net.minecraft.core.Direction.Plane.HORIZONTAL)
             for(int distance=17;distance<=19;distance++)for(int offset=-1;offset<=1;offset++)
