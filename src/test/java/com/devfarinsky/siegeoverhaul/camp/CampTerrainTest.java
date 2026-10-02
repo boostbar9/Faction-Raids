@@ -289,12 +289,27 @@ class CampTerrainTest extends MinecraftTestSupport {
         verify(level,never()).setBlock(any(),any(),anyInt());
     }
 
-    @Test void fallbackRequiresDryGroundOnTheActualGateSide() {
+    @Test void fallbackRotatesWaterFacingEntranceAndPersistsOnlyAfterSuccessfulApply() {
         for(int z=-1;z<=1;z++)edits.put(new BlockPos(13,63,z),Blocks.WATER.defaultBlockState());
         var reasons=new ArrayList<CampTerrain.Rejection>();
-        assertTrue(CampTerrain.plan(level,center,p->false,reasons::add,true,net.minecraft.core.Direction.EAST).isEmpty());
-        assertEquals(List.of(CampTerrain.Rejection.NO_LAND_EXIT),reasons);
-        assertTrue(CampTerrain.plan(level,center,p->false,r->{},true,net.minecraft.core.Direction.WEST).isPresent());
+        var plan=CampTerrain.plan(level,center,p->false,reasons::add,true,net.minecraft.core.Direction.EAST).orElseThrow();
+        assertEquals(net.minecraft.core.Direction.SOUTH,plan.entrance());
+        assertTrue(reasons.isEmpty());
+        assertFalse(raid.campaign.contains("CampEntranceFacing"));
+        verify(level,never()).setBlock(any(),any(),anyInt());
+        assertTrue(CampTerrain.apply(level,raid,plan));
+        var saved=RaidState.load(raid.save());
+        assertEquals(net.minecraft.core.Direction.SOUTH,CampPerimeter.mainGateSide(saved));
+        assertEquals(net.minecraft.core.Direction.WEST,CampTerrain.plan(level,center,p->false,r->{},true,
+                net.minecraft.core.Direction.WEST).orElseThrow().entrance());
+    }
+
+    @Test void failedEarthworksDoNotCommitTheirEntrance() {
+        heights.put("1:0",65);
+        var plan=CampTerrain.plan(level,center,p->false,r->{},true,net.minecraft.core.Direction.WEST).orElseThrow();
+        doReturn(false).when(level).setBlock(any(),any(),anyInt());
+        assertFalse(CampTerrain.apply(level,raid,plan));
+        assertFalse(raid.campaign.contains("CampEntranceFacing"));
     }
 
     @Test void fallbackStillRequiresClaimsAndTheOriginalMutationBudget() {

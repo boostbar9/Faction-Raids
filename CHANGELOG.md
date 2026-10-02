@@ -1,3 +1,7 @@
+## 4.51.13
+- Coastal camp earthworks now try alternate dry entrances before rejecting a site whose preferred gate faces water.
+- Successful site selection saves the dry entrance for the gate, approach road and perimeter; failed earthworks leave no saved entrance. Existing camps retain their established gate orientation.
+
 ## 4.51.12
 - Wall commissions can raise shallow perimeter depressions to accessible interior work height, using dirt foundations supplied and constructed through Workers 2.
 - Foundation planning stays within eight blocks of natural ground and preserves buildings, fluids and deep gaps. The preview and material list include the dirt needed.
