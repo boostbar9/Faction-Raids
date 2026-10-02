@@ -37,11 +37,13 @@ class CoreCiviliansTest extends MinecraftTestSupport {
             assertTrue(core.hasUUID("CivilianPendingOwner"));assertEquals(0,CivilianLedger.count(CoreCivilians.ledger(data,"team:test")));
         }
     }
-    @Test void fullPopulationRetryIsQuietAndPreservesUnfinishedLifetimeGrant() {
+    @Test void fullPopulationRetryIsQuietAndPreservesUnfinishedLifetimeGrant() throws Exception {
         ServerLevel level=mock(ServerLevel.class);when(level.dimension()).thenReturn(Level.OVERWORLD);
         MinecraftServer server=mock(MinecraftServer.class);when(level.getServer()).thenReturn(server);
         var players=mock(PlayerList.class);when(server.getPlayerList()).thenReturn(players);
-        var player=mock(ServerPlayer.class);player.server=server;when(player.serverLevel()).thenReturn(level);
+        var player=mock(ServerPlayer.class);
+        var field=ServerPlayer.class.getField("server");field.setAccessible(true);field.set(player,server);
+        when(player.serverLevel()).thenReturn(level);
         var data=new RaidSavedData();var core=new CompoundTag();UUID owner=UUID.randomUUID();
         core.putLong("Position",BlockPos.ZERO.asLong());core.putUUID("CivilianPendingOwner",owner);
         data.siegeCores.put("team:test",core);when(players.getPlayer(owner)).thenReturn(player);
@@ -57,6 +59,7 @@ class CoreCiviliansTest extends MinecraftTestSupport {
             assertEquals(1,ledger.getInt("Starters"));assertTrue(core.hasUUID("CivilianPendingOwner"));
             CoreCivilians.tryStarters(player,BlockPos.ZERO);
             verify(player).sendSystemMessage(argThat(c->c.getString().contains("64-civilian limit")));
+            verify(level,times(2)).scheduleTick(BlockPos.ZERO,CoreBlocks.CORE.get(),100);
             assertEquals(1,ledger.getInt("Starters"));assertEquals(64,CivilianLedger.count(ledger));
         }
     }
