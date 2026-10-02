@@ -92,6 +92,19 @@ class CoreCiviliansTest extends MinecraftTestSupport {
             verifyNoInteractions(server);verify(level,never()).scheduleTick(any(),eq(CoreBlocks.CORE.get()),anyInt());
         }
     }
+    @Test void removedCoreDoesNotRestartPendingArrivalsAtReusedCoordinates() {
+        ServerLevel level=mock(ServerLevel.class);when(level.dimension()).thenReturn(Level.OVERWORLD);
+        MinecraftServer server=mock(MinecraftServer.class);when(level.getServer()).thenReturn(server);
+        var data=new RaidSavedData();var core=new CompoundTag();
+        core.putLong("Position",BlockPos.ZERO.asLong());core.putUUID("CivilianPendingOwner",UUID.randomUUID());
+        core.putBoolean("CoreRemoved",true);data.siegeCores.put("team:test",core);
+        try(var saved=mockStatic(RaidSavedData.class)) {
+            saved.when(()->RaidSavedData.get(server)).thenReturn(data);
+            CoreCivilians.onCoreTick(level,BlockPos.ZERO);
+            verifyNoInteractions(server);verify(level,never()).scheduleTick(any(),eq(CoreBlocks.CORE.get()),anyInt());
+            assertFalse(data.civilianFactions.containsKey("team:test"));
+        }
+    }
     @Test void claimedCiviliansCannotTakePortalsButOrdinaryVillagersCan() {
         Villager v=mock(Villager.class);var tag=new CompoundTag();when(v.getPersistentData()).thenReturn(tag);
         var ordinary=new EntityTravelToDimensionEvent(v,Level.NETHER);CoreCivilians.dimension(ordinary);assertFalse(ordinary.isCanceled());

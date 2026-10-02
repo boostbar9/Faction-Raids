@@ -43,12 +43,12 @@ public final class CoreCivilians {
         var data=RaidSavedData.get(level.getServer());
         for(var entry:data.siegeCores.entrySet()) {
             var core=entry.getValue();
-            if(!core.contains("Position") || core.getLong("Position")!=pos.asLong() || !core.hasUUID("CivilianPendingOwner"))continue;
+            if(core.getBoolean("CoreRemoved") || !core.contains("Position") || core.getLong("Position")!=pos.asLong() || !core.hasUUID("CivilianPendingOwner"))continue;
             if(ledger(data,entry.getKey()).getInt("Starters")>=2) {
                 core.remove("CivilianPendingOwner");data.setDirty();return;
             }
             var player=level.getServer().getPlayerList().getPlayer(core.getUUID("CivilianPendingOwner"));
-            if(player!=null)tryStarters(player,pos,false);
+            if(player!=null && entry.getKey().equals(SiegeCore.key(player)))tryStarters(player,pos,false);
             // Placement schedules one initial tick. Retry only the unfinished, loaded core;
             // native block ticks survive saving without loading chunks or polling every frame.
             if(core.hasUUID("CivilianPendingOwner"))level.scheduleTick(pos,CoreBlocks.CORE.get(),100);
