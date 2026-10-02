@@ -122,7 +122,9 @@ public final class WallBuilderAccess extends Goal {
             if (!reserveColumns(area) || approachTarget == null) return false;
             double dx = worker.getX() - (approachTarget.getX()+0.5);
             double dz = worker.getZ() - (approachTarget.getZ()+0.5);
-            if (dx*dx+dz*dz < 20 && safeStandingSite(level,worker,BlockPos.containing(worker.position()))) {
+            BlockPos feet=BlockPos.containing(worker.position());
+            if (dx*dx+dz*dz < 20 && !reservedColumns.contains(feet.atY(0).asLong())
+                    && safeStandingSite(level,worker,feet)) {
                 worker.getNavigation().stop();
                 blockField.set(delegate,null);
                 stateField.set(delegate,prepare);
@@ -224,6 +226,7 @@ public final class WallBuilderAccess extends Goal {
         // Native reach is horizontal only. Being directly below the job is
         // not a safe work position, even when its distance check passes.
         if (dx * dx + dz * dz < nativeReachSquared
+                && !reservedColumns.contains(BlockPos.containing(worker.position()).atY(0).asLong())
                 && safeStandingSite(level, worker, BlockPos.containing(worker.position()))) return;
         if (!target.equals(lastTarget)) {
             pendingPath = null;

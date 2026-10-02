@@ -232,6 +232,16 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
                 && sites.stream().allMatch(p->Math.abs(p.getX())<=3 && Math.abs(p.getZ())<=3)
                 && !sites.contains(new BlockPos(0,64,0))),eq(0));
     }
+    @Test void workerStandingInQueuedWallColumnMovesAsideBeforeNativeConstruction() throws Exception {
+        var area=commission();when(worker.getZ()).thenReturn(0.5);
+        area.stackToPlace=java.util.List.of(new Cell(new BlockPos(20,64,0)));
+        var nativeGoal=new ApproachingGoal();nativeGoal.state=State.MOVE_TO_WORK_AREA;
+        new WallBuilderAccess(worker,nativeGoal).tick();
+        assertEquals(0,nativeGoal.ticks);assertEquals(State.MOVE_TO_WORK_AREA,nativeGoal.state);
+        verify(nav).createPath(argThat((java.util.Set<BlockPos> sites)->!sites.isEmpty()
+                && sites.stream().noneMatch(p->p.getX()==20 && p.getZ()==0)),eq(0));
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
     @Test void manualClearingPhaseRemainsNativeEvenWithNearWall() throws Exception {
         var area=commission();when(area.getFreeArea()).thenReturn(true);when(worker.getZ()).thenReturn(0.5);
         area.stackToPlace=java.util.List.of(new Cell(new BlockPos(21,64,0)));
