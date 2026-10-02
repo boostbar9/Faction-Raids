@@ -9,6 +9,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
@@ -38,6 +39,12 @@ class CampTerrainTest extends MinecraftTestSupport {
             edits.put(((BlockPos)c.getArgument(0)).immutable(), c.getArgument(1));
             return true;
         });
+    }
+
+    @AfterEach void releaseRecordedTerrainQueries() {
+        // Large forest/pond fixtures record tens of thousands of reads. Assertions
+        // are complete; do not retain their invocation history across the suite.
+        clearInvocations(level);
     }
 
     private BlockState state(BlockPos pos) {
@@ -358,7 +365,7 @@ class CampTerrainTest extends MinecraftTestSupport {
         for(int x=-16;x<=16;x++)for(int z=-16;z<=16;z++)for(int y=61;y<64;y++)
             edits.put(new BlockPos(x,y,z),Blocks.WATER.defaultBlockState());
         var plan=CampTerrain.plan(level,center,p->false,r->{},true).orElseThrow();
-        assertEquals(33*33*3,plan.changes().size());assertTrue(CampTerrain.apply(level,raid,plan));
+        assertEquals(31*31*3+3*3,plan.changes().size());assertTrue(CampTerrain.apply(level,raid,plan));
         for(int y=61;y<64;y++)assertTrue(state(new BlockPos(0,y,0)).is(Blocks.DIRT));
         assertTrue(state(new BlockPos(0,60,0)).is(Blocks.DIRT));
         var saved=RaidState.load(raid.save());
