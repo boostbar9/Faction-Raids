@@ -411,6 +411,25 @@ class CampTerrainTest extends MinecraftTestSupport {
         assertEquals("minecraft:oak_log",RaidState.load(raid.save()).campBlocks.get(new BlockPos(18,64,0).asLong()).getCompound("Original").getString("Name"));
     }
 
+    @Test void neighboringTreeCanopyOverTheEntranceIsClearedAndSaved() {
+        heights.put("18:2",70);
+        for(int y=64;y<70;y++)
+            edits.put(new BlockPos(18,y,2),Blocks.OAK_LOG.defaultBlockState());
+        BlockPos overhang=new BlockPos(18,70,1);
+        edits.put(overhang,Blocks.OAK_LEAVES.defaultBlockState());
+
+        var plan=CampTerrain.plan(level,center,p->false,r->{},true,
+                net.minecraft.core.Direction.EAST).orElseThrow();
+
+        assertEquals(net.minecraft.core.Direction.EAST,plan.entrance());
+        assertTrue(plan.changes().stream().anyMatch(change->change.pos().equals(overhang)
+                && change.after().isAir()));
+        assertTrue(CampTerrain.apply(level,raid,plan));
+        assertTrue(state(overhang).isAir());
+        assertEquals("minecraft:oak_leaves",RaidState.load(raid.save()).campBlocks.get(overhang.asLong())
+                .getCompound("Original").getString("Name"));
+    }
+
     @Test void tallConfirmedNaturalTreesAreClearedButUnboundedTimberIsRejected() {
         heights.put("0:0",88);
         for(int y=63;y<88;y++)edits.put(new BlockPos(0,y,0),(y==63?Blocks.GRASS_BLOCK:Blocks.SPRUCE_LOG).defaultBlockState());
