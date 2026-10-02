@@ -418,6 +418,17 @@ class CampTerrainTest extends MinecraftTestSupport {
         verify(level,never()).setBlock(any(),any(),anyInt());
     }
 
+    @Test void searchPrefilterUsesSameGroundSurveyForDenseTallForest() {
+        for(int x=-9;x<=9;x+=3)for(int z=-9;z<=9;z+=3) {
+            heights.put(x+":"+z,88);
+            for(int y=63;y<88;y++)edits.put(new BlockPos(x,y,z),(y==63?Blocks.GRASS_BLOCK:Blocks.SPRUCE_LOG).defaultBlockState());
+            edits.put(new BlockPos(x,88,z),Blocks.SPRUCE_LEAVES.defaultBlockState());
+        }
+        assertTrue(CampTerraforming.acceptableForTerraforming(level,center,center,12));
+        assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isPresent());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
     @Test void exitNeverExcavatesPlayerBlocksOrCrossesExcludedClaims() {
         for(var side:net.minecraft.core.Direction.Plane.HORIZONTAL)
             edits.put(center.relative(side,18),Blocks.CHEST.defaultBlockState());
