@@ -1,3 +1,8 @@
+## 4.51.19 — Clear camp entrance canopies
+
+- Difficult-site entrance preparation now notices confirmed trees beside the route and clears their overhanging natural canopy instead of stopping at the ground-only heightmap result.
+- The bounded route survey still requires loaded terrain, preserves protected columns, and refuses persistent, waterlogged or unsupported foliage.
+
 ## 4.51.18 — Packet validation and snapshots
 
 - Reject negative dashboard collection counts and counts that cannot fit in the received payload before allocating entries.

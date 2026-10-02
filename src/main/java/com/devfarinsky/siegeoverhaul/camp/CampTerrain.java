@@ -189,6 +189,7 @@ public final class CampTerrain {
             net.minecraft.core.Direction direction, Predicate<BlockPos> excluded) {
         List<Change> changes = new ArrayList<>();
         Map<Integer,Integer> previous = new HashMap<>();
+        Map<BlockPos,CampGround.Column> canopySurvey = new HashMap<>();
         int dryRows=0;
         for (int distance=edge; distance<=edge+10; distance++) {
             boolean dry = true;
@@ -211,7 +212,9 @@ public final class CampTerrain {
                 }
                 if(bottom<level.getMinBuildHeight() || surveyed.top()+2>=level.getMaxBuildHeight()
                         || !isSoil(level.getBlockState(column.atY(bottom)))) return Optional.empty();
-                int top=Math.max(y+2,surveyed.top()+2);
+                int canopyTop=nearbyCanopyTop(level,column,canopySurvey);
+                int top=Math.max(Math.max(y+2,surveyed.top()+2),canopyTop);
+                if(top>=level.getMaxBuildHeight())return Optional.empty();
                 for(int height=bottom;height<=top;height++) {
                     BlockPos pos=column.atY(height);BlockState before=level.getBlockState(pos);
                     boolean fill=water && height<y && CampGround.water(before);
@@ -229,6 +232,22 @@ public final class CampTerrain {
             previous=row;
         }
         return Optional.empty();
+    }
+
+    /**
+     * A neighboring trunk can overhang a route column whose no-leaves height is only
+     * the ground. Cache a bounded local survey and share its confirmed canopy ceiling.
+     */
+    private static int nearbyCanopyTop(ServerLevel level, BlockPos route,
+            Map<BlockPos,CampGround.Column> cache) {
+        int top=Integer.MIN_VALUE;
+        for(int x=-3;x<=3;x++)for(int z=-3;z<=3;z++) {
+            BlockPos column=route.offset(x,0,z);
+            if(!level.hasChunkAt(column)||!level.getWorldBorder().isWithinBounds(column))continue;
+            var surveyed=cache.computeIfAbsent(column,pos->CampGround.survey(level,pos,true));
+            if(surveyed.tree())top=Math.max(top,surveyed.top()+2);
+        }
+        return top;
     }
 
     private static Optional<Plan> reject(java.util.function.Consumer<Rejection> observer, Rejection reason) {
