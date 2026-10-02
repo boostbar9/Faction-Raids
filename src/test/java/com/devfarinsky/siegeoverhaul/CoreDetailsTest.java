@@ -27,4 +27,27 @@ class CoreDetailsTest extends MinecraftTestSupport {
         var packet=new RaidNetwork.CoreDetails(1,"f".repeat(127)+"\uD83D\uDE00",List.of("x".repeat(63)+"\uD83D\uDE00"),new int[0]);
         assertEquals(127,packet.faction().length());assertEquals(63,packet.members().get(0).length());
     }
+    @Test void ledgerCannotChangeAfterSnapshotThroughInputOrAccessor() {
+        int[] source = {12, -8, 4};
+        var packet = new RaidNetwork.CoreDetails(1, "Test", List.of(), source);
+        var expected = new RaidNetwork.CoreDetails(1, "Test", List.of(), source);
+        int hash = packet.hashCode();
+        source[0] = 999;
+        packet.ledger()[1] = 999;
+        assertArrayEquals(new int[]{12, -8, 4}, packet.ledger());
+        assertEquals(expected, packet);
+        assertEquals(hash, packet.hashCode());
+        var buffer = new FriendlyByteBuf(Unpooled.buffer());
+        try {
+            packet.encode(buffer);
+            assertEquals(expected, RaidNetwork.CoreDetails.decode(buffer));
+            assertEquals(0, buffer.readableBytes());
+        } finally { buffer.release(); }
+    }
+    @Test void oversizedLedgerRetainsOnlyTheNewestEntries() {
+        int[] source = java.util.stream.IntStream.range(0, 100).toArray();
+        var packet = new RaidNetwork.CoreDetails(1, "Test", List.of(), source);
+        source[99] = -1;
+        assertArrayEquals(java.util.stream.IntStream.range(36, 100).toArray(), packet.ledger());
+    }
 }
