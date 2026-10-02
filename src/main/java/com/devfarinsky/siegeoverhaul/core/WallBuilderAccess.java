@@ -164,7 +164,10 @@ public final class WallBuilderAccess extends Goal {
 
     void route(ServerLevel level, BlockPos target, int nativeReachSquared) {
         double dx = worker.getX() - (target.getX() + 0.5), dz = worker.getZ() - (target.getZ() + 0.5);
-        if (dx * dx + dz * dz < nativeReachSquared) return;
+        // Native reach is horizontal only. Being directly below the job is
+        // not a safe work position, even when its distance check passes.
+        if (dx * dx + dz * dz < nativeReachSquared
+                && safeStandingSite(level, worker, BlockPos.containing(worker.position()))) return;
         if (!target.equals(lastTarget)) {
             pendingPath = null;
             pendingSites = Set.of();
@@ -172,7 +175,17 @@ public final class WallBuilderAccess extends Goal {
         }
         var nav = worker.getNavigation();
         var existing = nav.getPath();
-        if (existing != null && (!pathReady(existing) || (!existing.isDone() && existing.canReach()))) return;
+        if (existing != null && !pathReady(existing)) return;
+        if (existing != null && !existing.isDone() && existing.canReach()) {
+            var end = existing.getEndNode();
+            BlockPos feet = end == null ? null : new BlockPos(end.x,end.y,end.z);
+            if (feet != null && feet.distSqr(target.atY(feet.getY())) < nativeReachSquared
+                    && !reservedColumns.contains(feet.atY(0).asLong())
+                    && safeStandingSite(level,worker,feet)) return;
+            // A reachable cave endpoint still sends the builder underground.
+            // Stop that route before probing loaded surface standing space.
+            nav.stop();
+        }
         long now = level.getGameTime();
         if (now < nextRoute && now >= nextRoute - 10) return;
         nextRoute = now + 10;
@@ -189,7 +202,8 @@ public final class WallBuilderAccess extends Goal {
             return;
         }
         if (now < nextSearch && now >= nextSearch - 40) {
-            if (target.equals(lastTarget) && destination != null) moveToSite(destination);
+            if (target.equals(lastTarget) && destination != null
+                    && safeStandingSite(level,worker,destination)) moveToSite(destination);
             return;
         }
         nextSearch = now + 40;
@@ -224,15 +238,23 @@ public final class WallBuilderAccess extends Goal {
             if (dx*dx+dz*dz >= 16 || !level.hasChunkAt(column)) continue;
             int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.getX(), column.getZ());
             if (Math.abs(y-target.getY()) > 12 || y <= level.getMinBuildHeight() || y+2 >= level.getMaxBuildHeight()) continue;
-            BlockPos feet = column.atY(y), floor = feet.below();
-            var support = level.getBlockState(floor);
-            if (!support.isFaceSturdy(level, floor, Direction.UP) || !support.getFluidState().isEmpty()
-                    || support.is(Blocks.MAGMA_BLOCK) || support.is(Blocks.CAMPFIRE) || support.is(Blocks.SOUL_CAMPFIRE)
-                    || support.is(Blocks.CACTUS) || !level.getWorldBorder().isWithinBounds(feet)
-                    || !level.getBlockState(feet).isAir() || !level.getBlockState(feet.above()).isAir()) continue;
-            var body = worker.getBoundingBox().move(Vec3.atBottomCenterOf(feet).subtract(worker.position()));
-            if (level.getWorldBorder().isWithinBounds(body) && level.noCollision(worker, body)) sites.add(feet);
+            BlockPos feet = column.atY(y);
+            if (safeStandingSite(level,worker,feet)) sites.add(feet);
         }
         return sites;
+    }
+
+    private static boolean safeStandingSite(ServerLevel level, Mob worker, BlockPos feet) {
+        if (!level.hasChunkAt(feet) || feet.getY() <= level.getMinBuildHeight()
+                || feet.getY()+2 >= level.getMaxBuildHeight()
+                || level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,feet.getX(),feet.getZ()) != feet.getY()) return false;
+        BlockPos floor=feet.below();
+        var support=level.getBlockState(floor);
+        if (!support.isFaceSturdy(level,floor,Direction.UP) || !support.getFluidState().isEmpty()
+                || support.is(Blocks.MAGMA_BLOCK) || support.is(Blocks.CAMPFIRE) || support.is(Blocks.SOUL_CAMPFIRE)
+                || support.is(Blocks.CACTUS) || !level.getBlockState(feet).isAir()
+                || !level.getBlockState(feet.above()).isAir()) return false;
+        var body=worker.getBoundingBox().move(Vec3.atBottomCenterOf(feet).subtract(worker.position()));
+        return level.getWorldBorder().isWithinBounds(body) && level.noCollision(worker,body);
     }
 }
