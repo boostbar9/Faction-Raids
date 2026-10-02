@@ -42,15 +42,20 @@ public final class CampTerrain {
         int radius = CAMP_RADIUS + EDGE_WIDTH + 1;
         int[] heights = new int[(radius * 2 + 1) * (radius * 2 + 1)];
         int count = 0;
+        int low = Integer.MIN_VALUE, high = Integer.MAX_VALUE;
         for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
             BlockPos column = center.offset(dx, 0, dz);
             if (!level.hasChunkAt(column) || !level.getWorldBorder().isWithinBounds(column)) return center;
             if (Math.abs(dx) == radius && Math.abs(dz) == radius) continue;
-            heights[count++] = CampGround.survey(level,column,fallback).ground();
+            int ground = CampGround.survey(level,column,fallback).ground();
+            heights[count++] = ground;
+            int distance = Math.max(0, Math.abs(dx)-CAMP_RADIUS) + Math.max(0, Math.abs(dz)-CAMP_RADIUS);
+            // Untouched edges constrain the slope; graded columns constrain actual cut/fill.
+            int allowance = distance + (Math.max(Math.abs(dx),Math.abs(dz)) < radius ? MAX_CHANGE : 0);
+            low = Math.max(low,ground-allowance);
+            high = Math.min(high,ground+allowance);
         }
         Arrays.sort(heights, 0, count);
-        int low = heights[count - 1] - MAX_CHANGE;
-        int high = heights[0] + MAX_CHANGE;
         if (low > high) return center;
         return new BlockPos(center.getX(), Math.max(low, Math.min(high, heights[count / 2])), center.getZ());
     }
@@ -90,7 +95,10 @@ public final class CampTerrain {
                 var surveyed = CampGround.survey(level,column,fallback);
                 columns.put(column,surveyed);
                 int oldY = surveyed.ground();
-                if (Math.abs(oldY - center.getY()) > MAX_CHANGE) return reject(rejected, Rejection.RELIEF);
+                // The transition can follow natural slopes. Bound actual changes below,
+                // rather than rejecting an untouched edge for its height above the core.
+                if (Math.max(Math.abs(dx),Math.abs(dz)) <= CAMP_RADIUS
+                        && Math.abs(oldY-center.getY()) > MAX_CHANGE) return reject(rejected,Rejection.RELIEF);
                 original.put(column, oldY);
                 if (Math.max(Math.abs(dx), Math.abs(dz)) > radius) boundary.add(column);
             }

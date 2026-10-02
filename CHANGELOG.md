@@ -1,3 +1,9 @@
+## 4.51.16 — Wall approaches and camp slopes
+
+- Commissioned perimeter builders approach the nearest remaining wall section instead of an arbitrary blueprint corner. Workers still handles supplies, preparation and construction; a safe surface position is required before work starts.
+- Camp grading now checks the amount of dirt actually cut or filled. Natural outer slopes no longer count as oversized earthworks, and the proposed height respects the untouched boundary.
+- Existing claims, protected blocks, water limits, restoration and work budgets remain enforced.
+
 ## 4.51.15 — Starting civilian arrivals
 
 - If the core cannot safely place both starting civilians, it retries every five seconds while loaded. The placer must still be nearby and able to use the core; no terrain or chunks are forced open.
