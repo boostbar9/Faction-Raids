@@ -22,6 +22,9 @@ public final class CampTerrain {
     private static final int MAX_CHANGE = 6;
     private static final int MAX_WATER_DEPTH = 6;
     private static final int MAX_BLOCKS = 1024;
+    public static final int FALLBACK_MAX_CHANGE = 12;
+    private static final int FALLBACK_EDGE_WIDTH = 6;
+    private static final int FALLBACK_MAX_BLOCKS = 4096;
     private CampTerrain() {}
 
     public record Change(BlockPos pos, BlockState before, BlockState after) {}
@@ -39,7 +42,8 @@ public final class CampTerrain {
     }
 
     public static BlockPos earthworksCenter(ServerLevel level, BlockPos center, boolean fallback) {
-        int radius = CAMP_RADIUS + EDGE_WIDTH + 1;
+        int radius = CAMP_RADIUS + (fallback ? FALLBACK_EDGE_WIDTH : EDGE_WIDTH) + 1;
+        int maxChange = fallback ? FALLBACK_MAX_CHANGE : MAX_CHANGE;
         int[] heights = new int[(radius * 2 + 1) * (radius * 2 + 1)];
         int count = 0;
         int low = Integer.MIN_VALUE, high = Integer.MAX_VALUE;
@@ -53,7 +57,7 @@ public final class CampTerrain {
             if (Math.max(Math.abs(dx),Math.abs(dz)) <= CAMP_RADIUS) heights[count++] = ground;
             int distance = Math.max(0, Math.abs(dx)-CAMP_RADIUS) + Math.max(0, Math.abs(dz)-CAMP_RADIUS);
             // Untouched edges constrain the slope; graded columns constrain actual cut/fill.
-            int allowance = distance + (Math.max(Math.abs(dx),Math.abs(dz)) < radius ? MAX_CHANGE : 0);
+            int allowance = distance + (Math.max(Math.abs(dx),Math.abs(dz)) < radius ? maxChange : 0);
             low = Math.max(low,ground-allowance);
             high = Math.min(high,ground+allowance);
         }
@@ -82,7 +86,9 @@ public final class CampTerrain {
     public static Optional<Plan> plan(ServerLevel level, BlockPos center, Predicate<BlockPos> excluded,
                                     java.util.function.Consumer<Rejection> rejected, boolean fallback,
                                     net.minecraft.core.Direction gateSide) {
-        int radius = CAMP_RADIUS + EDGE_WIDTH;
+        int radius = CAMP_RADIUS + (fallback ? FALLBACK_EDGE_WIDTH : EDGE_WIDTH);
+        int maxChange = fallback ? FALLBACK_MAX_CHANGE : MAX_CHANGE;
+        int budget = fallback ? FALLBACK_MAX_BLOCKS : MAX_BLOCKS;
         Map<BlockPos, Integer> original = new HashMap<>();
         Map<BlockPos, CampGround.Column> columns = new HashMap<>();
         Map<BlockPos, Integer> heights = new HashMap<>();
@@ -100,17 +106,19 @@ public final class CampTerrain {
                 // The transition can follow natural slopes. Bound actual changes below,
                 // rather than rejecting an untouched edge for its height above the core.
                 if (Math.max(Math.abs(dx),Math.abs(dz)) <= CAMP_RADIUS
-                        && Math.abs(oldY-center.getY()) > MAX_CHANGE) return reject(rejected,Rejection.RELIEF);
+                        && Math.abs(oldY-center.getY()) > maxChange) return reject(rejected,Rejection.RELIEF);
                 original.put(column, oldY);
                 if (Math.max(Math.abs(dx), Math.abs(dz)) > radius) boundary.add(column);
             }
         }
         net.minecraft.core.Direction entrance = null;
+        List<Change> exitChanges = List.of();
         if (fallback) {
             var preferred = gateSide == null ? net.minecraft.core.Direction.NORTH : gateSide;
             for (var direction : new net.minecraft.core.Direction[]{preferred, preferred.getClockWise(),
                     preferred.getCounterClockWise(), preferred.getOpposite()}) {
-                if (dryExit(level,center,original,radius+1,direction)) { entrance=direction; break; }
+                var exit = prepareExit(level,center,radius+1,direction,excluded);
+                if (exit.isPresent()) { entrance=direction; exitChanges=exit.get(); break; }
             }
             if (entrance == null) return reject(rejected,Rejection.NO_LAND_EXIT);
         }
@@ -135,11 +143,11 @@ public final class CampTerrain {
         }
         int canopyTop = columns.values().stream().filter(CampGround.Column::tree)
                 .mapToInt(c -> c.top()+2).max().orElse(Integer.MIN_VALUE);
-        List<Change> changes = new ArrayList<>();
+        List<Change> changes = new ArrayList<>(exitChanges);
         for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
             BlockPos column = center.offset(dx, 0, dz);
             int oldY = original.get(column), newY = heights.get(column);
-            if (Math.abs(newY - oldY) > MAX_CHANGE) return reject(rejected, Rejection.RELIEF);
+            if (Math.abs(newY - oldY) > maxChange) return reject(rejected, Rejection.RELIEF);
             int bottom = Math.min(oldY, newY) - 1;
             boolean wet=fallback && CampGround.water(level.getBlockState(column.atY(oldY-1)));
             if(wet) {
@@ -147,7 +155,7 @@ public final class CampTerrain {
                 int depth=0;
                 while(depth<MAX_WATER_DEPTH && CampGround.water(level.getBlockState(column.atY(oldY-depth-1))))depth++;
                 bottom=Math.min(bottom,oldY-depth-1);
-                if(newY-(oldY-depth)>MAX_CHANGE)return reject(rejected,Rejection.RELIEF);
+                if(newY-(oldY-depth)>maxChange)return reject(rejected,Rejection.RELIEF);
                 if(!isSoil(level.getBlockState(column.atY(bottom))))return reject(rejected,Rejection.FLUID);
             }
             var surveyed=columns.get(column);
@@ -170,27 +178,57 @@ public final class CampTerrain {
                 else if (y >= oldY && y < newY) after = Blocks.DIRT.defaultBlockState();
                 else if (oldY != newY && y >= Math.min(oldY, newY) && !before.isAir()) after = Blocks.AIR.defaultBlockState();
                 if (!before.equals(after)) changes.add(new Change(pos, before, after));
-                if (changes.size() > MAX_BLOCKS) return reject(rejected, Rejection.BUDGET);
+                if (changes.size() > budget) return reject(rejected, Rejection.BUDGET);
             }
         }
         return Optional.of(new Plan(changes, entrance));
     }
 
-    private static boolean dryExit(ServerLevel level,BlockPos center,Map<BlockPos,Integer> heights,int edge,net.minecraft.core.Direction gateSide) {
-        for(var direction:net.minecraft.core.Direction.Plane.HORIZONTAL) {
-            if(gateSide!=null && direction!=gateSide)continue;
-            boolean dry=true;
-            for(int offset=-1;offset<=1;offset++) {
-                BlockPos p=center.relative(direction,edge).relative(direction.getClockWise(),offset);
-                int y=heights.get(p);
-                BlockState ground=level.getBlockState(p.atY(y-1));
-                if(!isSoil(ground)||!ground.getFluidState().isEmpty()
-                        ||!isClearance(level.getBlockState(p.atY(y)))
-                        ||!isClearance(level.getBlockState(p.atY(y+1)))) {dry=false;break;}
+    /** A short supported, three-wide way out, never an island with no landing. */
+    private static Optional<List<Change>> prepareExit(ServerLevel level, BlockPos center, int edge,
+            net.minecraft.core.Direction direction, Predicate<BlockPos> excluded) {
+        List<Change> changes = new ArrayList<>();
+        Map<Integer,Integer> previous = new HashMap<>();
+        int dryRows=0;
+        for (int distance=edge; distance<=edge+10; distance++) {
+            boolean dry = true;
+            Map<Integer,Integer> row = new HashMap<>();
+            for (int offset=-1; offset<=1; offset++) {
+                BlockPos column=center.relative(direction,distance).relative(direction.getClockWise(),offset);
+                if (!level.hasChunkAt(column) || !level.getWorldBorder().isWithinBounds(column)
+                        || excluded.test(column)) return Optional.empty();
+                var surveyed=CampGround.survey(level,column,true);
+                int y=surveyed.ground(); row.put(offset,y);
+                if (offset>-1 && Math.abs(y-row.get(offset-1))>1
+                        || previous.containsKey(offset) && Math.abs(y-previous.get(offset))>1) return Optional.empty();
+                BlockState floor=level.getBlockState(column.atY(y-1));
+                boolean water=CampGround.water(floor); dry &= !water;
+                int bottom=y-1;
+                if (water) {
+                    int depth=0;
+                    while(depth<MAX_WATER_DEPTH && CampGround.water(level.getBlockState(column.atY(y-depth-1))))depth++;
+                    bottom=y-depth-1;
+                }
+                if(bottom<level.getMinBuildHeight() || surveyed.top()+2>=level.getMaxBuildHeight()
+                        || !isSoil(level.getBlockState(column.atY(bottom)))) return Optional.empty();
+                int top=Math.max(y+2,surveyed.top()+2);
+                for(int height=bottom;height<=top;height++) {
+                    BlockPos pos=column.atY(height);BlockState before=level.getBlockState(pos);
+                    boolean fill=water && height<y && CampGround.water(before);
+                    boolean vegetation=CampGround.leaves(before)
+                            || surveyed.tree() && height>=y && height<surveyed.top() && CampGround.trunk(before);
+                    if(before.hasBlockEntity() || !fill && !before.getFluidState().isEmpty()
+                            || !fill && !vegetation && (height<y ? !isSoil(before) : !isClearance(before))) return Optional.empty();
+                    BlockState after=fill ? Blocks.DIRT.defaultBlockState()
+                            : vegetation ? Blocks.AIR.defaultBlockState() : before;
+                    if(!before.equals(after)) changes.add(new Change(pos,before,after));
+                }
             }
-            if(dry)return true;
+            dryRows=dry ? dryRows+1 : 0;
+            if(dryRows>=3) return Optional.of(changes);
+            previous=row;
         }
-        return false;
+        return Optional.empty();
     }
 
     private static Optional<Plan> reject(java.util.function.Consumer<Rejection> observer, Rejection reason) {

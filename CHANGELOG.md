@@ -1,3 +1,10 @@
+## 4.51.17 — Prepared camp foundations and exits
+
+- Difficult-site fallback clears confirmed natural trees and canopy in the camp and entrance, with saved originals for cleanup.
+- Grading gets a wider six-block shoulder, up to twelve blocks of dirt cut/fill per column and a finite 4,096-block mutation budget. Ordinary scouting keeps its smaller limits.
+- Camps can fill shallow water onto solid sediment and prepare a three-wide dirt causeway up to eight blocks beyond the shoulder, ending on dry ground. Deep water, lava, blocked exits and protected builds remain excluded.
+- Camp height selection and the search prefilter now agree with the stronger fallback. Preparation remains fully validated before any edits; failed placements roll back.
+
 ## 4.51.16 — Wall approaches and camp slopes
 
 - Commissioned perimeter builders approach the nearest remaining wall section instead of an arbitrary blueprint corner. Workers still handles supplies, preparation and construction; a safe surface position is required before work starts.

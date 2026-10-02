@@ -26,9 +26,9 @@ final class CampGround {
         int top=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,column.getX(),column.getZ());
         if(!fallback)return new Column(top,top,false);
         int ground=top;
-        while(ground>level.getMinBuildHeight() && top-ground<16
+        while(ground>level.getMinBuildHeight() && top-ground<32
                 && trunk(level.getBlockState(new BlockPos(column.getX(),ground-1,column.getZ()))))ground--;
-        if(top-ground<2 || top-ground>=16
+        if(top-ground<2 || top-ground>=32
                 ||!CampRoad.soil(level.getBlockState(new BlockPos(column.getX(),ground-1,column.getZ()))))
             return new Column(top,top,false);
         // Require an ordinary non-persistent canopy near the top of the supported trunk.
