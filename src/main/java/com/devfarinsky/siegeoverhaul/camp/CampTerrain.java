@@ -48,7 +48,9 @@ public final class CampTerrain {
             if (!level.hasChunkAt(column) || !level.getWorldBorder().isWithinBounds(column)) return center;
             if (Math.abs(dx) == radius && Math.abs(dz) == radius) continue;
             int ground = CampGround.survey(level,column,fallback).ground();
-            heights[count++] = ground;
+            // Only the flat core is leveled to this plane. Hills in the transition
+            // constrain it but must not pull an already-flat camp upward.
+            if (Math.max(Math.abs(dx),Math.abs(dz)) <= CAMP_RADIUS) heights[count++] = ground;
             int distance = Math.max(0, Math.abs(dx)-CAMP_RADIUS) + Math.max(0, Math.abs(dz)-CAMP_RADIUS);
             // Untouched edges constrain the slope; graded columns constrain actual cut/fill.
             int allowance = distance + (Math.max(Math.abs(dx),Math.abs(dz)) < radius ? MAX_CHANGE : 0);
