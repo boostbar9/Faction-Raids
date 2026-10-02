@@ -137,6 +137,7 @@ class StarterCoreGuardTest extends MinecraftTestSupport {
 
     @Test void placementSchedulesDeliveryInsteadOfSpawningBeforeForgeCanCancel() {
         ServerLevel level = mock(ServerLevel.class);
+        when(level.dimension()).thenReturn(net.minecraft.world.level.Level.OVERWORLD);
         ServerPlayer player = mock(ServerPlayer.class);
         // The JUnit bootstrap freezes registries before this test; exercise the real
         // callbacks without constructing another registered Minecraft block.

@@ -6,6 +6,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.PlayerList;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.ai.Brain;
@@ -15,11 +17,108 @@ import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.entity.EntityTravelToDimensionEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class CoreCiviliansTest extends MinecraftTestSupport {
+    private java.lang.reflect.Field coreValue;
+    private Object previousCore;
+    @BeforeEach void provideCoreTickFixture() throws Exception {
+        // JUnit bootstraps vanilla blocks but never fires Forge's mod registration event.
+        // Substitute a real registered block for scheduling, restoring the handle afterwards.
+        coreValue=net.minecraftforge.registries.RegistryObject.class.getDeclaredField("value");
+        coreValue.setAccessible(true);previousCore=coreValue.get(CoreBlocks.CORE);
+        coreValue.set(CoreBlocks.CORE,net.minecraft.world.level.block.Blocks.STONE);
+    }
+    @AfterEach void restoreCoreTickFixture() throws Exception {
+        if(coreValue!=null)coreValue.set(CoreBlocks.CORE,previousCore);
+    }
+    @Test void pendingArrivalsRetryAfterPlacerLogsOutWithoutLoadingChunks() {
+        ServerLevel level=mock(ServerLevel.class);when(level.dimension()).thenReturn(Level.OVERWORLD);
+        MinecraftServer server=mock(MinecraftServer.class);when(level.getServer()).thenReturn(server);
+        var players=mock(PlayerList.class);when(server.getPlayerList()).thenReturn(players);
+        var data=new RaidSavedData();var core=new CompoundTag();UUID owner=UUID.randomUUID();
+        core.putLong("Position",BlockPos.ZERO.asLong());core.putUUID("CivilianPendingOwner",owner);
+        data.siegeCores.put("team:test",core);
+        try(var saved=mockStatic(RaidSavedData.class)) {
+            saved.when(()->RaidSavedData.get(server)).thenReturn(data);
+            CoreCivilians.onCoreTick(level,BlockPos.ZERO);
+            verify(level).scheduleTick(BlockPos.ZERO,CoreBlocks.CORE.get(),100);
+            verify(players).getPlayer(owner);
+            assertTrue(core.hasUUID("CivilianPendingOwner"));assertEquals(0,CivilianLedger.count(CoreCivilians.ledger(data,"team:test")));
+        }
+    }
+    @Test void fullPopulationRetryIsQuietAndPreservesUnfinishedLifetimeGrant() throws Exception {
+        ServerLevel level=mock(ServerLevel.class);when(level.dimension()).thenReturn(Level.OVERWORLD);
+        MinecraftServer server=mock(MinecraftServer.class);when(level.getServer()).thenReturn(server);
+        var players=mock(PlayerList.class);when(server.getPlayerList()).thenReturn(players);
+        var player=mock(ServerPlayer.class);
+        var field=ServerPlayer.class.getField("server");field.setAccessible(true);field.set(player,server);
+        when(player.serverLevel()).thenReturn(level);
+        var data=new RaidSavedData();var core=new CompoundTag();UUID owner=UUID.randomUUID();
+        core.putLong("Position",BlockPos.ZERO.asLong());core.putUUID("CivilianPendingOwner",owner);
+        data.siegeCores.put("team:test",core);when(players.getPlayer(owner)).thenReturn(player);
+        var ledger=CoreCivilians.ledger(data,"team:test");ledger.putInt("Starters",1);
+        for(int i=0;i<64;i++)CivilianLedger.register(ledger,UUID.randomUUID(),0);
+        try(var saved=mockStatic(RaidSavedData.class);var claims=mockStatic(SiegeCore.class)) {
+            saved.when(()->RaidSavedData.get(server)).thenReturn(data);
+            claims.when(()->SiegeCore.key(player)).thenReturn("team:test");
+            claims.when(()->SiegeCore.canUse(player,BlockPos.ZERO)).thenReturn(true);
+            CoreCivilians.onCoreTick(level,BlockPos.ZERO);
+            verify(player,never()).sendSystemMessage(any());
+            verify(level).scheduleTick(BlockPos.ZERO,CoreBlocks.CORE.get(),100);
+            assertEquals(1,ledger.getInt("Starters"));assertTrue(core.hasUUID("CivilianPendingOwner"));
+            CoreCivilians.tryStarters(player,BlockPos.ZERO);
+            verify(player).sendSystemMessage(argThat(c->c.getString().contains("64-civilian limit")));
+            verify(level,times(2)).scheduleTick(BlockPos.ZERO,CoreBlocks.CORE.get(),100);
+            assertEquals(1,ledger.getInt("Starters"));assertEquals(64,CivilianLedger.count(ledger));
+        }
+    }
+    @Test void savedCompletedGrantsClearPendingOwnerEvenAfterResidentsDie() {
+        ServerLevel level=mock(ServerLevel.class);when(level.dimension()).thenReturn(Level.OVERWORLD);
+        MinecraftServer server=mock(MinecraftServer.class);when(level.getServer()).thenReturn(server);
+        var data=new RaidSavedData();var core=new CompoundTag();
+        core.putLong("Position",BlockPos.ZERO.asLong());core.putUUID("CivilianPendingOwner",UUID.randomUUID());
+        data.siegeCores.put("team:test",core);CoreCivilians.ledger(data,"team:test").putInt("Starters",2);
+        var loaded=RaidSavedData.load(data.save(new CompoundTag()));
+        try(var saved=mockStatic(RaidSavedData.class)) {
+            saved.when(()->RaidSavedData.get(server)).thenReturn(loaded);
+            CoreCivilians.onCoreTick(level,BlockPos.ZERO);
+            assertFalse(loaded.siegeCores.get("team:test").hasUUID("CivilianPendingOwner"));
+            assertEquals(2,CoreCivilians.ledger(loaded,"team:test").getInt("Starters"));
+            verifyNoInteractions(server);
+            verify(level,never()).scheduleTick(any(),eq(CoreBlocks.CORE.get()),anyInt());
+        }
+    }
+    @Test void oldCoreTicksCannotSpawnOrRescheduleAtRelocatedPosition() {
+        ServerLevel level=mock(ServerLevel.class);when(level.dimension()).thenReturn(Level.OVERWORLD);
+        MinecraftServer server=mock(MinecraftServer.class);when(level.getServer()).thenReturn(server);
+        var data=new RaidSavedData();var core=new CompoundTag();
+        core.putLong("Position",new BlockPos(32,64,32).asLong());core.putUUID("CivilianPendingOwner",UUID.randomUUID());
+        data.siegeCores.put("team:test",core);
+        try(var saved=mockStatic(RaidSavedData.class)) {
+            saved.when(()->RaidSavedData.get(server)).thenReturn(data);
+            CoreCivilians.onCoreTick(level,BlockPos.ZERO);
+            assertTrue(core.hasUUID("CivilianPendingOwner"));
+            verifyNoInteractions(server);verify(level,never()).scheduleTick(any(),eq(CoreBlocks.CORE.get()),anyInt());
+        }
+    }
+    @Test void removedCoreDoesNotRestartPendingArrivalsAtReusedCoordinates() {
+        ServerLevel level=mock(ServerLevel.class);when(level.dimension()).thenReturn(Level.OVERWORLD);
+        MinecraftServer server=mock(MinecraftServer.class);when(level.getServer()).thenReturn(server);
+        var data=new RaidSavedData();var core=new CompoundTag();
+        core.putLong("Position",BlockPos.ZERO.asLong());core.putUUID("CivilianPendingOwner",UUID.randomUUID());
+        core.putBoolean("CoreRemoved",true);data.siegeCores.put("team:test",core);
+        try(var saved=mockStatic(RaidSavedData.class)) {
+            saved.when(()->RaidSavedData.get(server)).thenReturn(data);
+            CoreCivilians.onCoreTick(level,BlockPos.ZERO);
+            verifyNoInteractions(server);verify(level,never()).scheduleTick(any(),eq(CoreBlocks.CORE.get()),anyInt());
+            assertFalse(data.civilianFactions.containsKey("team:test"));
+        }
+    }
     @Test void claimedCiviliansCannotTakePortalsButOrdinaryVillagersCan() {
         Villager v=mock(Villager.class);var tag=new CompoundTag();when(v.getPersistentData()).thenReturn(tag);
         var ordinary=new EntityTravelToDimensionEvent(v,Level.NETHER);CoreCivilians.dimension(ordinary);assertFalse(ordinary.isCanceled());
