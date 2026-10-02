@@ -307,7 +307,7 @@ class CampTerrainTest extends MinecraftTestSupport {
     @Test void failedEarthworksDoNotCommitTheirEntrance() {
         heights.put("1:0",65);
         var plan=CampTerrain.plan(level,center,p->false,r->{},true,net.minecraft.core.Direction.WEST).orElseThrow();
-        when(level.setBlock(any(),any(),anyInt())).thenReturn(false);
+        doReturn(false).when(level).setBlock(any(),any(),anyInt());
         assertFalse(CampTerrain.apply(level,raid,plan));
         assertFalse(raid.campaign.contains("CampEntranceFacing"));
     }
