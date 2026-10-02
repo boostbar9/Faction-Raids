@@ -17,11 +17,25 @@ import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.entity.EntityTravelToDimensionEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class CoreCiviliansTest extends MinecraftTestSupport {
+    private java.lang.reflect.Field coreValue;
+    private Object previousCore;
+    @BeforeEach void provideCoreTickFixture() throws Exception {
+        // JUnit bootstraps vanilla blocks but never fires Forge's mod registration event.
+        // Substitute a real registered block for scheduling, restoring the handle afterwards.
+        coreValue=net.minecraftforge.registries.RegistryObject.class.getDeclaredField("value");
+        coreValue.setAccessible(true);previousCore=coreValue.get(CoreBlocks.CORE);
+        coreValue.set(CoreBlocks.CORE,net.minecraft.world.level.block.Blocks.STONE);
+    }
+    @AfterEach void restoreCoreTickFixture() throws Exception {
+        if(coreValue!=null)coreValue.set(CoreBlocks.CORE,previousCore);
+    }
     @Test void pendingArrivalsRetryAfterPlacerLogsOutWithoutLoadingChunks() {
         ServerLevel level=mock(ServerLevel.class);when(level.dimension()).thenReturn(Level.OVERWORLD);
         MinecraftServer server=mock(MinecraftServer.class);when(level.getServer()).thenReturn(server);
