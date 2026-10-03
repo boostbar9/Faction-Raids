@@ -246,6 +246,10 @@ if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)
     }
     minecraft.runs.client {
         workingDirectory project.file('build/native-qa/client')
+        // Companion release mixins retain SRG refmaps; translate those to the
+        // named userdev runtime without disabling any native mixin or check.
+        property 'mixin.env.remapRefMap', 'true'
+        property 'mixin.env.refMapRemappingFile', project.file('build/createSrgToMcp/output.srg').absolutePath
         property 'siegeoverhaul.nativeQa', 'true'
         property 'siegeoverhaul.nativeQa.directory', project.file('build/native-qa/client').absolutePath
         args '--width', '1280', '--height', '720'

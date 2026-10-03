@@ -23,7 +23,10 @@ actual native class identities; and SHA-256 hashes of the **loaded, ForgeGradle
 remapped development JARs**. Those hashes are deliberately not described as hashes
 of original CurseForge release JARs. Neither original nor remapped vendor JARs are
 uploaded as workflow artifacts. No API substitutes or test mocks are on this run's
-class path.
+class path. Companion release mixin refmaps are translated from SRG to the named
+userdev runtime with Mixin's supported `remapRefMap`/`refMapRemappingFile` settings
+and ForgeGradle's generated `build/createSrgToMcp/output.srg`. Native mixins and
+injection failure checks remain enabled.
 
 ## Trigger and isolation
 
@@ -152,3 +155,12 @@ Implementation signatures for `WorldOpenFlows.createFreshLevel`,
 `Minecraft.createWorldOpenFlows`, `Screenshot.takeScreenshot`, and world reload
 were additionally checked against the official 1.20.1 Mojang mappings and client
 class signatures. Actual compatibility is established only by the CI run.
+
+## CI bring-up record
+
+- [Run 37157686364](https://github.com/boostbar9/Faction-Raids/actions/runs/37157686364)
+  compiled production and all QA sources on Java 17 and initialized actual
+  llvmpipe OpenGL 4.5. It failed before world creation because Recruits' mixin
+  refmap still named an SRG method in the named development runtime. No scenario
+  assertion or screenshot passed in that run. The opt-in remapping configuration
+  addresses that loader setup error and requires a fresh run.
