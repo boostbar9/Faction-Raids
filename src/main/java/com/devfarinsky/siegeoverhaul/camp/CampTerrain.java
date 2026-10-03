@@ -156,7 +156,7 @@ public final class CampTerrain {
                 while(depth<MAX_WATER_DEPTH && CampGround.water(level.getBlockState(column.atY(oldY-depth-1))))depth++;
                 bottom=Math.min(bottom,oldY-depth-1);
                 if(newY-(oldY-depth)>maxChange)return reject(rejected,Rejection.RELIEF);
-                if(!isSoil(level.getBlockState(column.atY(bottom))))return reject(rejected,Rejection.FLUID);
+                if(!CampGround.foundation(level.getBlockState(column.atY(bottom))))return reject(rejected,Rejection.FLUID);
             }
             var surveyed=columns.get(column);
             int top = Math.max(Math.max(oldY, newY) + 5, canopyTop);
@@ -167,9 +167,12 @@ public final class CampTerrain {
                 boolean fillWater=wet && y<newY && CampGround.water(before);
                 boolean vegetation=fallback && (CampGround.leaves(before)
                         || surveyed.tree() && y>=oldY && y<surveyed.top() && CampGround.trunk(before));
+                // The block below all cut/fill stays in place. Natural rock there
+                // is valid support, not permission to quarry a rock outcrop or build.
+                boolean foundation=fallback && y==bottom && y<newY && CampGround.foundation(before);
                 if (!fillWater && (!before.getFluidState().isEmpty() || before.is(Blocks.WATER) || before.is(Blocks.LAVA))) return reject(rejected, Rejection.FLUID);
                 if (before.hasBlockEntity()) return reject(rejected, Rejection.BLOCK_ENTITY);
-                if (!fillWater && !vegetation && (y < oldY ? !isSoil(before) : !isClearance(before)))
+                if (!fillWater && !vegetation && !foundation && (y < oldY ? !isSoil(before) : !isClearance(before)))
                     return reject(rejected, y < oldY ? Rejection.SOIL : Rejection.CLEARANCE);
                 BlockState after = before;
                 if (fillWater) after = Blocks.DIRT.defaultBlockState();
@@ -211,7 +214,7 @@ public final class CampTerrain {
                     bottom=y-depth-1;
                 }
                 if(bottom<level.getMinBuildHeight() || surveyed.top()+2>=level.getMaxBuildHeight()
-                        || !isSoil(level.getBlockState(column.atY(bottom)))) return Optional.empty();
+                        || !CampGround.foundation(level.getBlockState(column.atY(bottom)))) return Optional.empty();
                 int canopyTop=nearbyCanopyTop(level,column,canopySurvey);
                 int top=Math.max(Math.max(y+2,surveyed.top()+2),canopyTop);
                 if(top>=level.getMaxBuildHeight())return Optional.empty();
@@ -220,8 +223,9 @@ public final class CampTerrain {
                     boolean fill=water && height<y && CampGround.water(before);
                     boolean vegetation=CampGround.leaves(before)
                             || surveyed.tree() && height>=y && height<surveyed.top() && CampGround.trunk(before);
+                    boolean foundation=height==bottom && CampGround.foundation(before);
                     if(before.hasBlockEntity() || !fill && !before.getFluidState().isEmpty()
-                            || !fill && !vegetation && (height<y ? !isSoil(before) : !isClearance(before))) return Optional.empty();
+                            || !fill && !vegetation && !foundation && (height<y ? !isSoil(before) : !isClearance(before))) return Optional.empty();
                     BlockState after=fill ? Blocks.DIRT.defaultBlockState()
                             : vegetation ? Blocks.AIR.defaultBlockState() : before;
                     if(!before.equals(after)) changes.add(new Change(pos,before,after));

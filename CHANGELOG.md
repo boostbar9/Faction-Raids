@@ -1,3 +1,9 @@
+## 4.51.20 — Stable wall projections and camp search
+
+- Enabled Workers wall projections use their full fixed footprint for camera visibility, so turning away from the shovel marker no longer hides an otherwise visible projection. Native placement, distance limits, ownership and the existing projection toggle stay unchanged.
+- Difficult-site scouting accepts untouched natural rock as foundation support, including shallow pond bottoms and exits. It still cannot excavate rock or use crafted foundations.
+- All 25 expanded scout survey positions now stay within the guaranteed loaded three-by-three chunk neighborhood.
+
 ## 4.51.19 — Clear camp entrance canopies
 
 - Difficult-site entrance preparation now notices confirmed trees beside the route and clears their overhanging natural canopy instead of stopping at the ground-only heightmap result.
