@@ -21,9 +21,13 @@ class NativeConstructionGuardTest extends MinecraftTestSupport {
     private final BlockState AIR = Blocks.AIR.defaultBlockState(), WALL = Blocks.COBBLESTONE.defaultBlockState(),
             GRASS = Blocks.GRASS.defaultBlockState();
 
-    @Test void newCommissionsRemainDisabledUntilDirectNativePacketWritesAreGuarded() {
-        assertNotNull(NativeConstructionGuard.availabilityProblem());
-        assertTrue(NativeConstructionGuard.availabilityProblem().contains("direct-placement"));
+    @Test void ordinaryNativeAreasCannotAccidentallyEnableProtectedCommissions() {
+        var owner = mock(net.minecraft.server.level.ServerPlayer.class);
+        var worker = mock(Mob.class); var area = mock(Entity.class);
+        when(area.level()).thenReturn(mock(net.minecraft.server.level.ServerLevel.class));
+        when(area.getPersistentData()).thenReturn(new CompoundTag());
+        assertFalse(NativeConstructionGuard.protect(owner, worker, area));
+        assertTrue(NativeConstructionGuard.status(area).contains("sealed native marker type"));
     }
 
     @Test void ambiguousLegacySolidsNeverBecomeClearableThroughAMaterialWhitelist() {
@@ -42,6 +46,19 @@ class NativeConstructionGuardTest extends MinecraftTestSupport {
         assertFalse(NativeConstructionGuard.currentCellSafe(GRASS, WALL, GRASS, false, true));
         assertFalse(NativeConstructionGuard.currentCellSafe(GRASS, WALL, Blocks.STONE.defaultBlockState(), false, false));
         assertTrue(NativeConstructionGuard.currentCellSafe(GRASS, WALL, AIR, false, true));
+    }
+
+    @Test void vegetationDropsDoNotBlockTheNextPlacementButLivingAndHangingEntitiesDo() {
+        var item = mock(net.minecraft.world.entity.item.ItemEntity.class);
+        var xp = mock(net.minecraft.world.entity.ExperienceOrb.class);
+        var mob = mock(Mob.class);
+        var hanging = mock(net.minecraft.world.entity.decoration.HangingEntity.class);
+        when(item.isAlive()).thenReturn(true); when(xp.isAlive()).thenReturn(true);
+        when(mob.isAlive()).thenReturn(true); when(hanging.isAlive()).thenReturn(true);
+        assertFalse(NativeConstructionGuard.blocksPlacement(item));
+        assertFalse(NativeConstructionGuard.blocksPlacement(xp));
+        assertTrue(NativeConstructionGuard.blocksPlacement(mob));
+        assertTrue(NativeConstructionGuard.blocksPlacement(hanging));
     }
 
     @Test void finishedBlocksAreNeverRebuiltAfterLaterRemovalEvenAfterReload() {

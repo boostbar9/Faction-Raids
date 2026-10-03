@@ -52,6 +52,10 @@ final class ConstructionEditLedger extends SavedData {
 
     boolean contains(UUID id) { return !invalid && sites.containsKey(id); }
 
+    boolean reserves(java.util.Collection<BlockPos> cells) {
+        return invalid || cells == null || cells.stream().anyMatch(pos -> pos == null || index.containsKey(pos.asLong()));
+    }
+
     boolean edited(UUID id) {
         Site site = sites.get(id);
         return invalid || site == null || !site.edited().isEmpty();

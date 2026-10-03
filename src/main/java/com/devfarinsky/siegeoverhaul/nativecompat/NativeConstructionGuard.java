@@ -53,22 +53,30 @@ public final class NativeConstructionGuard {
 
     private NativeConstructionGuard() {}
 
-    /**
-     * Public native creative-placement packets bypass the goal tick completely.
-     * Keep NEW commissions disabled until a reviewed server-side native subtype
-     * or upstream mutation hook covers those calls as well. This is deliberately
-     * not a user-toggleable safety flag.
-     */
-    public static String availabilityProblem() {
-        return "Protected construction is unavailable: native direct-placement controls still need a server-side guard.";
+    /** All new commission callers must use the sealed protected native subtype. */
+    public static String availabilityProblem() { return WorkersConstructionRuntime.problem(); }
+
+    public static boolean commissionPaid(Entity area) {
+        return area != null && area.getPersistentData() != null && area.getPersistentData().getBoolean(PAID);
+    }
+
+    /** Actual protected cells, including jobs whose physical marker is unloaded. */
+    public static boolean reserves(ServerLevel level, java.util.Collection<BlockPos> cells) {
+        return level == null || ConstructionEditLedger.get(level).reserves(cells);
+    }
+
+    public static boolean hasReservation(ServerLevel level, UUID areaId) {
+        return level != null && areaId != null && ConstructionEditLedger.get(level).contains(areaId);
     }
 
     /** Call after startBlueprint, before assignment/payment. A false result must abort the handoff. */
     public static boolean protect(ServerPlayer owner, Mob builder, Entity area) {
         if (owner == null || builder == null || area == null || !(area.level() instanceof ServerLevel level)
                 || area.getPersistentData().contains(KEY)) return false;
-        String unavailable = availabilityProblem();
-        if (unavailable != null) return pause(area, unavailable);
+        if (!(area instanceof ProtectedBuildArea))
+            return pause(area, "Protected construction requires the sealed native marker type");
+        String capabilityProblem = availabilityProblem();
+        if (capabilityProblem != null) return pause(area, capabilityProblem);
         try {
             if (!WallBuilderAccess.install(builder)) return pause(area, "Paused: native protection hook unavailable");
             var plan = AcceptedConstructionPlan.capture(area);
@@ -127,6 +135,8 @@ public final class NativeConstructionGuard {
         if (!protectedArea(area)) return true;
         if (!(builder.level() instanceof ServerLevel level)) return false;
         if (!area.getPersistentData().getBoolean(PAID)) return pause(area, "Paused: commission not completed");
+        String capabilityProblem = availabilityProblem();
+        if (capabilityProblem != null) return pause(area, capabilityProblem);
         try {
             Snapshot snapshot = snapshot(area);
             if (!snapshot.builder.equals(builder.getUUID())) return pause(area, "Paused: another builder selected this reserved job");
@@ -163,6 +173,8 @@ public final class NativeConstructionGuard {
                     && snapshot.plan.cells.entrySet().stream().anyMatch(cell -> !level.getBlockState(cell.getKey()).equals(cell.getValue())))
                 problem = "Paused: native job ended before every accepted block was placed";
             if (problem != null) return pause(area, problem);
+            if (state instanceof Enum<?> e && e.name().equals("DONE") && area instanceof ProtectedBuildArea protectedArea)
+                protectedArea.verifyCompletion();
             area.getPersistentData().remove(STATUS);
             return true;
         } catch (ReflectiveOperationException | RuntimeException unavailable) {
@@ -204,7 +216,8 @@ public final class NativeConstructionGuard {
     }
 
     private static boolean protectedArea(Entity area) {
-        return area != null && area.getPersistentData() != null && area.getPersistentData().contains(KEY);
+        return area instanceof ProtectedBuildArea || area != null && area.getPersistentData() != null
+                && area.getPersistentData().contains(KEY);
     }
 
     private static boolean pause(Entity area, String reason) {
@@ -250,11 +263,53 @@ public final class NativeConstructionGuard {
             if (level.getBlockEntity(pos) != null || !currentCellSafe(snapshot.before.get(pos), target, current,
                     snapshot.completed.contains(pos.asLong()), snapshot.cleared.contains(pos.asLong())))
                 return "Paused: existing or changed blocks are protected at " + pos.toShortString();
+            if (!current.equals(target)) {
+                String neighborhood = neighborhoodProblem(level, pos);
+                if (neighborhood != null) return neighborhood;
+            }
             if (!current.equals(target) && !level.getEntities((Entity) null, new AABB(pos),
-                    entity -> entity.isAlive() && entity != area).isEmpty())
+                    entity -> blocksPlacement(entity) && entity != area).isEmpty())
                 return "Paused: move entities out of the planned blocks";
         }
         return null;
+    }
+
+    static String neighborhoodProblem(ServerLevel level, BlockPos target) {
+        // Conductors can query a second neighbor ring while resolving power.
+        // Validate that bounded envelope before any state/signal read.
+        java.util.List<BlockPos> neighbors = new java.util.ArrayList<>(24);
+        for (int x = -2; x <= 2; x++) for (int y = -2; y <= 2; y++) for (int z = -2; z <= 2; z++) {
+            int distance = Math.abs(x) + Math.abs(y) + Math.abs(z);
+            if (distance == 0 || distance > 2) continue;
+            BlockPos pos = target.offset(x, y, z);
+            if (!level.hasChunkAt(pos)) return "Paused: placement neighbors must be loaded";
+            neighbors.add(pos);
+        }
+        for (BlockPos neighbor : neighbors) {
+            if (!stableNeighbor(level.getBlockState(neighbor)) || level.getBlockEntity(neighbor) != null)
+                return "Paused: a reactive or protected neighboring block needs manual review";
+        }
+        if (level.hasNeighborSignal(target)) return "Paused: powered construction sites need manual review";
+        return null;
+    }
+
+    static boolean stableNeighbor(BlockState state) {
+        if (state == null || state.hasBlockEntity() || !state.getFluidState().isEmpty()) return false;
+        if (state.isAir()) return true;
+        // Closed vanilla allowlist. No material tag or generic modded block is
+        // accepted as proof that neighbor updates are harmless.
+        return state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE) || state.is(Blocks.STONE_BRICKS)
+                || state.is(Blocks.OAK_PLANKS) || state.is(Blocks.DIRT) || state.is(Blocks.COARSE_DIRT)
+                || state.is(Blocks.ROOTED_DIRT) || state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.PODZOL)
+                || state.is(Blocks.MYCELIUM) || state.is(Blocks.GRANITE) || state.is(Blocks.DIORITE)
+                || state.is(Blocks.ANDESITE) || state.is(Blocks.DEEPSLATE) || state.is(Blocks.TUFF)
+                || state.is(Blocks.CALCITE) || state.is(Blocks.SANDSTONE) || state.is(Blocks.RED_SANDSTONE)
+                || state.is(Blocks.BEDROCK) || clearablePlant(state);
+    }
+
+    static boolean blocksPlacement(Entity entity) {
+        return entity.isAlive() && !(entity instanceof net.minecraft.world.entity.item.ItemEntity)
+                && !(entity instanceof net.minecraft.world.entity.ExperienceOrb);
     }
 
     /** The public source mutates at most one primary full-block cell in a tick. */
@@ -383,6 +438,8 @@ public final class NativeConstructionGuard {
     public static void areaJoined(EntityJoinLevelEvent event) {
         Entity area = event.getEntity();
         if (!event.loadedFromDisk() || !(event.getLevel() instanceof ServerLevel level) || !protectedArea(area)) return;
+        String capabilityProblem = availabilityProblem();
+        if (capabilityProblem != null) { pause(area, capabilityProblem); return; }
         try {
             Snapshot snapshot = snapshot(area);
             if (!snapshot.plan.matches(area) || !ConstructionEditLedger.get(level).matches(area.getUUID(), snapshot.plan.cells.keySet())
@@ -391,7 +448,11 @@ public final class NativeConstructionGuard {
                 return;
             }
             // Public native reconstruction only; never use creative placement or overwrite saved NBT.
-            area.getClass().getMethod("setStartBuild", boolean.class).invoke(area, false);
+            if (!(area instanceof ProtectedBuildArea protectedArea)) {
+                pause(area, "Paused: this marker has no protected native control boundary");
+                return;
+            }
+            protectedArea.rebuildAcceptedQueues();
         } catch (ReflectiveOperationException | RuntimeException unavailable) {
             pause(area, "Paused: saved construction cannot be verified");
         }

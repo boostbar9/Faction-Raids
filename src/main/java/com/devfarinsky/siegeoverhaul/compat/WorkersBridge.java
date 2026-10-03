@@ -11,6 +11,9 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import com.devfarinsky.siegeoverhaul.nativecompat.ProtectedBuildArea;
+import com.devfarinsky.siegeoverhaul.nativecompat.ProtectedConstructionAreas;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
@@ -45,7 +48,7 @@ public final class WorkersBridge {
 
     /** True only for the native Workers 2 build-area entity. */
     public static boolean isBuildArea(Entity entity) {
-        return entityTypeIs(entity, BUILD_AREA_ID);
+        return entityTypeIs(entity, BUILD_AREA_ID) || entity instanceof ProtectedBuildArea;
     }
 
     /**
@@ -182,7 +185,9 @@ public final class WorkersBridge {
     public static boolean assignBuildAreaDirectly(Mob worker, Entity buildArea) {
         if (worker == null || buildArea == null) return false;
         worker.getNavigation().stop();
-        return assignBuildAreaApi(worker, buildArea);
+        if (!assignBuildAreaApi(worker, buildArea)) return false;
+        return !(buildArea instanceof ProtectedBuildArea)
+                || com.devfarinsky.siegeoverhaul.core.WallBuilderAccess.prepareProtectedHandoff(worker, buildArea);
     }
 
     /** Package-visible seam that also makes the reflective handoff transactional. */
@@ -382,6 +387,21 @@ public final class WorkersBridge {
         return createAreaInternal(level, type, origin, owner, label, "", false, width, depth, height);
     }
 
+    /** New-only sealed native marker with a separately validated physical pick/shovel location. */
+    public static Entity createProtectedPlayerArea(ServerPlayer owner, Mob builder, BlockPos nativeOrigin,
+                                                   int width, int depth, int height,
+                                                   net.minecraft.nbt.CompoundTag blueprint) throws ReflectiveOperationException {
+        return ProtectedConstructionAreas.create(owner, builder, nativeOrigin, width, depth, height, blueprint);
+    }
+
+    /** A paid protected job cannot be discarded through unauthenticated native controls. */
+    public static boolean discardPlayerArea(Entity area) {
+        if (area == null) return true;
+        if (area instanceof ProtectedBuildArea protectedArea) return protectedArea.abortBeforePayment();
+        area.discard();
+        return true;
+    }
+
     private static Entity createAreaInternal(ServerLevel level, String type, BlockPos origin,
                                              java.util.UUID owner, String playerName, String teamId,
                                              boolean teamAccess, int width, int depth, int height)
@@ -546,7 +566,8 @@ public final class WorkersBridge {
     public static boolean enableWallProjection(Object area, int blockCount) {
         if (area == null || blockCount <= 0 || blockCount > 1024) return false;
         try {
-            area.getClass().getMethod("setAlwaysShowProjection", boolean.class).invoke(area, true);
+            if (area instanceof ProtectedBuildArea protectedArea) protectedArea.initializeProjection(true);
+            else area.getClass().getMethod("setAlwaysShowProjection", boolean.class).invoke(area, true);
             return true;
         } catch (ReflectiveOperationException | RuntimeException ex) {
             return false; // Optional presentation API; never reject an otherwise valid paid job.
@@ -554,6 +575,10 @@ public final class WorkersBridge {
     }
 
     public static void startBlueprint(Entity area, net.minecraft.nbt.CompoundTag blueprint) throws ReflectiveOperationException {
+        if (area instanceof ProtectedBuildArea protectedArea) {
+            protectedArea.initializeBlueprint(blueprint);
+            return;
+        }
         call(area, "setStructureNBT", net.minecraft.nbt.CompoundTag.class, blueprint);
         call(area, "setFreeArea", boolean.class, false);
         call(area, "setStartBuild", boolean.class, false);

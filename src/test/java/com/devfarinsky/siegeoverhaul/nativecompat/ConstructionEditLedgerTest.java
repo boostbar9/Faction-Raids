@@ -42,6 +42,17 @@ class ConstructionEditLedgerTest extends MinecraftTestSupport {
         assertTrue(ledger.register(b, Set.of(BlockPos.ZERO))); assertFalse(ledger.edited(b));
     }
 
+    @Test void reservationsUseActualCellsAndPersistWithoutReservingAHollowInterior() {
+        var ledger = new ConstructionEditLedger(); UUID id = UUID.randomUUID();
+        ledger.register(id, Set.of(new BlockPos(-5, 64, 0), new BlockPos(5, 64, 0)));
+        assertTrue(ledger.reserves(Set.of(new BlockPos(5, 64, 0))));
+        assertFalse(ledger.reserves(Set.of(new BlockPos(0, 64, 0))));
+        var loaded = ConstructionEditLedger.load(ledger.save(new CompoundTag()));
+        assertTrue(loaded.reserves(Set.of(new BlockPos(-5, 64, 0))));
+        CompoundTag invalid = new CompoundTag(); invalid.putBoolean("Invalid", true);
+        assertTrue(ConstructionEditLedger.load(invalid).reserves(Set.of(BlockPos.ZERO)));
+    }
+
     @Test void malformedAndMissingLedgersFailClosed() {
         CompoundTag root = new CompoundTag(); root.putBoolean("Invalid", true);
         var invalid = ConstructionEditLedger.load(root);

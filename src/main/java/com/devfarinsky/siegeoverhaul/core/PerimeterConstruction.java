@@ -121,14 +121,11 @@ public final class PerimeterConstruction {
         if (problem != null) return new Preparation(null, plan, claimIdentity, problem);
         String nativeProblem = NativeConstructionGuard.availabilityProblem();
         if (nativeProblem != null && !nativeProblem.isBlank()) return new Preparation(null, plan, claimIdentity, nativeProblem);
-        var search = TerritoryFortification.findNearbyBuilder(level, player, core, true);
-        Mob builder = search.builder();
-        if (builder == null) return new Preparation(null, plan, claimIdentity, search.reason());
-        Entity storage = TerritoryFortification.findPlayerStorageArea(level, player, builder.blockPosition(), nativeClaim.chunks());
-        if (storage == null || !WorkersBridge.hasBuilderStorage(storage))
-            return new Preparation(null, plan, claimIdentity, "Set up your own Workers storage inside the claim within 64 blocks of the builder, with Builders enabled.");
-        if (TerritoryFortification.withinStorageRange(plan.footprint(), storage.blockPosition()).size() != plan.columns().size())
-            return new Preparation(null, plan, claimIdentity, "The whole perimeter must be within 64 horizontal blocks of the selected storage area. No sections will be silently omitted.");
+        var supplySites = plan.columns().stream().flatMap(column -> java.util.stream.Stream.of(
+                column.foundationBase(), column.base().above(5))).toList();
+        var resources = ConstructionResources.find(level, player, core, nativeClaim.chunks(), supplySites);
+        if (resources.problem() != null) return new Preparation(null, plan, claimIdentity, resources.problem());
+        Mob builder = resources.builder();
         if (!player.isCreative() && PaymentSource.available(player, TerritoryFortification.PRICE) < TerritoryFortification.PRICE)
             return new Preparation(builder, plan, claimIdentity, "You need 900 emeralds in the faction Treasury before commissioning.");
         return new Preparation(builder, plan, claimIdentity, null);
@@ -165,7 +162,11 @@ public final class PerimeterConstruction {
             }
         }
         if (!remaining) return "This perimeter is already built. Nothing to commission.";
-        if (reserved(level, plan.min(), plan.max())) return "Another construction job already reserves part of this perimeter.";
+        Set<BlockPos> reservedCells = new HashSet<>();
+        plan.blocks().keySet().forEach(p -> reservedCells.add(BlockPos.of(p)));
+        plan.clearance().forEach(p -> reservedCells.add(BlockPos.of(p)));
+        String reservation = ConstructionReservations.problem(level, reservedCells);
+        if (reservation != null) return reservation;
         return null;
     }
 
@@ -181,33 +182,21 @@ public final class PerimeterConstruction {
         } catch (ArithmeticException overflow) { return false; }
     }
 
-    static boolean reserved(ServerLevel level, BlockPos min, BlockPos max) {
-        AABB bounds = new AABB(min, max.offset(1, 1, 1));
-        for (Entity area : level.getEntitiesOfClass(Entity.class, bounds.inflate(16), Entity::isAlive)) {
-            var tag = area.getPersistentData();
-            if (WorkersBridge.isBuildArea(area) && tag.contains(SITE_MIN) && tag.contains(SITE_MAX)
-                    && bounds.intersects(new AABB(BlockPos.of(tag.getLong(SITE_MIN)), BlockPos.of(tag.getLong(SITE_MAX)).offset(1, 1, 1))))
-                return true;
-        }
-        return false;
-    }
-
-    private static boolean startJob(ServerPlayer player, Preparation prepared, int material) {
+    static boolean startJob(ServerPlayer player, Preparation prepared, int material) {
         Entity area = null; Mob builder = prepared.builder(); boolean assigned = false, committed = false;
         try {
             var plan = prepared.plan(); BlockPos min = plan.min(), max = plan.max();
-            area = WorkersBridge.createPlayerArea(player.serverLevel(), "buildarea", new BlockPos(max.getX(), min.getY(), min.getZ()),
-                    player.getUUID(), player.getGameProfile().getName(), max.getX() - min.getX() + 1,
-                    max.getZ() - min.getZ() + 1, max.getY() - min.getY() + 1);
+            var blueprint = TerritoryFortification.blueprint(plan.blocks(), min, max);
+            area = WorkersBridge.createProtectedPlayerArea(player, builder, new BlockPos(max.getX(), min.getY(), min.getZ()),
+                    max.getX() - min.getX() + 1, max.getZ() - min.getZ() + 1, max.getY() - min.getY() + 1, blueprint);
             area.getPersistentData().putLong(SITE_MIN, min.asLong()); area.getPersistentData().putLong(SITE_MAX, max.asLong());
             ConstructionReport.remember(area, TerritoryFortification.material(material).label() + " template perimeter", plan.blocks().size());
             PlayerFortificationJobs.link(builder, area, player.getUUID());
             if (!player.serverLevel().addFreshEntity(area)) throw new IllegalStateException("Build marker rejected");
-            WorkersBridge.startBlueprint(area, TerritoryFortification.blueprint(plan.blocks(), min, max));
+            WorkersBridge.startBlueprint(area, blueprint);
             if (!NativeConstructionGuard.protect(player, builder, area)) throw new IllegalStateException("The native job could not be safely protected");
             WorkersBridge.enableWallProjection(area, plan.blocks().size());
             WorkersBridge.enablePlayerJob(builder, player.getUUID()); WallBuilderAccess.install(builder);
-            if (builder.distanceToSqr(player) > 24.0 * 24.0) WorkersBridge.teleportBuilderNear(builder, player.serverLevel(), player.blockPosition());
             assigned = true;
             if (!WorkersBridge.assignBuildAreaDirectly(builder, area)) throw new IllegalStateException("Builder refused the plan");
             if (!PaymentSource.consume(player, TerritoryFortification.PRICE)) throw new IllegalStateException("Treasury payment rejected");
@@ -220,7 +209,7 @@ public final class PerimeterConstruction {
         } catch (ReflectiveOperationException | RuntimeException failure) {
             if (committed) { FactionLogger.LOG.warn("[SiegeOverhaul] Paid perimeter feedback failed", failure); return true; }
             if (area != null && (!assigned || WorkersBridge.releasePlayerJob(builder, area))) {
-                PlayerFortificationJobs.unlink(builder, area.getUUID()); area.discard();
+                PlayerFortificationJobs.unlink(builder, area.getUUID()); WorkersBridge.discardPlayerArea(area);
             }
             FactionLogger.LOG.warn("[SiegeOverhaul] Template perimeter could not start", failure);
             return fail(player, "The perimeter could not start safely. No payment was taken; your plan is kept. " + failure.getMessage());

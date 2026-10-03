@@ -22,6 +22,10 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
             (x,z)->PerimeterBlueprint.Surface.ready(64),PerimeterBlueprint.Palette.COBBLESTONE); }
     private ServerLevel level() {
         var level=mock(ServerLevel.class);when(level.getMinBuildHeight()).thenReturn(-64);
+        when(level.getAllEntities()).thenReturn(List.of());
+        var storage=mock(net.minecraft.world.level.storage.DimensionDataStorage.class);
+        when(level.getDataStorage()).thenReturn(storage);
+        when(storage.computeIfAbsent(any(),any(),anyString())).thenAnswer(call -> ((java.util.function.Supplier<?>)call.getArgument(1)).get());
         when(level.getMaxBuildHeight()).thenReturn(320);when(level.hasChunkAt(any())).thenReturn(true);
         when(level.getWorldBorder()).thenReturn(new WorldBorder());
         when(level.getBlockState(any())).thenAnswer(call->((BlockPos)call.getArgument(0)).getY()<64
@@ -54,6 +58,7 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
         tag.putLong(PerimeterConstruction.SITE_MIN,new BlockPos(4,64,4).asLong());
         tag.putLong(PerimeterConstruction.SITE_MAX,new BlockPos(8,69,8).asLong());
         when(area.getPersistentData()).thenReturn(tag);when(level.getEntitiesOfClass(eq(Entity.class),any(),any())).thenReturn(List.of(area));
+        when(level.getAllEntities()).thenReturn(List.of(area)); when(area.isAlive()).thenReturn(true);
         try(var bridge=mockStatic(WorkersBridge.class)) {bridge.when(()->WorkersBridge.isBuildArea(area)).thenReturn(true);
             assertNotNull(PerimeterConstruction.siteProblem(level,plan(),p->true));}
     }

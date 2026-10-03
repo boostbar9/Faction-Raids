@@ -112,6 +112,8 @@ minecraft {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
+    // Official CurseForge Maven coordinates for the already-required native APIs.
+    maven { url = "https://www.cursemaven.com"; content { includeGroup "curse.maven" } }
     maven { url = "https://maven.theillusivec4.top/" }
     maven {
         name = 'MinecraftForge'
@@ -127,6 +129,11 @@ repositories {
 }
 
 dependencies {
+    // Compile against the reviewed 1.20.1 releases; companion JARs are not bundled.
+    compileOnly fg.deobf('curse.maven:workers-567450:8351157')
+    compileOnly fg.deobf('curse.maven:recruits-523860:8339846')
+    testImplementation fg.deobf('curse.maven:workers-567450:8351157')
+    testImplementation fg.deobf('curse.maven:recruits-523860:8339846')
     compileOnly fg.deobf('top.theillusivec4.curios:curios-forge:5.14.1+1.20.1:api')
     testImplementation fg.deobf('top.theillusivec4.curios:curios-forge:5.14.1+1.20.1:api')
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'

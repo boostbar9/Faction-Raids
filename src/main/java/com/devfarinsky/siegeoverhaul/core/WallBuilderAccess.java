@@ -80,6 +80,40 @@ public final class WallBuilderAccess extends Goal {
         return false;
     }
 
+    /** Reset only stale transient native goal state after the new area's assignment succeeds. */
+    public static boolean prepareProtectedHandoff(Mob worker, Entity expectedArea) {
+        if (worker.goalSelector == null || NativeConstructionGuard.currentArea(worker) != expectedArea) return false;
+        for (var goal : worker.goalSelector.getAvailableGoals())
+            if (goal.getGoal() instanceof WallBuilderAccess access) return access.resetTransientState();
+        return false;
+    }
+
+    private boolean resetTransientState() {
+        java.util.List<Field> fields = new ArrayList<>();
+        java.util.List<Object> previous = new ArrayList<>();
+        try {
+            for (String name : new String[]{"stackToBreak", "stackToPlace", "stackToFree"}) {
+                Field field = delegate.getClass().getField(name);
+                if (!field.getType().isAssignableFrom(java.util.Stack.class)) return false;
+                fields.add(field); previous.add(field.get(delegate));
+            }
+            Object selection = java.util.Arrays.stream(stateField.getType().getEnumConstants())
+                    .filter(value -> ((Enum<?>)value).name().equals("SELECT_WORK_AREA")).findFirst().orElseThrow();
+            fields.add(stateField); previous.add(stateField.get(delegate));
+            fields.add(blockField); previous.add(blockField.get(delegate));
+            fields.add(workDoneField); previous.add(workDoneField.get(delegate));
+            for (int i = 0; i < 3; i++) fields.get(i).set(delegate, new java.util.Stack<>());
+            stateField.set(delegate, selection); blockField.set(delegate, null); workDoneField.setBoolean(delegate, false);
+            reservedArea = null; reservedColumns = Set.of(); approachTarget = null;
+            pendingPath = null; pendingSites = Set.of(); destination = null; lastTarget = null;
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            for (int i = 0; i < fields.size(); i++) try { fields.get(i).set(delegate, previous.get(i)); }
+            catch (ReflectiveOperationException | RuntimeException ignored) { }
+            return false;
+        }
+    }
+
     @Override public boolean canUse() { return delegate.canUse(); }
     @Override public boolean canContinueToUse() { return delegate.canContinueToUse(); }
     @Override public boolean isInterruptable() { return delegate.isInterruptable(); }
