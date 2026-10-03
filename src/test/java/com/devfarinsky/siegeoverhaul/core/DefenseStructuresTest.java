@@ -160,7 +160,10 @@ class DefenseStructuresTest extends MinecraftTestSupport {
         when(area.getPersistentData()).thenReturn(new CompoundTag()); when(area.getUUID()).thenReturn(UUID.randomUUID());
         when(area.blockPosition()).thenReturn(tower().min()); when(level.addFreshEntity(area)).thenReturn(true);
         try (var bridge = mockStatic(WorkersBridge.class); var payment = mockStatic(PaymentSource.class);
-             var access = mockStatic(WallBuilderAccess.class)) {
+             var access = mockStatic(WallBuilderAccess.class);
+             var guard = mockStatic(com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.class)) {
+            guard.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.protect(player, builder, area)).thenReturn(true);
+            guard.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.activate(area)).thenReturn(true);
             bridge.when(() -> WorkersBridge.createPlayerArea(eq(level), eq("buildarea"), any(), eq(owner), anyString(), anyInt(), anyInt(), anyInt())).thenReturn(area);
             bridge.when(() -> WorkersBridge.assignBuildAreaDirectly(builder, area)).thenReturn(accepts);
             bridge.when(() -> WorkersBridge.releasePlayerJob(builder, area)).thenReturn(true);
@@ -171,6 +174,7 @@ class DefenseStructuresTest extends MinecraftTestSupport {
             });
             assertEquals(success, DefenseStructures.startJob(player, builder, tower(), DefenseBlueprint.Kind.WATCHTOWER));
             payment.verify(() -> PaymentSource.consume(player, 300), accepts ? times(1) : never());
+            guard.verify(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.activate(area), success ? times(1) : never());
             if (!success) {
                 verify(area).discard();
                 assertFalse(builder.getPersistentData().hasUUID(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));

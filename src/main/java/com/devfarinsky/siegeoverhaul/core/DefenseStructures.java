@@ -68,6 +68,8 @@ public final class DefenseStructures {
                 && level.mayInteract(player, p));
         if (problem != null) return Preparation.failed(problem);
 
+        String nativeProblem = com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.availabilityProblem();
+        if (nativeProblem != null && !nativeProblem.isBlank()) return Preparation.failed(nativeProblem);
         var search = TerritoryFortification.findNearbyBuilder(level, player, origin, true);
         Mob builder = search.builder();
         if (builder == null) return Preparation.failed(search.reason().replace("core", "placement"));
@@ -133,12 +135,15 @@ public final class DefenseStructures {
             PlayerFortificationJobs.link(builder, build, player.getUUID());
             if (!player.serverLevel().addFreshEntity(build)) throw new IllegalStateException("Build area rejected");
             WorkersBridge.startBlueprint(build, TerritoryFortification.blueprint(plan.blocks(), min, max));
+            if (!com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.protect(player, builder, build))
+                throw new IllegalStateException("The native job could not be safely protected");
             WorkersBridge.enableWallProjection(build, plan.blocks().size());
             WorkersBridge.enablePlayerJob(builder, player.getUUID());
             WallBuilderAccess.install(builder);
             if (!WorkersBridge.assignBuildAreaDirectly(builder, build)) throw new IllegalStateException("Builder refused the plan");
             if (!PaymentSource.consume(player, kind.price)) throw new IllegalStateException("Treasury payment rejected");
             committed = true;
+            com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.activate(build);
             player.sendSystemMessage(Component.literal(kind.label + " commissioned. Supply " + plan.materials()
                     + " through your Workers storage area. The builder waits when supplies run out and follows normal work hours."));
             player.sendSystemMessage(Component.literal("Build marker: " + build.blockPosition().toShortString()

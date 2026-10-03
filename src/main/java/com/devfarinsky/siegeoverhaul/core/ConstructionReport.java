@@ -76,6 +76,8 @@ public final class ConstructionReport {
             String activity = builder != null && builder.isSleeping() ? "Sleeping"
                     : builder != null && builder.getTarget() != null ? "Responding to danger"
                     : WorkersConstructionView.activity(builder, area);
+            String protection = com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.status(area);
+            if (!protection.isBlank()) activity = protection;
             result.add(new Job(label, progress.percent(), amount, location, activity,
                     String.join(", ", WorkersConstructionView.requests(builder))));
         }

@@ -41,13 +41,29 @@ public final class WorkersProjectionVisibility {
         var mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return;
         world = mc.level;
+        Object focusedArea = NativeFocus.current();
         for (Entity entity : world.entitiesForRendering()) {
             if (!entity.isAlive() || !WorkersBridge.isBuildArea(entity)) continue;
-            var bounds = WorkersProjectionView.visibleBounds(entity, mc.player);
+            var bounds = WorkersProjectionView.visibleBounds(entity, mc.player, focusedArea);
             // The native renderer is still responsible for positions, access,
             // distance limits and drawing. Only its marker-sized frustum test
             // is bypassed, and only while the actual projection is on screen.
             CULLING.update(entity, bounds, event.getFrustum()::isVisible);
+        }
+    }
+    /** Query the very same focus source as Workers' renderer, once per frame. */
+    private static final class NativeFocus {
+        private static final java.lang.reflect.Method GET = resolve();
+        private static java.lang.reflect.Method resolve() {
+            try {
+                return Class.forName("com.talhanation.recruits.client.events.ClientEvent")
+                        .getMethod("getEntityByLooking");
+            } catch (ReflectiveOperationException | LinkageError unavailable) { return null; }
+        }
+        private static Object current() {
+            if (GET == null) return null;
+            try { return GET.invoke(null); }
+            catch (ReflectiveOperationException | RuntimeException unavailable) { return null; }
         }
     }
 }

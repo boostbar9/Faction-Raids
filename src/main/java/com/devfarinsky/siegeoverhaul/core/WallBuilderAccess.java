@@ -2,6 +2,7 @@ package com.devfarinsky.siegeoverhaul.core;
 
 import com.devfarinsky.siegeoverhaul.ModConstants;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
+import com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -60,21 +61,23 @@ public final class WallBuilderAccess extends Goal {
         throw new NoSuchFieldException("workDone");
     }
 
-    public static void install(Mob worker) {
-        if (worker.goalSelector == null) return;
+    public static boolean install(Mob worker) {
+        if (worker.goalSelector == null) return false;
         var goals = new ArrayList<>(worker.goalSelector.getAvailableGoals());
-        if (goals.stream().anyMatch(g -> g.getGoal() instanceof WallBuilderAccess)) return;
+        if (goals.stream().anyMatch(g -> g.getGoal() instanceof WallBuilderAccess)) return true;
         for (var wrapped : goals) {
             if (!wrapped.getGoal().getClass().getName().equals("com.talhanation.workers.entities.ai.BuilderWorkGoal")) continue;
             try {
                 var replacement = new WallBuilderAccess(worker, wrapped.getGoal());
                 worker.goalSelector.removeGoal(wrapped.getGoal());
                 worker.goalSelector.addGoal(wrapped.getPriority(), replacement);
+                return true;
             } catch (ReflectiveOperationException ex) {
                 com.devfarinsky.siegeoverhaul.FactionLogger.LOG.debug("Wall access API unavailable: {}", ex.getMessage());
             }
-            return;
+            return false;
         }
+        return false;
     }
 
     @Override public boolean canUse() { return delegate.canUse(); }
@@ -87,7 +90,13 @@ public final class WallBuilderAccess extends Goal {
         retainCommission();
         if (approachCommission()) return;
         if (recoverBuriedApproach()) return;
+        // Access helpers can advance MOVE_TO_WORK_AREA to PREPARE_BREAK_BLOCKS.
+        // Validate after those transitions, at the actual native dispatch boundary.
+        if (!NativeConstructionGuard.beforeNativeTick(worker, delegate)) return;
+        Entity guardedArea = NativeConstructionGuard.currentArea(worker);
+        var mutationCells = NativeConstructionGuard.mutationCells(delegate);
         delegate.tick();
+        NativeConstructionGuard.afterNativeTick(worker, guardedArea, mutationCells);
         if (!(worker.level() instanceof ServerLevel level) || worker.isPassenger()
                 || worker.isLeashed() || worker.getTarget() != null) return;
         try {

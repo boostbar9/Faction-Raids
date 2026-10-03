@@ -59,13 +59,13 @@ class CoreHireCompactionTest extends MinecraftTestSupport {
             }
         }
     }
-    @Test void defenseCatalogDoesNotCoverTheLowerCardsAtCompactGuiSizes() {
+    @Test void territoryUsesTheFormerPerimeterBandWithoutOverlappingItsFooter() {
         for (int w = 240; w <= 640; w += 7) for (int h = 180; h <= 480; h += 7) {
             var layout = CoreHireLayout.fit(w, h);
             int cardBottom = layout.territoryCardY(3) + layout.territoryCardHeight();
-            int catalogTop = layout.contentBottom() - 22;
-            assertTrue(cardBottom + 2 <= catalogTop, w + "x" + h);
-            assertTrue(catalogTop + 20 <= layout.contentBottom(), w + "x" + h);
+            assertTrue(cardBottom <= layout.contentBottom(), w + "x" + h);
+            assertTrue(layout.territoryFreeTop() + layout.territoryFreeHeight()
+                    <= layout.contentBottom(), w + "x" + h);
         }
     }
 }

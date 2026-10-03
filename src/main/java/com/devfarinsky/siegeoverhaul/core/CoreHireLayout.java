@@ -137,7 +137,7 @@ public record CoreHireLayout(int x, int y, int width, int height,
         return contentY() + (i / 2) * (cardHeight() + rowGap());
     }
 
-    /** Shared Territory geometry for cards, buttons and hover regions, above the fortification strip. */
+    /** Shared Territory geometry for upgrade cards, buttons and hover regions. */
     public int territoryCardWidth() { return (width - 28) / 2; }
 
     /**
@@ -147,7 +147,7 @@ public record CoreHireLayout(int x, int y, int width, int height,
      * padding out four half-empty cards.
      */
     public int territoryCardHeight() {
-        int available = (contentBottom() - 32 - contentY() - 8) / 2;
+        int available = (contentBottom() - contentY() - 8) / 2;
         return Math.max(MIN_TERRITORY_CARD_HEIGHT,
                 Math.min(available, compact
                         ? COMPACT_TERRITORY_CARD_HEIGHT : FULL_TERRITORY_CARD_HEIGHT));
@@ -164,9 +164,9 @@ public record CoreHireLayout(int x, int y, int width, int height,
     /** First free pixel row below the Territory card grid. */
     public int territoryFreeTop() { return territoryCardY(2) + territoryCardHeight() + 8; }
 
-    /** Height of the free Territory band left above the fortification strip. */
+    /** Height of the free Territory band above the footer. */
     public int territoryFreeHeight() {
-        return Math.max(0, contentBottom() - 32 - territoryFreeTop());
+        return Math.max(0, contentBottom() - territoryFreeTop());
     }
 
     /**

@@ -11,6 +11,7 @@ import static org.mockito.Mockito.mock;
 class WorkersProjectionViewTest extends MinecraftTestSupport {
     public static class Area {
         boolean enabled = true, permitted = true;
+        public boolean showBox;
         public boolean getAlwaysShowProjection() { return enabled; }
         public boolean canPlayerSee(Player player) { return permitted; }
         public AABB getArea() { return new AABB(-32, 63, -16, 15, 70, 31); }
@@ -43,6 +44,31 @@ class WorkersProjectionViewTest extends MinecraftTestSupport {
         assertNull(WorkersProjectionView.visibleBounds(area, player));
         area.enabled = true; area.permitted = false;
         assertNull(WorkersProjectionView.visibleBounds(area, player));
+    }
+
+    @Test void focusOnlyLargePlansUseTheNativeFocusGateWithoutChangingTheirSetting() {
+        var area = new Area(); var player = mock(Player.class);
+        area.enabled = false;
+        assertNotNull(WorkersProjectionView.visibleBounds(area, player, area));
+        assertNull(WorkersProjectionView.visibleBounds(area, player, new Area()));
+        assertFalse(area.enabled);
+        area.permitted = false;
+        assertNull(WorkersProjectionView.visibleBounds(area, player, area));
+    }
+
+    @Test void nativeShowBoxEnablesBoundsWithoutAlwaysShowOrFocus() {
+        var area = new Area(); var player = mock(Player.class);
+        area.enabled = false; area.showBox = true;
+        assertNotNull(WorkersProjectionView.visibleBounds(area, player, null));
+        area.permitted = false;
+        assertNull(WorkersProjectionView.visibleBounds(area, player, area));
+    }
+
+    @Test void nativeShortCircuitDoesNotReadAlwaysShowWhenBoxOrFocusAlreadyVisible() {
+        var area = new UnavailableSettingsArea(); var player = mock(Player.class);
+        assertNotNull(WorkersProjectionView.visibleBounds(area, player, area));
+        area.showBox = true;
+        assertNotNull(WorkersProjectionView.visibleBounds(area, player, null));
     }
 
     @Test void missingCompanionApiOrPlayerFailsClosed() {
