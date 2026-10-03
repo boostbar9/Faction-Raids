@@ -26,13 +26,18 @@ public final class CampLoading {
         ChunkPos chunk=new ChunkPos(new BlockPos(x,core.getY(),z));
         return new BlockPos(chunk.getMiddleBlockX(),core.getY(),chunk.getMiddleBlockZ());
     }
-    /** Balanced local search that keeps the full radius-13 terrain check inside the loaded 3x3 chunks. */
+    /** Balanced local search that keeps even the fallback radius-16 survey inside the loaded 3x3 chunks. */
     public static BlockPos localCandidate(BlockPos scout, int attempt, boolean expanded) {
         int width = expanded ? 5 : 3;
         int spacing = expanded ? 4 : 6;
         int index = Math.floorMod(attempt, width * width);
-        return scout.offset((index % width - width / 2) * spacing, 0,
-                (index / width - width / 2) * spacing);
+        int dx = (index % width - width / 2) * spacing;
+        int dz = (index / width - width / 2) * spacing;
+        // At chunk-center +8, another +8 plus the fallback's 16-block
+        // survey reaches the first column outside the ready neighborhood.
+        // Keep the 25 distinct, symmetric sites without rejecting that edge unloaded.
+        if (expanded) { dx = Math.max(-7, Math.min(7, dx)); dz = Math.max(-7, Math.min(7, dz)); }
+        return scout.offset(dx, 0, dz);
     }
     public static void keep(ServerLevel level,BlockPos pos) {
         // Radius 3 keeps the 3x3 camp neighborhood entity-ticking, with vanilla's surrounding load margin.

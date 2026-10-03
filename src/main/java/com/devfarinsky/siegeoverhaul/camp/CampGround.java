@@ -44,5 +44,12 @@ final class CampGround {
                 || state.is(Blocks.SEAGRASS) || state.is(Blocks.TALL_SEAGRASS);
         // Only water and natural aquatic vegetation; never lava or waterlogged player blocks.
     }
+    /** Full, raw rock can support fallback earthworks only when it is left untouched. */
+    static boolean foundation(BlockState state) {
+        return CampRoad.soil(state) || state.is(Blocks.STONE) || state.is(Blocks.GRANITE)
+                || state.is(Blocks.DIORITE) || state.is(Blocks.ANDESITE) || state.is(Blocks.TUFF)
+                || state.is(Blocks.DEEPSLATE) || state.is(Blocks.CALCITE)
+                || state.is(Blocks.BASALT) || state.is(Blocks.SMOOTH_BASALT);
+    }
     private CampGround() {}
 }

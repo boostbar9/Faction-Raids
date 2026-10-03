@@ -587,4 +587,95 @@ class CampTerrainTest extends MinecraftTestSupport {
         verify(level,never()).setBlock(any(),any(),anyInt());
     }
 
+    @Test void fallbackAcceptsFlatNaturalRockAsUnchangedCampAndExitSupport() {
+        for(var rock:List.of(Blocks.STONE,Blocks.GRANITE,Blocks.DIORITE,Blocks.ANDESITE,
+                Blocks.TUFF,Blocks.DEEPSLATE,Blocks.CALCITE,Blocks.BASALT,Blocks.SMOOTH_BASALT)) {
+            doAnswer(c -> ((BlockPos)c.getArgument(0)).getY()<64
+                    ? rock.defaultBlockState() : Blocks.AIR.defaultBlockState()).when(level).getBlockState(any());
+            assertTrue(CampTerraforming.acceptableForTerraforming(level,center,center,12),rock.toString());
+            assertTrue(CampTerrain.plan(level,center,p->false).isEmpty(),"Ordinary scouting stays conservative");
+            var reasons=new ArrayList<CampTerrain.Rejection>();
+            var plan=CampTerrain.plan(level,center,p->false,reasons::add,true).orElseThrow();
+            assertTrue(reasons.isEmpty());
+            assertTrue(plan.changes().isEmpty(),"Natural rock must remain unchanged: "+rock);
+            assertEquals(net.minecraft.core.Direction.NORTH,plan.entrance());
+            verify(level,never()).setBlock(any(),any(),anyInt());
+            clearInvocations(level);
+        }
+    }
+
+    @Test void fallbackSoilCutAndFillCanRestOnUnchangedNaturalRock() {
+        heights.put("1:0",67);
+        heights.put("-1:0",63);
+        BlockPos cutSupport=new BlockPos(1,63,0), fillSupport=new BlockPos(-1,62,0);
+        edits.put(cutSupport,Blocks.STONE.defaultBlockState());
+        edits.put(fillSupport,Blocks.ANDESITE.defaultBlockState());
+        var plan=CampTerrain.plan(level,center,p->false,r->{},true).orElseThrow();
+        assertEquals(4,plan.changes().size());
+        assertTrue(plan.changes().stream().noneMatch(c->c.pos().equals(cutSupport)||c.pos().equals(fillSupport)));
+        assertTrue(CampTerrain.apply(level,raid,plan));
+        assertTrue(state(cutSupport).is(Blocks.STONE));
+        assertTrue(state(fillSupport).is(Blocks.ANDESITE));
+        assertTrue(state(new BlockPos(1,64,0)).isAir());
+        assertTrue(state(new BlockPos(-1,63,0)).is(Blocks.DIRT));
+        var saved=RaidState.load(raid.save());
+        assertEquals(4,saved.campBlocks.size());
+        assertFalse(saved.campBlocks.containsKey(cutSupport.asLong()));
+        assertFalse(saved.campBlocks.containsKey(fillSupport.asLong()));
+    }
+
+    @Test void shallowPondAndItsExitCanRestOnUnchangedStoneBottoms() {
+        BlockPos pond=center, exit=center.relative(net.minecraft.core.Direction.EAST,17);
+        for(BlockPos column:List.of(pond,exit)) {
+            edits.put(column.atY(60),Blocks.STONE.defaultBlockState());
+            for(int y=61;y<64;y++)edits.put(column.atY(y),Blocks.WATER.defaultBlockState());
+        }
+        var plan=CampTerrain.plan(level,center,p->false,r->{},true,
+                net.minecraft.core.Direction.EAST).orElseThrow();
+        assertEquals(net.minecraft.core.Direction.EAST,plan.entrance());
+        assertEquals(6,plan.changes().size());
+        assertTrue(plan.changes().stream().allMatch(c->c.before().is(Blocks.WATER)&&c.after().is(Blocks.DIRT)));
+        assertTrue(CampTerrain.apply(level,raid,plan));
+        var saved=RaidState.load(raid.save());
+        for(BlockPos column:List.of(pond,exit)) {
+            assertTrue(state(column.atY(60)).is(Blocks.STONE));
+            assertFalse(saved.campBlocks.containsKey(column.atY(60).asLong()));
+            for(int y=61;y<64;y++)assertEquals("minecraft:water",saved.campBlocks.get(column.atY(y).asLong())
+                    .getCompound("Original").getString("Name"));
+        }
+    }
+
+    @Test void fallbackRockFootingDoesNotAuthorizeExcavatingRockOrUsingPlayerFoundations() {
+        heights.put("1:0",65);
+        edits.put(new BlockPos(1,64,0),Blocks.STONE.defaultBlockState());
+        assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isEmpty(),"Never excavate rock");
+        heights.clear();edits.clear();
+        for(var block:List.of(Blocks.CHEST,Blocks.STONE_BRICKS,Blocks.COBBLESTONE,Blocks.OAK_PLANKS,
+                Blocks.WATER,Blocks.LAVA,Blocks.BEDROCK)) {
+            edits.put(new BlockPos(2,63,2),block.defaultBlockState());
+            // A water source would be a valid shallow pond, so reject its unsupported bottom too.
+            edits.put(new BlockPos(2,62,2),block.defaultBlockState());
+            edits.put(new BlockPos(2,61,2),Blocks.CHEST.defaultBlockState());
+            assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isEmpty(),block.toString());
+        }
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
+    @Test void expandedCornerCandidatePlansInsideOnlyTheReadyThreeByThreeChunks() {
+        BlockPos scout=new BlockPos(8,64,8);
+        when(level.hasChunkAt(any())).thenAnswer(c -> {
+            BlockPos pos=c.getArgument(0);
+            return pos.getX()>=-16 && pos.getX()<=31 && pos.getZ()>=-16 && pos.getZ()<=31;
+        });
+        BlockPos site=CampLoading.localCandidate(scout,24,true);
+        var reasons=new ArrayList<CampTerrain.Rejection>();
+        var plan=CampTerrain.plan(level,site,p->false,reasons::add,true).orElseThrow();
+        assertEquals(new BlockPos(15,64,15),site);
+        assertTrue(reasons.isEmpty());
+        assertTrue(plan.changes().isEmpty());
+        verify(level,never()).getHeight(any(),eq(32),anyInt());
+        verify(level,never()).getHeight(any(),anyInt(),eq(32));
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
 }

@@ -38,7 +38,7 @@ class CampLoadingTest extends MinecraftTestSupport {
             for(int i=0;i<25;i++) {
                 BlockPos site=CampLoading.localCandidate(scout,i,true);assertTrue(sites.add(site));
                 sumX+=site.getX()-scout.getX();sumZ+=site.getZ()-scout.getZ();
-                for(int x:new int[]{-13,13})for(int z:new int[]{-13,13}) {
+                for(int x:new int[]{-16,16})for(int z:new int[]{-16,16}) {
                     ChunkPos edge=new ChunkPos(site.offset(x,0,z));
                     assertTrue(Math.abs(edge.x-chunk.x)<=1 && Math.abs(edge.z-chunk.z)<=1);
                 }
