@@ -43,7 +43,8 @@ public final class NativeConstructionGuard {
     private static final Set<String> STATES = Set.of("SELECT_WORK_AREA", "MOVE_TO_WORK_AREA", "PREPARE_FREE_AREA",
             "FREE_AREA", "PREPARE_BREAK_BLOCKS", "BREAK_BLOCKS", "PREPARE_PLACE_BLOCKS", "PLACE_BLOCKS",
             "PREPARE_PLACE_MULTIBLOCK", "PLACE_MULTIBLOCK", "DONE", "ERROR");
-    private record Snapshot(AcceptedConstructionPlan plan, Map<BlockPos, BlockState> before,
+    private record Snapshot(AcceptedConstructionPlan plan, AcceptedConstructionReservation reservation,
+                            Map<BlockPos, BlockState> before,
                             Set<Long> completed, Set<Long> cleared, UUID owner, UUID builder,
                             String coreKey, BlockPos corePos) {}
 
@@ -65,8 +66,12 @@ public final class NativeConstructionGuard {
         return level != null && areaId != null && ConstructionEditLedger.get(level).contains(areaId);
     }
 
-    /** Call after startBlueprint, before assignment/payment. A false result must abort the handoff. */
-    public static boolean protect(ServerPlayer owner, Mob builder, Entity area) {
+    /**
+     * Call after startBlueprint, before assignment/payment. Pass the exact preflight solid + clearance
+     * cells (at most 65,536), including all native targets. Reservations never authorize excavation.
+     * A false result must abort the handoff. Missing older draft reservation recipes pause on reload.
+     */
+    public static boolean protect(ServerPlayer owner, Mob builder, Entity area, Collection<BlockPos> reservedCells) {
         if (owner == null || builder == null || area == null || !(area.level() instanceof ServerLevel level)
                 || area.getPersistentData().contains(KEY)) return false;
         if (!(area instanceof ProtectedBuildArea))
@@ -76,6 +81,7 @@ public final class NativeConstructionGuard {
         try {
             if (!WallBuilderAccess.install(builder)) return pause(area, "Paused: native protection hook unavailable");
             var plan = AcceptedConstructionPlan.capture(area);
+            var reservation = AcceptedConstructionReservation.capture(level, plan, reservedCells);
             var point = SiegeCore.point(owner.server, SiegeCore.key(owner));
             if (point == null || !owner.getUUID().equals(WorkersBridge.readOwner(area))
                     || !owner.getUUID().equals(WorkersBridge.readWorkerOwner(builder))) return false;
@@ -87,7 +93,7 @@ public final class NativeConstructionGuard {
                     return pause(area, "Paused: protected blocks or paired plants need manual clearance");
                 before.put(pos, state);
             }
-            Snapshot snapshot = new Snapshot(plan, Map.copyOf(before), new HashSet<>(), new HashSet<>(),
+            Snapshot snapshot = new Snapshot(plan, reservation, Map.copyOf(before), new HashSet<>(), new HashSet<>(),
                     owner.getUUID(), builder.getUUID(), SiegeCore.key(owner), point.pos().immutable());
             before.forEach((pos, state) -> { if (state.equals(plan.cells.get(pos))) snapshot.completed.add(pos.asLong()); });
             String problem = worldProblem(level, builder, area, snapshot, snapshot.plan.cells.keySet(), false);
@@ -102,7 +108,9 @@ public final class NativeConstructionGuard {
                     return pause(area, "Paused: the builder's previous canceled job cannot be detached safely");
                 ledger.acknowledgeRetirement(previous);
             }
-            if (!ledger.register(area.getUUID(), plan.cells.keySet()))
+            if (ledger.reserves(reservation.cells))
+                return pause(area, "Paused: another protected job reserves this footprint or headroom");
+            if (!ledger.register(area.getUUID(), reservation.cells))
                 return pause(area, "Paused: protected-site ledger is full or unavailable");
             area.getPersistentData().put(KEY, save(snapshot));
             area.getPersistentData().putBoolean(PAID, false);
@@ -287,11 +295,13 @@ public final class NativeConstructionGuard {
     private static String worldProblem(ServerLevel level, Mob builder, Entity area, Snapshot snapshot,
                                        Set<BlockPos> candidates, boolean requireLedger) {
         String permissions = NativeConstructionPolicy.problem(level, builder, area, snapshot.owner,
-                snapshot.coreKey, snapshot.corePos, candidates);
+                snapshot.coreKey, snapshot.corePos, snapshot.reservation.cells);
         if (permissions != null) return permissions;
+        String clearance = snapshot.reservation.problem(level);
+        if (clearance != null) return clearance;
         if (requireLedger) {
             var ledger = ConstructionEditLedger.get(level);
-            if (!ledger.contains(area.getUUID())) return "Paused: protected-site history is unavailable";
+            if (!ledger.matches(area.getUUID(), snapshot.reservation.cells)) return "Paused: protected-site history is unavailable";
             if (ledger.edited(area.getUUID())) return "Paused: this site was edited; commission a new reviewed plan";
         }
         for (BlockPos pos : candidates) {
@@ -429,6 +439,7 @@ public final class NativeConstructionGuard {
             cell.put("State", NbtUtils.writeBlockState(state)); initial.add(cell);
         });
         tag.put("Before", initial);
+        tag.put("Reservation", snapshot.reservation.save());
         tag.putLongArray("Completed", snapshot.completed.stream().mapToLong(Long::longValue).toArray());
         tag.putLongArray("Cleared", snapshot.cleared.stream().mapToLong(Long::longValue).toArray());
         return tag;
@@ -439,6 +450,7 @@ public final class NativeConstructionGuard {
         if (cached != null) return cached;
         CompoundTag tag = area.getPersistentData().getCompound(KEY);
         var plan = AcceptedConstructionPlan.load(tag);
+        var reservation = AcceptedConstructionReservation.load(plan, tag.getCompound("Reservation"));
         if (!tag.hasUUID("Owner") || !tag.hasUUID("Builder") || tag.getString("CoreKey").isBlank()
                 || !tag.contains("Completed", Tag.TAG_LONG_ARRAY) || !tag.contains("Cleared", Tag.TAG_LONG_ARRAY))
             throw new IllegalArgumentException("Incomplete protection context");
@@ -456,7 +468,7 @@ public final class NativeConstructionGuard {
         Set<Long> completed = readPositions(tag.getLongArray("Completed"), plan),
                 cleared = readPositions(tag.getLongArray("Cleared"), plan);
         before.forEach((pos, state) -> { if (state.equals(plan.cells.get(pos))) completed.add(pos.asLong()); });
-        Snapshot result = new Snapshot(plan, Map.copyOf(before), completed, cleared, tag.getUUID("Owner"),
+        Snapshot result = new Snapshot(plan, reservation, Map.copyOf(before), completed, cleared, tag.getUUID("Owner"),
                 tag.getUUID("Builder"), tag.getString("CoreKey"), BlockPos.of(tag.getLong("CorePos")));
         CACHE.put(area, result);
         return result;
@@ -480,10 +492,12 @@ public final class NativeConstructionGuard {
         if (protectedArea.nativeQueuesReady()) return true;
         try {
             Snapshot snapshot = snapshot(area);
-            if (!snapshot.plan.matches(area) || !ConstructionEditLedger.get(level).matches(area.getUUID(), snapshot.plan.cells.keySet())
+            if (!snapshot.plan.matches(area) || !ConstructionEditLedger.get(level).matches(area.getUUID(), snapshot.reservation.cells)
                     || !Boolean.FALSE.equals(AcceptedConstructionPlan.call(area, "getFreeArea")))
                 return pause(area, "Paused: saved construction needs a new reviewed plan");
             if (!scanChunksLoaded(level, snapshot.plan)) return pause(area, "Paused: load the complete construction footprint to resume");
+            String clearance = snapshot.reservation.problem(level);
+            if (clearance != null) return pause(area, clearance);
             protectedArea.rebuildAcceptedQueues();
             return true;
         } catch (ReflectiveOperationException | RuntimeException unavailable) {

@@ -81,6 +81,17 @@ final class AcceptedConstructionPlan {
                 || state.is(Blocks.OAK_PLANKS) || state.is(Blocks.DIRT);
     }
 
+    /** Reservations include native getArea's top Y endpoint; mutation cells do not. */
+    boolean withinEnvelope(BlockPos pos) {
+        long endX = (long) origin.getX() + (long) facing.getStepX() * (depth - 1)
+                + (long) facing.getClockWise().getStepX() * (width - 1);
+        long endZ = (long) origin.getZ() + (long) facing.getStepZ() * (depth - 1)
+                + (long) facing.getClockWise().getStepZ() * (width - 1);
+        return pos.getX() >= Math.min(origin.getX(), endX) && pos.getX() <= Math.max(origin.getX(), endX)
+                && pos.getZ() >= Math.min(origin.getZ(), endZ) && pos.getZ() <= Math.max(origin.getZ(), endZ)
+                && pos.getY() >= origin.getY() && pos.getY() <= (long) origin.getY() + height;
+    }
+
     boolean matches(Object area) throws ReflectiveOperationException {
         return origin.equals(call(area, "getOriginPos")) && facing == call(area, "getFacing")
                 && width == (Integer) call(area, "getWidthSize") && depth == (Integer) call(area, "getDepthSize")

@@ -22,6 +22,7 @@ public final class ProtectedConstructionScreen extends BuildAreaScreen {
     private ProtectedInspectionLayout.Layout layout;
     private Button projection;
     private int materialPage;
+    private boolean previewFits = true;
 
     public ProtectedConstructionScreen(ProtectedBuildArea area, Player player) { super(area, player); }
 
@@ -39,13 +40,7 @@ public final class ProtectedConstructionScreen extends BuildAreaScreen {
                     buildArea.getWidthSize(), buildArea.getDepthSize());
             if (structure != null) structurePreview.setStructure(structure, structureNBT);
             addRenderableWidget(structurePreview);
-            // Use the native widget's public zoom input, not copied rendering or
-            // private camera fields. Large plans retain native pan/zoom behavior.
-            int extent = Math.max(1, Math.max(buildArea.getWidthSize(), Math.max(buildArea.getDepthSize(), buildArea.getHeightSize())));
-            double fit = Math.min(20, Math.max(3.5, Math.min(box.width() - 20, box.height() - 12) / (double) extent));
-            structurePreview.setFocused(true);
-            structurePreview.mouseScrolled(box.x() + box.width() / 2.0, box.y() + box.height() / 2.0, fit - 3.5);
-            structurePreview.setFocused(false);
+            frameNativePreview(box);
             createMaterials();
         }
         projection = add(layout.projection(), projectionLabel(), ignored ->
@@ -54,6 +49,30 @@ public final class ProtectedConstructionScreen extends BuildAreaScreen {
         projection.setTooltip(Tooltip.create(Component.literal("Show the native projection always, or only while focused.")));
         add(layout.cancel(), Component.literal("Cancel job"), ignored -> confirmCancel());
         add(layout.close(), Component.literal("Close"), ignored -> onClose());
+    }
+
+    private void frameNativePreview(ProtectedInspectionLayout.Rect box) {
+        previewFits = true;
+        if (structure == null || structure.isEmpty()) return;
+        double minX = Double.POSITIVE_INFINITY, minY = minX, minZ = minX;
+        double maxX = Double.NEGATIVE_INFINITY, maxY = maxX, maxZ = maxX;
+        for (var block : structure) {
+            var pos = block.relativePos();
+            minX = Math.min(minX, pos.getX()); minY = Math.min(minY, pos.getY()); minZ = Math.min(minZ, pos.getZ());
+            maxX = Math.max(maxX, pos.getX() + 1); maxY = Math.max(maxY, pos.getY() + 1); maxZ = Math.max(maxZ, pos.getZ() + 1);
+        }
+        var frame = ProtectedPreviewFraming.initial(box.width(), box.height(), buildArea.getWidthSize(),
+                buildArea.getDepthSize(), new ProtectedPreviewFraming.Bounds(minX, minY, minZ, maxX, maxY, maxZ));
+        double x = box.x() + box.width() / 2.0, y = box.y() + box.height() / 2.0;
+        // Public native inputs establish the camera; no rendering copy or private-field changes.
+        structurePreview.setFocused(true);
+        structurePreview.mouseScrolled(x, y, frame.zoom() - 3.5);
+        structurePreview.setFocused(false);
+        if (structurePreview.mouseClicked(x, y, 1)) {
+            structurePreview.onGlobalMouseDragged(x + frame.dragX(), y + frame.dragY(), 1, frame.dragX(), frame.dragY());
+            structurePreview.mouseReleased(x + frame.dragX(), y + frame.dragY(), 1);
+        }
+        previewFits = frame.fits();
     }
 
     private void createMaterials() {
@@ -122,7 +141,7 @@ public final class ProtectedConstructionScreen extends BuildAreaScreen {
                 buildArea.getWidthSize() + " wide  x  " + buildArea.getDepthSize() + " deep  x  " + buildArea.getHeightSize() + " high",
                 x, panel.y() + 22, textWidth, 0xC8D0DB);
         if (layout.details()) text(graphics, "Progress: Building > Construction", x, panel.y() + 36, textWidth, 0xAAB8C8);
-        if (layout.content()) text(graphics, "Drag to rotate. Scroll to zoom.", layout.preview().x(),
+        if (layout.content()) text(graphics, previewFits ? "Drag: rotate. Right-drag: pan." : "Large plan: right-drag to pan.", layout.preview().x(),
                 layout.projection().y() - 10, layout.preview().width(), 0xAAB8C8);
         else text(graphics, "Enlarge window for the native preview.", x, layout.preview().y(), textWidth, 0xAAB8C8);
     }

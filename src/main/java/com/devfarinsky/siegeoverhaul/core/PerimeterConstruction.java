@@ -170,12 +170,17 @@ public final class PerimeterConstruction {
             }
         }
         if (!remaining) return "This perimeter is already built. Nothing to commission.";
-        Set<BlockPos> reservedCells = new HashSet<>();
-        plan.blocks().keySet().forEach(p -> reservedCells.add(BlockPos.of(p)));
-        plan.clearance().forEach(p -> reservedCells.add(BlockPos.of(p)));
-        String reservation = ConstructionReservations.problem(level, reservedCells);
+        String reservation = ConstructionReservations.problem(level, reservedCells(plan));
         if (reservation != null) return reservation;
         return null;
+    }
+
+    /** Reserve real wall columns and walkway headroom without claiming the hollow courtyard. */
+    static Set<BlockPos> reservedCells(PerimeterBlueprint.Plan plan) {
+        Set<BlockPos> cells = new HashSet<>();
+        plan.blocks().keySet().forEach(p -> cells.add(BlockPos.of(p)));
+        plan.clearance().forEach(p -> cells.add(BlockPos.of(p)));
+        return Set.copyOf(cells);
     }
 
     /** Native betweenClosedStream includes the Y endpoint; getStateFromPos scans the plan stacks. */
@@ -202,7 +207,8 @@ public final class PerimeterConstruction {
             PlayerFortificationJobs.link(builder, area, player.getUUID());
             if (!player.serverLevel().addFreshEntity(area)) throw new IllegalStateException("Build marker rejected");
             WorkersBridge.startBlueprint(area, blueprint);
-            if (!NativeConstructionGuard.protect(player, builder, area)) throw new IllegalStateException("The native job could not be safely protected");
+            if (!NativeConstructionGuard.protect(player, builder, area, reservedCells(plan)))
+                throw new IllegalStateException("The native job could not be safely protected");
             WorkersBridge.enableWallProjection(area, plan.blocks().size());
             WorkersBridge.enablePlayerJob(builder, player.getUUID()); WallBuilderAccess.install(builder);
             assigned = true;

@@ -223,3 +223,14 @@ audio devices, every shader/resource pack and every GPU are evidence limits, not
 an implied promise of exhaustive coverage. The integrated instance exercises the
 same production server-thread handlers with the real network sender. No dedicated
 server EULA acceptance, credentials or authentication changes are automated here.
+
+- [Run 37160108311](https://github.com/boostbar9/Faction-Raids/actions/runs/37160108311)
+  passed the responsive inspection controls and produced all fifteen images,
+  including actual free perimeter review and an actually paid native marker.
+  Production Survival payments, perimeter cancel, manual commissioning, finite
+  stock/resupply, claim/owner pauses and mid-job restart passed. The manual wall
+  reached its complete geometry, but strict material conservation failed with
+  168 cobblestone supplied versus 198 accounted. This is a real unresolved
+  acceptance failure; the assertion remains unchanged. Native slot/hand identity
+  and serialized stock snapshots were added to distinguish a native reload stock
+  defect from an accounting error. The new snapshots have not yet run.

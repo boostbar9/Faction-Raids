@@ -347,6 +347,9 @@ public final class NativeBuildingQa {
         Minecraft mc = Minecraft.getInstance();
         try (NativeImage pixels = Screenshot.takeScreenshot(mc.getMainRenderTarget())) {
             String name = screenshot;
+            if (mc.screen != null) REPORT.put("cursor-" + name, Map.of(
+                    "x", mc.mouseHandler.xpos(), "y", mc.mouseHandler.ypos(),
+                    "windowFocused", org.lwjgl.glfw.GLFW.glfwGetWindowAttrib(mc.getWindow().getWindow(), org.lwjgl.glfw.GLFW.GLFW_FOCUSED)));
             require(pixels.getWidth() >= 640 && pixels.getHeight() >= 360, "Framebuffer is unexpectedly small");
             // Do not silently accept a blank framebuffer as visual evidence.
             int first = pixels.getPixelRGBA(0, 0), changed = 0;
@@ -581,7 +584,14 @@ public final class NativeBuildingQa {
         // Leave ordinary HUD/tooltips unmodified; move the actual test cursor out
         // of the content and allow native mouse callbacks to settle before capture.
         Minecraft mc = Minecraft.getInstance();
-        if (mc.screen != null) org.lwjgl.glfw.GLFW.glfwSetCursorPos(mc.getWindow().getWindow(), 2, 2);
+        if (mc.screen != null) {
+            long window = mc.getWindow().getWindow();
+            // GLFW ignores cursor warps for an unfocused Xvfb window. Request
+            // ordinary input focus first and generate two native cursor moves.
+            org.lwjgl.glfw.GLFW.glfwFocusWindow(window);
+            org.lwjgl.glfw.GLFW.glfwSetCursorPos(window, 32, 32);
+            org.lwjgl.glfw.GLFW.glfwSetCursorPos(window, 2, 2);
+        }
         screenshotReadyFrame = renderFrames + 3;
         screenshot = name;
     }

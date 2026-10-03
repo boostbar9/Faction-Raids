@@ -90,6 +90,21 @@ class DefenseStructuresTest extends MinecraftTestSupport {
     }
     private DefenseBlueprint.Plan tower() { return DefenseBlueprint.create(DefenseBlueprint.Kind.WATCHTOWER, origin, Direction.NORTH); }
 
+    @Test void everyManualPlanRetainsItsExactPreflightFootprintAndHeadroom() {
+        for (var kind : DefenseBlueprint.Kind.values()) for (var facing : Direction.Plane.HORIZONTAL) {
+            var plan = DefenseBlueprint.create(kind, origin, facing);
+            var reserved = DefenseStructures.reservedCells(plan);
+            assertEquals(plan.footprint().size() * kind.height, reserved.size(), kind.label);
+            for (var base : plan.footprint()) {
+                assertTrue(reserved.contains(base));
+                assertTrue(reserved.contains(base.atY(plan.max().getY())));
+                assertFalse(reserved.contains(base.atY(plan.max().getY() + 1)));
+            }
+            assertTrue(plan.blocks().keySet().stream().allMatch(cell -> reserved.contains(BlockPos.of(cell))));
+            assertThrows(UnsupportedOperationException.class, reserved::clear);
+        }
+    }
+
     @Test void clearFlatClaimedSiteIsAccepted() {
         assertNull(DefenseStructures.siteProblem(clearLevel(), tower(), p -> true));
     }
@@ -167,7 +182,8 @@ class DefenseStructuresTest extends MinecraftTestSupport {
         try (var bridge = mockStatic(WorkersBridge.class); var payment = mockStatic(PaymentSource.class);
              var access = mockStatic(WallBuilderAccess.class);
              var guard = mockStatic(com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.class)) {
-            guard.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.protect(player, builder, area)).thenReturn(true);
+            guard.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.protect(
+                    player, builder, area, DefenseStructures.reservedCells(tower()))).thenReturn(true);
             guard.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.activate(area)).thenReturn(true);
             bridge.when(() -> WorkersBridge.createProtectedPlayerArea(eq(player), eq(builder), any(), anyInt(), anyInt(), anyInt(), any())).thenReturn(area);
             bridge.when(() -> WorkersBridge.discardPlayerArea(area)).thenAnswer(call -> { area.discard(); return true; });

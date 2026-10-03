@@ -33,6 +33,19 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
         return level;
     }
     @Test void completeDryOwnedFootprintIsAccepted() {assertNull(PerimeterConstruction.siteProblem(level(),plan(),p->true));}
+    @Test void reservationRetainsWalkwayHeadroomWithoutClaimingTheHollowCourtyard() {
+        var plan = plan();
+        var reserved = PerimeterConstruction.reservedCells(plan);
+        var headroom = new BlockPos(2, 69, 8);
+        assertTrue(plan.clearance().contains(headroom.asLong()));
+        assertFalse(plan.blocks().containsKey(headroom.asLong()));
+        assertTrue(reserved.contains(headroom));
+        assertTrue(plan.blocks().keySet().stream().allMatch(cell -> reserved.contains(BlockPos.of(cell))));
+        assertEquals(1320, reserved.size());
+        assertFalse(reserved.contains(new BlockPos(8, 64, 8)));
+        assertFalse(reserved.contains(new BlockPos(8, 69, 8)));
+        assertThrows(UnsupportedOperationException.class, reserved::clear);
+    }
     @Test void unclaimedInnerFootprintOrHeadroomFailsEntirePlan() {
         assertNotNull(PerimeterConstruction.siteProblem(level(),plan(),p->p.getX()!=4));
         assertNotNull(PerimeterConstruction.siteProblem(level(),plan(),p->p.getY()!=69));

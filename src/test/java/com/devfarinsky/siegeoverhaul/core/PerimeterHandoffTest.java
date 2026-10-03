@@ -34,7 +34,8 @@ class PerimeterHandoffTest extends MinecraftTestSupport {
             var payment=mockStatic(PaymentSource.class);var access=mockStatic(WallBuilderAccess.class)) {
             bridge.when(()->WorkersBridge.createProtectedPlayerArea(eq(player),eq(builder),any(),anyInt(),anyInt(),anyInt(),any())).thenReturn(area);
             bridge.when(()->WorkersBridge.startBlueprint(eq(area),any())).thenAnswer(call->{order.add("blueprint");return null;});
-            guard.when(()->NativeConstructionGuard.protect(player,builder,area)).thenAnswer(call->{order.add("protected");return true;});
+            guard.when(()->NativeConstructionGuard.protect(player,builder,area,PerimeterConstruction.reservedCells(plan)))
+                    .thenAnswer(call->{order.add("protected");return true;});
             bridge.when(()->WorkersBridge.assignBuildAreaDirectly(builder,area)).thenAnswer(call->{order.add("assigned");return accepts;});
             payment.when(()->PaymentSource.consume(player,900)).thenAnswer(call->{assertEquals(List.of("blueprint","protected","assigned"),order);order.add("paid");return pays;});
             guard.when(()->NativeConstructionGuard.activate(area)).thenAnswer(call->{assertEquals("paid",order.get(order.size()-1));order.add("activated");return true;});

@@ -88,6 +88,23 @@ class ConstructionEditLedgerTest extends MinecraftTestSupport {
         assertFalse(ledger.retired(loaded)); assertFalse(ledger.contains(loaded));
     }
 
+    @Test void earlierStructuralOnlyDraftIndexBlocksNewReservationsButStillAllowsExplicitCancellation() {
+        var ledger = new ConstructionEditLedger(); UUID old = UUID.randomUUID();
+        assertTrue(ledger.register(old, Set.of(BlockPos.ZERO)));
+        CompoundTag saved = ledger.save(new CompoundTag());
+        saved.getList("Sites", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0).remove("ReservationVersion");
+        var loaded = ConstructionEditLedger.load(saved);
+        assertFalse(loaded.matches(old, Set.of(BlockPos.ZERO)));
+        assertTrue(loaded.reserves(Set.of(new BlockPos(500, 65, 500))), "Unknown old clearance is not assumed free");
+        assertFalse(loaded.register(UUID.randomUUID(), Set.of(BlockPos.ZERO.above())));
+        assertTrue(loaded.canRetire(old));
+        loaded = ConstructionEditLedger.load(loaded.save(new CompoundTag()));
+        assertTrue(loaded.reserves(Set.of(BlockPos.ZERO.above())));
+        loaded.retire(old, true);
+        assertFalse(loaded.reserves(Set.of(BlockPos.ZERO.above())));
+        assertTrue(loaded.register(UUID.randomUUID(), Set.of(BlockPos.ZERO.above())));
+    }
+
     @Test void malformedAndMissingLedgersFailClosed() {
         CompoundTag root = new CompoundTag(); root.putBoolean("Invalid", true);
         var invalid = ConstructionEditLedger.load(root);

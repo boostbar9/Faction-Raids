@@ -104,12 +104,17 @@ public final class DefenseStructures {
             if (!level.getEntities((Entity) null, new AABB(BlockPos.of(cell)), Entity::isAlive).isEmpty())
                 return "Move players, creatures and vehicles out of the planned blocks, then try again.";
         }
-        var reservedCells = new java.util.HashSet<BlockPos>();
-        for (BlockPos base : plan.footprint()) for (int y = base.getY(); y <= plan.max().getY(); y++)
-            reservedCells.add(base.atY(y));
-        String reservation = ConstructionReservations.problem(level, reservedCells);
+        String reservation = ConstructionReservations.problem(level, reservedCells(plan));
         if (reservation != null) return reservation;
         return null;
+    }
+
+    /** The same complete footprint/headroom contract is checked before and retained after handoff. */
+    static java.util.Set<BlockPos> reservedCells(DefenseBlueprint.Plan plan) {
+        var cells = new java.util.HashSet<BlockPos>();
+        for (BlockPos base : plan.footprint()) for (int y = base.getY(); y <= plan.max().getY(); y++)
+            cells.add(base.atY(y));
+        return java.util.Set.copyOf(cells);
     }
 
     static boolean startJob(ServerPlayer player, Mob builder, DefenseBlueprint.Plan plan, DefenseBlueprint.Kind kind) {
@@ -127,7 +132,7 @@ public final class DefenseStructures {
             PlayerFortificationJobs.link(builder, build, player.getUUID());
             if (!player.serverLevel().addFreshEntity(build)) throw new IllegalStateException("Build area rejected");
             WorkersBridge.startBlueprint(build, blueprint);
-            if (!com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.protect(player, builder, build))
+            if (!com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.protect(player, builder, build, reservedCells(plan)))
                 throw new IllegalStateException("The native job could not be safely protected");
             WorkersBridge.enableWallProjection(build, plan.blocks().size());
             WorkersBridge.enablePlayerJob(builder, player.getUUID());

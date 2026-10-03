@@ -26,7 +26,7 @@ class NativeConstructionGuardTest extends MinecraftTestSupport {
         var worker = mock(Mob.class); var area = mock(Entity.class);
         when(area.level()).thenReturn(mock(net.minecraft.server.level.ServerLevel.class));
         when(area.getPersistentData()).thenReturn(new CompoundTag());
-        assertFalse(NativeConstructionGuard.protect(owner, worker, area));
+        assertFalse(NativeConstructionGuard.protect(owner, worker, area, Set.of(BlockPos.ZERO)));
         assertTrue(NativeConstructionGuard.status(area).contains("sealed native marker type"));
     }
 

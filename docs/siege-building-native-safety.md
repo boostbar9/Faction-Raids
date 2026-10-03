@@ -73,10 +73,11 @@ Native NBT getters and setters use defensive copies. A narrow trusted initializa
 and load scope restores only the new type's own validated contract. Missing or
 malformed new-type data remains closed; it is never treated as an editable legacy job.
 
-The protected screen extends the native inspection screen. Geometry/ownership
-controls are disabled as a UX supplement, and native blueprint/material inspection
-remains available. The original Delete position is replaced by an authenticated
-Siege action with explicit confirmation. Projection controls use the same authenticated
+The protected screen extends the native inspection screen and uses the actual
+Workers preview and material widgets in a responsive sealed-inspection layout.
+Irrelevant geometry/ownership controls are hidden as a UX supplement. Projection,
+Cancel job and Close remain reachable at compact GUI scales. Cancellation uses
+an authenticated Siege action with explicit confirmation. Projection controls use the same authenticated
 route. The common handler verifies the actual packet sender owns this exact nearby
 marker. Canceling keeps placed blocks and existing payment/material semantics;
 there are no refunds, restored blocks, or global queue actions.
@@ -145,13 +146,30 @@ rather than guessing offline privileges.
 ## Payment, reservations and reload
 
 Callers create the protected type, add it, initialize the accepted native queues,
-and call `protect(...)` before assignment/payment. Protection begins unpaid.
+and call `protect(owner, builder, area, reservedCells)` before assignment/payment.
+The exact preflight structural-plus-clearance set is required; there is no permissive
+three-argument path. Protection begins unpaid.
 `activate(area)` is called only after payment succeeds. Failed handoff/rollback
 cannot build for free. Unpaid rollback uses its narrow cleanup method; raw native
 Delete stays denied.
 
-The durable index contains actual planned cells, not a hollow ring's whole AABB.
-Reservations survive marker unloads. The combined active-job/pending-retirement
+The immutable reservation contract is separate from native mutation targets. It
+contains the exact structural footprint plus accepted walkway/headroom cells,
+not a hollow ring's whole AABB; its empty center remains usable. Each job is capped
+at 65,536 distinct reserved cells, all inside the native envelope (including its
+inclusive top scan endpoint) and including every structural target. Non-structural
+cells must initially be air or permitted unchanged single-cell vegetation; their
+exact original states are persisted. They are never native mining/placement targets.
+
+All reserved cells are indexed and player-edit tracked, including same-state edits.
+Before each native mutation the guard rechecks the entire reserved footprint's
+permissions and loaded state plus its non-structural clearance snapshots. Reload
+checks the explicit versioned recipe and exact ledger match before native queue
+reconstruction. Missing older draft recipes pause for a new review instead of
+silently assuming that unrecorded headroom was accepted. Older structural-only draft
+index entries block new reservation queries until their owners retire them; their
+explicit cancellation path remains usable. Reservations and clearance history
+survive marker unloads. The combined active-job/pending-retirement
 budget is 64 entries, and active indexed cells are capped at 262,144. Registration
 reserves the slot needed for later cancellation; existing jobs can always transition
 within that bound. Canceled receipts are acknowledged after exact worker cleanup.

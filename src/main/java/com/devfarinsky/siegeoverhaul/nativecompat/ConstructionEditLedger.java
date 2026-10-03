@@ -13,11 +13,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/** Only commissioned cells are indexed, including while their marker chunk is unloaded. */
+/** Exact commissioned structural and clearance cells are indexed even while their marker is unloaded. */
 final class ConstructionEditLedger extends SavedData {
     static final int MAX_JOBS = 64, MAX_CELLS = 262144;
     private static final String NAME = "siege_construction_edits";
-    private record Site(Set<Long> cells, Set<Long> edited, boolean builderDestroyed) {}
+    private record Site(Set<Long> cells, Set<Long> edited, boolean builderDestroyed, boolean completeReservation) {}
     private final Map<UUID, Site> sites = new HashMap<>();
     private final Map<Long, Set<UUID>> index = new HashMap<>();
     private final Set<UUID> retired = new java.util.LinkedHashSet<>();
@@ -31,11 +31,11 @@ final class ConstructionEditLedger extends SavedData {
     }
 
     boolean register(UUID id, Set<BlockPos> positions) {
-        if (invalid || id == null || positions == null || sites.containsKey(id) || retired.contains(id) || sites.size() + retired.size() >= MAX_JOBS
+        if (invalid || incompleteReservations() || id == null || positions == null || sites.containsKey(id) || retired.contains(id) || sites.size() + retired.size() >= MAX_JOBS
                 || positions.isEmpty() || positions.size() > MAX_CELLS - totalCells) return false;
         Set<Long> cells = new HashSet<>();
         positions.forEach(pos -> cells.add(pos.asLong()));
-        add(id, new Site(Set.copyOf(cells), new HashSet<>(), false));
+        add(id, new Site(Set.copyOf(cells), new HashSet<>(), false, true));
         setDirty();
         return true;
     }
@@ -48,7 +48,7 @@ final class ConstructionEditLedger extends SavedData {
 
     boolean matches(UUID id, Set<BlockPos> positions) {
         Site site = sites.get(id);
-        return !invalid && site != null && site.cells().size() == positions.size()
+        return !invalid && site != null && site.completeReservation() && site.cells().size() == positions.size()
                 && positions.stream().allMatch(pos -> site.cells().contains(pos.asLong()));
     }
 
@@ -72,7 +72,7 @@ final class ConstructionEditLedger extends SavedData {
     void builderDestroyed(UUID id) {
         Site site = sites.get(id);
         if (site != null && !site.builderDestroyed()) {
-            sites.put(id, new Site(site.cells(), site.edited(), true)); setDirty();
+            sites.put(id, new Site(site.cells(), site.edited(), true, site.completeReservation())); setDirty();
         }
         acknowledgeRetirement(id);
     }
@@ -80,7 +80,13 @@ final class ConstructionEditLedger extends SavedData {
     boolean sameGeneration(UUID expected) { return !invalid && generation.equals(expected); }
 
     boolean reserves(java.util.Collection<BlockPos> cells) {
-        return invalid || cells == null || cells.stream().anyMatch(pos -> pos == null || index.containsKey(pos.asLong()));
+        return invalid || incompleteReservations() || cells == null || cells.stream().anyMatch(pos -> pos == null || index.containsKey(pos.asLong()));
+    }
+
+    private boolean incompleteReservations() {
+        // Earlier draft ledgers indexed solids only. Preserve their cancellation receipts,
+        // but never infer that unrecorded clearance is free while any such site remains.
+        return sites.values().stream().anyMatch(site -> !site.completeReservation());
     }
 
     boolean edited(UUID id) {
@@ -131,7 +137,8 @@ final class ConstructionEditLedger extends SavedData {
                 ledger.invalid = true;
                 break;
             }
-            ledger.add(tag.getUUID("Id"), new Site(Set.copyOf(positions), edited, tag.getBoolean("BuilderDestroyed")));
+            ledger.add(tag.getUUID("Id"), new Site(Set.copyOf(positions), edited, tag.getBoolean("BuilderDestroyed"),
+                    tag.getInt("ReservationVersion") == AcceptedConstructionReservation.VERSION));
         }
         for (Tag entry : retiredJobs) {
             CompoundTag tag = (CompoundTag) entry;
@@ -148,6 +155,7 @@ final class ConstructionEditLedger extends SavedData {
             CompoundTag tag = new CompoundTag();
             tag.putUUID("Id", id);
             tag.putBoolean("BuilderDestroyed", site.builderDestroyed());
+            tag.putInt("ReservationVersion", site.completeReservation() ? AcceptedConstructionReservation.VERSION : 0);
             tag.putLongArray("Cells", site.cells().stream().mapToLong(Long::longValue).toArray());
             tag.putLongArray("Edited", site.edited().stream().mapToLong(Long::longValue).toArray());
             list.add(tag);

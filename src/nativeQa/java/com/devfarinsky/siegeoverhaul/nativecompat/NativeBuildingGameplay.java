@@ -49,6 +49,7 @@ final class NativeBuildingGameplay {
     private static final String WORLD = "siege-native-gameplay";
     private static final List<String> CHECKS = new ArrayList<>();
     private static final Map<String, Object> RESULT = new LinkedHashMap<>();
+    private static final List<Map<String, Object>> STOCK = new ArrayList<>();
     private static CompletableFuture<Action> pending;
     private static NativeGameplayFixture.Fixture fixture;
     private static UUID playerId, jobId, ledgerGeneration;
@@ -60,6 +61,9 @@ final class NativeBuildingGameplay {
     private static List<ChunkPos> claimChunks;
     private static RecruitsClaim claim;
     private static boolean done;
+    private static long observedPlaced = -1;
+    private static String observedHand = "";
+    private static int observedReloadPlacements;
 
     private enum Action { NONE, USE_BLOCK, USE_AIR, CANCEL, SHOW, RELOAD, CAPTURE_REVIEW, CAPTURE_PAID, AIM_WALL, DONE }
     private NativeBuildingGameplay() {}
@@ -113,6 +117,13 @@ final class NativeBuildingGameplay {
                 case USE_AIR -> mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
                 case CAPTURE_REVIEW -> {
                     aim(mc, new Vec3(fixture.wallAnchor().getX() + .5, 67, 30));
+                    if (!mc.levelRenderer.isChunkCompiled(fixture.corePos().below())
+                            || !mc.levelRenderer.isChunkCompiled(fixture.wallAnchor().below())
+                            || !mc.levelRenderer.isChunkCompiled(new BlockPos(fixture.wallAnchor().getX(), 64, 30))) {
+                        pending = CompletableFuture.completedFuture(Action.CAPTURE_REVIEW);
+                        return false;
+                    }
+                    RESULT.put("reviewCaptureTerrainCompiled", true);
                     NativeBuildingQa.captureGameplay("14-production-free-perimeter-review.png");
                     return false;
                 }
@@ -148,6 +159,7 @@ final class NativeBuildingGameplay {
     static Map<String, Object> result() {
         var result = new LinkedHashMap<>(RESULT);
         result.put("status", done ? "passed" : "incomplete"); result.put("stage", stage);
+        result.put("stockSnapshots", List.copyOf(STOCK));
         result.put("assertions", List.copyOf(CHECKS));
         result.put("scope", "Fresh cheats-off integrated world; real survival player, real Recruits claims, production plan item packets and native worker AI. Fixture-only terrain/faction/core/stock setup.");
         result.put("notCovered", List.of("Dedicated network server", "All shader/resource-pack combinations", "Offline owner with a separately connected second player", "Scan-work upper-bound performance", "Malicious custom client fuzzing", "Player same-state edits and late-block obstruction integration", "1024/1025 exact rendered geometry", "Competing active builder integration"));
@@ -160,18 +172,28 @@ final class NativeBuildingGameplay {
         if (stageSince < 0) stageSince = now;
         require(now - stageSince < 2400, "Gameplay stage " + stage + " timed out: " + diagnostics(level));
         if (now < resumeAt) return Action.NONE;
+        if (stage == 18) {
+            long currentPlaced = placed(level);
+            String currentHand = String.valueOf(ForgeRegistries.ITEMS.getKey(builder(level).getMainHandItem().getItem()));
+            if (!currentHand.equals(observedHand)) stockSnapshot(level, "post-reload-native-hand-material-switch");
+            else if (currentPlaced != observedPlaced && observedReloadPlacements < 8)
+                stockSnapshot(level, "post-reload-native-placement-" + (++observedReloadPlacements));
+            observedHand = currentHand; observedPlaced = currentPlaced;
+        }
         switch (stage) {
             case 0 -> {
                 require(!owner.isCreative() && !owner.hasPermissions(2) && owner.mayBuild(), "Payment actor is not real non-op survival");
                 fixture = NativeGameplayFixture.setup(level, owner);
                 require(SiegeCore.point(owner.server, SiegeCore.key(owner)) != null, "Actual core/claim/anchor unavailable");
+                stockSnapshot(level, "fixture-initial-stock");
                 builder(level).setNoAi(true); // Transaction-only perimeter; wall AI below is enabled.
                 FactionBank.credit(core(owner), 2000); RaidSavedData.get(owner.server).setDirty();
                 require(PerimeterConstruction.review(owner, fixture.corePos(), 1), "Real perimeter review rejected");
                 require(balance(owner) == 2000 && protectedAreas(level) == 0, "Free perimeter review changed money/jobs");
                 select(owner, ModItems.PERIMETER_PLAN.get());
                 check("Real non-op survival actor, indexed native faction/claim and production core placement");
-                advance(now, 1, 20);
+                // Let ordinary onboarding/chat/claim notices fade naturally; do not hide them.
+                advance(now, 1, 240);
             }
             case 1 -> {
                 var selection = PerimeterPreview.read(owner.getMainHandItem(), owner.getUUID(), level.dimension().location(), now);
@@ -247,6 +269,7 @@ final class NativeBuildingGameplay {
                 if (count != lastPlaced) { lastPlaced = count; lastChange = now; }
                 if (count <= 0 || now - lastChange < 100 || builder(level).neededItems.isEmpty()) return Action.NONE;
                 require(count < fixture.expectedPlan().blocks().size(), "Finite initial stock unexpectedly completed wall");
+                stockSnapshot(level, "first-material-stall");
                 conservation(level);
                 check("Actual native builder places from finite chest stock, then stalls with material request");
                 RESULT.put("initialStockPlacedBlocks", count);
@@ -288,11 +311,13 @@ final class NativeBuildingGameplay {
             }
             case 16 -> {
                 require(snapshot(level).equals(pausedCells), "Native mutation continued during owner permission pause");
+                stockSnapshot(level, "immediately-before-world-save");
                 owner.server.saveEverything(false, true, true);
                 check("Owner permission loss pauses actual AI without changing world cells");
                 advance(now, 17, 0); return Action.RELOAD;
             }
             case 17 -> {
+                stockSnapshot(level, "immediately-after-world-reload-before-resupply");
                 require(snapshot(level).equals(pausedCells) && balance(owner) == bankAfterManual,
                         "Mid-job world restart changed protected cells or Treasury");
                 require(NativeConstructionGuard.commissionPaid(area(level))
@@ -303,6 +328,7 @@ final class NativeBuildingGameplay {
             }
             case 18 -> {
                 if (placed(level) < fixture.expectedPlan().blocks().size()) return Action.NONE;
+                stockSnapshot(level, "completed-native-wall-before-conservation-assertion");
                 conservation(level);
                 require(balance(owner) == bankAfterManual, "Completion charged again");
                 check("Native AI completes the exact manual template after resupply/restart with material conservation");
@@ -373,8 +399,54 @@ final class NativeBuildingGameplay {
         }).count();
     }
     private static void replenish(ServerLevel level, int cobble, int oak) {
+        stockSnapshot(level, "before-resupply-" + cobble + "-" + oak);
         NativeGameplayFixture.replenishContainer(level, cobble, oak);
         suppliedCobble += cobble; suppliedOak += oak;
+        stockSnapshot(level, "after-resupply-" + cobble + "-" + oak);
+    }
+    private static void stockSnapshot(ServerLevel level, String when) {
+        BuilderEntity builder = builder(level);
+        Map<String, Object> snap = new LinkedHashMap<>();
+        snap.put("when", when); snap.put("gameTime", level.getGameTime()); snap.put("stage", stage);
+        snap.put("placedBlocks", placed(level)); snap.put("suppliedCobblestone", suppliedCobble); snap.put("suppliedOakPlanks", suppliedOak);
+        snap.put("mainHand", stackDescription(builder.getMainHandItem()));
+        snap.put("offHand", stackDescription(builder.getOffhandItem()));
+        snap.put("mainHandSameObjectAsInventorySlot5", builder.getMainHandItem() == builder.getInventory().getItem(5));
+        snap.put("offHandSameObjectAsInventorySlot4", builder.getOffhandItem() == builder.getInventory().getItem(4));
+        var slots = new ArrayList<Map<String, Object>>();
+        var identities = new IdentityHashMap<ItemStack, Integer>();
+        for (int i = 0; i < builder.getInventory().getContainerSize(); i++) {
+            ItemStack stack = builder.getInventory().getItem(i);
+            if (stack.isEmpty()) continue;
+            var entry = new LinkedHashMap<>(stackDescription(stack)); entry.put("slot", i);
+            entry.put("sameObjectAsSlot", identities.getOrDefault(stack, i)); identities.putIfAbsent(stack, i);
+            entry.put("sameObjectAsMainHand", stack == builder.getMainHandItem()); slots.add(entry);
+        }
+        snap.put("nativeInventorySlots", slots);
+        Container chest = (Container) level.getBlockEntity(fixture.chestPos());
+        snap.put("chestCobblestone", count(chest, Items.COBBLESTONE)); snap.put("chestOakPlanks", count(chest, Items.OAK_PLANKS));
+        snap.put("nativeInventoryCobblestone", count(builder.getInventory(), Items.COBBLESTONE));
+        snap.put("nativeInventoryOakPlanks", count(builder.getInventory(), Items.OAK_PLANKS));
+        snap.put("placedCobblestone", fixture.expectedPlan().blocks().keySet().stream()
+                .filter(p -> level.getBlockState(BlockPos.of(p)).is(Blocks.COBBLESTONE)).count());
+        snap.put("placedOakPlanks", fixture.expectedPlan().blocks().keySet().stream()
+                .filter(p -> level.getBlockState(BlockPos.of(p)).is(Blocks.OAK_PLANKS)).count());
+        CompoundTag nbt = builder.saveWithoutId(new CompoundTag());
+        var savedSlots = new ArrayList<Map<String, Object>>();
+        for (var value : nbt.getList("Items", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            var tag = (CompoundTag) value; var entry = new LinkedHashMap<>(stackDescription(ItemStack.of(tag)));
+            entry.put("slot", tag.getByte("Slot") & 255); savedSlots.add(entry);
+        }
+        snap.put("serializedItems", savedSlots);
+        var hands = new ArrayList<Map<String, Object>>();
+        for (var value : nbt.getList("HandItems", net.minecraft.nbt.Tag.TAG_COMPOUND))
+            hands.add(stackDescription(ItemStack.of((CompoundTag) value)));
+        snap.put("serializedHandItems", hands);
+        STOCK.add(Map.copyOf(snap));
+    }
+    private static Map<String, Object> stackDescription(ItemStack stack) {
+        return Map.of("item", String.valueOf(ForgeRegistries.ITEMS.getKey(stack.getItem())), "count", stack.getCount(),
+                "tag", stack.getTag() == null ? "" : stack.getTag().toString());
     }
     private static int count(Container inventory, Item item) {
         int total = 0; for (int i = 0; i < inventory.getContainerSize(); i++) if (inventory.getItem(i).is(item)) total += inventory.getItem(i).getCount();
