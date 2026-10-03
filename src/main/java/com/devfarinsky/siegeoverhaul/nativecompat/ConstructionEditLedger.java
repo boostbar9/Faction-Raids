@@ -53,6 +53,9 @@ final class ConstructionEditLedger extends SavedData {
     }
 
     boolean contains(UUID id) { return !invalid && sites.containsKey(id); }
+    boolean completeReservation(UUID id) {
+        Site site = sites.get(id); return !invalid && site != null && site.completeReservation();
+    }
     boolean retired(UUID id) { return !invalid && id != null && retired.contains(id); }
     boolean canRetire(UUID id) {
         // Absence is never cancellation evidence, including failed unregistered

@@ -60,10 +60,18 @@ final class NativeBuildingGameplay {
     private static Map<Long, BlockState> pausedCells;
     private static List<ChunkPos> claimChunks;
     private static RecruitsClaim claim;
+    private static BlockPos headroomCell;
+    private static BlockState originalHeadroom;
     private static boolean done;
     private static long observedPlaced = -1;
     private static String observedHand = "";
     private static int observedReloadPlacements;
+    private static int rebindsBeforeReload;
+    private static List<Map<String, Object>> inventoryBeforeReload;
+    private static Map<String, Object> mainHandBeforeReload;
+    private static int rebindsBeforeFirstCommission;
+    private static List<Map<String, Object>> inventoryBeforeFirstCommission;
+    private static Map<String, Object> mainHandBeforeFirstCommission;
 
     private enum Action { NONE, USE_BLOCK, USE_AIR, CANCEL, SHOW, RELOAD, CAPTURE_REVIEW, CAPTURE_PAID, AIM_WALL, DONE }
     private NativeBuildingGameplay() {}
@@ -162,7 +170,7 @@ final class NativeBuildingGameplay {
         result.put("stockSnapshots", List.copyOf(STOCK));
         result.put("assertions", List.copyOf(CHECKS));
         result.put("scope", "Fresh cheats-off integrated world; real survival player, real Recruits claims, production plan item packets and native worker AI. Fixture-only terrain/faction/core/stock setup.");
-        result.put("notCovered", List.of("Dedicated network server", "All shader/resource-pack combinations", "Offline owner with a separately connected second player", "Scan-work upper-bound performance", "Malicious custom client fuzzing", "Player same-state edits and late-block obstruction integration", "1024/1025 exact rendered geometry", "Competing active builder integration"));
+        result.put("notCovered", List.of("Dedicated network server", "All shader/resource-pack combinations", "Offline owner with a separately connected second player", "Scan-work upper-bound performance", "Malicious custom client fuzzing", "Actual player same-state edit history (raw headroom fixture changes do not cover it)", "1024/1025 exact rendered geometry", "Competing active builder integration"));
         return result;
     }
 
@@ -186,6 +194,14 @@ final class NativeBuildingGameplay {
                 fixture = NativeGameplayFixture.setup(level, owner);
                 require(SiegeCore.point(owner.server, SiegeCore.key(owner)) != null, "Actual core/claim/anchor unavailable");
                 stockSnapshot(level, "fixture-initial-stock");
+                BuilderEntity idleBuilder = builder(level);
+                require(!idleBuilder.getMainHandItem().isEmpty()
+                                && idleBuilder.getMainHandItem() != idleBuilder.getInventory().getItem(5)
+                                && ProtectedBuilderHandMirror.sameValue(idleBuilder.getMainHandItem(), idleBuilder.getInventory().getItem(5)),
+                        "Initial idle native reload did not reproduce an equal-valued split hand mirror");
+                rebindsBeforeFirstCommission = ProtectedBuilderHandMirror.rebindCount(idleBuilder.getPersistentData());
+                inventoryBeforeFirstCommission = inventoryValues(idleBuilder);
+                mainHandBeforeFirstCommission = stackDescription(idleBuilder.getMainHandItem());
                 builder(level).setNoAi(true); // Transaction-only perimeter; wall AI below is enabled.
                 FactionBank.credit(core(owner), 2000); RaidSavedData.get(owner.server).setDirty();
                 require(PerimeterConstruction.review(owner, fixture.corePos(), 1), "Real perimeter review rejected");
@@ -208,6 +224,12 @@ final class NativeBuildingGameplay {
                 require(NativeConstructionGuard.commissionPaid(area), "Perimeter was not activated after payment");
                 require(!area.getAlwaysShowProjection(), "Large perimeter default should be focus-only");
                 require(owner.getMainHandItem().isEmpty(), "Confirmed perimeter plan was not consumed");
+                stockSnapshot(level, "after-first-production-commission-idle-reload-handoff");
+                assertHandRebind(level, rebindsBeforeFirstCommission + 1);
+                require(inventoryValues(builder(level)).equals(inventoryBeforeFirstCommission)
+                                && stackDescription(builder(level).getMainHandItem()).equals(mainHandBeforeFirstCommission),
+                        "Initial protected handoff changed idle builder inventory or main-hand values");
+                check("Initial production commission value-preservingly binds an equal split mirror caused by idle native NBT reload");
                 check("Real perimeter plan packet commissions once, consumes plan and debits exactly 900 Treasury");
                 advance(now, 101, 20); return Action.CAPTURE_PAID;
             }
@@ -302,6 +324,30 @@ final class NativeBuildingGameplay {
             case 14 -> {
                 if (placed(level) <= lastPlaced) return Action.NONE;
                 require(balance(owner) == bankAfterManual, "Claim restore charged again");
+                headroomCell = fixture.wallAnchor().atY(fixture.expectedPlan().max().getY());
+                require(!fixture.expectedPlan().blocks().containsKey(headroomCell.asLong())
+                                && NativeConstructionGuard.reserves(level, List.of(headroomCell)),
+                        "Chosen headroom is not an accepted non-structural reservation");
+                originalHeadroom = level.getBlockState(headroomCell);
+                require(originalHeadroom.isAir(), "Reserved headroom is not initially clear");
+                // Raw fixture environmental change, intentionally NOT a simulated player event.
+                level.setBlock(headroomCell, Blocks.STONE.defaultBlockState(), 3);
+                pausedCells = snapshot(level); // Same server action: no worker tick can run between insertion and this snapshot.
+                RESULT.put("headroomObstructionCell", headroomCell.toShortString());
+                advance(now, 201, 20);
+            }
+            case 201 -> {
+                require(NativeConstructionGuard.status(area(level)).contains("headroom"),
+                        "Non-structural headroom change did not pause the native job: " + diagnostics(level));
+                require(snapshot(level).equals(pausedCells) && level.getBlockState(headroomCell).is(Blocks.STONE),
+                        "Native job mutated structural cells or obstruction after the headroom change");
+                advance(now, 202, 80);
+            }
+            case 202 -> {
+                require(snapshot(level).equals(pausedCells) && level.getBlockState(headroomCell).is(Blocks.STONE),
+                        "Native job mutated structural cells or obstruction during the headroom pause");
+                require(balance(owner) == bankAfterManual, "Headroom pause charged again");
+                check("Raw fixture solid in reserved non-structural headroom pauses actual mutation and is preserved");
                 owner.setGameMode(GameType.SPECTATOR); advance(now, 15, 20);
             }
             case 15 -> {
@@ -312,25 +358,46 @@ final class NativeBuildingGameplay {
             case 16 -> {
                 require(snapshot(level).equals(pausedCells), "Native mutation continued during owner permission pause");
                 stockSnapshot(level, "immediately-before-world-save");
+                rebindsBeforeReload = ProtectedBuilderHandMirror.rebindCount(builder(level).getPersistentData());
+                inventoryBeforeReload = inventoryValues(builder(level));
+                mainHandBeforeReload = stackDescription(builder(level).getMainHandItem());
                 owner.server.saveEverything(false, true, true);
                 check("Owner permission loss pauses actual AI without changing world cells");
                 advance(now, 17, 0); return Action.RELOAD;
             }
             case 17 -> {
                 stockSnapshot(level, "immediately-after-world-reload-before-resupply");
+                require(inventoryValues(builder(level)).equals(inventoryBeforeReload)
+                                && stackDescription(builder(level).getMainHandItem()).equals(mainHandBeforeReload),
+                        "Protected reload changed native inventory or main-hand values");
+                assertSingleHandRebind(level);
+                check("Protected reload rebinds the equal main-hand mirror exactly once before AI, preserving every inventory value");
                 require(snapshot(level).equals(pausedCells) && balance(owner) == bankAfterManual,
                         "Mid-job world restart changed protected cells or Treasury");
                 require(NativeConstructionGuard.commissionPaid(area(level))
                                 && ConstructionEditLedger.get(level).sameGeneration(ledgerGeneration)
                                 && NativeConstructionGuard.hasReservation(level, jobId), "Restart lost paid job or durable reservation");
                 check("Mid-job real world restart preserves exact cells, paid state and durable ledger identity");
-                owner.setGameMode(GameType.SURVIVAL); replenish(level, 128, 128); advance(now, 18, 0);
+                require(level.getBlockState(headroomCell).is(Blocks.STONE) && !area(level).nativeQueuesReady(),
+                        "Reload adopted obstructed clearance or enabled native queues");
+                owner.setGameMode(GameType.SURVIVAL); advance(now, 203, 60);
+            }
+            case 203 -> {
+                require(snapshot(level).equals(pausedCells) && level.getBlockState(headroomCell).is(Blocks.STONE)
+                                && !area(level).nativeQueuesReady(),
+                        "Restoring owner permission bypassed the saved headroom obstruction");
+                check("Headroom obstruction survives real reload and keeps native queues unready even after owner permission returns");
+                level.setBlock(headroomCell, originalHeadroom, 3);
+                replenish(level, 128, 128); advance(now, 18, 0);
             }
             case 18 -> {
                 if (placed(level) < fixture.expectedPlan().blocks().size()) return Action.NONE;
                 stockSnapshot(level, "completed-native-wall-before-conservation-assertion");
+                assertSingleHandRebind(level);
                 conservation(level);
                 require(balance(owner) == bankAfterManual, "Completion charged again");
+                require(level.getBlockState(headroomCell).equals(originalHeadroom), "Restored clearance changed during resumed construction");
+                check("Restoring original raw fixture clearance resumes protected native work without another charge");
                 check("Native AI completes the exact manual template after resupply/restart with material conservation");
                 RESULT.put("completedManualBlocks", placed(level));
                 RESULT.put("manualTreasuryDebit", 90); RESULT.put("perimeterTreasuryDebit", 900);
@@ -390,7 +457,12 @@ final class NativeBuildingGameplay {
     }
     private static Map<Long, BlockState> snapshot(ServerLevel level) {
         Map<Long, BlockState> snapshot = new HashMap<>();
-        fixture.expectedPlan().blocks().keySet().forEach(p -> snapshot.put(p, level.getBlockState(BlockPos.of(p)))); return Map.copyOf(snapshot);
+        // Observe the complete accepted manual footprint, including its non-structural clearance.
+        for (BlockPos base : fixture.expectedPlan().footprint())
+            for (int y = base.getY(); y <= fixture.expectedPlan().max().getY(); y++) {
+                BlockPos pos = base.atY(y); snapshot.put(pos.asLong(), level.getBlockState(pos));
+            }
+        return Map.copyOf(snapshot);
     }
     private static long placed(ServerLevel level) {
         return fixture.expectedPlan().blocks().entrySet().stream().filter(entry -> {
@@ -413,6 +485,9 @@ final class NativeBuildingGameplay {
         snap.put("offHand", stackDescription(builder.getOffhandItem()));
         snap.put("mainHandSameObjectAsInventorySlot5", builder.getMainHandItem() == builder.getInventory().getItem(5));
         snap.put("offHandSameObjectAsInventorySlot4", builder.getOffhandItem() == builder.getInventory().getItem(4));
+        snap.put("protectedMainHandRebindCount", ProtectedBuilderHandMirror.rebindCount(builder.getPersistentData()));
+        snap.put("protectedMainHandRebindPending", ProtectedBuilderHandMirror.pending(builder.getPersistentData()));
+        snap.put("protectedMainHandReviewRequired", ProtectedBuilderHandMirror.reviewNeeded(builder.getPersistentData()));
         var slots = new ArrayList<Map<String, Object>>();
         var identities = new IdentityHashMap<ItemStack, Integer>();
         for (int i = 0; i < builder.getInventory().getContainerSize(); i++) {
@@ -443,6 +518,23 @@ final class NativeBuildingGameplay {
             hands.add(stackDescription(ItemStack.of((CompoundTag) value)));
         snap.put("serializedHandItems", hands);
         STOCK.add(Map.copyOf(snap));
+    }
+    private static void assertSingleHandRebind(ServerLevel level) {
+        assertHandRebind(level, rebindsBeforeReload + 1);
+    }
+    private static void assertHandRebind(ServerLevel level, int expectedCount) {
+        BuilderEntity builder = builder(level);
+        CompoundTag data = builder.getPersistentData();
+        require(builder.getMainHandItem() == builder.getInventory().getItem(5)
+                        && ProtectedBuilderHandMirror.rebindCount(data) == expectedCount
+                        && !ProtectedBuilderHandMirror.pending(data) && !ProtectedBuilderHandMirror.reviewNeeded(data),
+                "Protected main-hand mirror was not rebound exactly once before native AI");
+    }
+    private static List<Map<String, Object>> inventoryValues(BuilderEntity builder) {
+        var values = new ArrayList<Map<String, Object>>();
+        for (int slot = 0; slot < builder.getInventory().getContainerSize(); slot++)
+            values.add(stackDescription(builder.getInventory().getItem(slot)));
+        return List.copyOf(values);
     }
     private static Map<String, Object> stackDescription(ItemStack stack) {
         return Map.of("item", String.valueOf(ForgeRegistries.ITEMS.getKey(stack.getItem())), "count", stack.getCount(),

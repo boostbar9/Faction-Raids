@@ -2,6 +2,7 @@ package com.devfarinsky.siegeoverhaul.core;
 
 import com.devfarinsky.siegeoverhaul.ModConstants;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
+import com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -25,7 +26,11 @@ final class ConstructionResources {
                 || WorkersBridge.hasActiveBuildArea(b) || WorkersBridge.isFleeing(b));
         builders.sort(Comparator.comparingDouble((Mob b) -> b.distanceToSqr(center.getX()+.5,center.getY(),center.getZ()+.5))
                 .thenComparing(Entity::getUUID));
-        if (builders.isEmpty()) return new Selection(null,null,TerritoryFortification.findNearbyBuilder(level,player,center,true).reason());
+        String inventoryProblem = builders.stream().map(NativeConstructionGuard::commissionProblem)
+                .filter(Objects::nonNull).findFirst().orElse(null);
+        builders.removeIf(builder -> NativeConstructionGuard.commissionProblem(builder) != null);
+        if (builders.isEmpty()) return new Selection(null,null,inventoryProblem != null ? inventoryProblem
+                : TerritoryFortification.findNearbyBuilder(level,player,center,true).reason());
         for (Mob builder : builders) {
             List<Entity> storage = new ArrayList<>(level.getEntitiesOfClass(Entity.class, new AABB(builder.blockPosition()).inflate(64), Entity::isAlive));
             storage.removeIf(s -> !storageArea(s) || !player.getUUID().equals(WorkersBridge.readOwner(s))

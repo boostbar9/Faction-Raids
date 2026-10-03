@@ -30,6 +30,21 @@ class NativeConstructionGuardTest extends MinecraftTestSupport {
         assertTrue(NativeConstructionGuard.status(area).contains("sealed native marker type"));
     }
 
+    @Test void protectedPortalJoinArmsThePreAiMirrorCheckEvenWhenNotLoadedFromDisk() {
+        var worker = mock(Mob.class); var data = new CompoundTag();
+        when(worker.getPersistentData()).thenReturn(data);
+        var level = mock(net.minecraft.server.level.ServerLevel.class);
+        try (var bridge = mockStatic(com.devfarinsky.siegeoverhaul.compat.WorkersBridge.class)) {
+            bridge.when(() -> com.devfarinsky.siegeoverhaul.compat.WorkersBridge.isBuilder(worker)).thenReturn(true);
+            NativeConstructionGuard.areaJoined(new net.minecraftforge.event.entity.EntityJoinLevelEvent(worker, level, false));
+            assertFalse(ProtectedBuilderHandMirror.pending(data), "Fresh/legacy worker without receipt is untouched");
+            data.putUUID("SiegeProtectedAreaReceipt", java.util.UUID.randomUUID());
+            NativeConstructionGuard.areaJoined(new net.minecraftforge.event.entity.EntityJoinLevelEvent(worker, level, false));
+            assertTrue(ProtectedBuilderHandMirror.pending(data), "Portal NBT restore is not a disk load");
+            verify(worker, never()).setItemInHand(any(), any());
+        }
+    }
+
     @Test void ambiguousLegacySolidsNeverBecomeClearableThroughAMaterialWhitelist() {
         for (var block : java.util.List.of(Blocks.DIRT, Blocks.OAK_LOG, Blocks.STONE, Blocks.CHEST,
                 Blocks.WATER, Blocks.LAVA, Blocks.WITHER_ROSE, Blocks.TALL_GRASS, Blocks.LARGE_FERN))

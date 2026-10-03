@@ -177,7 +177,7 @@ class signatures. Actual compatibility is established only by the CI run.
   invalid simulation-distance setting was corrected from 4 to Minecraft's minimum
   5. Headless narrator/audio-device warnings mean audio has not been verified.
 
-## Second gate: production gameplay (implementation awaiting its own run)
+## Second gate: production gameplay (acceptance not yet passed)
 
 After the first thirteen views, the same client creates a separate fresh
 `Siege-native-gameplay` scenario (`siege-native-gameplay` on disk) with cheats off.
@@ -190,6 +190,10 @@ separately. The test does not replace builder goals or any construction guard.
 The initial bounded gameplay sequence covers:
 
 - Free production perimeter review, with a held-plan framebuffer capture.
+- Before its first commission, the idle native builder holds its existing finite
+  pickaxe and undergoes native NBT save/load. Equal-valued but distinct hand and
+  inventory-slot-5 objects must be observed. Production acceptance, without a QA
+  repair call, must bind them exactly once while preserving every inventory value.
 - Actual client plan-use confirmation, an exact 900-emerald Treasury debit, consumed
   plan, paid protected marker and a second real framebuffer capture.
 - Authenticated explicit projection visibility for the large perimeter; real
@@ -202,10 +206,19 @@ The initial bounded gameplay sequence covers:
   stop with an actual native material request, and resume after measured resupply.
 - Real claim loss and owner permission loss must produce native pause reasons and
   zero further accepted-cell changes over observed intervals, with no extra debit.
+- A raw fixture solid inserted into reserved, non-structural headroom must pause
+  the live native job without a single further structural mutation or removal of
+  that obstruction. The obstruction is carried through the real world reload;
+  queues must remain unready even after owner permission returns. Only restoring
+  the original clearance allows normal resumption without another charge. This
+  is an environmental regression, not an actual player BlockEvent/history test.
 - Full client/server world close/reopen mid-job preserves the exact paused cells,
   paid state, reserved job and ledger identity. Native work resumes and completes
   the exact 110-block wall; chest + native builder stock + placed blocks must equal
   the measured supplied quantities for each construction material.
+- The protected builder's main hand must share the native inventory slot-5 object
+  after reload. The guarded rebind count must increase exactly once, with no pending
+  or review flag and no change to any item/tag/count, through final completion.
 
 Every server stage is capped at 2,400 ticks and reports current native pause,
 follow-state, material-request count and placed-block count on timeout. The whole
@@ -213,7 +226,7 @@ second sequence also has the client harness's eight-minute deadline. The result
 must include a passed gameplay section and all fifteen image names to pass CI.
 This implementation has not passed until a linked run proves it.
 
-The remaining player-edit/late-obstruction, competing-builder and exact
+The remaining actual-player-edit, competing-builder and exact
 1,024/1,025-cell rendering cases remain explicitly listed as uncovered until those
 additional bounded cases actually run. The claim/owner cases above are a defined
 subset, not a claim to have tested every ownership/core mutation.
@@ -233,4 +246,18 @@ server EULA acceptance, credentials or authentication changes are automated here
   168 cobblestone supplied versus 198 accounted. This is a real unresolved
   acceptance failure; the assertion remains unchanged. Native slot/hand identity
   and serialized stock snapshots were added to distinguish a native reload stock
-  defect from an accounting error. The new snapshots have not yet run.
+  defect from an accounting error.
+
+- [Run 37161200249](https://github.com/boostbar9/Faction-Raids/actions/runs/37161200249)
+  reproduced the same strict conservation failure and isolated its cause in the
+  actual pinned native runtime. Immediately before save, inventory slot 5 and the
+  main hand were the same 30-cobblestone object. After reload, both still held 30
+  but were different objects. Each next placement reduced the inventory stack
+  while the live hand stayed at 30. A later native material switch moved that
+  stale 30-stack into cargo. Only native inventory, chest and placed blocks were
+  counted, so this was not double-counting the displayed hand. The run's fifteen
+  screenshots also verify the centered compact native view, unobstructed HUD
+  catalogue and compiled-terrain production review capture. Its artifact SHA-256
+  is `a0d33b9a940bac89abe56d998123fcfc148e686195472d101f957b2aa1425e70`.
+  The focused main-hand rebind and new headroom/reload regression require their
+  own successful run; the strict material assertion has not been relaxed.

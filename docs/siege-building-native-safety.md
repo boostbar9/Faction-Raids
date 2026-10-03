@@ -118,6 +118,59 @@ queues/targets from previous jobs. It does not erase the area's actual native wo
 queues or loosen mutation checks. `canWorkHere` reserves discovery to the paid,
 designated builder, preventing unrelated builders from getting stuck on this job.
 
+## Confirmed pinned-runtime main-hand reload defect
+
+Actual Forge QA run `37161200249` proved a Recruits/Workers mirror alias defect:
+before saving, inventory slot 5 and the live main hand shared one 30-cobblestone
+stack. After loading they were separate equal 30-stacks. Native placement reduced
+only inventory to 29, 28, etc.; a later material switch returned the stale live
+30-stack to cargo. The unchanged conservation assertion found 198 accounted
+cobblestone versus 168 supplied. The hand was not double-counted by the assertion.
+
+The source mechanism is `AbstractInventoryEntity.readAdditionalSaveData`: superclass
+loading restores `HandItems`, then another `ItemStack.of(HandItems[0])` is stored in
+inventory slot 5. Workers `getMatchingItem` reads that inventory slot and
+`BuilderWorkGoal.placeBlocks` shrinks it; `switchMainHandItem` later moves the live
+hand into cargo. Public native `setItemInHand(MAIN_HAND, stack)` deliberately binds
+both views to the same stack object. The audited Workers source is `29d26e1` above;
+reviewed Recruits source blobs are `8cb3f845db9485ce38aa30e5301c8318a517f683`
+(`entities/AbstractInventoryEntity.java`) and
+`384200e2c700e9e8199e589b38a926fbe8e58a7d`
+(`inventory/RecruitSimpleContainer.java`). The actual pinned-runtime diagnostic,
+not an assumed source-version match, confirmed the behavior.
+
+Server-joining builders with an existing guarded receipt arm the one-shot mirror
+check. This includes dimension-transfer NBT recreation, which Forge does not label
+as loadedFromDisk; fresh commissioned/legacy builders have no such receipt on join.
+The first accepted protected handoff also establishes this invariant before payment,
+covering idle workers that previously reloaded without a receipt. Normal active item
+use at that initial preflight is only a temporary, non-mutating blocker, not a durable
+review flag. Once the job is protected, the pre-living-AI boundary verifies the exact
+supported runtime, active
+complete reservation and matching ledger generation before any food/tool/work goal
+can run. Equal item, full serialized stack NBT (including ForgeCaps), and exact integer count
+within both item/container stack limits are mandatory. Active item use, a retained
+use-stack reference or nonzero remaining-use ticks rejects binding without stopping
+use or changing that reference;
+overstacks are rejected before the inherited container setter could clamp them.
+The public native main-hand setter
+receives the existing inventory slot object; raw serialized NBT snapshots of every
+inventory slot and the resulting reference identity are checked afterward. Those
+snapshots do not reconstruct capabilities through ItemStack.copy(). Unverifiable
+serialization pauses without binding. No counts are selected or rewritten, and
+there is no offhand or general inventory normalization. Ordinary legacy workers
+never arm this path. End-to-end native conservation must pass unchanged before release.
+
+Unequal values, extra cargo aliases, unsupported callbacks or failed postconditions
+persist a review-needed flag; save/reload never silently clears it. That flagged
+builder cannot take another guarded commission until separately verified inventory
+review, for which this feature adds no repair-approval UI. Owner cancellation remains
+available, keeps existing no-refund behavior, and ends the protected-job pause without
+freezing unrelated native work. Cancellation does not repair ambiguous inventory or
+remove the durable review flag. Unknown runtime/history pauses the protected boundary
+without changing either hand or inventory. Normal verified jobs retain physics,
+food and sleep; only an unsafe post-load mirror/guard failure cancels their living tick.
+
 ## Terrain and player-edit policy
 
 Arbitrary dirt, stone, logs and other legacy solids are not classified as natural

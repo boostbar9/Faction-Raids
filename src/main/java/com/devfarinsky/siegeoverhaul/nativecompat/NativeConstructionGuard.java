@@ -53,6 +53,29 @@ public final class NativeConstructionGuard {
     /** All new commission callers must use the sealed protected native subtype. */
     public static String availabilityProblem() { return WorkersConstructionRuntime.problem(); }
 
+    /** Read-only hiring/selection predicate; review is never silently cleared by cancellation or reload. */
+    public static boolean needsInventoryReview(Mob builder) {
+        return builder != null && builder.getPersistentData() != null
+                && ProtectedBuilderHandMirror.reviewNeeded(builder.getPersistentData());
+    }
+
+    public static String inventoryReviewProblem(Mob builder) {
+        return needsInventoryReview(builder) ? ProtectedBuilderHandMirror.reviewReason() : null;
+    }
+
+    /** Selection-only checks: no stack serialization, native setter, item use interruption or mutation. */
+    public static String commissionProblem(Mob builder) {
+        if (builder == null) return "Builder is unavailable.";
+        String review = inventoryReviewProblem(builder);
+        if (review != null) return review;
+        try {
+            return ProtectedBuilderHandMirror.activeUse(builder)
+                    ? "Builder is using an item; wait for it to finish before commissioning. No payment taken." : null;
+        } catch (RuntimeException | LinkageError unavailable) {
+            return "Builder item-use state cannot be verified; try again when it is idle. No payment taken.";
+        }
+    }
+
     public static boolean commissionPaid(Entity area) {
         return area != null && area.getPersistentData() != null && area.getPersistentData().getBoolean(PAID);
     }
@@ -78,6 +101,10 @@ public final class NativeConstructionGuard {
             return pause(area, "Protected construction requires the sealed native marker type");
         String capabilityProblem = availabilityProblem();
         if (capabilityProblem != null) return pause(area, capabilityProblem);
+        // Normal eating/use on an idle hire is temporary, not evidence of corrupt inventory.
+        // Recheck before any receipt/ledger write or hand setter, and never charge or stop use.
+        String commissionProblem = commissionProblem(builder);
+        if (commissionProblem != null) return pause(area, commissionProblem);
         try {
             if (!WallBuilderAccess.install(builder)) return pause(area, "Paused: native protection hook unavailable");
             var plan = AcceptedConstructionPlan.capture(area);
@@ -117,6 +144,13 @@ public final class NativeConstructionGuard {
             builder.getPersistentData().putUUID(PROTECTED_LINK, area.getUUID());
             builder.getPersistentData().putUUID(PROTECTED_GENERATION, ledger.generation());
             CACHE.put(area, snapshot);
+            // An idle worker may have split its mirror during an earlier unguarded reload.
+            // Establish the same invariant now, inside the accepted protected handoff, before
+            // protect can return success to assignment/payment. Failure stays unpaid for rollback.
+            ProtectedBuilderHandMirror.arm(workerData);
+            String handProblem = ProtectedBuilderHandMirror.restore(builder);
+            if (handProblem != null) { pause(builder, handProblem); return pause(area, handProblem); }
+            workerData.remove(STATUS);
             pause(area, "Paused: commission not completed");
             return true;
         } catch (ReflectiveOperationException | RuntimeException unavailable) {
@@ -133,7 +167,7 @@ public final class NativeConstructionGuard {
     }
 
     /**
-     * Called before the living AI tick. Only inability to install the guard cancels
+     * Called before the living AI tick. Only an unavailable guard or unverified post-load hand mirror cancels
      * a living tick; a normally guarded pause leaves physics, food and sleep alone.
      * This also catches a second native builder discovering the protected area.
      */
@@ -150,6 +184,21 @@ public final class NativeConstructionGuard {
                 ledger.acknowledgeRetirement(receipt);
             }
         }
+        // This is the LivingTick boundary before all native AI, including eating and tool switches.
+        // Explicit cancellation cleanup above ends this scope; a review flag never freezes legacy work.
+        if (data.hasUUID(PROTECTED_LINK) && (ProtectedBuilderHandMirror.pending(data)
+                || ProtectedBuilderHandMirror.reviewNeeded(data))) {
+            var ledger = ConstructionEditLedger.get(level.getServer().overworld());
+            String handProblem = availabilityProblem();
+            if (handProblem == null && !validHandReceipt(data, ledger))
+                handProblem = "Paused: protected builder inventory receipt cannot be verified";
+            if (handProblem == null) handProblem = ProtectedBuilderHandMirror.restore(builder);
+            if (handProblem != null) {
+                Entity related = level.getServer().overworld().getEntity(data.getUUID(PROTECTED_LINK));
+                pause(related, handProblem); return pause(builder, handProblem);
+            }
+            data.remove(STATUS);
+        }
         Entity area = currentArea(builder);
         if (!protectedArea(area)) return true;
         if (WallBuilderAccess.install(builder)) {
@@ -158,6 +207,12 @@ public final class NativeConstructionGuard {
             return true;
         }
         return pause(area, "Paused: native protection hook unavailable");
+    }
+
+    static boolean validHandReceipt(CompoundTag data, ConstructionEditLedger ledger) {
+        return data.hasUUID(PROTECTED_LINK) && data.hasUUID(PROTECTED_GENERATION)
+                && ledger.sameGeneration(data.getUUID(PROTECTED_GENERATION))
+                && ledger.completeReservation(data.getUUID(PROTECTED_LINK));
     }
 
     /** Works for transferred builders too; only exact old references/metadata can be cleared. */
@@ -507,8 +562,15 @@ public final class NativeConstructionGuard {
 
     public static void areaJoined(EntityJoinLevelEvent event) {
         Entity area = event.getEntity();
-        if (event.loadedFromDisk() && event.getLevel() instanceof ServerLevel && protectedArea(area))
-            prepareLoadedArea(area);
+        if (event.getLevel() instanceof ServerLevel) {
+            // Dimension transfer also restores a new entity through NBT, but Forge marks that join
+            // loadedFromDisk=false. An existing guarded receipt, not the join flag, scopes the check.
+            // Fresh commissioned builders join before protection writes that receipt.
+            if (area instanceof Mob worker && WorkersBridge.isBuilder(worker)
+                    && worker.getPersistentData().hasUUID(PROTECTED_LINK))
+                ProtectedBuilderHandMirror.arm(worker.getPersistentData());
+            if (event.loadedFromDisk() && protectedArea(area)) prepareLoadedArea(area);
+        }
     }
 
     public static void blockPlaced(BlockEvent.EntityPlaceEvent event) {

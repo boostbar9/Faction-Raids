@@ -14,6 +14,7 @@ import com.talhanation.workers.entities.workarea.StorageArea;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.resources.ResourceLocation;
@@ -145,6 +146,21 @@ final class NativeGameplayFixture {
         inventory.setItem(8, new ItemStack(Items.DIAMOND_AXE));
         inventory.setItem(9, new ItemStack(Items.DIAMOND_SHOVEL));
         inventory.setChanged();
+        // Reproduce the real idle/unprotected reload boundary before its first commission. Move
+        // the existing finite tool using Workers' public switch (no added construction material),
+        // then use the actual entity NBT lifecycle. The production handoff must restore the mirror.
+        builder.switchMainHandItem(stack -> stack.is(Items.DIAMOND_PICKAXE));
+        require(builder.getMainHandItem().is(Items.DIAMOND_PICKAXE), "Native tool switch failed");
+        CompoundTag handBeforeReload = builder.getMainHandItem().save(new CompoundTag());
+        CompoundTag idleBuilder = builder.saveWithoutId(new CompoundTag());
+        builder.load(idleBuilder);
+        require(builder.isNoAi() && builder.getMainHandItem() != builder.getInventory().getItem(5)
+                && handBeforeReload.equals(builder.getMainHandItem().save(new CompoundTag()))
+                && handBeforeReload.equals(builder.getInventory().getItem(5).save(new CompoundTag())),
+                "Idle native NBT round-trip did not preserve equal values in split hand mirrors");
+        require(!ProtectedBuilderHandMirror.pending(builder.getPersistentData())
+                && !ProtectedBuilderHandMirror.reviewNeeded(builder.getPersistentData()),
+                "Unguarded fixture must not invoke the protected hand repair");
         require(level.addFreshEntity(builder), "Native builder spawn failed");
         require(storage.canWorkHere(builder), "Native storage denies the owned builder");
 
