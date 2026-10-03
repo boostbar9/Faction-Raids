@@ -100,10 +100,14 @@ class CampCoastalTerrainTest extends MinecraftTestSupport {
 
                 assertTrue(reasons.isEmpty());
                 assertEquals(side.getClockWise(), plan.entrance(), "Water-facing exit must rotate onto land");
-                assertEquals(3 * 31 * 3, plan.changes().size(), "Only the three shallow-water columns need filling");
+                assertEquals(3 * 31 * 3, plan.changes().size(), "Only the three-block-wide shallow-water strip needs filling");
                 assertEquals(plan.changes().size(), plan.changes().stream().map(CampTerrain.Change::pos).distinct().count());
                 assertTrue(plan.changes().stream().allMatch(change -> wet(change.pos())
                         && change.before().is(Blocks.WATER) && change.after().is(Blocks.DIRT)));
+                assertTrue(plan.changes().stream().allMatch(change ->
+                        Math.abs(change.pos().getX() - site.getX()) <= 15
+                                && Math.abs(change.pos().getZ() - site.getZ()) <= 15),
+                        "Rejected ocean-exit work must not leak beyond the accepted camp footprint");
                 verify(level, never()).setBlock(any(), any(), anyInt());
                 assertFalse(raid.campaign.contains("CampEntranceFacing"));
 
