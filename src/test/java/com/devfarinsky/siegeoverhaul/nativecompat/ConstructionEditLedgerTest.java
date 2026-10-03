@@ -53,6 +53,41 @@ class ConstructionEditLedgerTest extends MinecraftTestSupport {
         assertTrue(ConstructionEditLedger.load(invalid).reserves(Set.of(BlockPos.ZERO)));
     }
 
+    @Test void onlyExplicitBoundedRetirementReceiptsSurviveSaveLoadAsCancellationEvidence() {
+        UUID id = UUID.randomUUID(); var ledger = new ConstructionEditLedger();
+        assertFalse(ledger.retired(id));
+        ledger.register(id, Set.of(BlockPos.ZERO)); assertFalse(ledger.retired(id));
+        CompoundTag priorSave = ledger.save(new CompoundTag());
+        ledger.retire(id, false);
+        var loaded = ConstructionEditLedger.load(ledger.save(new CompoundTag()));
+        assertTrue(loaded.retired(id));
+        assertFalse(ConstructionEditLedger.load(priorSave).retired(id));
+        assertFalse(new ConstructionEditLedger().retired(id));
+        assertFalse(ConstructionEditLedger.load(new CompoundTag()).retired(id));
+        CompoundTag partial = priorSave.copy(); partial.remove("Sites");
+        assertFalse(ConstructionEditLedger.load(partial).retired(id));
+        loaded.acknowledgeRetirement(id); assertFalse(loaded.retired(id));
+    }
+
+    @Test void failedUnregisteredHandoffsAndRepeatedRetirementsDoNotLeakSlots() {
+        var ledger = new ConstructionEditLedger(); UUID failed = UUID.randomUUID();
+        ledger.retire(failed, false); assertFalse(ledger.retired(failed)); assertFalse(ledger.canRetire(failed));
+        UUID active = UUID.randomUUID(); ledger.register(active, Set.of(BlockPos.ZERO));
+        ledger.builderDestroyed(active); ledger.retire(active, false); ledger.retire(active, false);
+        assertFalse(ledger.retired(active));
+        UUID waiting = UUID.randomUUID(); ledger.register(waiting, Set.of(BlockPos.ZERO)); ledger.retire(waiting, false);
+        assertFalse(ledger.register(waiting, Set.of(BlockPos.ZERO)));
+        ledger.acknowledgeRetirement(waiting); assertTrue(ledger.register(waiting, Set.of(BlockPos.ZERO)));
+    }
+
+    @Test void knownDeadOrCleanedBuildersDoNotRetainCancellationSlots() {
+        UUID dead = UUID.randomUUID(), loaded = UUID.randomUUID(); var ledger = new ConstructionEditLedger();
+        ledger.register(dead, Set.of(BlockPos.ZERO)); ledger.builderDestroyed(dead); ledger.retire(dead, false);
+        assertFalse(ledger.retired(dead)); assertFalse(ledger.contains(dead));
+        ledger.register(loaded, Set.of(BlockPos.ZERO)); ledger.retire(loaded, true);
+        assertFalse(ledger.retired(loaded)); assertFalse(ledger.contains(loaded));
+    }
+
     @Test void malformedAndMissingLedgersFailClosed() {
         CompoundTag root = new CompoundTag(); root.putBoolean("Invalid", true);
         var invalid = ConstructionEditLedger.load(root);

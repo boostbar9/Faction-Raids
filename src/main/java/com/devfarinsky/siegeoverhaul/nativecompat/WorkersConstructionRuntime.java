@@ -3,7 +3,6 @@ package com.devfarinsky.siegeoverhaul.nativecompat;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.world.entity.Entity;
 import net.minecraftforge.fml.ModList;
 
 /** Non-toggleable version/API fence for the audited new protected entity path. */
@@ -59,8 +58,8 @@ final class WorkersConstructionRuntime {
                 if (!goal.getField("state").getType().isEnum() || goal.getField("blockPos").getType() != BlockPos.class)
                     throw new NoSuchFieldException("native state");
                 goal.getDeclaredField("workDone");
-                requireOverridable(Entity.class, "moveTo", double.class, double.class, double.class);
-                requireOverridable(Entity.class, "moveTo", double.class, double.class, double.class, float.class, float.class);
+                // Minecraft overrides are verified by the pinned Forge compile.
+                // Do not reflect Mojang method-name strings: production remaps them.
                 return null;
             } catch (ReflectiveOperationException | RuntimeException | LinkageError unavailable) {
                 return "Protected construction paused: required native server protection APIs are unavailable.";

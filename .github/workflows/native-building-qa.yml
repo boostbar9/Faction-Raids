@@ -1,0 +1,116 @@
+name: Native Building QA
+
+# Explicit opt-in. This is separate from the ordinary Build / JUnit job.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-building-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-client:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       contains(github.event.pull_request.labels.*.name, 'native-building-qa'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      LIBGL_ALWAYS_SOFTWARE: 'true'
+      GALLIUM_DRIVER: llvmpipe
+    steps:
+      - name: Check out integrated source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+
+      - name: Install display and software OpenGL from Ubuntu
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y xvfb xauth mesa-utils libgl1-mesa-dri libglx-mesa0 libopenal1
+
+      - name: Initialize a new isolated game directory
+        run: |
+          set -euo pipefail
+          test ! -e build/native-qa/client/saves/siege-native-qa-fixture
+          mkdir -p build/native-qa/client build/native-qa/evidence
+          printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:4\nsimulationDistance:4\nmaxFps:30\nvsync:false\n' > build/native-qa/client/options.txt
+          git rev-parse HEAD > build/native-qa/evidence/source-commit.txt
+          java -version 2> build/native-qa/evidence/java-version.txt
+
+      - name: Run actual client and integrated-server fixture
+        run: |
+          set -euo pipefail
+          xvfb-run -a -s '-screen 0 1280x720x24' bash -c '
+            set -euo pipefail
+            glxinfo -B | tee build/native-qa/evidence/opengl.txt
+            timeout --signal=TERM --kill-after=60s 20m ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true runClient 2>&1 | tee build/native-qa/evidence/client-console.log
+          '
+
+      - name: Verify evidence contract
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('build/native-qa/evidence')
+          data = json.loads((root / 'result.json').read_text())
+          assert data['status'] == 'passed', data
+          expected = [
+              '01-marker-focused.png', '02-native-inspection-scale2.png',
+              '03-native-inspection-scale3.png', '04-projection-unfocused.png',
+              '05-projection-focus-only.png', '06-projection-marker-behind-camera.png',
+              '07-marker-occluded.png', '08-marker-after-world-reload.png',
+              '09-building-auto-perimeter.png', '10-building-place-structure.png',
+              '11-building-construction.png', '12-building-construction-compact.png',
+              '13-native-perimeter-template.png',
+          ]
+          assert data['screenshots'] == expected, data['screenshots']
+          for name in expected:
+              content = (root / name).read_bytes()
+              assert content.startswith(b'\x89PNG\r\n\x1a\n') and len(content) > 4096, name
+          for mod in ['workers', 'recruits', 'smallships', 'siegeweapons']:
+              assert mod in data['loadedModVersions'], mod
+              artifact = data['loadedCompanionArtifacts'][mod]
+              assert len(artifact['sha256']) == 64, artifact
+          assert data['loadedModVersions']['minecraft'] == '1.20.1', data
+          assert data['loadedModVersions']['forge'] == '47.4.16', data
+          print('Actual native-client fixture passed. See screenshots for visual review and result.json for exclusions.')
+          PY
+
+      - name: Collect logs without redistributing companion JARs or worlds
+        if: always()
+        run: |
+          mkdir -p build/native-qa/evidence/logs
+          if [ -d build/native-qa/client/logs ]; then
+            find build/native-qa/client/logs -maxdepth 1 -type f -name '*.log' -exec cp {} build/native-qa/evidence/logs/ \;
+          fi
+          if [ -d build/native-qa/client/crash-reports ]; then
+            cp -R build/native-qa/client/crash-reports build/native-qa/evidence/
+          fi
+
+      - name: Upload framebuffer evidence and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-building-qa-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/native-qa/evidence/
+          if-no-files-found: error
+          retention-days: 7

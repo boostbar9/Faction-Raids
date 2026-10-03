@@ -89,6 +89,16 @@ Open each bag when ready. If your inventory fills, undelivered contents remain i
 
 Use the **Warlord's Codex** for concise siege guidance, status, and access to the native faction and claim interfaces.
 
+## Building System Candidate
+
+The `4.52.0-preview.1` development candidate consolidates automatic perimeter planning, the six existing placeable plans, and nearby construction reporting in **Building**. Territory retains its faction upgrades. This candidate is not a published release; see the pull request's verification status before installing it.
+
+Automatic perimeter reviews use the existing template wall appearance: a five-wide support, oak wall walk, and parapets. The selected stone-brick, cobblestone or oak style is retained. Plans are free; the automatic commission remains **900 faction Treasury emeralds plus supplied blocks**. Review the complete footprint before confirming. Steep terrain, protected obstructions, insufficient storage coverage and oversized native workloads are rejected without partial paid construction.
+
+New protected jobs are gated to the audited **Workers 2.0.3 + Recruits 1.15.2** runtime. Other supported installations keep existing jobs, while new protected commissioning pauses until compatibility is reviewed. The native Workers renderer, tools, materials and work hours remain in use. The marker is positioned separately from its immutable blueprint origin, with authenticated owner controls. Canceling leaves built blocks intact and does not refund supplies or the commission.
+
+Clearing is deliberately limited to unchanged single-cell plants. Unknown solids, player structures, inventories, fluids and reactive neighboring blocks are preserved. This is not a terrain-excavation tool. Actual client/server verification is required before release.
+
 ## Victory and Restoration
 
 Eligible Siege Core campaigns deposit emeralds into the shared faction bank after every survived wave. Each five-wave chapter increases the per-wave payment by 50% of the starting amount. There is no five-wave ending: accept a majority retreat vote at a checkpoint or capture the enemy command core. Victory loot and XP remain available; bank wave payments replace personal emerald victory payouts for these campaigns. Manually started raids do not award rewards by default.

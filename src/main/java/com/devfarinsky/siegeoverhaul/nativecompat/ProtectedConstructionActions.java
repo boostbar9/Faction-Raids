@@ -1,7 +1,6 @@
 package com.devfarinsky.siegeoverhaul.nativecompat;
 
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
-import com.devfarinsky.siegeoverhaul.core.PlayerFortificationJobs;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Mob;
@@ -22,13 +21,6 @@ public final class ProtectedConstructionActions {
             fail(sender, "That protected construction area is unavailable or is not yours.");
             return;
         }
-        UUID reserved = area.reservedBuilderId();
-        var raw = reserved == null ? null : sender.serverLevel().getEntity(reserved);
-        if (!(raw instanceof Mob builder) || !WorkersBridge.isBuilder(builder)
-                || !sender.getUUID().equals(WorkersBridge.readWorkerOwner(builder))) {
-            fail(sender, "Load your reserved builder nearby before changing or canceling this job; no job state changed.");
-            return;
-        }
         if (action != CANCEL) {
             area.projectionAuthorized(action == SHOW);
             return;
@@ -41,15 +33,34 @@ public final class ProtectedConstructionActions {
             fail(sender, "The construction reservation could not be read; no job state changed.");
             return;
         }
-        if (!WorkersBridge.releasePlayerJob(builder, area)) {
-            fail(sender, "The native builder could not be safely detached; the job was kept.");
+        if (!ledger.canRetire(area.getUUID())) {
+            fail(sender, "Cancellation history is unavailable; no job state changed.");
             return;
         }
-        PlayerFortificationJobs.unlink(builder, area.getUUID());
+        Mob builder = loadedReservedBuilder(sender, area.reservedBuilderId());
+        if (builder != null && !NativeConstructionGuard.retireBuilderAssociation(builder, area.getUUID())) {
+            fail(sender, "The native builder's exact job reference could not be verified; the job was kept.");
+            return;
+        }
+        // Unavailable/dead workers are untouched. Their single saved protected
+        // UUID receipt is retired on load against this durable active index.
+        // A loaded transferred worker loses only an exact old reference, never
+        // ownership, new assignments, navigation orders or inventory.
         area.removeAuthorized();
-        ledger.remove(area.getUUID());
+        ledger.retire(area.getUUID(), builder != null);
         sender.sendSystemMessage(Component.literal(
                 "Construction canceled. Placed blocks stay in the world; supplied materials and the commission are not refunded."));
+    }
+
+    private static Mob loadedReservedBuilder(ServerPlayer sender, UUID builderId) {
+        if (builderId == null) return null;
+        int inspected = 0;
+        for (var level : sender.getServer().getAllLevels()) {
+            if (++inspected > 32) break;
+            var entity = level.getEntity(builderId);
+            if (entity instanceof Mob mob && WorkersBridge.isBuilder(mob)) return mob;
+        }
+        return null;
     }
 
     static boolean authorized(UUID sender, UUID owner, boolean nearby) {

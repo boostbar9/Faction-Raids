@@ -257,6 +257,22 @@ class WorkersBridgeTest extends MinecraftTestSupport {
         verify(level,never()).getBlockState(any());
     }
 
+    @Test
+    void canceledAreaCleanupOnlyDetachesExactPointerWithoutChangingWorkerOrders() {
+        BuilderApi worker = new BuilderApi(); worker.followState = 6;
+        Entity canceled = mock(Entity.class), replacement = mock(Entity.class);
+        UUID id = UUID.randomUUID(), next = UUID.randomUUID();
+        when(canceled.getUUID()).thenReturn(id); when(replacement.getUUID()).thenReturn(next);
+        worker.currentBuildArea = replacement;
+        assertTrue(WorkersBridge.detachBuildAreaReferenceApi(worker, id));
+        assertSame(replacement, worker.currentBuildArea); assertEquals(6, worker.followState);
+        worker.currentBuildArea = canceled;
+        assertTrue(WorkersBridge.detachBuildAreaReferenceApi(worker, id));
+        assertNull(worker.currentBuildArea); assertEquals(6, worker.followState);
+        assertTrue(WorkersBridge.detachBuildAreaReferenceApi(worker, id));
+        assertFalse(WorkersBridge.detachBuildAreaReferenceApi(new Object(), id));
+    }
+
     /** Public signatures verified against Workers 2 / Recruits upstream. */
     public static class BuilderApi {
         public Object currentBuildArea;

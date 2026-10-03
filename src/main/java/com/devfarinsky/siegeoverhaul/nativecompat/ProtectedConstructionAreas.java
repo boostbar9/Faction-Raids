@@ -20,7 +20,8 @@ public final class ProtectedConstructionAreas {
     public static final DeferredRegister<EntityType<?>> TYPES = DeferredRegister.create(ForgeRegistries.ENTITY_TYPES, SiegeOverhaul.MOD_ID);
     public static final RegistryObject<EntityType<ProtectedBuildArea>> TYPE = TYPES.register("protected_build_area", () ->
             EntityType.Builder.<ProtectedBuildArea>of(ProtectedBuildArea::new, MobCategory.MISC)
-                    .sized(1.2F, 2.0F).fireImmune().noSummon().build(ID.toString()));
+                    .sized(1.2F, 2.0F).fireImmune().noSummon()
+                    .clientTrackingRange(ConstructionTracking.TRACKING_CHUNKS).build(ID.toString()));
 
     private ProtectedConstructionAreas() {}
 
@@ -35,6 +36,10 @@ public final class ProtectedConstructionAreas {
         BlockPos marker = ConstructionMarkerSite.find(owner, plan);
         if (marker == null) throw new IllegalStateException(
                 "Move onto clear ground inside your claim near the build site; no accessible native marker position is available.");
+        var nativeBounds = new net.minecraft.world.phys.AABB(origin, origin.relative(Direction.SOUTH, depth - 1)
+                .relative(Direction.WEST, width - 1).above(height));
+        if (!ConstructionTracking.covers(net.minecraft.world.phys.Vec3.atBottomCenterOf(marker), nativeBounds))
+            throw new IllegalStateException("The complete plan is too far from an accessible native marker; use a smaller construction job.");
         var area = TYPE.get().create(owner.serverLevel());
         if (area == null) throw new IllegalStateException("Native marker entity is unavailable");
         area.initialize(origin, marker, owner.getUUID(), owner.getGameProfile().getName(), builder.getUUID(),

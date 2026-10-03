@@ -1,6 +1,5 @@
 package com.devfarinsky.siegeoverhaul.nativecompat;
 
-import com.devfarinsky.siegeoverhaul.SiegeOverhaul;
 import com.devfarinsky.siegeoverhaul.camp.CampVegetation;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import com.devfarinsky.siegeoverhaul.core.SiegeCore;
@@ -22,9 +21,6 @@ import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.level.BlockEvent;
-import net.minecraftforge.eventbus.api.EventPriority;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -39,10 +35,10 @@ import java.util.WeakHashMap;
  * Public upstream 29d26e1 has no mutation event: every path is checked before
  * dispatching its synchronous tick. No solid clearing or FREE_AREA is enabled.
  */
-@Mod.EventBusSubscriber(modid = SiegeOverhaul.MOD_ID)
 public final class NativeConstructionGuard {
     private static final String KEY = "SiegeProtectedConstructionV1", STATUS = "SiegeConstructionPause",
-            PAID = "SiegeConstructionCommissionPaid";
+            PAID = "SiegeConstructionCommissionPaid", PROTECTED_LINK = "SiegeProtectedAreaReceipt",
+            PROTECTED_GENERATION = "SiegeProtectedLedgerGeneration";
     private static final Map<Entity, Snapshot> CACHE = new WeakHashMap<>();
     private static final Set<String> STATES = Set.of("SELECT_WORK_AREA", "MOVE_TO_WORK_AREA", "PREPARE_FREE_AREA",
             "FREE_AREA", "PREPARE_BREAK_BLOCKS", "BREAK_BLOCKS", "PREPARE_PLACE_BLOCKS", "PLACE_BLOCKS",
@@ -96,10 +92,22 @@ public final class NativeConstructionGuard {
             before.forEach((pos, state) -> { if (state.equals(plan.cells.get(pos))) snapshot.completed.add(pos.asLong()); });
             String problem = worldProblem(level, builder, area, snapshot, snapshot.plan.cells.keySet(), false);
             if (problem != null) return pause(area, problem);
-            if (!ConstructionEditLedger.get(level).register(area.getUUID(), plan.cells.keySet()))
+            var ledger = ConstructionEditLedger.get(level);
+            var workerData = builder.getPersistentData();
+            if (workerData.hasUUID(PROTECTED_LINK)) {
+                UUID previous = workerData.getUUID(PROTECTED_LINK);
+                if (!ledger.retired(previous))
+                    return pause(area, "Paused: the builder still has an active or unverified protected job");
+                if (!retireBuilderAssociation(builder, previous))
+                    return pause(area, "Paused: the builder's previous canceled job cannot be detached safely");
+                ledger.acknowledgeRetirement(previous);
+            }
+            if (!ledger.register(area.getUUID(), plan.cells.keySet()))
                 return pause(area, "Paused: protected-site ledger is full or unavailable");
             area.getPersistentData().put(KEY, save(snapshot));
             area.getPersistentData().putBoolean(PAID, false);
+            builder.getPersistentData().putUUID(PROTECTED_LINK, area.getUUID());
+            builder.getPersistentData().putUUID(PROTECTED_GENERATION, ledger.generation());
             CACHE.put(area, snapshot);
             pause(area, "Paused: commission not completed");
             return true;
@@ -122,11 +130,37 @@ public final class NativeConstructionGuard {
      * This also catches a second native builder discovering the protected area.
      */
     public static boolean beforeWorkerTick(Mob builder) {
-        if (!WorkersBridge.isBuilder(builder) || !(builder.level() instanceof ServerLevel)) return true;
+        if (!WorkersBridge.isBuilder(builder) || !(builder.level() instanceof ServerLevel level)) return true;
+        var data = builder.getPersistentData();
+        if (data.hasUUID(PROTECTED_LINK)) {
+            UUID receipt = data.getUUID(PROTECTED_LINK);
+            // Protected construction is Overworld-only. A transferred worker
+            // in another dimension must consult that original durable index.
+            var ledger = ConstructionEditLedger.get(level.getServer().overworld());
+            if (ledger.retired(receipt)) {
+                if (!retireBuilderAssociation(builder, receipt)) return false;
+                ledger.acknowledgeRetirement(receipt);
+            }
+        }
         Entity area = currentArea(builder);
         if (!protectedArea(area)) return true;
-        if (WallBuilderAccess.install(builder)) return true;
+        if (WallBuilderAccess.install(builder)) {
+            if (area instanceof ProtectedBuildArea protectedArea && !protectedArea.nativeQueuesReady()
+                    && prepareLoadedArea(area)) WallBuilderAccess.prepareProtectedHandoff(builder, area);
+            return true;
+        }
         return pause(area, "Paused: native protection hook unavailable");
+    }
+
+    /** Works for transferred builders too; only exact old references/metadata can be cleared. */
+    static boolean retireBuilderAssociation(Mob builder, UUID areaId) {
+        if (!WorkersBridge.detachBuildAreaReference(builder, areaId)) return false;
+        com.devfarinsky.siegeoverhaul.core.PlayerFortificationJobs.unlink(builder, areaId);
+        var data = builder.getPersistentData();
+        if (data.hasUUID(PROTECTED_LINK) && areaId.equals(data.getUUID(PROTECTED_LINK))) {
+            data.remove(PROTECTED_LINK); data.remove(PROTECTED_GENERATION);
+        }
+        return true;
     }
 
     /** Called directly at the wrapper's native tick boundary, including after resupply/reload. */
@@ -137,6 +171,8 @@ public final class NativeConstructionGuard {
         if (!area.getPersistentData().getBoolean(PAID)) return pause(area, "Paused: commission not completed");
         String capabilityProblem = availabilityProblem();
         if (capabilityProblem != null) return pause(area, capabilityProblem);
+        if (area instanceof ProtectedBuildArea protectedArea && !protectedArea.nativeQueuesReady())
+            return pause(area, "Paused: load the complete construction footprint to resume");
         try {
             Snapshot snapshot = snapshot(area);
             if (!snapshot.builder.equals(builder.getUUID())) return pause(area, "Paused: another builder selected this reserved job");
@@ -194,6 +230,8 @@ public final class NativeConstructionGuard {
                 if (now.equals(snapshot.plan.cells.get(pos))) changed |= snapshot.completed.add(pos.asLong());
                 else if (now.isAir() && !snapshot.before.get(pos).isAir()) changed |= snapshot.cleared.add(pos.asLong());
             }
+            if (priorArea instanceof ProtectedBuildArea protectedArea && protectedArea.isDone())
+                retireBuilderAssociation(builder, priorArea.getUUID());
             if (changed) {
                 CompoundTag tag = priorArea.getPersistentData().getCompound(KEY);
                 tag.putLongArray("Completed", snapshot.completed.stream().mapToLong(Long::longValue).toArray());
@@ -434,31 +472,31 @@ public final class NativeConstructionGuard {
         return result;
     }
 
-    @SubscribeEvent(priority = EventPriority.HIGH)
-    public static void areaJoined(EntityJoinLevelEvent event) {
-        Entity area = event.getEntity();
-        if (!event.loadedFromDisk() || !(event.getLevel() instanceof ServerLevel level) || !protectedArea(area)) return;
+    /** Read-only readiness check, then noncreative queue rebuild with no chunk loading. */
+    public static boolean prepareLoadedArea(Entity area) {
+        if (!(area instanceof ProtectedBuildArea protectedArea) || !(area.level() instanceof ServerLevel level)) return false;
         String capabilityProblem = availabilityProblem();
-        if (capabilityProblem != null) { pause(area, capabilityProblem); return; }
+        if (capabilityProblem != null) return pause(area, capabilityProblem);
+        if (protectedArea.nativeQueuesReady()) return true;
         try {
             Snapshot snapshot = snapshot(area);
             if (!snapshot.plan.matches(area) || !ConstructionEditLedger.get(level).matches(area.getUUID(), snapshot.plan.cells.keySet())
-                    || !Boolean.FALSE.equals(AcceptedConstructionPlan.call(area, "getFreeArea"))) {
-                pause(area, "Paused: saved construction needs a new reviewed plan");
-                return;
-            }
-            // Public native reconstruction only; never use creative placement or overwrite saved NBT.
-            if (!(area instanceof ProtectedBuildArea protectedArea)) {
-                pause(area, "Paused: this marker has no protected native control boundary");
-                return;
-            }
+                    || !Boolean.FALSE.equals(AcceptedConstructionPlan.call(area, "getFreeArea")))
+                return pause(area, "Paused: saved construction needs a new reviewed plan");
+            if (!scanChunksLoaded(level, snapshot.plan)) return pause(area, "Paused: load the complete construction footprint to resume");
             protectedArea.rebuildAcceptedQueues();
+            return true;
         } catch (ReflectiveOperationException | RuntimeException unavailable) {
-            pause(area, "Paused: saved construction cannot be verified");
+            return pause(area, "Paused: saved construction cannot be verified");
         }
     }
 
-    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void areaJoined(EntityJoinLevelEvent event) {
+        Entity area = event.getEntity();
+        if (event.loadedFromDisk() && event.getLevel() instanceof ServerLevel && protectedArea(area))
+            prepareLoadedArea(area);
+    }
+
     public static void blockPlaced(BlockEvent.EntityPlaceEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level)) return;
         var ledger = ConstructionEditLedger.get(level);
@@ -467,16 +505,21 @@ public final class NativeConstructionGuard {
         else ledger.record(event.getPos());
     }
 
-    @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void blockBroken(BlockEvent.BreakEvent event) {
         if (event.getLevel() instanceof ServerLevel level) ConstructionEditLedger.get(level).record(event.getPos());
     }
 
-    @SubscribeEvent
     public static void areaRemoved(EntityLeaveLevelEvent event) {
         Entity area = event.getEntity();
         CACHE.remove(area);
-        if (event.getLevel() instanceof ServerLevel level && protectedArea(area) && area.getRemovalReason() != null
-                && area.getRemovalReason().shouldDestroy()) ConstructionEditLedger.get(level).remove(area.getUUID());
+        if (!(event.getLevel() instanceof ServerLevel level) || area.getRemovalReason() == null
+                || !area.getRemovalReason().shouldDestroy()) return;
+        if (area instanceof Mob worker && worker.getPersistentData().hasUUID(PROTECTED_LINK)) {
+            ConstructionEditLedger.get(level.getServer().overworld())
+                    .builderDestroyed(worker.getPersistentData().getUUID(PROTECTED_LINK));
+        }
+        if (area instanceof ProtectedBuildArea protectedArea && protectedArea.retirementHandled()) return;
+        if (protectedArea(area)) ConstructionEditLedger.get(level).retire(area.getUUID(),
+                area instanceof ProtectedBuildArea protectedArea && protectedArea.isDone());
     }
 }

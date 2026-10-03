@@ -57,12 +57,20 @@ public final class PerimeterConstruction {
 
     /** Server confirmation rebuilds the quote and checks the entire site again. */
     public static boolean confirm(ServerPlayer player, ItemStack stack) {
+        return confirm(player, stack, selection -> prepare(player, selection.core(), selection.material()),
+                (prepared, material) -> startJob(player, prepared, material));
+    }
+
+    /** Narrow side-effect seam: validation/refresh remains real in lifecycle tests. */
+    static boolean confirm(ServerPlayer player, ItemStack stack,
+                           java.util.function.Function<PerimeterPreview.Selection, Preparation> prepare,
+                           java.util.function.BiPredicate<Preparation, Integer> start) {
         var selection = PerimeterPreview.read(stack, player.getUUID(), player.level().dimension().location(), player.level().getGameTime());
         if (selection == null) return fail(player, "This perimeter review expired. Open Building at your core to review it again.");
         if (!selection.canConfirm(player.level().getGameTime())) return false;
         if (player.distanceToSqr(selection.core().getX() + .5, selection.core().getY(), selection.core().getZ() + .5) > 256.0 * 256.0)
             return fail(player, "Return within 256 blocks of your core before confirming this perimeter.");
-        Preparation prepared = prepare(player, selection.core(), selection.material());
+        Preparation prepared = prepare.apply(selection);
         String hash = fingerprint(prepared, selection.core(), selection.material());
         if (!prepared.ready() || !selection.ready() || !selection.fingerprint().equals(hash)) {
             try { writePreview(stack, player, selection.core(), selection.material(), prepared); }
@@ -72,7 +80,7 @@ public final class PerimeterConstruction {
                     ? "The plan changed. Review the refreshed footprint and materials, then use it again to confirm. No payment taken."
                     : prepared.problem());
         }
-        if (!startJob(player, prepared, selection.material())) return false;
+        if (!start.test(prepared, selection.material())) return false;
         PerimeterPreview.clear(stack);
         if (!player.isCreative()) stack.shrink(1);
         player.inventoryMenu.broadcastChanges();

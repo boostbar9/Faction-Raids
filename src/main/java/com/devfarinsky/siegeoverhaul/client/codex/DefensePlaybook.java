@@ -48,11 +48,15 @@ public final class DefensePlaybook {
                     "The action bar at the top of your screen during a raid tells you what the raiders are doing right now: scouting, breaching, capturing, or retreating. If it says Breaching, they're at a door or gate. If it says Capturing, get bodies into the core ring."),
             // === Territory ===
             new Tip("Territory","Permanent faction upgrades",
-                    "The Territory tab offers four permanent faction decrees. Read their effects before buying; Active means your faction already owns that upgrade. The bottom row commissions perimeter fortifications in your chosen material."),
+                    "The Territory tab offers four permanent faction decrees. Read their effects before buying; Active means your faction already owns that upgrade. Perimeter planning and all placeable construction plans are in Building."),
             new Tip("Builders","Preview a defense before paying",
-                    "Collect a free plan from Defenses. Use it on ground to preview, sneak-use to rotate, and use the same anchor again to confirm. Use in air to cancel. Payment happens only when an owned idle builder accepts the commission."),
+                    "Collect a free plan from Building > Place structure. Use it on ground to preview, sneak-use to rotate, and use the same anchor again to confirm. Use in air to cancel. Payment happens only when an owned idle builder accepts the commission."),
             new Tip("Builders","Supply the construction site",
-                    "Stock cobblestone and oak planks in your Workers storage area with Builders enabled. Commissioned jobs use native Workers construction and work hours. Look at the floating shovel marker for its structure projection. Open Construction report to check your loaded jobs within 128 blocks."),
+                    "Stock the exact materials shown by your plan in your owned Workers storage area with Builders enabled. The whole worksite must remain within storage reach. Native Workers handles tools, materials and work hours. Building > Construction reports your loaded jobs within 128 blocks."),
+            new Tip("Builders","Review the automatic perimeter",
+                    "Building > Auto perimeter gives you a free Perimeter Plan. Hold it to review the template-style wall inside your claim. Use to confirm or sneak-use to cancel. The 900-emerald faction Treasury commission is separate from supplied blocks. Changed, blocked, steep or oversized plans need a fresh review before payment."),
+            new Tip("Builders","Protected construction and owner controls",
+                    "New protected jobs require Workers 2.0.3 and Recruits 1.15.2. Builders clear only unchanged small plants; solid obstructions, inventories and reactive surroundings stay protected. Jobs pause when the owner is offline or the site changes. Inspect the native shovel to change projection or cancel the job. Cancel leaves placed blocks intact and does not refund supplies or the commission."),
             // === Intel ===
             new Tip("Intel","Know your enemy",
                     "Search within each Intel section to find units, enemy lore or instructions. The unit archive lists raiders: their tag, stats, behavior, counter, and drops. Read it before the first wave so you're not surprised by sappers or siege engineers."),

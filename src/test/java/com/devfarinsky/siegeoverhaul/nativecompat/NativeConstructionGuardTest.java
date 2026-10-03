@@ -120,6 +120,25 @@ class NativeConstructionGuardTest extends MinecraftTestSupport {
         assertFalse(data.contains("SiegeProtectedConstructionV1"));
     }
 
+    @Test void retiredReceiptCleansOnlyAnExactOldAssociationAfterTransferOrReload() {
+        var worker = mock(Builder.class); var canceled = mock(Entity.class); var replacement = mock(Entity.class);
+        var data = new CompoundTag(); when(worker.getPersistentData()).thenReturn(data);
+        var old = java.util.UUID.randomUUID(); var next = java.util.UUID.randomUUID();
+        when(canceled.getUUID()).thenReturn(old); when(replacement.getUUID()).thenReturn(next);
+        data.putUUID(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID, old);
+        data.putUUID("SiegeProtectedAreaReceipt", old); worker.currentBuildArea = canceled;
+        assertTrue(NativeConstructionGuard.retireBuilderAssociation(worker, old));
+        assertNull(worker.currentBuildArea); assertFalse(data.hasUUID("SiegeProtectedAreaReceipt"));
+        data.putUUID(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID, next);
+        data.putUUID("SiegeProtectedAreaReceipt", next); worker.currentBuildArea = replacement;
+        assertTrue(NativeConstructionGuard.retireBuilderAssociation(worker, old));
+        assertSame(replacement, worker.currentBuildArea);
+        assertEquals(next, data.getUUID(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+        assertEquals(next, data.getUUID("SiegeProtectedAreaReceipt"));
+        verify(worker, never()).getNavigation();
+        verify(worker, never()).setItemSlot(any(), any());
+    }
+
     @Test void pendingCommissionNeverDispatchesNativeWorkUntilActivated() {
         Entity area = mock(Entity.class); CompoundTag data = new CompoundTag();
         data.put("SiegeProtectedConstructionV1", new CompoundTag());

@@ -224,3 +224,35 @@ tasks.withType(JavaCompile).configureEach {
 tasks.named('test', Test).configure {
     useJUnitPlatform()
 }
+
+// Opt-in native framebuffer/fixture QA. This source set is never part of jar.
+if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)) {
+    configurations { nativeQaCompanions }
+    dependencies {
+        nativeQaCompanions fg.deobf('curse.maven:workers-567450:8351157')
+        nativeQaCompanions fg.deobf('curse.maven:recruits-523860:8339846')
+        nativeQaCompanions fg.deobf('curse.maven:small-ships-450659:5566900')
+        nativeQaCompanions fg.deobf('curse.maven:siegeweapons-1259343:7906096')
+    }
+    // Only this opted-in invocation gets companions on the development runtime.
+    configurations.runtimeOnly.extendsFrom(configurations.nativeQaCompanions)
+    sourceSets {
+        nativeQa {
+            java.srcDir 'src/nativeQa/java'
+            resources.srcDir 'src/nativeQa/resources'
+            compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+            runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+        }
+    }
+    minecraft.runs.client {
+        workingDirectory project.file('build/native-qa/client')
+        property 'siegeoverhaul.nativeQa', 'true'
+        property 'siegeoverhaul.nativeQa.directory', project.file('build/native-qa/client').absolutePath
+        args '--width', '1280', '--height', '720'
+        jvmArgs '-Xms512m', '-Xmx3G'
+        mods {
+            "${mod_id}" { source sourceSets.nativeQa }
+        }
+    }
+    tasks.matching { it.name == 'runClient' }.configureEach { dependsOn tasks.named('nativeQaClasses') }
+}

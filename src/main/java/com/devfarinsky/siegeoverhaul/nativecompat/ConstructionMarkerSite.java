@@ -67,7 +67,8 @@ final class ConstructionMarkerSite {
             if (!level.hasChunkAt(cell) || !permitted.test(cell) || plan.cells.containsKey(cell)) return false;
             BlockState state = level.getBlockState(cell);
             if (state.hasBlockEntity() || level.getBlockEntity(cell) != null || !state.getFluidState().isEmpty() || hazardous(state)) return false;
-            if (cell.getY() >= feet.getY() && !state.getCollisionShape(level, cell).isEmpty()) return false;
+            if (cell.getY() >= feet.getY() && !state.isAir()) return false;
+            if (cell.getY() < feet.getY() && !NativeConstructionGuard.stableNeighbor(state)) return false;
         }
         BlockPos floor = feet.below();
         if (!level.getBlockState(floor).isFaceSturdy(level, floor, Direction.UP)
@@ -76,14 +77,16 @@ final class ConstructionMarkerSite {
         Vec3 eye = owner.getEyePosition(), target = new Vec3(feet.getX() + .5, feet.getY() + 1, feet.getZ() + .5);
         // A close current ray target is usable without assuming a creative reach extension.
         if (eye.distanceToSqr(target) > 3 * 3) return false;
-        if (level.clip(new ClipContext(eye, target, ClipContext.Block.COLLIDER, ClipContext.Fluid.ANY, owner))
-                .getType() != HitResult.Type.MISS) return false;
-        // The finished blueprint must not wall off the same line of sight.
+        // Establish the whole short ray's loaded envelope before vanilla clip,
+        // including a third chunk crossed by a diagonal near chunk corners.
         AABB rayBounds = new AABB(eye, target).inflate(.001);
         for (BlockPos cell : BlockPos.betweenClosed(BlockPos.containing(rayBounds.minX, rayBounds.minY, rayBounds.minZ),
-                BlockPos.containing(rayBounds.maxX, rayBounds.maxY, rayBounds.maxZ)))
+                BlockPos.containing(rayBounds.maxX, rayBounds.maxY, rayBounds.maxZ))) {
+            if (!level.hasChunkAt(cell)) return false;
             if (plan.cells.containsKey(cell) && new AABB(cell).clip(eye, target).isPresent()) return false;
-        return true;
+        }
+        return level.clip(new ClipContext(eye, target, ClipContext.Block.COLLIDER, ClipContext.Fluid.ANY, owner))
+                .getType() == HitResult.Type.MISS;
     }
 
     static AABB markerBox(BlockPos feet) {

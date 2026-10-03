@@ -17,11 +17,13 @@ import java.util.UUID;
 final class ConstructionEditLedger extends SavedData {
     static final int MAX_JOBS = 64, MAX_CELLS = 262144;
     private static final String NAME = "siege_construction_edits";
-    private record Site(Set<Long> cells, Set<Long> edited) {}
+    private record Site(Set<Long> cells, Set<Long> edited, boolean builderDestroyed) {}
     private final Map<UUID, Site> sites = new HashMap<>();
     private final Map<Long, Set<UUID>> index = new HashMap<>();
+    private final Set<UUID> retired = new java.util.LinkedHashSet<>();
     private boolean invalid;
     private int totalCells;
+    private UUID generation = UUID.randomUUID();
 
     static ConstructionEditLedger get(ServerLevel level) {
         return level.getDataStorage().computeIfAbsent(ConstructionEditLedger::load,
@@ -29,11 +31,11 @@ final class ConstructionEditLedger extends SavedData {
     }
 
     boolean register(UUID id, Set<BlockPos> positions) {
-        if (invalid || id == null || positions == null || sites.containsKey(id) || sites.size() >= MAX_JOBS
+        if (invalid || id == null || positions == null || sites.containsKey(id) || retired.contains(id) || sites.size() + retired.size() >= MAX_JOBS
                 || positions.isEmpty() || positions.size() > MAX_CELLS - totalCells) return false;
         Set<Long> cells = new HashSet<>();
         positions.forEach(pos -> cells.add(pos.asLong()));
-        add(id, new Site(Set.copyOf(cells), new HashSet<>()));
+        add(id, new Site(Set.copyOf(cells), new HashSet<>(), false));
         setDirty();
         return true;
     }
@@ -51,6 +53,31 @@ final class ConstructionEditLedger extends SavedData {
     }
 
     boolean contains(UUID id) { return !invalid && sites.containsKey(id); }
+    boolean retired(UUID id) { return !invalid && id != null && retired.contains(id); }
+    boolean canRetire(UUID id) {
+        // Absence is never cancellation evidence, including failed unregistered
+        // handoffs and a restored/missing history file.
+        return !invalid && id != null && (sites.containsKey(id) || retired.contains(id));
+    }
+    void retire(UUID id, boolean workerCleaned) {
+        if (!canRetire(id)) return;
+        Site site = sites.get(id);
+        boolean destroyed = site != null && site.builderDestroyed();
+        remove(id);
+        if (workerCleaned || destroyed) retired.remove(id);
+        else retired.add(id);
+        setDirty();
+    }
+    void acknowledgeRetirement(UUID id) { if (retired.remove(id)) setDirty(); }
+    void builderDestroyed(UUID id) {
+        Site site = sites.get(id);
+        if (site != null && !site.builderDestroyed()) {
+            sites.put(id, new Site(site.cells(), site.edited(), true)); setDirty();
+        }
+        acknowledgeRetirement(id);
+    }
+    UUID generation() { return generation; }
+    boolean sameGeneration(UUID expected) { return !invalid && generation.equals(expected); }
 
     boolean reserves(java.util.Collection<BlockPos> cells) {
         return invalid || cells == null || cells.stream().anyMatch(pos -> pos == null || index.containsKey(pos.asLong()));
@@ -82,10 +109,12 @@ final class ConstructionEditLedger extends SavedData {
     static ConstructionEditLedger load(CompoundTag root) {
         var ledger = new ConstructionEditLedger();
         ListTag jobs = root.getList("Sites", Tag.TAG_COMPOUND);
-        if (root.getBoolean("Invalid") || jobs.size() > MAX_JOBS) {
+        ListTag retiredJobs = root.getList("Retired", Tag.TAG_COMPOUND);
+        if (root.getBoolean("Invalid") || !root.hasUUID("Generation") || jobs.size() + retiredJobs.size() > MAX_JOBS) {
             ledger.invalid = true;
             return ledger;
         }
+        ledger.generation = root.getUUID("Generation");
         for (Tag entry : jobs) {
             CompoundTag tag = (CompoundTag) entry;
             long[] cells = tag.getLongArray("Cells"), edits = tag.getLongArray("Edited");
@@ -102,7 +131,13 @@ final class ConstructionEditLedger extends SavedData {
                 ledger.invalid = true;
                 break;
             }
-            ledger.add(tag.getUUID("Id"), new Site(Set.copyOf(positions), edited));
+            ledger.add(tag.getUUID("Id"), new Site(Set.copyOf(positions), edited, tag.getBoolean("BuilderDestroyed")));
+        }
+        for (Tag entry : retiredJobs) {
+            CompoundTag tag = (CompoundTag) entry;
+            if (!tag.hasUUID("Id") || ledger.sites.containsKey(tag.getUUID("Id")) || !ledger.retired.add(tag.getUUID("Id"))) {
+                ledger.invalid = true; break;
+            }
         }
         return ledger;
     }
@@ -112,11 +147,16 @@ final class ConstructionEditLedger extends SavedData {
         sites.forEach((id, site) -> {
             CompoundTag tag = new CompoundTag();
             tag.putUUID("Id", id);
+            tag.putBoolean("BuilderDestroyed", site.builderDestroyed());
             tag.putLongArray("Cells", site.cells().stream().mapToLong(Long::longValue).toArray());
             tag.putLongArray("Edited", site.edited().stream().mapToLong(Long::longValue).toArray());
             list.add(tag);
         });
         root.put("Sites", list);
+        ListTag canceled = new ListTag();
+        retired.forEach(id -> { CompoundTag tag = new CompoundTag(); tag.putUUID("Id", id); canceled.add(tag); });
+        root.put("Retired", canceled);
+        root.putUUID("Generation", generation);
         root.putBoolean("Invalid", invalid);
         return root;
     }

@@ -36,7 +36,9 @@ public final class ProtectedBuildArea extends BuildArea {
     private boolean trustedChanges;
     private boolean trustedRemoval;
     private boolean initialized;
+    private boolean queuesReady;
     private boolean completionVerified;
+    private boolean retirementHandled;
     private UUID reservedBuilder;
 
     public ProtectedBuildArea(EntityType<?> type, Level level) { super(type, level); }
@@ -76,14 +78,24 @@ public final class ProtectedBuildArea extends BuildArea {
     void rebuildAcceptedQueues() {
         if (level().isClientSide || !initialized || !entityData.get(ORIGIN_READY))
             throw new IllegalStateException("Unverified native origin");
+        AcceptedConstructionPlan plan;
+        try { plan = AcceptedConstructionPlan.capture(this); }
+        catch (ReflectiveOperationException unavailable) { throw new IllegalStateException("Native plan cannot be verified", unavailable); }
+        for (BlockPos cell : plan.cells.keySet())
+            if (!level().hasChunkAt(cell)) throw new IllegalStateException("Native blueprint cells must already be loaded");
         super.setStartBuild(false);
+        queuesReady = true;
     }
+
+    public boolean nativeQueuesReady() { return queuesReady; }
 
     void verifyCompletion() { completionVerified = true; }
 
     UUID reservedBuilderId() { return reservedBuilder; }
     void projectionAuthorized(boolean value) { super.setAlwaysShowProjection(value); }
+    boolean retirementHandled() { return retirementHandled; }
     void removeAuthorized() {
+        retirementHandled = true;
         trustedRemoval = true;
         try { super.remove(RemovalReason.DISCARDED); }
         finally { trustedRemoval = false; }
@@ -159,6 +171,11 @@ public final class ProtectedBuildArea extends BuildArea {
         if (trustedChanges || value && completionVerified) super.setDone(value);
     }
     @Override public void scanFreeArea() { stackToFree.clear(); }
+    @Override public void setTime(int value) {
+        // Native AI only resets to zero. The unauthenticated move packet adds
+        // DONE_TIME; that presentation/control side effect is denied as well.
+        if (trustedChanges || value == 0) super.setTime(value);
+    }
 
     @Override public boolean hurt(DamageSource source, float amount) {
         if (source.getEntity() instanceof Player player && player.isCreative() && player.isCrouching()
@@ -171,8 +188,9 @@ public final class ProtectedBuildArea extends BuildArea {
     }
 
     @Override public boolean canWorkHere(AbstractWorkerEntity worker) {
-        return initialized && reservedBuilder != null && worker != null && reservedBuilder.equals(worker.getUUID())
-                && NativeConstructionGuard.commissionPaid(this) && super.canWorkHere(worker);
+        return initialized && queuesReady && reservedBuilder != null && worker != null && reservedBuilder.equals(worker.getUUID())
+                && NativeConstructionGuard.commissionPaid(this) && WorkersConstructionRuntime.problem() == null
+                && super.canWorkHere(worker);
     }
 
     @Override public BlockPos getOriginPos() {
@@ -188,9 +206,15 @@ public final class ProtectedBuildArea extends BuildArea {
         return new AABB(origin, end);
     }
     @Override public AABB getArea() { return createArea(); }
+    @Override public boolean shouldRenderAtSqrDistance(double distance) {
+        return entityData.get(ORIGIN_READY)
+                ? distance < ConstructionTracking.renderDistanceSquared(position(), getArea())
+                : super.shouldRenderAtSqrDistance(distance);
+    }
+
 
     @Override public void readAdditionalSaveData(CompoundTag tag) {
-        initialized = false; completionVerified = false;
+        initialized = false; queuesReady = false; completionVerified = false;
         trustedChanges = true;
         try {
             super.readAdditionalSaveData(tag);

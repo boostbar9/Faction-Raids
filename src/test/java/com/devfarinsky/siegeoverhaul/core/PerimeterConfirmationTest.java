@@ -34,33 +34,29 @@ class PerimeterConfirmationTest extends MinecraftTestSupport {
     }
     private String hash(PerimeterConstruction.Preparation p) {return PerimeterPreview.fingerprint(p.plan().blocks(),core,1,p.claimIdentity());}
     @Test void successfulConfirmationConsumesPlanAndCannotBeRepeated() throws Exception {
-        var player=player(120);var p=ready();var stack=preview(p,hash(p));
-        try(var construction=mockStatic(PerimeterConstruction.class,CALLS_REAL_METHODS)) {
-            construction.when(()->PerimeterConstruction.prepare(player,core,1)).thenReturn(p);
-            construction.when(()->PerimeterConstruction.startJob(player,p,1)).thenReturn(true);
-            assertTrue(PerimeterConstruction.confirm(player,stack));assertTrue(stack.isEmpty());
-            assertFalse(PerimeterConstruction.confirm(player,stack));construction.verify(()->PerimeterConstruction.startJob(player,p,1),times(1));
-        }
+        var player=player(120);var p=ready();var stack=preview(p,hash(p));var calls=new java.util.concurrent.atomic.AtomicInteger();
+        java.util.function.BiPredicate<PerimeterConstruction.Preparation,Integer> start=(prepared,material)->{calls.incrementAndGet();assertSame(p,prepared);assertEquals(1,material);return true;};
+        assertTrue(PerimeterConstruction.confirm(player,stack,selection->p,start));assertTrue(stack.isEmpty());
+        assertFalse(PerimeterConstruction.confirm(player,stack,selection->p,start));assertEquals(1,calls.get());
     }
     @Test void changedQuoteRefreshesBeforeAnyHandoff() throws Exception {
-        var player=player(120);var p=ready();var stack=preview(p,"0".repeat(64));
-        try(var construction=mockStatic(PerimeterConstruction.class,CALLS_REAL_METHODS)) {
-            construction.when(()->PerimeterConstruction.prepare(player,core,1)).thenReturn(p);
-            assertFalse(PerimeterConstruction.confirm(player,stack));assertEquals(1,stack.getCount());
-            construction.verify(()->PerimeterConstruction.startJob(player,p,1),never());
-            var refreshed=PerimeterPreview.read(stack,owner,Level.OVERWORLD.location(),120);
-            assertEquals(hash(p),refreshed.fingerprint());assertFalse(refreshed.canConfirm(120));
-        }
+        var player=player(120);var p=ready();var stack=preview(p,"0".repeat(64));var calls=new java.util.concurrent.atomic.AtomicInteger();
+        assertFalse(PerimeterConstruction.confirm(player,stack,selection->p,(prepared,material)->{calls.incrementAndGet();return true;}));
+        assertEquals(1,stack.getCount());assertEquals(0,calls.get());
+        var refreshed=PerimeterPreview.read(stack,owner,Level.OVERWORLD.location(),120);
+        assertEquals(hash(p),refreshed.fingerprint());assertFalse(refreshed.canConfirm(120));
     }
-    @Test void failedHandoffRetainsThePlanAndExpiredOrCanceledPlansCannotStart() throws Exception {
-        var player=player(120);var p=ready();var stack=preview(p,hash(p));
-        try(var construction=mockStatic(PerimeterConstruction.class,CALLS_REAL_METHODS)) {
-            construction.when(()->PerimeterConstruction.prepare(player,core,1)).thenReturn(p);
-            construction.when(()->PerimeterConstruction.startJob(player,p,1)).thenReturn(false);
-            assertFalse(PerimeterConstruction.confirm(player,stack));assertEquals(1,stack.getCount());
-            assertNotNull(PerimeterPreview.read(stack,owner,Level.OVERWORLD.location(),120));
-            PerimeterPreview.clear(stack);assertFalse(PerimeterConstruction.confirm(player,stack));
-            construction.verify(()->PerimeterConstruction.startJob(player,p,1),times(1));
-        }
+    @Test void failedHandoffRetainsThePlanAndCanceledPlansCannotStart() throws Exception {
+        var player=player(120);var p=ready();var stack=preview(p,hash(p));var calls=new java.util.concurrent.atomic.AtomicInteger();
+        java.util.function.BiPredicate<PerimeterConstruction.Preparation,Integer> start=(prepared,material)->{calls.incrementAndGet();return false;};
+        assertFalse(PerimeterConstruction.confirm(player,stack,selection->p,start));assertEquals(1,stack.getCount());
+        assertNotNull(PerimeterPreview.read(stack,owner,Level.OVERWORLD.location(),120));
+        PerimeterPreview.clear(stack);assertFalse(PerimeterConstruction.confirm(player,stack,selection->p,start));assertEquals(1,calls.get());
+    }
+    @Test void expiredOrForeignSelectionsDoNotEvenPrepareOrStartAJob() throws Exception {
+        var player=player(2501);var p=ready();var stack=preview(p,hash(p));
+        assertFalse(PerimeterConstruction.confirm(player,stack,selection->{fail("Expired plan prepared");return p;},(prepared,material)->{fail("Expired plan started");return true;}));
+        player=player(120);when(player.getUUID()).thenReturn(UUID.randomUUID());
+        assertFalse(PerimeterConstruction.confirm(player,stack,selection->{fail("Foreign plan prepared");return p;},(prepared,material)->{fail("Foreign plan started");return true;}));
     }
 }

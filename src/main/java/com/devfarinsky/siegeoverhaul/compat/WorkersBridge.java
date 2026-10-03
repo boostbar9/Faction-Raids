@@ -184,6 +184,8 @@ public final class WorkersBridge {
      */
     public static boolean assignBuildAreaDirectly(Mob worker, Entity buildArea) {
         if (worker == null || buildArea == null) return false;
+        if (buildArea instanceof ProtectedBuildArea protectedArea && !protectedArea.nativeQueuesReady()
+                && !com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.prepareLoadedArea(buildArea)) return false;
         worker.getNavigation().stop();
         if (!assignBuildAreaApi(worker, buildArea)) return false;
         return !(buildArea instanceof ProtectedBuildArea)
@@ -257,6 +259,24 @@ public final class WorkersBridge {
             warn("reset player builder state", ex);
         }
         return PlayerJobRelease.RELEASED;
+    }
+
+    /** Clear only this canceled area's pointer; never touch a transferred worker's orders or inventory. */
+    public static boolean detachBuildAreaReference(Mob worker, java.util.UUID expectedArea) {
+        return detachBuildAreaReferenceApi(worker, expectedArea);
+    }
+
+    static boolean detachBuildAreaReferenceApi(Object worker, java.util.UUID expectedArea) {
+        if (worker == null || expectedArea == null) return false;
+        try {
+            var field = worker.getClass().getField("currentBuildArea");
+            Object current = field.get(worker);
+            if (current == null) return true;
+            if (!(current instanceof Entity area)) return false;
+            if (!expectedArea.equals(area.getUUID())) return true;
+            field.set(worker, null);
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException unavailable) { return false; }
     }
 
     enum PlayerJobRelease { RELEASED, NOT_ATTACHED, FAILED }

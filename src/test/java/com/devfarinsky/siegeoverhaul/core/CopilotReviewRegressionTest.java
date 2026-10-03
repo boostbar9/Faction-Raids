@@ -14,14 +14,14 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class CopilotReviewRegressionTest extends MinecraftTestSupport {
-    @Test void territoryDescriptionsNeverTouchPurchaseControlsOrFortificationStrip() {
+    @Test void territoryDescriptionsNeverTouchPurchaseControlsOrFooter() {
         for (int w : new int[]{240,320,640,960,1920}) for (int h : new int[]{180,240,360,540,1080}) {
             var layout = CoreHireLayout.fit(w,h);
             for (int i=0; i<4; i++) {
                 assertTrue(layout.territoryCardY(i)+19 < layout.territoryButtonY(i));
                 if (layout.territoryDescriptionLines()>0)
                     assertTrue(layout.territoryCardY(i)+28+layout.territoryDescriptionLines()*10 <= layout.territoryButtonY(i)-6);
-                assertTrue(layout.territoryButtonY(i)+18 <= layout.contentBottom()-32);
+                assertTrue(layout.territoryButtonY(i)+18 <= layout.contentBottom());
             }
         }
     }
