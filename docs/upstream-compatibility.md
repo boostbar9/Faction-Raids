@@ -1,5 +1,9 @@
 # Recruits and Workers source compatibility review
 
+## Commissioned wall-builder arrival follow-up (4.51.22)
+
+A late review found that the first scoring pass could still let a nearby roof beat farther same-elevation footing, and that collision-free hazards in the worker's body cells were not rejected. The search now completes its entire player-elevation pass before reading any surface heightmaps. Its support, feet and head checks share the hired-unit danger set: water, lava, magma, campfires, cactus, fire, soul fire, berry bushes, wither roses, powder snow and portal blocks. Regression coverage blocks the anchor cell while leaving farther indoor floor and a closer roof available, then verifies hazards in both occupied cells. No blueprint, material, inventory or native Workers job state changes.
+
 ## Commissioned wall-builder arrival (4.51.21)
 
 Rechecked Workers `29d26e1df6475fc8d043dc5d455f67b2fd1e9982`, `entities/ai/BuilderWorkGoal.java`. The native goal keeps the assigned build area and owns subsequent pathing, supply requests and placement; this compatibility change only chooses a safe starting point before the existing direct handoff when the hired builder is more than 24 blocks away. It checks at most 81 already-loaded columns, prefers clear footing at the player's elevation over a roof heightmap, then considers nearby surfaces within eight vertical blocks. Fluid, leaves, hazards, world-border crossings, collisions and occupied bodies are rejected. No terrain, inventory, blueprint or native job state is changed by the search. Regression fixtures are mocked integration checks, not an interactive companion-mod playtest.

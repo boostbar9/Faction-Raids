@@ -16,6 +16,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -283,22 +284,35 @@ public final class WorkersBridge {
      */
     static BlockPos playerBuilderArrival(ServerLevel level, Mob worker, BlockPos anchor) {
         BlockPos best = null;
+        int bestDistance = Integer.MAX_VALUE;
+        // Finish the whole player-level pass before considering any roof or
+        // terrain surface. A nearby roof must never outscore reachable floor
+        // farther across the room.
+        for (int dx=-4; dx<=4; dx++) for (int dz=-4; dz<=4; dz++) {
+            BlockPos sameLevel = anchor.offset(dx, 0, dz);
+            if (!level.hasChunkAt(sameLevel) || !safeBuilderArrival(level, worker, sameLevel)) continue;
+            int distance = dx*dx + dz*dz;
+            if (distance < bestDistance) {
+                best = sameLevel;
+                bestDistance = distance;
+            }
+        }
+        if (best != null) return best;
+
         double bestScore = Double.MAX_VALUE;
         for (int dx=-4; dx<=4; dx++) for (int dz=-4; dz<=4; dz++) {
             BlockPos column = anchor.offset(dx, 0, dz);
             if (!level.hasChunkAt(column)) continue;
-            BlockPos sameLevel = column.atY(anchor.getY());
-            if (safeBuilderArrival(level, worker, sameLevel)) {
-                double score = dx*dx + dz*dz;
-                if (score < bestScore) { best=sameLevel; bestScore=score; }
-            }
             int surfaceY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
                     column.getX(), column.getZ());
-            if (Math.abs(surfaceY-anchor.getY()) > 8) continue;
+            if (surfaceY == anchor.getY() || Math.abs(surfaceY-anchor.getY()) > 8) continue;
             BlockPos surface = column.atY(surfaceY);
-            if (!surface.equals(sameLevel) && safeBuilderArrival(level, worker, surface)) {
+            if (safeBuilderArrival(level, worker, surface)) {
                 double score = dx*dx + dz*dz + Math.abs(surfaceY-anchor.getY())*4.0D;
-                if (score < bestScore) { best=surface; bestScore=score; }
+                if (score < bestScore) {
+                    best = surface;
+                    bestScore = score;
+                }
             }
         }
         return best;
@@ -308,14 +322,25 @@ public final class WorkersBridge {
         if (!level.hasChunkAt(feet) || feet.getY() <= level.getMinBuildHeight()
                 || feet.getY()+2 >= level.getMaxBuildHeight()) return false;
         BlockPos floor=feet.below();
-        var support=level.getBlockState(floor);
+        BlockState support=level.getBlockState(floor);
+        BlockState feetState=level.getBlockState(feet);
+        BlockState headState=level.getBlockState(feet.above());
         if (!support.isFaceSturdy(level,floor,Direction.UP) || !support.getFluidState().isEmpty()
-                || support.is(BlockTags.LEAVES) || support.is(Blocks.MAGMA_BLOCK)
-                || support.is(Blocks.CAMPFIRE) || support.is(Blocks.SOUL_CAMPFIRE)
-                || support.is(Blocks.CACTUS) || !level.getBlockState(feet).getFluidState().isEmpty()
-                || !level.getBlockState(feet.above()).getFluidState().isEmpty()) return false;
+                || support.is(BlockTags.LEAVES) || dangerousBuilderBlock(support)
+                || !feetState.getFluidState().isEmpty() || dangerousBuilderBlock(feetState)
+                || !headState.getFluidState().isEmpty() || dangerousBuilderBlock(headState)) return false;
         AABB body=worker.getBoundingBox().move(Vec3.atBottomCenterOf(feet).subtract(worker.position()));
         return level.getWorldBorder().isWithinBounds(body) && level.noCollision(worker,body);
+    }
+
+    /** Keep this list aligned with the hired-unit placement safety contract. */
+    private static boolean dangerousBuilderBlock(BlockState state) {
+        return state.is(Blocks.WATER) || state.is(Blocks.LAVA) || state.is(Blocks.MAGMA_BLOCK)
+                || state.is(Blocks.CAMPFIRE) || state.is(Blocks.SOUL_CAMPFIRE)
+                || state.is(Blocks.CACTUS) || state.is(Blocks.FIRE) || state.is(Blocks.SOUL_FIRE)
+                || state.is(Blocks.SWEET_BERRY_BUSH) || state.is(Blocks.WITHER_ROSE)
+                || state.is(Blocks.POWDER_SNOW) || state.is(Blocks.NETHER_PORTAL)
+                || state.is(Blocks.END_PORTAL) || state.is(Blocks.END_GATEWAY);
     }
 
     /** Keep the camp crew visible after its job finishes without leaving native jobs running. */

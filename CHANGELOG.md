@@ -1,3 +1,9 @@
+## 4.51.22 — Wall-builder arrival follow-up
+
+- Same-elevation footing is now fully prioritized before any roof or terrain-surface fallback, even when the closest player-level cell is occupied.
+- Fire, soul fire, wither roses, powder snow, portals and the complete hired-unit hazard set are rejected in both body cells as well as beneath the builder.
+- This release supersedes 4.51.21 and addresses its late review findings without changing wall plans, supplies, inventories or Workers 2 construction behavior.
+
 ## 4.51.21 — Safe wall-builder arrival
 
 - A distant commissioned wall builder now chooses loaded, dry, collision-free footing near the player instead of teleporting blindly to the heightmap at the player's coordinates.
