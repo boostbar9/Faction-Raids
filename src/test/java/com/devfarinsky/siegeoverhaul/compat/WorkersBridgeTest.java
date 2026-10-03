@@ -233,18 +233,16 @@ class WorkersBridgeTest extends MinecraftTestSupport {
         when(worker.position()).thenReturn(new Vec3(100.5D,64,100.5D));
         when(worker.getBoundingBox()).thenReturn(new AABB(100.2D,64,100.2D,100.8D,65.95D,100.8D));
         when(level.noCollision(eq(worker),any(AABB.class))).thenReturn(true);
+        boolean[] headHazard={false};
         when(level.getBlockState(any())).thenAnswer(call -> {
             BlockPos pos=call.getArgument(0);
-            if (pos.equals(anchor)) return Blocks.FIRE.defaultBlockState();
+            BlockPos hazard=headHazard[0] ? anchor.above() : anchor;
+            if (pos.equals(hazard)) return (headHazard[0] ? Blocks.POWDER_SNOW : Blocks.FIRE).defaultBlockState();
             return (pos.getY()<64 ? Blocks.STONE : Blocks.AIR).defaultBlockState();
         });
         assertNotEquals(anchor,WorkersBridge.playerBuilderArrival(level,worker,anchor));
 
-        when(level.getBlockState(any())).thenAnswer(call -> {
-            BlockPos pos=call.getArgument(0);
-            if (pos.equals(anchor.above())) return Blocks.POWDER_SNOW.defaultBlockState();
-            return (pos.getY()<64 ? Blocks.STONE : Blocks.AIR).defaultBlockState();
-        });
+        headHazard[0]=true;
         assertNotEquals(anchor,WorkersBridge.playerBuilderArrival(level,worker,anchor));
     }
 
