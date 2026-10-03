@@ -5,6 +5,25 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CoreBuildingLayoutTest {
+    @Test void ordinary720pViewportGetsSixIllustratedCardsAndSmallViewportsRetainCompactGrid() {
+        var ordinary = new CoreBuildingLayout(CoreHireLayout.fit(640, 360));
+        assertFalse(ordinary.detailedCatalogue());
+        assertEquals(3, ordinary.catalogueColumns());
+        assertEquals(2, ordinary.catalogueRows());
+        assertTrue(ordinary.planWidth() >= 130);
+        assertTrue(ordinary.planHeight() >= 84);
+        assertTrue(ordinary.illustratedPerimeter());
+        assertEquals(3, ordinary.perimeterTextLines());
+        var compact = new CoreBuildingLayout(CoreHireLayout.fit(320, 240));
+        assertEquals(2, compact.catalogueColumns());
+        assertEquals(3, compact.catalogueRows());
+        assertFalse(compact.illustratedPerimeter());
+        var wideShort = new CoreBuildingLayout(CoreHireLayout.fit(640, 260));
+        assertEquals(2, wideShort.catalogueColumns());
+        assertEquals(3, wideShort.catalogueRows());
+        assertFalse(wideShort.illustratedPerimeter());
+    }
+
     @Test void allSixPlansAndTheirActionFitWithoutPaginationAtEveryScale() {
         for (int width = 120; width <= 1920; width += 23) {
             for (int height = 90; height <= 1080; height += 19) {
@@ -45,6 +64,11 @@ class CoreBuildingLayoutTest {
                 assertTrue(layout.materialX(2, 3) + layout.materialWidth(3) <= layout.x() + layout.width(), size);
                 assertTrue(layout.perimeterTextLines() >= 2, size);
                 assertTrue(layout.perimeterTextY() + layout.perimeterTextLines() * 10 <= layout.actionY() - 4, size);
+                if (layout.illustratedPerimeter()) {
+                    assertTrue(layout.perimeterTextY() + layout.perimeterTextLines() * 10 < layout.perimeterExampleY(), size);
+                    assertTrue(layout.perimeterExampleHeight() >= 94, size);
+                    assertTrue(layout.perimeterExampleY() + layout.perimeterExampleHeight() <= layout.actionY() - 6, size);
+                }
                 assertTrue(layout.reportRows() >= 1, size);
                 assertTrue(layout.reportY() + layout.reportRows() * layout.reportRowHeight()
                         <= layout.actionY() - 4, size);

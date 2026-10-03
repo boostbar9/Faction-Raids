@@ -164,3 +164,62 @@ class signatures. Actual compatibility is established only by the CI run.
   refmap still named an SRG method in the named development runtime. No scenario
   assertion or screenshot passed in that run. The opt-in remapping configuration
   addresses that loader setup error and requires a fresh run.
+
+- [Run 37158057809](https://github.com/boostbar9/Faction-Raids/actions/runs/37158057809)
+  passed all first-gate assertions and produced thirteen real screenshots using
+  Workers 2.0.3, Recruits 1.15.2, Small Ships 2.0.0-b1.4 and Siege Weapons 0.2.5.
+  Artifact SHA-256: `395531862e14d3c0a6e716b8a6b5f0c7c25c49c20a5d4ae86e2606b5c0922847`.
+  Pixel review confirmed native marker/projection/reload and the Building views.
+  It also exposed clipped native inspection controls and an overlapping status
+  line at GUI scale 3; these remain a visual acceptance issue despite the green
+  automation. Construction captures had hover tooltips over the fixture rows;
+  the harness now moves its actual cursor away before capturing. The harmless
+  invalid simulation-distance setting was corrected from 4 to Minecraft's minimum
+  5. Headless narrator/audio-device warnings mean audio has not been verified.
+
+## Second gate: production gameplay (implementation awaiting its own run)
+
+After the first thirteen views, the same client creates a separate fresh
+`Siege-native-gameplay` scenario (`siege-native-gameplay` on disk) with cheats off.
+The actor must be a real non-op Survival player; the harness asserts those facts.
+Fixture setup uses the public native Recruits faction/claim path and an actual
+core placement, native builder, storage area and chest. The initial construction
+stock is finite (eight cobblestone and eight oak planks), with tools/food supplied
+separately. The test does not replace builder goals or any construction guard.
+
+The initial bounded gameplay sequence covers:
+
+- Free production perimeter review, with a held-plan framebuffer capture.
+- Actual client plan-use confirmation, an exact 900-emerald Treasury debit, consumed
+  plan, paid protected marker and a second real framebuffer capture.
+- Authenticated explicit projection visibility for the large perimeter; real
+  cancellation must detach the builder/retire the reservation and not refund.
+  AI is paused for this transaction-only perimeter; it is not built to completion.
+- Manual-wall free preview, rejected insufficient-Treasury confirmation, preserved
+  item/balance/reservations, then real paid confirmation for exactly 90 emeralds.
+- Repeated post-confirmation use cannot duplicate a paid job. Native AI is enabled
+  for the manual wall and must place blocks using the real finite chest stock,
+  stop with an actual native material request, and resume after measured resupply.
+- Real claim loss and owner permission loss must produce native pause reasons and
+  zero further accepted-cell changes over observed intervals, with no extra debit.
+- Full client/server world close/reopen mid-job preserves the exact paused cells,
+  paid state, reserved job and ledger identity. Native work resumes and completes
+  the exact 110-block wall; chest + native builder stock + placed blocks must equal
+  the measured supplied quantities for each construction material.
+
+Every server stage is capped at 2,400 ticks and reports current native pause,
+follow-state, material-request count and placed-block count on timeout. The whole
+second sequence also has the client harness's eight-minute deadline. The result
+must include a passed gameplay section and all fifteen image names to pass CI.
+This implementation has not passed until a linked run proves it.
+
+The remaining player-edit/late-obstruction, competing-builder and exact
+1,024/1,025-cell rendering cases remain explicitly listed as uncovered until those
+additional bounded cases actually run. The claim/owner cases above are a defined
+subset, not a claim to have tested every ownership/core mutation.
+
+A separately connected dedicated server, dedicated-only distribution/classloading,
+audio devices, every shader/resource pack and every GPU are evidence limits, not
+an implied promise of exhaustive coverage. The integrated instance exercises the
+same production server-thread handlers with the real network sender. No dedicated
+server EULA acceptance, credentials or authentication changes are automated here.

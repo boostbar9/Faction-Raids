@@ -14,13 +14,14 @@ import net.minecraft.world.item.Items;
 
 import java.util.function.BooleanSupplier;
 
-/** Source-backed plan cards; real material sprites, never a fabricated structure image. */
+/** Source-backed plan cards; exact blueprint models with real material sprites on compact cards. */
 final class BuildingPlanButton extends Button {
     private static final ItemStack STONE = new ItemStack(Items.COBBLESTONE);
     private static final ItemStack WOOD = new ItemStack(Items.OAK_PLANKS);
     private final DefenseBlueprint.Kind kind;
     private final BooleanSupplier selected;
     private final long stone, wood;
+    private final BuildingPlanThumbnail thumbnail;
 
     BuildingPlanButton(DefenseBlueprint.Kind kind, OnPress press, int x, int y, int width,
                        int height, BooleanSupplier selected) {
@@ -30,6 +31,7 @@ final class BuildingPlanButton extends Button {
         var blocks = DefenseBlueprint.create(kind, BlockPos.ZERO, Direction.SOUTH).blocks();
         stone = blocks.values().stream().filter("minecraft:cobblestone"::equals).count();
         wood = blocks.size() - stone;
+        thumbnail = new BuildingPlanThumbnail(blocks);
     }
 
     @Override
@@ -42,18 +44,38 @@ final class BuildingPlanButton extends Button {
         if (chosen) g.fill(x + 1, y + 2, x + 3, y + height - 2, CommandPalette.ACCENT_TEAL);
         draw(g, kind.label, x + 7, y + 3, width - 14,
                 chosen ? CommandPalette.ACCENT_TEAL : CommandPalette.TEXT);
+        if (showsThumbnail(width, height)) {
+            thumbnail.render(g, x + 7, y + 16, width - 14, height - 43);
+            draw(g, kind.width + " x " + kind.depth + " · " + kind.height + " clear",
+                    x + 7, y + height - 23, width - 14, CommandPalette.TEXT_MUTED);
+            String price = kind.price + "e build";
+            int priceWidth = Minecraft.getInstance().font.width(price);
+            draw(g, "Free plan", x + 7, y + height - 10, width - priceWidth - 22, CommandPalette.TEXT_DIM);
+            draw(g, price, x + width - priceWidth - 7, y + height - 10, priceWidth, CommandPalette.ACCENT_GOLD);
+            return;
+        }
         draw(g, height >= 52 ? "Free plan · " + kind.price + "e build" : kind.price + "e build", x + 7, y + height - 10,
                 width - 14, CommandPalette.ACCENT_GOLD);
         if (height >= 52) draw(g, kind.width + " x " + kind.depth + " · " + kind.height + " clear",
                 x + 7, y + 18, width - 14, CommandPalette.TEXT_MUTED);
+        int materialsY = materialRowY(height);
+        if (materialsY >= 0) {
+            ItemIcons.draw(g, STONE, x + 8, y + materialsY);
+            draw(g, Long.toString(stone), x + 28, y + materialsY + 4, width / 2 - 30, CommandPalette.TEXT);
+            ItemIcons.draw(g, WOOD, x + width / 2, y + materialsY);
+            draw(g, Long.toString(wood), x + width / 2 + 20, y + materialsY + 4, width / 2 - 27, CommandPalette.TEXT);
+        }
         if (height >= 84) {
-            ItemIcons.draw(g, STONE, x + 8, y + 36);
-            draw(g, Long.toString(stone), x + 28, y + 40, width / 2 - 30, CommandPalette.TEXT);
-            ItemIcons.draw(g, WOOD, x + width / 2, y + 36);
-            draw(g, Long.toString(wood), x + width / 2 + 20, y + 40, width / 2 - 27, CommandPalette.TEXT);
             draw(g, "Supplied blocks", x + 7, y + 57, width - 14, CommandPalette.TEXT_DIM);
         }
     }
+
+    /** Compact 60–83px cards retain a real material row when the illustration would be too small. */
+    static int materialRowY(int cardHeight) {
+        return cardHeight < 60 ? -1 : cardHeight >= 84 ? 36 : cardHeight - 30;
+    }
+
+    static boolean showsThumbnail(int cardWidth, int cardHeight) { return cardWidth >= 130 && cardHeight >= 84; }
 
     private void draw(GuiGraphics g, String value, int x, int y, int width, int color) {
         var font = Minecraft.getInstance().font;

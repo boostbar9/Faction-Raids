@@ -83,6 +83,7 @@ public final class NativeBuildingQa {
     private static int ticks;
     private static int readyAt;
     private static int renderFrames;
+    private static int screenshotReadyFrame;
     private static long started;
     private static boolean finished;
     private static boolean sawEntities;
@@ -116,7 +117,7 @@ public final class NativeBuildingQa {
                     require(!Files.exists(directory.resolve("saves").resolve(WORLD)),
                             "Refusing to replace or reuse a pre-existing fixture world");
                     mc.options.renderDistance().set(4);
-                    mc.options.simulationDistance().set(4);
+                    mc.options.simulationDistance().set(5);
                     mc.options.guiScale().set(2);
                     mc.options.pauseOnLostFocus = false;
                     mc.resizeDisplay();
@@ -161,6 +162,7 @@ public final class NativeBuildingQa {
                 case 5 -> {
                     require(mc.screen instanceof ProtectedConstructionScreen,
                             "Native interaction did not open ProtectedConstructionScreen");
+                    assertInspectionControls(mc);
                     check("Actual native interaction/network path opens protected inspection screen");
                     capture("02-native-inspection-scale2.png"); phase = 6;
                 }
@@ -169,10 +171,18 @@ public final class NativeBuildingQa {
                 }
                 case 7 -> {
                     require(mc.screen instanceof ProtectedConstructionScreen, "Inspection screen lost during resize");
+                    assertInspectionControls(mc);
+                    check("Native protected inspection Projection, Cancel job and Close fit compact GUI scale without overlap");
                     capture("03-native-inspection-scale3.png"); phase = 8;
                 }
                 case 8 -> {
-                    mc.setScreen(null);
+                    clickVisibleButton(mc, "Cancel job");
+                    require(mc.screen instanceof net.minecraft.client.gui.screens.ConfirmScreen, "Cancel job did not show confirmation");
+                    clickVisibleButton(mc, "No");
+                    require(mc.screen instanceof ProtectedConstructionScreen, "Declining cancel did not return to inspection");
+                    clickVisibleButton(mc, "Close");
+                    require(mc.screen == null, "Native protected Close control did not close screen");
+                    check("Native protected cancel-back and Close controls work through actual visible hitboxes");
                     mc.options.guiScale().set(2); mc.resizeDisplay();
                     submitServer(mc, () -> player(mc).teleportTo(.5, 65, -2));
                     delay(20); phase = 9;
@@ -310,7 +320,13 @@ public final class NativeBuildingQa {
                     check("Production perimeter template rendered by actual Workers renderer with synchronized native coordinates");
                     capture("13-native-perimeter-template.png"); phase = 32;
                 }
-                case 32 -> finish(mc, null);
+                case 32 -> { phase = 33; started = System.nanoTime(); }
+                case 33 -> {
+                    if (NativeBuildingGameplay.tick(mc)) {
+                        REPORT.put("gameplay", NativeBuildingGameplay.result());
+                        finish(mc, null);
+                    }
+                }
                 default -> throw new AssertionError("Unexpected phase " + phase);
             }
         } catch (Throwable failure) { finish(mc, failure); }
@@ -327,7 +343,7 @@ public final class NativeBuildingQa {
     public static void render(TickEvent.RenderTickEvent event) {
         if (!ENABLED || finished || event.phase != TickEvent.Phase.END) return;
         renderFrames++;
-        if (screenshot == null) return;
+        if (screenshot == null || renderFrames < screenshotReadyFrame) return;
         Minecraft mc = Minecraft.getInstance();
         try (NativeImage pixels = Screenshot.takeScreenshot(mc.getMainRenderTarget())) {
             String name = screenshot;
@@ -355,8 +371,8 @@ public final class NativeBuildingQa {
         evidence = directory.getParent().resolve("evidence");
         Files.createDirectories(evidence);
         REPORT.put("startedUtc", Instant.now().toString());
-        REPORT.put("coverage", "Real Forge client + integrated-server fixture; native rendering, raycast, interaction and world reload. Fixture setup bypasses player commissioning.");
-        REPORT.put("notCovered", List.of("End-to-end player commissioning/payment and server-fed Building HUD data", "Native builder work/resupply", "Claim/core/owner mutation matrix", "Dedicated-server connection", "Shader/resource-pack or GPU-driver matrix", "1024/1025-cell boundary and scan-bound profiling"));
+        REPORT.put("coverage", "Phase1: real native rendering/lifecycle fixtures. Phase2: isolated survival production commissioning, native AI/materials and permission/reload acceptance. See gameplay assertions and exclusions.");
+        REPORT.put("notCovered", List.of("Server-fed Building HUD data beyond the client-menu fixture", "Full claim/core/owner mutation matrix beyond enumerated gameplay cases", "Dedicated-server connection", "Shader/resource-pack or GPU-driver matrix", "1024/1025-cell boundary and scan-bound profiling"));
         Map<String, String> mods = new LinkedHashMap<>();
         Map<String, Object> artifacts = new LinkedHashMap<>();
         for (String id : List.of("minecraft", "forge", "siegeoverhaul", "workers", "recruits", "smallships", "siegeweapons")) {
@@ -491,6 +507,30 @@ public final class NativeBuildingQa {
             if (id.equals(entity.getUUID()) && entity instanceof ProtectedBuildArea area) return area;
         return null;
     }
+    private static void assertInspectionControls(Minecraft mc) {
+        require(mc.screen instanceof ProtectedConstructionScreen, "Protected inspection screen is absent");
+        var controls = new java.util.ArrayList<Button>();
+        boolean projection = false, cancel = false, close = false;
+        for (var child : mc.screen.children()) if (child instanceof Button button && button.visible) {
+            String text = button.getMessage().getString();
+            if (text.startsWith("Projection:") || text.equals("Always shown") || text.equals("Focus only")) projection = true;
+            else if (text.equals("Cancel job")) cancel = true;
+            else if (text.equals("Close")) close = true;
+            else continue;
+            require(button.active && button.getX() >= 0 && button.getY() >= 0
+                            && button.getX() + button.getWidth() <= mc.screen.width
+                            && button.getY() + button.getHeight() <= mc.screen.height,
+                    "Native inspection control is clipped/inactive: " + text);
+            controls.add(button);
+        }
+        require(projection && cancel && close, "Protected inspector is missing required controls");
+        for (int i = 0; i < controls.size(); i++) for (int j = i + 1; j < controls.size(); j++) {
+            Button a = controls.get(i), b = controls.get(j);
+            require(a.getX() + a.getWidth() <= b.getX() || b.getX() + b.getWidth() <= a.getX()
+                            || a.getY() + a.getHeight() <= b.getY() || b.getY() + b.getHeight() <= a.getY(),
+                    "Native inspection controls overlap");
+        }
+    }
     private static boolean hasVisibleButton(Minecraft mc, String... labels) {
         if (mc.screen == null) return false;
         for (var child : mc.screen.children()) if (child instanceof Button button && button.visible && button.active)
@@ -505,8 +545,9 @@ public final class NativeBuildingQa {
                 double y = button.getY() + button.getHeight() / 2.0;
                 require(x >= 0 && x < mc.screen.width && y >= 0 && y < mc.screen.height,
                         "Visible navigation control is outside the viewport: " + label);
-                require(mc.screen.mouseClicked(x, y, 0), "Actual navigation hitbox rejected click: " + label);
-                mc.screen.mouseReleased(x, y, 0);
+                var clickedScreen = mc.screen;
+                require(clickedScreen.mouseClicked(x, y, 0), "Actual navigation hitbox rejected click: " + label);
+                clickedScreen.mouseReleased(x, y, 0);
                 return;
             }
         throw new AssertionError("Visible actual navigation button missing: " + String.join(" / ", labels));
@@ -535,7 +576,15 @@ public final class NativeBuildingQa {
         }
         return java.util.HexFormat.of().formatHex(digest.digest());
     }
-    private static void capture(String name) { screenshot = name; }
+    static void captureGameplay(String name) { capture(name); }
+    private static void capture(String name) {
+        // Leave ordinary HUD/tooltips unmodified; move the actual test cursor out
+        // of the content and allow native mouse callbacks to settle before capture.
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.screen != null) org.lwjgl.glfw.GLFW.glfwSetCursorPos(mc.getWindow().getWindow(), 2, 2);
+        screenshotReadyFrame = renderFrames + 3;
+        screenshot = name;
+    }
     private static void captureThen(String name, Runnable continuation) {
         afterScreenshot = continuation; capture(name);
     }
@@ -552,6 +601,7 @@ public final class NativeBuildingQa {
     private static void finish(Minecraft mc, Throwable failure) {
         if (finished) return;
         finished = true;
+        if (phase >= 33) REPORT.put("gameplay", NativeBuildingGameplay.result());
         REPORT.put("status", failure == null ? "passed" : "failed");
         REPORT.put("finishedUtc", Instant.now().toString());
         REPORT.put("phase", phase); REPORT.put("renderFrames", renderFrames);

@@ -52,7 +52,7 @@ jobs:
           set -euo pipefail
           test ! -e build/native-qa/client/saves/siege-native-qa-fixture
           mkdir -p build/native-qa/client build/native-qa/evidence
-          printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:4\nsimulationDistance:4\nmaxFps:30\nvsync:false\n' > build/native-qa/client/options.txt
+          printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:4\nsimulationDistance:5\nmaxFps:30\nvsync:false\n' > build/native-qa/client/options.txt
           git rev-parse HEAD > build/native-qa/evidence/source-commit.txt
           java -version 2> build/native-qa/evidence/java-version.txt
 
@@ -73,6 +73,7 @@ jobs:
           root = Path('build/native-qa/evidence')
           data = json.loads((root / 'result.json').read_text())
           assert data['status'] == 'passed', data
+          assert data['gameplay']['status'] == 'passed', data.get('gameplay')
           expected = [
               '01-marker-focused.png', '02-native-inspection-scale2.png',
               '03-native-inspection-scale3.png', '04-projection-unfocused.png',
@@ -81,6 +82,7 @@ jobs:
               '09-building-auto-perimeter.png', '10-building-place-structure.png',
               '11-building-construction.png', '12-building-construction-compact.png',
               '13-native-perimeter-template.png',
+              '14-production-free-perimeter-review.png', '15-production-paid-native-marker.png',
           ]
           assert data['screenshots'] == expected, data['screenshots']
           for name in expected:

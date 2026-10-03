@@ -21,7 +21,10 @@ public record CoreBuildingLayout(CoreHireLayout frame) {
     public int detailWidth() { return detailedCatalogue() ? Math.max(210, width() / 3) : 0; }
     public int detailX() { return x() + width() - detailWidth(); }
     public int catalogueWidth() { return width() - (detailedCatalogue() ? detailWidth() + 8 : 0); }
-    public int catalogueColumns() { return detailedCatalogue() ? 3 : 2; }
+    /** A third column also makes room for illustrations at ordinary 720p/GUI-scale-two sizes. */
+    public int catalogueColumns() {
+        return detailedCatalogue() || width() >= 480 && bodyHeight() >= 206 ? 3 : 2;
+    }
     public int catalogueRows() { return 6 / catalogueColumns(); }
     public int planWidth() { return (catalogueWidth() - GAP * (catalogueColumns() - 1)) / catalogueColumns(); }
     public int planHeight() {
@@ -37,7 +40,12 @@ public record CoreBuildingLayout(CoreHireLayout frame) {
     public int materialWidth(int count) { return (width() - GAP * (count - 1)) / count; }
     public int materialX(int material, int count) { return x() + material * (materialWidth(count) + GAP); }
     public int perimeterTextY() { return materialY() + ACTION_HEIGHT + 7; }
-    public int perimeterTextLines() { return Math.max(0, (actionY() - 4 - perimeterTextY()) / 10); }
+    public int perimeterTextLines() {
+        return illustratedPerimeter() ? 3 : Math.max(0, (actionY() - 4 - perimeterTextY()) / 10);
+    }
+    public boolean illustratedPerimeter() { return width() >= 480 && perimeterExampleHeight() >= 94; }
+    public int perimeterExampleY() { return perimeterTextY() + 34; }
+    public int perimeterExampleHeight() { return Math.max(0, actionY() - 6 - perimeterExampleY()); }
 
     public int reportHeaderY() { return bodyY(); }
     public int reportY() { return bodyY() + 14; }

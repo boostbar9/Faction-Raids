@@ -94,9 +94,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private BuildingSection buildingSection = BuildingSection.PERIMETER;
     private DefenseBlueprint.Kind selectedDefense = DefenseBlueprint.Kind.WALL;
     private final BuildingReportSubscription buildingReport = new BuildingReportSubscription();
-    private int perimeterMaterial, constructionPage;
+    // Match the existing manual wall's cobblestone/oak template on first review.
+    private int perimeterMaterial = 1;
+    private int constructionPage;
     private int planRequestCooldown, perimeterRequestCooldown;
     private final Button[] fortifyButtons = new Button[TerritoryFortification.MATERIALS.length];
+    private final BuildingPlanThumbnail[] perimeterExamples = new BuildingPlanThumbnail[TerritoryFortification.MATERIALS.length];
     private final Button[] boxes = new Button[3];
     private final Button[] buffs = new Button[3];
     private final Button[] bank = new Button[4];
@@ -1303,10 +1306,21 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 w - 6, CommandPalette.ACCENT_GOLD);
         int lines = building.perimeterTextLines();
         String guidance = "Review with a free perimeter plan. Commission only when confirmed.";
-        if (lines >= 6) guidance += " Hold the plan in world to inspect the full footprint, materials and any blocked sections. "
+        if (building.illustratedPerimeter()) guidance = "Review your actual claim in world before commissioning. "
+                + "Use an owned Workers builder and nearby storage with Builders enabled. "
+                + "Treasury commission and supplied materials are separate.";
+        else if (lines >= 6) guidance += " Hold the plan in world to inspect the full footprint, materials and any blocked sections. "
                 + "Use an owned Workers builder and a nearby storage area with Builders enabled. "
                 + "Supplied materials are separate from the Treasury commission.";
         drawWrappedText(g, guidance, x + 3, building.perimeterTextY(), w - 6, lines, CommandPalette.TEXT_MUTED);
+        if (building.illustratedPerimeter()) {
+            int exampleY = building.perimeterExampleY(), exampleHeight = building.perimeterExampleHeight();
+            CommandFrame.card(g, x, exampleY, w, exampleHeight, CommandPalette.ACCENT_STEEL);
+            text(g, "EXAMPLE · ONE FLAT CLAIM CHUNK", x + 8, exampleY + 5, w - 16, CommandPalette.TEXT_DIM);
+            if (perimeterExamples[perimeterMaterial] == null)
+                perimeterExamples[perimeterMaterial] = BuildingPlanThumbnail.perimeterExample(perimeterMaterial);
+            perimeterExamples[perimeterMaterial].render(g, x + 8, exampleY + 17, w - 16, exampleHeight - 21);
+        }
     }
 
     private void drawStructureSelection(GuiGraphics g) {
