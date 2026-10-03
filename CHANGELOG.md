@@ -1,3 +1,9 @@
+## 4.51.21 — Safe wall-builder arrival
+
+- A distant commissioned wall builder now chooses loaded, dry, collision-free footing near the player instead of teleporting blindly to the heightmap at the player's coordinates.
+- The search prefers the player's elevation, avoiding roofs above indoor Siege Cores, and refuses water, hazards, occupied space and unloaded columns. If no safe arrival exists, the builder stays put rather than being embedded or dropped.
+- Safe relocation clears old movement and fall state. Wall blueprints, Workers supplies, inventories, ownership and native construction remain unchanged.
+
 ## 4.51.20 — Stable wall projections and camp search
 
 - Enabled Workers wall projections use their full fixed footprint for camera visibility, so turning away from the shovel marker no longer hides an otherwise visible projection. Native placement, distance limits, ownership and the existing projection toggle stay unchanged.

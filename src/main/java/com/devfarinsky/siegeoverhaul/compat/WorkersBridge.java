@@ -6,13 +6,18 @@ import com.devfarinsky.siegeoverhaul.OptionalCompatBridge;
 import com.devfarinsky.siegeoverhaul.RaidConfig;
 import com.devfarinsky.siegeoverhaul.RecruitsBridge;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.registries.ForgeRegistries;
 
@@ -251,27 +256,66 @@ public final class WorkersBridge {
     enum PlayerJobRelease { RELEASED, NOT_ATTACHED, FAILED }
 
     /**
-     * Teleport a builder to a safe standing surface near a known-good anchor
-     * (typically the player's own position at commission time).
-     *
-     * <p>Uses Heightmap.MOTION_BLOCKING_NO_LEAVES so the drop-point is the
-     * top surface block: never inside a cave, never suspended in leaves,
-     * never on top of water. Only teleports when the builder is further than
-     * 24 blocks from the anchor, so short walks are left to the builder's
-     * own pathfinder (which is generally fine at close range).</p>
+     * Move a distant commissioned builder near the player without trusting one
+     * heightmap column. The player may be indoors, under a roof, in water, or
+     * sharing the exact destination; in those cases the old drop could strand
+     * the worker on a roof, in fluid, or inside another entity.
      */
     public static void teleportBuilderNear(Mob worker, ServerLevel level, BlockPos anchor) {
         if (worker == null || level == null || anchor == null) return;
         if (worker.blockPosition().distSqr(anchor) < 24 * 24) return;
         try {
-            int surfaceY = level.getHeight(
-                    net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                    anchor.getX(), anchor.getZ());
-            worker.teleportTo(anchor.getX() + 0.5, surfaceY, anchor.getZ() + 0.5);
+            BlockPos arrival = playerBuilderArrival(level, worker, anchor);
+            if (arrival == null) return;
+            worker.teleportTo(arrival.getX() + 0.5D, arrival.getY(), arrival.getZ() + 0.5D);
             worker.getNavigation().stop();
+            worker.setDeltaMovement(Vec3.ZERO);
+            worker.fallDistance = 0;
         } catch (RuntimeException ex) {
             warn("teleport builder", ex);
         }
+    }
+
+    /**
+     * Prefer collision-free footing at the player's elevation, then a nearby
+     * surface within eight blocks vertically. At most 81 loaded columns are
+     * inspected; no chunk is loaded and no block is changed.
+     */
+    static BlockPos playerBuilderArrival(ServerLevel level, Mob worker, BlockPos anchor) {
+        BlockPos best = null;
+        double bestScore = Double.MAX_VALUE;
+        for (int dx=-4; dx<=4; dx++) for (int dz=-4; dz<=4; dz++) {
+            BlockPos column = anchor.offset(dx, 0, dz);
+            if (!level.hasChunkAt(column)) continue;
+            BlockPos sameLevel = column.atY(anchor.getY());
+            if (safeBuilderArrival(level, worker, sameLevel)) {
+                double score = dx*dx + dz*dz;
+                if (score < bestScore) { best=sameLevel; bestScore=score; }
+            }
+            int surfaceY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    column.getX(), column.getZ());
+            if (Math.abs(surfaceY-anchor.getY()) > 8) continue;
+            BlockPos surface = column.atY(surfaceY);
+            if (!surface.equals(sameLevel) && safeBuilderArrival(level, worker, surface)) {
+                double score = dx*dx + dz*dz + Math.abs(surfaceY-anchor.getY())*4.0D;
+                if (score < bestScore) { best=surface; bestScore=score; }
+            }
+        }
+        return best;
+    }
+
+    private static boolean safeBuilderArrival(ServerLevel level, Mob worker, BlockPos feet) {
+        if (!level.hasChunkAt(feet) || feet.getY() <= level.getMinBuildHeight()
+                || feet.getY()+2 >= level.getMaxBuildHeight()) return false;
+        BlockPos floor=feet.below();
+        var support=level.getBlockState(floor);
+        if (!support.isFaceSturdy(level,floor,Direction.UP) || !support.getFluidState().isEmpty()
+                || support.is(BlockTags.LEAVES) || support.is(Blocks.MAGMA_BLOCK)
+                || support.is(Blocks.CAMPFIRE) || support.is(Blocks.SOUL_CAMPFIRE)
+                || support.is(Blocks.CACTUS) || !level.getBlockState(feet).getFluidState().isEmpty()
+                || !level.getBlockState(feet.above()).getFluidState().isEmpty()) return false;
+        AABB body=worker.getBoundingBox().move(Vec3.atBottomCenterOf(feet).subtract(worker.position()));
+        return level.getWorldBorder().isWithinBounds(body) && level.noCollision(worker,body);
     }
 
     /** Keep the camp crew visible after its job finishes without leaving native jobs running. */

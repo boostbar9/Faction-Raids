@@ -3,6 +3,13 @@ package com.devfarinsky.siegeoverhaul.compat;
 import com.devfarinsky.siegeoverhaul.MinecraftTestSupport;
 import com.devfarinsky.siegeoverhaul.RaidConfig;
 import com.devfarinsky.siegeoverhaul.RecruitsBridge;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;
 
@@ -11,6 +18,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 class WorkersBridgeTest extends MinecraftTestSupport {
     public static class WorkStateApi {
@@ -153,6 +162,66 @@ class WorkersBridgeTest extends MinecraftTestSupport {
         assertNotNull(BuilderWithReadOnlyBuildArea.currentBuildArea);
         assertEquals(0, worker.resetAttempts);
         assertEquals(6, worker.followState);
+    }
+
+    @Test
+    void distantBuilderArrivalPrefersPlayerElevationInsteadOfTheRoof() {
+        ServerLevel level=mock(ServerLevel.class);
+        Mob worker=mock(Mob.class);
+        WorldBorder border=mock(WorldBorder.class);
+        BlockPos anchor=new BlockPos(10,64,10);
+        when(level.hasChunkAt(any())).thenReturn(true);
+        when(level.getMinBuildHeight()).thenReturn(-64);
+        when(level.getMaxBuildHeight()).thenReturn(320);
+        when(level.getWorldBorder()).thenReturn(border);
+        when(border.isWithinBounds(any(AABB.class))).thenReturn(true);
+        when(level.getHeight(any(Heightmap.Types.class),anyInt(),anyInt())).thenReturn(68);
+        when(level.getBlockState(any())).thenAnswer(call -> {
+            BlockPos pos=call.getArgument(0);
+            return (pos.getY()<64 || pos.getY()==67 ? Blocks.STONE : Blocks.AIR).defaultBlockState();
+        });
+        when(worker.position()).thenReturn(new Vec3(100.5D,64,100.5D));
+        when(worker.getBoundingBox()).thenReturn(new AABB(100.2D,64,100.2D,100.8D,65.95D,100.8D));
+        when(level.noCollision(eq(worker),any(AABB.class))).thenReturn(true);
+
+        assertEquals(anchor,WorkersBridge.playerBuilderArrival(level,worker,anchor));
+    }
+
+    @Test
+    void commissionedBuilderArrivalRejectsWaterAndUsesNearbyDryFooting() {
+        ServerLevel level=mock(ServerLevel.class);
+        Mob worker=mock(Mob.class);
+        WorldBorder border=mock(WorldBorder.class);
+        BlockPos anchor=new BlockPos(0,64,0);
+        BlockPos dry=anchor.east();
+        when(level.hasChunkAt(any())).thenReturn(true);
+        when(level.getMinBuildHeight()).thenReturn(-64);
+        when(level.getMaxBuildHeight()).thenReturn(320);
+        when(level.getWorldBorder()).thenReturn(border);
+        when(border.isWithinBounds(any(AABB.class))).thenReturn(true);
+        when(level.getHeight(any(Heightmap.Types.class),anyInt(),anyInt())).thenReturn(64);
+        when(level.getBlockState(any())).thenAnswer(call -> {
+            BlockPos pos=call.getArgument(0);
+            if (pos.getY()==63) return (pos.getX()==dry.getX() && pos.getZ()==dry.getZ()
+                    ? Blocks.STONE : Blocks.WATER).defaultBlockState();
+            return Blocks.AIR.defaultBlockState();
+        });
+        when(worker.position()).thenReturn(new Vec3(100.5D,64,100.5D));
+        when(worker.getBoundingBox()).thenReturn(new AABB(100.2D,64,100.2D,100.8D,65.95D,100.8D));
+        when(level.noCollision(eq(worker),any(AABB.class))).thenReturn(true);
+
+        assertEquals(dry,WorkersBridge.playerBuilderArrival(level,worker,anchor));
+    }
+
+    @Test
+    void commissionedBuilderArrivalNeverReadsUnloadedColumns() {
+        ServerLevel level=mock(ServerLevel.class);
+        Mob worker=mock(Mob.class);
+        when(level.hasChunkAt(any())).thenReturn(false);
+
+        assertNull(WorkersBridge.playerBuilderArrival(level,worker,new BlockPos(0,64,0)));
+        verify(level,never()).getHeight(any(Heightmap.Types.class),anyInt(),anyInt());
+        verify(level,never()).getBlockState(any());
     }
 
     /** Public signatures verified against Workers 2 / Recruits upstream. */
