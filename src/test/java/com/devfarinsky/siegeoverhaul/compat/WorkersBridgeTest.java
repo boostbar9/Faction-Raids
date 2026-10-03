@@ -165,26 +165,31 @@ class WorkersBridgeTest extends MinecraftTestSupport {
     }
 
     @Test
-    void distantBuilderArrivalPrefersPlayerElevationInsteadOfTheRoof() {
+    void distantBuilderArrivalFinishesPlayerLevelSearchBeforeConsideringRoof() {
         ServerLevel level=mock(ServerLevel.class);
         Mob worker=mock(Mob.class);
         WorldBorder border=mock(WorldBorder.class);
         BlockPos anchor=new BlockPos(10,64,10);
+        BlockPos clearFloor=anchor.offset(4,0,0);
         when(level.hasChunkAt(any())).thenReturn(true);
         when(level.getMinBuildHeight()).thenReturn(-64);
         when(level.getMaxBuildHeight()).thenReturn(320);
         when(level.getWorldBorder()).thenReturn(border);
         when(border.isWithinBounds(any(AABB.class))).thenReturn(true);
-        when(level.getHeight(any(Heightmap.Types.class),anyInt(),anyInt())).thenReturn(68);
+        when(level.getHeight(any(Heightmap.Types.class),anyInt(),anyInt())).thenReturn(67);
         when(level.getBlockState(any())).thenAnswer(call -> {
             BlockPos pos=call.getArgument(0);
-            return (pos.getY()<64 || pos.getY()==67 ? Blocks.STONE : Blocks.AIR).defaultBlockState();
+            return (pos.getY()<64 || pos.getY()==66 ? Blocks.STONE : Blocks.AIR).defaultBlockState();
         });
         when(worker.position()).thenReturn(new Vec3(100.5D,64,100.5D));
         when(worker.getBoundingBox()).thenReturn(new AABB(100.2D,64,100.2D,100.8D,65.95D,100.8D));
-        when(level.noCollision(eq(worker),any(AABB.class))).thenReturn(true);
+        when(level.noCollision(eq(worker),any(AABB.class))).thenAnswer(call -> {
+            AABB body=call.getArgument(1);
+            return body.minY >= 67 || (Math.abs(body.minX-(clearFloor.getX()+0.2D))<0.01D
+                    && Math.abs(body.minZ-(clearFloor.getZ()+0.2D))<0.01D);
+        });
 
-        assertEquals(anchor,WorkersBridge.playerBuilderArrival(level,worker,anchor));
+        assertEquals(clearFloor,WorkersBridge.playerBuilderArrival(level,worker,anchor));
     }
 
     @Test
@@ -211,6 +216,36 @@ class WorkersBridgeTest extends MinecraftTestSupport {
         when(level.noCollision(eq(worker),any(AABB.class))).thenReturn(true);
 
         assertEquals(dry,WorkersBridge.playerBuilderArrival(level,worker,anchor));
+    }
+
+    @Test
+    void commissionedBuilderArrivalRejectsHazardsInBothBodyCells() {
+        ServerLevel level=mock(ServerLevel.class);
+        Mob worker=mock(Mob.class);
+        WorldBorder border=mock(WorldBorder.class);
+        BlockPos anchor=new BlockPos(0,64,0);
+        when(level.hasChunkAt(any())).thenReturn(true);
+        when(level.getMinBuildHeight()).thenReturn(-64);
+        when(level.getMaxBuildHeight()).thenReturn(320);
+        when(level.getWorldBorder()).thenReturn(border);
+        when(border.isWithinBounds(any(AABB.class))).thenReturn(true);
+        when(level.getHeight(any(Heightmap.Types.class),anyInt(),anyInt())).thenReturn(64);
+        when(worker.position()).thenReturn(new Vec3(100.5D,64,100.5D));
+        when(worker.getBoundingBox()).thenReturn(new AABB(100.2D,64,100.2D,100.8D,65.95D,100.8D));
+        when(level.noCollision(eq(worker),any(AABB.class))).thenReturn(true);
+        when(level.getBlockState(any())).thenAnswer(call -> {
+            BlockPos pos=call.getArgument(0);
+            if (pos.equals(anchor)) return Blocks.FIRE.defaultBlockState();
+            return (pos.getY()<64 ? Blocks.STONE : Blocks.AIR).defaultBlockState();
+        });
+        assertNotEquals(anchor,WorkersBridge.playerBuilderArrival(level,worker,anchor));
+
+        when(level.getBlockState(any())).thenAnswer(call -> {
+            BlockPos pos=call.getArgument(0);
+            if (pos.equals(anchor.above())) return Blocks.POWDER_SNOW.defaultBlockState();
+            return (pos.getY()<64 ? Blocks.STONE : Blocks.AIR).defaultBlockState();
+        });
+        assertNotEquals(anchor,WorkersBridge.playerBuilderArrival(level,worker,anchor));
     }
 
     @Test
