@@ -1,5 +1,10 @@
 # Recruits and Workers source compatibility review
 
+## Commissioned wall-builder arrival (4.51.21)
+
+Rechecked Workers `29d26e1df6475fc8d043dc5d455f67b2fd1e9982`, `entities/ai/BuilderWorkGoal.java`. The native goal keeps the assigned build area and owns subsequent pathing, supply requests and placement; this compatibility change only chooses a safe starting point before the existing direct handoff when the hired builder is more than 24 blocks away. It checks at most 81 already-loaded columns, prefers clear footing at the player's elevation over a roof heightmap, then considers nearby surfaces within eight vertical blocks. Fluid, leaves, hazards, world-border crossings, collisions and occupied bodies are rejected. No terrain, inventory, blueprint or native job state is changed by the search. Regression fixtures are mocked integration checks, not an interactive companion-mod playtest.
+
+
 ## Projection camera bounds (4.51.20)
 
 Rechecked Workers `29d26e1df6475fc8d043dc5d455f67b2fd1e9982`, `client/render/WorkerAreaRenderer.java` and `entities/workarea/AbstractWorkAreaEntity.java`. The native projection already maps blueprint cells to fixed world positions. However, its entity renderer inherits the shovel marker's small culling box, so an enabled projection can disappear when that corner leaves the camera. The client now reads native `getAlwaysShowProjection()`, `canPlayerSee(Player)` and `getArea()` and tests the full native world-box envelope against the current frustum. Only while that envelope is visible does it temporarily bypass the marker-only frustum test. Original flags are restored immediately after native entity rendering, before the next frame, and on world changes. No entity position, collision/picking box, blueprint, worker state or native projection preference changes.
