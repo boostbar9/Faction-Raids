@@ -1,3 +1,5 @@
+# Recruits and Workers source compatibility review
+
 ## Projection camera bounds (4.51.20)
 
 Rechecked Workers `29d26e1df6475fc8d043dc5d455f67b2fd1e9982`, `client/render/WorkerAreaRenderer.java` and `entities/workarea/AbstractWorkAreaEntity.java`. The native projection already maps blueprint cells to fixed world positions. However, its entity renderer inherits the shovel marker's small culling box, so an enabled projection can disappear when that corner leaves the camera. The client now reads native `getAlwaysShowProjection()`, `canPlayerSee(Player)` and `getArea()` and tests the full native world-box envelope against the current frustum. Only while that envelope is visible does it temporarily bypass the marker-only frustum test. Original flags are restored immediately after native entity rendering, before the next frame, and on world changes. No entity position, collision/picking box, blueprint, worker state or native projection preference changes.
@@ -5,8 +7,6 @@ Rechecked Workers `29d26e1df6475fc8d043dc5d455f67b2fd1e9982`, `client/render/Wor
 Verified the Forge 1.20.1 `RenderLevelStageEvent` and `LevelRenderer` patch: `AFTER_SOLID_BLOCKS` precedes entity rendering and `AFTER_ENTITIES` follows it. Official Minecraft 1.20.1 client bytecode (`client.jar` SHA-1 `0c3ec587af28e5a785c0b4a7b8a30f9a8f78f838`, mappings SHA-1 `6c48521eed01fe2e8ecdadbd5ae348415f3c47da`) confirms `EntityRenderer.shouldRender` applies entity distance limits before `Entity.noCulling`, preserving native distance/tracking behavior. Disabled previews stay disabled, including the automatic-preview size limit of 1,024 cells. Larger jobs can still enable the native projection manually.
 
 Regression fixtures cover whole-plan camera intersection, repeated-frame/restoration lifecycle, original flags, native visibility permission, disabled projection and missing/throwing compatibility APIs. Source/bytecode checks and these tests are not a rendered Minecraft session or companion-binary playtest.
-
-# Recruits and Workers source compatibility review
 
 ## Player wall surface approaches (4.51.14)
 
