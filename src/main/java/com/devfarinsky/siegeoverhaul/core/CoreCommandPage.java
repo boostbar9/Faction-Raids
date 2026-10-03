@@ -5,8 +5,8 @@ public enum CoreCommandPage {
     ARMY("Army", "War Council", "Recruit defenders, specialists and legendary heroes"),
     LOOT("Loot", "Olympian Reliquary", "Unseal divine spoils and prepare battlefield blessings"),
     TREASURY("Treasury", "Faction Treasury", "Manage shared wealth, rewards and faction activity"),
-    TERRITORY("Territory", "Kingdom Development", "Commission permanent upgrades and perimeter works"),
-    DEFENSES("Defenses", "Defense Works", "Collect a plan, choose a site and commission your builder"),
+    TERRITORY("Territory", "Kingdom Development", "Enact permanent faction-wide upgrades"),
+    DEFENSES("Building", "Building", "Plan a perimeter, place a structure and track your nearby construction"),
     CIVILIANS("Civilians", "House of Civilians", "Welcome new residents, trade and grow the faction Treasury"),
     INTEL("Intel", "Warlord Intelligence", "Study units, enemy hosts and defensive doctrine");
 

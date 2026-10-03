@@ -2,6 +2,7 @@ package com.devfarinsky.siegeoverhaul.core;
 
 import com.devfarinsky.siegeoverhaul.ModConstants;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
+import com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -60,20 +61,56 @@ public final class WallBuilderAccess extends Goal {
         throw new NoSuchFieldException("workDone");
     }
 
-    public static void install(Mob worker) {
-        if (worker.goalSelector == null) return;
+    public static boolean install(Mob worker) {
+        if (worker.goalSelector == null) return false;
         var goals = new ArrayList<>(worker.goalSelector.getAvailableGoals());
-        if (goals.stream().anyMatch(g -> g.getGoal() instanceof WallBuilderAccess)) return;
+        if (goals.stream().anyMatch(g -> g.getGoal() instanceof WallBuilderAccess)) return true;
         for (var wrapped : goals) {
             if (!wrapped.getGoal().getClass().getName().equals("com.talhanation.workers.entities.ai.BuilderWorkGoal")) continue;
             try {
                 var replacement = new WallBuilderAccess(worker, wrapped.getGoal());
                 worker.goalSelector.removeGoal(wrapped.getGoal());
                 worker.goalSelector.addGoal(wrapped.getPriority(), replacement);
+                return true;
             } catch (ReflectiveOperationException ex) {
                 com.devfarinsky.siegeoverhaul.FactionLogger.LOG.debug("Wall access API unavailable: {}", ex.getMessage());
             }
-            return;
+            return false;
+        }
+        return false;
+    }
+
+    /** Reset only stale transient native goal state after the new area's assignment succeeds. */
+    public static boolean prepareProtectedHandoff(Mob worker, Entity expectedArea) {
+        if (worker.goalSelector == null || NativeConstructionGuard.currentArea(worker) != expectedArea) return false;
+        for (var goal : worker.goalSelector.getAvailableGoals())
+            if (goal.getGoal() instanceof WallBuilderAccess access) return access.resetTransientState();
+        return false;
+    }
+
+    private boolean resetTransientState() {
+        java.util.List<Field> fields = new ArrayList<>();
+        java.util.List<Object> previous = new ArrayList<>();
+        try {
+            for (String name : new String[]{"stackToBreak", "stackToPlace", "stackToFree"}) {
+                Field field = delegate.getClass().getField(name);
+                if (!field.getType().isAssignableFrom(java.util.Stack.class)) return false;
+                fields.add(field); previous.add(field.get(delegate));
+            }
+            Object selection = java.util.Arrays.stream(stateField.getType().getEnumConstants())
+                    .filter(value -> ((Enum<?>)value).name().equals("SELECT_WORK_AREA")).findFirst().orElseThrow();
+            fields.add(stateField); previous.add(stateField.get(delegate));
+            fields.add(blockField); previous.add(blockField.get(delegate));
+            fields.add(workDoneField); previous.add(workDoneField.get(delegate));
+            for (int i = 0; i < 3; i++) fields.get(i).set(delegate, new java.util.Stack<>());
+            stateField.set(delegate, selection); blockField.set(delegate, null); workDoneField.setBoolean(delegate, false);
+            reservedArea = null; reservedColumns = Set.of(); approachTarget = null;
+            pendingPath = null; pendingSites = Set.of(); destination = null; lastTarget = null;
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            for (int i = 0; i < fields.size(); i++) try { fields.get(i).set(delegate, previous.get(i)); }
+            catch (ReflectiveOperationException | RuntimeException ignored) { }
+            return false;
         }
     }
 
@@ -87,7 +124,13 @@ public final class WallBuilderAccess extends Goal {
         retainCommission();
         if (approachCommission()) return;
         if (recoverBuriedApproach()) return;
+        // Access helpers can advance MOVE_TO_WORK_AREA to PREPARE_BREAK_BLOCKS.
+        // Validate after those transitions, at the actual native dispatch boundary.
+        if (!NativeConstructionGuard.beforeNativeTick(worker, delegate)) return;
+        Entity guardedArea = NativeConstructionGuard.currentArea(worker);
+        var mutationCells = NativeConstructionGuard.mutationCells(delegate);
         delegate.tick();
+        NativeConstructionGuard.afterNativeTick(worker, guardedArea, mutationCells);
         if (!(worker.level() instanceof ServerLevel level) || worker.isPassenger()
                 || worker.isLeashed() || worker.getTarget() != null) return;
         try {

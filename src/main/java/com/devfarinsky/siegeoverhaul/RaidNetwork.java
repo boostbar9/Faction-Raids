@@ -19,7 +19,7 @@ public final class RaidNetwork {
     // discovered units/factions, and War Journal rows to DashboardSync.
     // Bump whenever the wire format changes so mismatched builds refuse to connect
     // instead of silently corrupting the dashboard payload.
-    private static final String PROTOCOL = "17";
+    private static final String PROTOCOL = "18";
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(SiegeOverhaul.MOD_ID, "main"))
             .networkProtocolVersion(() -> PROTOCOL)
@@ -91,6 +91,15 @@ public final class RaidNetwork {
                 .decoder(DashboardAction::decode)
                 .consumerMainThread(DashboardAction::handle)
                 .add();
+        CHANNEL.messageBuilder(ProtectedConstructionAction.class, messageId++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(ProtectedConstructionAction::encode).decoder(ProtectedConstructionAction::decode)
+                .consumerMainThread((packet, supplier) -> {
+                    var context = supplier.get();
+                    var sender = context.getSender();
+                    if (sender != null) com.devfarinsky.siegeoverhaul.nativecompat.ProtectedConstructionActions.handle(
+                            sender, packet.areaId(), packet.action());
+                    context.setPacketHandled(true);
+                }).add();
     }
 
     public record CaptureBeam(ResourceLocation dimension,net.minecraft.core.BlockPos pos,int percent,long time) {
@@ -406,6 +415,20 @@ public final class RaidNetwork {
             });
             context.setPacketHandled(true);
         }
+    }
+
+    /** Authenticated native-marker controls: 0 hide, 1 show, 2 cancel. No blueprint or owner data is accepted. */
+    public record ProtectedConstructionAction(java.util.UUID areaId, int action) {
+        public ProtectedConstructionAction {
+            if (areaId == null || action < 0 || action > 2) throw new IllegalArgumentException("Invalid construction action");
+        }
+        public void encode(FriendlyByteBuf buffer) { buffer.writeUUID(areaId); buffer.writeByte(action); }
+        public static ProtectedConstructionAction decode(FriendlyByteBuf buffer) {
+            return new ProtectedConstructionAction(buffer.readUUID(), buffer.readUnsignedByte());
+        }
+    }
+    public static void protectedConstructionAction(java.util.UUID areaId, int action) {
+        CHANNEL.sendToServer(new ProtectedConstructionAction(areaId, action));
     }
 
     public record CorePurchase(int menuId, int index, long rotation) {}

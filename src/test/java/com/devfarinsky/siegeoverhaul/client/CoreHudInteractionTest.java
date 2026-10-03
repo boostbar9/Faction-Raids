@@ -151,8 +151,23 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
             var layout = CoreHireLayout.fit(w,h); set(screen,"layout",layout);
             int rows = (int) rowsMethod.invoke(screen), rowH = (int) heightMethod.invoke(screen);
             assertTrue(rows > 0);
-            assertTrue(layout.contentY() + 24 + rows * rowH <= layout.contentBottom() - 20);
+            var building = new CoreBuildingLayout(layout);
+            assertTrue(building.reportY() + rows * rowH <= building.actionY() - 4);
         }
+    }
+
+    @Test void buildingSectionChangesClearHiddenFocusAndKeepTheSelectedPlan() throws Exception {
+        var screen = new CoreHireScreen(mock(CoreHireMenu.class), mock(Inventory.class), Component.literal("Command"));
+        var sections = new Button[BuildingSection.values().length];
+        for (int i = 0; i < sections.length; i++) sections[i] = mock(Button.class);
+        set(screen, "buildingSections", sections);
+        invoke(screen, "selectDefense", DefenseBlueprint.Kind.class, DefenseBlueprint.Kind.GATEHOUSE);
+        invoke(screen, "selectBuildingSection", BuildingSection.class, BuildingSection.CONSTRUCTION);
+        assertEquals(BuildingSection.CONSTRUCTION, get(screen, "buildingSection"));
+        assertSame(sections[BuildingSection.CONSTRUCTION.ordinal()], screen.getFocused());
+        invoke(screen, "selectBuildingSection", BuildingSection.class, BuildingSection.STRUCTURES);
+        assertEquals(DefenseBlueprint.Kind.GATEHOUSE, get(screen, "selectedDefense"));
+        assertSame(sections[BuildingSection.STRUCTURES.ordinal()], screen.getFocused());
     }
 
 }

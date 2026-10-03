@@ -1,3 +1,11 @@
+## 4.52.0-preview.1 — Building system candidate (unreleased)
+
+- Consolidates automatic perimeter, all six existing plans and nearby construction reporting in one Building section while preserving the other command sections and Treasury prices.
+- Adds exact five-wide template-style perimeter planning inside claims, retained material styles, a free owner-bound plan preview, whole-site revalidation and deliberate paid confirmation. Unsafe or oversized plans are blocked rather than partially queued.
+- Adds a protected native Workers BuildArea extension under verification, keeping the native shovel renderer, blueprint transform, builder and storage behavior while separating accessible marker location from immutable construction origin.
+- Adds guarded native work, strict live ownership/claim and obstacle checks, durable reservations and authenticated owner controls. Solid obstructions remain protected; no blanket excavation is enabled.
+- Candidate only: no CurseForge release. Real companion-mod compatibility, client/server rendering, reload, supplies and protection playtesting remain release gates. Native protocol is 18, requiring matching client/server builds.
+
 ## 4.51.22 — Wall-builder arrival follow-up
 
 - Same-elevation footing is now fully prioritized before any roof or terrain-surface fallback, even when the closest player-level cell is occupied.

@@ -5,6 +5,7 @@ import com.devfarinsky.siegeoverhaul.RaidConfig;
 import com.devfarinsky.siegeoverhaul.RecruitsBridge;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.border.WorldBorder;
@@ -255,6 +256,22 @@ class WorkersBridgeTest extends MinecraftTestSupport {
         assertNull(WorkersBridge.playerBuilderArrival(level,worker,new BlockPos(0,64,0)));
         verify(level,never()).getHeight(any(Heightmap.Types.class),anyInt(),anyInt());
         verify(level,never()).getBlockState(any());
+    }
+
+    @Test
+    void canceledAreaCleanupOnlyDetachesExactPointerWithoutChangingWorkerOrders() {
+        BuilderApi worker = new BuilderApi(); worker.followState = 6;
+        Entity canceled = mock(Entity.class), replacement = mock(Entity.class);
+        UUID id = UUID.randomUUID(), next = UUID.randomUUID();
+        when(canceled.getUUID()).thenReturn(id); when(replacement.getUUID()).thenReturn(next);
+        worker.currentBuildArea = replacement;
+        assertTrue(WorkersBridge.detachBuildAreaReferenceApi(worker, id));
+        assertSame(replacement, worker.currentBuildArea); assertEquals(6, worker.followState);
+        worker.currentBuildArea = canceled;
+        assertTrue(WorkersBridge.detachBuildAreaReferenceApi(worker, id));
+        assertNull(worker.currentBuildArea); assertEquals(6, worker.followState);
+        assertTrue(WorkersBridge.detachBuildAreaReferenceApi(worker, id));
+        assertFalse(WorkersBridge.detachBuildAreaReferenceApi(new Object(), id));
     }
 
     /** Public signatures verified against Workers 2 / Recruits upstream. */

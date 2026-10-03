@@ -11,6 +11,9 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import com.devfarinsky.siegeoverhaul.nativecompat.ProtectedBuildArea;
+import com.devfarinsky.siegeoverhaul.nativecompat.ProtectedConstructionAreas;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
@@ -45,7 +48,7 @@ public final class WorkersBridge {
 
     /** True only for the native Workers 2 build-area entity. */
     public static boolean isBuildArea(Entity entity) {
-        return entityTypeIs(entity, BUILD_AREA_ID);
+        return entityTypeIs(entity, BUILD_AREA_ID) || entity instanceof ProtectedBuildArea;
     }
 
     /**
@@ -181,8 +184,12 @@ public final class WorkersBridge {
      */
     public static boolean assignBuildAreaDirectly(Mob worker, Entity buildArea) {
         if (worker == null || buildArea == null) return false;
+        if (buildArea instanceof ProtectedBuildArea protectedArea && !protectedArea.nativeQueuesReady()
+                && !com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.prepareLoadedArea(buildArea)) return false;
         worker.getNavigation().stop();
-        return assignBuildAreaApi(worker, buildArea);
+        if (!assignBuildAreaApi(worker, buildArea)) return false;
+        return !(buildArea instanceof ProtectedBuildArea)
+                || com.devfarinsky.siegeoverhaul.core.WallBuilderAccess.prepareProtectedHandoff(worker, buildArea);
     }
 
     /** Package-visible seam that also makes the reflective handoff transactional. */
@@ -252,6 +259,24 @@ public final class WorkersBridge {
             warn("reset player builder state", ex);
         }
         return PlayerJobRelease.RELEASED;
+    }
+
+    /** Clear only this canceled area's pointer; never touch a transferred worker's orders or inventory. */
+    public static boolean detachBuildAreaReference(Mob worker, java.util.UUID expectedArea) {
+        return detachBuildAreaReferenceApi(worker, expectedArea);
+    }
+
+    static boolean detachBuildAreaReferenceApi(Object worker, java.util.UUID expectedArea) {
+        if (worker == null || expectedArea == null) return false;
+        try {
+            var field = worker.getClass().getField("currentBuildArea");
+            Object current = field.get(worker);
+            if (current == null) return true;
+            if (!(current instanceof Entity area)) return false;
+            if (!expectedArea.equals(area.getUUID())) return true;
+            field.set(worker, null);
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException unavailable) { return false; }
     }
 
     enum PlayerJobRelease { RELEASED, NOT_ATTACHED, FAILED }
@@ -380,6 +405,21 @@ public final class WorkersBridge {
                                           int width, int depth, int height) throws ReflectiveOperationException {
         String label = (playerName == null || playerName.isEmpty()) ? "Player" : playerName;
         return createAreaInternal(level, type, origin, owner, label, "", false, width, depth, height);
+    }
+
+    /** New-only sealed native marker with a separately validated physical pick/shovel location. */
+    public static Entity createProtectedPlayerArea(ServerPlayer owner, Mob builder, BlockPos nativeOrigin,
+                                                   int width, int depth, int height,
+                                                   net.minecraft.nbt.CompoundTag blueprint) throws ReflectiveOperationException {
+        return ProtectedConstructionAreas.create(owner, builder, nativeOrigin, width, depth, height, blueprint);
+    }
+
+    /** A paid protected job cannot be discarded through unauthenticated native controls. */
+    public static boolean discardPlayerArea(Entity area) {
+        if (area == null) return true;
+        if (area instanceof ProtectedBuildArea protectedArea) return protectedArea.abortBeforePayment();
+        area.discard();
+        return true;
     }
 
     private static Entity createAreaInternal(ServerLevel level, String type, BlockPos origin,
@@ -546,7 +586,8 @@ public final class WorkersBridge {
     public static boolean enableWallProjection(Object area, int blockCount) {
         if (area == null || blockCount <= 0 || blockCount > 1024) return false;
         try {
-            area.getClass().getMethod("setAlwaysShowProjection", boolean.class).invoke(area, true);
+            if (area instanceof ProtectedBuildArea protectedArea) protectedArea.initializeProjection(true);
+            else area.getClass().getMethod("setAlwaysShowProjection", boolean.class).invoke(area, true);
             return true;
         } catch (ReflectiveOperationException | RuntimeException ex) {
             return false; // Optional presentation API; never reject an otherwise valid paid job.
@@ -554,6 +595,10 @@ public final class WorkersBridge {
     }
 
     public static void startBlueprint(Entity area, net.minecraft.nbt.CompoundTag blueprint) throws ReflectiveOperationException {
+        if (area instanceof ProtectedBuildArea protectedArea) {
+            protectedArea.initializeBlueprint(blueprint);
+            return;
+        }
         call(area, "setStructureNBT", net.minecraft.nbt.CompoundTag.class, blueprint);
         call(area, "setFreeArea", boolean.class, false);
         call(area, "setStartBuild", boolean.class, false);

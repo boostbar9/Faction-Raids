@@ -160,6 +160,9 @@ public final class RaidEvents {
     @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.LOWEST)
     public static void onCampWorkerTick(net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent event) {
         if (!(event.getEntity() instanceof Mob mob) || !(mob.level() instanceof ServerLevel level)) return;
+        if (!com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.beforeWorkerTick(mob)) {
+            event.setCanceled(true); return;
+        }
         com.devfarinsky.siegeoverhaul.core.PlayerFortificationJobs.tick(level, mob);
         String team = mob.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM);
         if (team.isBlank()) return;

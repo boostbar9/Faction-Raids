@@ -16,6 +16,8 @@ public final class WorkersConstructionView {
     private WorkersConstructionView() {}
 
     public static Progress progress(Object area, int originalCount) {
+        if (area instanceof com.devfarinsky.siegeoverhaul.nativecompat.ProtectedBuildArea protectedArea
+                && !protectedArea.nativeQueuesReady()) return new Progress(originalCount, -1);
         try {
             Object first = area.getClass().getField("stackToPlace").get(area);
             Object second = area.getClass().getField("stackToPlaceMultiBlock").get(area);
