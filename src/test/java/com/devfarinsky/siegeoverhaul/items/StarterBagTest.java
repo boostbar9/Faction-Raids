@@ -1,5 +1,7 @@
 package com.devfarinsky.siegeoverhaul.items;
 import com.devfarinsky.siegeoverhaul.MinecraftTestSupport;
+import com.devfarinsky.siegeoverhaul.core.TerritoryFortification;
+import com.devfarinsky.siegeoverhaul.core.CoreHiring;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.*;
@@ -19,6 +21,21 @@ class StarterBagTest extends MinecraftTestSupport {
     @Test void fundsCoverFirstFactionClaimAndFourTroops() {
         assertEquals(192,StarterBagItem.budget(10,64,10,6));
         for(int cost:new int[]{0,10,100,1453})assertTrue(StarterBagItem.budget(cost,cost,cost,cost)>=cost*6);
+    }
+    @Test void defaultOpeningCanFundBuilderTwoDefendersAndWholePerimeterFee() throws Exception {
+        // Pinned native defaults plus production hire uplift; server configs can differ.
+        var uplift = CoreHiring.class.getDeclaredMethod("applyUplift", int.class, int.class);
+        uplift.setAccessible(true);
+        int faction = 10, claim = 64;
+        int shield = (Integer) uplift.invoke(null, 10, 1);
+        int archer = (Integer) uplift.invoke(null, 6, 2);
+        int builder = (Integer) uplift.invoke(null, 20, 7);
+        assertEquals(15, shield); assertEquals(9, archer); assertEquals(25, builder);
+        int starterBudget = StarterBagItem.budget(faction, claim, shield, archer);
+        assertEquals(192, starterBudget);
+        assertEquals(64, TerritoryFortification.PRICE);
+        assertEquals(5, starterBudget - faction - claim - builder - shield - archer
+                - TerritoryFortification.PRICE);
     }
     @Test void overflowRemainsAndPartialStacksMergeWithoutLoss() {
         Inventory inv=new Inventory(mock(Player.class));

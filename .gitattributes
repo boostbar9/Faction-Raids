@@ -3,3 +3,6 @@
 # are changed when only line endings change.
 src/generated/**/.cache/cache text eol=lf
 src/generated/**/*.json text eol=lf
+
+# Preserve captured native defaults exactly, including Forge's terminal blank line.
+scripts/fixtures/smallships-2.0.0-b1.4/*.toml -text whitespace=-blank-at-eof

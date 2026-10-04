@@ -2,6 +2,7 @@ package com.devfarinsky.siegeoverhaul.core;
 
 import com.devfarinsky.siegeoverhaul.ModConstants;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
+import com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -37,6 +38,7 @@ public final class WallBuilderAccess extends Goal {
     private Entity reservedArea;
     private Set<Long> reservedColumns = Set.of();
     private BlockPos approachTarget;
+    private BlockPos lastSelfObstruction;
 
     WallBuilderAccess(Mob worker, Goal delegate) throws ReflectiveOperationException {
         this.worker = worker;
@@ -60,20 +62,56 @@ public final class WallBuilderAccess extends Goal {
         throw new NoSuchFieldException("workDone");
     }
 
-    public static void install(Mob worker) {
-        if (worker.goalSelector == null) return;
+    public static boolean install(Mob worker) {
+        if (worker.goalSelector == null) return false;
         var goals = new ArrayList<>(worker.goalSelector.getAvailableGoals());
-        if (goals.stream().anyMatch(g -> g.getGoal() instanceof WallBuilderAccess)) return;
+        if (goals.stream().anyMatch(g -> g.getGoal() instanceof WallBuilderAccess)) return true;
         for (var wrapped : goals) {
             if (!wrapped.getGoal().getClass().getName().equals("com.talhanation.workers.entities.ai.BuilderWorkGoal")) continue;
             try {
                 var replacement = new WallBuilderAccess(worker, wrapped.getGoal());
                 worker.goalSelector.removeGoal(wrapped.getGoal());
                 worker.goalSelector.addGoal(wrapped.getPriority(), replacement);
+                return true;
             } catch (ReflectiveOperationException ex) {
                 com.devfarinsky.siegeoverhaul.FactionLogger.LOG.debug("Wall access API unavailable: {}", ex.getMessage());
             }
-            return;
+            return false;
+        }
+        return false;
+    }
+
+    /** Reset only stale transient native goal state after the new area's assignment succeeds. */
+    public static boolean prepareProtectedHandoff(Mob worker, Entity expectedArea) {
+        if (worker.goalSelector == null || NativeConstructionGuard.currentArea(worker) != expectedArea) return false;
+        for (var goal : worker.goalSelector.getAvailableGoals())
+            if (goal.getGoal() instanceof WallBuilderAccess access) return access.resetTransientState();
+        return false;
+    }
+
+    private boolean resetTransientState() {
+        java.util.List<Field> fields = new ArrayList<>();
+        java.util.List<Object> previous = new ArrayList<>();
+        try {
+            for (String name : new String[]{"stackToBreak", "stackToPlace", "stackToFree"}) {
+                Field field = delegate.getClass().getField(name);
+                if (!field.getType().isAssignableFrom(java.util.Stack.class)) return false;
+                fields.add(field); previous.add(field.get(delegate));
+            }
+            Object selection = java.util.Arrays.stream(stateField.getType().getEnumConstants())
+                    .filter(value -> ((Enum<?>)value).name().equals("SELECT_WORK_AREA")).findFirst().orElseThrow();
+            fields.add(stateField); previous.add(stateField.get(delegate));
+            fields.add(blockField); previous.add(blockField.get(delegate));
+            fields.add(workDoneField); previous.add(workDoneField.get(delegate));
+            for (int i = 0; i < 3; i++) fields.get(i).set(delegate, new java.util.Stack<>());
+            stateField.set(delegate, selection); blockField.set(delegate, null); workDoneField.setBoolean(delegate, false);
+            reservedArea = null; reservedColumns = Set.of(); approachTarget = null; lastSelfObstruction = null;
+            pendingPath = null; pendingSites = Set.of(); destination = null; lastTarget = null;
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            for (int i = 0; i < fields.size(); i++) try { fields.get(i).set(delegate, previous.get(i)); }
+            catch (ReflectiveOperationException | RuntimeException ignored) { }
+            return false;
         }
     }
 
@@ -81,19 +119,28 @@ public final class WallBuilderAccess extends Goal {
     @Override public boolean canContinueToUse() { return delegate.canContinueToUse(); }
     @Override public boolean isInterruptable() { return delegate.isInterruptable(); }
     @Override public boolean requiresUpdateEveryTick() { return delegate.requiresUpdateEveryTick(); }
-    @Override public void start() { reservedArea = null; approachTarget = null; delegate.start(); }
-    @Override public void stop() { delegate.stop(); reservedArea = null; approachTarget = null; destination = null; lastTarget = null; pendingPath = null; pendingSites = Set.of(); }
+    @Override public void start() { reservedArea = null; approachTarget = null; lastSelfObstruction = null; delegate.start(); }
+    @Override public void stop() { delegate.stop(); reservedArea = null; approachTarget = null; lastSelfObstruction = null; destination = null; lastTarget = null; pendingPath = null; pendingSites = Set.of(); }
     @Override public void tick() {
         retainCommission();
         if (approachCommission()) return;
         if (recoverBuriedApproach()) return;
+        // Access helpers can advance MOVE_TO_WORK_AREA to PREPARE_BREAK_BLOCKS.
+        // Validate after those transitions, at the actual native dispatch boundary.
+        if (!NativeConstructionGuard.beforeNativeTick(worker, delegate)) {
+            recoverGuardedSelfObstruction();
+            return;
+        }
+        Entity guardedArea = NativeConstructionGuard.currentArea(worker);
+        var mutationCells = NativeConstructionGuard.mutationCells(delegate);
         delegate.tick();
+        NativeConstructionGuard.afterNativeTick(worker, guardedArea, mutationCells);
         if (!(worker.level() instanceof ServerLevel level) || worker.isPassenger()
                 || worker.isLeashed() || worker.getTarget() != null) return;
         try {
             Object current = areaField.get(worker);
             if (current != reservedArea) {
-                reservedArea = null; reservedColumns = Set.of();
+                reservedArea = null; reservedColumns = Set.of(); lastSelfObstruction = null;
                 pendingPath = null; pendingSites = Set.of(); destination = null; lastTarget = null;
             }
             if (!(current instanceof Entity area) || !isCommission(area)) return;
@@ -105,6 +152,31 @@ public final class WallBuilderAccess extends Goal {
             route(level, target, state instanceof Enum<?> e && e.name().equals("MOVE_TO_WORK_AREA") ? 20 : 40);
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             // Keep native behavior when a companion changes its public job state.
+        }
+    }
+
+    /** Keep collision protection, but let the existing pathfinder move this builder out of its own target. */
+    private void recoverGuardedSelfObstruction() {
+        if (!(worker.level() instanceof ServerLevel level) || worker.isPassenger()
+                || worker.isLeashed() || worker.getTarget() != null) return;
+        try {
+            if (!(areaField.get(worker) instanceof Entity area) || !isCommission(area)
+                    || !"Paused: move entities out of the planned blocks".equals(NativeConstructionGuard.status(area))) return;
+            var cells = NativeConstructionGuard.mutationCells(delegate);
+            if (cells.size() != 1) return;
+            BlockPos target = cells.iterator().next();
+            if (!worker.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(target)) || !reserveColumns(area)) return;
+            if (!target.equals(lastSelfObstruction)) {
+                lastSelfObstruction = target.immutable();
+                var diagnostic = worker.getPersistentData();
+                diagnostic.putInt("SiegeSelfClearanceRequests", (int)Math.min(Integer.MAX_VALUE,
+                        Math.max(0L, diagnostic.getInt("SiegeSelfClearanceRequests")) + 1));
+                diagnostic.putLong("SiegeSelfClearanceTarget", target.asLong());
+                diagnostic.putString("SiegeSelfClearanceBounds", worker.getBoundingBox().toString());
+            }
+            route(level, target, 40, true);
+        } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            // No unverified movement fallback, native queue changes, teleport or placement.
         }
     }
 
@@ -165,7 +237,7 @@ public final class WallBuilderAccess extends Goal {
 
     private boolean reserveColumns(Entity area) throws ReflectiveOperationException {
         if (reservedArea == area) return true;
-        reservedArea=null;reservedColumns=Set.of();approachTarget=null;
+        reservedArea=null;reservedColumns=Set.of();approachTarget=null;lastSelfObstruction=null;
         pendingPath=null;pendingSites=Set.of();destination=null;lastTarget=null;
         var columns=new java.util.HashSet<Long>();
         for (String name : new String[]{"stackToPlace", "stackToPlaceMultiBlock"}) {
@@ -222,10 +294,14 @@ public final class WallBuilderAccess extends Goal {
     }
 
     void route(ServerLevel level, BlockPos target, int nativeReachSquared) {
+        route(level, target, nativeReachSquared, false);
+    }
+
+    void route(ServerLevel level, BlockPos target, int nativeReachSquared, boolean selfRecovery) {
         double dx = worker.getX() - (target.getX() + 0.5), dz = worker.getZ() - (target.getZ() + 0.5);
         // Native reach is horizontal only. Being directly below the job is
         // not a safe work position, even when its distance check passes.
-        if (dx * dx + dz * dz < nativeReachSquared
+        if (!selfRecovery && dx * dx + dz * dz < nativeReachSquared
                 && !reservedColumns.contains(BlockPos.containing(worker.position()).atY(0).asLong())
                 && safeStandingSite(level, worker, BlockPos.containing(worker.position()))) return;
         if (!target.equals(lastTarget)) {
@@ -241,6 +317,7 @@ public final class WallBuilderAccess extends Goal {
             BlockPos feet = end == null ? null : new BlockPos(end.x,end.y,end.z);
             if (feet != null && feet.distSqr(target.atY(feet.getY())) < nativeReachSquared
                     && !reservedColumns.contains(feet.atY(0).asLong())
+                    && (!selfRecovery || recoveryMargin(feet, reservedColumns, worker.getBbWidth()))
                     && safeStandingSite(level,worker,feet)) return;
             // A reachable cave endpoint still sends the builder underground.
             // Stop that route before probing loaded surface standing space.
@@ -255,22 +332,21 @@ public final class WallBuilderAccess extends Goal {
             Set<BlockPos> sites = pendingSites;
             pendingPath = null;
             pendingSites = Set.of();
-            if (now <= pendingUntil && pathReady(ready) && ready.canReach()
-                    && sites.contains(ready.getTarget())
-                    && standingSites(level, worker, target).contains(ready.getTarget())
-                    && moveToSite(ready.getTarget())) destination = ready.getTarget();
+            BlockPos reached = now <= pendingUntil ? reachedSite(ready, sites) : null;
+            if (reached != null && routeSites(level, target, nativeReachSquared, selfRecovery).contains(reached)
+                    && moveToSite(reached)) destination = reached;
             return;
         }
         if (now < nextSearch && now >= nextSearch - 40) {
             if (target.equals(lastTarget) && destination != null
+                    && (!selfRecovery || recoveryMargin(destination, reservedColumns, worker.getBbWidth()))
                     && safeStandingSite(level,worker,destination)) moveToSite(destination);
             return;
         }
         nextSearch = now + 40;
         lastTarget = target.immutable();
         destination = null;
-        Set<BlockPos> candidates = standingSites(level, worker, target);
-        candidates.removeIf(p -> reservedColumns.contains(p.atY(0).asLong()));
+        Set<BlockPos> candidates = routeSites(level, target, nativeReachSquared, selfRecovery);
         if (candidates.isEmpty()) return;
         var path = nav.createPath(candidates, 0);
         if (path == null) return;
@@ -278,9 +354,29 @@ public final class WallBuilderAccess extends Goal {
             pendingPath = path;
             pendingSites = Set.copyOf(candidates);
             pendingUntil = now + 100;
-        } else if (path.canReach() && candidates.contains(path.getTarget()) && moveToSite(path.getTarget())) {
-            destination = path.getTarget();
+        } else {
+            BlockPos reached = reachedSite(path, candidates);
+            if (reached != null && moveToSite(reached)) destination = reached;
         }
+    }
+
+    private Set<BlockPos> routeSites(ServerLevel level, BlockPos target, int nativeReachSquared, boolean selfRecovery) {
+        Set<BlockPos> sites = standingSites(level, worker, target, selfRecovery ? 6 : 3,
+                selfRecovery ? nativeReachSquared : 16);
+        sites.removeIf(p -> reservedColumns.contains(p.atY(0).asLong())
+                || selfRecovery && !recoveryMargin(p, reservedColumns, worker.getBbWidth()));
+        return sites;
+    }
+
+    private static BlockPos reachedSite(Path path, Set<BlockPos> sites) {
+        if (!pathReady(path) || !path.canReach()) return null;
+        // Workers 2.0.3 labels a successful multi-target path with its FIRST target,
+        // even when it reached a different candidate. Only its actual end node
+        // proves which safe standing site native movement can reach.
+        var end = path.getEndNode();
+        if (end == null) return null;
+        BlockPos reached = new BlockPos(end.x, end.y, end.z);
+        return sites.contains(reached) ? reached : null;
     }
 
     private boolean moveToSite(BlockPos site) {
@@ -292,16 +388,30 @@ public final class WallBuilderAccess extends Goal {
 
     /** At most 49 columns, inside native horizontal reach; never dig or move the blueprint. */
     static Set<BlockPos> standingSites(ServerLevel level, Mob worker, BlockPos target) {
+        return standingSites(level, worker, target, 3, 16);
+    }
+
+    /** Recovery-only search: at most 169 loaded columns, still inside the native reach. */
+    private static Set<BlockPos> standingSites(ServerLevel level, Mob worker, BlockPos target, int radius, int reachSquared) {
         Set<BlockPos> sites = new LinkedHashSet<>();
-        for (int dx=-3; dx<=3; dx++) for (int dz=-3; dz<=3; dz++) {
+        for (int dx=-radius; dx<=radius; dx++) for (int dz=-radius; dz<=radius; dz++) {
             BlockPos column = target.offset(dx, 0, dz);
-            if (dx*dx+dz*dz >= 16 || !level.hasChunkAt(column)) continue;
+            if (dx*dx+dz*dz >= reachSquared || !level.hasChunkAt(column)) continue;
             int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.getX(), column.getZ());
             if (Math.abs(y-target.getY()) > 12 || y <= level.getMinBuildHeight() || y+2 >= level.getMaxBuildHeight()) continue;
             BlockPos feet = column.atY(y);
             if (safeStandingSite(level,worker,feet)) sites.add(feet);
         }
         return sites;
+    }
+
+    /** Arrival tolerance must not leave the worker body straddling a neighboring wall column. */
+    static boolean recoveryMargin(BlockPos feet, Set<Long> reservedColumns, float width) {
+        if (!Float.isFinite(width) || width < 0 || width > 4) return false;
+        int margin = Math.max(1, (int)Math.ceil(width / 2.0 + .5));
+        for (int x = -margin; x <= margin; x++) for (int z = -margin; z <= margin; z++)
+            if (reservedColumns.contains(feet.offset(x, 0, z).atY(0).asLong())) return false;
+        return true;
     }
 
     private static boolean safeStandingSite(ServerLevel level, Mob worker, BlockPos feet) {

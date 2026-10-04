@@ -68,20 +68,18 @@ public final class DefenseStructures {
                 && level.mayInteract(player, p));
         if (problem != null) return Preparation.failed(problem);
 
-        var search = TerritoryFortification.findNearbyBuilder(level, player, origin, true);
-        Mob builder = search.builder();
-        if (builder == null) return Preparation.failed(search.reason().replace("core", "placement"));
-        Entity storage = TerritoryFortification.findPlayerStorageArea(level, player, builder.blockPosition(), nativeClaim.chunks());
-        if (storage == null || !WorkersBridge.hasBuilderStorage(storage))
-            return Preparation.failed("Set up your own Workers storage area inside this claim, within 64 blocks of the builder, with Builders enabled.");
-        if (TerritoryFortification.withinStorageRange(plan.footprint(), storage.blockPosition()).size() != plan.footprint().size())
-            return Preparation.failed("Move your storage area within 64 blocks of the whole structure.");
+        String nativeProblem = com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.availabilityProblem();
+        if (nativeProblem != null && !nativeProblem.isBlank()) return Preparation.failed(nativeProblem);
+        var supplySites = plan.footprint().stream().flatMap(base -> java.util.stream.Stream.of(base, base.atY(plan.max().getY()))).toList();
+        var resources = ConstructionResources.find(level, player, origin, nativeClaim.chunks(), supplySites);
+        if (resources.problem() != null) return Preparation.failed(resources.problem());
+        Mob builder = resources.builder();
         if (!player.isCreative() && PaymentSource.available(player, kind.price) < kind.price)
             return Preparation.failed("You need " + kind.price + " emeralds in the faction Treasury.");
         return new Preparation(builder, plan, null);
     }
 
-    /** Checks empty access space too, so the passage and stepped approach cannot start obstructed. */
+    /** Checks empty access space too, so hollow wall cavities, passages and stepped approaches cannot start obstructed. */
     static String siteProblem(ServerLevel level, DefenseBlueprint.Plan plan, Predicate<BlockPos> permitted) {
         if (plan.min().getY() - 1 < level.getMinBuildHeight() || plan.max().getY() >= level.getMaxBuildHeight())
             return "The structure would exceed the world's build height.";
@@ -106,16 +104,17 @@ public final class DefenseStructures {
             if (!level.getEntities((Entity) null, new AABB(BlockPos.of(cell)), Entity::isAlive).isEmpty())
                 return "Move players, creatures and vehicles out of the planned blocks, then try again.";
         }
-        AABB bounds = new AABB(plan.min(), plan.max().offset(1, 1, 1));
-        // Another builder can reserve the same still-empty site before its first block is placed.
-        for (Entity area : level.getEntitiesOfClass(Entity.class, bounds.inflate(16), Entity::isAlive)) {
-            var tag = area.getPersistentData();
-            if (WorkersBridge.isBuildArea(area) && tag.contains(SITE_MIN) && tag.contains(SITE_MAX)
-                    && bounds.intersects(new AABB(BlockPos.of(tag.getLong(SITE_MIN)),
-                    BlockPos.of(tag.getLong(SITE_MAX)).offset(1, 1, 1))))
-                return "Another defense job already reserves this site. Finish or remove its build marker first.";
-        }
+        String reservation = ConstructionReservations.problem(level, reservedCells(plan));
+        if (reservation != null) return reservation;
         return null;
+    }
+
+    /** The same complete footprint, cavity and headroom contract is checked before and retained after handoff. */
+    static java.util.Set<BlockPos> reservedCells(DefenseBlueprint.Plan plan) {
+        var cells = new java.util.HashSet<BlockPos>();
+        for (BlockPos base : plan.footprint()) for (int y = base.getY(); y <= plan.max().getY(); y++)
+            cells.add(base.atY(y));
+        return java.util.Set.copyOf(cells);
     }
 
     static boolean startJob(ServerPlayer player, Mob builder, DefenseBlueprint.Plan plan, DefenseBlueprint.Kind kind) {
@@ -123,22 +122,25 @@ public final class DefenseStructures {
         boolean committed = false;
         try {
             BlockPos min = plan.min(), max = plan.max();
-            build = WorkersBridge.createPlayerArea(player.serverLevel(), "buildarea",
-                    new BlockPos(max.getX(), min.getY(), min.getZ()), player.getUUID(),
-                    player.getGameProfile().getName(), max.getX() - min.getX() + 1,
-                    max.getZ() - min.getZ() + 1, max.getY() - min.getY() + 1);
+            var blueprint = TerritoryFortification.blueprint(plan.blocks(), min, max);
+            build = WorkersBridge.createProtectedPlayerArea(player, builder,
+                    new BlockPos(max.getX(), min.getY(), min.getZ()), max.getX() - min.getX() + 1,
+                    max.getZ() - min.getZ() + 1, max.getY() - min.getY() + 1, blueprint);
             build.getPersistentData().putLong(SITE_MIN, min.asLong());
             build.getPersistentData().putLong(SITE_MAX, max.asLong());
             ConstructionReport.remember(build, kind.label, plan.blocks().size());
             PlayerFortificationJobs.link(builder, build, player.getUUID());
             if (!player.serverLevel().addFreshEntity(build)) throw new IllegalStateException("Build area rejected");
-            WorkersBridge.startBlueprint(build, TerritoryFortification.blueprint(plan.blocks(), min, max));
+            WorkersBridge.startBlueprint(build, blueprint);
+            if (!com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.protect(player, builder, build, reservedCells(plan)))
+                throw new IllegalStateException("The native job could not be safely protected");
             WorkersBridge.enableWallProjection(build, plan.blocks().size());
             WorkersBridge.enablePlayerJob(builder, player.getUUID());
             WallBuilderAccess.install(builder);
             if (!WorkersBridge.assignBuildAreaDirectly(builder, build)) throw new IllegalStateException("Builder refused the plan");
             if (!PaymentSource.consume(player, kind.price)) throw new IllegalStateException("Treasury payment rejected");
             committed = true;
+            com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.activate(build);
             player.sendSystemMessage(Component.literal(kind.label + " commissioned. Supply " + plan.materials()
                     + " through your Workers storage area. The builder waits when supplies run out and follows normal work hours."));
             player.sendSystemMessage(Component.literal("Build marker: " + build.blockPosition().toShortString()
@@ -151,7 +153,7 @@ public final class DefenseStructures {
             }
             if (build != null && WorkersBridge.releasePlayerJob(builder, build)) {
                 PlayerFortificationJobs.unlink(builder, build.getUUID());
-                build.discard();
+                WorkersBridge.discardPlayerArea(build);
             }
             FactionLogger.LOG.warn("[SiegeOverhaul] Defense commission failed", ex);
             return fail(player, "The builder could not start this defense. No payment was taken; your plan is kept.");

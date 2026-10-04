@@ -1,0 +1,131 @@
+name: Native Building Server QA
+
+# Explicit opt-in, independently scoped from the framebuffer/integrated-client suite.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-building-server-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-server:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       contains(github.event.pull_request.labels.*.name, 'native-building-server-qa'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out integrated source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+
+      - name: Initialize fresh isolated server evidence
+        run: |
+          set -euo pipefail
+          test ! -e build/native-server-qa/server
+          test ! -e build/native-server-qa/evidence
+          mkdir -p build/native-server-qa/evidence
+          python3 scripts/generate-native-server-template.py --check
+          git rev-parse HEAD > build/native-server-qa/evidence/source-commit.txt
+          java -version 2> build/native-server-qa/evidence/java-version.txt
+
+      - name: Run supported Forge GameTest server
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=60s 20m ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeServerQa=true runGameTestServer 2>&1 | tee build/native-server-qa/evidence/server-console.log
+
+      - name: Verify actual dedicated-side evidence
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('build/native-server-qa/evidence')
+          data = json.loads((root / 'result.json').read_text())
+          assert data['status'] == 'passed', data
+          assert data['testsExecuted'] == 1, data
+          assert data['physicalDistribution'] == 'DEDICATED_SERVER', data
+          assert data['logicalSide'] == 'SERVER', data
+          assert data['serverClass'] == 'net.minecraft.gametest.framework.GameTestServer', data
+          assert data['connectedPlayers'] == 0, data
+          assert data['fixtureActor'] == 'net.minecraftforge.common.util.FakePlayer; no authenticated network client', data
+          assert 'real multiplayer connection/authentication remains unverified' in data['limitation'], data
+          expected = [
+              'physical-dedicated-classloading',
+              'real-native-factories-and-queues',
+              'sealed-native-packets-and-move-overloads',
+              'native-nbt-roundtrip-and-defensive-copies',
+              'unloaded-blueprint-remains-unloaded',
+              'clearance-and-world-saveddata-disk-roundtrip',
+              'fakeplayer-direct-handler-authorization-and-cancel',
+              'offline-native-inventory-authority-and-loss-recovery',
+          ]
+          assert data['checks'] == expected, data
+          console = (root / 'server-console.log').read_text()
+          assert console.count('SIEGE_NATIVE_SERVER_QA_COMPLETED tests=1 checks=8') == 1, console[-5000:]
+          authority = data['inventoryAuthority']
+          assert authority['ownerConnected'] is False, authority
+          assert authority['profileCacheSource'] == 'Explicit isolated GameProfileCache dependency; GameTest server cache remains absent', authority
+          assert 'cached UUID identity' in authority['productionEntryWithoutProfileCache'], authority
+          assert authority['profileRepositoryLookups'] == 0, authority
+          assert authority['coreAnchorDiskRoundTrip'] == 'passed', authority
+          assert authority['scoreboardDiskRoundTrip'] == 'passed', authority
+          assert authority['nativeRosterMembersBeforeDisk'] == 1, authority
+          assert authority['nativeRosterMembersAfterDisk'] == 0, authority
+          for allowed in ['offline-native-owner-valid', 'native-manager-disk-reload-valid', 'membership-restored',
+                          'native-roster-name-restored', 'native-roster-uuid-restored', 'identity-conflicts-restored',
+                          'scoreboard-restored', 'worker-owner-restored', 'source-claim-restored',
+                          'original-core-restored', 'valid-context-restored']:
+              assert authority['outcomes'][allowed] == 'allowed', (allowed, authority)
+          for denied in ['removed-native-member', 'stale-native-roster-name', 'conflicting-native-roster-uuid',
+                         'stale-cached-profile-name', 'scoreboard-transferred', 'worker-owner-transferred',
+                         'foreign-source-claim', 'unloaded-source-denied', 'original-core-lost', 'original-anchor-lost']:
+              assert authority['outcomes'][denied].startswith('Paused:'), (denied, authority)
+          for mod in ['workers', 'recruits', 'smallships', 'siegeweapons']:
+              assert mod in data['loadedModVersions'], mod
+              assert len(data['loadedCompanionArtifacts'][mod]['sha256']) == 64, mod
+          for mod, version in {'minecraft': '1.20.1', 'forge': '47.4.16', 'workers': '2.0.3', 'recruits': '1.15.2'}.items():
+              assert data['loadedModVersions'][mod] == version, data
+          assert not Path('build/native-server-qa/server/eula.txt').exists(), 'Unexpected eula.txt'
+          assert not Path('build/classes/java/nativeQa').exists(), 'Client QA classes were unexpectedly built'
+          print('Required Forge GameTest passed on the physical dedicated distribution. Real multiplayer remains unverified.')
+          PY
+
+      - name: Collect logs without companion JARs or worlds
+        if: always()
+        run: |
+          mkdir -p build/native-server-qa/evidence/logs
+          if [ -d build/native-server-qa/server/logs ]; then
+            find build/native-server-qa/server/logs -maxdepth 1 -type f -name '*.log' -exec cp {} build/native-server-qa/evidence/logs/ \;
+          fi
+          if [ -d build/native-server-qa/server/crash-reports ]; then
+            cp -R build/native-server-qa/server/crash-reports build/native-server-qa/evidence/
+          fi
+
+      - name: Upload server contract evidence and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-building-server-qa-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/native-server-qa/evidence/
+          if-no-files-found: error
+          retention-days: 7

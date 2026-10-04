@@ -47,6 +47,8 @@ public final class ModItems {
     public static final RegistryObject<Item> GATEHOUSE_PLAN = ITEMS.register("gatehouse_plan",
             () -> new DefensePlanItem(com.devfarinsky.siegeoverhaul.core.DefenseBlueprint.Kind.GATEHOUSE));
 
+    public static final RegistryObject<Item> PERIMETER_PLAN = ITEMS.register("perimeter_plan", PerimeterPlanItem::new);
+
     public static final RegistryObject<Item> WALL_PLAN = ITEMS.register("wall_plan",
             () -> new DefensePlanItem(com.devfarinsky.siegeoverhaul.core.DefenseBlueprint.Kind.WALL));
     public static final RegistryObject<Item> CORNER_PLAN = ITEMS.register("corner_plan",

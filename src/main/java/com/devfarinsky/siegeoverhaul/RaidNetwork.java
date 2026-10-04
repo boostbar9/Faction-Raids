@@ -19,7 +19,7 @@ public final class RaidNetwork {
     // discovered units/factions, and War Journal rows to DashboardSync.
     // Bump whenever the wire format changes so mismatched builds refuse to connect
     // instead of silently corrupting the dashboard payload.
-    private static final String PROTOCOL = "17";
+    private static final String PROTOCOL = "19";
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(SiegeOverhaul.MOD_ID, "main"))
             .networkProtocolVersion(() -> PROTOCOL)
@@ -63,6 +63,13 @@ public final class RaidNetwork {
                     });
                     supplier.get().setPacketHandled(true);
                 }).add();
+        CHANNEL.messageBuilder(PerimeterProjectCancel.class, messageId++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(PerimeterProjectCancel::encode).decoder(PerimeterProjectCancel::decode)
+                .consumerMainThread((packet, supplier) -> {
+                    var context = supplier.get();
+                    packet.handle(context.getSender());
+                    context.setPacketHandled(true);
+                }).add();
         CHANNEL.messageBuilder(CorePurchase.class, messageId++, NetworkDirection.PLAY_TO_SERVER)
                 .encoder((packet, buffer) -> { buffer.writeVarInt(packet.menuId()); buffer.writeVarInt(packet.index()); buffer.writeLong(packet.rotation()); })
                 .decoder(buffer -> new CorePurchase(buffer.readVarInt(), buffer.readVarInt(), buffer.readLong()))
@@ -91,6 +98,15 @@ public final class RaidNetwork {
                 .decoder(DashboardAction::decode)
                 .consumerMainThread(DashboardAction::handle)
                 .add();
+        CHANNEL.messageBuilder(ProtectedConstructionAction.class, messageId++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(ProtectedConstructionAction::encode).decoder(ProtectedConstructionAction::decode)
+                .consumerMainThread((packet, supplier) -> {
+                    var context = supplier.get();
+                    var sender = context.getSender();
+                    if (sender != null) com.devfarinsky.siegeoverhaul.nativecompat.ProtectedConstructionActions.handle(
+                            sender, packet.areaId(), packet.action());
+                    context.setPacketHandled(true);
+                }).add();
     }
 
     public record CaptureBeam(ResourceLocation dimension,net.minecraft.core.BlockPos pos,int percent,long time) {
@@ -131,25 +147,93 @@ public final class RaidNetwork {
     }
 
     public record ConstructionDetails(int menuId, java.util.List<com.devfarinsky.siegeoverhaul.core.ConstructionReport.Job> jobs) {
-        public ConstructionDetails { jobs = java.util.List.copyOf(jobs.stream().limit(12).toList()); }
+        public static final int LIMIT = 12, TEXT_LIMIT = 256;
+        public ConstructionDetails {
+            if (menuId < 1 || menuId > 100) throw new IllegalArgumentException("Invalid construction menu");
+            jobs = java.util.List.copyOf(jobs.stream().limit(LIMIT).toList());
+        }
         public void encode(FriendlyByteBuf buffer) {
             buffer.writeVarInt(menuId); buffer.writeVarInt(jobs.size());
             for (var job : jobs) {
-                buffer.writeUtf(job.label(), 256); buffer.writeVarInt(job.percent());
-                buffer.writeUtf(job.progressText(), 256); buffer.writeUtf(job.location(), 256);
-                buffer.writeUtf(job.activity(), 256); buffer.writeUtf(job.supplies(), 256);
+                buffer.writeUtf(job.label(), TEXT_LIMIT); buffer.writeVarInt(job.percent());
+                buffer.writeUtf(job.progressText(), TEXT_LIMIT); buffer.writeUtf(job.location(), TEXT_LIMIT);
+                buffer.writeUtf(job.activity(), TEXT_LIMIT); buffer.writeUtf(job.supplies(), TEXT_LIMIT);
+                buffer.writeBoolean(job.projectId() != null);
+                if (job.projectId() != null) { buffer.writeUUID(job.projectId()); buffer.writeLong(job.generation()); }
+                buffer.writeUtf(job.sectionText(), TEXT_LIMIT);
+                buffer.writeByte((job.cancelable() ? 1 : 0) | (job.complete() ? 2 : 0));
             }
         }
         public static ConstructionDetails decode(FriendlyByteBuf buffer) {
             int id = buffer.readVarInt(), count = buffer.readVarInt();
-            if (count < 0 || count > 12) throw new IllegalArgumentException("Invalid construction list size");
-            var jobs = new java.util.ArrayList<com.devfarinsky.siegeoverhaul.core.ConstructionReport.Job>();
-            for (int i = 0; i < count; i++) jobs.add(new com.devfarinsky.siegeoverhaul.core.ConstructionReport.Job(
-                    buffer.readUtf(256), buffer.readVarInt(), buffer.readUtf(256), buffer.readUtf(256),
-                    buffer.readUtf(256), buffer.readUtf(256)));
+            if (id < 1 || id > 100 || count < 0 || count > LIMIT)
+                throw new IllegalArgumentException("Invalid construction menu or list size");
+            var jobs = new java.util.ArrayList<com.devfarinsky.siegeoverhaul.core.ConstructionReport.Job>(count);
+            for (int i = 0; i < count; i++) {
+                String label = buffer.readUtf(TEXT_LIMIT); int percent = buffer.readVarInt();
+                if (percent < -1 || percent > 100) throw new IllegalArgumentException("Invalid construction progress");
+                String progress = buffer.readUtf(TEXT_LIMIT), location = buffer.readUtf(TEXT_LIMIT);
+                String activity = buffer.readUtf(TEXT_LIMIT), supplies = buffer.readUtf(TEXT_LIMIT);
+                int projectPresent = buffer.readUnsignedByte();
+                if (projectPresent > 1) throw new IllegalArgumentException("Invalid construction identity flag");
+                java.util.UUID projectId = projectPresent == 1 ? buffer.readUUID() : null;
+                long generation = projectPresent == 1 ? buffer.readLong() : 0;
+                String sectionText = buffer.readUtf(TEXT_LIMIT); int flags = buffer.readUnsignedByte();
+                if (flags > 2 || projectId == null && (!sectionText.isEmpty() || flags != 0)
+                        || projectId != null && (projectId.equals(new java.util.UUID(0, 0)) || generation <= 0))
+                    throw new IllegalArgumentException("Invalid construction project metadata");
+                jobs.add(new com.devfarinsky.siegeoverhaul.core.ConstructionReport.Job(label, percent, progress,
+                        location, activity, supplies, projectId, generation, sectionText, (flags & 1) != 0, (flags & 2) != 0));
+            }
+            if (buffer.isReadable()) throw new IllegalArgumentException("Unexpected construction report data");
             return new ConstructionDetails(id, jobs);
         }
     }
+
+    /** Only the current owner at their open, valid Siege Core menu can cancel a whole commission. */
+    public record PerimeterProjectCancel(int menuId, java.util.UUID projectId, long generation) {
+        public PerimeterProjectCancel {
+            // ServerPlayer assigns ordinary container IDs in the range 1..100; zero is the player inventory.
+            if (menuId < 1 || menuId > 100 || projectId == null || projectId.equals(new java.util.UUID(0, 0)) || generation <= 0)
+                throw new IllegalArgumentException("Invalid perimeter cancellation identity");
+        }
+        public void encode(FriendlyByteBuf buffer) {
+            buffer.writeVarInt(menuId); buffer.writeUUID(projectId); buffer.writeLong(generation);
+        }
+        public static PerimeterProjectCancel decode(FriendlyByteBuf buffer) {
+            var packet = new PerimeterProjectCancel(buffer.readVarInt(), buffer.readUUID(), buffer.readLong());
+            if (buffer.isReadable()) throw new IllegalArgumentException("Unexpected perimeter cancellation data");
+            return packet;
+        }
+        public boolean handle(ServerPlayer sender) {
+            try {
+                if (sender == null || !sender.isAlive() || sender.isSpectator()
+                        || !(sender.containerMenu instanceof com.devfarinsky.siegeoverhaul.core.CoreHireMenu menu)
+                        || menu.containerId != menuId || !menu.stillValid(sender)) return false;
+                String key = com.devfarinsky.siegeoverhaul.core.SiegeCore.key(sender);
+                if (key == null || !key.startsWith("team:") || key.length() <= 5 || key.length() > 256) return false;
+                var core = RaidSavedData.get(sender.server).siegeCores.get(key);
+                if (core == null || !core.contains("Position", net.minecraft.nbt.Tag.TAG_LONG)
+                        || core.getBoolean("Occupied") || core.getBoolean("CoreRemoved")) return false;
+                var pos = net.minecraft.core.BlockPos.of(core.getLong("Position"));
+                if (!com.devfarinsky.siegeoverhaul.core.SiegeCore.canUse(sender, pos)) return false;
+                var project = com.devfarinsky.siegeoverhaul.core.PerimeterProjectStore.get(core, projectId);
+                if (project == null || project.header().generation() != generation
+                        || !project.header().coreKey().equals(key)
+                        || !project.header().owner().equals(sender.getUUID())
+                        || project.state() == com.devfarinsky.siegeoverhaul.core.PerimeterProject.State.COMPLETE
+                        || project.state() == com.devfarinsky.siegeoverhaul.core.PerimeterProject.State.CANCELED) return false;
+                return com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.cancel(sender, projectId, generation);
+            } catch (RuntimeException | LinkageError invalidAuthority) {
+                // Missing or malformed authority is not permission to reconstruct or cancel another project.
+                return false;
+            }
+        }
+    }
+    public static void cancelPerimeterProject(int menuId, java.util.UUID projectId, long generation) {
+        CHANNEL.sendToServer(new PerimeterProjectCancel(menuId, projectId, generation));
+    }
+
     public static void constructionDetails(ServerPlayer player, int menuId,
             java.util.List<com.devfarinsky.siegeoverhaul.core.ConstructionReport.Job> jobs) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new ConstructionDetails(menuId, jobs));
@@ -406,6 +490,20 @@ public final class RaidNetwork {
             });
             context.setPacketHandled(true);
         }
+    }
+
+    /** Authenticated native-marker controls: 0 hide, 1 show, 2 cancel. No blueprint or owner data is accepted. */
+    public record ProtectedConstructionAction(java.util.UUID areaId, int action) {
+        public ProtectedConstructionAction {
+            if (areaId == null || action < 0 || action > 2) throw new IllegalArgumentException("Invalid construction action");
+        }
+        public void encode(FriendlyByteBuf buffer) { buffer.writeUUID(areaId); buffer.writeByte(action); }
+        public static ProtectedConstructionAction decode(FriendlyByteBuf buffer) {
+            return new ProtectedConstructionAction(buffer.readUUID(), buffer.readUnsignedByte());
+        }
+    }
+    public static void protectedConstructionAction(java.util.UUID areaId, int action) {
+        CHANNEL.sendToServer(new ProtectedConstructionAction(areaId, action));
     }
 
     public record CorePurchase(int menuId, int index, long rotation) {}

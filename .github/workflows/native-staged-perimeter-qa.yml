@@ -1,0 +1,141 @@
+name: Native Staged 5x5 Perimeter QA
+
+# Opt-in full5x5 acceptance. Actual production stage layout and applicable world restarts; no speed/refill changes.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-staged-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-staged-client:
+    # Long full-completion coverage is opt-in when a specific risk warrants it.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 205
+    env:
+      LIBGL_ALWAYS_SOFTWARE: 'true'
+      GALLIUM_DRIVER: llvmpipe
+    steps:
+      - name: Check out exact integrated source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+      - name: Install standard virtual display and software OpenGL
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y xvfb xauth mesa-utils libgl1-mesa-dri libglx-mesa0 libopenal1
+      - name: Prepare new isolated perimeter directory
+        run: |
+          set -euo pipefail
+          test ! -e build/native-staged-qa/client
+          test ! -e build/native-staged-qa/evidence
+          python3 -B -m unittest discover -s scripts/tests -p 'test_prepare_native_client_defaults.py'
+          python3 scripts/prepare-native-client-defaults.py --mode staged-perimeter --smallships-version 2.0.0-b1.4
+          mkdir -p build/native-staged-qa/evidence
+          cp build/native-staged-qa/client/.native-smallships-defaults.json build/native-staged-qa/evidence/smallships-default-config-provenance.json
+          printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:6\nsimulationDistance:6\nmaxFps:30\nvsync:false\n' > build/native-staged-qa/client/options.txt
+          git rev-parse HEAD > build/native-staged-qa/evidence/source-commit.txt
+          java -version 2> build/native-staged-qa/evidence/java-version.txt
+      - name: Run full native staged 5x5 perimeter and applicable world restarts
+        run: |
+          set -euo pipefail
+          xvfb-run -a -s '-screen 0 1280x720x24' bash -c '
+            set -euo pipefail
+            glxinfo -B | tee build/native-staged-qa/evidence/opengl.txt
+            timeout --signal=TERM --kill-after=60s 198m ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=staged-perimeter runClient 2>&1 | tee build/native-staged-qa/evidence/client-console.log
+          '
+      - name: Audit exact loaded native API bytecode
+        if: always()
+        run: python3 scripts/audit-native-inventory-bytecode.py build/native-staged-qa/evidence
+      - name: Verify complete staged authority and exact world evidence
+        run: |
+          python3 - <<'PYQA'
+          import json
+          from pathlib import Path
+          root = Path('build/native-staged-qa/evidence')
+          data = json.loads((root / 'result.json').read_text())
+          audit = json.loads((root / 'native-bytecode-audit.json').read_text())
+          assert audit['status'] == 'passed' and audit['noVendorJarsUploaded'], audit
+          assert sum(len(v['classes']) for v in audit['artifacts'].values()) == 18, audit
+          assert data['mode'] == 'staged-perimeter' and data['status'] == 'passed', data
+          assert data['completedBlocks'] == 3900 and data['treasuryDebit'] == 64, data
+          assert data['materialCounts'] == {'minecraft:cobblestone': 2400, 'minecraft:oak_planks': 1500}, data
+          assert data['nativeCompletionObserved'] and data['completedCaptureTerrainCompiled'], data
+          assert data['completionAuthority'] in ['COMPLETE full durable project', 'COMPLETE compact terminal receipt'], data
+          assert data['completionAuthorityNbt'] and len(data['manifestHash']) == 64, data
+          assert 0 < data['constructionSeconds'] <= data['constructionLimitSeconds'] == 10800, data
+          assert data['totalLimitSeconds'] == 11700 and data['territoryChunkCount'] == 25, data
+          assert data['midStageRestartVerified'], data
+          assert data['betweenStageRestartApplicable'] == (data['reviewedStageCount'] > 1), data
+          assert data['betweenStageRestartVerified'] == data['betweenStageRestartApplicable'], data
+          restarts = data['restarts']
+          expected_restarts = ['mid-stage', 'between-stages'] if data['betweenStageRestartApplicable'] else ['mid-stage']
+          assert [r['kind'] for r in restarts] == expected_restarts, restarts
+          assert restarts[0]['projectState'] == 'RUNNING', restarts
+          if data['betweenStageRestartApplicable']:
+              assert restarts[1]['projectState'] == 'WAITING_FOR_NEXT_STAGE', restarts
+          for restart in restarts:
+              assert 0 < restart['placed'] < 3900 and restart['placed'] + restart['pending'] == 3900, restart
+          stages = data['stageLayout']
+          assert len(stages) == data['reviewedStageCount'] >= 1, stages
+          assert sum(s['targets'] for s in stages) == 3900, stages
+          assert [s['index'] for s in stages] == list(range(len(stages))), stages
+          assert len(set(s['area'] for s in stages)) == len(stages), stages
+          joins = data['nativeStageJoins']
+          assert set(j['area'] for j in joins) == set(s['area'] for s in stages), joins
+          assert all(j['marker'] == data['originalMarker'] for j in joins), joins
+          assert sum(not j['loadedFromDisk'] for j in joins) == len(stages), joins
+          assert any(j['loadedFromDisk'] for j in joins), joins
+          expected = ['01-live-core-five-by-five-review.png', '02-free-five-by-five-perimeter-review.png', '03-native-completed-staged-perimeter.png']
+          assert data['screenshots'] == expected, data
+          for name in expected:
+              content = (root / name).read_bytes()
+              assert content.startswith(b'\x89PNG\r\n\x1a\n') and len(content) > 4096, name
+          versions = data['loadedModVersions']
+          assert versions['workers'] == '2.0.3' and versions['recruits'] == '1.15.2', versions
+          assert versions['minecraft'] == '1.20.1' and versions['forge'] == '47.4.16', versions
+          for mod in ['workers', 'recruits', 'smallships', 'siegeweapons']:
+              assert len(data['loadedCompanionArtifacts'][mod]['sha256']) == 64, mod
+          final, bank = data['finalDiagnostics'], data['treasuryAccounting']
+          assert bank['startingFunds'] == 2000 and bank['commissionDebit'] == 64 and bank['initialPaidBalance'] == 1936, bank
+          assert bank['singleNegativeLedgerDelta'] == -64, bank
+          assert bank['expectedFinalBalance'] == 1936 + bank['interestCredits'] + bank['taxCredits'], bank
+          assert final['placed'] == 3900 and final['treasury'] == bank['expectedFinalBalance'], final
+          assert len(data['treasuryObserverContracts']) == 10, data
+          assert final['placedCobble'] == 2400 and final['placedOak'] == 1500, final
+          for key in ['chestCobble', 'chestOak', 'builderCobble', 'builderOak', 'looseCobble', 'looseOak']:
+              assert final[key] == 0, (key, final)
+          print('Complete native5x5 staged perimeter and applicable real restarts passed. Review raw framebuffers and authority/stock evidence.')
+          PYQA
+      - name: Collect diagnostics without companion JARs or worlds
+        if: always()
+        run: |
+          mkdir -p build/native-staged-qa/evidence/logs
+          if [ -d build/native-staged-qa/client/logs ]; then
+            find build/native-staged-qa/client/logs -maxdepth 1 -type f -name '*.log' -exec cp {} build/native-staged-qa/evidence/logs/ \;
+          fi
+          if [ -d build/native-staged-qa/client/crash-reports ]; then
+            cp -R build/native-staged-qa/client/crash-reports build/native-staged-qa/evidence/
+          fi
+      - name: Upload actual framebuffer and diagnostic evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-staged-qa-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/native-staged-qa/evidence/
+          if-no-files-found: error
+          retention-days: 7

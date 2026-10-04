@@ -14,26 +14,21 @@ Enemy factions claim a foothold near your territory, build a fortified war camp,
 
 Create or join a [Villager Recruits](https://www.curseforge.com/minecraft/mc-mods/recruits) faction, claim land, and place a **Siege Core inside your faction's Overworld claim**. One active core per faction becomes the siege objective and your recruitment hub.
 
-The core opens a responsive five-tab command center:
+The core opens a responsive command center with Army, Loot, Treasury, Territory, Building, Civilians and Intel sections:
 
 - **Army:** two recruit offers, one worker offer, and a featured hero, rotating every **15 minutes of server runtime**. Each offer can be purchased once per rotation across your faction. Catapult and ballista crews are delivered as deployment kits; their hover text and item tooltip show the selected engine's actual clear, solid, flat pad size and headroom requirement.
 - **Loot:** spend emeralds on hidden equipment and supply rewards, or activate short personal blessings.
-- **Bank:** manage the shared faction treasury and review the member roster and recent activity.
+- **Treasury:** manage shared funds, members and recent activity.
 - **Territory:** purchase permanent faction-wide upgrades.
+- **Building:** review a complete automatic perimeter, choose among six placeable plans, and track nearby construction.
+- **Civilians:** welcome residents, trade and grow faction Treasury income.
 - **Intel:** browse unit reference cards, enemy lore, and field guidance.
 
 The menu sizes itself from the player's Minecraft-scaled viewport, selects detailed or compact cards from the space actually available, and uniformly scales down for unusually small windows so controls and mouse hitboxes stay aligned. It also includes selected-tab highlighting, an emerald balance, offer refresh progress, affordability cues, and a **Leave Feedback** button that opens the mod's CurseForge comments page through Minecraft's normal link confirmation.
 
 ## Heroes With a Purpose
 
-| Hero | Signature skill |
-| --- | --- |
-| **Kael Bloodthorn** | Every third melee hit against siege enemies heals him. At full health, it grants a short shield instead. |
-| **Branna Dawnwarden** | Grants an emergency shield to one nearby wounded ally belonging to her owner. |
-| **Sylva Stormbow** | Every fourth arrow hit can chain magical damage to two additional nearby siege enemies. |
-| **Orin Frostbinder** | Bolts briefly slow up to three nearby siege enemies. |
-
-Hero magic uses bounded effects and cooldowns while retaining the recruits' normal combat and movement. Existing hired heroes gain their new role abilities without receiving replacement equipment.
+Twenty heroes are divided among the five Olympian hosts, with patron-themed names, equipment and distinct abilities. The Army panel shows the rotating hero offer, while Intel contains current unit descriptions. They use Recruits-based units with bounded hero abilities; player-chosen names and existing equipment are preserved.
 
 ## Emerald Loot Boxes
 
@@ -77,6 +72,18 @@ Open each bag when ready. If your inventory fills, undelivered contents remain i
 5. Hire troops, assign your workers their normal work areas, and prepare your defenses.
 
 Use the **Warlord's Codex** for concise siege guidance, status, and access to the native faction and claim interfaces.
+
+## Building System Candidate
+
+The unreleased 4.52.0 candidate brings perimeter review, six existing placeable plans and nearby construction into **Building**, with cleaner dark panels and source-based plan thumbnails. New automatic perimeters follow the full claimed boundary in the existing five-wide wall style, with an oak walkway, parapets and a hollow enclosed body. Shared internal claim edges stay open. Review is free; commissioning costs **one flat 64 faction Treasury emeralds for the whole territory**, plus separately supplied blocks. Manual Wall Section and Wall Corner plans also gain hollow bodies with retained end caps; their prices and other variants are unchanged.
+
+Already-paid jobs keep their saved geometry, supplies and payment. Old unpaid previews of changed geometry require fresh review. Cavities are protected clearance, never excavation targets. Builders only clear unchanged supported single-cell plants; player builds, containers, fluids and solid obstructions remain protected. Canceling leaves placed blocks intact and does not refund supplies or the commission.
+
+Protected construction and post-load inventory verification for previously protected builders require the audited **Workers 2.0.3 + Recruits 1.15.2** runtime. Other companion versions pause those jobs and reload checks; ordinary unmarked legacy native workers retain their existing behavior. Install the same Siege Overhaul build on server and every client; this candidate uses network protocol 19. Optional integrations remain optional, and these checks do not establish compatibility with every optional-mod combination or modpack.
+
+Whole-territory projects use bounded native sections, one payment and durable progress. A complete plan must pass the initial loaded-terrain, permission, storage and size checks. Later unavailable sections pause; they are never silently omitted. Suitable paths and supplied native builder storage are still required.
+
+Real-client camp checks passed ordinary terrain and a controlled shallow-water/forest fallback with protected content unchanged. Some terrain cannot safely support a camp; bounded search reports the reason rather than promising universal placement. This verifies establishment, not complete decorative construction or every modpack. Representative real section handoff, canceled-project reload and completed-manual-wall reload checks passed. Publication is still pending.
 
 ## Victory and Restoration
 
@@ -140,12 +147,12 @@ With **Epic Knights: Shields, Armor and Weapons** (`magistuarmory`) installed, n
 
 With **ewewukek's Musket Mod** (`musketmod`) installed and its native Recruits combat API available, one-third of new ordinary crossbowman hires receive a named musket and 32 cartridges. They use Recruits' existing musket aiming, reload and ammunition rules. If the expected API or items are absent, the hire keeps its crossbow and arrows. Named ranged heroes retain their specialized weapons.
 
-Both integrations are optional on Minecraft 1.20.1 Forge. Automated tests and upstream API inspection do not replace a combined-mod in-game playtest; this remains a beta release.
+Both integrations are optional on Minecraft 1.20.1 Forge. Automated tests and upstream API inspection do not establish every combined-mod or modpack configuration.
 
 
-## Arcane command center (4.11.0)
+## Historical command center (4.11.0)
 
-The Siege Core has a glowing crystal model and three compact service tabs:
+This historical entry describes the earlier three-tab layout. The current sections and costs are described above. The Siege Core introduced a glowing crystal model and these service tabs:
 
 - **Army & Heroes:** ordinary hires, workers, and the rotating hero offer together.
 - **Loot & Buffs:** mystery boxes remain 16/48/96 emeralds. Personal five-minute blessings offer Speed I (16), Strength I (24), or Resistance I (32), without replacing an existing effect.
@@ -155,7 +162,7 @@ The bank earns **1% interest per real 24-hour day** by default, configurable fro
 
 Core sieges continue through progressively stronger five-wave chapters. Reinforcements are staged under existing active-entity and performance caps. Every fifth cleared wave offers a 60-second clickable retreat vote to the faction's eligible online members. Each member gets one ballot; a strict majority accepts retreat. A tie or no majority continues the siege. Capturing the enemy core on its War Gate pad also ends the invasion: outnumber the defenders in the capture radius for the configured recapture duration. Camp restoration still runs afterward.
 
-Bank withdrawals, buffs, and voting are validated on the server. Matching server/client versions are required. This beta is validated by automated checks, not an interactive Minecraft playtest.
+Bank withdrawals, buffs, and voting are validated on the server. Matching server/client versions are required. The original 4.11.0 entry had automated-only validation. Current release coverage and its limits are recorded in the candidate notes and native QA reports.
 
 
 ### Long-campaign reliability (4.11.2)

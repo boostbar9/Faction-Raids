@@ -11,9 +11,9 @@ import java.util.function.BooleanSupplier;
 /**
  * Custom-painted command-center buttons.
  *
- * <p>Two visual variants share the same widget: a full-width tab that reads as
- * a metal tab-stop over parchment, and an action button that reads as a forged
- * key. Buttons retain vanilla focus, narration and keyboard activation so
+ * <p>Quiet navigation tabs and square action controls share one widget.
+ * A teal underline marks selection, while a full outline marks keyboard focus.
+ * Buttons retain vanilla focus, narration and keyboard activation so
  * accessibility keeps working.
  *
  * <p>Buttons may show a real Minecraft item sprite when that conveys useful
@@ -25,6 +25,8 @@ public final class CoreButton extends Button {
     private final boolean tab;
     private final ItemStack itemIcon;
     private String detail;
+    private boolean primary;
+    public CoreButton primary() { primary = true; return this; }
 
     public void setDetail(String value) { detail = value; }
 
@@ -66,44 +68,42 @@ public final class CoreButton extends Button {
         g.fill(x, y + 3, x + w, y + h - 3, color);
     }
 
+    /** Keyboard focus is distinguishable from both hover and selection. */
+    static int borderColor(boolean active, boolean focused, boolean hovered, boolean selected, boolean primary) {
+        if (!active) return CommandPalette.CARD_BORDER_DIM;
+        if (focused) return CommandPalette.ACCENT_TEAL;
+        return hovered || selected || primary ? CommandPalette.CARD_BORDER_HOVER : CommandPalette.CARD_BORDER;
+    }
+
     @Override
     public void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partial) {
         boolean chosen = selected.getAsBoolean();
         boolean hover = isHoveredOrFocused();
 
-        // Flat navy controls with a restrained gold selection line feel more
-        // like a command console while remaining consistent with the setting.
-        int border = !active ? CommandPalette.CARD_BORDER_DIM
-                : chosen ? CommandPalette.BEVEL_LIGHT
-                : hover ? CommandPalette.CARD_BORDER_HOVER
-                : CommandPalette.CARD_BORDER;
-        int fillTop = !active ? CommandPalette.CARD_TOP_DIM
-                : chosen ? 0xff2a3448
-                : hover ? CommandPalette.CARD_HOVER_TOP
-                : tab ? 0xff182237 : CommandPalette.CARD_TOP;
-        int fillBottom = !active ? CommandPalette.CARD_BOTTOM_DIM
-                : chosen ? 0xff151d2d
-                : hover ? CommandPalette.CARD_HOVER_BOTTOM
-                : tab ? 0xff0e1523 : CommandPalette.CARD_BOTTOM;
-
+        // Square, low-noise controls retain vanilla focus/narration and unchanged hit boxes.
+        int border = borderColor(active, isFocused(), hover, chosen, primary);
+        int fill = !active ? CommandPalette.CARD_TOP_DIM
+                : primary ? CommandPalette.CONTROL_PRIMARY : chosen ? CommandPalette.CONTROL_SELECTED
+                : hover ? CommandPalette.CARD_HOVER_TOP : CommandPalette.CARD_TOP;
         int x = getX(), y = getY(), w = width, h = height;
-
-        g.fill(x, y + 1, x + w, y + h - 1, border);
-        g.fill(x + 1, y, x + w - 1, y + h, border);
-        g.fillGradient(x + 1, y + 1, x + w - 1, y + h - 1, fillTop, fillBottom);
-        if (chosen) {
-            // Active tabs use a modern bottom rail; confirmation actions keep
-            // the same language without introducing another pictogram.
-            int indicatorY = tab ? y + h - 2 : y + 1;
-            g.fill(x + 3, indicatorY, x + w - 3, indicatorY + 1,
-                    CommandPalette.ACCENT_GOLD);
-        } else if (hover && active) {
-            g.fill(x + 4, y + 1, x + w - 4, y + 2, CommandPalette.PANEL_INSET);
+        if (tab) {
+            // Inactive navigation stays quiet; selection and keyboard focus remain explicit.
+            g.fill(x, y, x + w, y + h, chosen || hover ? fill : CommandPalette.PANEL_TOP);
+        } else {
+            g.fill(x, y, x + w, y + h, border);
+            g.fill(x + 1, y + 1, x + w - 1, y + h - 1, fill);
+        }
+        if (chosen && active) g.fill(x + 1, y + h - 2, x + w - 1, y + h, CommandPalette.ACCENT_TEAL);
+        if (isFocused() && active) {
+            g.fill(x, y, x + w, y + 1, CommandPalette.ACCENT_TEAL);
+            g.fill(x, y, x + 1, y + h, CommandPalette.ACCENT_TEAL);
+            g.fill(x + w - 1, y, x + w, y + h, CommandPalette.ACCENT_TEAL);
+            g.fill(x, y + h - 1, x + w, y + h, CommandPalette.ACCENT_TEAL);
         }
 
         var font = Minecraft.getInstance().font;
         int textColor = !active ? CommandPalette.TEXT_DIM
-                : chosen ? CommandPalette.TEXT
+                : chosen || primary ? CommandPalette.TEXT
                 : hover ? 0xfff7f1df
                 : CommandPalette.TEXT_MUTED;
 

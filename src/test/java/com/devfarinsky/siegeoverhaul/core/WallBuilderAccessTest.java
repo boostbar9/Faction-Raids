@@ -10,6 +10,9 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.level.pathfinder.Node;
+import net.minecraft.world.level.pathfinder.NodeEvaluator;
+import net.minecraft.world.level.pathfinder.Target;
 import net.minecraft.world.phys.*;
 import org.junit.jupiter.api.Test;
 import java.util.EnumSet;
@@ -23,7 +26,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         when(cave.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(0,60,0));
         when(nav.getPath()).thenReturn(cave);
         var surface=mock(Path.class);when(surface.canReach()).thenReturn(true);
-        when(surface.getTarget()).thenReturn(new BlockPos(1,64,0));
+        when(surface.getTarget()).thenReturn(new BlockPos(1,64,0));when(surface.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(1,64,0));
         when(nav.createPath(anySet(),eq(0))).thenReturn(surface);
         goal.route(level,new BlockPos(0,60,0),20);
         verify(nav).stop();verify(nav).moveTo(1,64,0,0.8);
@@ -43,7 +46,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         when(worker.position()).thenReturn(new Vec3(0.5,60,0.5));
         when(worker.getBoundingBox()).thenReturn(new AABB(0.2,60,0.2,0.8,61.8,0.8));
         var path=mock(Path.class);when(path.canReach()).thenReturn(true);
-        when(path.getTarget()).thenReturn(new BlockPos(1,64,0));
+        when(path.getTarget()).thenReturn(new BlockPos(1,64,0));when(path.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(1,64,0));
         when(nav.createPath(anySet(),eq(0))).thenReturn(path);
         goal.route(level,new BlockPos(0,60,0),20);
         verify(nav).moveTo(1,64,0,0.8);
@@ -52,7 +55,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
     @Test void cachedStandingSpaceIsNotReusedAfterItsFloorBecomesHazardous() throws Exception {
         terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
         var path=mock(Path.class);when(path.canReach()).thenReturn(true);
-        when(path.getTarget()).thenReturn(new BlockPos(1,64,0));
+        when(path.getTarget()).thenReturn(new BlockPos(1,64,0));when(path.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(1,64,0));
         when(nav.createPath(anySet(),eq(0))).thenReturn(path);
         when(nav.moveTo(1,64,0,0.8)).thenReturn(true);
         goal.route(level,new BlockPos(0,60,0),20);
@@ -60,6 +63,69 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         doReturn(Blocks.MAGMA_BLOCK.defaultBlockState()).when(level).getBlockState(new BlockPos(1,63,0));
         when(level.getGameTime()).thenReturn(10L);
         goal.route(level,new BlockPos(0,60,0),20);
+        verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+    }
+    @Test void selfRecoveryDoesNotMistakeAnUnreservedFootCellForClearBodySpace() throws Exception {
+        terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
+        when(worker.getX()).thenReturn(-.04);when(worker.getZ()).thenReturn(-.02);
+        when(worker.position()).thenReturn(new Vec3(-.04,64,-.02));
+        when(worker.getBbWidth()).thenReturn(.6f);
+        when(worker.getBoundingBox()).thenReturn(new AABB(-.34,64,-.32,.26,65.95,.28));
+        var target=new BlockPos(0,64,0);
+        assertTrue(worker.getBoundingBox().intersects(new AABB(target)));
+        // The old non-recovery path accepts this floored neighboring standing cell.
+        goal.route(level,target,40);verify(nav,never()).createPath(anySet(),eq(0));
+        var field=WallBuilderAccess.class.getDeclaredField("reservedColumns");field.setAccessible(true);
+        field.set(goal,java.util.Set.of(target.atY(0).asLong()));
+        Path clear=mock(Path.class);when(clear.canReach()).thenReturn(true);when(clear.getTarget()).thenReturn(new BlockPos(-2,64,0));when(clear.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(-2,64,0));
+        when(nav.createPath(anySet(),eq(0))).thenReturn(clear);
+        goal.route(level,target,40,true);
+        verify(nav).createPath(argThat((java.util.Set<BlockPos> sites)->!sites.isEmpty()
+                && sites.stream().allMatch(p->WallBuilderAccess.recoveryMargin(p,java.util.Set.of(target.atY(0).asLong()),.6f))
+                && sites.stream().allMatch(p->p.distSqr(target.atY(p.getY()))<40)),eq(0));
+        verify(nav).moveTo(-2,64,0,0.8);
+        verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+    @Test void onlyTheGuardsOwnBodyObstructionAllowsRecoveryWhileNativeWorkStaysPaused() throws Exception {
+        var area=commission();var original=spy(new NativeGoal()); original.state=State.PLACE_BLOCKS;
+        var target=new BlockPos(0,64,0);original.blockPos=target;
+        area.stackToPlace=java.util.List.of(new Cell(target));
+        var goal=new WallBuilderAccess(worker,original);
+        when(worker.getX()).thenReturn(-.04);when(worker.getZ()).thenReturn(-.02);
+        when(worker.position()).thenReturn(new Vec3(-.04,64,-.02));when(worker.getBbWidth()).thenReturn(.6f);
+        when(worker.getBoundingBox()).thenReturn(new AABB(-.34,64,-.32,.26,65.95,.28));
+        var path=mock(Path.class);when(path.canReach()).thenReturn(true);when(path.getTarget()).thenReturn(new BlockPos(-2,64,0));when(path.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(-2,64,0));
+        when(nav.createPath(anySet(),eq(0))).thenReturn(path);
+        try(var guard=mockStatic(com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.class,CALLS_REAL_METHODS)) {
+            guard.when(()->com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.beforeNativeTick(worker,original)).thenReturn(false);
+            guard.when(()->com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.mutationCells(original)).thenReturn(java.util.Set.of(target));
+            guard.when(()->com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.status(area)).thenReturn("Paused: faction territory changed");
+            goal.tick();verifyNoInteractions(nav);verify(original,never()).tick();
+            guard.when(()->com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.status(area)).thenReturn("Paused: move entities out of the planned blocks");
+            goal.tick();verify(nav).moveTo(-2,64,0,0.8);verify(original,never()).tick();
+            assertEquals(target,original.blockPos);assertEquals(State.PLACE_BLOCKS,original.state);
+            assertEquals(1,worker.getPersistentData().getInt("SiegeSelfClearanceRequests"));
+            clearInvocations(nav);when(worker.getBoundingBox()).thenReturn(new AABB(4.2,64,4.2,4.8,65.95,4.8));
+            goal.tick();verifyNoInteractions(nav); // A different occupant is never moved or ignored.
+        }
+        verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+    @Test void recoveryMarginRejectsBoundaryStraddlingAndUnsupportedWidths() {
+        var reserved=java.util.Set.of(new BlockPos(142,0,11).asLong());
+        assertFalse(WallBuilderAccess.recoveryMargin(new BlockPos(141,65,10),reserved,.6f));
+        assertTrue(WallBuilderAccess.recoveryMargin(new BlockPos(140,65,10),reserved,.6f));
+        assertFalse(WallBuilderAccess.recoveryMargin(BlockPos.ZERO,reserved,Float.NaN));
+        assertFalse(WallBuilderAccess.recoveryMargin(BlockPos.ZERO,reserved,5));
+    }
+    @Test void guardedRecoveryNeverProbesUnloadedOrUnsafeTerrain() throws Exception {
+        terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
+        when(level.hasChunkAt(any())).thenReturn(false);
+        goal.route(level,new BlockPos(0,64,0),40,true);
+        verify(level,never()).getHeight(any(),anyInt(),anyInt());verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+        terrain();doReturn(Blocks.LAVA.defaultBlockState()).when(level).getBlockState(any());
+        when(level.getGameTime()).thenReturn(100L);goal.route(level,new BlockPos(0,64,0),40,true);
         verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
     }
     public abstract static class Builder extends Mob {
@@ -81,7 +147,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         public void setTime(int value) { }
     }
     public record Cell(BlockPos pos) { public BlockPos getPos() { return pos; } }
-    public enum State { SELECT_WORK_AREA, MOVE_TO_WORK_AREA, PREPARE_BREAK_BLOCKS, DONE }
+    public enum State { SELECT_WORK_AREA, MOVE_TO_WORK_AREA, PREPARE_BREAK_BLOCKS, PLACE_BLOCKS, BREAK_BLOCKS, DONE }
     public static class NativeGoal extends Goal {
         public BlockPos blockPos;
         public Object state;
@@ -113,7 +179,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         assertFalse(sites.isEmpty());
         assertTrue(sites.stream().allMatch(p -> p.getY()==64 && p.distSqr(new BlockPos(0,64,0))<16));
         Path path=mock(Path.class); when(path.canReach()).thenReturn(true);
-        when(path.getTarget()).thenReturn(new BlockPos(1,64,0));
+        when(path.getTarget()).thenReturn(new BlockPos(1,64,0));when(path.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(1,64,0));
         when(nav.createPath(anySet(),eq(0))).thenReturn(path); when(nav.moveTo(1,64,0,0.8)).thenReturn(true);
         goal.route(level,marker,20); verify(nav).moveTo(1,64,0,0.8);
         when(level.getGameTime()).thenReturn(10L);goal.route(level,marker,20);
@@ -269,7 +335,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         var nativeGoal=new ApproachingGoal();nativeGoal.state=State.MOVE_TO_WORK_AREA;
         var goal=new WallBuilderAccess(worker,nativeGoal);
         var path=mock(Path.class);when(path.canReach()).thenReturn(true);
-        when(path.getTarget()).thenReturn(new BlockPos(1,64,0));
+        when(path.getTarget()).thenReturn(new BlockPos(1,64,0));when(path.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(1,64,0));
         when(nav.createPath(anySet(),eq(0))).thenReturn(path);
         goal.tick();assertEquals(0,nativeGoal.ticks);assertEquals(State.MOVE_TO_WORK_AREA,nativeGoal.state);
         verify(nav).moveTo(1,64,0,0.8);
@@ -331,7 +397,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         verify(nav, never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
         verify(path, never()).getTarget();
         when(path.isProcessed()).thenReturn(true); when(path.canReach()).thenReturn(true);
-        when(path.getTarget()).thenReturn(endpoint); when(nav.moveTo(1,64,0,0.8)).thenReturn(true);
+        when(path.getTarget()).thenReturn(endpoint);when(path.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(1,64,0)); when(nav.moveTo(1,64,0,0.8)).thenReturn(true);
         when(level.getGameTime()).thenReturn(50L); goal.route(level,target,20);
         verify(nav).moveTo(1,64,0,0.8); verify(nav,times(1)).createPath(anySet(),eq(0));
         verify(nav,never()).moveTo(any(Path.class),anyDouble());
@@ -345,7 +411,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
             when(level.getGameTime()).thenReturn(0L); goal.route(level,target,20);
             when(nav.createPath(anySet(),eq(0))).thenReturn(null);
             when(path.isProcessed()).thenReturn(true); when(path.canReach()).thenReturn(true);
-            when(path.getTarget()).thenReturn(new BlockPos(1,64,0));
+            when(path.getTarget()).thenReturn(new BlockPos(1,64,0));when(path.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(1,64,0));
             when(level.getGameTime()).thenReturn(10L);
             switch (scenario) {
                 case 0 -> target = new BlockPos(3,60,0);
@@ -369,11 +435,106 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
     @Test void negativeEndpointUsesNativeMovementWithoutTruncatingIntoAnotherColumn() throws Exception {
         terrain(); var goal = new WallBuilderAccess(worker,new NativeGoal());
         var path = mock(Path.class); when(path.canReach()).thenReturn(true);
-        when(path.getTarget()).thenReturn(new BlockPos(-1,64,-2));
+        when(path.getTarget()).thenReturn(new BlockPos(-1,64,-2));when(path.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(-1,64,-2));
         when(nav.createPath(anySet(),eq(0))).thenReturn(path);
         goal.route(level,new BlockPos(-2,60,-2),20);
         verify(nav).moveTo(-1,64,-2,0.8);
         verify(nav,never()).moveTo(any(Path.class),anyDouble());
+    }
+
+    @Test void nativeMultiTargetProbeUsesReachedGroundInsteadOfItsUnreachableRoofLabel() throws Exception {
+        for (boolean delayed : new boolean[]{false,true}) {
+            reset(nav);terrain();
+            when(worker.getX()).thenReturn(129.94);when(worker.getZ()).thenReturn(3.92);
+            when(worker.position()).thenReturn(new Vec3(129.94,65,3.92));
+            when(worker.getBoundingBox()).thenReturn(new AABB(129.64,65,3.62,130.24,66.95,4.22));
+            when(level.getHeight(any(),anyInt(),anyInt())).thenAnswer(i ->
+                    (int)i.getArgument(1)==128 ? 70 : (int)i.getArgument(1)==129 ? 69 : 65);
+            doAnswer(i -> {
+                BlockPos p=i.getArgument(0);
+                int top=p.getX()==128 ? 70 : p.getX()==129 ? 69 : 65;
+                return p.getY()<top ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState();
+            }).when(level).getBlockState(any());
+            var roof=new BlockPos(128,70,3);var ground=new BlockPos(132,65,3);
+            Path nativePath=nativeMultiTargetProbe(roof,ground);
+            assertTrue(nativePath.canReach());assertEquals(roof,nativePath.getTarget(),
+                    "Pinned Workers 2.0.3 labels the probe with its first candidate");
+            assertEquals(new Node(132,65,3),nativePath.getEndNode(),
+                    "The path really reached a different, ground-level candidate");
+            var goal=new WallBuilderAccess(worker,new NativeGoal());
+            Path probe=nativePath;
+            if (delayed) {
+                var pending=mock(DelayedPath.class);probe=pending;
+                when(pending.canReach()).thenReturn(true);when(pending.getTarget()).thenReturn(roof);
+                when(pending.getEndNode()).thenReturn(nativePath.getEndNode());
+            }
+            when(nav.createPath(anySet(),eq(0))).thenReturn(probe);
+            when(level.getGameTime()).thenReturn(0L);goal.route(level,new BlockPos(130,68,3),20);
+            if (delayed) {
+                verify(probe,never()).getEndNode();
+                verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+                when(((DelayedPath)probe).isProcessed()).thenReturn(true);
+                when(level.getGameTime()).thenReturn(10L);goal.route(level,new BlockPos(130,68,3),20);
+            }
+            verify(nav).createPath(argThat((java.util.Set<BlockPos> sites)->sites.contains(roof)&&sites.contains(ground)),eq(0));
+            verify(nav).moveTo(132,65,3,0.8);
+            verify(nav,never()).moveTo(128,70,3,0.8);
+            verify(nav,never()).moveTo(any(Path.class),anyDouble());
+            verify(level,never()).setBlock(any(),any(),anyInt());
+            verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+        }
+    }
+
+    /** Execute the supported companion's actual multi-target reconstruction, with a bounded node graph. */
+    private Path nativeMultiTargetProbe(BlockPos roof,BlockPos ground) throws Exception {
+        var evaluator=mock(NodeEvaluator.class);
+        doAnswer(i -> {
+            Node[] neighbors=i.getArgument(0);Node node=i.getArgument(1);
+            if (node.x>=ground.getX()) return 0;
+            neighbors[0]=new Node(node.x+1,ground.getY(),ground.getZ());return 1;
+        }).when(evaluator).getNeighbors(any(Node[].class),any(Node.class));
+        var type=com.talhanation.workers.entities.ai.navigation.WorkersAsyncPathfinder.class;
+        var method=type.getDeclaredMethod("processPath",NodeEvaluator.class,Node.class,java.util.List.class,
+                float.class,int.class,float.class,int.class);
+        method.setAccessible(true);
+        return (Path)method.invoke(new com.talhanation.workers.entities.ai.navigation.WorkersAsyncPathfinder(evaluator,16),
+                evaluator,new Node(129,65,3),java.util.List.of(
+                        java.util.Map.entry(new Target(roof.getX(),roof.getY(),roof.getZ()),roof),
+                        java.util.Map.entry(new Target(ground.getX(),ground.getY(),ground.getZ()),ground)),32f,0,1f,1);
+    }
+
+    @Test void reachableProbeRequiresAnActualCandidateEndpointNotOnlyAValidTargetLabel() throws Exception {
+        for (Node end : new Node[]{null,new Node(1,65,0),new Node(10,64,0)}) {
+            reset(nav);terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
+            Path probe=mock(Path.class);when(probe.canReach()).thenReturn(true);
+            when(probe.getTarget()).thenReturn(new BlockPos(1,64,0));when(probe.getEndNode()).thenReturn(end);
+            when(nav.createPath(anySet(),eq(0))).thenReturn(probe);
+            goal.route(level,new BlockPos(0,64,0),20);
+            verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+        }
+    }
+
+    @Test void delayedActualEndpointMustStillBeLoadedSafeAndUnreserved() throws Exception {
+        for (int scenario=0;scenario<4;scenario++) {
+            reset(nav);terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
+            var site=new BlockPos(1,64,0);var probe=mock(DelayedPath.class);
+            when(probe.canReach()).thenReturn(true);when(probe.getTarget()).thenReturn(new BlockPos(-1,64,0));
+            when(probe.getEndNode()).thenReturn(new Node(1,64,0));
+            when(nav.createPath(anySet(),eq(0))).thenReturn(probe);
+            when(level.getGameTime()).thenReturn(0L);goal.route(level,BlockPos.ZERO.atY(64),20);
+            when(probe.isProcessed()).thenReturn(true);
+            switch (scenario) {
+                case 0 -> when(level.hasChunkAt(site)).thenReturn(false);
+                case 1 -> doReturn(Blocks.MAGMA_BLOCK.defaultBlockState()).when(level).getBlockState(site.below());
+                case 2 -> {
+                    var field=WallBuilderAccess.class.getDeclaredField("reservedColumns");field.setAccessible(true);
+                    field.set(goal,java.util.Set.of(site.atY(0).asLong()));
+                }
+                case 3 -> when(probe.getEndNode()).thenReturn(new Node(10,64,0));
+            }
+            when(level.getGameTime()).thenReturn(10L);goal.route(level,BlockPos.ZERO.atY(64),20);
+            verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+        }
     }
 
 }

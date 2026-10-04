@@ -40,7 +40,8 @@ import java.util.*;
  */
 public final class TerritoryFortification {
 
-    public static final int PRICE = 900;
+    /** Flat fee for a new complete-territory commission; saved paid jobs are never repriced. */
+    public static final int PRICE = 64;
     /** Height of the wall segments. */
     public static final int WALL_HEIGHT = 3;
     /** Additional pillar height above the wall at chunk corners. */
@@ -518,7 +519,7 @@ public final class TerritoryFortification {
             }
             if (m.getPersistentData().hasUUID(
                     com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
-                    || WorkersBridge.hasActiveBuildArea(m)) { sawBusy = true; continue; }
+                    || PerimeterProjectLink.reserved(m) || WorkersBridge.hasActiveBuildArea(m)) { sawBusy = true; continue; }
             if (WorkersBridge.isFleeing(m)) { sawFleeing = true; continue; }
             double distance = m.distanceToSqr(center.getX() + 0.5, center.getY(), center.getZ() + 0.5);
             if (distance < bestDistance) { bestDistance = distance; best = m; }
@@ -571,7 +572,7 @@ public final class TerritoryFortification {
     }
 
     /** Same shape as NativeCampConstruction.blueprint. */
-    static CompoundTag blueprint(Map<Long, String> jobs, BlockPos min, BlockPos max) {
+    public static CompoundTag blueprint(Map<Long, String> jobs, BlockPos min, BlockPos max) {
         // Workers mirrors local X around the area's eastern origin using this
         // width. Keep the full area bounds even if its eastern cells are already
         // built or protected; shrinking to the remaining jobs shifts every cell.

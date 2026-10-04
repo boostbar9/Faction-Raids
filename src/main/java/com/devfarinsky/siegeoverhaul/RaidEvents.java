@@ -151,7 +151,10 @@ public final class RaidEvents {
 
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || !RaidConfig.ENABLED.get()) return;
+        if (event.phase != TickEvent.Phase.END) return;
+        if (com.devfarinsky.siegeoverhaul.compat.WorkersBridge.available())
+            com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.tick(event.getServer());
+        if (!RaidConfig.ENABLED.get()) return;
         if (++tickCounter < 20) return;
         tickCounter = 0;
         tick(event.getServer());
@@ -160,6 +163,9 @@ public final class RaidEvents {
     @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.LOWEST)
     public static void onCampWorkerTick(net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent event) {
         if (!(event.getEntity() instanceof Mob mob) || !(mob.level() instanceof ServerLevel level)) return;
+        if (!com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.beforeWorkerTick(mob)) {
+            event.setCanceled(true); return;
+        }
         com.devfarinsky.siegeoverhaul.core.PlayerFortificationJobs.tick(level, mob);
         String team = mob.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM);
         if (team.isBlank()) return;
@@ -726,6 +732,7 @@ public final class RaidEvents {
 
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
+        com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.serverStopped(event.getServer());
         PATHING_TELEMETRY.clear();
         STUCK_TRACKER.clear();
         RaidBossBars.shutdown();
@@ -1318,7 +1325,7 @@ public final class RaidEvents {
                                 state.pendingWaveSpawns + " reinforcing • " + state.totalDefeated + " defeated")
                                 .withStyle(ChatFormatting.YELLOW)), false);
                 source.sendSuccess(() -> Component.literal("War camp: ").withStyle(ChatFormatting.GRAY)
-                        .append(Component.literal(state.campPos == null ? "No safe camp site was available" :
+                        .append(Component.literal(state.campPos == null ? com.devfarinsky.siegeoverhaul.camp.CampScouting.noCampStatus(state) :
                                 formatPos(state.campPos)).withStyle(state.campPos == null ?
                                 ChatFormatting.YELLOW : ChatFormatting.RED)), false);
                 source.sendSuccess(() -> Component.literal("Physical breach: ").withStyle(ChatFormatting.GRAY)
@@ -2078,6 +2085,8 @@ public final class RaidEvents {
         }
         if (RaidConfig.BUILD_WAR_CAMPS.get() && state.campPos == null && !state.coreCaptured
                 && !state.campSearchAbandoned) {
+            if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.unavailableReason(level).isEmpty())
+                state.campSearchDiagnostics.record(com.devfarinsky.siegeoverhaul.camp.CampSearchDiagnostics.Reason.CLAIM_SETUP);
             var scouting = com.devfarinsky.siegeoverhaul.camp.CampScouting.advance(
                     level, state, RaidConfig.CAMP_TERRAFORM.get(),
                     RaidConfig.PREPARATION_MINUTES.get() * 1200);
@@ -2088,7 +2097,8 @@ public final class RaidEvents {
                 data.setDirty();
             } else if (scouting == com.devfarinsky.siegeoverhaul.camp.CampScouting.Result.ABANDONED) {
                 announce(server, teamKey, Component.literal(
-                        "No safe camp site found in time. Raiders will attack without a fortified camp. Preparation starts now.")
+                        state.campSearchDiagnostics.summary()
+                                + " Raiders will attack without a fortified camp. Preparation starts now.")
                         .withStyle(ChatFormatting.GOLD), true);
                 FactionLogger.LOG.info("Camp search {} exhausted after {} candidates in final pass; running camp-less",
                         teamKey, state.campSearchStep);
@@ -2115,6 +2125,7 @@ public final class RaidEvents {
                     } else com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,state.campSearchPos);
                     state.campSearchPos=null;state.campSearchTicks=0;
                 } else if(state.campSearchTicks>=1200) {
+                    state.campSearchDiagnostics.record(com.devfarinsky.siegeoverhaul.camp.CampSearchDiagnostics.Reason.UNLOADED);
                     com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,state.campSearchPos);
                     state.campSearchPos=null;state.campSearchTicks=0;
                 }
@@ -3477,6 +3488,17 @@ public final class RaidEvents {
                 cap, remote, state != null && state.campTerraformed,
                 rejChunk, rejExcluded, rejClaim, rejForeign, rejSurface,
                 rejNavalGuard, rejTerrainPlan, rejClaimCreate, rejTerrainApply, terrainReasons);
+        if (state != null) {
+            var diagnostics = state.campSearchDiagnostics;
+            diagnostics.record(com.devfarinsky.siegeoverhaul.camp.CampSearchDiagnostics.Reason.UNLOADED, rejChunk);
+            diagnostics.record(com.devfarinsky.siegeoverhaul.camp.CampSearchDiagnostics.Reason.CLAIM_SAFETY,
+                    rejExcluded + rejClaim + rejForeign);
+            diagnostics.record(com.devfarinsky.siegeoverhaul.camp.CampSearchDiagnostics.Reason.SURFACE, rejSurface);
+            diagnostics.record(com.devfarinsky.siegeoverhaul.camp.CampSearchDiagnostics.Reason.NAVAL_SPACE, rejNavalGuard);
+            terrainReasons.forEach(diagnostics::recordTerrain);
+            diagnostics.record(com.devfarinsky.siegeoverhaul.camp.CampSearchDiagnostics.Reason.CLAIM_CREATE, rejClaimCreate);
+            diagnostics.record(com.devfarinsky.siegeoverhaul.camp.CampSearchDiagnostics.Reason.TERRAIN_APPLY, rejTerrainApply);
+        }
         return null;
     }
 

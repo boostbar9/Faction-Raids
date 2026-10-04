@@ -1,0 +1,155 @@
+name: Native Staged Unload QA (Chunk Loading Off)
+
+# Separate bounded client acceptance, never a substitute for the full staged completion run.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-staged-unload-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-staged-unload-client:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       contains(github.event.pull_request.labels.*.name, 'native-staged-unload-qa'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      LIBGL_ALWAYS_SOFTWARE: 'true'
+      GALLIUM_DRIVER: llvmpipe
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+      - name: Install virtual display and software OpenGL
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y xvfb xauth mesa-utils libgl1-mesa-dri libglx-mesa0 libopenal1
+      - name: Prepare a new isolated fixture directory
+        run: |
+          set -euo pipefail
+          test ! -e build/native-unload-qa/client/saves/siege-native-staged-unload
+          python3 scripts/prepare-native-client-defaults.py --mode staged-unload --smallships-version 2.0.0-b1.4
+          mkdir -p build/native-unload-qa/evidence
+          cp build/native-unload-qa/client/.native-smallships-defaults.json build/native-unload-qa/evidence/smallships-default-config-provenance.json
+          printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:6\nsimulationDistance:6\nmaxFps:30\nvsync:false\n' > build/native-unload-qa/client/options.txt
+          git rev-parse HEAD > build/native-unload-qa/evidence/source-commit.txt
+          java -version 2> build/native-unload-qa/evidence/java-version.txt
+      - name: Prepare native classes, client assets and runtime without starting Minecraft
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=10s 15m ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=staged-unload prepareNativeQaClient 2>&1 | tee build/native-unload-qa/evidence/preparation-console.log
+      - name: Run ten-minute configured client unload, resume and cancellation
+        run: |
+          set -euo pipefail
+          xvfb-run -a -s '-screen 0 1280x720x24' bash -c '
+            set -euo pipefail
+            glxinfo -B | tee build/native-unload-qa/evidence/opengl.txt
+            timeout --signal=TERM --kill-after=10s 10m ./gradlew --offline --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=staged-unload runClient 2>&1 | tee build/native-unload-qa/evidence/client-console.log
+          '
+      - name: Audit exact loaded native API bytecode
+        if: always()
+        run: python3 scripts/audit-native-inventory-bytecode.py build/native-unload-qa/evidence
+      - name: Verify bounded unload, native load and cancellation receipts
+        run: |
+          python3 - <<'PYQA'
+          import json
+          from pathlib import Path
+          root = Path('build/native-unload-qa/evidence')
+          data = json.loads((root / 'result.json').read_text())
+          audit = json.loads((root / 'native-bytecode-audit.json').read_text())
+          assert audit['status'] == 'passed' and audit['noVendorJarsUploaded'], audit
+          assert data['mode'] == 'staged-unload' and data['status'] == 'passed', data
+          assert data['recruitsChunkLoading'] is False and 'RecruitsChunkLoading=false' in data['scenarioConfiguration'], data
+          assert len(data['fixtureServerConfigSha256']) == 64, data
+          assert data['outcome'] == 'unloaded pause/resume/cancel' and not data['fullCompletionClaimed'], data
+          assert 0 < data['elapsedSeconds'] <= data['totalLimitSeconds'] == 600, data
+          gate = data['closedLifecycle']
+          assert gate['consecutiveServerTicks'] >= gate['minimumTicks'] == 40, gate
+          assert gate['carriedCobble'] >= 32 and gate['nativePlaced'] > 0, gate
+          assert gate['neededItemsEmpty'] and gate['storageRunningProblemAbsent'] and gate['cleanupJournalEmpty'], gate
+          assert not gate['activeHandUse'] and gate['nativeGoalState'] == 'PLACE_BLOCKS', gate
+          assert data['controllerSettlingRevisions'] in [0, 1] and 0 <= data['unloadedBeforeSettlingTicks'] < 40, data
+          progress = data['returnedProgressReceipt']
+          assert progress['returnedCompleted'] >= progress['departureCompleted'] > 0 and progress['cleared'] == 0, progress
+          assert progress['immutableRecipeVerified'] and progress['everyCompletedCellMatchesExactTarget'], progress
+          pause = data['unloadedPause']
+          assert pause['ticks'] >= 100 and pause['all49ChunksUnavailable'], pause
+          assert pause['builderUnavailable'] and pause['markerUnavailable'] and not pause['remoteMenuRendered'], pause
+          assert pause['activeStage'] == 0 and pause['completedStageReceipts'] == 0, pause
+          assert 'load the original owned builder' in pause['controllerBlocker'], pause
+          assert pause['serverReportActivity'] == pause['controllerBlocker'] and pause['serverReportPercent'] < 0, pause
+          tracking = data['builderTrackingEndInventory']
+          finalization = data['unloadFinalization']
+          assert 0 <= finalization['waitTicks'] <= finalization['limitTicks'] == 200, finalization
+          assert finalization['confirmedUnloadTick'] - finalization['trackingEndTick'] == finalization['waitTicks'], finalization
+          assert finalization['confirmedUnloadTick'] == data['confirmedUnloadTick'], finalization
+          assert finalization['actualRemovalReason'] == 'UNLOADED_TO_CHUNK' and finalization['trackingEndInventoryMatched'], finalization
+          assert finalization['serializationInvocationObservedNotFsync'], finalization
+          removed, loaded = data['builderUnloadInventory'], data['builderLoadInventory']
+          assert tracking['gameTime'] == finalization['trackingEndTick'] and removed['gameTime'] == finalization['confirmedUnloadTick'], finalization
+          for key in ['cargo', 'main', 'off', 'cleanup']:
+              assert tracking[key] == removed[key], key
+          assert removed['reason'] == 'UNLOADED_TO_CHUNK' and loaded['reason'] == 'loadedFromDisk', (removed, loaded)
+          for key in ['cargo', 'main', 'off']:
+              assert removed[key] == loaded[key], key
+          assert loaded['cleanup'] == '{}' and data['returnedCleanupJournal'] == '{}', data
+          assert data['nativeInventoryReloadVerified'] and data['returnedConservationVerified'], data
+          assert data['placementsDuringDepartureBeforeConfirmedUnload'] >= 0, data
+          assert 0 < data['returnedPlaced'] < data['resumedPlaced'] <= data['finalPlaced'] < 3900, data
+          assert data['nativePlacementResumed'] and data['cancelPacketAuthenticated'] and data['safeCleanupVerified'], data
+          assert data['cancelAuthorityNbt'] and data['reviewedStageCount'] >= 1, data
+          assert sum(stage['targets'] for stage in data['stageLayout']) == 3900, data
+          for material, totals in data['latestConservation'].items():
+              expected = 2400 if material == 'minecraft:cobblestone' else 1500
+              assert totals['supplied'] == expected, totals
+              assert sum(totals[k] for k in ['built', 'chests', 'builder', 'owner', 'loose']) == expected, totals
+          bank = data['treasuryAccounting']
+          assert bank['startingFunds'] == 2000 and bank['commissionDebit'] == 64 and bank['singleNegativeLedgerDelta'] == -64, bank
+          assert bank['expectedFinalBalance'] == 1936 + bank['interestCredits'] + bank['taxCredits'], bank
+          versions = data['loadedModVersions']
+          assert versions['workers'] == '2.0.3' and versions['recruits'] == '1.15.2', versions
+          assert versions['minecraft'] == '1.20.1' and versions['forge'] == '47.4.16', versions
+          for mod in ['workers', 'recruits', 'smallships', 'siegeweapons']:
+              assert len(data['loadedCompanionArtifacts'][mod]['sha256']) == 64, mod
+          assert data['screenshots'] == ['01-returned-permission-pause.png'], data
+          image = (root / data['screenshots'][0]).read_bytes()
+          assert image.startswith(b'\x89PNG\r\n\x1a\n') and len(image) > 4096
+          print('Real staged unload pause/resume/cancel passed. Full completion and remote-menu rendering are not claimed.')
+          PYQA
+      - name: Collect diagnostics without companion JARs or worlds
+        if: always()
+        run: |
+          mkdir -p build/native-unload-qa/evidence/logs
+          if [ -d build/native-unload-qa/client/logs ]; then
+            find build/native-unload-qa/client/logs -maxdepth 1 -type f -name '*.log' -exec cp {} build/native-unload-qa/evidence/logs/ \;
+          fi
+          if [ -d build/native-unload-qa/client/crash-reports ]; then
+            cp -R build/native-unload-qa/client/crash-reports build/native-unload-qa/evidence/
+          fi
+      - name: Upload diagnostic and framebuffer evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-staged-unload-qa-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/native-unload-qa/evidence/
+          if-no-files-found: error
+          retention-days: 7

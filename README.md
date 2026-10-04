@@ -14,12 +14,14 @@ Five rival Olympian war hosts claim footholds near your territory, raise temple-
 
 Create or join a [Villager Recruits](https://www.curseforge.com/minecraft/mc-mods/recruits) faction, claim land, and place a **Siege Core inside your faction's Overworld claim**. One active core per faction becomes the siege objective and your recruitment hub.
 
-The core opens a responsive five-tab command center:
+The core opens a responsive command center with Army, Loot, Treasury, Territory, Building, Civilians and Intel sections:
 
 - **Army:** two recruit offers, one worker offer, and a featured hero, rotating every **15 minutes of server runtime**. Each offer can be purchased once per rotation across your faction. Catapult and ballista crews are delivered as deployment kits so you can place them on a clear, flat area sized for the selected engine away from an indoor Core.
 - **Loot:** spend shared Treasury emeralds on concealed equipment and supply rewards, or activate short personal blessings.
 - **Treasury:** scan balance, interest and next-wave reward metrics, then manage deposits, withdrawals, members and recent activity.
-- **Territory:** enact permanent faction-wide upgrades and commission Workers 2 perimeter construction.
+- **Territory:** enact permanent faction-wide upgrades.
+- **Building:** review a complete automatic perimeter, choose among six placeable plans, and track nearby construction.
+- **Civilians:** welcome residents, trade and grow faction Treasury income.
 - **Intel:** browse scrollable unit dossiers, Olympian host lore, and field guidance.
 
 The menu sizes itself from the player's Minecraft-scaled viewport, selects detailed or compact cards from the space actually available, and uniformly scales down for unusually small windows so controls and mouse hitboxes stay aligned. Every tab uses the same modern navy-and-aged-gold command-console language, with page context, glanceable live metrics, restrained status badges and purpose-colored card rails. Army offers continuously show the real Recruits or Workers entity in its armor and equipment, with the model following the cursor. Text-first navigation replaces ambiguous decorative glyphs, while real Minecraft emerald and reward sprites remain where they carry literal meaning. Fitted and wrapped text is cached, control state updates at game-tick frequency, and the full-window tiled backdrop and decorative animation passes are omitted to keep the menu responsive. The footer includes a **Leave Feedback** button that opens the mod's CurseForge comments page through Minecraft's normal link confirmation.
@@ -88,6 +90,16 @@ Open each bag when ready. If your inventory fills, undelivered contents remain i
 5. Hire troops, assign your workers their normal work areas, and prepare your defenses.
 
 Use the **Warlord's Codex** for concise siege guidance, status, and access to the native faction and claim interfaces.
+
+## Building System Candidate
+
+The `4.52.0` development candidate consolidates automatic perimeter planning, the six existing placeable plans, and nearby construction reporting in **Building**. Territory retains its faction upgrades. This candidate is not a published release; see the pull request's verification status before installing it.
+
+Automatic perimeter reviews use the existing five-wide wall-template appearance, with an oak walkway, parapets and a hollow enclosed body. Shared internal claim edges stay open. Manual Wall Section and Wall Corner plans also gain hollow bodies with retained end caps; other placeable variants and their prices are unchanged. Cavities remain protected clearance, never excavation targets. Already-paid jobs keep their exact saved geometry; old unpaid previews of changed geometry require fresh review. The selected stone-brick, cobblestone or oak style is retained. Plans are free; each new automatic commission costs a **flat 64 faction Treasury emeralds for the complete territory, plus separately supplied blocks**. Existing paid jobs are not repriced or refunded, and claim-purchase costs are unchanged. Review the complete footprint before confirming. Steep terrain, protected obstructions, insufficient storage coverage and oversized native workloads are rejected without partial paid construction.
+
+Protected construction and post-load inventory verification for previously protected builders require the audited **Workers 2.0.3 + Recruits 1.15.2** runtime. Other companion versions pause those jobs and reload checks; ordinary unmarked legacy native workers retain their existing behavior. Install the same Siege Overhaul build on server and every client; this candidate uses network protocol 19. Optional integrations remain optional, and these checks do not establish compatibility with every optional-mod combination or modpack. The native Workers renderer, tools, materials and work hours remain in use. The marker is positioned separately from its immutable blueprint origin, with authenticated owner controls. Canceling leaves built blocks intact and does not refund supplies or the commission.
+
+Clearing is deliberately limited to unchanged single-cell plants. Unknown solids, player structures, inventories, fluids and reactive neighboring blocks are preserved. This is not a terrain-excavation tool. Representative real-client building and lifecycle checks are required before release. Dedicated-side contracts do not establish authenticated multiplayer coverage.
 
 ## Victory and Restoration
 
@@ -162,12 +174,12 @@ With **Epic Knights: Shields, Armor and Weapons** (`magistuarmory`) installed, n
 
 With **ewewukek's Musket Mod** (`musketmod`) installed and its native Recruits combat API available, one-third of new ordinary crossbowman hires receive a named musket and 32 cartridges. They use Recruits' existing musket aiming, reload and ammunition rules. If the expected API or items are absent, the hire keeps its crossbow and arrows. Named ranged heroes retain their specialized weapons.
 
-Both integrations are optional on Minecraft 1.20.1 Forge. Automated tests and upstream API inspection do not replace a combined-mod in-game playtest; this remains a beta release.
+Both integrations are optional on Minecraft 1.20.1 Forge. Automated tests and upstream API inspection do not establish every combined-mod or modpack configuration.
 
 
-## Arcane command center (4.11.0)
+## Historical command center (4.11.0)
 
-The Siege Core has a glowing crystal model and three compact service tabs:
+This historical entry describes the earlier three-tab layout. The current sections and costs are described above. The Siege Core introduced a glowing crystal model and these service tabs:
 
 - **Army & Heroes:** ordinary hires, workers, and the rotating hero offer together.
 - **Loot & Buffs:** mystery boxes remain 16/48/96 emeralds. Personal five-minute blessings offer Speed I (24), Strength I (36), or Resistance I (48), without replacing an existing effect; all Command Center purchases debit the faction Treasury.
@@ -177,7 +189,7 @@ The bank earns **1% interest per real 24-hour day** by default, configurable fro
 
 Core sieges continue through progressively stronger five-wave chapters. Reinforcements are staged under existing active-entity and performance caps. Every fifth cleared wave offers a 60-second clickable retreat vote to the faction's eligible online members. Each member gets one ballot; a strict majority accepts retreat. A tie or no majority continues the siege. Capturing the enemy core on its War Gate pad also ends the invasion: outnumber the defenders in the capture radius for the configured recapture duration. Camp restoration still runs afterward.
 
-Bank withdrawals, buffs, and voting are validated on the server. Matching server/client versions are required. This beta is validated by automated checks, not an interactive Minecraft playtest.
+Bank withdrawals, buffs, and voting are validated on the server. Matching server/client versions are required. The original 4.11.0 entry had automated-only validation. Current release coverage and its limits are recorded in the candidate notes and native QA reports.
 
 
 ### Long-campaign reliability (4.11.2)

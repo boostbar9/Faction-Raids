@@ -28,7 +28,10 @@ public final class CampScouting {
         if (state.campSearchPos != null && CampLoading.ready(level, state.campSearchPos))
             return Result.SEARCHING;
 
-        if (state.campSearchPos != null) CampLoading.release(level, state.campSearchPos);
+        if (state.campSearchPos != null) {
+            state.campSearchDiagnostics.record(CampSearchDiagnostics.Reason.UNLOADED);
+            CampLoading.release(level, state.campSearchPos);
+        }
         state.campSearchPos = null;
         state.campSearchTicks = 0;
         if (allowTerraform && !state.campTerraformed) {
@@ -38,6 +41,7 @@ public final class CampScouting {
             return Result.TERRAFORM;
         }
         state.campSearchAbandoned = true;
+        state.campSearchDiagnostics.finish();
         state.campBuildAttempted = true;
         state.preparationTotalTicks = preparationTicks;
         state.preparationTicks = preparationTicks;
@@ -54,6 +58,13 @@ public final class CampScouting {
                 state.campSearchPos = candidate;
                 break;
             }
+            state.campSearchDiagnostics.record(CampSearchDiagnostics.Reason.CLAIM_SAFETY);
         }
+    }
+
+    public static String noCampStatus(RaidSavedData.RaidState state) {
+        if (!state.campSearchAbandoned) return "No fortified camp established yet";
+        return state.campSearchDiagnostics.exhausted() ? state.campSearchDiagnostics.summary()
+                : "Camp scouting stopped; no fortified camp established";
     }
 }

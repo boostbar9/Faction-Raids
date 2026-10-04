@@ -70,13 +70,13 @@ public final class DefensePlanItem extends Item {
     }
 
     private DefensePreview.Selection selection(ItemStack stack, Player player) {
-        var result = DefensePreview.read(stack, player.level().dimension().location(), player.getUUID(), player.level().getGameTime());
+        var result = DefensePreview.read(stack, kind, player.level().dimension().location(), player.getUUID(), player.level().getGameTime());
         return result != null && player.distanceToSqr(result.origin().getX() + .5, result.origin().getY(), result.origin().getZ() + .5)
                 <= DefensePreview.RANGE * DefensePreview.RANGE ? result : null;
     }
     private void preview(ItemStack stack, ServerPlayer player, BlockPos origin, Direction facing) {
         String problem = DefenseStructures.prepare(player, origin, facing, kind).problem();
-        DefensePreview.set(stack, origin, facing, player.level().dimension().location(), player.getUUID(),
+        DefensePreview.set(stack, kind, origin, facing, player.level().dimension().location(), player.getUUID(),
                 player.level().getGameTime(), problem);
         player.displayClientMessage(Component.literal("Preview only: " + kind.price + "e + "
                 + DefenseBlueprint.create(kind, origin, facing).materials()), true);

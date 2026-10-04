@@ -67,7 +67,7 @@ final class WallSurface {
                 || state.is(Blocks.MUD) || state.is(Blocks.SNOW_BLOCK);
     }
 
-    private static BlockPos ground(ServerLevel level, BlockPos column) {
+    static BlockPos ground(ServerLevel level, BlockPos column) {
         if (!level.hasChunkAt(column) || !level.getWorldBorder().isWithinBounds(column)) return null;
         int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.getX(), column.getZ());
         // Ignore canopy height, but never put jobs beneath preserved tree trunks.

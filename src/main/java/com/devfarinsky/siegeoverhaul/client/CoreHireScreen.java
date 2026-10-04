@@ -28,14 +28,14 @@ import java.util.Map;
  *
  * <p>Purchase authority remains entirely on the server; this screen only
  * paints server-authoritative state from {@link CoreHireMenu} and dispatches
- * inventory-button clicks or {@link RaidNetwork} packets. Layout math and
- * server contracts remain unchanged. Navigation metadata and bounded tab
- * windows allow new pages without shrinking existing controls. The shared
+ * inventory-button clicks or {@link RaidNetwork} packets. Server contracts remain
+ * unchanged. Navigation metadata and bounded tab windows allow new pages without
+ * shrinking existing controls. The shared
  * presentation layer uses {@link CommandFrame} and
  * {@link CommandPalette}. Controls use readable labels; only real Minecraft
  * item sprites are used where an icon communicates a concrete item.
  *
- * <p>Six tabs share the window:
+ * <p>Seven tabs share the window:
  * <ul>
  *   <li><b>Army &amp; Heroes</b> — four rotating hire cards with live armored
  *       entity previews, readable kit details and siege deployment kits.</li>
@@ -43,9 +43,9 @@ import java.util.Map;
  *       reveal reel and three blessing cards with cool-down state.</li>
  *   <li><b>Treasury</b> — deposit/withdraw controls, glanceable financial
  *       metrics, a scrollable roster and recent activity.</li>
- *   <li><b>Territory</b> — permanent faction-wide upgrades and builder
- *       fortification contracts.</li>
- *   <li><b>Defenses</b> — placeable construction plans for hired builders.</li>
+ *   <li><b>Territory</b> — permanent faction-wide upgrades.</li>
+ *   <li><b>Building</b> — perimeter planning, structure plans and nearby construction.</li>
+ *   <li><b>Civilians</b> — faction residents and taxes.</li>
  *   <li><b>Intel</b> — units, enemy lore and the field playbook.</li>
  * </ul>
  */
@@ -88,12 +88,19 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private final Button[] hire = new Button[4];
     private final Button[] siegeYard = new Button[2];
     private final Button[] territoryBuffs = new Button[4];
-    private Button constructionReport;
-    private final Button[] defensePlans = new Button[3];
-    private Button defenseCatalog, constructionBack, constructionPrevious, constructionNext;
-    private boolean constructionView;
-    private int defensePage, constructionPage;
+    private final Button[] buildingSections = new Button[BuildingSection.values().length];
+    private final Button[] defensePlans = new Button[DefenseBlueprint.Kind.values().length];
+    private Button takeDefensePlan, reviewPerimeter, constructionPrevious, constructionNext, constructionCancel;
+    private ConstructionReport.Job displayedCancellationTarget;
+    private BuildingSection buildingSection = BuildingSection.PERIMETER;
+    private DefenseBlueprint.Kind selectedDefense = DefenseBlueprint.Kind.WALL;
+    private final BuildingReportSubscription buildingReport = new BuildingReportSubscription();
+    // Match the existing manual wall's cobblestone/oak template on first review.
+    private int perimeterMaterial = 1;
+    private int constructionPage;
+    private int planRequestCooldown, perimeterRequestCooldown, cancellationCooldown;
     private final Button[] fortifyButtons = new Button[TerritoryFortification.MATERIALS.length];
+    private final BuildingPlanThumbnail[] perimeterExamples = new BuildingPlanThumbnail[TerritoryFortification.MATERIALS.length];
     private final Button[] boxes = new Button[3];
     private final Button[] buffs = new Button[3];
     private final Button[] bank = new Button[4];
@@ -246,11 +253,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // that fill the tab body. No map, no zoom controls; this tab is a
         // pure upgrade shop for kingdom-wide territory buffs.
         int tbCols = 2;
-        int tbRows = (TerritoryBuffs.COUNT + tbCols - 1) / tbCols;
         int tbGridTop = layout.contentY();
-        // Reserve a bottom strip for the Fortify Perimeter material buttons.
-        int fortifyStripH = 26;
-        int tbGridBottom = layout.contentBottom() - fortifyStripH - 6;
         int tbCellW = layout.territoryCardWidth();
         int tbCellH = layout.territoryCardHeight();
         // Purchase button lives inside its card, near the bottom-right.
@@ -269,50 +272,61 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     btnW, btnH,
                     false, () -> false));
         }
-        // Fortify Perimeter strip: 3 side-by-side material buttons that
-        // commission a Villager Recruits Builder to wall off the territory
-        // in the chosen material. The faction Treasury pays 900 emeralds.
-        int stripY = tbGridBottom + 8;
-        int stripH = 22;
-        int stripW = layout.width() - 20;
-        int fbGap = 6;
-        int fbW = (stripW - (fortifyButtons.length - 1) * fbGap) / fortifyButtons.length;
+        // Building has a single navigation band; every body view owns the same
+        // bounded area. Selection never purchases or starts a builder job.
+        var building = buildingLayout();
+        for (BuildingSection section : BuildingSection.values()) {
+            int index = section.ordinal();
+            buildingSections[index] = addRenderableWidget(new CoreButton(Component.literal(
+                    building.sectionWidth() < 110 ? section.compactLabel : section.label),
+                    b -> selectBuildingSection(section), building.sectionX(index), building.sectionY(),
+                    building.sectionWidth(), CoreBuildingLayout.SECTION_HEIGHT, true,
+                    () -> buildingSection == section));
+        }
         for (int i = 0; i < fortifyButtons.length; i++) {
             final int index = i;
-            String label = TerritoryFortification.material(i).label();
             fortifyButtons[i] = addRenderableWidget(new CoreButton(
-                    Component.literal(label + "  " + TerritoryFortification.PRICE + "e"),
-                    b -> action(70 + index),
-                    layout.x() + 10 + i * (fbW + fbGap),
-                    stripY,
-                    fbW, stripH,
-                    false, () -> false));
+                    Component.literal(TerritoryFortification.material(i).label()),
+                    b -> { perimeterMaterial = index; updateControlState(); },
+                    building.materialX(i, fortifyButtons.length), building.materialY(i),
+                    building.materialWidth(fortifyButtons.length), CoreBuildingLayout.ACTION_HEIGHT,
+                    false, () -> perimeterMaterial == index));
         }
-
-        for (int i = 0; i < defensePlans.length; i++) {
-            final int index = i;
-            int cx = layout.territoryCardX(i), cy = layout.territoryCardY(i);
-            defensePlans[i] = addRenderableWidget(new CoreButton(Component.literal("Free plan"),
-                    b -> action(90 + defensePage * 3 + index), cx + 8, cy + layout.territoryCardHeight() - 24,
-                    layout.territoryCardWidth() - 16, 18, false, () -> false));
+        reviewPerimeter = addRenderableWidget(new CoreButton(Component.literal("Review in world"),
+                b -> {
+                    if (perimeterRequestCooldown > 0) return;
+                    perimeterRequestCooldown = 10;
+                    action(70 + perimeterMaterial);
+                    updateControlState();
+                }, building.perimeterActionX(), building.perimeterActionY(), building.perimeterActionWidth(),
+                CoreBuildingLayout.ACTION_HEIGHT, false, () -> false).primary());
+        for (DefenseBlueprint.Kind kind : DefenseBlueprint.Kind.values()) {
+            int index = kind.ordinal();
+            defensePlans[index] = addRenderableWidget(new BuildingPlanButton(kind,
+                    b -> selectDefense(kind), building.planX(index), building.planY(index),
+                    building.planWidth(), building.planHeight(), () -> selectedDefense == kind));
         }
-
-        constructionReport = addRenderableWidget(new CoreButton(Component.literal("Live construction"),
-                b -> showConstruction(true), layout.territoryCardX(3) + 8, layout.territoryButtonY(3),
-                layout.territoryCardWidth() - 16, 18, false, () -> false));
-
-        defenseCatalog = addRenderableWidget(new CoreButton(Component.literal("Wall pieces >"),
-                b -> { defensePage = 1 - defensePage; updateControlState(); }, layout.x() + 10,
-                layout.contentBottom() - 22, layout.width() - 20, 20, false, () -> false));
-        constructionBack = addRenderableWidget(new CoreButton(Component.literal("< Plans"),
-                b -> showConstruction(false), layout.x() + 10, layout.contentY(), 82, 18, false, () -> false));
-        int jobsNavW = (layout.width() - 26) / 2;
+        takeDefensePlan = addRenderableWidget(new CoreButton(Component.literal("Take free plan"),
+                b -> {
+                    if (planRequestCooldown > 0) return;
+                    planRequestCooldown = 10;
+                    action(90 + selectedDefense.ordinal());
+                    updateControlState();
+                }, building.planActionX(), building.actionY(), building.planActionWidth(),
+                CoreBuildingLayout.ACTION_HEIGHT, false, () -> false).primary());
         constructionPrevious = addRenderableWidget(new CoreButton(Component.literal("< Previous"),
-                b -> { constructionPage--; updateControlState(); }, layout.x() + 10,
-                layout.contentBottom() - 20, jobsNavW, 18, false, () -> false));
+                b -> { constructionPage--; updateControlState(); }, building.x(),
+                building.actionY(), building.reportNavigationWidth(), CoreBuildingLayout.ACTION_HEIGHT,
+                false, () -> false));
         constructionNext = addRenderableWidget(new CoreButton(Component.literal("Next >"),
-                b -> { constructionPage++; updateControlState(); }, layout.x() + 16 + jobsNavW,
-                layout.contentBottom() - 20, jobsNavW, 18, false, () -> false));
+                b -> { constructionPage++; updateControlState(); },
+                building.x() + building.reportNavigationWidth() + CoreBuildingLayout.GAP,
+                building.actionY(), building.reportNavigationWidth(), CoreBuildingLayout.ACTION_HEIGHT,
+                false, () -> false));
+
+        constructionCancel = addRenderableWidget(new CoreButton(Component.literal("Cancel entire perimeter"),
+                b -> confirmProjectCancellation(), building.reportCancelX(), building.reportCancelY(),
+                building.reportCancelWidth(), CoreBuildingLayout.ACTION_HEIGHT, false, () -> false));
 
         // Persistent path for beta feedback. Minecraft shows its normal
         // external-link confirmation before opening CurseForge comments.
@@ -351,14 +365,13 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     false, () -> false));
         }
         updateControlState();
-        if (tab == CoreCommandPage.DEFENSES && constructionView) action(84);
+        updateBuildingReport();
     }
 
     private void selectPage(CoreCommandPage page) {
         if (tab == page) return;
-        if (tab == CoreCommandPage.DEFENSES && constructionView) action(85);
         tab = page;
-        if (tab == CoreCommandPage.DEFENSES && constructionView) action(84);
+        updateBuildingReport();
         confirmBox = -1;
         intelDragging = false;
         setFocused(null); // Never leave keyboard focus on a now-hidden purchase action.
@@ -367,16 +380,52 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         setFocused(pageButtons[tab.ordinal()]);
     }
 
-    private void showConstruction(boolean show) {
-        constructionView = show;
-        action(show ? 84 : 85);
+    private CoreBuildingLayout buildingLayout() { return new CoreBuildingLayout(layout); }
+
+    private void selectBuildingSection(BuildingSection section) {
+        if (buildingSection == section) return;
+        buildingSection = section;
+        updateBuildingReport();
         setFocused(null);
+        updateControlState();
+        setFocused(buildingSections[section.ordinal()]);
+    }
+
+    private void selectDefense(DefenseBlueprint.Kind kind) {
+        selectedDefense = kind;
         updateControlState();
     }
 
-    private int constructionRowHeight() { return layout.compact() ? 52 : 68; }
-    private int constructionRows() { return Math.max(1, (layout.contentBottom() - layout.contentY() - 48) / constructionRowHeight()); }
+    private void updateBuildingReport() {
+        buildingReport.update(tab == CoreCommandPage.DEFENSES
+                && buildingSection == BuildingSection.CONSTRUCTION, this::action);
+    }
+
+    private int constructionRowHeight() { return buildingLayout().reportRowHeight(); }
+    private boolean projectReports() { return menu.construction().stream().anyMatch(job -> job.projectId() != null); }
+    private int constructionRows() { return projectReports() ? 1 : buildingLayout().reportRows(); }
     private int constructionPages() { return Math.max(1, (menu.construction().size() + constructionRows() - 1) / constructionRows()); }
+    private ConstructionReport.Job selectedConstruction() {
+        int index = constructionPage * constructionRows();
+        return index >= 0 && index < menu.construction().size() ? menu.construction().get(index) : null;
+    }
+
+    private void confirmProjectCancellation() {
+        // Bind the last drawn job, not an index that a newer report could reorder under the pointer.
+        var target = displayedCancellationTarget;
+        if (minecraft == null || tab != CoreCommandPage.DEFENSES || buildingSection != BuildingSection.CONSTRUCTION
+                || target == null || !target.cancelable() || cancellationCooldown > 0) return;
+        int menuId = menu.containerId;
+        minecraft.setScreen(new net.minecraft.client.gui.screens.ConfirmScreen(confirmed -> {
+            minecraft.setScreen(this);
+            if (confirmed) {
+                cancellationCooldown = 40;
+                RaidNetwork.cancelPerimeterProject(menuId, target.projectId(), target.generation());
+                updateControlState();
+            }
+        }, Component.literal("Cancel entire perimeter?"),
+                Component.literal("All sections of this perimeter stop. Placed blocks stay. The commission and consumed materials are not refunded.")));
+    }
 
     private void movePage(int direction) {
         var strip = layout.tabs(PAGES.length, tab.ordinal());
@@ -436,6 +485,9 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     protected void containerTick() {
         super.containerTick();
         if (intelSearch != null && intelSearch.visible) intelSearch.tick();
+        if (planRequestCooldown > 0) planRequestCooldown--;
+        if (perimeterRequestCooldown > 0) perimeterRequestCooldown--;
+        if (cancellationCooldown > 0) cancellationCooldown--;
         updateControlState();
         if (waitingTicks > 0) waitingTicks--;
         if (menu.lootSequence() != seenLoot) {
@@ -515,18 +567,37 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                                     + "  ·  " + SiegeYard.PRICES[i] + "e"
                             : shortLabel + "  ·  unavailable"));
         }
-        boolean plansVisible = tab == CoreCommandPage.DEFENSES && !constructionView;
-        boolean jobsVisible = tab == CoreCommandPage.DEFENSES && constructionView;
+        boolean buildingVisible = tab == CoreCommandPage.DEFENSES;
+        boolean plansVisible = buildingVisible && buildingSection == BuildingSection.STRUCTURES;
+        boolean jobsVisible = buildingVisible && buildingSection == BuildingSection.CONSTRUCTION;
+        boolean perimeterVisible = buildingVisible && buildingSection == BuildingSection.PERIMETER;
+        for (Button section : buildingSections) section.visible = buildingVisible;
         constructionPage = Math.max(0, Math.min(constructionPage, constructionPages() - 1));
-        constructionReport.visible = defenseCatalog.visible = plansVisible;
-        defenseCatalog.setMessage(Component.literal(defensePage == 0 ? "Wall pieces >" : "< Defensive structures"));
-        constructionBack.visible = constructionPrevious.visible = constructionNext.visible = jobsVisible;
+        constructionPrevious.visible = constructionNext.visible = jobsVisible;
         constructionPrevious.active = constructionPage > 0;
         constructionNext.active = constructionPage + 1 < constructionPages();
-        for (Button plan : defensePlans) {
-            plan.visible = plansVisible;
-            plan.active = true;
-        }
+        var selectedJob = selectedConstruction();
+        boolean canCancel = jobsVisible && selectedJob != null && selectedJob.cancelable();
+        constructionCancel.visible = canCancel;
+        constructionCancel.active = canCancel && cancellationCooldown == 0;
+        if (!canCancel && getFocused() == constructionCancel) setFocused(buildingSections[BuildingSection.CONSTRUCTION.ordinal()]);
+        var reportLayout = buildingLayout();
+        boolean compactCancellation = canCancel && !reportLayout.splitReport();
+        int navigationWidth = compactCancellation ? reportLayout.reportCancelNavigationWidth() : reportLayout.reportNavigationWidth();
+        constructionPrevious.setWidth(navigationWidth);
+        constructionNext.setWidth(navigationWidth);
+        constructionNext.setX(reportLayout.x() + reportLayout.width() - navigationWidth);
+        constructionPrevious.setMessage(Component.literal(compactCancellation ? "<" : "< Previous"));
+        constructionNext.setMessage(Component.literal(compactCancellation ? ">" : "Next >"));
+        for (Button plan : defensePlans) plan.visible = plansVisible;
+        takeDefensePlan.visible = plansVisible;
+        takeDefensePlan.active = planRequestCooldown == 0;
+        takeDefensePlan.setMessage(Component.literal(buildingLayout().detailedCatalogue()
+                ? "Take free plan" : "Take free plan: " + selectedDefense.label));
+        reviewPerimeter.visible = perimeterVisible;
+        // Reviewing is free, even when the Treasury cannot yet fund commission.
+        reviewPerimeter.active = perimeterRequestCooldown == 0;
+        for (Button material : fortifyButtons) material.visible = perimeterVisible;
         for (int i = 0; i < territoryBuffs.length; i++) {
             territoryBuffs[i].visible = tab == CoreCommandPage.TERRITORY;
             boolean owned = menu.hasTerritoryBuff(i);
@@ -538,14 +609,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                                     ? (layout.compact() ? "Buy" : "Enact")
                                             + "  ·  " + TerritoryBuffs.PRICES[i] + "e"
                                     : "Need  ·  " + missing + "e"));
-        }
-        for (int i = 0; i < fortifyButtons.length; i++) {
-            fortifyButtons[i].visible = tab == CoreCommandPage.TERRITORY;
-            fortifyButtons[i].active = canAfford(TerritoryFortification.PRICE);
-            String label = TerritoryFortification.material(i).label();
-            fortifyButtons[i].setMessage(Component.literal(
-                    layout.compact() ? label
-                            : "Fortify  " + label + "  " + TerritoryFortification.PRICE + "e"));
         }
         for (int i = 0; i < 3; i++) {
             boxes[i].visible = buffs[i].visible = tab == CoreCommandPage.LOOT;
@@ -684,38 +747,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 }
             }
         }
-        if (tab == CoreCommandPage.DEFENSES && !constructionView) {
-            if (constructionReport.isMouseOver(mx, my)) tooltip(g,
-                    "Shows your loaded commissioned jobs within 128 blocks, refreshed every two seconds. Hover a job for its full status, location and current supply requests. Chat report: /siegeoverhaul builds.", tooltipX, tooltipY);
-            for (int i = 0; i < defensePlans.length; i++) {
-                if (over(mx, my, layout.territoryCardX(i), layout.territoryCardY(i),
-                        layout.territoryCardWidth(), layout.territoryCardHeight())) {
-                    var kind = DefenseBlueprint.Kind.values()[defensePage * 3 + i];
-                    tooltip(g, kind.label + " | " + kind.description + " | " + kind.dimensions()
-                            + " | " + kind.price + " Treasury emeralds on placement + "
-                            + DefenseBlueprint.create(kind, net.minecraft.core.BlockPos.ZERO, net.minecraft.core.Direction.SOUTH).materials()
-                            + ". Plan collection and preview are free. Use the same anchor again to pay and build. Your idle builder must be within 16 blocks of the site; supply a Workers storage area with Builders enabled.",
-                            tooltipX, tooltipY);
-                }
-            }
-        }
-        if (tab == CoreCommandPage.DEFENSES && constructionView) {
-            int first = constructionPage * constructionRows();
-            for (int row = 0; row < constructionRows() && first + row < menu.construction().size(); row++) {
-                if (over(mx, my, layout.x() + 10, layout.contentY() + 24 + row * constructionRowHeight(),
-                        layout.width() - 20, constructionRowHeight() - 4)) {
-                    var job = menu.construction().get(first + row);
-                    tooltip(g, job.label() + " | " + job.progressText() + " | " + job.location()
-                            + " | " + job.activity() + " | Requested now: "
-                            + (job.supplies().isBlank() ? "No active requests reported" : job.supplies()), tooltipX, tooltipY);
-                }
-            }
-        }
+        if (tab == CoreCommandPage.DEFENSES) drawBuildingTooltips(g, mx, my, tooltipX, tooltipY);
         if (tab == CoreCommandPage.TERRITORY) {
             int cols = 2;
-            int rows = (TerritoryBuffs.COUNT + cols - 1) / cols;
             int gridTop = layout.contentY();
-            int gridBottom = layout.contentBottom() - 32;
             int cellW = layout.territoryCardWidth();
             int cellH = layout.territoryCardHeight();
             for (int i = 0; i < TerritoryBuffs.COUNT; i++) {
@@ -733,19 +768,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                             tooltipX, tooltipY);
                 }
             }
-            for (int i = 0; i < fortifyButtons.length; i++) {
-                if (fortifyButtons[i].isMouseOver(mx, my)) {
-                    String material = TerritoryFortification.material(i).label();
-                    String affordability = canAfford(TerritoryFortification.PRICE)
-                            ? "Treasury funds are ready."
-                            : "Need " + emeralds(TerritoryFortification.PRICE - availableFunds())
-                                    + " more in the faction Treasury.";
-                    tooltip(g, "Commission a " + material
-                                    + " perimeter from a Workers 2 builder. Requires a nearby"
-                                    + " Builder-enabled storage area with materials. " + affordability,
-                            tooltipX, tooltipY);
-                }
-            }
+
         }
     }
 
@@ -821,20 +844,16 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     protected void renderBg(GuiGraphics g, float partial, int mx, int my) {
         int x = layout.x(), y = layout.y(), w = layout.width(), h = layout.height();
 
-        // Frame the whole window: shadow, bevel, parchment body, hairlines, rivets.
+        // Quiet dark surfaces keep the world visible around a single thin frame.
         CommandFrame.window(g, x, y, w, h);
         // Header banner strip that sits behind the crown, title and treasury chip.
         CommandFrame.header(g, x, y, w, 26);
 
         // Hanging crest banner on the left of the header (like the reference).
-        drawCrestBanner(g, x - 6, y + 6);
+        drawCrestBanner(g, x + 5, y + 7);
 
-        // Title cluster to the right of the crest. Double-shadow for a
-        // struck-metal look: dark drop shadow, then warm bronze halo, then
-        // the crisp gold glyph on top.
-        String title = layout.compact() ? "COMMAND" : "KINGDOM COMMAND";
-        g.drawString(font, title, x + 43, y + 13, 0xff000000, false);
-        g.drawString(font, title, x + 42, y + 13, CommandPalette.BEVEL_DARK, false);
+        // Keep the native Minecraft font and crest, with one crisp title instead of layered shadows.
+        String title = layout.compact() ? "COMMAND" : "SIEGE COMMAND";
         text(g, title, x + 42, y + 12, layout.headerTitleWidth(), CommandPalette.ACCENT_GOLD);
         text(g, menu.factionName(),
                 x + 42, y + 22, layout.headerTitleWidth(), CommandPalette.TEXT_MUTED);
@@ -901,7 +920,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     /** Modern two-line page identity shared by every roomy tab. */
     private void drawPageHeader(GuiGraphics g) {
-        if (layout.pageHeaderHeight() == 0) return;
+        if (layout.pageHeaderHeight() == 0 || tab == CoreCommandPage.DEFENSES) return;
         int x = layout.x() + 10;
         int y = layout.pageHeaderY();
         int w = layout.width() - 20;
@@ -942,7 +961,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             case CIVILIANS -> menu.civilians()+" / 64 residents";
             case LOOT -> String.format(Locale.ROOT, "Treasury %,de", menu.bank());
             case TREASURY -> String.format(Locale.ROOT, "Balance %,de", menu.bank());
-            case DEFENSES -> constructionView ? "Your nearby jobs" : "Plans " + (defensePage + 1) + "/2";
+            case DEFENSES -> buildingSection.label;
             case TERRITORY -> ownedTerritoryBuffs() + "/" + TerritoryBuffs.COUNT + " active";
             case INTEL -> switch (intelSection) {
                 case 0 -> "Unit archive";
@@ -958,8 +977,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             case ARMY -> "Four faction-wide offers · purchases deploy from the shared Treasury";
             case LOOT -> "Rewards stay concealed until opened · purchases use the shared Treasury";
             case TREASURY -> "Every transaction is faction-wide and recorded in recent activity";
-            case DEFENSES -> "Free plans · pay on placement · supply your builder through Workers storage";
-            case TERRITORY -> "Permanent decrees affect every member · contracts dispatch equipped builders";
+            case DEFENSES -> "Free review and plans · commission from the Treasury · supply blocks through Workers storage";
+            case TERRITORY -> "Permanent decrees affect every faction member · construction lives in Building";
             case INTEL -> "Search this section · Ctrl+F focuses search · scroll to read matching entries";
             default -> "";
         };
@@ -986,11 +1005,17 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // Footer is its own fixed band. Keeping all controls inside this band
         // prevents the Army deployment row from colliding at large GUI scales.
         g.fill(x + 4, y, x + w - 4, y + CoreHireLayout.FOOTER_HEIGHT,
-                0xB0100C08);
-        g.fill(x + 6, y, x + w - 6, y + 1, CommandPalette.HAIRLINE);
+                CommandPalette.PANEL_BOTTOM);
+        g.fill(x + 6, y, x + w - 6, y + 1, CommandPalette.DIVIDER);
 
         int feedbackW = layout.feedbackWidth();
         int feedbackLeft = x + w - feedbackW - 8;
+
+        if (tab == CoreCommandPage.DEFENSES) {
+            text(g, "Esc: close  ·  Ctrl+Tab: switch tab", x + 10, y + 4,
+                    feedbackLeft - x - 18, CommandPalette.TEXT_MUTED);
+            return;
+        }
 
         // Faction member count on the left.
         int members = menu.members().size();
@@ -1005,7 +1030,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             case ARMY -> "Shared stock rotates every 15 minutes";
             case LOOT -> "Loot & blessings draw from the faction Treasury";
             case TREASURY -> "Interest " + menu.interestRate() / 100.0 + "% per in-game day";
-            case DEFENSES -> "Collect a plan, then use it on level ground in your claim";
+            case DEFENSES -> "Esc: close · Ctrl+Tab: switch tab";
             case TERRITORY -> "Faction-wide upgrades apply to every member";
             case INTEL -> "Unit reference, enemy lore and field guidance";
             default -> "";
@@ -1219,59 +1244,229 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 (int) Math.ceil(bottom * scale));
     }
 
+    private void drawBuildingTooltips(GuiGraphics g, int mx, int my, int tooltipX, int tooltipY) {
+        var building = buildingLayout();
+        for (BuildingSection section : BuildingSection.values()) {
+            if (visibleHover(buildingSections[section.ordinal()], mx, my)) {
+                String detail = switch (section) {
+                    case PERIMETER -> "Choose a material, then review a free perimeter plan in world. Confirm separately to commission.";
+                    case STRUCTURES -> "All six existing plans. Select a structure, take its free plan, then preview and confirm in your claim.";
+                    case CONSTRUCTION -> "Your core’s whole-perimeter projects plus your loaded native jobs within 128 blocks, refreshed every two seconds. Unknown sections never count as completed. Recent terminal summaries are bounded.";
+                };
+                tooltip(g, section.label + " | " + detail, tooltipX, tooltipY);
+                return;
+            }
+        }
+        if (buildingSection == BuildingSection.PERIMETER) {
+            for (int i = 0; i < fortifyButtons.length; i++) {
+                if (visibleHover(fortifyButtons[i], mx, my)) {
+                    tooltip(g, TerritoryFortification.material(i).label()
+                            + " perimeter palette. Selection and preview are free. Commission: "
+                            + TerritoryFortification.PRICE + " faction Treasury emeralds plus supplied blocks.", tooltipX, tooltipY);
+                    return;
+                }
+            }
+            if (visibleHover(reviewPerimeter, mx, my)) {
+                tooltip(g, "Receive a free perimeter plan and hold it to review in world. Commission only when confirmed. "
+                        + "Needs an owned Workers builder and Builder-enabled storage with the exact blocks. "
+                        + (canAfford(TerritoryFortification.PRICE) ? "Treasury funds are ready."
+                        : "Review is free; commission needs " + emeralds(TerritoryFortification.PRICE - availableFunds())
+                        + " more in the faction Treasury."), tooltipX, tooltipY);
+            }
+        } else if (buildingSection == BuildingSection.STRUCTURES) {
+            for (DefenseBlueprint.Kind kind : DefenseBlueprint.Kind.values()) {
+                if (visibleHover(defensePlans[kind.ordinal()], mx, my)) {
+                    tooltip(g, defenseTooltip(kind), tooltipX, tooltipY);
+                    return;
+                }
+            }
+            if (visibleHover(takeDefensePlan, mx, my)) tooltip(g, defenseTooltip(selectedDefense), tooltipX, tooltipY);
+        } else {
+            if (visibleHover(constructionCancel, mx, my)) {
+                tooltip(g, "Cancel the displayed whole perimeter, including all remaining sections. Placed blocks stay; no commission or consumed-material refund.", tooltipX, tooltipY);
+                return;
+            }
+            int first = constructionPage * constructionRows();
+            for (int row = 0; row < constructionRows() && first + row < menu.construction().size(); row++) {
+                if (over(mx, my, building.x(), building.reportRowY(row), building.width(),
+                        projectReports() ? building.reportProjectHeight() : constructionRowHeight() - 4)) {
+                    var job = menu.construction().get(first + row);
+                    tooltip(g, job.label() + " | " + job.progressText() + " | " + job.location()
+                            + " | " + job.activity() + (job.sectionText().isBlank() ? "" : " | " + job.sectionText()) + " | Requested now: "
+                            + (job.supplies().isBlank() ? "No active requests reported" : job.supplies()), tooltipX, tooltipY);
+                    return;
+                }
+            }
+        }
+    }
+
+    private String defenseTooltip(DefenseBlueprint.Kind kind) {
+        return kind.label + " | " + kind.description + " | " + kind.dimensions()
+                + " | " + kind.price + " Treasury emeralds on placement + "
+                + DefenseBlueprint.create(kind, net.minecraft.core.BlockPos.ZERO, net.minecraft.core.Direction.SOUTH).materials()
+                + ". Plan collection and preview are free. Use the same anchor again to pay and build. "
+                + "Your idle builder must be within 16 blocks of the site; supply a Workers storage area with Builders enabled.";
+    }
+
     private void drawConstruction(GuiGraphics g) {
-        text(g, "Your jobs · 128 blocks · 2s refresh", layout.x() + 100, layout.contentY() + 5,
-                layout.width() - 112, CommandPalette.TEXT_MUTED);
+        var building = buildingLayout();
         var jobs = menu.construction();
+        constructionPage = Math.max(0, Math.min(constructionPage, constructionPages() - 1));
+        displayedCancellationTarget = selectedConstruction();
+        text(g, (projectReports() ? "Perimeters + nearby jobs · 2s · " : "Loaded nearby · 128 blocks · 2s · ")
+                        + (constructionPage + 1) + "/" + constructionPages(),
+                building.x() + 2, building.reportHeaderY() + 1, building.width() - 4, CommandPalette.TEXT_MUTED);
         if (jobs.isEmpty()) {
+            CommandFrame.surface(g, building.x(), building.reportY(), building.width(),
+                    building.actionY() - building.reportY() - 6);
             drawWrappedText(g, menu.constructionLoaded()
-                            ? "No loaded jobs nearby. Move closer to your builder or site. Completed markers may disappear."
-                            : "Loading your construction...", layout.x() + 18, layout.contentY() + 34,
-                    layout.width() - 36, 4, CommandPalette.TEXT_MUTED);
+                            ? "No owned perimeter projects or loaded jobs nearby. Move closer to a native builder or site."
+                            : "Loading your construction...", building.x() + 10, building.reportY() + 10,
+                    building.width() - 20, Math.max(1, (building.actionY() - building.reportY() - 20) / 10),
+                    CommandPalette.TEXT_MUTED);
             return;
         }
-        constructionPage = Math.max(0, Math.min(constructionPage, constructionPages() - 1));
         int first = constructionPage * constructionRows();
         for (int row = 0; row < constructionRows() && first + row < jobs.size(); row++) {
             var job = jobs.get(first + row);
-            int x = layout.x() + 10, y = layout.contentY() + 24 + row * constructionRowHeight();
-            int w = layout.width() - 20, h = constructionRowHeight() - 4;
-            CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_TEAL);
-            text(g, (first + row + 1) + "/" + jobs.size() + "  " + job.label(), x + 8, y + 5, w - 16, CommandPalette.TEXT);
-            text(g, job.progressText(), x + 8, y + 17, w - 16, CommandPalette.ACCENT_TEAL);
-            text(g, job.activity(), x + 8, y + 29, w - 16, CommandPalette.TEXT_MUTED);
-            if (!layout.compact()) text(g, "Supplies: " + (job.supplies().isBlank()
-                    ? "No active requests reported" : job.supplies()), x + 8, y + 41, w - 16, CommandPalette.ACCENT_GOLD);
-            if (job.percent() >= 0) CommandFrame.progress(g, x + 8, y + h - 6, w - 16, 3,
+            int x = building.x(), y = building.reportRowY(row);
+            int w = building.reportMainWidth(), h = projectReports() ? building.reportProjectHeight() : constructionRowHeight() - 4;
+            if (job.projectId() != null) {
+                drawPerimeterProject(g, job, first + row, jobs.size(), x, y, w, h);
+                continue;
+            }
+            CommandFrame.surface(g, x, y, w, h);
+            text(g, (first + row + 1) + "/" + jobs.size() + "  " + job.label(),
+                    x + 10, y + 7, w - 20, CommandPalette.TEXT);
+            if (building.splitReport()) {
+                text(g, "REPORTED PROGRESS", x + 10, y + 26, w - 20, CommandPalette.TEXT_DIM);
+                drawWrappedText(g, job.progressText(), x + 10, y + 40, w - 20, 2, CommandPalette.ACCENT_TEAL);
+                text(g, job.location(), x + 10, y + 72, w - 20, CommandPalette.TEXT_MUTED);
+                int detailX = building.reportDetailX(), detailW = building.reportDetailWidth();
+                CommandFrame.surface(g, detailX, y, detailW, h);
+                text(g, "BUILDER STATUS", detailX + 10, y + 7, detailW - 20, CommandPalette.TEXT_DIM);
+                drawWrappedText(g, job.activity(), detailX + 10, y + 22, detailW - 20, 3, CommandPalette.TEXT);
+                text(g, "REQUESTED NOW", detailX + 10, y + 59, detailW - 20, CommandPalette.TEXT_DIM);
+                drawWrappedText(g, job.supplies().isBlank() ? "No active requests reported" : job.supplies(),
+                        detailX + 10, y + 74, detailW - 20, 2, CommandPalette.ACCENT_GOLD);
+            } else {
+                text(g, job.progressText(), x + 10, y + 19, w - 20, CommandPalette.ACCENT_TEAL);
+                text(g, job.activity(), x + 10, y + 31, w - 20, CommandPalette.TEXT_MUTED);
+                text(g, "Supplies: " + (job.supplies().isBlank() ? "No active requests reported" : job.supplies()),
+                        x + 10, y + 43, w - 20, CommandPalette.ACCENT_GOLD);
+            }
+            // Unavailable progress is never painted as an empty/zero-percent bar.
+            if (job.percent() >= 0) CommandFrame.progress(g, x + 10, y + h - 6, w - 20, 3,
                     job.percent() / 100f, CommandPalette.ACCENT_TEAL);
         }
     }
 
-    private void drawDefenses(GuiGraphics g, int mouseX, int mouseY) {
-        if (constructionView) { drawConstruction(g); return; }
-        int w = layout.territoryCardWidth(), h = layout.territoryCardHeight();
-        for (int i = 0; i < defensePlans.length; i++) {
-            var kind = DefenseBlueprint.Kind.values()[defensePage * 3 + i];
-            int x = layout.territoryCardX(i), y = layout.territoryCardY(i);
-            CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_TEAL,
-                    over(mouseX, mouseY, x, y, w, h));
-            text(g, kind.label, x + 8, y + 9, w - 16, CommandPalette.ACCENT_TEAL);
-            if (h >= 84) {
-                text(g, kind.description, x + 8, y + 24, w - 16, CommandPalette.TEXT_MUTED);
-                text(g, kind.dimensions(), x + 8, y + 36, w - 16, CommandPalette.TEXT_DIM);
-                text(g, kind.price + "e to build + supplied materials", x + 8, y + 48,
-                        w - 16, CommandPalette.ACCENT_GOLD);
+    static int constructionProgressColor(ConstructionReport.Job job) {
+        return job.complete() ? CommandPalette.ACCENT_EMERALD
+                : job.percent() == 100 ? CommandPalette.ACCENT_GOLD : CommandPalette.ACCENT_TEAL;
+    }
+
+    private void drawPerimeterProject(GuiGraphics g, ConstructionReport.Job job, int index, int count,
+                                      int x, int y, int w, int h) {
+        var building = buildingLayout();
+        int progressColor = constructionProgressColor(job);
+        CommandFrame.surface(g, x, y, w, h);
+        text(g, (index + 1) + "/" + count + "  " + job.label(), x + 10, y + 5, w - 20, CommandPalette.TEXT);
+        if (building.splitReport()) {
+            text(g, "OVERALL PROGRESS", x + 10, y + 25, w - 20, CommandPalette.TEXT_DIM);
+            drawWrappedText(g, job.progressText(), x + 10, y + 40, w - 20, 2, progressColor);
+            if (job.percent() >= 0) CommandFrame.progress(g, x + 10, y + 65, w - 20, 4, job.percent() / 100f, progressColor);
+            drawWrappedText(g, job.sectionText(), x + 10, y + 82, w - 20, 3, CommandPalette.ACCENT_GOLD);
+            drawWrappedText(g, job.location(), x + 10, y + 124, w - 20, 2, CommandPalette.TEXT_MUTED);
+            int detailX = building.reportDetailX(), detailW = building.reportDetailWidth();
+            CommandFrame.surface(g, detailX, y, detailW, h);
+            text(g, job.complete() ? "VERIFIED COMPLETE" : "CURRENT STATUS", detailX + 10, y + 8, detailW - 20,
+                    job.complete() ? CommandPalette.ACCENT_EMERALD : CommandPalette.TEXT_DIM);
+            drawWrappedText(g, job.activity(), detailX + 10, y + 25, detailW - 20, 5, CommandPalette.TEXT);
+            CommandFrame.divider(g, detailX + 10, y + 83, detailW - 20);
+            text(g, "REQUESTED NOW", detailX + 10, y + 94, detailW - 20, CommandPalette.TEXT_DIM);
+            drawWrappedText(g, job.supplies().isBlank() ? "No active requests reported" : job.supplies(),
+                    detailX + 10, y + 109, detailW - 20, Math.max(1, (h - 152) / 10), CommandPalette.ACCENT_GOLD);
+            if (job.cancelable()) text(g, "Placed blocks stay. No refund.", detailX + 10, y + h - 13,
+                    detailW - 20, CommandPalette.TEXT_MUTED);
+        } else {
+            // Five explicit lines fit the minimum logical canvas. Full details remain in the report tooltip.
+            text(g, job.progressText(), x + 10, y + 16, w - 20, progressColor);
+            String[] sections = job.sectionText().split("\n", 2);
+            text(g, sections[0], x + 10, y + 27, w - 20, CommandPalette.TEXT_MUTED);
+            if (sections.length > 1) text(g, sections[1], x + 10, y + 38, w - 20, CommandPalette.ACCENT_GOLD);
+            text(g, job.activity(), x + 10, y + 49, w - 20, job.complete() ? CommandPalette.ACCENT_EMERALD : CommandPalette.TEXT);
+            if (h >= 82) {
+                text(g, "Supplies: " + (job.supplies().isBlank() ? "No active requests reported" : job.supplies()),
+                        x + 10, y + 65, w - 20, CommandPalette.ACCENT_GOLD);
+                if (job.percent() >= 0) CommandFrame.progress(g, x + 10, y + h - 7, w - 20, 3, job.percent() / 100f, progressColor);
             }
         }
-        int x = layout.territoryCardX(3), y = layout.territoryCardY(3);
-        CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_STEEL);
-        text(g, "YOUR CONSTRUCTION", x + 8, y + 9, w - 16, CommandPalette.TEXT);
-        if (h >= 84) {
-            text(g, "Progress, supplies and builder status", x + 8, y + 24, w - 16, CommandPalette.TEXT_MUTED);
-            text(g, "Your loaded jobs within 128 blocks", x + 8, y + 36, w - 16, CommandPalette.TEXT_DIM);
-            text(g, "Progress and supply requests in this hub", x + 8, y + 48, w - 16, CommandPalette.ACCENT_GOLD);
-        }
+    }
 
+    private void drawDefenses(GuiGraphics g, int mouseX, int mouseY) {
+        switch (buildingSection) {
+            case PERIMETER -> drawPerimeter(g);
+            case STRUCTURES -> drawStructureSelection(g);
+            case CONSTRUCTION -> drawConstruction(g);
+        }
+    }
+
+    private void drawPerimeter(GuiGraphics g) {
+        var building = buildingLayout();
+        int x = building.x(), y = building.bodyY(), w = building.perimeterPreviewWidth();
+        text(g, "Auto perimeter", x + 3, y + 2, w - 6, CommandPalette.TEXT);
+        if (building.splitPerimeter()) {
+            text(g, "Your complete claimed boundary", x + 3, y + 17, w - 6, CommandPalette.TEXT_MUTED);
+            int detailX = building.perimeterDetailX(), detailW = building.perimeterDetailWidth();
+            CommandFrame.surface(g, detailX, y, detailW, building.bodyHeight());
+            text(g, "ONE-TIME TREASURY FEE", detailX + 10, y + 10, detailW - 20, CommandPalette.TEXT_DIM);
+            text(g, TerritoryFortification.PRICE + " emeralds", detailX + 10, y + 25,
+                    detailW - 20, CommandPalette.ACCENT_GOLD);
+            drawWrappedText(g, "Supply blocks separately through Builder-enabled storage.",
+                    detailX + 10, y + 41, detailW - 20, 2, CommandPalette.TEXT_MUTED);
+            CommandFrame.divider(g, detailX + 10, y + 66, detailW - 20);
+            text(g, "WALL MATERIAL", detailX + 10, y + 76, detailW - 20, CommandPalette.TEXT_DIM);
+            drawWrappedText(g, "Review is free. Charged once after the builder accepts.",
+                    detailX + 10, building.perimeterTextY(), detailW - 20, 2, CommandPalette.TEXT_MUTED);
+            text(g, "Review the actual terrain before commissioning.", x + 3, building.bottom() - 15,
+                    w - 6, CommandPalette.TEXT_MUTED);
+        } else {
+            text(g, TerritoryFortification.PRICE + " emeralds · one-time Treasury fee", x + 3, y + 16,
+                    w - 6, CommandPalette.ACCENT_GOLD);
+            int lines = building.perimeterTextLines();
+            String guidance = "Free review. Supply blocks separately; commission after the builder accepts.";
+            if (building.illustratedPerimeter() || lines >= 6) guidance = "Review your actual claim in world before commissioning. "
+                    + "Use an owned Workers builder and nearby storage with Builders enabled. "
+                    + "The one-time Treasury fee and supplied materials are separate.";
+            drawWrappedText(g, guidance, x + 3, building.perimeterTextY(), w - 6, lines, CommandPalette.TEXT_MUTED);
+        }
+        if (building.illustratedPerimeter()) {
+            int exampleY = building.perimeterExampleY(), exampleHeight = building.perimeterExampleHeight();
+            CommandFrame.surface(g, x, exampleY, w, exampleHeight);
+            text(g, "TEMPLATE STYLE · ONE-CHUNK EXAMPLE", x + 8, exampleY + 7, w - 16, CommandPalette.TEXT_DIM);
+            if (perimeterExamples[perimeterMaterial] == null)
+                perimeterExamples[perimeterMaterial] = BuildingPlanThumbnail.perimeterExample(perimeterMaterial);
+            perimeterExamples[perimeterMaterial].render(g, x + 8, exampleY + 21, w - 16, exampleHeight - 27);
+        }
+    }
+
+    private void drawStructureSelection(GuiGraphics g) {
+        var building = buildingLayout();
+        if (!building.detailedCatalogue()) return;
+        int x = building.detailX(), y = building.bodyY(), w = building.detailWidth();
+        CommandFrame.card(g, x, y, w, building.bodyHeight() - 26, CommandPalette.ACCENT_TEAL);
+        text(g, "SELECTED PLAN", x + 8, y + 8, w - 16, CommandPalette.TEXT_DIM);
+        text(g, selectedDefense.label, x + 8, y + 23, w - 16, CommandPalette.ACCENT_TEAL);
+        text(g, selectedDefense.dimensions(), x + 8, y + 38, w - 16, CommandPalette.TEXT_MUTED);
+        int descriptionLines = Math.min(4, Math.max(1, (building.bodyHeight() - 130) / 10));
+        drawWrappedText(g, selectedDefense.description, x + 8, y + 55, w - 16,
+                descriptionLines, CommandPalette.TEXT_MUTED);
+        int stepsY = y + 62 + descriptionLines * 10;
+        drawWrappedText(g, "1. Take a free plan. 2. Preview the site and facing. 3. Confirm "
+                        + selectedDefense.price + "e from the Treasury, plus supplied materials.",
+                x + 8, stepsY, w - 16,
+                Math.max(1, (building.actionY() - stepsY - 16) / 10), CommandPalette.ACCENT_GOLD);
     }
 
     private void drawTerritory(GuiGraphics g, int mouseX, int mouseY) {
@@ -1280,9 +1475,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         // the label, a short description, price and status, with the
         // purchase button in the bottom-right (added in init()).
         int cols = 2;
-        int rows = (TerritoryBuffs.COUNT + cols - 1) / cols;
         int gridTop = layout.contentY();
-        int gridBottom = layout.contentBottom() - 32;
         int cellW = layout.territoryCardWidth();
         int cellH = layout.territoryCardHeight();
         for (int i = 0; i < TerritoryBuffs.COUNT; i++) {
@@ -1348,14 +1541,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
         if (h >= 62) {
             CommandFrame.divider(g, x + 9, y + 43, w - 18);
-            text(g, "PERIMETER CONTRACTS", x + 9, y + 50,
+            text(g, "BUILDING", x + 9, y + 50,
                     Math.max(1, w / 3 - 18), CommandPalette.ACCENT_GOLD);
-            text(g, "Choose a material to start work; the wall projection is at its shovel marker",
+            text(g, "Plan perimeters, collect structure plans and check nearby jobs in Building",
                     x + w / 3, y + 50,
                     Math.max(1, w - w / 3 - 9), CommandPalette.TEXT);
         }
         if (h >= 76) {
-            text(g, "Requires a Builder-enabled storage area stocked near the wall line",
+            text(g, "Construction uses Workers builders and materials from Builder-enabled storage",
                     x + 9, y + 64, w - 18, CommandPalette.TEXT_MUTED);
         }
     }
@@ -1935,9 +2128,16 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     @Override
     public void onClose() {
+        buildingReport.update(false, this::action);
         EntityPortrait.clear();
         CivilianPortrait.clear();
         super.onClose();
+    }
+
+    @Override
+    public void removed() {
+        buildingReport.update(false, this::action);
+        super.removed();
     }
 
     /**

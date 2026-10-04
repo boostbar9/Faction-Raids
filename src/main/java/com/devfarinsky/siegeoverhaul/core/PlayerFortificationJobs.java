@@ -233,6 +233,7 @@ public final class PlayerFortificationJobs {
 
     /** Called cheaply from the existing living-tick hook; meaningful work runs once every two seconds. */
     public static void tick(ServerLevel level, Mob builder) {
+        if (PerimeterProjectLink.reserved(builder)) return; // Whole-project recovery never treats a missing section as completion.
         if (builder.tickCount % RECOVERY_INTERVAL != 0 || !WorkersBridge.isBuilder(builder)) return;
         CompoundTag tag = builder.getPersistentData();
         if (tag.contains(ModConstants.Tags.CAMP_WORKER_TEAM)) return;

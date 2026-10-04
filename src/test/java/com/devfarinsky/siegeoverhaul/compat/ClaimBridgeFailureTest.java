@@ -12,7 +12,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-class ClaimBridgeFailureTest extends MinecraftTestSupport {
+public class ClaimBridgeFailureTest extends MinecraftTestSupport {
     @BeforeEach @AfterEach void clearProviderState() throws Exception {
         for (String name : new String[]{"PROVIDER_AVAILABLE", "BROKEN_PROVIDERS"}) {
             var field = ClaimBridge.class.getDeclaredField(name);
@@ -21,6 +21,10 @@ class ClaimBridgeFailureTest extends MinecraftTestSupport {
             if (value instanceof Map<?,?> map) map.clear();
             if (value instanceof Set<?> set) set.clear();
         }
+        for (String name : new String[]{"ftbInit", "opacInit"}) setField(name, false);
+        for (String name : new String[]{"ftbGetManager", "ftbGetChunk", "ftbGetTeamId",
+                "opacGetInstance", "opacGetClaimStatePos", "opacClaimGetPlayerId"}) setField(name, null);
+        Provider.instance = null;
     }
 
     @Test void absentOptionalModsDoNotBlockPlacement() {
@@ -34,6 +38,63 @@ class ClaimBridgeFailureTest extends MinecraftTestSupport {
 
     @Test void brokenFtbApiBlocksInitialAndLaterQueries() { checkBroken("ftbchunks", "FTB Chunks"); }
     @Test void brokenOpacApiBlocksInitialAndLaterQueries() { checkBroken("openpartiesandclaims", "Open Parties"); }
+
+    @Test void installedFtbWithNullManagerIsUnavailableNotUnclaimed() throws Exception {
+        setField("ftbInit", true);
+        setField("ftbGetManager", Provider.class.getMethod("instance"));
+        checkBroken("ftbchunks", "FTB Chunks");
+    }
+
+    @Test void installedOpacWithNullInstanceIsUnavailableNotUnclaimed() throws Exception {
+        setField("opacInit", true);
+        setField("opacGetInstance", Provider.class.getMethod("instance"));
+        checkBroken("openpartiesandclaims", "Open Parties");
+    }
+
+    @Test void installedOpacWithNullServerDataIsUnavailableNotUnclaimed() throws Exception {
+        Provider.instance = new Instance(null);
+        setField("opacInit", true);
+        setField("opacGetInstance", Provider.class.getMethod("instance"));
+        checkBroken("openpartiesandclaims", "Open Parties");
+    }
+
+    @Test void installedOpacWithNullClaimManagerIsUnavailableNotUnclaimed() throws Exception {
+        Provider.instance = new Instance(new Data());
+        setField("opacInit", true);
+        setField("opacGetInstance", Provider.class.getMethod("instance"));
+        checkBroken("openpartiesandclaims", "Open Parties");
+    }
+
+    @Test void existingClaimsRequireAnActualUuidOwner() {
+        var owner = java.util.UUID.randomUUID();
+        assertSame(owner, ClaimBridge.requireClaimOwner(owner));
+        assertThrows(IllegalStateException.class, () -> ClaimBridge.requireClaimOwner(null));
+        assertThrows(IllegalStateException.class, () -> ClaimBridge.requireClaimOwner(owner.toString()));
+        assertThrows(IllegalStateException.class, () -> ClaimBridge.requireClaimOwner(new Object()));
+    }
+
+    @Test void healthyProviderValueIsReturnedWithoutReplacement() {
+        var manager = new Object();
+        assertSame(manager, ClaimBridge.requireAvailable(manager, "test manager"));
+        assertThrows(IllegalStateException.class, () -> ClaimBridge.requireAvailable(null, "test manager"));
+    }
+
+    private static void setField(String name, Object value) throws Exception {
+        var field = ClaimBridge.class.getDeclaredField(name); field.setAccessible(true); field.set(null, value);
+    }
+
+    public static final class Provider {
+        static Object instance;
+        public static Object instance() { return instance; }
+    }
+    public static final class Instance {
+        private final Object data;
+        Instance(Object data) { this.data = data; }
+        public Object getServerData() { return data; }
+    }
+    public static final class Data {
+        public Object getServerClaimsManager() { return null; }
+    }
 
     private void checkBroken(String modId, String label) {
         // The optional APIs are deliberately absent from this test runtime, reproducing

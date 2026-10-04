@@ -1,0 +1,130 @@
+name: Native Territory Perimeter QA
+
+# Separate long multi-claim / irregular territory / real restart acceptance; one-chunk calibration remains independent.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-territory-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-territory-client:
+    # Long full-completion coverage is opt-in when a specific risk warrants it.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    env:
+      LIBGL_ALWAYS_SOFTWARE: 'true'
+      GALLIUM_DRIVER: llvmpipe
+    steps:
+      - name: Check out exact integrated source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+      - name: Install standard virtual display and software OpenGL
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y xvfb xauth mesa-utils libgl1-mesa-dri libglx-mesa0 libopenal1
+      - name: Prepare new isolated perimeter directory
+        run: |
+          set -euo pipefail
+          test ! -e build/native-territory-qa/client
+          test ! -e build/native-territory-qa/evidence
+          python3 -B -m unittest discover -s scripts/tests -p 'test_prepare_native_client_defaults.py'
+          python3 scripts/prepare-native-client-defaults.py --mode territory-perimeter --smallships-version 2.0.0-b1.4
+          mkdir -p build/native-territory-qa/evidence
+          cp build/native-territory-qa/client/.native-smallships-defaults.json build/native-territory-qa/evidence/smallships-default-config-provenance.json
+          printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:4\nsimulationDistance:5\nmaxFps:30\nvsync:false\n' > build/native-territory-qa/client/options.txt
+          git rev-parse HEAD > build/native-territory-qa/evidence/source-commit.txt
+          java -version 2> build/native-territory-qa/evidence/java-version.txt
+      - name: Run full native territory perimeter and partial-progress world restart
+        run: |
+          set -euo pipefail
+          xvfb-run -a -s '-screen 0 1280x720x24' bash -c '
+            set -euo pipefail
+            glxinfo -B | tee build/native-territory-qa/evidence/opengl.txt
+            timeout --signal=TERM --kill-after=60s 58m ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=territory-perimeter runClient 2>&1 | tee build/native-territory-qa/evidence/client-console.log
+          '
+      - name: Verify exact completed-ring evidence
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('build/native-territory-qa/evidence')
+          data = json.loads((root / 'result.json').read_text())
+          assert data['mode'] == 'territory-perimeter', data
+          assert data['status'] == 'passed', data
+          assert data['completedBlocks'] == 1404, data
+          assert data['treasuryDebit'] == 64, data
+          assert data['materialCounts'] == {'minecraft:cobblestone': 864, 'minecraft:oak_planks': 540}, data
+          assert data['nativeCompletionObserved'] and data['completedCaptureTerrainCompiled'], data
+          assert data['completionAuthority'] in ['COMPLETE full durable project', 'COMPLETE compact terminal receipt'], data
+          assert data['completionAuthorityNbt'] and len(data['manifestHash']) == 64, data
+          stages = data['stageLayout']
+          assert len(stages) >= 1 and sum(s['targets'] for s in stages) == 1404, stages
+          assert [s['index'] for s in stages] == list(range(len(stages))), stages
+          assert len(set(s['area'] for s in stages)) == len(stages), stages
+          joins = data['nativeStageJoins']
+          assert set(j['area'] for j in joins) == set(s['area'] for s in stages), joins
+          assert all(j['marker'] == data['originalMarker'] for j in joins), joins
+          assert sum(not j['loadedFromDisk'] for j in joins) == len(stages), joins
+          assert any(j['loadedFromDisk'] for j in joins), joins
+          assert 0 < data['constructionSeconds'] <= data['constructionLimitSeconds'] == 1584, data
+          assert data['restartVerified'] and data['territoryChunkCount'] == 3, data
+          assert len(data['nativeClaimRecords']) == len(set(data['nativeClaimRecords'])) == 2, data
+          assert 0 < data['restartPlacedBlocks'] < 1404, data
+          assert data['restartPlacedBlocks'] + data['restartPendingCells'] == 1404, data
+          assert 0 <= data['restartActiveStage'] < len(stages), data
+          assert 0 < data['restartActiveStagePending'] < data['restartActiveStageTargets'], data
+          assert data['reloadProjectBoundary'], data
+          assert data['screenshots'] == ['01-native-completed-territory-perimeter.png'], data
+          content = (root / data['screenshots'][0]).read_bytes()
+          assert content.startswith(b'\x89PNG\r\n\x1a\n') and len(content) > 4096
+          versions = data['loadedModVersions']
+          assert versions['workers'] == '2.0.3' and versions['recruits'] == '1.15.2', versions
+          assert versions['minecraft'] == '1.20.1' and versions['forge'] == '47.4.16', versions
+          for mod in ['workers', 'recruits', 'smallships', 'siegeweapons']:
+              assert len(data['loadedCompanionArtifacts'][mod]['sha256']) == 64, mod
+          final = data['finalDiagnostics']
+          bank = data['treasuryAccounting']
+          assert bank['startingFunds'] == 2000 and bank['commissionDebit'] == 64 and bank['initialPaidBalance'] == 1936, bank
+          assert bank['singleNegativeLedgerDelta'] == -64, bank
+          assert bank['expectedFinalBalance'] == 1936 + bank['interestCredits'] + bank['taxCredits'], bank
+          assert final['placed'] == 1404 and final['treasury'] == bank['expectedFinalBalance'], final
+          assert len(data['treasuryObserverContracts']) == 10, data
+          assert final['placedCobble'] == 864 and final['placedOak'] == 540, final
+          for key in ['chestCobble', 'chestOak', 'builderCobble', 'builderOak', 'looseCobble', 'looseOak']:
+              assert final[key] == 0, (key, final)
+          print('Exact multi-claim L-territory native completion and restart passed. Review the actual framebuffer and diagnostics.')
+          PY
+      - name: Collect diagnostics without companion JARs or worlds
+        if: always()
+        run: |
+          mkdir -p build/native-territory-qa/evidence/logs
+          if [ -d build/native-territory-qa/client/logs ]; then
+            find build/native-territory-qa/client/logs -maxdepth 1 -type f -name '*.log' -exec cp {} build/native-territory-qa/evidence/logs/ \;
+          fi
+          if [ -d build/native-territory-qa/client/crash-reports ]; then
+            cp -R build/native-territory-qa/client/crash-reports build/native-territory-qa/evidence/
+          fi
+      - name: Upload actual framebuffer and diagnostic evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-territory-qa-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/native-territory-qa/evidence/
+          if-no-files-found: error
+          retention-days: 7

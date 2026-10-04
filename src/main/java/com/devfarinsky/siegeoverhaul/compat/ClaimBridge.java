@@ -199,15 +199,14 @@ public final class ClaimBridge {
 
     private static UUID ftbClaimOwner(ServerLevel level, ChunkPos chunk) throws ReflectiveOperationException {
         ftbInitReflection();
-        Object manager = ftbGetManager.invoke(null);
-        if (manager == null) return null;
+        Object manager = requireAvailable(ftbGetManager.invoke(null), "FTB claim manager");
         Class<?> dimPosClass = Class.forName("dev.ftb.mods.ftbchunks.api.ChunkDimPos");
         Object dimPos = dimPosClass.getConstructor(ResourceKey.class, int.class, int.class)
                 .newInstance(level.dimension(), chunk.x, chunk.z);
         Object claimed = ftbGetChunk.invoke(manager, dimPos);
         if (claimed == null) return null;
         Object teamId = ftbGetTeamId.invoke(claimed);
-        return teamId instanceof UUID u ? u : null;
+        return requireClaimOwner(teamId);
     }
 
     // ---- Open Parties and Claims reflection -----------------------------
@@ -240,22 +239,31 @@ public final class ClaimBridge {
 
     private static UUID opacClaimOwner(ServerLevel level, ChunkPos chunk) throws ReflectiveOperationException {
         opacInitReflection();
-        Object instance = opacGetInstance.invoke(null);
-        if (instance == null) return null;
+        Object instance = requireAvailable(opacGetInstance.invoke(null), "Open Parties instance");
         Method getServerData = instance.getClass().getMethod("getServerData");
-        Object serverData = getServerData.invoke(instance);
-        if (serverData == null) return null;
+        Object serverData = requireAvailable(getServerData.invoke(instance), "Open Parties server data");
         Method getManager = serverData.getClass().getMethod("getServerClaimsManager");
-        Object mgr = getManager.invoke(serverData);
-        if (mgr == null) return null;
+        Object mgr = requireAvailable(getManager.invoke(serverData), "Open Parties claim manager");
         ResourceLocation dim = level.dimension().location();
         Object claim = opacGetClaimStatePos.invoke(mgr, dim, chunk.x, chunk.z);
         if (claim == null) return null;
         Object playerId = opacClaimGetPlayerId.invoke(claim);
-        return playerId instanceof UUID u ? u : null;
+        return requireClaimOwner(playerId);
     }
 
     // ---- Common ---------------------------------------------------------
+
+    /** An installed provider that is not ready is not evidence of unclaimed land. */
+    static <T> T requireAvailable(T value, String description) {
+        if (value == null) throw new IllegalStateException(description + " is unavailable");
+        return value;
+    }
+
+    /** Called only for a non-null claim record; malformed/missing ownership fails closed. */
+    static UUID requireClaimOwner(Object value) {
+        if (value instanceof UUID owner) return owner;
+        throw new IllegalStateException("Existing claim has an unavailable or unsupported owner");
+    }
 
     private static void markProviderBroken(String key, Throwable t) {
         // Log once per provider per JVM, then cache "off" so we stop retrying.

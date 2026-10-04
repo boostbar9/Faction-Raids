@@ -90,6 +90,31 @@ class DefensePlanItemTest extends MinecraftTestSupport {
             assertEquals(0, f.stack.getCount());
         }
     }
+    @Test void staleSolidManualWallPreviewsCannotCommissionOrChargeUntilReviewedAgain() throws Exception {
+        for (var kind : java.util.List.of(DefenseBlueprint.Kind.WALL, DefenseBlueprint.Kind.CORNER)) {
+            try (Fixture f = new Fixture()) {
+                var field = DefensePlanItem.class.getDeclaredField("kind"); field.setAccessible(true); field.set(f.item, kind);
+                f.arm(); f.stack.getTag().getCompound(DefensePreview.TAG).remove("Geometry");
+                assertNull(f.selection());
+                assertEquals(InteractionResult.CONSUME, f.item.useOn(f.context));
+                f.noCommission(); assertEquals(1, f.stack.getCount());
+                assertEquals(20, f.selection().created()); assertFalse(f.selection().canConfirm(BlockPos.ZERO.above(), 20));
+                f.item.useOn(f.context); f.noCommission();
+                when(f.level.getGameTime()).thenReturn(40L);
+                f.structures.when(() -> DefenseStructures.commission(f.player, BlockPos.ZERO.above(), Direction.EAST, kind)).thenReturn(true);
+                assertEquals(InteractionResult.CONSUME, f.item.useOn(f.context));
+                assertEquals(0, f.stack.getCount());
+            }
+        }
+    }
+    @Test void legacyUnchangedTowerPreviewStillConfirms() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.arm(); f.stack.getTag().getCompound(DefensePreview.TAG).remove("Geometry");
+            f.structures.when(() -> DefenseStructures.commission(f.player, BlockPos.ZERO.above(), Direction.EAST,
+                    DefenseBlueprint.Kind.WATCHTOWER)).thenReturn(true);
+            assertEquals(InteractionResult.CONSUME, f.item.useOn(f.context)); assertEquals(0, f.stack.getCount());
+        }
+    }
     private static class Fixture implements AutoCloseable {
         final DefensePlanItem item = mock(DefensePlanItem.class, CALLS_REAL_METHODS);
         final UseOnContext context = mock(UseOnContext.class);
@@ -113,8 +138,8 @@ class DefensePlanItemTest extends MinecraftTestSupport {
             structures.when(() -> DefenseStructures.prepare(any(), any(), any(), any()))
                     .thenReturn(new DefenseStructures.Preparation(null, null, null));
         }
-        void arm() { DefensePreview.set(stack, BlockPos.ZERO.above(), Direction.EAST, Level.OVERWORLD.location(), owner, 0, null); }
-        DefensePreview.Selection selection() { return DefensePreview.read(stack, Level.OVERWORLD.location(), owner, 20); }
+        void arm() { DefensePreview.set(stack, item.kind(), BlockPos.ZERO.above(), Direction.EAST, Level.OVERWORLD.location(), owner, 0, null); }
+        DefensePreview.Selection selection() { return DefensePreview.read(stack, item.kind(), Level.OVERWORLD.location(), owner, 20); }
         void noCommission() { structures.verify(() -> DefenseStructures.commission(any(), any(), any(), any()), never()); }
         public void close() { structures.close(); }
     }

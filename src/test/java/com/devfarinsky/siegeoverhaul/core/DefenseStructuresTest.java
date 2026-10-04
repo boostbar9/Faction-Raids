@@ -77,6 +77,10 @@ class DefenseStructuresTest extends MinecraftTestSupport {
     private ServerLevel clearLevel() {
         ServerLevel level = mock(ServerLevel.class);
         when(level.getMinBuildHeight()).thenReturn(-64);
+        when(level.getAllEntities()).thenReturn(List.of());
+        var storage=mock(net.minecraft.world.level.storage.DimensionDataStorage.class);
+        when(level.getDataStorage()).thenReturn(storage);
+        when(storage.computeIfAbsent(any(),any(),anyString())).thenAnswer(call -> ((java.util.function.Supplier<?>)call.getArgument(1)).get());
         when(level.getMaxBuildHeight()).thenReturn(320);
         when(level.getWorldBorder()).thenReturn(new WorldBorder());
         when(level.hasChunkAt(any())).thenReturn(true);
@@ -85,6 +89,37 @@ class DefenseStructuresTest extends MinecraftTestSupport {
         return level;
     }
     private DefenseBlueprint.Plan tower() { return DefenseBlueprint.create(DefenseBlueprint.Kind.WATCHTOWER, origin, Direction.NORTH); }
+
+    @Test void everyManualPlanRetainsItsExactPreflightFootprintAndHeadroom() {
+        for (var kind : DefenseBlueprint.Kind.values()) for (var facing : Direction.Plane.HORIZONTAL) {
+            var plan = DefenseBlueprint.create(kind, origin, facing);
+            var reserved = DefenseStructures.reservedCells(plan);
+            assertEquals(plan.footprint().size() * kind.height, reserved.size(), kind.label);
+            for (var base : plan.footprint()) {
+                assertTrue(reserved.contains(base));
+                assertTrue(reserved.contains(base.atY(plan.max().getY())));
+                assertFalse(reserved.contains(base.atY(plan.max().getY() + 1)));
+            }
+            assertTrue(plan.blocks().keySet().stream().allMatch(cell -> reserved.contains(BlockPos.of(cell))));
+            assertThrows(UnsupportedOperationException.class, reserved::clear);
+        }
+    }
+
+    @Test void everyManualBodyCavityIsReservedAndOccupiedCavitiesRejectWithoutExcavation() {
+        for (var kind : List.of(DefenseBlueprint.Kind.WALL, DefenseBlueprint.Kind.CORNER))
+            for (var facing : Direction.Plane.HORIZONTAL) {
+                var plan = DefenseBlueprint.create(kind, origin, facing); var reserved = DefenseStructures.reservedCells(plan);
+                for (int x = -1; x <= 1; x++) for (int z = -1; z <= 1; z++) for (int y = 0; y < 3; y++) {
+                    var cell = origin.relative(facing.getClockWise(), x).relative(facing, z).above(y);
+                    assertTrue(reserved.contains(cell)); assertFalse(plan.blocks().containsKey(cell.asLong()));
+                }
+                for (int y = 0; y < 3; y++) for (var block : List.of(Blocks.COBBLESTONE, Blocks.CHEST, Blocks.WATER)) {
+                    var level = clearLevel(); when(level.getBlockState(origin.above(y))).thenReturn(block.defaultBlockState());
+                    assertNotNull(DefenseStructures.siteProblem(level, plan, p -> true));
+                    verify(level, never()).setBlock(any(), any(), anyInt(), anyInt());
+                }
+            }
+    }
 
     @Test void clearFlatClaimedSiteIsAccepted() {
         assertNull(DefenseStructures.siteProblem(clearLevel(), tower(), p -> true));
@@ -124,6 +159,7 @@ class DefenseStructuresTest extends MinecraftTestSupport {
         tag.putLong("SiegeDefenseSiteMax", tower().max().asLong());
         when(area.getPersistentData()).thenReturn(tag);
         when(level.getEntitiesOfClass(eq(Entity.class), any(), any())).thenReturn(List.of(area));
+        when(level.getAllEntities()).thenReturn(List.of(area)); when(area.isAlive()).thenReturn(true);
         try (var bridge = mockStatic(WorkersBridge.class)) {
             bridge.when(() -> WorkersBridge.isBuildArea(area)).thenReturn(true);
             assertNotNull(DefenseStructures.siteProblem(level, tower(), p -> true));
@@ -160,8 +196,13 @@ class DefenseStructuresTest extends MinecraftTestSupport {
         when(area.getPersistentData()).thenReturn(new CompoundTag()); when(area.getUUID()).thenReturn(UUID.randomUUID());
         when(area.blockPosition()).thenReturn(tower().min()); when(level.addFreshEntity(area)).thenReturn(true);
         try (var bridge = mockStatic(WorkersBridge.class); var payment = mockStatic(PaymentSource.class);
-             var access = mockStatic(WallBuilderAccess.class)) {
-            bridge.when(() -> WorkersBridge.createPlayerArea(eq(level), eq("buildarea"), any(), eq(owner), anyString(), anyInt(), anyInt(), anyInt())).thenReturn(area);
+             var access = mockStatic(WallBuilderAccess.class);
+             var guard = mockStatic(com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.class)) {
+            guard.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.protect(
+                    player, builder, area, DefenseStructures.reservedCells(tower()))).thenReturn(true);
+            guard.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.activate(area)).thenReturn(true);
+            bridge.when(() -> WorkersBridge.createProtectedPlayerArea(eq(player), eq(builder), any(), anyInt(), anyInt(), anyInt(), any())).thenReturn(area);
+            bridge.when(() -> WorkersBridge.discardPlayerArea(area)).thenAnswer(call -> { area.discard(); return true; });
             bridge.when(() -> WorkersBridge.assignBuildAreaDirectly(builder, area)).thenReturn(accepts);
             bridge.when(() -> WorkersBridge.releasePlayerJob(builder, area)).thenReturn(true);
             payment.when(() -> PaymentSource.consume(player, 300)).thenAnswer(call -> {
@@ -171,6 +212,7 @@ class DefenseStructuresTest extends MinecraftTestSupport {
             });
             assertEquals(success, DefenseStructures.startJob(player, builder, tower(), DefenseBlueprint.Kind.WATCHTOWER));
             payment.verify(() -> PaymentSource.consume(player, 300), accepts ? times(1) : never());
+            guard.verify(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.activate(area), success ? times(1) : never());
             if (!success) {
                 verify(area).discard();
                 assertFalse(builder.getPersistentData().hasUUID(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));

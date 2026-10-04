@@ -27,6 +27,8 @@ public final class DefenseBlueprint {
             this.height = height; this.price = price; this.description = description;
         }
         public boolean modular() { return ordinal() >= WALL.ordinal(); }
+        /** Only changed geometry invalidates old, unpaid manual previews. Accepted jobs keep saved blocks. */
+        public int previewGeometryVersion() { return this == WALL || this == CORNER ? 2 : 1; }
         public BlockPos anchor(BlockPos clicked) {
             return modular() ? new BlockPos(Math.floorDiv(clicked.getX() + 2, 5) * 5,
                     clicked.getY(), Math.floorDiv(clicked.getZ() + 2, 5) * 5) : clicked;
@@ -73,7 +75,8 @@ public final class DefenseBlueprint {
                 if (Math.abs(x) <= 1 && y <= Math.min(z, 3)) return stone;
                 return Math.abs(x) == 2 && z == 4 && y <= 4 ? stone : null;
             }
-            if (y < 3) return stone;
+            // Keep every exposed side and end face; only the enclosed 3 x 3 x 3 body is omitted.
+            if (y < 3) return Math.abs(x) == 2 || z == 0 || z == 4 ? stone : null;
             if (y == 3) return wood;
             if (y != 4) return null;
             boolean rail = kind == Kind.WALL ? Math.abs(x) == 2
