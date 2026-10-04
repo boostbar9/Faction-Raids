@@ -280,8 +280,8 @@ if (providers.gradleProperty('nativeServerQa').map { it.toBoolean() }.getOrElse(
     configurations.runtimeOnly.extendsFrom(configurations.nativeServerQaCompanions)
     sourceSets {
         nativeServerQa {
-            java.srcDir 'src/nativeServerQa/java'
-            resources.srcDir 'src/nativeServerQa/resources'
+            java.setSrcDirs(['src/nativeServerQa/java'])
+            resources.setSrcDirs(['src/nativeServerQa/resources'])
             compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
             runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
         }

@@ -49,7 +49,7 @@ final class NativePerimeterFixture {
     static final String FACTION = "native_perimeter";
     static final ChunkPos CLAIM_CHUNK = new ChunkPos(8, 0);
     static final BlockPos CORE = new BlockPos(135, 65, 7);
-    static final BlockPos CHEST = new BlockPos(137, 65, 9);
+    static final BlockPos CHEST = new BlockPos(136, 65, 8);
     static final int COBBLE = 748, OAK = 220, BLOCKS = 968;
     static final AABB BOUNDS = new AABB(104, 63, -24, 168, 80, 40);
 
@@ -161,6 +161,11 @@ final class NativePerimeterFixture {
                 && level.getBlockState(BlockPos.of(cell)).isAir(), "Plan leaves actual claim or starts prebuilt");
         require(!plan.blocks().containsKey(CORE.asLong()) && !plan.blocks().containsKey(CHEST.asLong()),
                 "Core/chest overlaps five-wide ring");
+        // Containers and the core must also clear production's two-cell reactive-neighbor guard.
+        // In a six-wide courtyard, only the central two rows/columns are far enough from both walls.
+        for (long cell : plan.blocks().keySet()) require(
+                NativeConstructionGuard.neighborhoodProblem(level, BlockPos.of(cell)) == null,
+                "Fixture puts a reactive/protected neighbor inside the native safety envelope at " + BlockPos.of(cell));
         Map<BlockPos, BlockState> nonPlan = new LinkedHashMap<>();
         for (int x = 122; x <= 149; x++) for (int z = -6; z <= 21; z++)
             for (int y = 64; y <= 71; y++) {
