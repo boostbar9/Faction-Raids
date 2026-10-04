@@ -1,6 +1,6 @@
 # 4.52.0 — Building and camp reliability
 
-Publication is pending. This is the complete approved feature package; it is not a claim of a published or broadly modpack-certified stable release. The existing CurseForge publishing channel remains unchanged until its release selection is confirmed.
+The complete Building and camp reliability package uses the CurseForge **Release** channel (`releaseType: release`). Release-channel selection does not establish universal modpack compatibility. Exact source, artifact and publication records are listed below.
 
 ## What changes
 
@@ -25,11 +25,41 @@ A complete initial perimeter review requires loaded terrain and passes finite pe
 
 The receipt keeps the original commissioning owner as history; later native ownership transfer does not invalidate hand-only verification or grant construction/storage permission. The hand-only history retains at most 4,096 builder identities per Overworld ledger; existing matching builders remain reusable at capacity. It is not a job reservation or permission grant. Authenticated old protected jobs migrate while their original proof is available. Missing or inconsistent proof can defer cleanup; an unavailable/dead old builder may require recovery review rather than simply loading it. Post-load verification with active item use pauses without stopping use or guessing at inventory.
 
-## Verification recorded so far
+## Final remote verification
 
-Earlier checks used 4.52.0-preview.1 development metadata; current handoff, completed-wall and dedicated-side checks used 4.52.0 development metadata. Companion hashes identify ForgeGradle-remapped artifacts, not original release JARs. The final reobfuscated 4.52.0 package has passed metadata/dependency/content checks; separately installed-JAR gameplay is not claimed.
+[PR #255](https://github.com/boostbar9/Faction-Raids/pull/255) was verified at candidate `9d7e1e3205ab3821bb022d1d85d44363f621aafe`, with exact source tree `ca6dbed762bc7269185028886ddbdac1825b4501`. All six required final PR runs completed successfully:
 
-- Production source a0eb806: clean build, **1,375 tests in 236 suites**, zero failures/errors/skips, plus native QA compilation. Reobfuscated 4.52.0 JAR SHA-256: `2b60d3147dcee90c12ca4c1acba05e19b03ea368536f205d1a87d198585585a4`. Metadata/dependencies were verified; no QA/vendor classes or nested JARs were packaged. The later 3c22c38 change is QA/docs only.
+- [Build 37208347948](https://github.com/boostbar9/Faction-Raids/actions/runs/37208347948): **1,375 tests in 236 suites**, zero failures, errors or skips.
+- [Native Building QA 37208347889](https://github.com/boostbar9/Faction-Raids/actions/runs/37208347889): real native construction completed the **83-block hollow manual wall**, retaining all **27 cavity AIR cells** through completion and reload. Native shovel/render/raycast/reload, finite stock/resupply, material accounting, protected pauses, multi-claim HUD and compact/keyboard controls passed. This is representative manual-building and lifecycle coverage, not a complete large perimeter.
+- [Native Building Server QA 37208347898](https://github.com/boostbar9/Faction-Raids/actions/runs/37208347898): all eight dedicated-side contract groups passed on a physical Forge GameTestServer with all four companions and zero network players. FakePlayer/direct-handler checks do not establish a real authenticated external multiplayer connection.
+- [Native Camp Spawn QA 37208347913](https://github.com/boostbar9/Faction-Raids/actions/runs/37208347913): both ordinary-terrain and controlled shallow-water/forest establishment passed. Fresh captures of both actual camp scenes recorded ready world, observer, received camp core, compiled terrain and camera, with changed-pixel proof and zero blank captures. Native work access and protected content checks passed, including 6,146 protected cells and three chests in the shallow-water/forest scenario. This covers establishment, not full decorative construction or a battle.
+- [Native Hollow Representative Stage Handoff QA 37208347941](https://github.com/boostbar9/Faction-Raids/actions/runs/37208347941): the first **95-target** section completed, native work continued into the next section, and **98 placed blocks were retained** through authenticated cancellation/reload. The fixture uses an explicitly **synthetic maximum-96-target partition** of the complete 572-target production quote and direct server admission. Mid-section, between-section and canceled-project save/close/reopen, cavities, exact stock, one 64-emerald charge and keyboard handlers passed; full-plan completion is not claimed.
+- [Native Staged Unload QA (Chunk Loading Off) 37208347895](https://github.com/boostbar9/Faction-Raids/actions/runs/37208347895): actual chunk/entity absence, disk-loaded resumption, one charge and terminal cancellation passed for an accepted **solid manifest with RecruitsChunkLoading=false**. This is not default-enabled chunk-loading evidence or a hollow-geometry unload test.
+
+## Release artifact and publication record
+
+- Verified merged-main commit/tree: `53b805b7590443148a4e3bd7713dec7890af7b2b` / `ca6dbed762bc7269185028886ddbdac1825b4501`.
+- Merged-main Build: 37209549373 — https://github.com/boostbar9/Faction-Raids/actions/runs/37209549373; verified conclusion: success.
+- Exact reobfuscated `siegeoverhaul-4.52.0.jar` from artifact 11305059245 (1,952,934 bytes), SHA-256: `b4a77cd802dceb6ff0041a80f5e862abd6a777a2e659a3f9b08108fb9b529760`.
+- Independent merged-main artifact checks: **1,375 tests in 236 suites**, zero failures, errors or skips; 4.52.0 metadata and required dependencies verified, with no QA/vendor classes or nested JARs. Decompressed entries match the verified PR Build except for the manifest build timestamp.
+- CurseForge project: 1364352; release channel: **Release** (`releaseType: release`).
+- CurseForge file ID: 9059365; file page: https://www.curseforge.com/minecraft/mc-mods/siege-overhaul/files/9059365.
+- [Verified-artifact publisher 37210150800](https://github.com/boostbar9/Faction-Raids/actions/runs/37210150800), attempt 1 at commit `0ecd4835f01d9134bf93fbd7a5f4fd9d7cd63d6b`, completed successfully. CurseForge accepted the exact tested artifact at **2026-10-04 14:40:58 UTC**.
+- Upload acceptance: accepted; public availability: public; verified at 2026-10-04T14:46:46Z.
+
+Public verification checked the [exact file page](https://www.curseforge.com/minecraft/mc-mods/siege-overhaul/files/9059365) at **2026-10-04 14:46:46 UTC**: the 4.52.0 title, `siegeoverhaul-4.52.0.jar`, Release channel, Forge 1.20.1, intended changelog and official Download link matched. At **2026-10-04 14:53:44 UTC**, the [all-files listing](https://www.curseforge.com/minecraft/mc-mods/siege-overhaul/files/all) showed 203 files with exactly one 4.52.0 row, first in the listing and identified as Main File and Recent File.
+
+[File-specific dependencies](https://www.curseforge.com/minecraft/mc-mods/siege-overhaul/files/9059365/dependencies) matched all four required projects (`recruits`, `workers`, `small-ships`, `siegeweapons`) and six optional projects (`ftb-chunks-forge`, `open-parties-and-claims`, `corpse`, `epic-knights-armor-and-weapons`, `ewewukeks-musket-mod`, `curios`). The [observed official download page](https://www.curseforge.com/minecraft/mc-mods/siege-overhaul/download/9059365) also returned HTTP 200 at **2026-10-04 14:52:05 UTC**.
+
+**Public downloaded-byte verification limit:** the browser check did not yield a JAR to hash, so public downloaded bytes were not independently SHA-256 verified. The digest above identifies the independently verified merged-main artifact accepted by the successful pinned publisher; it is not a separate public-download hash verification.
+
+The merged-main artifact has its own build timestamp: the historical local digest below must not be substituted for its verified SHA-256. Native QA ran through the development runtime; separately installed production-JAR gameplay is not claimed.
+
+## Historical local verification
+
+The following local checks predate the final remote candidate and remain historical evidence. Earlier checks used 4.52.0-preview.1 development metadata; the later local handoff, completed-wall and dedicated-side checks used 4.52.0 development metadata. Companion hashes identify ForgeGradle-remapped artifacts, not original release JARs. The local reobfuscated 4.52.0 package passed metadata/dependency/content checks; its historical digest is not the published-artifact digest. Separately installed-JAR gameplay is not claimed.
+
+- Historical local production source a0eb806: clean build, **1,375 tests in 236 suites**, zero failures/errors/skips, plus native QA compilation. Reobfuscated 4.52.0 JAR SHA-256: `2b60d3147dcee90c12ca4c1acba05e19b03ea368536f205d1a87d198585585a4`. Metadata/dependencies were verified; no QA/vendor classes or nested JARs were packaged. The later 3c22c38 change is QA/docs only.
 - Real client 3c22c38: an 83-block hollow manual wall completed through native AI, finite stock/resupply and real save/reopen. All 27 cavity cells were AIR at completion, the nine-column footing stayed intact, and the nine-cell deck was built over the cavity. The deliberate cavity obstruction was preserved through pause/reload before QA restored its original fixture AIR. Accepted plant clearing, player-edit/headroom/cavity/claim/permission pauses, exact payments and material conservation passed.
 - The same run checked the real native shovel/render/raycast/reload path, server-fed multi-claim construction HUD, the 64-emerald perimeter transaction, authenticated cancellation and capture of all 18 raw framebuffers. Every frame passed dimension/nonblank checks; selected native inspection, Building and completed-wall frames were also visually reviewed. Native inspection and Building both fit an actual 320×240 logical viewport.
 - Camp 864b698: ordinary terrain and controlled shallow-water/forest establishment passed with native work access and 6,146 protected cells/three chests unchanged. This covers establishment, not complete decorative building or a full battle.
@@ -37,6 +67,6 @@ Earlier checks used 4.52.0-preview.1 development metadata; current handoff, comp
 - Dedicated side a0eb806: all eight existing contract groups passed on a physical Forge GameTestServer with all four companions and zero network players. FakePlayer/direct-handler coverage does not establish an authenticated external client connection.
 - Short hollow handoff a0eb806: the real builder completed the first 95-target section and placed three targets in the next section. Mid-section, between-section and canceled-project save/close/reopen all passed, with exact stock, preserved cavities, one 64-emerald charge and authenticated cancellation. Real screen handlers verified Tab/Enter navigation and Escape/back before Yes. This uses an explicitly synthetic maximum-96-target partition of the complete 572-target production quote and direct server admission; it does not claim full-plan completion.
 - Completed-manual-wall reload 3c22c38: all 83 blocks and 27 cavity AIR cells survived, with construction detached and its reservation retired. The equal 40-cobblestone hand/slot pair was rebound once (counter 2→3), preserving the complete serialized inventory immediately and through 40 further ticks. Final accounting was 70 chest + 40 builder + 58 placed = 168 cobblestone and 143 chest + 25 placed = 168 oak.
-- Local acceptance gates passed. Publication, channel selection and remote exact-artifact checks remain pending.
+- These local acceptance gates passed before the final remote verification recorded above.
 
 Complete 3,900-block walkthroughs are optional risk-based stress tests. Earlier 561/6,600 and 512/6,600 observations remain explicitly partial, solid-profile evidence. All shaders/resource packs, optional-mod combinations, real authenticated multiplayer and a live upgrade of an old player world are not claimed as tested.
