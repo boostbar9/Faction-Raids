@@ -1,0 +1,582 @@
+# One-use exact-artifact publisher; do not merge this workflow into main.
+# All 14 source, PR/main Build/artifact and regression pins stay invalid until reviewed.
+# No checkout, rebuild, release tag, GitHub Release or updates.json mutation.
+name: Publish tested 4.52.3 release to CurseForge
+
+on:
+  push:
+    branches: [publish/curseforge-v4.52.3]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v4.52.3
+  cancel-in-progress: false
+
+env:
+  REVIEWED_SOURCE_SHA: 'a77e3f7070b9637be94eba9fdffc77b2b19c4ad3'
+  MERGED_SOURCE_SHA: '4fd41f9ddc4c0ef34d693d132ae438f381cc8db0'
+  SOURCE_TREE_SHA: 'b4f0e0cb87bc92314351673f713a0e2d814c5acf'
+  REVIEWED_BUILD_RUN_ID: '37230491373'
+  REVIEWED_JAR_ARTIFACT_ID: '11313990439'
+  REVIEWED_REGRESSION_ARTIFACT_ID: '11313596676'
+  BUILD_RUN_ID: '37231163147'
+  BUILD_RUN_ATTEMPT: '1'
+  JAR_ARTIFACT_ID: '11312834839'
+  REGRESSION_ARTIFACT_ID: '11314110711'
+  ARTIFACT_SHA256: '865233de3cb5cd09a57c9d2e6f2459b458e8e8ef7e0c2e4900403531d39d141d'
+  REGRESSION_SUITE_SHA256: '4d7a0a7c7a5b87dbb19f303e0a77797fb660acf9ec61653fa0b55638bb3959bb'
+  REGRESSION_TEST_COUNT: '1444'
+  REGRESSION_SUITE_COUNT: '244'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require complete immutable 4.52.3 pins
+        run: |
+          python3 - <<'CHECK'
+          """Fail locally before any API read unless every immutable 4.52.3 pin is filled."""
+          import os
+          import re
+
+
+          def main():
+              assert os.environ['GITHUB_REPOSITORY'] == 'boostbar9/Faction-Raids'
+              assert os.environ['GITHUB_REF'] == 'refs/heads/publish/curseforge-v4.52.3'
+              assert os.environ['GITHUB_EVENT_NAME'] == 'push'
+              for key in ('REVIEWED_SOURCE_SHA', 'MERGED_SOURCE_SHA', 'SOURCE_TREE_SHA'):
+                  assert re.fullmatch(r'[0-9a-f]{40}', os.environ[key]), 'Unfilled source pin: ' + key
+              for key in ('ARTIFACT_SHA256', 'REGRESSION_SUITE_SHA256'):
+                  assert re.fullmatch(r'[0-9a-f]{64}', os.environ[key]), 'Unfilled digest pin: ' + key
+              for key in ('REVIEWED_BUILD_RUN_ID', 'REVIEWED_JAR_ARTIFACT_ID',
+                          'REVIEWED_REGRESSION_ARTIFACT_ID', 'BUILD_RUN_ID',
+                          'BUILD_RUN_ATTEMPT', 'JAR_ARTIFACT_ID', 'REGRESSION_ARTIFACT_ID',
+                          'REGRESSION_TEST_COUNT', 'REGRESSION_SUITE_COUNT'):
+                  assert re.fullmatch(r'[1-9][0-9]*', os.environ[key]), 'Unfilled or invalid pin: ' + key
+              assert os.environ['BUILD_RUN_ID'] != os.environ['REVIEWED_BUILD_RUN_ID'], 'PR Build is not a merged-main release Build'
+              artifact_ids = [os.environ[key] for key in (
+                  'REVIEWED_JAR_ARTIFACT_ID', 'REVIEWED_REGRESSION_ARTIFACT_ID',
+                  'JAR_ARTIFACT_ID', 'REGRESSION_ARTIFACT_ID')]
+              assert len(set(artifact_ids)) == 4, 'PR/main JAR/XML artifact IDs must all be distinct'
+              assert int(os.environ['REGRESSION_TEST_COUNT']) >= int(os.environ['REGRESSION_SUITE_COUNT'])
+              print('All 4.52.3 immutable pins are filled; live source/artifact checks still required.')
+
+
+          if __name__ == '__main__':
+              main()
+          CHECK
+
+      - name: Prevent duplicate release uploads
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          """One-use upload guard. GitHub reads only; no CurseForge credentials."""
+          import json
+          import os
+          import urllib.parse
+          import urllib.request
+
+
+          def get(path):
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+
+
+          def pages(path, key, params=None):
+              seen = 0
+              total = None
+              for page in range(1, 11):
+                  query = urllib.parse.urlencode(dict(params or {}, per_page=100, page=page))
+                  response = get(path + '?' + query)
+                  if (not isinstance(response, dict) or not isinstance(response.get(key), list)
+                          or type(response.get('total_count')) is not int):
+                      raise RuntimeError('Missing or malformed history metadata; inspect before publishing.')
+                  if total is None:
+                      total = response['total_count']
+                  elif total != response['total_count']:
+                      raise RuntimeError('History changed during inspection; inspect before publishing.')
+                  items = response[key]
+                  seen += len(items)
+                  yield from items
+                  if len(items) < 100:
+                      if seen != total:
+                          raise RuntimeError('Incomplete history returned; inspect before publishing.')
+                      return
+              raise RuntimeError('History exceeded the bounded scan; inspect before publishing.')
+
+
+          def classify(step):
+              """Success means accepted; skipped/definitely unstarted means no attempt."""
+              if step.get('conclusion') == 'success':
+                  return 'accepted'
+              if step.get('conclusion') == 'skipped':
+                  return 'not_started'
+              if (step.get('status') in ('queued', 'pending')
+                      and not step.get('started_at') and not step.get('completed_at')
+                      and step.get('conclusion') is None):
+                  return 'not_started'
+              # Failed/canceled/timed-out, in-progress, or incomplete/unknown metadata
+              # cannot prove that CurseForge did not accept a request.
+              return 'ambiguous'
+
+
+          def definitely_unstarted(item):
+              return (item.get('conclusion') == 'skipped'
+                      or (item.get('status') in ('queued', 'pending')
+                          and not item.get('started_at') and not item.get('run_started_at')
+                          and not item.get('completed_at') and item.get('conclusion') is None))
+
+
+          def classify_job(job):
+              if not isinstance(job, dict):
+                  return 'ambiguous'
+              steps = job.get('steps')
+              if not isinstance(steps, list) or any(not isinstance(step, dict) for step in steps):
+                  return 'not_started' if definitely_unstarted(job) else 'ambiguous'
+              uploads = [step for step in steps if step.get('name') == 'Publish to CurseForge']
+              if len(uploads) != 1:
+                  return 'not_started' if not uploads and definitely_unstarted(job) else 'ambiguous'
+              return classify(uploads[0])
+
+
+          def main():
+              current = int(os.environ['GITHUB_RUN_ID'])
+              current_attempt = int(os.environ.get('GITHUB_RUN_ATTEMPT', '1'))
+              accepted = []
+              ambiguous = []
+              runs = list(pages('actions/workflows/publish-curseforge-v4.52.3.yml/runs', 'workflow_runs', {
+                  'branch': 'publish/curseforge-v4.52.3', 'event': 'push'}))
+              # The running attempt may not yet appear in list results. Always inspect
+              # its prior attempts explicitly, and every attempt of earlier runs.
+              inspect = {(current, attempt): None for attempt in range(1, current_attempt)}
+              for run in runs:
+                  if (not isinstance(run, dict) or type(run.get('id')) is not int
+                          or type(run.get('run_attempt')) is not int or run['run_attempt'] < 1):
+                      raise RuntimeError('Incomplete run identity/attempt history; inspect before publishing.')
+                  if run['id'] == current:
+                      continue
+                  if run.get('path', '').split('@', 1)[0] != '.github/workflows/publish-curseforge-v4.52.3.yml':
+                      raise RuntimeError('Unexpected or missing publisher workflow identity; inspect before publishing.')
+                  inspect.update({(run['id'], attempt): run
+                                  for attempt in range(1, run['run_attempt'] + 1)})
+              for run_id, attempt in sorted(inspect):
+                  jobs = list(pages(f'actions/runs/{run_id}/attempts/{attempt}/jobs', 'jobs'))
+                  run_metadata = inspect[(run_id, attempt)]
+                  if not jobs and not (run_metadata and attempt == run_metadata['run_attempt']
+                                       and definitely_unstarted(run_metadata)):
+                      ambiguous.append({'run': run_id, 'attempt': attempt, 'reason': 'No job history returned'})
+                  for job in jobs:
+                      state = classify_job(job)
+                      evidence = {'run': run_id, 'attempt': attempt,
+                                  'job': job.get('id') if isinstance(job, dict) else None,
+                                  'state': state}
+                      if state == 'accepted':
+                          accepted.append(evidence)
+                      elif state == 'ambiguous':
+                          ambiguous.append(evidence)
+              if accepted:
+                  publish = False
+                  print('Prior successful upload found; skipping duplicate:', json.dumps(accepted))
+                  print('Inspect its receipt and CurseForge public status separately.')
+              elif ambiguous:
+                  raise RuntimeError('An earlier upload may have been accepted. Inspect its logs, '
+                                     'receipt and existing CurseForge files before any retry; '
+                                     'there is no override flag. Evidence: ' + json.dumps(ambiguous))
+              else:
+                  publish = True
+                  print('No prior successful or ambiguous upload attempt; publishing once.')
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                  output.write('publish=' + str(publish).lower() + '\n')
+
+
+          if __name__ == '__main__':
+              main()
+          CHECK
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Verify successful tested build and identical merged tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          """Bind the exact merged Build, PR, current main and source tree."""
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import urllib.request
+
+
+          def get(path):
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+
+
+          def main():
+              reviewed_sha = os.environ['REVIEWED_SOURCE_SHA']
+              merged_sha = os.environ['MERGED_SOURCE_SHA']
+              source_tree = os.environ['SOURCE_TREE_SHA']
+              build_run = os.environ['BUILD_RUN_ID']
+              for value in (reviewed_sha, merged_sha, source_tree):
+                  assert re.fullmatch(r'[0-9a-f]{40}', value), 'Unfilled or invalid source pin'
+              for key in ('BUILD_RUN_ID', 'BUILD_RUN_ATTEMPT', 'JAR_ARTIFACT_ID', 'REGRESSION_ARTIFACT_ID'):
+                  assert re.fullmatch(r'[1-9][0-9]*', os.environ[key]), 'Unfilled or invalid pin: ' + key
+              assert re.fullmatch(r'[0-9a-f]{64}', os.environ['ARTIFACT_SHA256']), 'Unfilled JAR digest'
+              assert os.environ['GITHUB_REPOSITORY'] == 'boostbar9/Faction-Raids'
+              run = get('actions/runs/' + build_run)
+              assert run['id'] == int(build_run)
+              assert run['run_attempt'] == int(os.environ['BUILD_RUN_ATTEMPT']), 'Build attempt changed; reconcile'
+              assert run['status'] == 'completed' and run['conclusion'] == 'success'
+              assert run['event'] == 'push' and run['head_branch'] == 'main'
+              assert run['head_sha'] == merged_sha
+              assert run['name'] == 'Build' and run['path'] == '.github/workflows/build.yml'
+              assert run['repository']['full_name'] == 'boostbar9/Faction-Raids'
+              assert run['head_repository']['full_name'] == 'boostbar9/Faction-Raids'
+              workflow = get('actions/workflows/' + str(run['workflow_id']))
+              assert workflow['path'] == '.github/workflows/build.yml'
+              pr = get('pulls/261')
+              assert pr['merged'] and pr['merge_commit_sha'] == merged_sha
+              assert pr['head']['sha'] == reviewed_sha
+              assert pr['base']['ref'] == 'main'
+              assert pr['base']['repo']['full_name'] == 'boostbar9/Faction-Raids'
+              assert pr['head']['repo']['full_name'] == 'boostbar9/Faction-Raids'
+              main_sha = get('branches/main')['commit']['sha']
+              assert main_sha == merged_sha, 'Main advanced; reconcile explicitly before upload'
+              for sha in (reviewed_sha, merged_sha, run['head_sha'], main_sha):
+                  assert get('git/commits/' + sha)['tree']['sha'] == source_tree
+              tree = get('git/trees/' + source_tree + '?recursive=1')
+              assert tree['sha'] == source_tree and not tree['truncated']
+              paths = [entry['path'] for entry in tree['tree'] if entry['type'] == 'blob']
+              source_roots = sorted(path[len('src/main/java/'):-len('.java')]
+                                    for path in paths
+                                    if path.startswith('src/main/java/') and path.endswith('.java'))
+              assert source_roots and len(source_roots) == len(set(source_roots))
+              excluded_roots = sorted(path.split('/java/', 1)[1][:-len('.java')]
+                                      for path in paths
+                                      if path.startswith(('src/test/java/', 'src/nativeQa/java/', 'src/nativeServerQa/java/'))
+                                      and path.endswith('.java'))
+              assert not set(source_roots).intersection(excluded_roots)
+              artifacts = get('actions/runs/' + build_run + '/artifacts?per_page=100')
+              assert artifacts['total_count'] == len(artifacts['artifacts']), 'Artifact list truncated'
+              selected = {}
+              expected_artifacts = {
+                  'Faction-Raids-Forge-1.20.1': int(os.environ['JAR_ARTIFACT_ID']),
+                  'regression-test-results': int(os.environ['REGRESSION_ARTIFACT_ID']),
+              }
+              for name, expected_id in expected_artifacts.items():
+                  matches = [item for item in artifacts['artifacts'] if item['name'] == name]
+                  assert len(matches) == 1, name
+                  item = matches[0]
+                  assert item['id'] == expected_id, 'Artifact identity changed: ' + name
+                  assert not item['expired'] and item['size_in_bytes'] > 0
+                  assert item['workflow_run']['id'] == int(build_run)
+                  assert item['workflow_run']['head_sha'] == merged_sha
+                  assert item['workflow_run']['head_branch'] == 'main'
+                  selected[name] = item['id']
+              manifest = {
+                  'pull_request': 261, 'reviewed_source': reviewed_sha, 'merged_source': merged_sha,
+                  'source_tree': source_tree, 'build_run': int(build_run),
+                  'build_attempt': run['run_attempt'], 'artifacts': selected,
+                  'production_class_roots': source_roots, 'excluded_class_roots': excluded_roots,
+              }
+              Path('verified-source.json').write_text(json.dumps(manifest, sort_keys=True, indent=2) + '\n')
+              print('Verified PR261, successful merged-main Build, unchanged current main and source tree.')
+              print('Artifact IDs:', json.dumps(selected, sort_keys=True))
+
+
+          if __name__ == '__main__':
+              main()
+          CHECK
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download exact tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.JAR_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: dist
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download regression results
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.REGRESSION_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: regression
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Verify tested bytes, metadata, dependencies, and regressions
+        run: |
+          python3 - <<'CHECK'
+          """Verify exact JAR bytes and the complete recorded regression suite set."""
+          from pathlib import Path
+          import hashlib
+          import json
+          import os
+          import tomllib
+          import xml.etree.ElementTree as ET
+          import zipfile
+
+
+          def main():
+              jar = Path('dist/siegeoverhaul-4.52.3.jar')
+              assert sorted(Path('dist').rglob('*.jar')) == [jar], 'Exactly one intended production JAR required'
+              digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+              assert digest == os.environ['ARTIFACT_SHA256'], 'JAR does not match independently verified merged-main artifact'
+              source = json.loads(Path('verified-source.json').read_text())
+              production = set(source['production_class_roots'])
+              excluded = set(source['excluded_class_roots'])
+              with zipfile.ZipFile(jar) as archive:
+                  assert archive.testzip() is None
+                  names = archive.namelist()
+                  entries = set(names)
+                  assert len(names) == len(entries), 'Duplicate ZIP entries'
+                  assert not any(name.lower().endswith('.jar') for name in entries), 'Nested JAR'
+                  classes = [name for name in entries if name.endswith('.class')]
+                  assert classes
+                  for entry in classes:
+                      root = entry[:-len('.class')].split('$', 1)[0]
+                      assert root in production and root not in excluded, 'Non-production/QA/test/vendor class: ' + entry
+                      data = archive.read(entry)
+                      assert data[:4] == b'\xca\xfe\xba\xbe' and int.from_bytes(data[6:8], 'big') == 61, entry
+                  for entry in (
+                      'com/devfarinsky/siegeoverhaul/core/DefenseStructures.class',
+                      'com/devfarinsky/siegeoverhaul/client/CoreHireScreen.class',
+                      'com/devfarinsky/siegeoverhaul/client/ProtectedConstructionScreen.class',
+                      'com/devfarinsky/siegeoverhaul/client/SiegeCommandScreen.class',
+                      'com/devfarinsky/siegeoverhaul/client/SiegeOverhaulConfigScreen.class',
+                      'com/devfarinsky/siegeoverhaul/client/ConfigScreenLayout.class',
+                      'com/devfarinsky/siegeoverhaul/client/SiegeCommandLayout.class',
+                      'com/devfarinsky/siegeoverhaul/client/PlanReviewHud.class',
+                      'com/devfarinsky/siegeoverhaul/core/PerimeterPreview.class',
+                      'com/devfarinsky/siegeoverhaul/core/WallBuilderAccess.class',
+                      'com/devfarinsky/siegeoverhaul/camp/CampTerrain.class',
+                      'com/devfarinsky/siegeoverhaul/camp/CampGround.class',
+                      'com/devfarinsky/siegeoverhaul/client/WorkersProjectionVisibility.class',
+                      'com/devfarinsky/siegeoverhaul/client/ProjectionCulling.class',
+                      'com/devfarinsky/siegeoverhaul/compat/WorkersProjectionView.class',
+                      'com/devfarinsky/siegeoverhaul/compat/WorkersBridge.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/ProtectedBuilderHandLifecycle.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/ProtectedBuilderHandMirror.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/ProtectedInventoryCleanup.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/NativePerimeterProjects.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/ProtectedBuildArea.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/ConstructionProjectLeases.class',
+                  ):
+                      assert entry in entries, entry
+                  assert b'foundation' in archive.read('com/devfarinsky/siegeoverhaul/camp/CampTerrain.class')
+                  assert b'playerBuilderArrival' in archive.read('com/devfarinsky/siegeoverhaul/compat/WorkersBridge.class')
+                  data = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+              assert data['modLoader'] == 'javafml' and data['loaderVersion'] == '[47,)'
+              assert len(data['mods']) == 1
+              mod = data['mods'][0]
+              assert mod['modId'] == 'siegeoverhaul' and mod['version'] == '4.52.3'
+              assert mod['displayTest'] == 'MATCH_VERSION'
+              raw_dependencies = data['dependencies']['siegeoverhaul']
+              dependencies = {entry['modId']: entry for entry in raw_dependencies}
+              expected = {
+                  'forge': (True, '[47,)', 'NONE'),
+                  'minecraft': (True, '[1.20.1,1.21)', 'NONE'),
+                  'recruits': (True, '[1.15.2,)', 'AFTER'),
+                  'workers': (True, '[2.0.3,)', 'AFTER'),
+                  'smallships': (True, '[0,)', 'AFTER'),
+                  'siegeweapons': (True, '[0,)', 'AFTER'),
+                  'ftbchunks': (False, '[0,)', 'AFTER'),
+                  'openpartiesandclaims': (False, '[0,)', 'AFTER'),
+                  'corpse': (False, '[0,)', 'AFTER'),
+                  'magistuarmory': (False, '[0,)', 'AFTER'),
+                  'musketmod': (False, '[0,)', 'AFTER'),
+                  'curios': (False, '[5.14.1,6)', 'AFTER'),
+              }
+              assert len(dependencies) == len(raw_dependencies) and set(dependencies) == set(expected)
+              for mod_id, (mandatory, version_range, ordering) in expected.items():
+                  dep = dependencies[mod_id]
+                  assert dep['mandatory'] is mandatory and dep['side'] == 'BOTH', mod_id
+                  assert dep['versionRange'] == version_range and dep['ordering'] == ordering, mod_id
+              totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0)
+              reports = list(Path('regression').rglob('TEST-*.xml'))
+              expected_suite_count = int(os.environ['REGRESSION_SUITE_COUNT'])
+              expected_test_count = int(os.environ['REGRESSION_TEST_COUNT'])
+              assert expected_suite_count > 0 and expected_test_count >= expected_suite_count
+              assert len(reports) == expected_suite_count, len(reports)
+              suite_counts = {}
+              for report in reports:
+                  result = ET.parse(report).getroot()
+                  assert result.tag == 'testsuite', report
+                  name = result.get('name')
+                  assert name and name not in suite_counts, 'Duplicate or missing suite name: ' + str(name)
+                  assert report.name == 'TEST-' + name + '.xml', report
+                  suite_counts[name] = int(result.get('tests'))
+                  testcases = result.findall('testcase')
+                  assert len(testcases) == suite_counts[name], name
+                  assert all(case.find(child) is None for case in testcases for child in ('failure', 'error', 'skipped')), name
+                  for key in totals:
+                      value = int(result.get(key))
+                      assert value >= 0, (name, key)
+                      totals[key] += value
+              assert totals == {'tests': expected_test_count, 'failures': 0, 'errors': 0, 'skipped': 0}, totals
+              assert len(suite_counts) == expected_suite_count
+              # Independently pinned canonical name/count manifest binds every suite and count.
+              suite_digest = hashlib.sha256(json.dumps(suite_counts, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+              assert suite_digest == os.environ['REGRESSION_SUITE_SHA256'], suite_digest
+              # Require release-relevant coverage as well as the full pinned manifest. Counts
+              # are deliberately supplied only by the final independently checked manifest.
+              required_suites = (
+                  'com.devfarinsky.siegeoverhaul.camp.CampScoutingTest',
+                  'com.devfarinsky.siegeoverhaul.client.BuildingPlanButtonTest',
+                  'com.devfarinsky.siegeoverhaul.client.ConfigScreenInteractionTest',
+                  'com.devfarinsky.siegeoverhaul.client.ConfigScreenLayoutTest',
+                  'com.devfarinsky.siegeoverhaul.client.CoreButtonStyleTest',
+                  'com.devfarinsky.siegeoverhaul.client.CoreHudInteractionTest',
+                  'com.devfarinsky.siegeoverhaul.client.PlanReviewHudTest',
+                  'com.devfarinsky.siegeoverhaul.client.SiegeCommandInteractionTest',
+                  'com.devfarinsky.siegeoverhaul.client.SiegeCommandLayoutTest',
+                  'com.devfarinsky.siegeoverhaul.core.BuilderFeedbackTest',
+                  'com.devfarinsky.siegeoverhaul.core.CoreBuildingLayoutTest',
+                  'com.devfarinsky.siegeoverhaul.core.CoreHireLayoutTest',
+                  'com.devfarinsky.siegeoverhaul.core.EndlessSiegeTest',
+                  'com.devfarinsky.siegeoverhaul.core.SiegeYardTest',
+                  'com.devfarinsky.siegeoverhaul.raid.RaidFeedbackTest',
+                  'com.devfarinsky.siegeoverhaul.core.DefenseCommissionDiagnosticsTest',
+                  'com.devfarinsky.siegeoverhaul.core.PerimeterPreviewTest',
+                  'com.devfarinsky.siegeoverhaul.core.WallBuilderAccessTest',
+                  'com.devfarinsky.siegeoverhaul.core.ConstructionPacketTest',
+                  'com.devfarinsky.siegeoverhaul.camp.CampTerrainTest',
+                  'com.devfarinsky.siegeoverhaul.nativecompat.PerimeterDestroyedBuilderCleanupTest',
+                  'com.devfarinsky.siegeoverhaul.nativecompat.PerimeterRetirementLifecycleTest',
+                  'com.devfarinsky.siegeoverhaul.core.PerimeterStageJournalTest',
+              )
+              for name in required_suites:
+                  assert suite_counts.get(name, 0) > 0, name
+              Path('verified-sha256.txt').write_text(digest)
+              Path('verified-regressions.json').write_text(json.dumps({
+                  **totals, 'suites': len(suite_counts), 'suite_manifest_sha256': suite_digest}, sort_keys=True) + '\n')
+              print('Verified', jar.name, digest, totals, len(suite_counts), 'unique suites')
+
+
+          if __name__ == '__main__':
+              main()
+          CHECK
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          curseforge-retry-attempts: 1
+          files: dist/siegeoverhaul-4.52.3.jar
+          name: The Siege Overhaul v4.52.3 - Clearer command screens and feedback
+          version: v4.52.3
+          version-type: release
+          changelog: |
+            The Command Center is easier to use on smaller screens, with clearer pages, readable controls and live unit and building previews. Small Building screens now page through the plans, and the Codex and older Journal entries are easier to reach.
+
+            Settings keep unfinished edits when you resize the window or return from Hero visuals. Construction inspection and held-plan guidance share the updated dark style.
+
+            Camp search and assault messages are clearer, repeated stalled-search messages are reduced, and capture, payment and delivery feedback better reflects what actually happened.
+
+            Back up your world before updating. Use 4.52.3 on the server and all clients, with Recruits 1.15.2+, Workers 2.0.3+, Small Ships and Siege Weapons installed.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            ftb-chunks-forge(optional)
+            open-parties-and-claims(optional)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+            curios(optional)
+            epic-knights-addon(optional)
+          fail-mode: fail
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Record accepted upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          """Record accepted upload; public moderation/download checks remain separate."""
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          from urllib.parse import urlsplit
+
+
+          def main():
+              digest = hashlib.sha256(Path('dist/siegeoverhaul-4.52.3.jar').read_bytes()).hexdigest()
+              assert digest == Path('verified-sha256.txt').read_text() == os.environ['ARTIFACT_SHA256']
+              source = json.loads(Path('verified-source.json').read_text())
+              regressions = json.loads(Path('verified-regressions.json').read_text())
+              assert source['reviewed_source'] == os.environ['REVIEWED_SOURCE_SHA']
+              assert source['merged_source'] == os.environ['MERGED_SOURCE_SHA']
+              assert source['source_tree'] == os.environ['SOURCE_TREE_SHA']
+              assert source['build_run'] == int(os.environ['BUILD_RUN_ID'])
+              assert source['build_attempt'] == int(os.environ['BUILD_RUN_ATTEMPT'])
+              assert source['artifacts'] == {
+                  'Faction-Raids-Forge-1.20.1': int(os.environ['JAR_ARTIFACT_ID']),
+                  'regression-test-results': int(os.environ['REGRESSION_ARTIFACT_ID']),
+              }
+              assert source['pull_request'] == 261
+              assert regressions == {
+                  'tests': int(os.environ['REGRESSION_TEST_COUNT']),
+                  'suites': int(os.environ['REGRESSION_SUITE_COUNT']),
+                  'failures': 0, 'errors': 0, 'skipped': 0,
+                  'suite_manifest_sha256': os.environ['REGRESSION_SUITE_SHA256'],
+              }
+              file_id = os.environ['RELEASE_FILE_ID']
+              url = os.environ['RELEASE_URL']
+              assert re.fullmatch(r'[1-9][0-9]*', file_id), 'Missing or invalid accepted CurseForge file ID'
+              location = urlsplit(url)
+              assert location.scheme == 'https' and location.hostname in ('www.curseforge.com', 'curseforge.com')
+              assert location.path.rstrip('/') == '/minecraft/mc-mods/siege-overhaul/files/' + file_id, 'Project/file ID/URL mismatch'
+              assert not location.query and not location.fragment, 'Unexpected receipt URL suffix'
+              assert not location.username and not location.password
+              result = {
+                  'version': '4.52.3', 'version_type': 'release', 'curseforge_project': 1364352,
+                  'file_id': file_id, 'url': url,
+                  'status': 'accepted_upload', 'public_availability': 'not_yet_verified',
+                  'pull_request': 261, 'reviewed_source': source['reviewed_source'],
+                  'tested_source': source['merged_source'], 'merged_source': source['merged_source'],
+                  'source_tree': source['source_tree'], 'build_run': source['build_run'],
+                  'build_attempt': source['build_attempt'], 'artifacts': source['artifacts'],
+                  **regressions, 'sha256': digest,
+                  'publisher_run': int(os.environ['GITHUB_RUN_ID']),
+                  'publisher_attempt': int(os.environ.get('GITHUB_RUN_ATTEMPT', '1')),
+              }
+              Path('curseforge-4.52.3-receipt.json').write_text(json.dumps(result, sort_keys=True, indent=2) + '\n')
+              print(json.dumps(result, sort_keys=True))
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+                  summary.write('Accepted upload (moderation/public availability separate): '
+                                + json.dumps(result, sort_keys=True) + '\n')
+
+
+          if __name__ == '__main__':
+              main()
+          RECEIPT
