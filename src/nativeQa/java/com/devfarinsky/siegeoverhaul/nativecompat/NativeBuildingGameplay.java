@@ -43,6 +43,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -88,6 +89,7 @@ final class NativeBuildingGameplay {
     private static BlockPos sameStateEditCell;
     private static Map<Long, BlockState> perimeterBeforeEdit;
     private static boolean recordedNativeRequestMetadata;
+    private static final Map<UUID, BuilderWorkGoal> NATIVE_BUILD_GOALS = new HashMap<>();
 
     private enum Action { NONE, USE_BLOCK, USE_AIR, CANCEL, SHOW, RELOAD, CAPTURE_REVIEW, CAPTURE_PAID, CAPTURE_COMPLETED, AIM_WALL, OPEN_CORE, LIVE_CORE_HUD, PLACE_EDIT, START_BREAK_EDIT, CONTINUE_BREAK_EDIT, DONE }
     private NativeBuildingGameplay() {}
@@ -219,7 +221,13 @@ final class NativeBuildingGameplay {
             try {
                 var server = mc.getSingleplayerServer();
                 next.complete(step(server.overworld(), server.getPlayerList().getPlayer(playerId)));
-            } catch (Throwable failure) { next.completeExceptionally(failure); }
+            } catch (Throwable failure) {
+                try {
+                    var server = mc.getSingleplayerServer();
+                    if (server != null && fixture != null) RESULT.put("failureGeometry", spatialDiagnostics(server.overworld()));
+                } catch (Throwable unavailable) { failure.addSuppressed(unavailable); }
+                next.completeExceptionally(failure);
+            }
         });
         return false;
     }
@@ -234,12 +242,25 @@ final class NativeBuildingGameplay {
         return result;
     }
 
+    static void observeNativeBuilder(EntityJoinLevelEvent event) {
+        if (!(event.getLevel() instanceof ServerLevel level) || !WORLD.equals(level.getServer().getWorldData().getLevelName())
+                || !(event.getEntity() instanceof BuilderEntity builder)) return;
+        // Read the original goal before the production listener installs its wrapper; never alter it.
+        builder.goalSelector.getAvailableGoals().stream().map(goal -> goal.getGoal())
+                .filter(BuilderWorkGoal.class::isInstance).map(BuilderWorkGoal.class::cast).findFirst()
+                .ifPresent(goal -> NATIVE_BUILD_GOALS.put(builder.getUUID(), goal));
+    }
+
     private static Action step(ServerLevel level, ServerPlayer owner) throws Exception {
         require(owner != null, "Real gameplay player unavailable");
         long now = level.getGameTime();
         if (stageSince < 0) stageSince = now;
         require(now - stageSince < 2400, "Gameplay stage " + stage + " timed out: " + diagnostics(level));
         if (now < resumeAt) return Action.NONE;
+        if (fixture != null && jobId != null && level.getEntity(jobId) instanceof ProtectedBuildArea liveArea
+                && NativeConstructionGuard.status(liveArea).contains("move entities")
+                && !RESULT.containsKey("firstPlacementBlocker"))
+            RESULT.put("firstPlacementBlocker", spatialDiagnostics(level));
         if (stage >= 9 && stage <= 18 && !recordedNativeRequestMetadata && !builder(level).neededItems.isEmpty()) {
             stockSnapshot(level, "first-native-request-observed");
             recordedNativeRequestMetadata = true; // Evidence remains available even if a new provenance gate pauses before first placement.
@@ -748,6 +769,7 @@ final class NativeBuildingGameplay {
         BuilderEntity builder = builder(level);
         Map<String, Object> snap = new LinkedHashMap<>();
         snap.put("when", when); snap.put("gameTime", level.getGameTime()); snap.put("stage", stage);
+        snap.put("builderPosition", builder.position().toString()); snap.put("builderBounds", builder.getBoundingBox().toString());
         snap.put("placedBlocks", placed(level)); snap.put("suppliedCobblestone", suppliedCobble); snap.put("suppliedOakPlanks", suppliedOak);
         snap.put("mainHand", stackDescription(builder.getMainHandItem()));
         snap.put("offHand", stackDescription(builder.getOffhandItem()));
@@ -860,10 +882,47 @@ final class NativeBuildingGameplay {
         String pause = jobId != null && level.getEntity(jobId) instanceof ProtectedBuildArea area ? NativeConstructionGuard.status(area) : "no marker";
         String requested = String.join(", ", com.devfarinsky.siegeoverhaul.compat.WorkersConstructionView.requests(builder));
         return "placed=" + placed(level) + ", follow=" + builder.getFollowState() + ", requests=" + requested
+                + ", builderPosition=" + builder.position()
                 + ", sleeping=" + builder.needsToSleep() + ", noAi=" + builder.isNoAi()
                 + ", navigationDone=" + builder.getNavigation().isDone()
                 + ", nativeRemaining=" + (builder.currentBuildArea == null ? -1 : builder.currentBuildArea.stackToPlace.size())
                 + ", pause=" + pause;
+    }
+    private static Map<String, Object> spatialDiagnostics(ServerLevel level) {
+        var result = new LinkedHashMap<String, Object>();
+        result.put("gameTime", level.getGameTime()); result.put("stage", stage);
+        if (fixture == null) return result;
+        BuilderEntity builder = builder(level);
+        result.put("builderPosition", builder.position().toString()); result.put("builderBounds", builder.getBoundingBox().toString());
+        result.put("navigationDone", builder.getNavigation().isDone());
+        var nativeGoal = NATIVE_BUILD_GOALS.get(builder.getUUID());
+        if (nativeGoal != null) {
+            result.put("nativeBuildState", String.valueOf(nativeGoal.state));
+            result.put("nativeTarget", String.valueOf(nativeGoal.blockPos));
+            result.put("nativeMutationCandidates", NativeConstructionGuard.mutationCells(nativeGoal).stream().map(BlockPos::toShortString).toList());
+        }
+        ServerPlayer owner = level.getServer().getPlayerList().getPlayer(playerId);
+        if (owner != null) { result.put("ownerPosition", owner.position().toString()); result.put("ownerBounds", owner.getBoundingBox().toString()); }
+        Set<String> auxiliary = new HashSet<>();
+        if (owner != null) for (Tag id : owner.getPersistentData().getList("NativeGameplayFixtureAuxiliaries", Tag.TAG_STRING)) auxiliary.add(id.getAsString());
+        var occupants = new ArrayList<Map<String, Object>>();
+        AABB bounds = new AABB(fixture.expectedPlan().min(), fixture.expectedPlan().max().offset(1, 1, 1));
+        for (var entity : level.getEntities((net.minecraft.world.entity.Entity) null, bounds, net.minecraft.world.entity.Entity::isAlive)) {
+            var details = new LinkedHashMap<String, Object>();
+            details.put("uuid", entity.getUUID().toString()); details.put("type", String.valueOf(ForgeRegistries.ENTITY_TYPES.getKey(entity.getType())));
+            details.put("position", entity.position().toString()); details.put("bounds", entity.getBoundingBox().toString());
+            details.put("isTestBuilder", entity == builder); details.put("isOwner", entity == owner);
+            details.put("isFixtureAuxiliary", auxiliary.contains(entity.getUUID().toString()));
+            details.put("blocksPlacement", NativeConstructionGuard.blocksPlacement(entity));
+            if (entity instanceof net.minecraft.world.entity.Mob mob) details.put("noAi", mob.isNoAi());
+            details.put("intersectedPendingCells", fixture.expectedPlan().blocks().entrySet().stream()
+                    .filter(entry -> !entry.getValue().equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(level.getBlockState(BlockPos.of(entry.getKey())).getBlock()))))
+                    .filter(entry -> new AABB(BlockPos.of(entry.getKey())).intersects(entity.getBoundingBox()))
+                    .limit(32).map(entry -> BlockPos.of(entry.getKey()).toShortString()).toList());
+            occupants.add(details); if (occupants.size() >= 32) break;
+        }
+        result.put("footprintEntities", occupants);
+        return result;
     }
     private static void advance(long now, int next, int delay) { stage = next; stageSince = now; resumeAt = now + delay; }
     private static void check(String text) { CHECKS.add(text); }

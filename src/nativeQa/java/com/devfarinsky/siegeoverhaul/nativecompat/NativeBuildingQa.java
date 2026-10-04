@@ -41,6 +41,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModList;
@@ -95,6 +96,11 @@ public final class NativeBuildingQa {
     private static CompletableFuture<Void> serverTask;
 
     private NativeBuildingQa() {}
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void observeNativeBuilder(EntityJoinLevelEvent event) {
+        if (ENABLED && !finished) NativeBuildingGameplay.observeNativeBuilder(event);
+    }
 
     @SubscribeEvent
     public static void tick(TickEvent.ClientTickEvent event) {
@@ -622,6 +628,10 @@ public final class NativeBuildingQa {
         if (failure != null) {
             REPORT.put("failure", failure.toString());
             FactionLogger.LOG.error("Native Building QA failed in phase {}", phase, failure);
+            if (evidence != null && mc.level != null) try (NativeImage pixels = Screenshot.takeScreenshot(mc.getMainRenderTarget())) {
+                pixels.writeToFile(evidence.resolve("failure-frame.png"));
+                REPORT.put("failureFramebuffer", "failure-frame.png");
+            } catch (Throwable captureFailure) { REPORT.put("failureFramebufferError", captureFailure.toString()); }
         }
         try {
             if (evidence != null) Files.writeString(evidence.resolve("result.json"), new GsonBuilder().setPrettyPrinting().create().toJson(REPORT));

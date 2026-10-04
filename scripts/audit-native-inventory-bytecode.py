@@ -18,6 +18,8 @@ TARGETS = {
         'com.talhanation.recruits.entities.AbstractRecruitEntity',
         'com.talhanation.recruits.entities.AbstractInventoryEntity',
         'com.talhanation.recruits.inventory.RecruitSimpleContainer',
+        'com.talhanation.recruits.world.RecruitsClaimManager',
+        'com.talhanation.recruits.world.RecruitsClaim',
     ]),
     'workers': ('workers-567450-8351157_mapped_official_1.20.1.jar', [
         'com.talhanation.workers.entities.ai.GetNeededItemsFromStorage',
@@ -76,7 +78,7 @@ def main():
             outputs.append({'class': name, 'file': target.name, 'sha256': sha256(target)})
         report['artifacts'][mod] = {'fileName': filename, 'sha256': expected['sha256'], 'classes': outputs}
     (evidence / 'native-bytecode-audit.json').write_text(json.dumps(report, indent=2) + '\n')
-    print('Verified disassembly evidence for 11 exact pinned native inventory/goal classes; no vendor JARs copied.')
+    print('Verified disassembly evidence for 13 exact pinned native inventory/goal/claim classes; no vendor JARs copied.')
 
 if __name__ == '__main__':
     main()

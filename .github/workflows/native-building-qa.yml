@@ -78,7 +78,7 @@ jobs:
           data = json.loads((root / 'result.json').read_text())
           audit = json.loads((root / 'native-bytecode-audit.json').read_text())
           assert audit['status'] == 'passed' and audit['noVendorJarsUploaded'], audit
-          assert sum(len(v['classes']) for v in audit['artifacts'].values()) == 11, audit
+          assert sum(len(v['classes']) for v in audit['artifacts'].values()) == 13, audit
           assert data['status'] == 'passed', data
           assert data['gameplay']['status'] == 'passed', data.get('gameplay')
           expected = [

@@ -17,6 +17,7 @@ import com.devfarinsky.siegeoverhaul.items.ModItems;
 import com.google.gson.GsonBuilder;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.talhanation.recruits.ClaimEvents;
+import com.talhanation.recruits.world.RecruitsClaim;
 import com.talhanation.workers.entities.BuilderEntity;
 import com.talhanation.workers.entities.workarea.StorageArea;
 import net.minecraft.client.Minecraft;
@@ -301,11 +302,13 @@ public final class NativeTerritoryPerimeterQa {
                 if (now - stageTick < 60) return Action.NONE;
                 require(NativeConstructionGuard.status(area(level)).toLowerCase(java.util.Locale.ROOT).contains("permission"),
                         "Actual permission-loss guard pause was not observed");
-                var second = ClaimEvents.recruitsClaimManager.getClaim(fixture.claimIds().get(1));
+                var second = detachedClaimUpdate(ClaimEvents.recruitsClaimManager.getClaim(fixture.claimIds().get(1)));
                 require(second != null && !second.getClaimedChunks().contains(NativeTerritoryPerimeterFixture.EXPANSION),
                         "Unexpected expansion fixture claim state");
                 second.addChunk(NativeTerritoryPerimeterFixture.EXPANSION);
                 ClaimEvents.recruitsClaimManager.addOrUpdateClaim(level, second);
+                require(ClaimEvents.recruitsClaimManager.getClaim(second.getUUID()) == second,
+                        "Native expansion update was canceled or did not replace the indexed claim");
                 ClaimEvents.recruitsClaimManager.save(level);
                 verifyCurrentTerritory(level, expandedTerritory());
                 require(PerimeterTerritory.problem(level, area(level), NativeTerritoryPerimeterFixture.FACTION) != null,
@@ -358,10 +361,12 @@ public final class NativeTerritoryPerimeterQa {
                 require(NativeConstructionGuard.status(area(level)).toLowerCase(java.util.Locale.ROOT).contains("territory"),
                         "Native scope-change pause is masked by another guard: " + NativeConstructionGuard.status(area(level)));
                 check("After restart, Survival owner with expanded same-faction territory remains paused for 100 ticks with exact old scope and no mutation or payment");
-                var second = ClaimEvents.recruitsClaimManager.getClaim(fixture.claimIds().get(1));
+                var second = detachedClaimUpdate(ClaimEvents.recruitsClaimManager.getClaim(fixture.claimIds().get(1)));
                 require(second != null, "Second native claim record vanished");
                 second.removeChunk(NativeTerritoryPerimeterFixture.EXPANSION);
                 ClaimEvents.recruitsClaimManager.addOrUpdateClaim(level, second); ClaimEvents.recruitsClaimManager.save(level);
+                require(ClaimEvents.recruitsClaimManager.getClaim(second.getUUID()) == second,
+                        "Native scope restoration was canceled or did not replace the indexed claim");
                 verifyCurrentTerritory(level, NativeTerritoryPerimeterFixture.TERRITORY);
                 require(PerimeterTerritory.problem(level, area(level), NativeTerritoryPerimeterFixture.FACTION) == null,
                         "Restoring the original complete native territory did not restore the accepted scope");
@@ -427,6 +432,16 @@ public final class NativeTerritoryPerimeterQa {
     private static ProtectedBuildArea area(ServerLevel level) {
         require(jobId != null && level.getEntity(jobId) instanceof ProtectedBuildArea, "Paid native territory marker missing");
         return (ProtectedBuildArea) level.getEntity(jobId);
+    }
+    private static RecruitsClaim detachedClaimUpdate(RecruitsClaim original) {
+        require(original != null, "Native claim record unavailable for an update");
+        CompoundTag before = original.toNBT().copy();
+        RecruitsClaim update = RecruitsClaim.fromNBT(before.copy());
+        require(update != original && update.getUUID().equals(original.getUUID()) && update.toNBT().equals(before),
+                "Native public claim NBT copy did not preserve the exact update values");
+        // The native manager removes old chunk indexes by reading its old object's chunk list.
+        // Keep that indexed object intact until addOrUpdateClaim replaces it with this update.
+        return update;
     }
     private static Set<net.minecraft.world.level.ChunkPos> expandedTerritory() {
         var chunks = new java.util.HashSet<>(NativeTerritoryPerimeterFixture.TERRITORY);
