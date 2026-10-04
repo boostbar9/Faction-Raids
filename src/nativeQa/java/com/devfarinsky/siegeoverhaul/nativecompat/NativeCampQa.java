@@ -41,14 +41,14 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
-/** Actual command, ordinary raid ticks and native camp establishment in two isolated fresh worlds. */
+/** Actual command, ordinary raid ticks and native camp establishment in three isolated fresh worlds. */
 @Mod.EventBusSubscriber(modid = SiegeOverhaul.MOD_ID, value = Dist.CLIENT)
 public final class NativeCampQa {
     private static final boolean ENABLED = Boolean.getBoolean("siegeoverhaul.nativeQa")
             && "camp-spawn".equals(System.getProperty("siegeoverhaul.nativeQa.mode"));
     private static final long SECOND = 1_000_000_000L;
     private static final long CAPTURE_TIMEOUT = 30 * SECOND;
-    private static final List<String> WORLDS = List.of("siege-native-camp-flat", "siege-native-camp-shallow-water");
+    private static final List<String> WORLDS = List.of("siege-native-camp-flat", "siege-native-camp-shallow-water", "siege-native-camp-rocky-rise");
     private static final Map<String, Object> REPORT = new LinkedHashMap<>();
     private static final List<Map<String, Object>> SCENARIOS = new ArrayList<>(), SAMPLES = new ArrayList<>();
     private static final List<String> SHOTS = new ArrayList<>();
@@ -72,7 +72,7 @@ public final class NativeCampQa {
         Minecraft mc = Minecraft.getInstance();
         try {
             if (started == 0) started = System.nanoTime();
-            require(System.nanoTime() - started < 22 * 60 * SECOND, "Camp QA exceeded its overall 22-minute limit");
+            require(System.nanoTime() - started < 33 * 60 * SECOND, "Camp QA exceeded its overall 33-minute limit");
             if (capture != null) {
                 require(System.nanoTime() - captureStarted < CAPTURE_TIMEOUT,
                         "Camp capture did not produce a ready, nonblank framebuffer within 30 seconds: " + captureDiagnostics);
@@ -94,7 +94,7 @@ public final class NativeCampQa {
                 rules.getRule(GameRules.RULE_DAYLIGHT).set(false, null);
                 rules.getRule(GameRules.RULE_DOMOBSPAWNING).set(false, null);
                 rules.getRule(GameRules.RULE_WEATHER_CYCLE).set(false, null);
-                boolean hostile = scenario == 1;
+                boolean hostile = scenario > 0;
                 scenarioStarted = System.nanoTime(); clientPhase = 2;
                 mc.createWorldOpenFlows().createFreshLevel(world,
                         new LevelSettings(world, GameType.SURVIVAL, false, Difficulty.NORMAL, false,
@@ -103,7 +103,7 @@ public final class NativeCampQa {
                 return;
             }
             if (mc.level == null || mc.player == null || mc.getSingleplayerServer() == null || mc.screen != null) return;
-            require(System.nanoTime() - scenarioStarted < (scenario == 1 ? 11 : 6) * 60 * SECOND,
+            require(System.nanoTime() - scenarioStarted < (scenario > 0 ? 11 : 6) * 60 * SECOND,
                     "Camp scenario exceeded its real-time scouting/establishment bound");
             if (playerId == null) playerId = mc.player.getUUID();
             if (pending != null) {
@@ -114,7 +114,8 @@ public final class NativeCampQa {
                     mc.getConnection().sendCommand("siegeoverhaul start");
                 } else if (action == Action.CAPTURE) {
                     mc.options.hideGui = true;
-                    capture = scenario == 0 ? "01-established-flat-camp.png" : "02-established-shallow-water-forest-camp.png";
+                    capture = scenario == 0 ? "01-established-flat-camp.png" : scenario == 1
+                            ? "02-established-shallow-water-forest-camp.png" : "03-established-rocky-water-forest-camp.png";
                     captureStarted = System.nanoTime();
                     captureReadyFrames = captureAttempts = captureBlankFrames = 0;
                     captureDiagnostics = new LinkedHashMap<>();
@@ -143,7 +144,7 @@ public final class NativeCampQa {
     private static Action step(ServerLevel level, ServerPlayer owner) throws Exception {
         require(owner != null, "Real camp QA player unavailable");
         if (stage == 0) {
-            fixture = NativeCampFixture.setup(level, owner, WORLDS.get(scenario), scenario == 1);
+            fixture = NativeCampFixture.setup(level, owner, WORLDS.get(scenario), scenario > 0);
             coreKey = SiegeCore.key(owner);
             require(CampClaims.unavailableReason(level).isEmpty(), "Native camp claim setup unavailable: " + CampClaims.unavailableReason(level));
             require(RaidConfig.BUILD_WAR_CAMPS.get() && RaidConfig.CAMP_TERRAFORM.get() && RaidConfig.LEVEL_CAMP_TERRAIN.get()
@@ -168,7 +169,7 @@ public final class NativeCampQa {
         if (stage == 2) {
             if (!raid.campTerraformed && raid.campPos == null) sawNaturalSearch = true;
             if (raid.campTerraformed) sawFallback = true;
-            if (scenario == 1 && !hostilePrepared) {
+            if (scenario > 0 && !hostilePrepared) {
                 require(raid.campPos == null && !raid.campTerraformed,
                         "Hostile camp advanced before its controlled terrain setup; do not accept an accidental natural camp");
                 if (landingScout == null && raid.campSearchPos != null) {
@@ -177,14 +178,14 @@ public final class NativeCampQa {
                         landingScout = candidate.immutable();
                 }
                 if (landingScout != null && CampLoading.ready(level, landingScout)) {
-                    var landing = NativeCampFixture.hostileLanding(level, fixture, landingScout);
+                    var landing = NativeCampFixture.hostileLanding(level, fixture, landingScout, scenario == 2);
                     fixture = landing.fixture(); landingEvidence = landing.evidence(); hostilePrepared = true;
                 }
             }
             require(!raid.campSearchAbandoned, "Production camp search exhausted its bounded candidates; see scouting/terrain rejection logs");
             if (raid.campPos == null || !raid.campCrewStarted) return Action.NONE;
-            require(raid.campTerraformed == (scenario == 1), "Camp established through the wrong natural/fallback path");
-            if (scenario == 1) require(hostilePrepared && sawNaturalSearch && sawFallback,
+            require(raid.campTerraformed == (scenario > 0), "Camp established through the wrong natural/fallback path");
+            if (scenario > 0) require(hostilePrepared && sawNaturalSearch && sawFallback,
                     "Hostile case did not exercise genuine natural search and fallback");
             if (establishedAt < 0) establishedAt = level.getGameTime();
             BlockPos enemyCore = EnemyCore.position(raid);
@@ -277,7 +278,7 @@ public final class NativeCampQa {
             for (String block : List.of("minecraft:water", "minecraft:oak_log", "minecraft:oak_leaves"))
                 originalTerrain.put(block, raid.campBlocks.values().stream()
                         .filter(record -> block.equals(record.getCompound("Original").getString("Name"))).count());
-            if (scenario == 1) require(originalTerrain.values().stream().allMatch(count -> count > 0),
+            if (scenario > 0) require(originalTerrain.values().stream().allMatch(count -> count > 0),
                     "Hostile camp did not actually replace shallow water and supported logs/leaves through the production ledger");
             var result = new LinkedHashMap<String, Object>(sample(level, owner));
             result.put("status", "passed"); result.put("enemyCore", enemyCore.toShortString());
@@ -293,6 +294,16 @@ public final class NativeCampQa {
             result.put("registeredGuardRoleCount", expectedGuardSlots.size());
             result.put("protectedCellCount", fixture.protectedCells().size()); result.put("protectedChests", fixture.protectedContainers().size());
             result.put("entry", "Actual non-op client /siegeoverhaul start command; normal production raid/scouting ticks");
+            if (scenario == 2) {
+                BlockPos rock = landingScout.atY(fixture.surface());
+                require(raid.campPos.getY() == fixture.surface()+1,
+                        "Rocky fallback did not raise its camp plane above the untouched support");
+                require(Math.abs(rock.getX()-raid.campPos.getX())<=9 && Math.abs(rock.getZ()-raid.campPos.getZ())<=9
+                                && level.getBlockState(rock).is(Blocks.STONE) && !raid.campBlocks.containsKey(rock.asLong()),
+                        "Rocky support must remain unchanged inside the actual camp, outside its restoration ledger");
+                result.put("raisedCampPlane",true); result.put("unchangedRockSupportVerified",true);
+                result.put("campPlaneAboveOriginalSurface",raid.campPos.getY()-fixture.surface());
+            }
             result.put("elapsedSeconds", (System.nanoTime() - scenarioStarted) / (double)SECOND);
             result.put("ordinaryTicksSinceEstablishment", level.getGameTime() - establishedAt);
             result.put("recordedOriginalTerrainCounts", originalTerrain);
@@ -307,14 +318,15 @@ public final class NativeCampQa {
         }
         if (stage == 3) {
             require(SHOTS.size() == scenario + 1, "Established camp framebuffer was not captured");
-            return scenario == 0 ? Action.NEXT_WORLD : Action.DONE;
+            return scenario + 1 < WORLDS.size() ? Action.NEXT_WORLD : Action.DONE;
         }
         return Action.NONE;
     }
 
     private static Map<String, Object> sample(ServerLevel level, ServerPlayer owner) {
         var result = new LinkedHashMap<String, Object>();
-        result.put("scenario", scenario == 0 ? "natural-flat" : "controlled-shallow-water-forest");
+        result.put("scenario", scenario == 0 ? "natural-flat" : scenario == 1
+                ? "controlled-shallow-water-forest" : "controlled-rocky-water-forest");
         result.put("stage", stage); result.put("gameTime", level.getGameTime());
         if (fixture == null) return result;
         result.put("nativeClaimAvailability", CampClaims.unavailableReason(level)); result.put("hostileTerrainPrepared", hostilePrepared);
@@ -434,7 +446,7 @@ public final class NativeCampQa {
                         && mc.gameDirectory.toPath().toAbsolutePath().normalize().equals(directory), "Refusing a non-isolated camp QA directory");
         evidence = directory.getParent().resolve("evidence"); Files.createDirectories(evidence);
         REPORT.put("mode", "camp-spawn"); REPORT.put("startedUtc", Instant.now().toString());
-        REPORT.put("scope", "Two fresh isolated worlds; real non-op client command and native production camp pipeline. Labeled terrain/faction/core fixtures; no private camp helper calls, timer changes or forced acceptance.");
+        REPORT.put("scope", "Three fresh isolated worlds; real non-op client command and native production camp pipeline. Labeled terrain/faction/core fixtures; no private camp helper calls, timer changes or forced acceptance.");
         REPORT.put("notCovered", List.of("Arbitrary terrain or mod packs", "Dedicated multiplayer connection", "Full camp decorative completion", "Raid-wave combat and occupation"));
         var versions = new LinkedHashMap<String, String>(); var artifacts = new LinkedHashMap<String, Object>();
         for (String id : List.of("minecraft", "forge", "siegeoverhaul", "workers", "recruits", "smallships", "siegeweapons")) {

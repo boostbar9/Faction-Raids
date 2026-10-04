@@ -54,7 +54,15 @@ public final class CampTerrain {
             int ground = CampGround.survey(level,column,fallback).ground();
             // Only the flat core is leveled to this plane. Hills in the transition
             // constrain it but must not pull an already-flat camp upward.
-            if (Math.max(Math.abs(dx),Math.abs(dz)) <= CAMP_RADIUS) heights[count++] = ground;
+            if (Math.max(Math.abs(dx),Math.abs(dz)) <= CAMP_RADIUS) {
+                heights[count++] = ground;
+                // Exposed raw rock may support the fallback only while untouched.
+                // A median below that support is guaranteed to require forbidden
+                // excavation. Raise the proposal instead; plan() must still accept
+                // every column, exit, protected block and finite fill budget.
+                if (fallback && CampGround.rockFoundation(level.getBlockState(column.atY(ground - 1))))
+                    low = Math.max(low, ground);
+            }
             int distance = Math.max(0, Math.abs(dx)-CAMP_RADIUS) + Math.max(0, Math.abs(dz)-CAMP_RADIUS);
             // Untouched edges constrain the slope; graded columns constrain actual cut/fill.
             int allowance = distance + (Math.max(Math.abs(dx),Math.abs(dz)) < radius ? maxChange : 0);

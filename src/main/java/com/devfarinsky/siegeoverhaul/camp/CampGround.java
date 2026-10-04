@@ -46,7 +46,10 @@ final class CampGround {
     }
     /** Full, raw rock can support fallback earthworks only when it is left untouched. */
     static boolean foundation(BlockState state) {
-        return CampRoad.soil(state) || state.is(Blocks.STONE) || state.is(Blocks.GRANITE)
+        return CampRoad.soil(state) || rockFoundation(state);
+    }
+    static boolean rockFoundation(BlockState state) {
+        return state.is(Blocks.STONE) || state.is(Blocks.GRANITE)
                 || state.is(Blocks.DIORITE) || state.is(Blocks.ANDESITE) || state.is(Blocks.TUFF)
                 || state.is(Blocks.DEEPSLATE) || state.is(Blocks.CALCITE)
                 || state.is(Blocks.BASALT) || state.is(Blocks.SMOOTH_BASALT);
