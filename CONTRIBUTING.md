@@ -65,11 +65,13 @@ For gameplay releases, update mod_version and CHANGELOG.md, then verify the fina
 
 The maintainer's release workflow includes CurseForge (project 1364352). A coding agent must still respect its actual permissions and merge/publish policies. If it cannot perform release steps, leave the tested artifact and a concrete handoff rather than claiming publication.
 
+Write CurseForge patch notes in a short, natural, player-focused voice, covering changes, fixes and necessary update advice; keep test counts and developer evidence in repository release records.
+
 Recent verified-artifact publishing workflows are on publish/curseforge-v<version> branches. For example, publish/curseforge-v4.28.12 downloads the successful main Build artifacts and validates source tree, tests, metadata and JAR before upload. Treat that as a historical example: replace all version, PR, commit, tree and run IDs for a new release, and derive test counts from actual results.
 
 The older main-branch publish.yml rebuilds with tests excluded; do not use it as evidence that an upload contains the tested bytes. release.yml is tag-triggered and also rebuilds. Creating release tags is therefore a publishing action, not routine task setup.
 
-Required CurseForge dependencies: recruits, workers, small-ships, siegeweapons. Optional: corpse, epic-knights-armor-and-weapons, ewewukeks-musket-mod. Release credentials belong only in trusted release workflows; never copy them into issues, source, Copilot setup or logs.
+Required CurseForge dependencies: recruits, workers, small-ships, siegeweapons. Optional: ftb-chunks-forge, open-parties-and-claims, corpse, epic-knights-armor-and-weapons, ewewukeks-musket-mod, curios, epic-knights-addon. Release credentials belong only in trusted release workflows; never copy them into issues, source, Copilot setup or logs.
 
 Avoid duplicate uploads after ambiguous failures: check the run logs and upload receipt first. Report accepted upload and public moderation status separately. Documentation and development-tooling changes do not need a version bump or CurseForge JAR.
 
