@@ -645,6 +645,70 @@ class CampTerrainTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void fallbackRaisesThePlaneOverAnExposedRockBumpWithoutCuttingIt() {
+        BlockPos rock = new BlockPos(1,64,0);
+        heights.put("1:0",65);
+        edits.put(rock,Blocks.STONE.defaultBlockState());
+        assertEquals(center,CampTerrain.earthworksCenter(level,center),"Natural scouting stays unchanged");
+        assertTrue(CampTerrain.plan(level,center,p->false,r->{},true).isEmpty(),"The median plane would cut stone");
+        BlockPos raised = CampTerrain.earthworksCenter(level,center,true);
+        assertEquals(center.above(),raised);
+        var plan = CampTerrain.plan(level,raised,p->false,r->{},true).orElseThrow();
+        assertFalse(plan.changes().isEmpty());
+        assertTrue(plan.changes().stream().noneMatch(change->change.pos().equals(rock)));
+        assertTrue(plan.changes().stream().allMatch(change->change.before().isAir()
+                && change.after().is(Blocks.DIRT)),"Only add supported soil around the untouched bump");
+        assertTrue(CampTerrain.apply(level,raid,plan));
+        var saved=RaidState.load(raid.save());
+        assertTrue(state(rock).is(Blocks.STONE));
+        assertFalse(saved.campBlocks.containsKey(rock.asLong()));
+        assertEquals(plan.changes().size(),saved.campBlocks.size());
+        for(var change:plan.changes())assertEquals("minecraft:air",saved.campBlocks.get(change.pos().asLong())
+                .getCompound("Original").getString("Name"));
+    }
+
+    @Test void fallbackRaisesOverUnevenMixedRockWithoutChangingAnySupport() {
+        for(int x=-2;x<=2;x++)for(int z=-2;z<=2;z++) {
+            int top=65+Math.floorMod(x+z,2);
+            heights.put(x+":"+z,top);
+            for(int y=64;y<top;y++)edits.put(new BlockPos(x,y,z),
+                    (Math.floorMod(x,2)==0?Blocks.STONE:Blocks.ANDESITE).defaultBlockState());
+        }
+        BlockPos raised=CampTerrain.earthworksCenter(level,center,true);
+        assertEquals(center.above(2),raised);
+        var plan=CampTerrain.plan(level,raised,p->false,r->{},true).orElseThrow();
+        assertTrue(plan.changes().size()<=4096);
+        assertTrue(plan.changes().stream().allMatch(change->change.before().isAir()
+                && change.after().is(Blocks.DIRT)));
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
+    @Test void raisedRockProposalKeepsProtectionAndReliefLimits() {
+        heights.put("1:0",65);
+        BlockPos rock=new BlockPos(1,64,0);
+        edits.put(rock,Blocks.STONE.defaultBlockState());
+        BlockPos raised=CampTerrain.earthworksCenter(level,center,true);
+        assertTrue(CampTerrain.plan(level,raised,p->p.getX()==2,r->{},true).isEmpty());
+        edits.put(new BlockPos(2,64,0),Blocks.CHEST.defaultBlockState());
+        assertTrue(CampTerrain.plan(level,raised,p->false,r->{},true).isEmpty());
+        edits.clear();
+        heights.put("1:0",77);
+        for(int y=64;y<77;y++)edits.put(new BlockPos(1,y,0),Blocks.STONE.defaultBlockState());
+        assertTrue(CampTerrain.plan(level,CampTerrain.earthworksCenter(level,center,true),p->false,r->{},true).isEmpty());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
+    @Test void raisedRockProposalStillRejectsAnOverBudgetFill() {
+        heights.put("1:0",71);
+        for(int y=64;y<71;y++)edits.put(new BlockPos(1,y,0),Blocks.STONE.defaultBlockState());
+        BlockPos raised=CampTerrain.earthworksCenter(level,center,true);
+        assertEquals(center.above(7),raised);
+        var reasons=new ArrayList<CampTerrain.Rejection>();
+        assertTrue(CampTerrain.plan(level,raised,p->false,reasons::add,true).isEmpty());
+        assertEquals(List.of(CampTerrain.Rejection.BUDGET),reasons);
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+
     @Test void fallbackRockFootingDoesNotAuthorizeExcavatingRockOrUsingPlayerFoundations() {
         heights.put("1:0",65);
         edits.put(new BlockPos(1,64,0),Blocks.STONE.defaultBlockState());

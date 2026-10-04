@@ -1,6 +1,6 @@
 name: Native Camp Spawn QA
 
-# Actual non-op command and production scouting in two fresh integrated-server worlds.
+# Actual non-op command and production scouting in three fresh integrated-server worlds.
 on:
   workflow_dispatch:
   pull_request:
@@ -21,7 +21,7 @@ jobs:
       (github.event.pull_request.head.repo.full_name == github.repository &&
        contains(github.event.pull_request.labels.*.name, 'native-camp-qa'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 32
+    timeout-minutes: 43
     env:
       LIBGL_ALWAYS_SOFTWARE: 'true'
       GALLIUM_DRIVER: llvmpipe
@@ -58,13 +58,13 @@ jobs:
           printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:4\nsimulationDistance:5\nmaxFps:30\nvsync:false\n' > build/native-camp-qa/client/options.txt
           git rev-parse HEAD > build/native-camp-qa/evidence/source-commit.txt
           java -version 2> build/native-camp-qa/evidence/java-version.txt
-      - name: Run real natural and shallow-water camp establishment
+      - name: Run real natural, shallow-water and rocky camp establishment
         run: |
           set -euo pipefail
           xvfb-run -a -s '-screen 0 1280x720x24' bash -c '
             set -euo pipefail
             glxinfo -B | tee build/native-camp-qa/evidence/opengl.txt
-            timeout --signal=TERM --kill-after=60s 26m ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=camp-spawn runClient 2>&1 | tee build/native-camp-qa/evidence/client-console.log
+            timeout --signal=TERM --kill-after=60s 37m ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=camp-spawn runClient 2>&1 | tee build/native-camp-qa/evidence/client-console.log
           '
       - name: Audit exact loaded native guard and inventory bytecode
         if: always()
@@ -87,8 +87,8 @@ jobs:
           for mod in ['workers', 'recruits', 'smallships', 'siegeweapons']:
               assert len(data['loadedCompanionArtifacts'][mod]['sha256']) == 64, mod
           scenarios = data['scenarios']
-          assert len(scenarios) == 2, scenarios
-          assert [case['scenario'] for case in scenarios] == ['natural-flat', 'controlled-shallow-water-forest']
+          assert len(scenarios) == 3, scenarios
+          assert [case['scenario'] for case in scenarios] == ['natural-flat', 'controlled-shallow-water-forest', 'controlled-rocky-water-forest']
           for index, case in enumerate(scenarios):
               assert case['status'] == 'passed' and case['nativeClaimChunks'] == 25, case
               capture = case['framebufferCapture']
@@ -121,12 +121,18 @@ jobs:
           assert scenarios[1]['hostileTerrainPrepared'], scenarios[1]
           assert all(scenarios[1]['recordedOriginalTerrainCounts'][block] > 0
                      for block in ['minecraft:water', 'minecraft:oak_log', 'minecraft:oak_leaves']), scenarios[1]
-          expected = ['01-established-flat-camp.png', '02-established-shallow-water-forest-camp.png']
+          rocky = scenarios[2]
+          assert rocky['controlledHostileTerrain']['rockyRise'] and rocky['controlledHostileTerrain']['fixtureWrites'] < 300, rocky
+          assert rocky['raisedCampPlane'] and rocky['unchangedRockSupportVerified'], rocky
+          assert rocky['campPlaneAboveOriginalSurface'] == 1 and rocky['protectedCellCount'] >= 6147, rocky
+          assert all(rocky['recordedOriginalTerrainCounts'][block] > 0
+                     for block in ['minecraft:water', 'minecraft:oak_log', 'minecraft:oak_leaves']), rocky
+          expected = ['01-established-flat-camp.png', '02-established-shallow-water-forest-camp.png', '03-established-rocky-water-forest-camp.png']
           assert data['screenshots'] == expected, data['screenshots']
           for name in expected:
               content = (root / name).read_bytes()
               assert content.startswith(b'\x89PNG\r\n\x1a\n') and len(content) > 4096, name
-          print('Both actual camp-establishment scenarios passed. Review raw framebuffers and bounded fixture coverage.')
+          print('All three actual camp-establishment scenarios passed. Review raw framebuffers and bounded fixture coverage.')
           PY
       - name: Collect diagnostics without companion JARs or worlds
         if: always()

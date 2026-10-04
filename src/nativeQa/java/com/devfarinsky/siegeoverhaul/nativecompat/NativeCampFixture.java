@@ -123,7 +123,7 @@ final class NativeCampFixture {
         return new Fixture(world, factionId, core, surface, List.copyOf(claimIds), Map.copyOf(protectedCells), Map.copyOf(containers));
     }
 
-    static Landing hostileLanding(ServerLevel level, Fixture fixture, BlockPos scout) {
+    static Landing hostileLanding(ServerLevel level, Fixture fixture, BlockPos scout, boolean rocky) {
         require(CampLoading.ready(level, scout), "Hostile landing setup must use the actually loaded native scout neighborhood");
         BlockPos center = CampLoading.localCandidate(scout, 0, true).atY(fixture.surface());
         int changes = 0;
@@ -151,13 +151,28 @@ final class NativeCampFixture {
         protectedCells.put(protectedWall, level.getBlockState(protectedWall));
         Map<BlockPos, CompoundTag> containers = new LinkedHashMap<>(fixture.protectedContainers());
         containers.put(protectedChest, level.getBlockEntity(protectedChest).saveWithFullMetadata().copy());
+        // An exposed one-block rock rise is inside every expanded local site's
+        // core. The median water plane would quarry it; the camp must safely
+        // raise its plane and retain this exact original support instead.
+        BlockPos rock = scout.atY(fixture.surface());
+        if (rocky) {
+            dryColumn(level, rock);
+            level.setBlock(rock, Blocks.STONE.defaultBlockState(), 3);
+            protectedCells.put(rock, level.getBlockState(rock));
+            changes += 4;
+        }
         Fixture updated = new Fixture(fixture.world(), fixture.faction(), fixture.core(), fixture.surface(),
                 fixture.claimIds(), Map.copyOf(protectedCells), Map.copyOf(containers));
         require(changes < 300, "Hostile terrain setup exceeded its bounded cell count");
-        return new Landing(updated, Map.of("scout", scout.toShortString(), "intendedFallbackCenter", center.toShortString(),
-                "surface", fixture.surface(), "waterDepth", 3, "dryLandingWidth", 3, "fixtureWrites", changes,
-                "unclaimedProtectedChest", protectedChest.toShortString(),
-                "terrain", "Vanilla generated shallow-water layers plus bounded dry landing and supported oak log/leaf fixture; no raid state changes"));
+        Map<String,Object> evidence = new LinkedHashMap<>();
+        evidence.put("scout",scout.toShortString()); evidence.put("intendedFallbackCenter",center.toShortString());
+        evidence.put("surface",fixture.surface()); evidence.put("waterDepth",3);
+        evidence.put("dryLandingWidth",3); evidence.put("fixtureWrites",changes);
+        evidence.put("unclaimedProtectedChest",protectedChest.toShortString());
+        evidence.put("terrain","Vanilla generated shallow-water layers plus bounded dry landing and supported oak log/leaf fixture; no raid state changes");
+        evidence.put("rockyRise",rocky);
+        if(rocky)evidence.put("unchangedRockSupport",rock.toShortString());
+        return new Landing(updated,Map.copyOf(evidence));
     }
 
     static void verifyProtected(ServerLevel level, Fixture fixture) {

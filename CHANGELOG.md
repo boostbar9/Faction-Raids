@@ -1,3 +1,8 @@
+## 4.52.1 — Safe camp support on rough ground
+
+- Fallback camp scouting can raise its proposed ground plane over exposed raw-rock bumps inside the camp core instead of rejecting a median plane that would require quarrying. The rock remains untouched; all existing claim, structure, exit, relief, height and finite earthworks limits still apply.
+- Adds focused rough-ground regressions and a third opt-in native camp scenario combining an exposed stone rise, shallow water, trees and protected content. This is bounded representative coverage, not a guarantee that every world has a safe camp site.
+
 ## 4.52.0 — Building and camp reliability
 
 - Consolidates automatic perimeter, all six existing plans and construction progress in one Building section. Adds restrained dark styling, source-based plan thumbnails, readable costs and responsive layouts while preserving Minecraft's font and the other command sections.
