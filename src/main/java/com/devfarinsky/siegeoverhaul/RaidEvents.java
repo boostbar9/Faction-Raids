@@ -2,6 +2,7 @@ package com.devfarinsky.siegeoverhaul;
 
 import com.devfarinsky.siegeoverhaul.core.EndlessSiege;
 import com.devfarinsky.siegeoverhaul.core.FactionBank;
+import com.devfarinsky.siegeoverhaul.raid.RaidFeedback;
 import com.devfarinsky.siegeoverhaul.scout.ScoutManager;
 
 import net.minecraft.ChatFormatting;
@@ -842,7 +843,7 @@ public final class RaidEvents {
         }
         state.barrelPos = null;
         announce(level.getServer(), state.teamKey, Component.literal(
-                "The war camp supply barrel spills its cargo — emeralds scatter across the ground.")
+                "Enemy supply barrel destroyed.")
                 .withStyle(ChatFormatting.GOLD), false);
     }
 
@@ -1315,10 +1316,12 @@ public final class RaidEvents {
                         Math.max(1, RaidConfig.CAPTURE_TIME_SECONDS.get() * 20);
                 int breach = breachPercent(state);
                 source.sendSuccess(() -> Component.literal("Phase: ").withStyle(ChatFormatting.GRAY)
-                        .append(Component.literal(state.wave == 0 ? "War camp forming" :
-                                (!state.breached && RaidConfig.ENABLE_BREACH_PHASE.get() ?
-                                        "Perimeter breach " + breach + "% — wave " + state.wave + (EndlessSiege.active(state) ? " (endless)" : "/" + RaidConfig.WAVES.get()) :
-                                        waveTitle(EndlessSiege.active(state) ? EndlessSiege.chapterWave(state.wave) : state.wave) + " — wave " + state.wave + (EndlessSiege.active(state) ? " (endless)" : "/" + RaidConfig.WAVES.get())))
+                        .append(Component.literal(state.wave == 0 || state.preparationTicks > 0 || state.coreCaptured
+                                ? raidPhaseLabel(state, false)
+                                : (!state.breached && RaidConfig.ENABLE_BREACH_PHASE.get()
+                                    ? "Perimeter breach " + breach + "% — " + EndlessSiege.waveLabel(state, RaidConfig.WAVES.get())
+                                    : waveTitle(EndlessSiege.active(state) ? EndlessSiege.chapterWave(state.wave) : state.wave)
+                                        + " — " + EndlessSiege.waveLabel(state, RaidConfig.WAVES.get())))
                                 .withStyle(ChatFormatting.RED)), false);
                 source.sendSuccess(() -> Component.literal("Enemy force: ").withStyle(ChatFormatting.GRAY)
                         .append(Component.literal(state.raiders.size() + " deployed • " +
@@ -1419,9 +1422,16 @@ public final class RaidEvents {
                 return 0;
             }
             net.minecraft.world.item.ItemStack stack = new net.minecraft.world.item.ItemStack(book);
-            if (!player.getInventory().add(stack)) player.drop(stack, false);
+            boolean accepted = player.getInventory().add(stack);
+            net.minecraft.world.entity.item.ItemEntity drop = !accepted ? player.drop(stack, false) : null;
+            boolean stored = playerHasGuidebook(player, book);
+            boolean dropped = drop != null && player.serverLevel().getEntity(drop.getUUID()) == drop;
             BOOK_COOLDOWN.put(player.getUUID(), now);
-            source.sendSuccess(() -> Component.literal("A Warlord's Codex materializes in your inventory.")
+            if (!stored && !dropped) {
+                source.sendFailure(Component.literal(RaidFeedback.codexDelivery(false, false)));
+                return 0;
+            }
+            source.sendSuccess(() -> Component.literal(RaidFeedback.codexDelivery(stored, dropped))
                     .withStyle(ChatFormatting.GREEN), false);
             return 1;
         } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
@@ -1882,7 +1892,7 @@ public final class RaidEvents {
             }
             if (state.campPos != null) startCampCrew(raidLevel,state,point);
             else if (RaidConfig.BUILD_WAR_CAMPS.get()) announce(server,anchor.teamKey(),Component.literal(
-                    "Scouts are searching for claimable land. Preparation waits until a real enemy camp is established.")
+                    "Enemy scouts are searching for a safe camp site. Preparation is paused.")
                     .withStyle(ChatFormatting.GOLD),false);
         }
         data.raids.put(anchor.teamKey(), state);
@@ -1898,9 +1908,10 @@ public final class RaidEvents {
                 ? state.narrative.opening
                 : "Enemy scouts have found " + anchor.teamDisplay() + " at '" + point.name() + "'";
         String detail = state.campPos == null && RaidConfig.BUILD_WAR_CAMPS.get()
-                ? " Scouts are searching for a foothold. No enemy claim or camp exists yet; the preparation countdown is paused."
-                : " Enemy camp at " + (state.campPos==null?"disabled by config":formatPos(state.campPos))
-                    + ". Assault in " + formatTime(state.preparationTicks/20) + ". Rally your Recruits at the Siege Core.";
+                ? " No enemy camp has been established yet. Rally your defenders at the Siege Core."
+                : (state.campPos == null ? " Enemy camps are disabled. Preparation has started."
+                    : " Enemy camp at " + formatPos(state.campPos) + ".")
+                    + " Preparation time: " + formatTime(state.preparationTicks/20) + ". Rally your defenders at the Siege Core.";
         announce(server, anchor.teamKey(), Component.literal(opening + detail).withStyle(accent), true);
         Vec3 markedPoint = raidLevel == null ? Vec3.atCenterOf(point.pos()) : invasionObjective(raidLevel, point, state);
         announce(server, anchor.teamKey(), Component.literal("Defend the marked point at " +
@@ -1987,7 +1998,7 @@ public final class RaidEvents {
             RaidSavedData.Anchor anchor, RaidSavedData.DefensePoint point, RaidSavedData.RaidState state,
             List<ServerPlayer> members, List<Mob> recruits) {
         if (state.campPos != null && !level.hasChunkAt(state.campPos)) {
-            state.objectiveStatus = "Preparation paused: camp unloaded";
+            state.objectiveStatus = "Waiting for camp terrain to load. Preparation is paused.";
             updateBossBar(server, anchor, state, false);
             return;
         }
@@ -2026,15 +2037,15 @@ public final class RaidEvents {
         }
         state.preparationTicks = Math.max(0, state.preparationTicks - 20);
         state.ticksToNextWave = state.preparationTicks;
-        state.objectiveStatus = preparationLabel(state);
+        state.objectiveStatus = RaidFeedback.preparation(state);
         if (state.preparationTicks == 0) {
             for (UUID id : state.raiders) if (level.getEntity(id) instanceof Mob mob)
                 com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
             if (state.wave == 0) state.ticksToNextWave = 20;
-            announce(server, anchor.teamKey(), Component.literal("The enemy army is leaving camp. Defend your Siege Core!").withStyle(ChatFormatting.RED), true);
+            announce(server, anchor.teamKey(), Component.literal("The assault has begun. Defend your Siege Core.").withStyle(ChatFormatting.RED), true);
             showSignatureAssault(server, anchor.teamKey(), state);
         } else if (!before.equals(preparationLabel(state))) {
-            announce(server, anchor.teamKey(), Component.literal(preparationLabel(state) + ". Assault in " + (state.preparationTicks + 1199) / 1200 + " minutes.").withStyle(ChatFormatting.GOLD), false);
+            announce(server, anchor.teamKey(), Component.literal(RaidFeedback.preparation(state) + ". Preparation time remaining: " + formatTime(state.preparationTicks / 20) + ".").withStyle(ChatFormatting.GOLD), false);
         }
         updateBossBar(server, anchor, state, false);
         data.setDirty();
@@ -2121,7 +2132,7 @@ public final class RaidEvents {
                         state.ticksToNextWave=state.preparationTicks;
                         state.approachAngle=Math.atan2(state.campPos.getZ()-point.pos().getZ(),state.campPos.getX()-point.pos().getX());
                         startCampCrew(level,state,point);
-                        announce(server,teamKey,Component.literal("Enemy territory claimed at "+formatPos(state.campPos)+". Builders and guards are establishing their camp there. Preparation starts now.").withStyle(ChatFormatting.GOLD),true);
+                        announce(server,teamKey,Component.literal("Enemy territory claimed at "+formatPos(state.campPos)+". Builders are setting up camp; preparation has started.").withStyle(ChatFormatting.GOLD),true);
                     } else com.devfarinsky.siegeoverhaul.camp.CampLoading.release(level,state.campSearchPos);
                     state.campSearchPos=null;state.campSearchTicks=0;
                 } else if(state.campSearchTicks>=1200) {
@@ -2132,10 +2143,10 @@ public final class RaidEvents {
             }
             if(state.campPos==null) {
                 String reason=com.devfarinsky.siegeoverhaul.compat.CampClaims.unavailableReason(level);
-                state.objectiveStatus=reason.isEmpty()?"Scanning "+state.campSearchStep+"/200 sites; preparation paused":reason;
+                state.objectiveStatus=com.devfarinsky.siegeoverhaul.camp.CampScouting.searchStatus(state, reason);
                 if(level.getGameTime()%600==0) FactionLogger.LOG.info("Camp search {}: candidate {}, step {}, status {}",teamKey,state.campSearchPos,state.campSearchStep,state.objectiveStatus);
                 setRaidMobsFrozen(level,state,true);
-                if(level.getGameTime()%600==0) announce(server,teamKey,Component.literal("Enemy camp search: "+state.objectiveStatus+". Preparation remains paused.").withStyle(ChatFormatting.GRAY),false);
+                if(level.getGameTime()%600==0 && com.devfarinsky.siegeoverhaul.camp.CampScouting.shouldAnnounceSearch(state, state.objectiveStatus)) announce(server,teamKey,Component.literal(state.objectiveStatus+". Preparation is paused.").withStyle(ChatFormatting.GRAY),false);
                 updateBossBar(server,anchor,state,false);data.setDirty();return;
             }
         }
@@ -2148,7 +2159,7 @@ public final class RaidEvents {
         com.devfarinsky.siegeoverhaul.camp.CampGuards.tick(level, state, false);
         if (state.offlinePauseAnnounced) {
             state.offlinePauseAnnounced = false;
-            announce(server, teamKey, Component.literal("The paused invasion has resumed.").withStyle(ChatFormatting.YELLOW), false);
+            announce(server, teamKey, Component.literal("The siege has resumed.").withStyle(ChatFormatting.YELLOW), false);
         }
 
         reconcileTaggedMobs(level, point, state);
@@ -2319,7 +2330,7 @@ public final class RaidEvents {
                     state.ticksToNextSquad = 10 * 20;
                     if (!state.performancePauseAnnounced) {
                         state.performancePauseAnnounced = true;
-                        announce(server, teamKey, Component.literal("The next assault squad is waiting for server performance to recover.")
+                        announce(server, teamKey, Component.literal("Reinforcements are waiting for server performance to recover.")
                                 .withStyle(ChatFormatting.YELLOW), false);
                     }
                 } else {
@@ -2330,7 +2341,7 @@ public final class RaidEvents {
         }
 
         long paid = EndlessSiege.awardClearedWave(data, state, server.overworld().getGameTime(), RaidConfig.BANK_INTEREST_BASIS_POINTS.get());
-        if (paid > 0) announce(server, teamKey, Component.literal("Wave " + state.wave + " survived: +" + paid + " emeralds deposited in your faction bank.").withStyle(ChatFormatting.GREEN), false);
+        if (paid > 0) announce(server, teamKey, Component.literal("Wave " + state.wave + " cleared. +" + paid + " emeralds added to the faction Treasury.").withStyle(ChatFormatting.GREEN), false);
         if (com.devfarinsky.siegeoverhaul.core.EnemyCore.tick(level, data, state, anchor)) {
             finishRaid(server, data, teamKey, true, true, "Your faction captured the enemy Siege Core. The invasion is defeated!");
             return;
@@ -2345,7 +2356,7 @@ public final class RaidEvents {
                 state.objectiveStatus = EndlessSiege.voteStatus(state.campaign);
                 updateBossBar(server, anchor, state, false); return;
             }
-            announce(server, teamKey, Component.literal("The siege continues. The next five waves pay more into your faction bank.").withStyle(ChatFormatting.GOLD), false);
+            announce(server, teamKey, Component.literal(EndlessSiege.continuationMessage(state)).withStyle(ChatFormatting.GOLD), false);
             // v4.32.0: Endless commit hooks the "Endless" advancement.
             // Fires on the CONTINUE decision, not on the offer, so a vote
             // that gets declined doesn't grant credit for enduring it.
@@ -2420,7 +2431,7 @@ public final class RaidEvents {
                     state.ticksToNextWave = 10 * 20;
                     if (!state.performancePauseAnnounced) {
                         state.performancePauseAnnounced = true;
-                        announce(server, teamKey, Component.literal("Next wave delayed briefly to protect server performance.")
+                        announce(server, teamKey, Component.literal("Next wave delayed while server performance recovers.")
                                 .withStyle(ChatFormatting.YELLOW), false);
                     }
                 } else {
@@ -5044,11 +5055,11 @@ public final class RaidEvents {
                     .withStyle(ChatFormatting.ITALIC, state.narrative.accent), false);
         }
         if (victory && reward && !eligibleVictory) {
-            announce(server, teamKey, Component.literal("Practice siege complete. Manual test raids do not grant rewards by default.")
+            announce(server, teamKey, Component.literal("Siege complete. No victory rewards were granted for this siege.")
                     .withStyle(ChatFormatting.YELLOW), false);
         } else if (eligibleVictory) {
             int emeralds = EndlessSiege.active(state) ? 0 : guaranteedEmeraldReward(state);
-            announce(server, teamKey, Component.literal((EndlessSiege.active(state) ? "Faction bank earned " + state.campaign.getLong("Deposited") + " emeralds during this siege. Victory grants " : "Victory spoils: " + emeralds +
+            announce(server, teamKey, Component.literal((EndlessSiege.active(state) ? "Faction Treasury earned " + state.campaign.getLong("Deposited") + " emeralds during this siege. Victory grants " : "Victory spoils: " + emeralds +
                     " guaranteed emeralds, ") + RaidConfig.VICTORY_EXPERIENCE.get() +
                     " experience and bonus campaign loot for each online faction member.")
                     .withStyle(ChatFormatting.GREEN), false);
@@ -5062,9 +5073,9 @@ public final class RaidEvents {
         // v2.32.0: outcome is DEFINING — slow fade, long hold, slow fade out
         // so the win or loss lands as a moment instead of a status ping.
         showTitle(server, teamKey,
-                Component.literal(victory ? "Siege Broken" : "Stronghold Fallen")
+                Component.literal(RaidFeedback.outcomeTitle(victory))
                         .withStyle(victory ? ChatFormatting.GREEN : ChatFormatting.DARK_RED),
-                Component.literal(victory ? "Your faction held the line" : "The invaders seized the objective")
+                Component.literal(RaidFeedback.outcomeSubtitle(victory))
                         .withStyle(ChatFormatting.GOLD),
                 com.devfarinsky.siegeoverhaul.chat.ChatStyle.TitleWeight.DEFINING);
         data.setDirty();
@@ -5086,15 +5097,8 @@ public final class RaidEvents {
      * occupation (standing on the stronghold to capture).
      */
     private static String raidPhaseLabel(RaidSavedData.RaidState state, boolean paused) {
-        if (!paused && state.campPos==null && RaidConfig.BUILD_WAR_CAMPS.get() && !state.coreCaptured) return "Scouting camp land";
-        if (!paused && state.preparationTicks > 0) return preparationLabel(state) + " • " + (state.preparationTicks + 1199) / 1200 + "m until assault";
-        if (paused) return "Paused";
-        if (state.coreCaptured) return "Reclaim core";
-        if ("siege_core".equals(state.defensePointName) && state.wave > 0) return "Defend core";
-        if (state.wave == 0) return "Rally";
-        if (!state.breached && RaidConfig.ENABLE_BREACH_PHASE.get()) return "Breach";
-        if (state.captureTicks > 0) return "Occupation";
-        return "March";
+        return RaidFeedback.phase(state, paused, RaidConfig.BUILD_WAR_CAMPS.get(),
+                RaidConfig.ENABLE_BREACH_PHASE.get());
     }
 
     /**
@@ -5182,9 +5186,9 @@ public final class RaidEvents {
             // hint through the 200-site spiral.
             String detail = state.objectiveStatus != null && !state.objectiveStatus.isEmpty()
                     ? state.objectiveStatus
-                    : "scanning " + state.campSearchStep + "/200 sites";
+                    : com.devfarinsky.siegeoverhaul.camp.CampScouting.searchStatus(state, "");
             label = com.devfarinsky.siegeoverhaul.chat.ChatStyle.bossbarLabel(epithet,
-                    "Scouting camp land", detail);
+                    "Camp search", detail);
         } else if (state.coreCaptured) {
             var core = RaidSavedData.get(server).siegeCores.get(state.teamKey);
             int progress = core == null ? 0 : core.getInt("RecaptureTicks");

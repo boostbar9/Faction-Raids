@@ -62,6 +62,22 @@ public final class CampScouting {
         }
     }
 
+    // Chat-only memory. Weak keys follow the active raid lifetime and never enter saved gameplay state.
+    private static final java.util.Map<RaidSavedData.RaidState, String> SEARCH_NOTICES = new java.util.WeakHashMap<>();
+
+    /** Keep changed reasons/progress visible, without repeating an identical stalled notice every 30 seconds. */
+    public static synchronized boolean shouldAnnounceSearch(RaidSavedData.RaidState state, String status) {
+        return !java.util.Objects.equals(SEARCH_NOTICES.put(state, status), status);
+    }
+
+    public static String searchStatus(RaidSavedData.RaidState state, String unavailableReason) {
+        if (unavailableReason != null && !unavailableReason.isBlank())
+            return "Camp search unavailable: " + unavailableReason;
+        String progress = state.campSearchStep + "/" + MAX_CANDIDATES + " sites checked";
+        return state.campSearchPos == null ? "Searching for camp land: " + progress
+                : "Waiting for camp terrain: " + progress;
+    }
+
     public static String noCampStatus(RaidSavedData.RaidState state) {
         if (!state.campSearchAbandoned) return "No fortified camp established yet";
         return state.campSearchDiagnostics.exhausted() ? state.campSearchDiagnostics.summary()

@@ -94,10 +94,18 @@ public final class EndlessSiege {
         begin(state.campaign, state.wave, members.stream().filter(p -> !p.isSpectator()).map(ServerPlayer::getUUID).toList(), token);
         for (var player : members) {
             player.getPersistentData().putString("SiegeVoteReminder",token);
-            player.sendSystemMessage(Component.literal("Wave " + state.wave + " survived. Call it good? The enemy offers retreat. ")
+            player.sendSystemMessage(Component.literal("Wave " + state.wave + " cleared. Let the enemy retreat or fight five more waves? ")
                 .append(choice("[Accept retreat]", token, true)).append(" ").append(choice("[Fight 5 more]", token, false))
-                .append(Component.literal(" Strict majority of " + state.campaign.getCompound("Electorate").size() + " eligible members; 60 seconds. A tie/no majority continues. Next wave: " + reward(state.wave + 1) + " bank emeralds.")));
+                .append(Component.literal(" More than half of " + state.campaign.getCompound("Electorate").size() + " eligible members must accept within 60 seconds. A tie or no majority continues the siege. " + nextWaveRewardMessage(state))));
         }
+    }
+    static String nextWaveRewardMessage(RaidSavedData.RaidState state) {
+        return state.rewardEligible ? "Next wave reward: up to " + reward(state.wave + 1) + " Treasury emeralds."
+                : "This siege does not pay Treasury rewards.";
+    }
+    public static String continuationMessage(RaidSavedData.RaidState state) {
+        return state.rewardEligible ? "The siege continues for five more waves. Treasury rewards follow server settings."
+                : "The siege continues for five more waves. This siege does not pay Treasury rewards.";
     }
     public static void remindIfNeeded(ServerPlayer player,RaidSavedData.RaidState state) {
         if(active(state) && !state.campaign.getString("VoteToken").equals(player.getPersistentData().getString("SiegeVoteReminder")))remind(player,state);
@@ -120,7 +128,7 @@ public final class EndlessSiege {
         RaidSavedData data = RaidSavedData.get(player.server);
         var state = data.raids.get(SiegeCore.key(player));
         if (!active(state) || player.isSpectator() || !cast(state.campaign, player.getUUID(), token, retreat)) {
-            player.sendSystemMessage(Component.literal("That vote is closed, already cast, or not open to you.")); return 0;
+            player.sendSystemMessage(Component.literal("Vote not recorded. This vote has ended, you already voted, or you aren't eligible.")); return 0;
         }
         data.setDirty(); player.sendSystemMessage(Component.literal(retreat ? "Vote recorded: accept retreat." : "Vote recorded: continue the siege.")); return 1;
     }
