@@ -35,4 +35,15 @@ class CoreHireLayoutTest {
         assertEquals(120, layout.logicalX(90));
         assertEquals(120, layout.logicalY(90));
     }
+    @Test void nativeEntityPortraitsGrowWithUsableSpaceWithoutCoveringActions() {
+        assertTrue(CoreHireLayout.fit(480, 360).hirePortraitSize() >= 56);
+        assertTrue(CoreHireLayout.fit(1920, 1080).hirePortraitSize() >= 96);
+        for (int w = 120; w <= 1920; w += 23) for (int h = 90; h <= 1080; h += 19) {
+            var frame = CoreHireLayout.fit(w, h);
+            assertTrue(frame.hirePortraitSize() >= 20);
+            assertTrue(frame.hirePortraitSize() + 10 <= frame.cardHeight());
+            assertTrue(frame.cardWidth() - frame.hirePortraitSize() - 22 >= 50);
+        }
+    }
+
 }

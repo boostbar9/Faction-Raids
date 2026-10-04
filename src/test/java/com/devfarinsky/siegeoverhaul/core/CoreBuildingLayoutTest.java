@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CoreBuildingLayoutTest {
-    @Test void ordinary720pViewportGetsSixIllustratedCardsAndSmallViewportsRetainCompactGrid() {
+    @Test void ordinary720pGetsSixModelsAndSmallViewportsPageBeforeModelsBecomeIcons() {
         var ordinary = new CoreBuildingLayout(CoreHireLayout.fit(640, 360));
         assertFalse(ordinary.detailedCatalogue());
         assertEquals(3, ordinary.catalogueColumns());
@@ -18,22 +18,26 @@ class CoreBuildingLayoutTest {
         assertEquals(2, ordinary.perimeterTextLines());
         var compact = new CoreBuildingLayout(CoreHireLayout.fit(320, 240));
         assertEquals(2, compact.catalogueColumns());
-        assertEquals(3, compact.catalogueRows());
+        assertEquals(1, compact.catalogueRows());
+        assertEquals(3, compact.cataloguePages());
+        assertEquals(2, compact.plansPerPage());
+        assertTrue(compact.planHeight() >= 72);
         assertFalse(compact.illustratedPerimeter());
         var wideShort = new CoreBuildingLayout(CoreHireLayout.fit(640, 260));
         assertEquals(2, wideShort.catalogueColumns());
-        assertEquals(3, wideShort.catalogueRows());
+        assertEquals(1, wideShort.catalogueRows());
+        assertTrue(wideShort.pagedCatalogue());
         assertFalse(wideShort.illustratedPerimeter());
     }
 
-    @Test void allSixPlansAndTheirActionFitWithoutPaginationAtEveryScale() {
+    @Test void allSixPlansRemainReachableWithReadableModelsAndActionsAtEveryScale() {
         for (int width = 120; width <= 1920; width += 23) {
             for (int height = 90; height <= 1080; height += 19) {
                 var frame = CoreHireLayout.fit(width, height);
                 var layout = new CoreBuildingLayout(frame);
                 String size = width + "x" + height;
                 assertTrue(layout.planWidth() >= 130, size);
-                assertTrue(layout.planHeight() >= 23, size);
+                assertTrue(layout.planHeight() >= 72, size);
                 for (int plan = 0; plan < 6; plan++) {
                     assertTrue(layout.planX(plan) >= layout.x(), size);
                     assertTrue(layout.planX(plan) + layout.planWidth()
@@ -45,7 +49,22 @@ class CoreBuildingLayoutTest {
                 assertTrue(layout.planActionX() >= layout.x(), size);
                 assertTrue(layout.planActionX() + layout.planActionWidth() <= layout.x() + layout.width(), size);
                 assertTrue(layout.actionY() + CoreBuildingLayout.ACTION_HEIGHT <= frame.contentBottom(), size);
-                assertEquals(6, layout.catalogueColumns() * layout.catalogueRows());
+                assertTrue(layout.plansPerPage() * layout.cataloguePages() >= 6);
+                assertTrue((layout.cataloguePages() - 1) * layout.plansPerPage() < 6);
+                if (layout.pagedCatalogue()) {
+                    assertTrue(layout.x() + 28 < layout.planActionX());
+                    assertTrue(layout.planActionX() + layout.planActionWidth() < layout.x() + layout.width() - 28);
+                }
+                for (int first = 0; first < 6; first += layout.plansPerPage()) {
+                    for (int a = first; a < Math.min(6, first + layout.plansPerPage()); a++) {
+                        for (int b = a + 1; b < Math.min(6, first + layout.plansPerPage()); b++) {
+                            assertTrue(layout.planX(a) + layout.planWidth() <= layout.planX(b)
+                                    || layout.planX(b) + layout.planWidth() <= layout.planX(a)
+                                    || layout.planY(a) + layout.planHeight() <= layout.planY(b)
+                                    || layout.planY(b) + layout.planHeight() <= layout.planY(a), size);
+                        }
+                    }
+                }
                 if (layout.detailedCatalogue()) {
                     assertTrue(layout.x() + layout.catalogueWidth() + 8 <= layout.detailX(), size);
                 }
@@ -132,7 +151,7 @@ class CoreBuildingLayoutTest {
                 assertTrue(frame.scale() > 0 && frame.scale() <= 1);
                 assertTrue((frame.x() + frame.width() + 3) * frame.scale() <= width + 1);
                 assertTrue((frame.y() + frame.height() + 4) * frame.scale() <= height + 1);
-                assertTrue(layout.planHeight() >= 23);
+                assertTrue(layout.planHeight() >= 72);
                 assertTrue(layout.materialWidth(3) >= 84);
                 double buttonX = (layout.perimeterActionX() + layout.perimeterActionWidth() / 2.0) * frame.scale();
                 double buttonY = (layout.perimeterActionY() + CoreBuildingLayout.ACTION_HEIGHT / 2.0) * frame.scale();

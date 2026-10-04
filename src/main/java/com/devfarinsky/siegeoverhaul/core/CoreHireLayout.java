@@ -137,6 +137,12 @@ public record CoreHireLayout(int x, int y, int width, int height,
         return contentY() + (i / 2) * (cardHeight() + rowGap());
     }
 
+    /** Keep actual entity previews useful on medium windows, not fixed at tiny-icon size. */
+    public int hirePortraitSize() {
+        return Math.max(20, Math.min(cardHeight() - 10,
+                Math.min(compact ? 64 : 112, cardWidth() * 2 / 5)));
+    }
+
     /** Shared Territory geometry for upgrade cards, buttons and hover regions. */
     public int territoryCardWidth() { return (width - 28) / 2; }
 

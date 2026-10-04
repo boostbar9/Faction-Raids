@@ -65,4 +65,47 @@ class SiegeYardTest extends MinecraftTestSupport {
         when(level.getFluidState(any())).thenReturn(Fluids.EMPTY.defaultFluidState());
         return level;
     }
+
+    @Test void creativeKitFeedbackDoesNotClaimThatEmeraldsWereSpent() {
+        String feedback = SiegeYard.kitPurchaseMessage("Catapult Crew", 480, true, true, false,
+                new SiegeIntegration.Footprint(2, 5));
+        assertTrue(feedback.contains("No Treasury emeralds charged in Creative."));
+        org.junit.jupiter.api.Assertions.assertFalse(feedback.contains("480"));
+        assertTrue(feedback.contains("5x5 area with 5 blocks of headroom"));
+        org.junit.jupiter.api.Assertions.assertFalse(feedback.contains("dropped"));
+    }
+
+    @Test void paidKitFeedbackNamesTreasuryAndFullInventoryDrop() {
+        String feedback = SiegeYard.kitPurchaseMessage("Ballista Crew", 400, false, false, true,
+                new SiegeIntegration.Footprint(1, 3));
+        assertTrue(feedback.contains("400 emeralds charged to the faction Treasury."));
+        assertTrue(feedback.contains("3x3 area with 3 blocks of headroom"));
+        assertTrue(feedback.contains("kit was dropped at your feet"));
+        org.junit.jupiter.api.Assertions.assertFalse(feedback.contains("Creative"));
+    }
+
+    @Test void unconfirmedDeliveryNeverClaimsThatAKitIsReadyOrDropped() {
+        var footprint = new SiegeIntegration.Footprint(1, 3);
+        for (boolean creative : new boolean[]{false, true}) {
+            String message = SiegeYard.kitPurchaseMessage("Ballista Crew", 400, creative, false, false, footprint);
+            assertTrue(message.contains("delivery could not be confirmed"));
+            org.junit.jupiter.api.Assertions.assertFalse(message.contains("kit ready"));
+            org.junit.jupiter.api.Assertions.assertFalse(message.contains("dropped at your feet"));
+        }
+    }
+
+    @Test void inventoryReceiptCountsExistingKitsAcrossEveryInventorySlot() {
+        var inventory = mock(net.minecraft.world.entity.player.Inventory.class);
+        var item = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.PAPER);
+        when(inventory.getContainerSize()).thenReturn(41);
+        when(inventory.getItem(org.mockito.ArgumentMatchers.anyInt())).thenReturn(net.minecraft.world.item.ItemStack.EMPTY);
+        when(inventory.getItem(35)).thenReturn(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.PAPER, 2));
+        when(inventory.getItem(40)).thenReturn(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.PAPER, 3));
+        assertEquals(5L, SiegeYard.inventoryCount(inventory, item));
+        // A discarded Creative insertion leaves exactly the same count, never a receipt.
+        assertEquals(5L, SiegeYard.inventoryCount(inventory, item));
+        when(inventory.getItem(35)).thenReturn(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.PAPER, 3));
+        assertEquals(6L, SiegeYard.inventoryCount(inventory, item));
+    }
+
 }

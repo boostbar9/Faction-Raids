@@ -143,4 +143,14 @@ class EndlessSiegeTest extends MinecraftTestSupport {
         tag.remove("SiegeVoteReminder");EndlessSiege.remindIfNeeded(player,raid);
         org.mockito.Mockito.verify(player,org.mockito.Mockito.times(2)).sendSystemMessage(org.mockito.ArgumentMatchers.any());
     }
+    @org.junit.jupiter.api.Test void ineligibleSiegesNeverAdvertiseTreasuryPayouts() {
+        var state = new com.devfarinsky.siegeoverhaul.RaidSavedData.RaidState("team:test", "siege_core", 0);
+        state.wave = 5; state.rewardEligible = false;
+        assertEquals("This siege does not pay Treasury rewards.", EndlessSiege.nextWaveRewardMessage(state));
+        assertTrue(EndlessSiege.continuationMessage(state).contains("does not pay Treasury rewards"));
+        state.rewardEligible = true;
+        assertTrue(EndlessSiege.nextWaveRewardMessage(state).contains(Long.toString(EndlessSiege.reward(6))));
+        assertTrue(EndlessSiege.continuationMessage(state).contains("Treasury rewards follow server settings"));
+    }
+
 }

@@ -21,6 +21,7 @@ GAME_DIRECTORIES = {
     'staged-perimeter': 'build/native-staged-qa/client',
     'staged-unload': 'build/native-unload-qa/client',
     'staged-handoff': 'build/native-handoff-qa/client',
+    'hud': 'build/native-hud-qa/client',
 }
 MARKER = '.native-smallships-defaults.json'
 

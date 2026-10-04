@@ -99,7 +99,7 @@ public final class OlympianSupplyPowers {
         }
         int cost=power.cost(stack);
         if(!player.getAbilities().instabuild && stack.getCount()<cost) {
-            player.displayClientMessage(Component.literal("This blessing needs " + cost + " items."),true);
+            player.displayClientMessage(Component.literal("This blessing needs " + cost + " of the held supply item."),true);
             return InteractionResult.FAIL;
         }
         boolean applied=false;

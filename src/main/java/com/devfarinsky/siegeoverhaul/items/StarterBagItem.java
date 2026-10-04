@@ -61,11 +61,11 @@ public final class StarterBagItem extends Item {
         tag.putString("author", "The Siege Overhaul");
         ListTag pages = new ListTag();
         pages.add(net.minecraft.nbt.StringTag.valueOf(
-                "\"Welcome, commander.\\n\\n1) Make a faction:\\n /faction create <name>\\n\\n2) Claim your land:\\n Stand where you want your keep and use\\n /claim create\\n\\nEmeralds for both come from your Settlement Bag.\""));
+                "\"Welcome, commander.\\n\\n1) Make a faction:\\n /faction create <name>\\n\\n2) Claim your land:\\n Stand where you want your keep and use\\n /claim create\\n\\nEmeralds for both come from your Faction Starter Bag.\""));
         pages.add(net.minecraft.nbt.StringTag.valueOf(
-                "\"3) Place the Siege Core inside your claim. This is your command center.\\n\\n4) Right-click the core to open the HUD: Army, Loot, Bank, Territory, Intel.\\n\\n5) Hire your first shieldman and archer from the Army tab.\""));
+                "\"3) Place the Siege Core inside your claim. This is your command center.\\n\\n4) Right-click the core. Treasury stores shared funds; Building has defense plans.\\n\\n5) Hire your first shieldman and archer from the Army tab.\""));
         pages.add(net.minecraft.nbt.StringTag.valueOf(
-                "\"6) Build a wall and a gate. Recruits will defend your claim.\\n\\n7) When you are ready, invite the first wave from the Intel tab.\\n\\nUnlock territory buffs on the Territory tab as your bank grows.\\n\\nGood luck.\""));
+                "\"6) Build a wall and a gate. Recruits will defend your claim.\\n\\n7) Try /siegeoverhaul start for a practice siege. Rewards follow server settings.\\n\\nBuy faction upgrades in Territory as your Treasury grows.\\n\\nGood luck.\""));
         tag.put("pages", pages);
         tag.putInt("generation", 0);
         return book;
@@ -127,9 +127,9 @@ public final class StarterBagItem extends Item {
         player.getPersistentData().put(Player.PERSISTED_NBT_TAG,flags);
         player.sendSystemMessage(Component.literal("Welcome, commander. You received starter bags for settlement and survival.")
                 .withStyle(ChatFormatting.GOLD));
-        player.sendSystemMessage(Component.literal("Open the Settlement Bag first, follow the setup guide, then place your Siege Core inside your claim.")
+        player.sendSystemMessage(Component.literal("Open your Faction Starter Bag, follow the setup guide, then place your Siege Core inside your faction's claim.")
                 .withStyle(ChatFormatting.GRAY));
-        player.sendSystemMessage(Component.literal("Tip: Right-click your Siege Core to open Army, Bank, Territory and Intel controls.")
+        player.sendSystemMessage(Component.literal("Tip: Right-click your Siege Core to open your Command Center.")
                 .withStyle(ChatFormatting.GRAY));
     }
 }

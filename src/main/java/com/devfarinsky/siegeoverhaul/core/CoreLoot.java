@@ -518,7 +518,7 @@ public final class CoreLoot {
         // Treasury-only affordability check via PaymentSource.
         long combined = PaymentSource.available(player, price);
         if (!player.isCreative() && combined < price) {
-            player.sendSystemMessage(Component.literal("You need " + price + " emeralds in the faction Treasury."));
+            player.sendSystemMessage(Component.literal("Requires " + price + " faction Treasury emeralds. Deposit emeralds in Treasury, then try again."));
             return null;
         }
         // v4.36.0 loot box rework: the Hub hands out a SEALED loot box
@@ -534,15 +534,14 @@ public final class CoreLoot {
         ItemStack sealedPrize = sealedPrizeFor(sealedTier);
         if (sealedPrize != null) {
             if (!fits(inventory.items, sealedPrize)) {
-                player.sendSystemMessage(Component.literal("Make room in your inventory before buying a chest."));
+                player.sendSystemMessage(Component.literal("Make room in your inventory for a sealed loot box, then try again."));
                 return null;
             }
             if (!PaymentSource.consume(player, price)) return null;
             inventory.add(sealedPrize.copy()); inventory.setChanged();
             data.putLong("SiegeLootNext", now + OPEN_TICKS);
             player.sendSystemMessage(Component.literal(
-                    "Purchased from " + NAMES[box] + ". A sealed "
-                            + sealedTier.label + " Loot Box is in your inventory - open it when you get home."));
+                    "Sealed " + sealedTier.label + " Loot Box added to your inventory. Right-click it to open."));
             return new Receipt(sealedPrize.copy(), tier);
         }
         // Test-only fallback: sealed registry not present. Roll a concrete

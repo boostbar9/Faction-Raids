@@ -77,16 +77,19 @@ public final class SiegeYard {
                 : ModItems.BALLISTA_CREW_KIT.get());
         if (!player.isCreative() && !PaymentSource.consume(player, price)) return false;
 
-        boolean stored = player.getInventory().add(kit);
-        if (!stored && !kit.isEmpty()) player.drop(kit, false);
+        ItemStack receiptItem = kit.copy();
+        long before = inventoryCount(player.getInventory(), receiptItem);
+        boolean accepted = player.getInventory().add(kit);
+        net.minecraft.world.entity.item.ItemEntity drop = !accepted && !kit.isEmpty() ? player.drop(kit, false) : null;
+        // Creative insertion can return true while discarding a full-inventory stack.
+        // These observations affect feedback only; payment and delivery calls retain their ordering.
+        boolean stored = inventoryCount(player.getInventory(), receiptItem) > before;
+        boolean dropped = drop != null && player.serverLevel().getEntity(drop.getUUID()) == drop;
         player.getInventory().setChanged();
         player.inventoryMenu.broadcastChanges();
         SiegeIntegration.Footprint footprint = SiegeIntegration.footprintOf(TYPES[index]);
         player.sendSystemMessage(Component.literal(
-                "Purchased a " + LABELS[index] + " deployment kit for " + price
-                        + " emeralds. Right-click the top of a clear flat "
-                        + deploymentAreaGuidance(footprint) + " to deploy it."
-                        + (stored ? "" : " Your inventory was full, so the kit was dropped at your feet.")));
+                kitPurchaseMessage(LABELS[index], price, player.isCreative(), stored, dropped, footprint)));
         player.playNotifySound(SoundEvents.EXPERIENCE_ORB_PICKUP,
                 SoundSource.PLAYERS, 0.7F, 1.15F);
         return true;
@@ -121,7 +124,7 @@ public final class SiegeYard {
         SiegeIntegration.Footprint fp = SiegeIntegration.footprintOf(type);
         String flatIssue = describeClearance(level, deployPos, fp.horizontalRadius(), fp.blockHeight());
         if (flatIssue != null) {
-            player.sendSystemMessage(Component.literal("Deployment blocked: " + flatIssue));
+            player.sendSystemMessage(Component.literal("Deployment blocked: " + flatIssue + " Your deployment kit was kept."));
             return false;
         }
 
@@ -130,7 +133,7 @@ public final class SiegeYard {
         Optional<Entity> vehicleOpt = SiegeIntegration.spawnSiegeVehicle(level, type, spawn, yaw);
         if (vehicleOpt.isEmpty()) {
             player.sendSystemMessage(Component.literal(
-                    "Siege Weapons rejected the deployment spot. Try again from a clearer angle."));
+                    "Siege Weapons could not deploy the vehicle here. Try a clear, flat site. Your deployment kit was kept."));
             return false;
         }
         Entity vehicle = vehicleOpt.get();
@@ -138,7 +141,7 @@ public final class SiegeYard {
         if (engineerResult.mob == null) {
             vehicle.discard();
             player.sendSystemMessage(Component.literal(
-                    "Could not summon a Siege Engineer: " + engineerResult.reason));
+                    "Could not deploy the Siege Engineer: " + engineerResult.reason + " Your deployment kit was kept."));
             return false;
         }
         level.playSound(null, deployPos, SoundEvents.ANVIL_LAND,
@@ -149,6 +152,27 @@ public final class SiegeYard {
         player.sendSystemMessage(Component.literal(
                 "Deployed your " + LABELS[index] + ". The crew is ready for orders."));
         return true;
+    }
+
+    static long inventoryCount(net.minecraft.world.entity.player.Inventory inventory, ItemStack item) {
+        long count = 0;
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack present = inventory.getItem(slot);
+            if (ItemStack.isSameItemSameTags(present, item)) count += present.getCount();
+        }
+        return count;
+    }
+
+    static String kitPurchaseMessage(String label, int price, boolean creative, boolean stored, boolean dropped,
+                                     SiegeIntegration.Footprint footprint) {
+        String charge = creative ? "No Treasury emeralds charged in Creative. "
+                : price + " emeralds charged to the faction Treasury. ";
+        if (!stored && !dropped) return label + " kit delivery could not be confirmed. " + charge
+                + (creative ? "Make room in your inventory, then try again."
+                    : "Check your inventory and nearby drops. If the kit is missing, contact the server owner.");
+        return label + " deployment kit ready. " + charge
+                + "Right-click the top of a clear, flat " + deploymentAreaGuidance(footprint) + " to deploy it."
+                + (stored ? "" : " Your inventory was full, so the kit was dropped at your feet.");
     }
 
     static boolean isFlat3x3(ServerLevel level, BlockPos center) {

@@ -126,4 +126,28 @@ class CampScoutingTest extends MinecraftTestSupport {
         state.campSearchElapsedTicks = Integer.MAX_VALUE;
         assertEquals(CampScouting.Result.ABANDONED, CampScouting.advance(null, state, false, 3600));
     }
+
+    @Test void feedbackSeparatesActiveSearchLoadingAndUnavailableClaims() {
+        var state = raid();
+        state.campSearchStep = 8;
+        assertEquals("Searching for camp land: 8/200 sites checked", CampScouting.searchStatus(state, ""));
+        state.campSearchPos = new BlockPos(160, 64, 0);
+        assertEquals("Waiting for camp terrain: 8/200 sites checked", CampScouting.searchStatus(state, ""));
+        String reason = "Recruits AllowClaiming is disabled";
+        var before = state.save();
+        assertEquals("Camp search unavailable: " + reason, CampScouting.searchStatus(state, reason));
+        assertEquals(before, state.save(), "Feedback must not change the search or its safety checks");
+    }
+
+    @org.junit.jupiter.api.Test void identicalSearchChatIsQuietButChangedReasonsAndOtherRaidsRemainVisible() {
+        var first = new com.devfarinsky.siegeoverhaul.RaidSavedData.RaidState("team:first", "siege_core", 0);
+        var second = new com.devfarinsky.siegeoverhaul.RaidSavedData.RaidState("team:second", "siege_core", 0);
+        var before = first.save();
+        org.junit.jupiter.api.Assertions.assertTrue(CampScouting.shouldAnnounceSearch(first, "Waiting for camp terrain: 12/200 sites checked"));
+        org.junit.jupiter.api.Assertions.assertFalse(CampScouting.shouldAnnounceSearch(first, "Waiting for camp terrain: 12/200 sites checked"));
+        org.junit.jupiter.api.Assertions.assertTrue(CampScouting.shouldAnnounceSearch(first, "Camp search unavailable: claim service unavailable"));
+        org.junit.jupiter.api.Assertions.assertTrue(CampScouting.shouldAnnounceSearch(second, "Waiting for camp terrain: 12/200 sites checked"));
+        org.junit.jupiter.api.Assertions.assertEquals(before, first.save());
+    }
+
 }

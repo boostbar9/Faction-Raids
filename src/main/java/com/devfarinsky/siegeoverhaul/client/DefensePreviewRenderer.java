@@ -10,8 +10,6 @@ import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.network.chat.Component;
-import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.api.distmarker.Dist;
@@ -21,7 +19,7 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-import java.util.ArrayList;
+import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -93,17 +91,13 @@ public final class DefensePreviewRenderer {
     @SubscribeEvent public static void hud(RenderGuiEvent.Post event) {
         var mc = Minecraft.getInstance();
         if (plan == null || selection == null || mc.level != world || mc.screen != null || mc.options.hideGui) return;
-        int width = Math.max(40, Math.min(420, mc.getWindow().getGuiScaledWidth() - 16));
-        var lines = new ArrayList<FormattedCharSequence>();
-        for (String text : new String[]{kind.label + " · " + kind.price + " Treasury emeralds",
-                plan.materials(), "Use yellow anchor: confirm · Sneak-use: rotate · Use air: cancel",
-                selection.ready() ? "Site ready. Confirmation checks it again." : selection.problem()})
-            lines.addAll(mc.font.split(Component.literal(text), width));
-        int maxLines = Math.max(1, (mc.getWindow().getGuiScaledHeight() - 70) / 10);
-        if (lines.size() > maxLines) lines.subList(maxLines, lines.size()).clear();
-        int top = Math.max(4, mc.getWindow().getGuiScaledHeight() - 60 - lines.size() * 10);
-        var g = event.getGuiGraphics();
-        g.fill(5, top - 4, width + 11, top + lines.size() * 10 + 3, 0xC0101820);
-        for (int i = 0; i < lines.size(); i++) g.drawString(mc.font, lines.get(i), 8, top + i * 10, 0xFFE6EFF5, true);
+        if (mc.player == null || !PlanReviewHud.shouldDisplay(
+                mc.player.getMainHandItem().getItem() instanceof DefensePlanItem,
+                mc.player.getMainHandItem().getItem() instanceof com.devfarinsky.siegeoverhaul.items.PerimeterPlanItem)) return;
+        PlanReviewHud.render(event.getGuiGraphics(), mc.font,
+                mc.getWindow().getGuiScaledWidth(), mc.getWindow().getGuiScaledHeight(),
+                kind.label + " · " + kind.price + " Treasury emeralds",
+                selection.ready() ? "Site ready. Confirmation checks it again." : selection.problem(), selection.ready(),
+                List.of("Use yellow anchor: confirm · Sneak-use: rotate · Use air: cancel", plan.materials()));
     }
 }

@@ -526,14 +526,14 @@ public final class TerritoryFortification {
         }
         if (best != null) return new BuilderSearch(best, "");
         if (sawBusy) return new BuilderSearch(null,
-                "Every builder near the core is already working on a build area. "
-                        + "Wait for that job to finish or bring another builder.");
+                "No idle builder is available nearby. "
+                        + "Wait for the current job to finish or bring another builder.");
         if (sawFleeing) return new BuilderSearch(null,
-                "Your builder is fleeing. Make the area safe and commission again.");
+                "A nearby builder is fleeing. Make the area safe, then try again.");
         if (sawForeign) return new BuilderSearch(null,
-                "The builders near the core belong to someone else. Bring one of your own builders.");
-        return new BuilderSearch(null, "No Villager Recruits builder found within "
-                + BUILDER_SEARCH_RADIUS + " blocks of the core. Bring a builder closer.");
+                "No eligible builder nearby belongs to you. Bring one of your hired builders.");
+        return new BuilderSearch(null, "No available Workers 2 builder within "
+                + BUILDER_SEARCH_RADIUS + " blocks of this site. Bring a builder closer.");
     }
 
     /**

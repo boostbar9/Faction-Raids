@@ -7,8 +7,6 @@ import com.devfarinsky.siegeoverhaul.items.PerimeterPlanItem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.network.chat.Component;
-import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.api.distmarker.Dist;
@@ -17,7 +15,7 @@ import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import java.util.ArrayList;
+import java.util.List;
 
 /** Read-only held-plan outline. Accepted jobs continue to use the real Workers 2 renderer and shovel. */
 @Mod.EventBusSubscriber(modid = SiegeOverhaul.MOD_ID, value = Dist.CLIENT)
@@ -62,17 +60,15 @@ public final class PerimeterPreviewRenderer {
     @SubscribeEvent public static void hud(RenderGuiEvent.Post event) {
         var mc = Minecraft.getInstance();
         if (selection == null || mc.level != world || mc.screen != null || mc.options.hideGui) return;
-        int width = Math.max(40, Math.min(460, mc.getWindow().getGuiScaledWidth() - 16));
-        var lines = new ArrayList<FormattedCharSequence>();
-        for (String text : new String[]{"PERIMETER REVIEW · " + TerritoryFortification.PRICE + " faction Treasury emeralds", selection.materials(),
+        if (mc.player == null || !PlanReviewHud.shouldDisplay(
+                mc.player.getMainHandItem().getItem() instanceof PerimeterPlanItem,
+                mc.player.getMainHandItem().getItem() instanceof com.devfarinsky.siegeoverhaul.items.DefensePlanItem)) return;
+        PlanReviewHud.render(event.getGuiGraphics(), mc.font,
+                mc.getWindow().getGuiScaledWidth(), mc.getWindow().getGuiScaledHeight(),
+                "PERIMETER REVIEW · " + TerritoryFortification.PRICE + " faction Treasury emeralds",
                 selection.ready() ? "Use: confirm · Sneak-use: cancel · No charge until accepted" : selection.problem(),
-                selection.ready() ? "Exact grouped outline within 128 blocks. The server rechecks before building."
-                        : "Blocked preview. Fix the problem, then use the plan to refresh. No payment taken."})
-            lines.addAll(mc.font.split(Component.literal(text), width));
-        int maxLines = Math.max(1, (mc.getWindow().getGuiScaledHeight() - 70) / 10);
-        if (lines.size() > maxLines) lines.subList(maxLines, lines.size()).clear();
-        int top = Math.max(4, mc.getWindow().getGuiScaledHeight() - 60 - lines.size() * 10);
-        var graphics = event.getGuiGraphics(); graphics.fill(5, top - 4, width + 11, top + lines.size() * 10 + 3, 0xD0101820);
-        for (int i = 0; i < lines.size(); i++) graphics.drawString(mc.font, lines.get(i), 8, top + i * 10, 0xFFE6EFF5, true);
+                selection.ready(), List.of(selection.materials(), selection.ready()
+                        ? "Exact grouped outline within 128 blocks. The server rechecks before building."
+                        : "Blocked preview. Fix the problem, then use the plan to refresh. No payment taken."));
     }
 }

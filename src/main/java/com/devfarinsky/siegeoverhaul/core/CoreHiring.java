@@ -202,7 +202,7 @@ public final class CoreHiring {
             }
             if (!found) { recruit.discard(); player.sendSystemMessage(net.minecraft.network.chat.Component.literal(starterGuard
                     ? "Clear a safe space in your claim beside the core, then open it to receive your free Core Guard."
-                    : "Clear a safe space beside the core for your new unit.")); return false; }
+                    : "No safe space for this unit beside the core. Clear the area, then hire again.")); return false; }
             recruit.finalizeSpawn(player.serverLevel(), player.serverLevel().getCurrentDifficultyAt(recruit.blockPosition()), MobSpawnType.EVENT, null, null);
             // v4.18.0 Iron Levy territory buff: extra 4 HP (2 hearts) on all fresh hires.
             if (TerritoryBuffs.has(player.server.overworld() == null ? null
@@ -239,7 +239,7 @@ public final class CoreHiring {
             long combined = starterGuard ? price : PaymentSource.available(player, price);
             if (!starterGuard && !player.isCreative() && combined < price) {
                 recruit.discard();
-                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("You need " + price + " emeralds in the faction Treasury."));
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Requires " + price + " faction Treasury emeralds. Deposit emeralds in Treasury, then try again."));
                 return false;
             }
             Class<?> group = Class.forName("com.talhanation.recruits.world.RecruitsGroup");

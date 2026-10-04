@@ -33,6 +33,13 @@ class CoreButtonStyleTest extends MinecraftTestSupport {
         assertTrue(contrast(CommandPalette.ACCENT_GOLD, CommandPalette.CARD_TOP) >= 4.5);
     }
 
+    @Test void closeAndArrowControlsHaveRoomForTheNativeGlyph() {
+        for (int width : new int[]{16, 20, 28}) {
+            assertTrue(width - 2 * CoreButton.labelInset(width) >= 8);
+        }
+        assertEquals(6, CoreButton.labelInset(100));
+    }
+
     private static double contrast(int a, int b) {
         double first = luminance(a), second = luminance(b);
         return (Math.max(first, second) + .05) / (Math.min(first, second) + .05);

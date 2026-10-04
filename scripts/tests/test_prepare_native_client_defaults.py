@@ -94,6 +94,18 @@ class NativeClientDefaultsTest(unittest.TestCase):
         self.assertFalse(marker['smallshipsGameplayValuesChanged'])
         self.assertFalse(self.game.exists())
 
+    def test_hud_uses_only_its_explicit_isolated_directory(self):
+        directory = self.prepare('hud')
+        self.assertEqual(directory, self.root / 'build/native-hud-qa/client')
+        marker = json.loads((directory / setup.MARKER).read_text())
+        self.assertEqual(marker['qaMode'], 'hud')
+        self.assertEqual(marker['gameDirectory'], 'build/native-hud-qa/client')
+        self.assertFalse(marker['smallshipsGameplayValuesChanged'])
+        self.assertFalse(self.game.exists())
+        (directory / 'saves').mkdir()
+        with self.assertRaisesRegex(ValueError, 'not a fresh'):
+            self.prepare('hud')
+
     def test_unknown_version_or_mode_makes_no_directory(self):
         for mode, version in [('baseline', '2.0.0'), ('baseline', ''),
                               ('../.minecraft', setup.VERSION), ('server', setup.VERSION)]:
