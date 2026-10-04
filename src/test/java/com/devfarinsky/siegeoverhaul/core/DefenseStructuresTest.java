@@ -124,6 +124,25 @@ class DefenseStructuresTest extends MinecraftTestSupport {
     @Test void clearFlatClaimedSiteIsAccepted() {
         assertNull(DefenseStructures.siteProblem(clearLevel(), tower(), p -> true));
     }
+    @Test void clearManualFootprintReportsTheSameNearbySandRefusalAsNativeAdmission() {
+        var level = clearLevel();
+        var plan = DefenseBlueprint.create(DefenseBlueprint.Kind.WALL, origin, Direction.SOUTH);
+        BlockPos sand = origin.east(3);
+        when(level.getBlockState(sand)).thenReturn(Blocks.SAND.defaultBlockState());
+        assertFalse(plan.footprint().contains(sand), "The neighbor is outside the previously checked footprint");
+        for (BlockPos base : plan.footprint()) {
+            assertTrue(level.getBlockState(base).isAir());
+            assertTrue(level.getBlockState(base.below()).isFaceSturdy(level, base.below(), Direction.UP));
+        }
+        String nativeProblem = com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.placementNeighborhoodProblem(
+                level, plan.blocks().keySet().stream().map(BlockPos::of).toList());
+        assertNotNull(nativeProblem);
+        assertTrue(nativeProblem.contains("minecraft:sand"));
+        assertTrue(nativeProblem.contains(sand.toShortString()));
+        assertEquals(nativeProblem, DefenseStructures.siteProblem(level, plan, p -> true));
+        verify(level, never()).setBlock(any(), any(), anyInt(), anyInt());
+        verify(level, never()).destroyBlock(any(), anyBoolean(), any());
+    }
     @Test void unloadedChunksAreRejectedBeforeReadingAnyTerrain() {
         var level = clearLevel(); when(level.hasChunkAt(any())).thenReturn(false);
         assertNotNull(DefenseStructures.siteProblem(level, tower(), p -> true));

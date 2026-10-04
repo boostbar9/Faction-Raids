@@ -17,7 +17,11 @@ class ConstructionNeighborhoodTest extends MinecraftTestSupport {
         when(level.hasChunkAt(any())).thenReturn(true);
         when(level.getBlockState(any())).thenReturn(Blocks.AIR.defaultBlockState());
         when(level.getBlockState(foreignCactus)).thenReturn(Blocks.CACTUS.defaultBlockState());
-        assertNotNull(NativeConstructionGuard.neighborhoodProblem(level, planned));
+        String problem = NativeConstructionGuard.neighborhoodProblem(level, planned);
+        assertNotNull(problem);
+        assertTrue(problem.contains("minecraft:cactus"));
+        assertTrue(problem.contains(foreignCactus.toShortString()));
+        assertEquals(problem, NativeConstructionGuard.placementNeighborhoodProblem(level, java.util.List.of(planned)));
         verify(level, never()).setBlock(any(), any(), anyInt());
         verify(level, never()).destroyBlock(any(), anyBoolean(), any());
         clearInvocations(level);

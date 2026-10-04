@@ -97,4 +97,72 @@ class WallSurfaceTest extends MinecraftTestSupport {
         assertEquals(1,TerritoryFortification.computePerimeter(s.level,s.claim,64,columns,corners));
         assertEquals(59,columns.size());assertEquals(3,corners.size());
     }
+
+    @Test void grassyFootingWithFlowersRemainsValidAtTheReportedNegativeCoordinates() {
+        var s = new Site();
+        BlockPos column = new BlockPos(-2512, 77, -875);
+        s.heights = p -> 70;
+        s.edits.put(column.atY(69), Blocks.GRASS_BLOCK.defaultBlockState());
+        s.edits.put(column.atY(70), Blocks.DANDELION.defaultBlockState());
+        var result = WallSurface.inspectGround(s.level, column);
+        assertEquals(column.atY(70), result.base());
+        assertNull(result.problem());
+        assertEquals(result.base(), WallSurface.ground(s.level, column));
+        verify(s.level, never()).setBlock(any(), any(), anyInt());
+    }
+
+    @Test void unloadedTerrainIsDistinguishedBeforeHeightOrBlockReads() {
+        var s = new Site();
+        when(s.level.hasChunkAt(any())).thenReturn(false);
+        var result = WallSurface.inspectGround(s.level, new BlockPos(-2512, 77, -875));
+        assertNull(result.base());
+        assertTrue(result.problem().contains("not loaded at X -2512, Z -875"));
+        assertFalse(result.problem().contains("natural ground"));
+        verify(s.level, never()).getHeight(any(), anyInt(), anyInt());
+        verify(s.level, never()).getBlockState(any());
+    }
+
+    @Test void actualRejectedSurfaceIncludesBlockAndFullCoordinateWithoutRemovingIt() {
+        var s = new Site();
+        BlockPos column = new BlockPos(-2512, 77, -875);
+        for (var block : List.of(Blocks.COBBLESTONE, Blocks.STONE_BRICKS, Blocks.CHEST, Blocks.OAK_PLANKS)) {
+            s.edits.put(column.atY(63), block.defaultBlockState());
+            var result = WallSurface.inspectGround(s.level, column);
+            assertNull(result.base());
+            assertTrue(result.problem().contains("not natural ground at -2512, 63, -875"));
+            assertTrue(result.problem().contains(String.valueOf(net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(block))));
+            assertNull(WallSurface.ground(s.level, column));
+        }
+        verify(s.level, never()).setBlock(any(), any(), anyInt());
+    }
+
+    @Test void fluidAndOccupiedSpaceHaveDifferentReadOnlyDiagnostics() {
+        var s = new Site();
+        BlockPos column = new BlockPos(-2512, 77, -875);
+        s.edits.put(column.atY(63), Blocks.WATER.defaultBlockState());
+        var wet = WallSurface.inspectGround(s.level, column);
+        assertNull(wet.base());
+        assertTrue(wet.problem().contains("Fluid blocks perimeter footing at -2512, 63, -875 (minecraft:water)"));
+        s.edits.clear();
+        s.edits.put(column.atY(64), Blocks.COBWEB.defaultBlockState());
+        var occupied = WallSurface.inspectGround(s.level, column);
+        assertNull(occupied.base());
+        assertTrue(occupied.problem().contains("build space is occupied at -2512, 64, -875 (minecraft:cobweb)"));
+        verify(s.level, never()).setBlock(any(), any(), anyInt());
+    }
+
+    @Test void blockedSurfaceStillRejectsTheWholePerimeterWithoutPartialTargets() {
+        var s = new Site();
+        BlockPos obstruction = new BlockPos(-2512, 63, -875);
+        s.edits.put(obstruction, Blocks.COBBLESTONE.defaultBlockState());
+        var plan = PerimeterBlueprint.create(Set.of(new ChunkPos(-157, -55)), (x, z) -> {
+            var result = WallSurface.inspectGround(s.level, new BlockPos(x, 77, z));
+            return result.base() == null ? PerimeterBlueprint.Surface.blocked(result.problem())
+                    : PerimeterBlueprint.Surface.ready(result.base().getY());
+        }, PerimeterBlueprint.Palette.STONE_BRICKS);
+        assertFalse(plan.valid());
+        assertTrue(plan.blocks().isEmpty());
+        assertTrue(plan.problemSummary().contains("-2512, 63, -875 (minecraft:cobblestone)"));
+        verify(s.level, never()).setBlock(any(), any(), anyInt());
+    }
 }
