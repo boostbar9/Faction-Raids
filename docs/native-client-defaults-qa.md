@@ -19,6 +19,7 @@ Use the mode matching the subsequent Gradle invocation:
 | `staged-perimeter` | `build/native-staged-qa/client` |
 | `staged-unload` | `build/native-unload-qa/client` |
 | `staged-handoff` | `build/native-handoff-qa/client` |
+| `hud` | `build/native-hud-qa/client` |
 
 Run the helper **before** creating `options.txt`, camp-specific fixture config, or
 starting Minecraft. It creates only two Small Ships TOMLs and a provenance marker

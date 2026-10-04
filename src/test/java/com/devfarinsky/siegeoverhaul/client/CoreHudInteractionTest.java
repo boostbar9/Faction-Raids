@@ -247,4 +247,60 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
         assertNotSame(cancel, screen.getFocused());
     }
 
+    @Test void keyboardReadingIsBoundedAndDoesNotHijackOrdinaryArrowNavigation() {
+        assertEquals(0, CoreHireScreen.keyboardScroll(12, 100, 40, org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_UP));
+        assertEquals(52, CoreHireScreen.keyboardScroll(12, 100, 40, org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_DOWN));
+        assertEquals(100, CoreHireScreen.keyboardScroll(92, 100, 40, org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_DOWN));
+        assertEquals(0, CoreHireScreen.keyboardScroll(50, 100, 40, org.lwjgl.glfw.GLFW.GLFW_KEY_HOME));
+        assertEquals(100, CoreHireScreen.keyboardScroll(50, 100, 40, org.lwjgl.glfw.GLFW.GLFW_KEY_END));
+        assertEquals(-1, CoreHireScreen.keyboardScroll(50, 100, 40, org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN));
+    }
+
+    @Test void compactPlanPagingKeepsSelectionVisibleAndCannotCommission() throws Exception {
+        var screen = new CoreHireScreen(mock(CoreHireMenu.class), mock(Inventory.class), Component.literal("Command"));
+        set(screen, "layout", CoreHireLayout.fit(320, 240));
+        set(screen, "hire", new Button[4]);
+        Button[] plans = new Button[DefenseBlueprint.Kind.values().length];
+        for (int i = 0; i < plans.length; i++) plans[i] = mock(Button.class);
+        set(screen, "defensePlans", plans);
+        try (var packets = mockStatic(com.devfarinsky.siegeoverhaul.RaidNetwork.class)) {
+            invoke(screen, "selectDefense", DefenseBlueprint.Kind.class, DefenseBlueprint.Kind.WALL);
+            assertEquals(1, get(screen, "planPage"));
+            invoke(screen, "movePlanPage", int.class, 1);
+            assertEquals(2, get(screen, "planPage"));
+            assertEquals(DefenseBlueprint.Kind.CORNER, get(screen, "selectedDefense"));
+            assertSame(plans[4], screen.getFocused());
+            invoke(screen, "movePlanPage", int.class, 1);
+            assertEquals(2, get(screen, "planPage"));
+            invoke(screen, "movePlanPage", int.class, -1);
+            assertEquals(DefenseBlueprint.Kind.GATEHOUSE, get(screen, "selectedDefense"));
+            packets.verifyNoInteractions();
+        }
+    }
+
+    @Test void compactArmyRetainsItsRefreshCountdownWithPageNavigation() {
+        assertEquals("1/7 · Refresh 2:03 · Ctrl+Tab", CoreHireScreen.footerHint(CoreCommandPage.ARMY, true, 123));
+        assertTrue(CoreHireScreen.footerHint(CoreCommandPage.INTEL, true, 123).contains("7/7"));
+        assertTrue(CoreHireScreen.footerHint(CoreCommandPage.ARMY, false, 123).contains("Ctrl+Shift+Tab"));
+    }
+
+    @Test @SuppressWarnings("unchecked")
+    void disabledPlanPagerFocusMovesToTheVisibleSelection() throws Exception {
+        var screen = new CoreHireScreen(mock(CoreHireMenu.class), mock(Inventory.class), Component.literal("Command"));
+        set(screen, "layout", CoreHireLayout.fit(320, 240));
+        set(screen, "tab", CoreCommandPage.DEFENSES);
+        set(screen, "buildingSection", BuildingSection.STRUCTURES);
+        var pager = mock(Button.class); pager.visible = true; pager.active = false;
+        var plan = mock(Button.class); plan.visible = true; plan.active = true;
+        Button[] plans = new Button[DefenseBlueprint.Kind.values().length]; plans[DefenseBlueprint.Kind.WALL.ordinal()] = plan;
+        set(screen, "defensePlans", plans);
+        var children = (java.util.List<net.minecraft.client.gui.components.events.GuiEventListener>)(java.util.List<?>)screen.children();
+        children.add(pager); children.add(plan);
+        screen.setFocused(pager);
+        var normalize = CoreHireScreen.class.getDeclaredMethod("ensureVisibleFocus"); normalize.setAccessible(true); normalize.invoke(screen);
+        assertSame(plan, screen.getFocused());
+        assertTrue(screen.children().contains(screen.getFocused()));
+        assertTrue(((Button)screen.getFocused()).active);
+    }
+
 }

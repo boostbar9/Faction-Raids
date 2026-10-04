@@ -26,7 +26,9 @@ public final class CoreButton extends Button {
     private final ItemStack itemIcon;
     private String detail;
     private boolean primary;
+    private String narrationHint;
     public CoreButton primary() { primary = true; return this; }
+    public CoreButton hint(String value) { narrationHint = value; return this; }
 
     public void setDetail(String value) { detail = value; }
 
@@ -35,6 +37,8 @@ public final class CoreButton extends Button {
         super.updateWidgetNarration(output);
         if (detail != null) output.add(net.minecraft.client.gui.narration.NarratedElementType.HINT,
                 Component.literal(detail + " emeralds. Open the faction Treasury."));
+        else if (narrationHint != null) output.add(net.minecraft.client.gui.narration.NarratedElementType.HINT,
+                Component.literal(narrationHint));
     }
 
     public CoreButton(Component text, OnPress press,
@@ -75,6 +79,9 @@ public final class CoreButton extends Button {
         return hovered || selected || primary ? CommandPalette.CARD_BORDER_HOVER : CommandPalette.CARD_BORDER;
     }
 
+    /** Close and arrow controls must keep their actual glyph at the smallest supported widths. */
+    static int labelInset(int width) { return width < 28 ? 2 : width < 80 ? 4 : 6; }
+
     @Override
     public void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partial) {
         boolean chosen = selected.getAsBoolean();
@@ -108,7 +115,8 @@ public final class CoreButton extends Button {
                 : CommandPalette.TEXT_MUTED;
 
         int iconSize = Math.min(h - 4, 12);
-        int textLeft = x + 6;
+        int inset = labelInset(w);
+        int textLeft = x + inset;
         // At high GUI scales some buttons become too narrow for both the real
         // item sprite and complete label. Keep the actionable text readable.
         boolean showIcon = !itemIcon.isEmpty()
@@ -117,7 +125,7 @@ public final class CoreButton extends Button {
             ItemIcons.draw(g, itemIcon, x + 4, y + (h - iconSize) / 2, iconSize);
             textLeft = x + 6 + iconSize + 4;
         }
-        int textAreaWidth = Math.max(1, x + w - 6 - textLeft);
+        int textAreaWidth = Math.max(1, x + w - inset - textLeft);
         String fullLabel = getMessage().getString();
         String label = font.plainSubstrByWidth(fullLabel, textAreaWidth);
         if (!label.equals(fullLabel) && textAreaWidth > font.width("…")) {

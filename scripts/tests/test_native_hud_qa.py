@@ -1,0 +1,186 @@
+"""Static/receipt HUD contracts. Synthetic receipts here are not Minecraft evidence."""
+import contextlib
+import importlib.util
+import io
+import json
+from pathlib import Path
+import re
+import struct
+import tempfile
+import unittest
+import zlib
+
+REPO = Path(__file__).resolve().parents[2]
+SPEC = importlib.util.spec_from_file_location('verify_native_hud', REPO / 'scripts/verify-native-hud.py')
+verify = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(verify)
+HARNESS = REPO / 'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeHudQa.java'
+
+
+def synthetic_png(width, height):
+    """A valid generated test image for receipt-parser tests, never a QA artifact."""
+    def chunk(kind, value):
+        body = kind + value
+        return struct.pack('>I', len(value)) + body + struct.pack('>I', zlib.crc32(body) & 0xffffffff)
+    rows = b''.join(b'\x00' + bytes((x + y) % 256 for x in range(width * 3)) for y in range(height))
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0))
+            + chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b''))
+
+
+class NativeHudSourceContracts(unittest.TestCase):
+    def test_hud_is_explicit_opt_in_and_unshipped(self):
+        build = (REPO / 'build.gradle').read_text()
+        source = HARNESS.read_text()
+        self.assertIn('"hud".equals(System.getProperty("siegeoverhaul.nativeQa.mode"))', source)
+        self.assertIn('Boolean.getBoolean("siegeoverhaul.nativeQa")', source)
+        self.assertIn("'hud': 'build/native-hud-qa/client'", build)
+        self.assertIn("source sourceSets.nativeQa", build)
+        self.assertNotIn('from sourceSets.nativeQa', build)
+        baseline = (HARNESS.parent / 'NativeBuildingQa.java').read_text()
+        self.assertRegex(baseline, r'Set.of\([^;]+"hud"')
+
+    def test_fixture_uses_real_frames_and_native_keyboard_without_private_writes(self):
+        source = HARNESS.read_text()
+        for item in ['Screenshot.takeScreenshot(mc.getMainRenderTarget())', 'pixels.writeToFile',
+                     'new Robot()', 'keyboard.keyPress(key)', 'GLFW.glfwFocusWindow',
+                     'new CoreHireScreen(', 'new SiegeCommandScreen(', 'new ProtectedConstructionScreen(',
+                     'new SiegeOverhaulConfigScreen(', 'new CoreHireMenu(', 'createFreshLevel(',
+                     'Refusing an existing HUD fixture world', 'Refusing to overwrite existing HUD evidence',
+                     'client data only, no live faction/core or server transaction',
+                     'Hired, unavailable, insufficient and affordable', 'private static List<String> portraitEvidence']:
+            self.assertIn(item, source)
+        self.assertNotRegex(source, r'\bfield\.set(?:Int|Long|Boolean|Float|Double)?\(')
+        for action in ['purchaseCoreOffer(', 'protectedConstructionAction(', 'setBlock(',
+                       'clickMenuButton(', 'verifyCompletion(', 'commissionPaid(', 'projectionAuthorized(']:
+            self.assertNotIn(action, source)
+        self.assertIn('click("No")', source)
+        self.assertNotIn('click("Yes")', source)
+
+    def test_workflow_read_only_and_bounded_online_then_offline(self):
+        workflow = (REPO / '.github/workflows/native-hud-qa.yml').read_text()
+        for text in ['contents: read', 'persist-credentials: false', 'cache-read-only: true',
+                     "'native-hud-qa'", 'timeout-minutes: 35', 'set -euo pipefail',
+                     '--mode hud --smallships-version 2.0.0-b1.4', 'python3 scripts/verify-native-hud.py',
+                     'if-no-files-found: error', 'path: build/native-hud-qa/evidence/']:
+            self.assertIn(text, workflow)
+        commands = [line for line in workflow.splitlines() if './gradlew ' in line]
+        self.assertEqual(len(commands), 2)
+        self.assertIn('20m', commands[0]); self.assertIn('prepareNativeQaClient', commands[0])
+        self.assertNotIn('--offline', commands[0])
+        self.assertIn('10m', commands[1]); self.assertIn('--offline', commands[1])
+        self.assertIn('runClient', commands[1])
+        for command in commands:
+            self.assertIn('-PnativeQa=true -PnativeQaMode=hud', command)
+            self.assertNotRegex(command, r'--exclude-task|--continue|\s-x\s')
+        self.assertNotIn('secrets.', workflow)
+        self.assertNotIn('contents: write', workflow)
+
+    def test_exact_named_matrix_has_all_pages_plans_states_and_native_inspection(self):
+        expected = verify.expected_screenshots()
+        self.assertEqual(len(expected), 106)
+        for prefix in verify.MATRICES:
+            for page in verify.PAGES:
+                self.assertIn(f'{prefix}-{page}.png', expected)
+            for plan in verify.PLANS:
+                self.assertIn(f'{prefix}-plan-{plan}.png', expected)
+        for prefix in verify.MATRICES[:2]:
+            for state in verify.STATES:
+                self.assertIn(f'{prefix}-{state}.png', expected)
+        self.assertIn('roomy-scale1-native-inspection.png', expected)
+
+
+class NativeHudReceiptVerifier(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.pngs = {size: synthetic_png(*size) for size in [(960, 720), (1440, 960)]}
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        required = ['Native OS E key', 'Native Ctrl+Tab', 'Native Ctrl+Shift+Tab', 'Native Escape',
+                    'Actual 1440x960 to 960x720', 'Hired, unavailable, insufficient', 'without a purchase',
+                    'Codex Journal', 'focus across sync', 'Settings empty-filter']
+        self.data = {'mode': 'hud', 'status': 'passed', 'completedSteps': 200, 'plannedSteps': 200,
+                     'assertions': required + [f'synthetic assertion {i}' for i in range(20)],
+                     'loadedModVersions': {'minecraft': '1.20.1', 'forge': '47.4.16', 'workers': '2.0.3',
+                                           'recruits': '1.15.2', 'smallships': '2.0.0-b1.4', 'siegeweapons': '0.2.5'},
+                     'loadedCompanionArtifacts': {mod: {'sha256': 'a' * 64, 'kind': 'remapped synthetic test metadata'}
+                                                   for mod in ['workers', 'recruits', 'smallships', 'siegeweapons']},
+                     'notCovered': ['synthetic parser fixture, no Minecraft execution'], 'coverage': 'synthetic client-menu receipt',
+                     'screenshots': sorted(verify.expected_screenshots()), 'views': []}
+        for name in self.data['screenshots']:
+            size = (1440, 960) if name.startswith('roomy-') else (960, 720)
+            scale = 1 if name.startswith('roomy-scale1') else 3 if 'scale3' in name or name.startswith('resized-') else 2
+            view = {'screenshot': name, 'fixture': 'Synthetic parser fixture only', 'nonblankSamples': 51,
+                    'viewport': {'framebufferWidth': size[0], 'framebufferHeight': size[1], 'guiWidth': size[0] // scale,
+                                 'guiHeight': size[1] // scale, 'requestedGuiScale': scale},
+                    'widgets': [{'label': 'Synthetic button', 'x': 1, 'y': 1, 'width': 10, 'height': 10, 'active': True, 'focused': True}]}
+            if name.endswith('-army.png'): view['nativePortraits'] = ['com.talhanation.synthetic.Test'] * 4
+            if '-plan-' in name:
+                view['selectedPlan'] = name.removesuffix('.png').split('-plan-')[1].upper()
+                view['nativeBlueprintCards'] = [{'plan': view['selectedPlan'], 'sourceBlueprintMatches': True,
+                                                'blockModels': 15, 'caption': 'Synthetic plan'}]
+            if 'native-inspection' in name: view['nativeStructurePreviewCount'] = 1
+            self.data['views'].append(view)
+            (self.root / name).write_bytes(self.pngs[size])
+        (self.root / 'source-commit.txt').write_text('a' * 40 + '\n')
+
+    def run_verifier(self):
+        (self.root / 'result.json').write_text(json.dumps(self.data))
+        with contextlib.redirect_stdout(io.StringIO()):
+            return verify.verify(self.root)
+
+    def test_complete_synthetic_receipt_parses_without_claiming_runtime(self):
+        self.assertEqual(self.run_verifier()['status'], 'passed')
+
+    def test_missing_screenshot_fails(self):
+        (self.root / self.data['screenshots'][0]).unlink()
+        with self.assertRaises(FileNotFoundError): self.run_verifier()
+
+    def test_missing_named_case_fails(self):
+        self.data['screenshots'].pop()
+        with self.assertRaises(AssertionError): self.run_verifier()
+
+    def test_incomplete_steps_fail(self):
+        self.data['completedSteps'] -= 1
+        with self.assertRaises(AssertionError): self.run_verifier()
+
+    def test_wrong_native_version_fails(self):
+        self.data['loadedModVersions']['workers'] = 'unknown'
+        with self.assertRaises(AssertionError): self.run_verifier()
+
+    def test_outside_hitbox_fails(self):
+        self.data['views'][0]['widgets'][0]['x'] = -1
+        with self.assertRaises(AssertionError): self.run_verifier()
+
+    def test_overlapping_hitboxes_fail(self):
+        self.data['views'][0]['widgets'].append(dict(self.data['views'][0]['widgets'][0]))
+        with self.assertRaises(AssertionError): self.run_verifier()
+
+    def test_disabled_focus_fails(self):
+        self.data['views'][0]['widgets'][0]['active'] = False
+        with self.assertRaises(AssertionError): self.run_verifier()
+
+    def test_portrait_fallback_fails(self):
+        army = next(view for view in self.data['views'] if view['screenshot'].endswith('-army.png'))
+        army['nativePortraits'].pop()
+        with self.assertRaises(AssertionError): self.run_verifier()
+
+    def test_wrong_blueprint_models_fail(self):
+        plan = next(view for view in self.data['views'] if '-plan-' in view['screenshot'])
+        plan['nativeBlueprintCards'][0]['sourceBlueprintMatches'] = False
+        with self.assertRaises(AssertionError): self.run_verifier()
+
+    def test_missing_native_preview_fails(self):
+        native = next(view for view in self.data['views'] if 'native-inspection' in view['screenshot'])
+        native['nativeStructurePreviewCount'] = 0
+        with self.assertRaises(AssertionError): self.run_verifier()
+
+    def test_png_viewport_mismatch_fails(self):
+        self.data['views'][0]['viewport']['framebufferWidth'] = 1
+        with self.assertRaises(AssertionError): self.run_verifier()
+
+
+if __name__ == '__main__':
+    unittest.main()

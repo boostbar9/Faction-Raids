@@ -21,11 +21,20 @@ class BuildingPlanButtonTest extends MinecraftTestSupport {
         assertEquals(36, BuildingPlanButton.materialRowY(120));
     }
 
-    @Test void modelsOnlyReplaceTheMaterialFallbackWhenTheyHaveAReadableBoundedSlot() {
+    @Test void modelsRemainVisibleOnPagedCompactCardsAndDetailedCards() {
         assertFalse(BuildingPlanButton.showsThumbnail(198, 62));
-        assertFalse(BuildingPlanButton.showsThumbnail(129, 100));
-        assertFalse(BuildingPlanButton.showsThumbnail(198, 83));
+        assertFalse(BuildingPlanButton.showsThumbnail(99, 100));
+        assertTrue(BuildingPlanButton.showsThumbnail(198, 83));
+        assertTrue(BuildingPlanButton.showsThumbnail(140, 78));
         assertTrue(BuildingPlanButton.showsThumbnail(130, 84));
         assertTrue(BuildingPlanButton.showsThumbnail(198, 98));
     }
+    @Test void everySupportedCataloguePageHasAnActualModelSlot() {
+        for (int w = 120; w <= 1920; w += 23) for (int h = 90; h <= 1080; h += 19) {
+            var layout = new com.devfarinsky.siegeoverhaul.core.CoreBuildingLayout(
+                    com.devfarinsky.siegeoverhaul.core.CoreHireLayout.fit(w, h));
+            assertTrue(BuildingPlanButton.showsThumbnail(layout.planWidth(), layout.planHeight()), w + "x" + h);
+        }
+    }
+
 }

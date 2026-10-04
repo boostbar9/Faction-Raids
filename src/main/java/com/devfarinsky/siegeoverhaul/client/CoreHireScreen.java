@@ -90,7 +90,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private final Button[] territoryBuffs = new Button[4];
     private final Button[] buildingSections = new Button[BuildingSection.values().length];
     private final Button[] defensePlans = new Button[DefenseBlueprint.Kind.values().length];
-    private Button takeDefensePlan, reviewPerimeter, constructionPrevious, constructionNext, constructionCancel;
+    private Button takeDefensePlan, previousPlans, nextPlans, reviewPerimeter, constructionPrevious, constructionNext, constructionCancel;
+    private int planPage;
     private ConstructionReport.Job displayedCancellationTarget;
     private BuildingSection buildingSection = BuildingSection.PERIMETER;
     private DefenseBlueprint.Kind selectedDefense = DefenseBlueprint.Kind.WALL;
@@ -194,7 +195,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 b -> onClose(),
                 layout.x() + layout.width() - 22, layout.y() + 6,
                 16, 16,
-                false, () -> false));
+                false, () -> false).hint("Close this menu."));
 
         // Hire keys and bank keys share the same iteration to stay compact.
         for (int i = 0; i < 4; i++) {
@@ -219,7 +220,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     false, () -> false));
 
             String[] bankLabels = layout.compact()
-                    ? new String[]{"Store 8", "Store 64", "Take 8", "Take 64"}
+                    ? new String[]{"Deposit 8", "Deposit 64", "Withdraw 8", "Withdraw 64"}
                     : new String[]{"Deposit 8", "Deposit 64", "Withdraw 8", "Withdraw 64"};
             int bankGap = layout.controlGap();
             int bw = (layout.width() - layout.outerMargin() * 2 - bankGap * 3) / 4;
@@ -306,6 +307,13 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     b -> selectDefense(kind), building.planX(index), building.planY(index),
                     building.planWidth(), building.planHeight(), () -> selectedDefense == kind));
         }
+        planPage = selectedDefense.ordinal() / building.plansPerPage();
+        previousPlans = addRenderableWidget(new CoreButton(Component.literal("‹"),
+                b -> movePlanPage(-1), building.x(), building.actionY(), 28,
+                CoreBuildingLayout.ACTION_HEIGHT, false, () -> false).hint("Previous structure plans."));
+        nextPlans = addRenderableWidget(new CoreButton(Component.literal("›"),
+                b -> movePlanPage(1), building.x() + building.width() - 28, building.actionY(), 28,
+                CoreBuildingLayout.ACTION_HEIGHT, false, () -> false).hint("Next structure plans."));
         takeDefensePlan = addRenderableWidget(new CoreButton(Component.literal("Take free plan"),
                 b -> {
                     if (planRequestCooldown > 0) return;
@@ -393,7 +401,17 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     private void selectDefense(DefenseBlueprint.Kind kind) {
         selectedDefense = kind;
+        if (layout != null) planPage = kind.ordinal() / buildingLayout().plansPerPage();
         updateControlState();
+    }
+
+    private void movePlanPage(int direction) {
+        var building = buildingLayout();
+        int next = Math.max(0, Math.min(building.cataloguePages() - 1, planPage + direction));
+        if (next == planPage) return;
+        selectDefense(DefenseBlueprint.Kind.values()[next * building.plansPerPage()]);
+        // A pager can become disabled at the end. Put focus on the selected visible plan.
+        setFocused(defensePlans[selectedDefense.ordinal()]);
     }
 
     private void updateBuildingReport() {
@@ -478,7 +496,29 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 return true;
             }
         }
+        if (tab == CoreCommandPage.INTEL && (intelSearch == null || !intelSearch.isFocused())) {
+            int next = keyboardScroll(intelOffset, intelMaxOffset, Math.max(12, intelBodyH - 12), key);
+            if (next >= 0) { intelOffset = next; intelDragging = false; return true; }
+        }
+        if (tab == CoreCommandPage.TREASURY && layout != null) {
+            int rows = Math.max(1, (bankRosterHeight() - 26) / 12);
+            int next = keyboardScroll(rosterOffset, Math.max(0, menu.members().size() - rows), rows, key);
+            if (next >= 0) { rosterOffset = next; return true; }
+        }
         return super.keyPressed(key, scan, modifiers);
+    }
+
+    static int keyboardScroll(int current, int maximum, int page, int key) {
+        int target = switch (key) {
+            case org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_UP -> current - page;
+            case org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_DOWN -> current + page;
+            case org.lwjgl.glfw.GLFW.GLFW_KEY_HOME -> 0;
+            case org.lwjgl.glfw.GLFW.GLFW_KEY_END -> maximum;
+            default -> -1;
+        };
+        if (key != org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_UP && key != org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_DOWN
+                && key != org.lwjgl.glfw.GLFW.GLFW_KEY_HOME && key != org.lwjgl.glfw.GLFW.GLFW_KEY_END) return -1;
+        return Math.max(0, Math.min(Math.max(0, maximum), target));
     }
 
     @Override
@@ -541,17 +581,22 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         intelSearch.visible = clearIntelSearch.visible = tab == CoreCommandPage.INTEL;
         clearIntelSearch.active = !intelQuery.isEmpty();
         civilianRecruit.visible = tab == CoreCommandPage.CIVILIANS;
-        civilianRecruit.active = canAfford(CoreCivilians.PRICE) && menu.civilians()<CivilianLedger.LIMIT;
+        civilianRecruit.active = canAfford(CoreCivilians.PRICE) && menu.civilians() < CivilianLedger.LIMIT;
+        civilianRecruit.setMessage(Component.literal(menu.civilians() >= CivilianLedger.LIMIT
+                ? "Housing full · " + CivilianLedger.LIMIT + " residents"
+                : canAfford(CoreCivilians.PRICE) ? "House a civilian · " + CoreCivilians.PRICE + "e"
+                : "Need " + Math.max(0L, CoreCivilians.PRICE - availableFunds()) + "e in Treasury"));
         ((CoreButton) treasuryShortcut).setDetail(String.format(Locale.ROOT, "%,d", menu.bank()));
         for (int i = 0; i < 4; i++) {
             hire[i].visible = tab == CoreCommandPage.ARMY;
-            hire[i].active = menu.role(i) >= 0 && menu.cost(i) >= 0
+            hire[i].active = menu.role(i) >= 0 && menu.role(i) < CoreHiring.NAMES.length && menu.cost(i) >= 0
                     && !menu.sold(i) && menu.rotation() > 0 && canAfford(menu.cost(i));
             String actionLabel = menu.sold(i)
                     ? "Hired"
                     : menu.cost(i) < 0
-                            ? (layout.compact() ? "N/A" : "Unavailable")
-                            : (canAfford(menu.cost(i)) ? "Hire " : "Cost ") + menu.cost(i) + "e";
+                            ? "Unavailable"
+                            : canAfford(menu.cost(i)) ? "Hire · " + menu.cost(i) + "e"
+                            : "Need " + Math.max(0L, menu.cost(i) - availableFunds()) + "e";
             hire[i].setMessage(Component.literal(actionLabel));
 
             bank[i].visible = tab == CoreCommandPage.TREASURY;
@@ -580,6 +625,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         boolean canCancel = jobsVisible && selectedJob != null && selectedJob.cancelable();
         constructionCancel.visible = canCancel;
         constructionCancel.active = canCancel && cancellationCooldown == 0;
+        constructionCancel.setMessage(Component.literal(cancellationCooldown > 0 ? "Waiting for server…" : "Cancel entire perimeter"));
         if (!canCancel && getFocused() == constructionCancel) setFocused(buildingSections[BuildingSection.CONSTRUCTION.ordinal()]);
         var reportLayout = buildingLayout();
         boolean compactCancellation = canCancel && !reportLayout.splitReport();
@@ -589,11 +635,17 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         constructionNext.setX(reportLayout.x() + reportLayout.width() - navigationWidth);
         constructionPrevious.setMessage(Component.literal(compactCancellation ? "<" : "< Previous"));
         constructionNext.setMessage(Component.literal(compactCancellation ? ">" : "Next >"));
-        for (Button plan : defensePlans) plan.visible = plansVisible;
+        int firstPlan = planPage * reportLayout.plansPerPage();
+        for (int i = 0; i < defensePlans.length; i++)
+            defensePlans[i].visible = plansVisible && i >= firstPlan && i < firstPlan + reportLayout.plansPerPage();
+        previousPlans.visible = nextPlans.visible = plansVisible && reportLayout.pagedCatalogue();
+        previousPlans.active = planPage > 0;
+        nextPlans.active = planPage + 1 < reportLayout.cataloguePages();
         takeDefensePlan.visible = plansVisible;
         takeDefensePlan.active = planRequestCooldown == 0;
-        takeDefensePlan.setMessage(Component.literal(buildingLayout().detailedCatalogue()
-                ? "Take free plan" : "Take free plan: " + selectedDefense.label));
+        takeDefensePlan.setMessage(Component.literal(planRequestCooldown > 0 ? "Requesting plan…"
+                : buildingLayout().detailedCatalogue() ? "Take free plan" : "Free plan: " + selectedDefense.label));
+        reviewPerimeter.setMessage(Component.literal(perimeterRequestCooldown > 0 ? "Requesting review…" : "Review in world"));
         reviewPerimeter.visible = perimeterVisible;
         // Reviewing is free, even when the Treasury cannot yet fund commission.
         reviewPerimeter.active = perimeterRequestCooldown == 0;
@@ -617,6 +669,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             boxes[i].setMessage(Component.literal(
                     waitingTicks > 0 ? "Waiting..."
                             : revealTicks > 0 ? "Unsealing..."
+                            : !canAfford(CoreLoot.price(i)) ? "Need " + Math.max(0L, CoreLoot.price(i) - availableFunds()) + "e"
                             : (confirmBox == i ? "Confirm  ·  " : "Open  ·  ")
                                     + CoreLoot.price(i) + "e"));
 
@@ -624,8 +677,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     && minecraft.player.hasEffect(CoreBuffs.effect(i));
             buffs[i].active = !active && canAfford(CoreBuffs.PRICES[i]);
             buffs[i].setMessage(Component.literal(
-                    active ? "Blessing active" : "Bless  ·  " + CoreBuffs.PRICES[i] + "e"));
+                    active ? "Blessing active" : !canAfford(CoreBuffs.PRICES[i])
+                            ? "Need " + Math.max(0L, CoreBuffs.PRICES[i] - availableFunds()) + "e"
+                            : "Bless  ·  " + CoreBuffs.PRICES[i] + "e"));
         }
+        ensureVisibleFocus();
     }
 
     static boolean visibleHover(Button button, double x, double y) {
@@ -739,13 +795,26 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 if (bank[i].isMouseOver(mx, my)) {
                     boolean deposit = i < 2;
                     int amount = i % 2 == 0 ? 8 : 64;
-                    tooltip(g, (deposit ? "Deposit " : "Withdraw ") + amount
+                    String reason = deposit && menu.emeralds() == 0 ? "Your purse is empty. "
+                            : !deposit && !menu.canWithdraw() ? "Your faction role cannot withdraw Treasury funds. "
+                            : !deposit && menu.bank() == 0 ? "The faction Treasury is empty. " : "";
+                    tooltip(g, reason + (deposit ? "Deposit up to " : "Withdraw up to ") + amount
                             + " emeralds " + (deposit
                                     ? "from your purse into the shared faction Treasury."
                                     : "from the shared faction Treasury into your purse."),
                             tooltipX, tooltipY);
                 }
             }
+        }
+        if (tab == CoreCommandPage.CIVILIANS && over(mx, my, layout.x() + 10,
+                layout.contentY(), layout.width() - 20, layout.contentBottom() - layout.contentY())) {
+            String reason = menu.civilians() >= CivilianLedger.LIMIT ? "Your faction has reached its resident limit. "
+                    : !canAfford(CoreCivilians.PRICE) ? "Deposit " + emeralds(CoreCivilians.PRICE - availableFunds())
+                            + " in the Treasury to house another resident. " : "";
+            tooltip(g, reason + "Housing costs " + CoreCivilians.PRICE + " Treasury emeralds. Give residents beds, food and workstations. "
+                    + "Each living resident pays one emerald per full in-game day. Taxes pause when stranded or while the core is occupied.",
+                    tooltipX, tooltipY);
+            return;
         }
         if (tab == CoreCommandPage.DEFENSES) drawBuildingTooltips(g, mx, my, tooltipX, tooltipY);
         if (tab == CoreCommandPage.TERRITORY) {
@@ -832,10 +901,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         return creative || availableFunds() >= price;
     }
 
-    private int hirePortraitSize() {
-        return layout.compact() ? Math.min(28, layout.cardHeight() - 10)
-                : Math.min(layout.cardHeight() - 12, 88);
-    }
+    private int hirePortraitSize() { return layout.hirePortraitSize(); }
 
     @Override
     protected void renderLabels(GuiGraphics g, int x, int y) {}
@@ -853,7 +919,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         drawCrestBanner(g, x + 5, y + 7);
 
         // Keep the native Minecraft font and crest, with one crisp title instead of layered shadows.
-        String title = layout.compact() ? "COMMAND" : "SIEGE COMMAND";
+        String title = layout.compact() ? tab.label().toUpperCase(Locale.ROOT) : "SIEGE COMMAND";
         text(g, title, x + 42, y + 12, layout.headerTitleWidth(), CommandPalette.ACCENT_GOLD);
         text(g, menu.factionName(),
                 x + 42, y + 22, layout.headerTitleWidth(), CommandPalette.TEXT_MUTED);
@@ -887,29 +953,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         } else if (tab == CoreCommandPage.DEFENSES) {
             drawDefenses(g, mx, my);
         } else if (tab == CoreCommandPage.CIVILIANS) {
-            int tx=layout.x()+14, ty=layout.contentY()+8, tw=layout.width()-28;
-            int portrait=Math.min(74,Math.max(32,(layout.contentBottom()-ty-35)/2));
-            CivilianPortrait.draw(g,tx,ty,portrait,mx,my);
-            int infoX=tx+portrait+10, infoW=Math.max(20,tw-portrait-10);
-            text(g,"A home for a new resident",infoX,ty,infoW,CommandPalette.ACCENT_GOLD);
-            text(g,"Housing fee: 16 emeralds from Treasury",infoX,ty+14,infoW,CommandPalette.TEXT);
-            text(g,"Name, profession and appearance",infoX,ty+27,infoW,CommandPalette.TEXT_MUTED);
-            text(g,"are assigned on arrival.",infoX,ty+39,infoW,CommandPalette.TEXT_MUTED);
-            int yy=ty+portrait+8;
-            text(g,menu.civilians()+" / 64 residents · up to "+menu.civilians()+" emeralds daily",tx,yy,tw,CommandPalette.TEXT);
-            yy+=16;
-            text(g,String.format(Locale.ROOT,"Taxes deposited: %,d emeralds",menu.totalCivilianTaxes()),tx,yy,tw,CommandPalette.ACCENT_EMERALD);
-            yy+=16;
-            String[] lines={"Two residents join when you establish a core. Give them beds, food and workstations for trades.",
-                "Each living resident pays 1 emerald per full Minecraft day into the faction Treasury.",
-                "Civilians stay within your claims. Taxes pause while a civilian is stranded or the core is occupied."};
-            for(String line:lines) {
-                for(var part:font.split(Component.literal(line),tw)) {
-                    if(yy+font.lineHeight>=layout.contentBottom()-32)break;
-                    g.drawString(font,part,tx,yy,CommandPalette.TEXT_MUTED,false);yy+=font.lineHeight+2;
-                }
-                yy+=5;
-            }
+            drawCivilians(g, mx, my);
         } else if (tab == CoreCommandPage.INTEL) {
             drawIntel(g, mx, my);
         }
@@ -937,7 +981,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         String subtitle = tab.description();
         String metric = pageMetric();
         int metricWidth = Math.min(w / 3, font.width(metric) + 4);
-        text(g, title.toUpperCase(Locale.ROOT), x + 8, y + 3,
+        text(g, title, x + 8, y + 3,
                 w - metricWidth - 28, accent);
         text(g, metric, x + w - metricWidth - 7, y + 3,
                 metricWidth, CommandPalette.TEXT);
@@ -979,7 +1023,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             case TREASURY -> "Every transaction is faction-wide and recorded in recent activity";
             case DEFENSES -> "Free review and plans · commission from the Treasury · supply blocks through Workers storage";
             case TERRITORY -> "Permanent decrees affect every faction member · construction lives in Building";
-            case INTEL -> "Search this section · Ctrl+F focuses search · scroll to read matching entries";
+            case INTEL -> "Ctrl+F: search · Page Up / Down: read · Home / End: jump";
+            case CIVILIANS -> "Each living resident pays one emerald per full in-game day; taxes pause if stranded or the core is occupied";
             default -> "";
         };
     }
@@ -1011,49 +1056,28 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int feedbackW = layout.feedbackWidth();
         int feedbackLeft = x + w - feedbackW - 8;
 
-        if (tab == CoreCommandPage.DEFENSES) {
-            text(g, "Esc: close  ·  Ctrl+Tab: switch tab", x + 10, y + 4,
-                    feedbackLeft - x - 18, CommandPalette.TEXT_MUTED);
-            return;
-        }
+        text(g, footerHint(tab, layout.compact(), menu.seconds()), x + 10, y + 4,
+                feedbackLeft - x - 18, CommandPalette.TEXT_MUTED);
+    }
 
-        // Faction member count on the left.
-        int members = menu.members().size();
-        String membersLine = layout.compact()
-                ? Integer.toString(members)
-                : members + (members == 1 ? " member" : " members");
-        text(g, membersLine, x + 10, y + 4,
-                layout.compact() ? 42 : 108, CommandPalette.TEXT_MUTED);
+    static String footerHint(CoreCommandPage page, boolean compact, int seconds) {
+        String count = (page.ordinal() + 1) + "/" + PAGES.length;
+        if (compact && page == CoreCommandPage.ARMY) return count + " · Refresh "
+                + String.format(Locale.ROOT, "%d:%02d", Math.max(0, seconds) / 60, Math.max(0, seconds) % 60)
+                + " · Ctrl+Tab";
+        return compact ? count + " · Esc: close · Ctrl+Tab"
+                : "Page " + (page.ordinal() + 1) + " / " + PAGES.length
+                    + " · Esc: close · Ctrl+Tab: next · Ctrl+Shift+Tab: previous";
+    }
 
-        // Context hint in the middle.
-        String hint = switch (tab) {
-            case ARMY -> "Shared stock rotates every 15 minutes";
-            case LOOT -> "Loot & blessings draw from the faction Treasury";
-            case TREASURY -> "Interest " + menu.interestRate() / 100.0 + "% per in-game day";
-            case DEFENSES -> "Esc: close · Ctrl+Tab: switch tab";
-            case TERRITORY -> "Faction-wide upgrades apply to every member";
-            case INTEL -> "Unit reference, enemy lore and field guidance";
-            default -> "";
-        };
-        if (!layout.compact()) {
-            int hintLeft = x + 126;
-            int hintRight = tab == CoreCommandPage.ARMY ? feedbackLeft - 92 : feedbackLeft - 8;
-            int hintArea = Math.max(1, hintRight - hintLeft);
-            int hintW = Math.min(font.width(hint), hintArea);
-            text(g, hint, hintLeft + Math.max(0, (hintArea - hintW) / 2),
-                    y + 4, hintW, CommandPalette.TEXT_DIM);
-        }
-
-        // Refresh timer on the right (only for tabs where it applies).
-        if (tab == CoreCommandPage.ARMY) {
-            String timer = String.format(Locale.ROOT, "Refresh %d:%02d",
-                    menu.seconds() / 60, menu.seconds() % 60);
-            int tw = font.width(timer);
-            int timerRight = feedbackLeft - 8;
-            text(g, timer, Math.max(x + 56, timerRight - tw), y + 4,
-                    Math.max(1, Math.min(tw + 2, timerRight - (x + 56))),
-                    CommandPalette.TEXT_MUTED);
-        }
+    private void ensureVisibleFocus() {
+        var focused = getFocused();
+        if (focused == null || focused instanceof net.minecraft.client.gui.components.AbstractWidget widget
+                && children().contains(widget) && widget.visible && widget.active) return;
+        if (tab == CoreCommandPage.DEFENSES && buildingSection == BuildingSection.STRUCTURES
+                && defensePlans[selectedDefense.ordinal()] != null && defensePlans[selectedDefense.ordinal()].visible)
+            setFocused(defensePlans[selectedDefense.ordinal()]);
+        else if (pageButtons[tab.ordinal()] != null) setFocused(pageButtons[tab.ordinal()]);
     }
 
     /**
@@ -1251,7 +1275,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 String detail = switch (section) {
                     case PERIMETER -> "Choose a material, then review a free perimeter plan in world. Confirm separately to commission.";
                     case STRUCTURES -> "All six existing plans. Select a structure, take its free plan, then preview and confirm in your claim.";
-                    case CONSTRUCTION -> "Your core’s whole-perimeter projects plus your loaded native jobs within 128 blocks, refreshed every two seconds. Unknown sections never count as completed. Recent terminal summaries are bounded.";
+                    case CONSTRUCTION -> "Your perimeter projects and loaded construction within 128 blocks, refreshed every two seconds. Unloaded sections remain unknown until checked. Recently completed or canceled projects stay visible for a while.";
                 };
                 tooltip(g, section.label + " | " + detail, tooltipX, tooltipY);
                 return;
@@ -1313,14 +1337,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         var jobs = menu.construction();
         constructionPage = Math.max(0, Math.min(constructionPage, constructionPages() - 1));
         displayedCancellationTarget = selectedConstruction();
-        text(g, (projectReports() ? "Perimeters + nearby jobs · 2s · " : "Loaded nearby · 128 blocks · 2s · ")
+        text(g, (projectReports() ? "Perimeters + nearby jobs · 2s · " : "Nearby · 128 blocks · refresh 2s · ")
                         + (constructionPage + 1) + "/" + constructionPages(),
                 building.x() + 2, building.reportHeaderY() + 1, building.width() - 4, CommandPalette.TEXT_MUTED);
         if (jobs.isEmpty()) {
             CommandFrame.surface(g, building.x(), building.reportY(), building.width(),
                     building.actionY() - building.reportY() - 6);
             drawWrappedText(g, menu.constructionLoaded()
-                            ? "No owned perimeter projects or loaded jobs nearby. Move closer to a native builder or site."
+                            ? "No projects or loaded jobs nearby. Move within 128 blocks of your builder or build site."
                             : "Loading your construction...", building.x() + 10, building.reportY() + 10,
                     building.width() - 20, Math.max(1, (building.actionY() - building.reportY() - 20) / 10),
                     CommandPalette.TEXT_MUTED);
@@ -1339,14 +1363,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             text(g, (first + row + 1) + "/" + jobs.size() + "  " + job.label(),
                     x + 10, y + 7, w - 20, CommandPalette.TEXT);
             if (building.splitReport()) {
-                text(g, "REPORTED PROGRESS", x + 10, y + 26, w - 20, CommandPalette.TEXT_DIM);
+                text(g, "BUILD PROGRESS", x + 10, y + 26, w - 20, CommandPalette.TEXT_DIM);
                 drawWrappedText(g, job.progressText(), x + 10, y + 40, w - 20, 2, CommandPalette.ACCENT_TEAL);
                 text(g, job.location(), x + 10, y + 72, w - 20, CommandPalette.TEXT_MUTED);
                 int detailX = building.reportDetailX(), detailW = building.reportDetailWidth();
                 CommandFrame.surface(g, detailX, y, detailW, h);
                 text(g, "BUILDER STATUS", detailX + 10, y + 7, detailW - 20, CommandPalette.TEXT_DIM);
                 drawWrappedText(g, job.activity(), detailX + 10, y + 22, detailW - 20, 3, CommandPalette.TEXT);
-                text(g, "REQUESTED NOW", detailX + 10, y + 59, detailW - 20, CommandPalette.TEXT_DIM);
+                text(g, "NEEDED NOW", detailX + 10, y + 59, detailW - 20, CommandPalette.TEXT_DIM);
                 drawWrappedText(g, job.supplies().isBlank() ? "No active requests reported" : job.supplies(),
                         detailX + 10, y + 74, detailW - 20, 2, CommandPalette.ACCENT_GOLD);
             } else {
@@ -1380,11 +1404,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             drawWrappedText(g, job.location(), x + 10, y + 124, w - 20, 2, CommandPalette.TEXT_MUTED);
             int detailX = building.reportDetailX(), detailW = building.reportDetailWidth();
             CommandFrame.surface(g, detailX, y, detailW, h);
-            text(g, job.complete() ? "VERIFIED COMPLETE" : "CURRENT STATUS", detailX + 10, y + 8, detailW - 20,
+            text(g, job.complete() ? "COMPLETE" : "CURRENT STATUS", detailX + 10, y + 8, detailW - 20,
                     job.complete() ? CommandPalette.ACCENT_EMERALD : CommandPalette.TEXT_DIM);
             drawWrappedText(g, job.activity(), detailX + 10, y + 25, detailW - 20, 5, CommandPalette.TEXT);
             CommandFrame.divider(g, detailX + 10, y + 83, detailW - 20);
-            text(g, "REQUESTED NOW", detailX + 10, y + 94, detailW - 20, CommandPalette.TEXT_DIM);
+            text(g, "NEEDED NOW", detailX + 10, y + 94, detailW - 20, CommandPalette.TEXT_DIM);
             drawWrappedText(g, job.supplies().isBlank() ? "No active requests reported" : job.supplies(),
                     detailX + 10, y + 109, detailW - 20, Math.max(1, (h - 152) / 10), CommandPalette.ACCENT_GOLD);
             if (job.cancelable()) text(g, "Placed blocks stay. No refund.", detailX + 10, y + h - 13,
@@ -1409,6 +1433,30 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             case PERIMETER -> drawPerimeter(g);
             case STRUCTURES -> drawStructureSelection(g);
             case CONSTRUCTION -> drawConstruction(g);
+        }
+    }
+
+    /** Real resident preview, essential figures and bounded guidance share one readable surface. */
+    private void drawCivilians(GuiGraphics g, int mouseX, int mouseY) {
+        int x = layout.x() + 10, y = layout.contentY(), w = layout.width() - 20;
+        int h = layout.contentBottom() - y - 30;
+        CommandFrame.surface(g, x, y, w, h);
+        int portrait = Math.min(layout.compact() ? 48 : 96, Math.max(24, h - 28));
+        CivilianPortrait.draw(g, x + 8, y + 8, portrait, mouseX, mouseY);
+        int infoX = x + portrait + 18, infoW = w - portrait - 28;
+        text(g, menu.civilians() + " / " + CivilianLedger.LIMIT + " residents", infoX, y + 8, infoW, CommandPalette.TEXT);
+        text(g, "Housing: " + CoreCivilians.PRICE + "e from Treasury", infoX, y + 21, infoW, CommandPalette.ACCENT_GOLD);
+        text(g, "Up to " + menu.civilians() + "e per in-game day", infoX, y + 34, infoW, CommandPalette.TEXT_MUTED);
+        text(g, "Taxes collected: " + String.format(Locale.ROOT, "%,d", menu.totalCivilianTaxes()) + "e",
+                infoX, y + 47, infoW, CommandPalette.ACCENT_EMERALD);
+        int guidanceY = y + Math.max(portrait + 18, 65);
+        int lines = Math.max(0, (y + h - guidanceY - 7) / 10);
+        if (lines > 0) {
+            String guidance = "Give residents beds, food and workstations. "
+                    + "Name, profession and appearance are assigned on arrival. "
+                    + "Each living resident pays one emerald per full in-game day. "
+                    + "Taxes pause if stranded or the core is occupied.";
+            drawWrappedText(g, guidance, x + 10, guidanceY, w - 20, lines, CommandPalette.TEXT_MUTED);
         }
     }
 
@@ -1493,7 +1541,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
             // Readable heading replaces the former ambiguous flag glyph.
             if (!layout.compact()) {
-                String stateLabel = owned ? "ACTIVE" : "DECREE";
+                String stateLabel = owned ? "ACTIVE" : "UPGRADE";
                 int stateWidth = drawBadge(g, stateLabel, cx + cellW - 7,
                         cy + 6, accent);
                 text(g, TerritoryBuffs.LABELS[i], cx + 10, cy + 10,
@@ -1524,10 +1572,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int h = available;
         int owned = ownedTerritoryBuffs();
         CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_TEAL);
-        text(g, "KINGDOM READINESS", x + 9, y + 6,
+        text(g, "FACTION UPGRADES", x + 9, y + 6,
                 Math.max(1, w / 3 - 18), CommandPalette.ACCENT_TEAL);
         String summary = owned + " of " + TerritoryBuffs.COUNT
-                + " permanent decrees active";
+                + " permanent upgrades active";
         text(g, summary, x + w / 3, y + 6,
                 Math.max(1, w - w / 3 - 9), CommandPalette.TEXT);
         if (h >= 40) {
@@ -1535,8 +1583,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     owned / (float) TerritoryBuffs.COUNT,
                     CommandPalette.ACCENT_TEAL);
             text(g, owned == TerritoryBuffs.COUNT
-                            ? "All kingdom decrees are active across the faction"
-                            : "Permanent decrees improve every member of the faction",
+                            ? "All upgrades are active across your faction"
+                            : "Permanent upgrades benefit your faction",
                     x + 9, y + 29, w - 18, CommandPalette.TEXT_DIM);
         }
         if (h >= 62) {
@@ -1594,7 +1642,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         if (menu.sold(i)) CommandFrame.cardDimmed(g, x, y, w, h);
         else CommandFrame.card(g, x, y, w, h, accent, hovered);
 
-        if (role < 0 || role >= CoreHiring.NAMES.length) return;
+        if (role < 0 || role >= CoreHiring.NAMES.length) {
+            text(g, menu.rotation() <= 0 ? "Loading offers…" : "Offer unavailable", x + 8, y + 8,
+                    w - 16, CommandPalette.TEXT_MUTED);
+            return;
+        }
 
         if (layout.compact()) {
             drawCompactHire(g, i, role, x, y, w, h, mouseX, mouseY);
@@ -1940,7 +1992,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 indicatorW, CommandPalette.TEXT_DIM);
 
         if (count == 0) {
-            text(g, "Roster is synchronizing...", x + 18, listTop, rosterListW,
+            text(g, "Loading faction members…", x + 18, listTop, rosterListW,
                     CommandPalette.TEXT_MUTED);
         } else {
             for (int i = 0; i < lines && i + rosterOffset < count; i++) {
@@ -2005,7 +2057,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 CommandPalette.DIVIDER);
 
         if (ledger.length == 0) {
-            text(g, "No transactions yet", gx + 6, zeroY + 6, gw - 12, CommandPalette.TEXT_DIM);
+            text(g, "No recent transactions", gx + 6, zeroY + 6, gw - 12, CommandPalette.TEXT_DIM);
             return;
         }
         // Find max absolute delta for scaling.
@@ -2090,8 +2142,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 return true;
             }
         }
-        // Territory tab is now a pure upgrade shop; no map click handling.
-        return super.mouseClicked(mouseX, mouseY, button);
+        // Vanilla focuses the clicked child after its callback. A pager may now be disabled.
+        boolean handled = super.mouseClicked(mouseX, mouseY, button);
+        ensureVisibleFocus();
+        return handled;
     }
 
     @Override

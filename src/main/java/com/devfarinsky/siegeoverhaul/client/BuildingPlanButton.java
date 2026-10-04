@@ -14,7 +14,7 @@ import net.minecraft.world.item.Items;
 
 import java.util.function.BooleanSupplier;
 
-/** Source-backed plan cards; exact blueprint models with real material sprites on compact cards. */
+/** Source-backed plan cards: the actual blueprint block models stay visible at supported GUI sizes. */
 final class BuildingPlanButton extends Button {
     private static final ItemStack STONE = new ItemStack(Items.COBBLESTONE);
     private static final ItemStack WOOD = new ItemStack(Items.OAK_PLANKS);
@@ -45,8 +45,9 @@ final class BuildingPlanButton extends Button {
         draw(g, kind.label, x + 7, y + 3, width - 14,
                 chosen ? CommandPalette.ACCENT_TEAL : CommandPalette.TEXT);
         if (showsThumbnail(width, height)) {
-            thumbnail.render(g, x + 7, y + 16, width - 14, height - 43);
-            draw(g, kind.width + " x " + kind.depth + " · " + kind.height + " clear",
+            boolean detailed = height >= 96;
+            thumbnail.render(g, x + 7, y + 16, width - 14, height - (detailed ? 43 : 30));
+            if (detailed) draw(g, kind.width + " x " + kind.depth + " · " + kind.height + " clear",
                     x + 7, y + height - 23, width - 14, CommandPalette.TEXT_MUTED);
             String price = kind.price + "e build";
             int priceWidth = Minecraft.getInstance().font.width(price);
@@ -75,7 +76,7 @@ final class BuildingPlanButton extends Button {
         return cardHeight < 60 ? -1 : cardHeight >= 84 ? 36 : cardHeight - 30;
     }
 
-    static boolean showsThumbnail(int cardWidth, int cardHeight) { return cardWidth >= 130 && cardHeight >= 84; }
+    static boolean showsThumbnail(int cardWidth, int cardHeight) { return cardWidth >= 100 && cardHeight >= 64; }
 
     private void draw(GuiGraphics g, String value, int x, int y, int width, int color) {
         var font = Minecraft.getInstance().font;

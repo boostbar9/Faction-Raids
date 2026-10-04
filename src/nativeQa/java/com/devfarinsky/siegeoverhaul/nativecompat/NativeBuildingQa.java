@@ -67,7 +67,7 @@ import java.util.concurrent.CompletableFuture;
 @Mod.EventBusSubscriber(modid = SiegeOverhaul.MOD_ID, value = Dist.CLIENT)
 public final class NativeBuildingQa {
     private static final boolean ENABLED = Boolean.getBoolean("siegeoverhaul.nativeQa")
-            && !java.util.Set.of("perimeter-completion", "territory-perimeter", "camp-spawn", "staged-perimeter", "staged-unload", "staged-handoff")
+            && !java.util.Set.of("perimeter-completion", "territory-perimeter", "camp-spawn", "staged-perimeter", "staged-unload", "staged-handoff", "hud")
                     .contains(System.getProperty("siegeoverhaul.nativeQa.mode", "baseline"));
     private static final String WORLD = "siege-native-qa-fixture";
     private static final BlockPos ORIGIN = new BlockPos(8, 65, 8);
@@ -321,7 +321,7 @@ public final class NativeBuildingQa {
                     clickVisibleButton(mc, "Place structure", "Structures"); delay(20); phase = 24;
                 }
                 case 24 -> {
-                    require(hasVisibleButton(mc, "Take free plan", "Take free plan: Wall Section"),
+                    require(hasVisibleButton(mc, "Take free plan", "Free plan: Wall Section"),
                             "Actual structure-plan controls are missing");
                     capture("10-building-place-structure.png"); phase = 25;
                 }

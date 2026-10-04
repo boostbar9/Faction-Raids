@@ -2,13 +2,13 @@ package com.devfarinsky.siegeoverhaul.core;
 
 /** Client navigation metadata only; ordinals are never purchase or packet IDs. */
 public enum CoreCommandPage {
-    ARMY("Army", "War Council", "Recruit defenders, specialists and legendary heroes"),
-    LOOT("Loot", "Olympian Reliquary", "Unseal divine spoils and prepare battlefield blessings"),
-    TREASURY("Treasury", "Faction Treasury", "Manage shared wealth, rewards and faction activity"),
-    TERRITORY("Territory", "Kingdom Development", "Enact permanent faction-wide upgrades"),
-    DEFENSES("Building", "Building", "Plan a perimeter, place a structure and track your nearby construction"),
-    CIVILIANS("Civilians", "House of Civilians", "Welcome new residents, trade and grow the faction Treasury"),
-    INTEL("Intel", "Warlord Intelligence", "Study units, enemy hosts and defensive doctrine");
+    ARMY("Army", "Army & heroes", "Recruit defenders, workers and heroes from shared faction offers"),
+    LOOT("Loot", "Loot & blessings", "Open mystery rewards or buy a five-minute personal blessing"),
+    TREASURY("Treasury", "Faction Treasury", "Deposit emeralds, manage shared funds and view recent activity"),
+    TERRITORY("Territory", "Territory upgrades", "Buy permanent upgrades for your faction"),
+    DEFENSES("Building", "Building", "Plan a perimeter, place a structure and follow your builders"),
+    CIVILIANS("Civilians", "Civilians", "House residents, unlock trades and collect daily taxes"),
+    INTEL("Intel", "Intel", "Find units, enemy lore and practical defense advice");
 
     private final String label, title, description;
     CoreCommandPage(String label, String title, String description) {

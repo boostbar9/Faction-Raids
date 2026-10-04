@@ -24,18 +24,25 @@ public record CoreBuildingLayout(CoreHireLayout frame) {
     public int catalogueWidth() { return width() - (detailedCatalogue() ? detailWidth() + 8 : 0); }
     /** A third column also makes room for illustrations at ordinary 720p/GUI-scale-two sizes. */
     public int catalogueColumns() {
-        return detailedCatalogue() || width() >= 480 && bodyHeight() >= 206 ? 3 : 2;
+        return detailedCatalogue() || width() >= 410 && bodyHeight() >= 206 ? 3 : 2;
     }
-    public int catalogueRows() { return 6 / catalogueColumns(); }
+    /** Page the catalogue before live block models collapse into labels or material icons. */
+    public int catalogueRows() {
+        int available = (detailedCatalogue() ? bottom() : actionY() - 6) - bodyY();
+        return Math.max(1, Math.min(6 / catalogueColumns(), (available + GAP) / (72 + GAP)));
+    }
+    public int plansPerPage() { return catalogueColumns() * catalogueRows(); }
+    public int cataloguePages() { return (6 + plansPerPage() - 1) / plansPerPage(); }
+    public boolean pagedCatalogue() { return cataloguePages() > 1; }
     public int planWidth() { return (catalogueWidth() - GAP * (catalogueColumns() - 1)) / catalogueColumns(); }
     public int planHeight() {
         int available = (detailedCatalogue() ? bottom() : actionY() - 6) - bodyY();
         return (available - GAP * (catalogueRows() - 1)) / catalogueRows();
     }
     public int planX(int plan) { return x() + plan % catalogueColumns() * (planWidth() + GAP); }
-    public int planY(int plan) { return bodyY() + plan / catalogueColumns() * (planHeight() + GAP); }
-    public int planActionX() { return detailedCatalogue() ? detailX() + 8 : x(); }
-    public int planActionWidth() { return detailedCatalogue() ? detailWidth() - 16 : width(); }
+    public int planY(int plan) { return bodyY() + (plan % plansPerPage()) / catalogueColumns() * (planHeight() + GAP); }
+    public int planActionX() { return detailedCatalogue() ? detailX() + 8 : x() + (pagedCatalogue() ? 32 : 0); }
+    public int planActionWidth() { return detailedCatalogue() ? detailWidth() - 16 : width() - (pagedCatalogue() ? 64 : 0); }
 
     /** A detail card needs room for full native-font labels and the free-review explanation. */
     public boolean splitPerimeter() { return width() >= 580 && bodyHeight() >= 220; }

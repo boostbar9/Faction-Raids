@@ -1,3 +1,12 @@
+## 4.52.3 — Clearer command screens and feedback
+
+- Keep live unit models and 3D building plans visible at more GUI sizes. Small Building screens page through the plans instead of replacing their previews with material icons.
+- Give every Command Center page clearer headings, useful unavailable states and consistent navigation. Restore readable close controls and keep the Army refresh timer visible on compact screens.
+- Make the Codex guide and older Journal entries fully reachable, with keyboard focus that stays in the right place when tabs or live reports change.
+- Fit Settings to smaller screens, keep unfinished edits when resizing or returning from Hero visuals, and prevent offscreen rows from receiving input.
+- Bring construction inspection and held-plan guidance into the same dark style while retaining the native previews and controls.
+- Distinguish camp searching, terrain waiting and assaults. Avoid false capture, payment or item-delivery confirmations, and keep unchanged stalled-search messages from repeating in chat.
+
 ## 4.52.2 — Actionable building checks
 
 - Perimeter reviews distinguish unloaded boundary terrain, fluids, protected ground and occupied build space, reporting the exact rejected block and full coordinates when available. Existing surface and structure protections remain unchanged.
