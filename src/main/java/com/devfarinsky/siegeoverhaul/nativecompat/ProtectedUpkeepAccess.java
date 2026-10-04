@@ -85,6 +85,12 @@ final class ProtectedUpkeepAccess extends ProtectedInventoryGoal {
                 }
             acceptedStorage=area;return null;
         }
+        if(target instanceof AbstractHorse) {
+            // The original native start only captures the horse's container; it performs no
+            // inventory read/transfer. Its public captured reference is verified after start and
+            // again before every transfer through the horse's public identity predicate.
+            validateEntityTarget(target);acceptedEntity=target;return null;
+        }
         Container source=entitySource(target);
         String data=ProtectedTransferCapacity.upkeepProblem(worker,source);if(data!=null)return data;
         acceptedEntity=target;return null;
@@ -210,14 +216,18 @@ final class ProtectedUpkeepAccess extends ProtectedInventoryGoal {
         return target;
     }
 
-    private Container entitySource(Entity target) {
+    private void validateEntityTarget(Entity target) {
         if(target==null || configuredEntity()!=target || !ENTITY_SOURCES.contains(target.getClass()))
             throw new IllegalStateException("Native upkeep entity/container implementation is unsupported");
         var level=ProtectedStorageContext.level(worker);
         Set<BlockPos> cells=new java.util.HashSet<>(List.of(target.blockPosition(),target.getOnPos()));
         ProtectedStorageContext.loaded(level,cells);
         String authority=NativeConstructionGuard.storageProblem(worker,cells);if(authority!=null)throw new IllegalStateException(authority);
-        Container source=target instanceof AbstractHorse horse?horse.inventory
+    }
+
+    private Container entitySource(Entity target) {
+        validateEntityTarget(target);
+        Container source=target instanceof AbstractHorse horse?capturedHorseInventory(horse,entityGoal.container)
                 :target instanceof InventoryCarrier carrier?carrier.getInventory():target instanceof Container container?container:null;
         if(source==null || source!=target && (source.getClass()!=SimpleContainer.class
                 && !(source instanceof SimpleContainer simple && ProtectedTransferCapacity.supportedInventory(simple))))
@@ -226,6 +236,15 @@ final class ProtectedUpkeepAccess extends ProtectedInventoryGoal {
         if(target.saveWithoutId(new net.minecraft.nbt.CompoundTag()).contains("LootTable"))
             throw new IllegalStateException("Open loot upkeep storage first");
         return source;
+    }
+
+    /** Official 1.20.1 hasInventoryChanged is a public, read-only reference comparison.
+     * Use the original goal's captured source, never reflect/read the protected horse field. */
+    static Container capturedHorseInventory(AbstractHorse horse,Container captured) {
+        if(horse==null || captured==null || captured.getClass()!=SimpleContainer.class
+                || horse.hasInventoryChanged(captured))
+            throw new IllegalStateException("Native horse upkeep inventory was replaced or is unsupported");
+        return captured;
     }
 
     private void positionCleanup(BlockPos closeAt) {
