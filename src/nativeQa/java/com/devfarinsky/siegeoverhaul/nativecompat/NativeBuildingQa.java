@@ -376,7 +376,7 @@ public final class NativeBuildingQa {
         Files.createDirectories(evidence);
         REPORT.put("startedUtc", Instant.now().toString());
         REPORT.put("coverage", "Phase1: real native rendering/lifecycle fixtures. Phase2: isolated survival production commissioning, native AI/materials and permission/reload acceptance. See gameplay assertions and exclusions.");
-        REPORT.put("notCovered", List.of("Server-fed Building HUD data beyond the client-menu fixture", "Full claim/core/owner mutation matrix beyond enumerated gameplay cases", "Dedicated-server connection", "Shader/resource-pack or GPU-driver matrix", "1024/1025-cell boundary and scan-bound profiling"));
+        REPORT.put("notCovered", List.of("Menu-issued Review/Take-plan commands beyond the read-only live Core HUD acceptance", "Full claim/core/owner mutation matrix beyond enumerated gameplay cases", "Dedicated-server connection", "Shader/resource-pack or GPU-driver matrix", "1024/1025-cell boundary and scan-bound profiling"));
         Map<String, String> mods = new LinkedHashMap<>();
         Map<String, Object> artifacts = new LinkedHashMap<>();
         for (String id : List.of("minecraft", "forge", "siegeoverhaul", "workers", "recruits", "smallships", "siegeweapons")) {
@@ -535,13 +535,13 @@ public final class NativeBuildingQa {
                     "Native inspection controls overlap");
         }
     }
-    private static boolean hasVisibleButton(Minecraft mc, String... labels) {
+    static boolean hasVisibleButton(Minecraft mc, String... labels) {
         if (mc.screen == null) return false;
         for (var child : mc.screen.children()) if (child instanceof Button button && button.visible && button.active)
             for (String label : labels) if (button.getMessage().getString().equals(label)) return true;
         return false;
     }
-    private static void clickVisibleButton(Minecraft mc, String... labels) {
+    static void clickVisibleButton(Minecraft mc, String... labels) {
         require(mc.screen != null, "No actual screen for navigation click");
         for (var child : mc.screen.children()) if (child instanceof Button button && button.visible && button.active)
             for (String label : labels) if (button.getMessage().getString().equals(label)) {

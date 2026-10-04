@@ -199,11 +199,41 @@ The initial bounded gameplay sequence covers:
 - Authenticated explicit projection visibility for the large perimeter; real
   cancellation must detach the builder/retire the reservation and not refund.
   AI is paused for this transaction-only perimeter; it is not built to completion.
+- Before that cancellation, ordinary client block-use opens the actual core menu.
+  Client/server menu identity, native owner faction and live 1,100-emerald Treasury
+  must agree. Visible Building controls navigate Auto perimeter and Construction;
+  the real subscription/response packets must deliver every `ConstructionReport.Job`
+  field unchanged from the server snapshot. Captures `16-live-core-building-auto.png`
+  and `17-live-core-construction.png` use this live fixture data, distinct from the
+  sample-menu images 09–12. The displayed 900-emerald price is a shared production
+  constant, while the balance and job rows are server-fed. No review, plan pickup
+  or commission button is clicked. Closing the actual menu must leave the paid
+  job, reservation and Treasury unchanged.
+- Before cancellation, the actual non-op Survival client places one fixture dirt
+  item into an accepted AIR perimeter cell and mines it using ordinary empty-hand
+  destruction packets. The original AIR and every other reserved cell must be
+  restored while the real ledger retains `edited=true`. Native AI is then enabled
+  and must expose its player-edit pause without accepted-cell changes, additional
+  payment or loss of the finite construction stock. Normal authenticated
+  cancellation ends that deliberately edited job. No raw QA block write, synthetic
+  player event, stock reset or extra paid job substitutes for this sequence.
 - Manual-wall free preview, rejected insufficient-Treasury confirmation, preserved
   item/balance/reservations, then real paid confirmation for exactly 90 emeralds.
+  A temporary native item-use refusal must preserve the exact plan NBT/count,
+  all 1,000 funded Treasury emeralds and zero jobs/reservations. The test allows
+  native eating to finish normally, then retries actual plan use at most three
+  times within the original stage deadline; it never interrupts native item use.
 - Repeated post-confirmation use cannot duplicate a paid job. Native AI is enabled
   for the manual wall and must place blocks using the real finite chest stock,
   stop with an actual native material request, and resume after measured resupply.
+- One pre-preview fixture dandelion has valid grass-block support in a planned
+  cobblestone cell; its support is outside the mutation plan. The plant must still
+  exist through free/failed confirmations and appear unchanged in the guard's
+  actual accepted `Before` receipt. Native work must remove it through the break
+  path, record `Cleared`, preserve both receipts through the real reload, and
+  finally place the planned cobblestone. QA never removes that plant. Its support
+  must remain solid (grass may naturally become dirt under the completed wall),
+  and neither the 110 planned blocks nor supplied construction totals changes.
 - Real claim loss and owner permission loss must produce native pause reasons and
   zero further accepted-cell changes over observed intervals, with no extra debit.
 - A raw fixture solid inserted into reserved, non-structural headroom must pause
@@ -219,14 +249,19 @@ The initial bounded gameplay sequence covers:
 - The protected builder's main hand must share the native inventory slot-5 object
   after reload. The guarded rebind count must increase exactly once, with no pending
   or review flag and no change to any item/tag/count, through final completion.
+- Only after full completion and repeated strict material conservation checks,
+  `18-completed-manual-wall-and-builder.png` captures the actual synchronized world
+  blocks with the real native builder. Only the fixture observer is repositioned;
+  the builder is neither teleported nor AI-disabled for that capture. A projection
+  is never accepted as proof of a finished structure.
 
 Every server stage is capped at 2,400 ticks and reports current native pause,
 follow-state, material-request count and placed-block count on timeout. The whole
 second sequence also has the client harness's eight-minute deadline. The result
-must include a passed gameplay section and all fifteen image names to pass CI.
+must include a passed gameplay section and all eighteen image names to pass CI.
 This implementation has not passed until a linked run proves it.
 
-The remaining actual-player-edit, competing-builder and exact
+The remaining additional player-edit/restart combinations, competing-builder and exact
 1,024/1,025-cell rendering cases remain explicitly listed as uncovered until those
 additional bounded cases actually run. The claim/owner cases above are a defined
 subset, not a claim to have tested every ownership/core mutation.
@@ -275,3 +310,10 @@ server EULA acceptance, credentials or authentication changes are automated here
   evidence and immediate post-reload stock equality are now required, without a
   QA dirty-mark workaround. Artifact SHA-256:
   `4ef06fcd6c247c3ae12b937f2e351271a62d17a6e9e77608750f7452f7bf7035`.
+
+- [Run 37164336625](https://github.com/boostbar9/Faction-Raids/actions/runs/37164336625)
+  compiled the stricter chest diagnostics but stopped before reaching them. The
+  server correctly refused manual commissioning because the newly enabled native
+  builder was eating, with its explicit no-payment message. The harness had
+  assumed immediate acceptance. Its bounded natural wait/retry now preserves that
+  production guard and checks exact unpaid plan/Treasury/reservation state.

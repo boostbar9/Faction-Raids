@@ -83,6 +83,8 @@ jobs:
               '11-building-construction.png', '12-building-construction-compact.png',
               '13-native-perimeter-template.png',
               '14-production-free-perimeter-review.png', '15-production-paid-native-marker.png',
+              '16-live-core-building-auto.png', '17-live-core-construction.png',
+              '18-completed-manual-wall-and-builder.png',
           ]
           assert data['screenshots'] == expected, data['screenshots']
           for name in expected:

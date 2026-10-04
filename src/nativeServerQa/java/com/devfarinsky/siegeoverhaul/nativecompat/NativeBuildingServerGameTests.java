@@ -54,7 +54,7 @@ import java.util.UUID;
 @PrefixGameTestTemplate(false)
 public final class NativeBuildingServerGameTests {
     public static final String LIMITATION = "Physical dedicated distribution in Forge GameTestServer with real companion mods. "
-            + "FakePlayer actors test direct handler authorization only; real multiplayer connection/authentication remains unverified. "
+            + "FakePlayer actors test direct server APIs only; real multiplayer connection/authentication remains unverified. "
             + "Fixture initialization is not production commissioning, native AI construction, rendering, or a full server restart.";
     private static final List<String> CHECKS = new ArrayList<>();
     private static final Map<String, Object> REPORT = new LinkedHashMap<>();
@@ -276,6 +276,10 @@ public final class NativeBuildingServerGameTests {
         require(builder.getInventory().countItem(Items.COBBLESTONE) == stock
                 && owner.getUUID().equals(WorkersBridge.readWorkerOwner(builder)), "Cancellation changed stock or worker ownership");
         check("fakeplayer-direct-handler-authorization-and-cancel");
+        Map<String, Object> authorityReport = new LinkedHashMap<>();
+        REPORT.put("inventoryAuthority", authorityReport);
+        NativeInventoryAuthorityServerContracts.verify(helper, owner, outsider, builder, authorityReport);
+        check("offline-native-inventory-authority-and-loss-recovery");
         builder.discard();
     }
 

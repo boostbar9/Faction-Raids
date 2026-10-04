@@ -28,7 +28,7 @@ if this supported GameTest route encounters a prompt; stop and report it.
 
 ## What it verifies
 
-One required GameTest checks these seven groups and writes its actual execution
+One required GameTest checks these eight groups and writes its actual execution
 count, physical/logical side, server class, loaded versions, remapped runtime JAR
 hashes, assertions, and limitations to `build/native-server-qa/evidence/result.json`:
 
@@ -47,6 +47,29 @@ hashes, assertions, and limitations to `build/native-server-qa/evidence/result.j
 7. Direct handler calls with explicitly labeled Forge FakePlayer actors reject
    outsiders, distant owners, and spectators, while nearby owner show/hide/cancel
    preserves stock/ownership and retires the exact loaded native job reference.
+8. The full production inventory-authority helper accepts an offline owner absent
+   from both connected-player lists. Setup uses public native faction/claim APIs,
+   an actual Core block and `SiegeCore.placed`, a separate source-claim chunk, and
+   an explicit synthetic entry in this isolated server's local profile cache.
+   Actual Core/anchor, scoreboard and native faction SavedData are flushed/read
+   from disk. The pinned native faction SavedData drops its UUID member roster;
+   this is asserted and reported, never represented as retained membership. Its
+   disk-decoded dataset is installed through the native public manager loader,
+   and authority must recover using the known current profile and persisted
+   scoreboard. Native offline member removal, scoreboard transfer, conflicting
+   roster/profile identity, worker transfer, foreign source claim, unloaded source
+   without force-loading, and original Core/anchor loss each deny access; explicit
+   fixture restoration must restore valid authority without changing worker stock.
+
+Group 8 is a direct authority contract, not offline AI upkeep, a container
+transaction, native faction-menu use, or paid production commissioning. One
+adjacent source chunk is loaded explicitly during setup; the separate distant
+unloaded-source probe must stay unloaded. Restoring fixture membership directly
+is labeled separately from the real native offline-removal path, since native
+joining requires a connected player. A SavedData manager reload and disk-read
+scoreboard check are not a full server restart or profile-cache restart test.
+These added cases require a successful run on their exact source commit before
+being considered verified.
 
 The workflow checks every expected group and the in-test completion marker in
 addition to the standard GameTest process exit status. A missing test or missing
@@ -57,11 +80,13 @@ reports and logs are uploaded, never companion JARs or generated worlds.
 ## Exact limitations
 
 Physical dedicated distribution in Forge GameTestServer with real companion
-mods. FakePlayer actors test direct handler authorization only; real multiplayer
+mods. FakePlayer actors test direct server APIs only; real multiplayer
 connection/authentication remains unverified. Fixture initialization is not
 production commissioning, native AI construction, rendering, or a full server
 restart. The entity round trip and actual SavedData disk flush/read are not a
 server-process restart. Client QA covers separate gameplay/rendering scenarios.
+The actual native roster-loss assertion covers the pinned Recruits persistence
+format; it does not assert that the helper is authorized by a retained UUID roster.
 
 ## Supported Forge references
 
@@ -75,6 +100,9 @@ server-process restart. Client QA covers separate gameplay/rendering scenarios.
   explicitly recognizes GameTest CI; this suite does not manufacture an acceptance file.
 - [Forge 1.20.1 GameTestServer lifecycle patch](https://github.com/MinecraftForge/MinecraftForge/blob/1.20.1/patches/minecraft/net/minecraft/gametest/framework/GameTestServer.java.patch)
   runs the normal server lifecycle hooks.
+- [Pinned Recruits faction SavedData](https://github.com/talhanation/recruits/blob/cff03e085d65653406a8b6ddcdd0ebff615c3e48/src/main/java/com/talhanation/recruits/world/RecruitsTeamSaveData.java)
+  omits the member roster, unlike `RecruitsFaction.toNBT`; this suite reads the
+  actual runtime SavedData bytes instead of substituting faction-packet NBT.
 
 The 113-byte empty NBT structure is generated entirely from the checked-in Python
 source. It contains scene dimensions and an air palette, with no copied vendor

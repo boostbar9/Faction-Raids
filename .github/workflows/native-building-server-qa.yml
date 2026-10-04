@@ -77,10 +77,26 @@ jobs:
               'unloaded-blueprint-remains-unloaded',
               'clearance-and-world-saveddata-disk-roundtrip',
               'fakeplayer-direct-handler-authorization-and-cancel',
+              'offline-native-inventory-authority-and-loss-recovery',
           ]
           assert data['checks'] == expected, data
           console = (root / 'server-console.log').read_text()
-          assert console.count('SIEGE_NATIVE_SERVER_QA_COMPLETED tests=1 checks=7') == 1, console[-5000:]
+          assert console.count('SIEGE_NATIVE_SERVER_QA_COMPLETED tests=1 checks=8') == 1, console[-5000:]
+          authority = data['inventoryAuthority']
+          assert authority['ownerConnected'] is False, authority
+          assert authority['coreAnchorDiskRoundTrip'] == 'passed', authority
+          assert authority['scoreboardDiskRoundTrip'] == 'passed', authority
+          assert authority['nativeRosterMembersBeforeDisk'] == 1, authority
+          assert authority['nativeRosterMembersAfterDisk'] == 0, authority
+          for allowed in ['offline-native-owner-valid', 'native-manager-disk-reload-valid', 'membership-restored',
+                          'native-roster-name-restored', 'native-roster-uuid-restored', 'identity-conflicts-restored',
+                          'scoreboard-restored', 'worker-owner-restored', 'source-claim-restored',
+                          'original-core-restored', 'valid-context-restored']:
+              assert authority['outcomes'][allowed] == 'allowed', (allowed, authority)
+          for denied in ['removed-native-member', 'stale-native-roster-name', 'conflicting-native-roster-uuid',
+                         'stale-cached-profile-name', 'scoreboard-transferred', 'worker-owner-transferred',
+                         'foreign-source-claim', 'unloaded-source-denied', 'original-core-lost', 'original-anchor-lost']:
+              assert authority['outcomes'][denied].startswith('Paused:'), (denied, authority)
           for mod in ['workers', 'recruits', 'smallships', 'siegeweapons']:
               assert mod in data['loadedModVersions'], mod
               assert len(data['loadedCompanionArtifacts'][mod]['sha256']) == 64, mod
