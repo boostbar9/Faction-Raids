@@ -1,0 +1,208 @@
+# One-use, changelog-only edit of one existing CurseForge file.
+# Do not merge into main. Do not rerun or recreate the branch after an attempt.
+# Only the workflow file is needed remotely; no checkout or external code runs.
+name: Update existing CurseForge 4.52.0 player notes
+
+on:
+  push:
+    branches: [publish/curseforge-player-notes-4520-20261004]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: curseforge-player-notes-1364352-4520-20261004
+  cancel-in-progress: false
+
+jobs:
+  update-notes:
+    if: >-
+      github.repository == 'boostbar9/Faction-Raids' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/publish/curseforge-player-notes-4520-20261004' &&
+      github.event.created == true &&
+      github.event.deleted == false &&
+      github.event.forced == false &&
+      github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Update only existing file changelog text and type
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        shell: bash
+        run: |
+          python3 - <<'PYTHON'
+          """One-use CurseForge changelog-only update. Embedded verbatim in the workflow."""
+          
+          import hashlib
+          import http.client
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import sys
+          
+          PROJECT_ID = 1364352
+          HOST = "minecraft.curseforge.com"
+          PATH = "/api/projects/1364352/update-file"
+          REPOSITORY = "boostbar9/Faction-Raids"
+          REF = "refs/heads/publish/curseforge-player-notes-4520-20261004"
+          WORKFLOW = ".github/workflows/update-curseforge-player-notes-4520-20261004.yml"
+          BOUNDARY = "----siege-player-notes-20261004-1364352"
+          TIMEOUT_SECONDS = 30
+          MAX_RESPONSE_BYTES = 16384
+          PINS = ((9059365, 'b2c1c409e680b395e48027d722b0a7c70f571caca5909610502483a84516322d'),)
+          TARGETS = ((9059365, '# 4.52.0\n\n- Building controls are now together in one tab, with clearer plan previews and construction progress.\n- Automatic perimeter walls now cost a flat 64 emeralds from the faction treasury. You still need to supply the blocks.\n- New perimeter walls, Wall Sections and Wall Corners are hollow beneath the walkway, so they use fewer blocks. Existing paid projects keep their original plans and costs.\n- Fixed builders getting stuck on earlier wall sections, along with construction, cancellation and reload issues.\n- Improved enemy-camp placement, guard spawning and scout compatibility.\n\nBack up your world and update both the server and clients. Protected construction requires Recruits 1.15.2 and Workers 2.0.3.\n'),)
+          
+          
+          def require(condition):
+              # Unlike assert, this remains active if Python optimization is enabled.
+              if not condition:
+                  raise ValueError("Preflight rejected")
+          
+          
+          def unique_object(pairs):
+              result = {}
+              for key, value in pairs:
+                  require(key not in result)
+                  result[key] = value
+              return result
+          
+          
+          def validate_context(environ, event):
+              require(environ.get("GITHUB_ACTIONS") == "true")
+              require(environ.get("GITHUB_REPOSITORY") == REPOSITORY)
+              require(environ.get("GITHUB_REF") == REF)
+              require(environ.get("GITHUB_EVENT_NAME") == "push")
+              require(environ.get("GITHUB_RUN_ATTEMPT") == "1")
+              require(environ.get("GITHUB_WORKFLOW_REF") == REPOSITORY + "/" + WORKFLOW + "@" + REF)
+              sha = environ.get("GITHUB_SHA", "")
+              require(re.fullmatch(r"[0-9a-f]{40}", sha) is not None)
+              require(environ.get("GITHUB_WORKFLOW_SHA") == sha)
+              require(event.get("repository", {}).get("full_name") == REPOSITORY)
+              require(event.get("repository", {}).get("fork") is False)
+              require(event.get("ref") == REF)
+              require(event.get("created") is True)
+              require(event.get("deleted") is False)
+              require(event.get("forced") is False)
+              require(event.get("before") == "0" * 40)
+              require(event.get("after") == sha)
+              require(event.get("head_commit", {}).get("id") == sha)
+          
+          
+          def prepare_payloads():
+              # Validate the entire batch before allowing the first network connection.
+              require(PROJECT_ID == 1364352)
+              require(HOST == "minecraft.curseforge.com")
+              require(PATH == "/api/projects/1364352/update-file")
+              require(TIMEOUT_SECONDS == 30 and MAX_RESPONSE_BYTES == 16384)
+              require(tuple(file_id for file_id, _ in TARGETS) == (9059365,))
+              require(tuple(file_id for file_id, _ in PINS) == (9059365,))
+              payloads = []
+              for (file_id, copy), (pinned_id, expected_hash) in zip(TARGETS, PINS):
+                  require(type(file_id) is int and file_id == pinned_id)
+                  require(type(copy) is str)
+                  require(hashlib.sha256(copy.encode("utf-8")).hexdigest() == expected_hash)
+                  require(BOUNDARY not in copy)
+                  metadata = {"fileID": file_id, "changelog": copy, "changelogType": "markdown"}
+                  require(set(metadata) == {"fileID", "changelog", "changelogType"})
+                  serialized = json.dumps(metadata, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                  # Exactly one form field. No filename attribute and no binary/file part.
+                  body = (
+                      "--" + BOUNDARY + "\r\n"
+                      'Content-Disposition: form-data; name="metadata"\r\n'
+                      "Content-Type: application/json; charset=utf-8\r\n\r\n"
+                      + serialized + "\r\n--" + BOUNDARY + "--\r\n"
+                  ).encode("utf-8")
+                  payloads.append((file_id, expected_hash, body))
+              return tuple(payloads)
+          
+          
+          def send_once(file_id, body, token, connection_factory):
+              connection = None
+              try:
+                  # http.client never follows redirects or retries. It also ignores proxy
+                  # environment variables. Default HTTPS certificate verification is used.
+                  connection = connection_factory(HOST, port=443, timeout=TIMEOUT_SECONDS)
+                  connection.request("POST", PATH, body=body, headers={
+                      "X-Api-Token": token,
+                      "Content-Type": "multipart/form-data; boundary=" + BOUNDARY,
+                      "Content-Length": str(len(body)),
+                      "Accept": "application/json",
+                  })
+                  response = connection.getresponse()
+                  if 300 <= response.status < 400:
+                      return "uncertain_redirect_refused"
+                  if not 200 <= response.status < 300:
+                      return "uncertain_http_error_" + str(response.status)
+                  raw = response.read(MAX_RESPONSE_BYTES + 1)
+                  if len(raw) > MAX_RESPONSE_BYTES:
+                      return "uncertain_response_invalid"
+                  try:
+                      result = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_object)
+                  except (ValueError, UnicodeError):
+                      return "uncertain_response_invalid"
+                  if type(result) is not dict or type(result.get("id")) is not int:
+                      return "uncertain_response_invalid"
+                  if result["id"] != file_id:
+                      return "uncertain_response_id_mismatch"
+                  return "accepted"
+              except Exception:
+                  # The server may have applied the change before a disconnect/timeout.
+                  # Never log exceptions, headers, token values or remote response bodies.
+                  return "uncertain_transport_error"
+              finally:
+                  if connection is not None:
+                      try:
+                          connection.close()
+                      except Exception:
+                          pass
+          
+          
+          def run_batch(environ, event, token, connection_factory, emit):
+              rows = [
+                  {"file_id": file_id, "copy_sha256": digest, "metadata_status": "not_attempted"}
+                  for file_id, digest in PINS
+              ]
+              try:
+                  validate_context(environ, event)
+                  payloads = prepare_payloads()
+                  require(type(token) is str and bool(token))
+                  require("\r" not in token and "\n" not in token)
+              except Exception:
+                  for row in rows:
+                      row["metadata_status"] = "not_attempted_preflight_rejected"
+                      emit(row)
+                  return 1
+              for index, (file_id, digest, body) in enumerate(payloads):
+                  emit({"file_id": file_id, "copy_sha256": digest, "metadata_status": "attempt_started"})
+                  status = send_once(file_id, body, token, connection_factory)
+                  rows[index]["metadata_status"] = status
+                  emit(rows[index])
+                  if status != "accepted":
+                      # Preserve the earlier accepted receipt and explicitly mark the rest
+                      # not attempted. An uncertain operation is never repeated here.
+                      for row in rows[index + 1:]:
+                          emit(row)
+                      return 1
+              return 0
+          
+          
+          def main():
+              emit = lambda row: print(json.dumps(row, sort_keys=True), flush=True)
+              try:
+                  event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"),
+                                     object_pairs_hook=unique_object)
+                  token = os.environ.pop("CURSEFORGE_TOKEN", "")
+              except Exception:
+                  for file_id, digest in PINS:
+                      emit({"file_id": file_id, "copy_sha256": digest,
+                            "metadata_status": "not_attempted_preflight_rejected"})
+                  return 1
+              return run_batch(os.environ, event, token, http.client.HTTPSConnection, emit)
+          
+          
+          if __name__ == "__main__":
+              sys.exit(main())
+          PYTHON
