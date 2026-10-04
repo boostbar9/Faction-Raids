@@ -26,6 +26,17 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
         call.setAccessible(true);
         call.invoke(screen, value);
     }
+    @Test void territorySummaryNeverCountsUnavailableOwnershipAsActive() throws Exception {
+        var menu = mock(CoreHireMenu.class);
+        var screen = new CoreHireScreen(menu, mock(Inventory.class), Component.literal("Command"));
+        var summary = CoreHireScreen.class.getDeclaredMethod("territoryUpgradeSummary"); summary.setAccessible(true);
+        when(menu.territoryBuffMask()).thenReturn(5);
+        assertEquals("1 active · 1 retained", summary.invoke(screen));
+        when(menu.territoryBuffMask()).thenReturn(3);
+        assertEquals("0 active · 2 retained", summary.invoke(screen));
+        when(menu.territoryBuffMask()).thenReturn(12);
+        assertEquals("2 active", summary.invoke(screen));
+    }
     @Test void hiddenNavigationControlsCannotAnnounceTooltips() {
         var button = mock(Button.class);
         when(button.isMouseOver(12, 34)).thenReturn(true);

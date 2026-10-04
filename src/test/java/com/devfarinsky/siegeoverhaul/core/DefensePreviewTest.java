@@ -79,6 +79,25 @@ class DefensePreviewTest extends MinecraftTestSupport {
         stack.getTag().getCompound(DefensePreview.TAG).putInt("Geometry", 2);
         assertNull(DefensePreview.read(stack, DefenseBlueprint.Kind.WALL, Level.OVERWORLD.location(), owner, 120));
     }
+    @Test void everyOldOrChangedUnpaidPriceRequiresFreshReview() {
+        for (var kind : DefenseBlueprint.Kind.values()) {
+            for (int mutation = 0; mutation < 3; mutation++) {
+                var stack = new ItemStack(Items.PAPER);
+                DefensePreview.set(stack, kind, origin, Direction.WEST, Level.OVERWORLD.location(), owner, 100, null);
+                var tag = stack.getTag().getCompound(DefensePreview.TAG);
+                if (mutation == 0) tag.remove("QuotedPrice");
+                else if (mutation == 1) tag.putInt("QuotedPrice", kind.price + 1);
+                else tag.putString("QuotedPrice", Integer.toString(kind.price));
+                assertNull(DefensePreview.read(stack, kind, Level.OVERWORLD.location(), owner, 120), kind.label);
+                DefensePreview.updateProblem(stack, null);
+                assertNull(DefensePreview.read(stack, kind, Level.OVERWORLD.location(), owner, 120));
+                DefensePreview.set(stack, kind, origin, Direction.WEST, Level.OVERWORLD.location(), owner, 120, null);
+                var fresh = DefensePreview.read(stack, kind, Level.OVERWORLD.location(), owner, 120);
+                assertNotNull(fresh); assertFalse(fresh.canConfirm(origin, 120)); assertTrue(fresh.canConfirm(origin, 130));
+                assertEquals(kind.price, stack.getTag().getCompound(DefensePreview.TAG).getInt("QuotedPrice"));
+            }
+        }
+    }
     @Test void corruptFacingFailsClosed() {
         var stack = preview(); stack.getTag().getCompound(DefensePreview.TAG).putInt("Facing", 10);
         assertNull(DefensePreview.read(stack, DefenseBlueprint.Kind.WATCHTOWER, Level.OVERWORLD.location(), owner, 110));

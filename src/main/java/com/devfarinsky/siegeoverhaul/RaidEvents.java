@@ -784,7 +784,7 @@ public final class RaidEvents {
                 return;
             }
             if (pos.equals(state.barrelPos)) {
-                handleBarrelBroken(level, state);
+                handleBarrelBroken(level, data, state, anchor, event.getPlayer());
                 data.setDirty();
                 return;
             }
@@ -828,12 +828,20 @@ public final class RaidEvents {
 
     /**
      * Supply barrel. Drops a bonus stack of emeralds at the barrel position
-     * so defenders who fight up the hill get concrete loot back.
+     * for eligible defending members. Practice raids and other breakers still
+     * consume the tracked structure, without granting currency.
      */
-    private static void handleBarrelBroken(ServerLevel level, RaidSavedData.RaidState state) {
+    static void handleBarrelBroken(ServerLevel level, RaidSavedData data, RaidSavedData.RaidState state,
+                                   RaidSavedData.Anchor anchor, net.minecraft.world.entity.player.Player breaker) {
+        BlockPos drop = state.barrelPos;
+        if (drop == null) return;
+        // Destruction always counts, even in practice raids or when an outsider breaks it.
+        // Consume before spawning loot so duplicate/re-entrant callbacks cannot mint it again.
+        state.barrelPos = null;
+        data.setDirty();
         int count = RaidConfig.CAMP_BONUS_LOOT_EMERALDS.get();
-        if (count > 0) {
-            BlockPos drop = state.barrelPos;
+        if (count > 0 && state.rewardEligible && breaker != null && !breaker.isSpectator()
+                && isCurrentCampDefender(breaker, anchor)) {
             ItemStack emeralds = new ItemStack(Items.EMERALD, count);
             net.minecraft.world.entity.item.ItemEntity entity =
                     new net.minecraft.world.entity.item.ItemEntity(level,
@@ -841,10 +849,18 @@ public final class RaidEvents {
             entity.setDefaultPickUpDelay();
             level.addFreshEntity(entity);
         }
-        state.barrelPos = null;
         announce(level.getServer(), state.teamKey, Component.literal(
                 "Enemy supply barrel destroyed.")
                 .withStyle(ChatFormatting.GOLD), false);
+    }
+
+    /** Match the live onlineMembers authority; a core anchor may only remember its placer. */
+    static boolean isCurrentCampDefender(net.minecraft.world.entity.player.Player breaker,
+                                         RaidSavedData.Anchor anchor) {
+        if (anchor == null || !(breaker instanceof ServerPlayer player)) return false;
+        if (anchor.teamKey().startsWith("team:")) return anchor.teamKey().equals(teamKey(player));
+        if (anchor.internalRoster()) return anchor.members().contains(player.getUUID());
+        return anchor.teamKey().equals(teamKey(player));
     }
 
     // ---------------------------------------------------------------------
@@ -2340,6 +2356,9 @@ public final class RaidEvents {
             }
         }
 
+        // Physical wave loot must settle before capture victory or a checkpoint vote can
+        // remove this raid. Its own persisted receipt is independent of Treasury payment.
+        com.devfarinsky.siegeoverhaul.core.WaveLootRewards.awardClearedWave(data, state, members);
         long paid = EndlessSiege.awardClearedWave(data, state, server.overworld().getGameTime(), RaidConfig.BANK_INTEREST_BASIS_POINTS.get());
         if (paid > 0) announce(server, teamKey, Component.literal("Wave " + state.wave + " cleared. +" + paid + " emeralds added to the faction Treasury.").withStyle(ChatFormatting.GREEN), false);
         if (com.devfarinsky.siegeoverhaul.core.EnemyCore.tick(level, data, state, anchor)) {
@@ -2397,24 +2416,6 @@ public final class RaidEvents {
                     com.devfarinsky.siegeoverhaul.advancements.SiegeTriggers.ENDLESS_WAVE_REACHED
                             .trigger(p, state.wave);
                 }
-                // v4.33.0: rarity-weighted loot box drop for surviving the
-                // wave. Higher waves shift the distribution toward Rare/
-                // Epic - the exact curve lives in LootBoxItem.rollWaveTier.
-                // One box per online defender per cleared wave; overflow
-                // drops at their feet so a full inventory never eats it.
-                com.devfarinsky.siegeoverhaul.items.LootBoxItem.Tier tier =
-                        com.devfarinsky.siegeoverhaul.items.LootBoxItem.rollWaveTier(
-                                p.getRandom(), state.wave);
-                net.minecraft.world.item.ItemStack box = new net.minecraft.world.item.ItemStack(
-                        com.devfarinsky.siegeoverhaul.items.ModItems.lootBox(tier).get());
-                if (!p.getInventory().add(box.copy())) {
-                    p.drop(box.copy(), false);
-                }
-                p.displayClientMessage(
-                        Component.literal("You received a ")
-                                .append(Component.literal(tier.label + " Loot Box").withStyle(tier.color))
-                                .append(Component.literal(" for surviving wave " + state.wave + ".")),
-                        false);
             }
         }
 

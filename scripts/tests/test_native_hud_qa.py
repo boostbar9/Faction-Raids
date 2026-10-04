@@ -179,6 +179,10 @@ class NativeHudReceiptVerifier(unittest.TestCase):
                                  'guiHeight': size[1] // scale, 'requestedGuiScale': scale},
                     'widgets': [{'label': 'Synthetic button', 'x': 1, 'y': 1, 'width': 10, 'height': 10, 'active': True, 'focused': True}]}
             if name.endswith('-army.png'): view['nativePortraits'] = ['com.talhanation.synthetic.Test'] * 4
+            if name.endswith('-territory.png'):
+                view['territoryAvailability'] = {'ownershipMask': 5, 'active': 1, 'retained': 1, 'unavailableButtons': 2}
+                view['widgets'].extend([{'label': 'Unavailable', 'x': x, 'y': 1, 'width': 10, 'height': 10,
+                                         'active': False, 'focused': False} for x in [20, 40]])
             if '-plan-' in name:
                 view['selectedPlan'] = name.removesuffix('.png').split('-plan-')[1].upper()
                 view['nativeBlueprintCards'] = [{'plan': view['selectedPlan'], 'sourceBlueprintMatches': True,
@@ -195,6 +199,14 @@ class NativeHudReceiptVerifier(unittest.TestCase):
 
     def test_complete_synthetic_receipt_parses_without_claiming_runtime(self):
         self.assertEqual(self.run_verifier()['status'], 'passed')
+
+    def test_available_or_falsely_active_unimplemented_upgrade_fails(self):
+        view = next(view for view in self.data['views'] if view['screenshot'].endswith('-territory.png'))
+        view['territoryAvailability']['active'] = 2
+        with self.assertRaises(AssertionError): self.run_verifier()
+        view['territoryAvailability']['active'] = 1
+        next(widget for widget in view['widgets'] if widget['label'] == 'Unavailable')['active'] = True
+        with self.assertRaises(AssertionError): self.run_verifier()
 
     def test_missing_screenshot_fails(self):
         (self.root / self.data['screenshots'][0]).unlink()

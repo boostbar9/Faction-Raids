@@ -653,10 +653,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         for (int i = 0; i < territoryBuffs.length; i++) {
             territoryBuffs[i].visible = tab == CoreCommandPage.TERRITORY;
             boolean owned = menu.hasTerritoryBuff(i);
-            territoryBuffs[i].active = !owned && canAfford(TerritoryBuffs.PRICES[i]);
+            territoryBuffs[i].active = TerritoryBuffs.available(i) && !owned && canAfford(TerritoryBuffs.PRICES[i]);
             long missing = canAfford(TerritoryBuffs.PRICES[i]) ? 0L : Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
             territoryBuffs[i].setMessage(Component.literal(
-                    owned ? "Active"
+                    !TerritoryBuffs.available(i) ? "Unavailable" : owned ? "Active"
                             : missing == 0L
                                     ? (layout.compact() ? "Buy" : "Enact")
                                             + "  ·  " + TerritoryBuffs.PRICES[i] + "e"
@@ -827,13 +827,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 int cy = gridTop + (i / cols) * (cellH + 8);
                 if (over(mx, my, cx, cy, cellW, cellH)) {
                     long missing = canAfford(TerritoryBuffs.PRICES[i]) ? 0L : Math.max(0L, TerritoryBuffs.PRICES[i] - availableFunds());
-                    String state = menu.hasTerritoryBuff(i)
-                            ? "Already active for the whole faction."
+                    String state = !TerritoryBuffs.available(i)
+                            ? TerritoryBuffs.unavailableDescription(menu.hasTerritoryBuff(i), false)
+                            : menu.hasTerritoryBuff(i) ? "Already active for the whole faction."
                             : missing == 0L
                                     ? "One-time purchase. Paid from the faction Treasury only."
                                     : "Need " + emeralds(missing) + " more (faction Treasury).";
                     tooltip(g, TerritoryBuffs.LABELS[i] + "  |  "
-                            + TerritoryBuffs.DESCRIPTIONS[i] + "  |  " + state,
+                            + (TerritoryBuffs.available(i) ? TerritoryBuffs.DESCRIPTIONS[i] + "  |  " : "") + state,
                             tooltipX, tooltipY);
                 }
             }
@@ -1006,7 +1007,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             case LOOT -> String.format(Locale.ROOT, "Treasury %,de", menu.bank());
             case TREASURY -> String.format(Locale.ROOT, "Balance %,de", menu.bank());
             case DEFENSES -> buildingSection.label;
-            case TERRITORY -> ownedTerritoryBuffs() + "/" + TerritoryBuffs.COUNT + " active";
+            case TERRITORY -> territoryUpgradeSummary();
             case INTEL -> switch (intelSection) {
                 case 0 -> "Unit archive";
                 case 1 -> "Host archive";
@@ -1022,19 +1023,18 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             case LOOT -> "Rewards stay concealed until opened · purchases use the shared Treasury";
             case TREASURY -> "Every transaction is faction-wide and recorded in recent activity";
             case DEFENSES -> "Free review and plans · commission from the Treasury · supply blocks through Workers storage";
-            case TERRITORY -> "Permanent decrees affect every faction member · construction lives in Building";
+            case TERRITORY -> "Unavailable upgrades cannot be purchased · saved ownership is retained";
             case INTEL -> "Ctrl+F: search · Page Up / Down: read · Home / End: jump";
             case CIVILIANS -> "Each living resident pays one emerald per full in-game day; taxes pause if stranded or the core is occupied";
             default -> "";
         };
     }
 
-    private int ownedTerritoryBuffs() {
-        int owned = 0;
-        for (int i = 0; i < TerritoryBuffs.COUNT; i++) {
-            if (menu.hasTerritoryBuff(i)) owned++;
-        }
-        return owned;
+    private int activeTerritoryBuffs() { return TerritoryBuffs.activeCount(menu.territoryBuffMask()); }
+    private int retainedTerritoryBuffs() { return TerritoryBuffs.retainedCount(menu.territoryBuffMask()); }
+    private String territoryUpgradeSummary() {
+        return activeTerritoryBuffs() + " active" + (retainedTerritoryBuffs() == 0
+                ? "" : " · " + retainedTerritoryBuffs() + " retained");
     }
 
     /** Textured hanging crest banner rendered from the HUD atlas. */
@@ -1537,17 +1537,18 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             int cx = layout.x() + 10 + col * (cellW + 8);
             int cy = gridTop + row * (cellH + 8);
             boolean owned = menu.hasTerritoryBuff(i);
-            int accent = owned ? CommandPalette.ACCENT_EMERALD
+            boolean enabled = TerritoryBuffs.available(i);
+            int accent = !enabled ? CommandPalette.ACCENT_GOLD : owned ? CommandPalette.ACCENT_EMERALD
                     : (canAfford(TerritoryBuffs.PRICES[i])
                             ? CommandPalette.ACCENT_GOLD
                             : CommandPalette.ACCENT_STEEL);
-            if (owned) CommandFrame.cardDimmed(g, cx, cy, cellW, cellH);
+            if (owned || !enabled) CommandFrame.cardDimmed(g, cx, cy, cellW, cellH);
             else CommandFrame.card(g, cx, cy, cellW, cellH, accent,
                     over(mouseX, mouseY, cx, cy, cellW, cellH));
 
             // Readable heading replaces the former ambiguous flag glyph.
             if (!layout.compact()) {
-                String stateLabel = owned ? "ACTIVE" : "UPGRADE";
+                String stateLabel = !enabled ? (owned ? "OWNED · PAUSED" : "UNAVAILABLE") : owned ? "ACTIVE" : "UPGRADE";
                 int stateWidth = drawBadge(g, stateLabel, cx + cellW - 7,
                         cy + 6, accent);
                 text(g, TerritoryBuffs.LABELS[i], cx + 10, cy + 10,
@@ -1558,9 +1559,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             }
 
             // Multi-line description below the label.
-            String desc = TerritoryBuffs.DESCRIPTIONS[i];
+            String desc = !enabled ? TerritoryBuffs.unavailableDescription(owned, layout.compact())
+                    : layout.compact() ? TerritoryBuffs.compactSummary(i) : TerritoryBuffs.DESCRIPTIONS[i];
             if (layout.territoryDescriptionLines() > 0) {
-                drawWrappedText(g, layout.compact() ? TerritoryBuffs.compactSummary(i) : desc,
+                drawWrappedText(g, desc,
                         cx + 10, cy + 28, cellW - 20, layout.territoryDescriptionLines(), CommandPalette.TEXT_MUTED);
             }
         }
@@ -1576,21 +1578,20 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int y = layout.territoryFreeTop();
         int w = layout.width() - 20;
         int h = available;
-        int owned = ownedTerritoryBuffs();
+        int active = activeTerritoryBuffs();
         CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_TEAL);
         text(g, "FACTION UPGRADES", x + 9, y + 6,
                 Math.max(1, w / 3 - 18), CommandPalette.ACCENT_TEAL);
-        String summary = owned + " of " + TerritoryBuffs.COUNT
-                + " permanent upgrades active";
+        String summary = territoryUpgradeSummary();
         text(g, summary, x + w / 3, y + 6,
                 Math.max(1, w - w / 3 - 9), CommandPalette.TEXT);
         if (h >= 40) {
             CommandFrame.progress(g, x + 9, y + 19, w - 18, 5,
-                    owned / (float) TerritoryBuffs.COUNT,
+                    active / (float) TerritoryBuffs.availableCount(),
                     CommandPalette.ACCENT_TEAL);
-            text(g, owned == TerritoryBuffs.COUNT
-                            ? "All upgrades are active across your faction"
-                            : "Permanent upgrades benefit your faction",
+            text(g, retainedTerritoryBuffs() > 0
+                            ? "Unavailable effects stay paused; previous ownership is saved"
+                            : "Unavailable upgrades cannot be purchased",
                     x + 9, y + 29, w - 18, CommandPalette.TEXT_DIM);
         }
         if (h >= 62) {

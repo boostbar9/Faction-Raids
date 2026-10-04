@@ -638,6 +638,20 @@ public final class NativeHudQa {
                     view.put("nativePortraits", portraitEvidence());
                     view.put("portraitLogicalSize", CoreHireLayout.fit(mc.screen.width, mc.screen.height).hirePortraitSize());
                 }
+                if (currentPage() == CoreCommandPage.TERRITORY) {
+                    Button[] upgrades = (Button[]) read("territoryBuffs");
+                    for (int i : new int[]{0, 1}) require(!upgrades[i].active
+                                    && upgrades[i].getMessage().getString().equals("Unavailable"),
+                            "Unimplemented territory upgrade remains purchasable or claims active");
+                    require(menu().territoryBuffMask() == 5 && menu().bank() == 480,
+                            "Disabled-state rendering changed illustrative ownership or funds");
+                    int active = com.devfarinsky.siegeoverhaul.core.TerritoryBuffs.activeCount(menu().territoryBuffMask());
+                    int retained = com.devfarinsky.siegeoverhaul.core.TerritoryBuffs.retainedCount(menu().territoryBuffMask());
+                    require(active == 1 && retained == 1, "Unavailable owned effect was counted as active");
+                    view.put("territoryAvailability", Map.of("ownershipMask", menu().territoryBuffMask(),
+                            "active", active, "retained", retained, "unavailableButtons", 2));
+                    check("Unavailable territory upgrades stay disabled and preserve sample ownership at " + capture);
+                }
                 if (currentPage() == CoreCommandPage.CIVILIANS) {
                     var layout = (CoreHireLayout) read("layout");
                     int height = layout.contentBottom() - layout.contentY() - 30;

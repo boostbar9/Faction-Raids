@@ -74,6 +74,24 @@ public final class TerritoryBuffs {
         return has(core, index);
     }
 
+    /** Stored ownership remains intact while unimplemented effects cannot be sold. */
+    public static boolean available(int index) { return index == 2 || index == 3; }
+    public static int availableCount() { return 2; }
+    public static int activeCount(int ownershipMask) {
+        int count = 0;
+        for (int i = 0; i < COUNT; i++) if (available(i) && (ownershipMask & (1 << i)) != 0) count++;
+        return count;
+    }
+    public static int retainedCount(int ownershipMask) {
+        int count = 0;
+        for (int i = 0; i < COUNT; i++) if (!available(i) && (ownershipMask & (1 << i)) != 0) count++;
+        return count;
+    }
+    public static String unavailableDescription(boolean owned, boolean compact) {
+        return owned ? (compact ? "Unavailable; ownership saved" : "Effect unavailable. Previous ownership is retained.")
+                : (compact ? "Unavailable; no charge" : "Temporarily unavailable. No emeralds will be charged.");
+    }
+
     public static int price(int index) {
         if (index < 0 || index >= COUNT) return -1;
         return PRICES[index];
@@ -96,13 +114,18 @@ public final class TerritoryBuffs {
 
     /**
      * Charge the player and unlock the given buff on their current core.
-     * Bank first, then inventory. No-op when already owned.
+     * Treasury only. Unavailable effects and already-owned upgrades never charge.
      */
     public static boolean purchase(ServerPlayer player, BlockPos corePos, int index) {
         if (player == null || index < 0 || index >= COUNT) return false;
         RaidSavedData saved = RaidSavedData.get(player.server);
         CompoundTag core = saved.siegeCores.get(SiegeCore.key(player));
         if (core == null) return false;
+        if (!available(index)) {
+            player.sendSystemMessage(Component.literal(LABELS[index] + ": "
+                    + unavailableDescription(has(core, index), false)));
+            return false;
+        }
         if (has(core, index)) {
             player.sendSystemMessage(Component.literal(LABELS[index] + " already active."));
             return false;

@@ -107,12 +107,29 @@ class DefensePlanItemTest extends MinecraftTestSupport {
             }
         }
     }
-    @Test void legacyUnchangedTowerPreviewStillConfirms() throws Exception {
+    @Test void unchangedTowerGeometryWithCurrentPriceStillConfirms() throws Exception {
         try (Fixture f = new Fixture()) {
             f.arm(); f.stack.getTag().getCompound(DefensePreview.TAG).remove("Geometry");
             f.structures.when(() -> DefenseStructures.commission(f.player, BlockPos.ZERO.above(), Direction.EAST,
                     DefenseBlueprint.Kind.WATCHTOWER)).thenReturn(true);
             assertEquals(InteractionResult.CONSUME, f.item.useOn(f.context)); assertEquals(0, f.stack.getCount());
+        }
+    }
+    @Test void legacyPricePreviewCannotChargeUntilFreshReviewAndDelay() throws Exception {
+        for (var kind : DefenseBlueprint.Kind.values()) {
+            try (Fixture f = new Fixture()) {
+                var field = DefensePlanItem.class.getDeclaredField("kind"); field.setAccessible(true); field.set(f.item, kind);
+                f.arm(); f.stack.getTag().getCompound(DefensePreview.TAG).remove("QuotedPrice");
+                assertNull(f.selection());
+                assertEquals(InteractionResult.CONSUME, f.item.useOn(f.context));
+                f.noCommission(); assertEquals(1, f.stack.getCount());
+                assertFalse(f.selection().canConfirm(BlockPos.ZERO.above(), 20));
+                f.item.useOn(f.context); f.noCommission();
+                when(f.level.getGameTime()).thenReturn(40L);
+                f.structures.when(() -> DefenseStructures.commission(f.player, BlockPos.ZERO.above(), Direction.EAST, kind)).thenReturn(true);
+                assertEquals(InteractionResult.CONSUME, f.item.useOn(f.context));
+                assertEquals(0, f.stack.getCount());
+            }
         }
     }
     private static class Fixture implements AutoCloseable {
