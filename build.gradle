@@ -228,10 +228,11 @@ tasks.named('test', Test).configure {
 // Opt-in native framebuffer/fixture QA. This source set is never part of jar.
 if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)) {
     def nativeQaMode = providers.gradleProperty('nativeQaMode').getOrElse('baseline')
-    if (!(nativeQaMode in ['baseline', 'perimeter-completion', 'territory-perimeter'])) throw new GradleException('Unsupported nativeQaMode')
+    if (!(nativeQaMode in ['baseline', 'perimeter-completion', 'territory-perimeter', 'camp-spawn'])) throw new GradleException('Unsupported nativeQaMode')
     def nativeQaDirectory = [baseline: 'build/native-qa/client',
                              'perimeter-completion': 'build/native-perimeter-qa/client',
-                             'territory-perimeter': 'build/native-territory-qa/client'][nativeQaMode]
+                             'territory-perimeter': 'build/native-territory-qa/client',
+                             'camp-spawn': 'build/native-camp-qa/client'][nativeQaMode]
     configurations { nativeQaCompanions }
     dependencies {
         nativeQaCompanions fg.deobf('curse.maven:workers-567450:8351157')

@@ -585,6 +585,11 @@ public final class NativeTerritoryPerimeterQa {
         BuilderEntity builder = builder(level); var goal = liveBuildGoal; var storageGoal = liveStorageGoal;
         result.put("placed", placed(level)); result.put("treasury", owner == null ? -1 : balance(owner));
         result.put("builderPosition", builder.position().toString()); result.put("builderNoAi", builder.isNoAi());
+        var builderData = builder.getPersistentData();
+        result.put("selfClearanceRequests", builderData.getInt("SiegeSelfClearanceRequests"));
+        if (builderData.contains("SiegeSelfClearanceTarget", net.minecraft.nbt.Tag.TAG_LONG))
+            result.put("selfClearanceTarget", BlockPos.of(builderData.getLong("SiegeSelfClearanceTarget")).toShortString());
+        result.put("selfClearanceBounds", builderData.getString("SiegeSelfClearanceBounds"));
         result.put("sleeping", builder.needsToSleep()); result.put("followState", builder.getFollowState());
         require(goal != null && storageGoal != null, "Fresh native goal references were unavailable after world load");
         result.put("nativeBuildState", String.valueOf(goal.state)); result.put("nativeTarget", String.valueOf(goal.blockPos));
@@ -619,6 +624,38 @@ public final class NativeTerritoryPerimeterQa {
         result.put("placedCobble", fixture.plan().blocks().keySet().stream().filter(p -> level.getBlockState(BlockPos.of(p)).is(Blocks.COBBLESTONE)).count());
         result.put("placedOak", fixture.plan().blocks().keySet().stream().filter(p -> level.getBlockState(BlockPos.of(p)).is(Blocks.OAK_PLANKS)).count());
         if (detailed) {
+            result.put("builderUuid", builder.getUUID().toString());
+            result.put("builderBounds", builder.getBoundingBox().toString());
+            result.put("builderWidth", builder.getBbWidth()); result.put("builderHeight", builder.getBbHeight());
+            result.put("registeredBuilderWidth", builder.getType().getDimensions().width);
+            result.put("registeredBuilderHeight", builder.getType().getDimensions().height);
+            var mutationCells = NativeConstructionGuard.mutationCells(goal);
+            result.put("nativeMutationCandidates", mutationCells.stream().map(BlockPos::toShortString).toList());
+            var occupants = new ArrayList<Map<String, Object>>();
+            var footprint = new net.minecraft.world.phys.AABB(fixture.plan().min(), fixture.plan().max().offset(1, 1, 1));
+            for (var entity : level.getEntities((net.minecraft.world.entity.Entity) null, footprint,
+                    net.minecraft.world.entity.Entity::isAlive)) {
+                var occupant = new LinkedHashMap<String, Object>();
+                occupant.put("uuid", entity.getUUID().toString());
+                occupant.put("type", String.valueOf(ForgeRegistries.ENTITY_TYPES.getKey(entity.getType())));
+                occupant.put("position", entity.position().toString()); occupant.put("bounds", entity.getBoundingBox().toString());
+                occupant.put("isTestBuilder", entity == builder); occupant.put("isOwner", entity == owner);
+                occupant.put("isNativeArea", entity == rawArea);
+                occupant.put("isFixtureAuxiliary", fixture.parkedAuxiliaries().contains(entity.getUUID().toString()));
+                occupant.put("blocksPlacement", NativeConstructionGuard.blocksPlacement(entity));
+                if (entity instanceof net.minecraft.world.entity.Mob mob) occupant.put("noAi", mob.isNoAi());
+                occupant.put("intersectedMutationCells", mutationCells.stream()
+                        .filter(cell -> new net.minecraft.world.phys.AABB(cell).intersects(entity.getBoundingBox()))
+                        .map(BlockPos::toShortString).toList());
+                occupant.put("intersectedPendingCells", fixture.plan().blocks().entrySet().stream()
+                        .filter(entry -> !entry.getValue().equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(
+                                level.getBlockState(BlockPos.of(entry.getKey())).getBlock()))))
+                        .filter(entry -> new net.minecraft.world.phys.AABB(BlockPos.of(entry.getKey())).intersects(entity.getBoundingBox()))
+                        .limit(32).map(entry -> BlockPos.of(entry.getKey()).toShortString()).toList());
+                occupants.add(occupant);
+                if (occupants.size() >= 64) break;
+            }
+            result.put("footprintEntities", occupants);
             var inventory = new ArrayList<Map<String, Object>>();
             for (int slot = 0; slot < builder.getInventory().getContainerSize(); slot++) {
                 var value = new LinkedHashMap<>(stack(builder.getInventory().getItem(slot))); value.put("slot", slot); inventory.add(value);

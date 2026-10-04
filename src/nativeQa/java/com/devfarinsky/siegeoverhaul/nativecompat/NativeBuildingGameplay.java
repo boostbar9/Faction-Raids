@@ -770,6 +770,7 @@ final class NativeBuildingGameplay {
         Map<String, Object> snap = new LinkedHashMap<>();
         snap.put("when", when); snap.put("gameTime", level.getGameTime()); snap.put("stage", stage);
         snap.put("builderPosition", builder.position().toString()); snap.put("builderBounds", builder.getBoundingBox().toString());
+        selfClearanceTelemetry(snap, builder);
         snap.put("placedBlocks", placed(level)); snap.put("suppliedCobblestone", suppliedCobble); snap.put("suppliedOakPlanks", suppliedOak);
         snap.put("mainHand", stackDescription(builder.getMainHandItem()));
         snap.put("offHand", stackDescription(builder.getOffhandItem()));
@@ -894,6 +895,7 @@ final class NativeBuildingGameplay {
         if (fixture == null) return result;
         BuilderEntity builder = builder(level);
         result.put("builderPosition", builder.position().toString()); result.put("builderBounds", builder.getBoundingBox().toString());
+        selfClearanceTelemetry(result, builder);
         result.put("navigationDone", builder.getNavigation().isDone());
         var nativeGoal = NATIVE_BUILD_GOALS.get(builder.getUUID());
         if (nativeGoal != null) {
@@ -923,6 +925,13 @@ final class NativeBuildingGameplay {
         }
         result.put("footprintEntities", occupants);
         return result;
+    }
+    private static void selfClearanceTelemetry(Map<String, Object> result, BuilderEntity builder) {
+        var data = builder.getPersistentData();
+        result.put("selfClearanceRequests", data.getInt("SiegeSelfClearanceRequests"));
+        if (data.contains("SiegeSelfClearanceTarget", Tag.TAG_LONG))
+            result.put("selfClearanceTarget", BlockPos.of(data.getLong("SiegeSelfClearanceTarget")).toShortString());
+        result.put("selfClearanceBounds", data.getString("SiegeSelfClearanceBounds"));
     }
     private static void advance(long now, int next, int delay) { stage = next; stageSince = now; resumeAt = now + delay; }
     private static void check(String text) { CHECKS.add(text); }
