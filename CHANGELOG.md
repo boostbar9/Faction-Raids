@@ -1,6 +1,7 @@
 ## 4.52.0-preview.1 — Building system candidate (unreleased)
 
-- Consolidates automatic perimeter, all six existing plans and nearby construction reporting in one Building section while preserving the other command sections and Treasury prices.
+- Consolidates automatic perimeter, all six existing plans and nearby construction reporting in one Building section while preserving the other command sections.
+- Reduces new automatic perimeter commissions to one flat 64-emerald Treasury fee for the whole territory. Supplied blocks stay separate; existing paid jobs and claim-purchase costs are unchanged.
 - Adds exact five-wide template-style perimeter planning inside claims, retained material styles, a free owner-bound plan preview, whole-site revalidation and deliberate paid confirmation. Unsafe or oversized plans are blocked rather than partially queued.
 - Adds a protected native Workers BuildArea extension under verification, keeping the native shovel renderer, blueprint transform, builder and storage behavior while separating accessible marker location from immutable construction origin.
 - Adds guarded native work, strict live ownership/claim and obstacle checks, durable reservations and authenticated owner controls. Solid obstructions remain protected; no blanket excavation is enabled.

@@ -1,6 +1,7 @@
 package com.devfarinsky.siegeoverhaul.core;
 import com.devfarinsky.siegeoverhaul.MinecraftTestSupport;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
+import com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge;
 import com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -29,20 +30,21 @@ class PerimeterHandoffTest extends MinecraftTestSupport {
         // This used to move the validated builder outside its supply range.
         when(builder.distanceToSqr(player)).thenReturn(40000D);
         var plan=PerimeterBlueprint.create(Set.of(new ChunkPos(0,0)),(x,z)->PerimeterBlueprint.Surface.ready(64),PerimeterBlueprint.Palette.COBBLESTONE);
-        var prepared=new PerimeterConstruction.Preparation(builder,plan,"claim",null);var order=new ArrayList<String>();
+        var prepared=new PerimeterConstruction.Preparation(builder,plan,"claim",null,
+                new RecruitsClaimsBridge.TerritorySnapshot("blue",Set.of(new ChunkPos(0,0)),null));var order=new ArrayList<String>();
         try(var bridge=mockStatic(WorkersBridge.class);var guard=mockStatic(NativeConstructionGuard.class);
             var payment=mockStatic(PaymentSource.class);var access=mockStatic(WallBuilderAccess.class)) {
             bridge.when(()->WorkersBridge.createProtectedPlayerArea(eq(player),eq(builder),any(),anyInt(),anyInt(),anyInt(),any())).thenReturn(area);
             bridge.when(()->WorkersBridge.startBlueprint(eq(area),any())).thenAnswer(call->{order.add("blueprint");return null;});
             guard.when(()->NativeConstructionGuard.protect(player,builder,area,PerimeterConstruction.reservedCells(plan)))
-                    .thenAnswer(call->{order.add("protected");return true;});
+                    .thenAnswer(call->{assertTrue(PerimeterTerritory.tracked(area));order.add("protected");return true;});
             bridge.when(()->WorkersBridge.assignBuildAreaDirectly(builder,area)).thenAnswer(call->{order.add("assigned");return accepts;});
-            payment.when(()->PaymentSource.consume(player,900)).thenAnswer(call->{assertEquals(List.of("blueprint","protected","assigned"),order);order.add("paid");return pays;});
+            payment.when(()->PaymentSource.consume(player,64)).thenAnswer(call->{assertEquals(List.of("blueprint","protected","assigned"),order);order.add("paid");return pays;});
             guard.when(()->NativeConstructionGuard.activate(area)).thenAnswer(call->{assertEquals("paid",order.get(order.size()-1));order.add("activated");return true;});
             bridge.when(()->WorkersBridge.releasePlayerJob(builder,area)).thenReturn(detaches);
             bridge.when(()->WorkersBridge.discardPlayerArea(area)).thenAnswer(call->{area.discard();return true;});
             assertEquals(expected,PerimeterConstruction.startJob(player,prepared,1));
-            payment.verify(()->PaymentSource.consume(player,900),accepts?times(1):never());
+            payment.verify(()->PaymentSource.consume(player,64),accepts?times(1):never());
             guard.verify(()->NativeConstructionGuard.activate(area),expected?times(1):never());
             bridge.verify(()->WorkersBridge.teleportBuilderNear(any(),any(),any()),never());
             bridge.verify(()->WorkersBridge.discardPlayerArea(area),!expected&&detaches?times(1):never());

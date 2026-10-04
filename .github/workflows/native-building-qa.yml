@@ -65,6 +65,10 @@ jobs:
             timeout --signal=TERM --kill-after=60s 20m ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true runClient 2>&1 | tee build/native-qa/evidence/client-console.log
           '
 
+      - name: Audit exact pinned native inventory bytecode
+        if: always()
+        run: python3 scripts/audit-native-inventory-bytecode.py build/native-qa/evidence
+
       - name: Verify evidence contract
         run: |
           python3 - <<'PY'
@@ -72,6 +76,9 @@ jobs:
           from pathlib import Path
           root = Path('build/native-qa/evidence')
           data = json.loads((root / 'result.json').read_text())
+          audit = json.loads((root / 'native-bytecode-audit.json').read_text())
+          assert audit['status'] == 'passed' and audit['noVendorJarsUploaded'], audit
+          assert sum(len(v['classes']) for v in audit['artifacts'].values()) == 11, audit
           assert data['status'] == 'passed', data
           assert data['gameplay']['status'] == 'passed', data.get('gameplay')
           expected = [

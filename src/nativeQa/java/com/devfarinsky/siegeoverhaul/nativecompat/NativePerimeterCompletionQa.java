@@ -177,7 +177,7 @@ public final class NativePerimeterCompletionQa {
             }
             case 2 -> {
                 if (now - stageTick < 20) return Action.NONE;
-                require(balance(owner) == 1100 && owner.getMainHandItem().isEmpty(), "Real plan-use packet did not charge exactly 900 and consume one plan");
+                require(balance(owner) == 1936 && owner.getMainHandItem().isEmpty(), "Real plan-use packet did not charge exactly 64 and consume one plan");
                 require(builder(level).getPersistentData().hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID), "Production builder/job link missing");
                 jobId = builder(level).getPersistentData().getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID);
                 require(level.getEntity(jobId) instanceof ProtectedBuildArea, "Real paid protected job missing");
@@ -193,13 +193,13 @@ public final class NativePerimeterCompletionQa {
                 builder(level).setNoAi(false); // Last fixture write to the tested worker; native AI owns all movement/work now.
                 constructionStarted = lastProgress = System.nanoTime(); placedBefore = placed(level);
                 owner.teleportTo(level, 136.5, 65, -5.5, 0, 10); // Stationary survival observer, outside the claimed ring.
-                check("Actual client plan-use packet produces one guarded native job, exactly 900 Treasury debit and consumed plan");
+                check("Actual client plan-use packet produces one guarded native job, exactly 64 Treasury debit and consumed plan");
                 sample(level, owner, "commissioned-ai-enabled"); advance(now, 3);
                 return Action.USE_PLAN; // Ordinary second use of the now-empty hand must not commission again.
             }
             case 3 -> {
                 if (now - stageTick < 20) return Action.NONE;
-                require(balance(owner) == 1100 && areaCount(level) == 1, "Repeated client use charged or created another job");
+                require(balance(owner) == 1936 && areaCount(level) == 1, "Repeated client use charged or created another job");
                 check("Repeated real client use after plan consumption cannot double-charge or create another job");
                 advance(now, 4);
             }
@@ -209,7 +209,7 @@ public final class NativePerimeterCompletionQa {
                 lastSampleTick = now;
                 long placed = placed(level);
                 if (placed != placedBefore) { lastProgress = System.nanoTime(); placedBefore = placed; }
-                require(balance(owner) == 1100, "Native construction charged Treasury again");
+                require(balance(owner) == 1936, "Native construction charged Treasury again");
                 conservation(level, owner);
                 if (SAMPLES.isEmpty() || now % 200 < 20 || placed == NativePerimeterFixture.BLOCKS)
                     sample(level, owner, "native-progress");
@@ -227,10 +227,10 @@ public final class NativePerimeterCompletionQa {
                 require(level.getEntity(jobId) == null || ((ProtectedBuildArea) level.getEntity(jobId)).isDone(),
                         "Exact world completion did not reach native marker completion");
                 REPORT.put("finalDiagnostics", diagnostics(level, owner, true));
-                REPORT.put("completedBlocks", placed(level)); REPORT.put("treasuryDebit", 900);
+                REPORT.put("completedBlocks", placed(level)); REPORT.put("treasuryDebit", 64);
                 REPORT.put("materialCounts", Map.of("minecraft:cobblestone", NativePerimeterFixture.COBBLE, "minecraft:oak_planks", NativePerimeterFixture.OAK));
                 REPORT.put("nativeCompletionObserved", true);
-                check("Exact block states, unchanged non-plan cells, zero residual/loose stock and single 900 charge remain stable after completion");
+                check("Exact block states, unchanged non-plan cells, zero residual/loose stock and single 64 charge remain stable after completion");
                 // Only after all payment, native-completion, geometry and stock checks pass: visual fixture camera.
                 owner.setGameMode(GameType.SPECTATOR); owner.teleportTo(level, 151.5, 88, -12.5, 40, 45);
                 advance(now, 6);
@@ -249,7 +249,7 @@ public final class NativePerimeterCompletionQa {
     }
 
     private static void verifyExactCompletion(ServerLevel level, ServerPlayer owner) {
-        require(placed(level) == NativePerimeterFixture.BLOCKS && balance(owner) == 1100, "Completion geometry/payment mismatch");
+        require(placed(level) == NativePerimeterFixture.BLOCKS && balance(owner) == 1936, "Completion geometry/payment mismatch");
         for (var entry : fixture.plan().blocks().entrySet()) {
             BlockState expected = ForgeRegistries.BLOCKS.getValue(new net.minecraft.resources.ResourceLocation(entry.getValue())).defaultBlockState();
             require(level.getBlockState(BlockPos.of(entry.getKey())).equals(expected), "Wrong exact block state at " + BlockPos.of(entry.getKey()));

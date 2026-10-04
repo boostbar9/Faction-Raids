@@ -69,8 +69,9 @@ public final class NativeConstructionGuard {
         String review = inventoryReviewProblem(builder);
         if (review != null) return review;
         try {
-            return ProtectedBuilderHandMirror.activeUse(builder)
-                    ? "Builder is using an item; wait for it to finish before commissioning. No payment taken." : null;
+            if (ProtectedBuilderHandMirror.activeUse(builder))
+                return "Builder is using an item; wait for it to finish before commissioning. No payment taken.";
+            return ProtectedStorageAccess.runningProblem(builder);
         } catch (RuntimeException | LinkageError unavailable) {
             return "Builder item-use state cannot be verified; try again when it is idle. No payment taken.";
         }
@@ -106,7 +107,8 @@ public final class NativeConstructionGuard {
         String commissionProblem = commissionProblem(builder);
         if (commissionProblem != null) return pause(area, commissionProblem);
         try {
-            if (!WallBuilderAccess.install(builder)) return pause(area, "Paused: native protection hook unavailable");
+            if (!WallBuilderAccess.install(builder) || !ProtectedStorageAccess.install(builder))
+                return pause(area, "Paused: native protection or storage persistence hook unavailable");
             var plan = AcceptedConstructionPlan.capture(area);
             var reservation = AcceptedConstructionReservation.capture(level, plan, reservedCells);
             var point = SiegeCore.point(owner.server, SiegeCore.key(owner));
@@ -199,6 +201,14 @@ public final class NativeConstructionGuard {
             }
             data.remove(STATUS);
         }
+        if (hasProtectedReceipt(builder)) {
+            if (!ProtectedStorageAccess.install(builder))
+                return pauseStorage(builder, "Paused: native storage persistence hook unavailable");
+            if (builder instanceof com.talhanation.workers.entities.BuilderEntity nativeBuilder) {
+                String requests=ProtectedTransferCapacity.requestsProblem(nativeBuilder);
+                if(requests!=null)return pauseStorage(builder,requests);
+            }
+        }
         Entity area = currentArea(builder);
         if (!protectedArea(area)) return true;
         if (WallBuilderAccess.install(builder)) {
@@ -207,6 +217,52 @@ public final class NativeConstructionGuard {
             return true;
         }
         return pause(area, "Paused: native protection hook unavailable");
+    }
+
+    static boolean hasProtectedReceipt(Mob builder) {
+        return builder != null && builder.getPersistentData().hasUUID(PROTECTED_LINK);
+    }
+
+    static String storageProblem(Mob builder, Set<BlockPos> containers) {
+        if (!(builder.level() instanceof ServerLevel level) || !hasProtectedReceipt(builder))
+            return "Paused: protected storage context is unavailable";
+        String runtime = availabilityProblem(); if (runtime != null) return runtime;
+        if (needsInventoryReview(builder)) return inventoryReviewProblem(builder);
+        var data = builder.getPersistentData();
+        if (!validHandReceipt(data, ConstructionEditLedger.get(level.getServer().overworld())))
+            return "Paused: protected storage receipt is unavailable";
+        Entity area = level.getServer().overworld().getEntity(data.getUUID(PROTECTED_LINK));
+        if (!(area instanceof ProtectedBuildArea) || !area.isAlive())
+            return "Paused: load the protected construction marker before resupply";
+        if (!commissionPaid(area)) return "Paused: commission not completed";
+        try {
+            Snapshot snapshot = snapshot(area);
+            if (!ConstructionEditLedger.get(level.getServer().overworld()).matches(area.getUUID(), snapshot.reservation.cells))
+                return "Paused: protected storage reservation history differs from the accepted job";
+            if (!snapshot.builder.equals(builder.getUUID())) return "Paused: storage worker assignment changed";
+            if (!snapshot.owner.equals(WorkersBridge.readOwner(area))) return "Paused: protected inventory owner changed";
+            return NativeInventoryAuthority.problem(level, builder, snapshot.owner,
+                    snapshot.coreKey, snapshot.corePos, containers);
+        } catch (RuntimeException | LinkageError unavailable) {
+            return "Paused: protected storage contract cannot be verified";
+        }
+    }
+
+    static boolean sharedStorageFactionMatches(Mob builder) {
+        if (!(builder.level() instanceof ServerLevel level) || !hasProtectedReceipt(builder)) return false;
+        Entity area=level.getServer().overworld().getEntity(builder.getPersistentData().getUUID(PROTECTED_LINK));
+        if (!(area instanceof ProtectedBuildArea)) return false;
+        try {
+            String key=snapshot(area).coreKey;
+            var team=level.getScoreboard().getPlayersTeam(builder.getScoreboardName());
+            return key.startsWith("team:") && team!=null && key.substring(5).equals(team.getName());
+        } catch(RuntimeException unavailable){return false;}
+    }
+
+    static boolean pauseStorage(Mob builder, String reason) {
+        if (builder.level() instanceof ServerLevel level && hasProtectedReceipt(builder))
+            pause(level.getServer().overworld().getEntity(builder.getPersistentData().getUUID(PROTECTED_LINK)), reason);
+        return pause(builder, reason);
     }
 
     static boolean validHandReceipt(CompoundTag data, ConstructionEditLedger ledger) {
@@ -550,6 +606,9 @@ public final class NativeConstructionGuard {
             if (!snapshot.plan.matches(area) || !ConstructionEditLedger.get(level).matches(area.getUUID(), snapshot.reservation.cells)
                     || !Boolean.FALSE.equals(AcceptedConstructionPlan.call(area, "getFreeArea")))
                 return pause(area, "Paused: saved construction needs a new reviewed plan");
+            String territory = com.devfarinsky.siegeoverhaul.core.PerimeterTerritory.problem(level, area,
+                    snapshot.coreKey.startsWith("team:") ? snapshot.coreKey.substring(5) : null);
+            if (territory != null) return pause(area, territory);
             if (!scanChunksLoaded(level, snapshot.plan)) return pause(area, "Paused: load the complete construction footprint to resume");
             String clearance = snapshot.reservation.problem(level);
             if (clearance != null) return pause(area, clearance);

@@ -11,6 +11,8 @@ import com.devfarinsky.siegeoverhaul.items.ModItems;
 import com.talhanation.recruits.ClaimEvents;
 import com.talhanation.recruits.world.RecruitsClaim;
 import com.talhanation.workers.entities.BuilderEntity;
+import com.talhanation.workers.entities.ai.BuilderWorkGoal;
+import com.talhanation.workers.world.NeededItem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.core.BlockPos;
@@ -85,6 +87,7 @@ final class NativeBuildingGameplay {
     private static BlockPos plantCell;
     private static BlockPos sameStateEditCell;
     private static Map<Long, BlockState> perimeterBeforeEdit;
+    private static boolean recordedNativeRequestMetadata;
 
     private enum Action { NONE, USE_BLOCK, USE_AIR, CANCEL, SHOW, RELOAD, CAPTURE_REVIEW, CAPTURE_PAID, CAPTURE_COMPLETED, AIM_WALL, OPEN_CORE, LIVE_CORE_HUD, PLACE_EDIT, START_BREAK_EDIT, CONTINUE_BREAK_EDIT, DONE }
     private NativeBuildingGameplay() {}
@@ -237,6 +240,10 @@ final class NativeBuildingGameplay {
         if (stageSince < 0) stageSince = now;
         require(now - stageSince < 2400, "Gameplay stage " + stage + " timed out: " + diagnostics(level));
         if (now < resumeAt) return Action.NONE;
+        if (stage >= 9 && stage <= 18 && !recordedNativeRequestMetadata && !builder(level).neededItems.isEmpty()) {
+            stockSnapshot(level, "first-native-request-observed");
+            recordedNativeRequestMetadata = true; // Evidence remains available even if a new provenance gate pauses before first placement.
+        }
         if (stage == 18) {
             long currentPlaced = placed(level);
             String currentHand = String.valueOf(ForgeRegistries.ITEMS.getKey(builder(level).getMainHandItem().getItem()));
@@ -275,7 +282,7 @@ final class NativeBuildingGameplay {
             }
             case 100 -> { advance(now, 2, 25); return Action.USE_AIR; }
             case 2 -> {
-                require(balance(owner) == 1100, "Perimeter did not debit exactly 900 Treasury emeralds");
+                require(balance(owner) == 1936, "Perimeter did not debit exactly 64 Treasury emeralds");
                 jobId = linkedJob(level);
                 var area = area(level);
                 require(NativeConstructionGuard.commissionPaid(area), "Perimeter was not activated after payment");
@@ -287,7 +294,7 @@ final class NativeBuildingGameplay {
                                 && stackDescription(builder(level).getMainHandItem()).equals(mainHandBeforeFirstCommission),
                         "Initial protected handoff changed idle builder inventory or main-hand values");
                 check("Initial production commission value-preservingly binds an equal split mirror caused by idle native NBT reload");
-                check("Real perimeter plan packet commissions once, consumes plan and debits exactly 900 Treasury");
+                check("Real perimeter plan packet commissions once, consumes plan and debits exactly 64 Treasury");
                 advance(now, 101, 20); return Action.CAPTURE_PAID;
             }
             case 101 -> { advance(now, 3, 20); return Action.SHOW; }
@@ -300,13 +307,13 @@ final class NativeBuildingGameplay {
             case 300 -> { advance(now, 301, 20); return Action.OPEN_CORE; }
             case 301 -> {
                 if (!(owner.containerMenu instanceof CoreHireMenu menu)) return Action.NONE;
-                require(menu.stillValid(owner) && balance(owner) == 1100 && menu.bank() == 1100,
+                require(menu.stillValid(owner) && balance(owner) == 1936 && menu.bank() == 1936,
                         "Real core menu has wrong owner access or Treasury");
                 require(owner.getTeam() instanceof net.minecraft.world.scores.PlayerTeam
                                 && fixture.factionId().equals(owner.getTeam().getName()),
                         "Real core menu owner has wrong faction identity");
                 coreHudFaction = ((net.minecraft.world.scores.PlayerTeam) owner.getTeam()).getDisplayName().getString();
-                require(menu.factionName().equals(coreHudFaction), "Server core menu has wrong faction display");
+                // factionName is a client packet cache; the authoritative server value is its actual PlayerTeam.
                 coreHudMenuId = menu.containerId;
                 coreHudExpectedJobs = ConstructionReport.snapshot(owner);
                 require(coreHudExpectedJobs.size() == 1 && coreHudExpectedJobs.get(0).label().toLowerCase(Locale.ROOT).contains("perimeter"),
@@ -316,7 +323,7 @@ final class NativeBuildingGameplay {
             }
             case 302 -> {
                 if (owner.containerMenu instanceof CoreHireMenu) return Action.NONE;
-                require(balance(owner) == 1100 && protectedAreas(level) == 1
+                require(balance(owner) == 1936 && protectedAreas(level) == 1
                                 && NativeConstructionGuard.commissionPaid(area(level))
                                 && NativeConstructionGuard.hasReservation(level, jobId),
                         "Read-only live Building navigation changed Treasury, job or reservation");
@@ -347,7 +354,7 @@ final class NativeBuildingGameplay {
                 require(level.getBlockState(sameStateEditCell).is(Blocks.DIRT) && owner.getMainHandItem().isEmpty()
                                 && ConstructionEditLedger.get(level).edited(jobId),
                         "Actual Survival placement did not consume one dirt block and record the player edit");
-                require(balance(owner) == 1100, "Player placement changed the paid perimeter Treasury");
+                require(balance(owner) == 1936, "Player placement changed the paid perimeter Treasury");
                 advance(now, 305, 0); return Action.START_BREAK_EDIT;
             }
             case 305 -> {
@@ -363,7 +370,7 @@ final class NativeBuildingGameplay {
                 require(NativeConstructionGuard.status(area(level)).contains("site was edited"),
                         "Real native AI did not expose its player-edit pause: " + NativeConstructionGuard.status(area(level)));
                 require(perimeterUnchanged(level) && ConstructionEditLedger.get(level).edited(jobId)
-                                && balance(owner) == 1100 && NativeConstructionGuard.commissionPaid(area(level)),
+                                && balance(owner) == 1936 && NativeConstructionGuard.commissionPaid(area(level)),
                         "Native AI altered accepted cells, edit history or payment after a same-state player edit");
                 conservation(level); // Transfers may occur naturally, but all eight of each initial material must still exist.
                 stockSnapshot(level, "same-state-player-edit-native-pause-before-cancel");
@@ -378,7 +385,7 @@ final class NativeBuildingGameplay {
             case 4 -> {
                 require(level.getEntity(jobId) == null && !NativeConstructionGuard.hasReservation(level, jobId),
                         "Real perimeter cancellation did not retire marker/reservation");
-                require(balance(owner) == 1100 && builder(level).currentBuildArea == null,
+                require(balance(owner) == 1936 && builder(level).currentBuildArea == null,
                         "Perimeter cancellation refunded or left builder attached");
                 check("Real perimeter cancellation retires reservation/builder without refund");
                 plantCell = fixture.wallAnchor().offset(2, 0, 2);
@@ -391,7 +398,7 @@ final class NativeBuildingGameplay {
                 assertLivePlant(level);
                 RESULT.put("singleCellPlant", Map.of("cell", plantCell.toShortString(), "plant", "minecraft:dandelion",
                         "support", plantCell.below().toShortString(), "supportOutsideMutationPlan", true));
-                FactionBank.debit(core(owner), 1100); RaidSavedData.get(owner.server).setDirty();
+                FactionBank.debit(core(owner), 1936); RaidSavedData.get(owner.server).setDirty();
                 require(DefenseStructures.givePlan(owner, DefenseBlueprint.Kind.WALL.ordinal()), "Free manual plan delivery failed");
                 select(owner, ModItems.defensePlan(DefenseBlueprint.Kind.WALL).get());
                 owner.teleportTo(fixture.wallAnchor().getX() + .5, 65, fixture.wallAnchor().getZ() - 3.5);
@@ -592,7 +599,7 @@ final class NativeBuildingGameplay {
                 check("Restoring original raw fixture clearance resumes protected native work without another charge");
                 check("Native AI completes the exact manual template after resupply/restart with material conservation");
                 RESULT.put("completedManualBlocks", placed(level));
-                RESULT.put("manualTreasuryDebit", 90); RESULT.put("perimeterTreasuryDebit", 900);
+                RESULT.put("manualTreasuryDebit", 90); RESULT.put("perimeterTreasuryDebit", 64);
                 advance(now, 19, 30);
             }
             case 19 -> {
@@ -647,7 +654,7 @@ final class NativeBuildingGameplay {
         require(System.nanoTime() < coreHudDeadline, "Live core HUD packets or widgets did not become ready within 30 seconds");
         if (!(mc.screen instanceof CoreHireScreen screen) || !(mc.player.containerMenu instanceof CoreHireMenu menu)) return false;
         require(screen.getMenu() == menu && menu.containerId == coreHudMenuId, "Client/server live core menu identities differ");
-        if (menu.bank() != 1100 || !menu.factionName().equals(coreHudFaction)) return false;
+        if (menu.bank() != 1936 || !menu.factionName().equals(coreHudFaction)) return false;
         switch (coreHudClientStage) {
             case 0 -> {
                 for (int attempts = 0; !NativeBuildingQa.hasVisibleButton(mc, "Building") && attempts < 7; attempts++)
@@ -670,7 +677,7 @@ final class NativeBuildingGameplay {
                 require(menu.construction().equals(coreHudExpectedJobs), "Client construction rows differ from the actual server report");
                 RESULT.put("liveCoreHud", Map.of("menuId", coreHudMenuId, "faction", coreHudFaction,
                         "treasury", menu.bank(), "serverReportRows", List.copyOf(menu.construction()),
-                        "perimeterPriceSource", "Shared production constant; actual 900e debit asserted separately",
+                        "perimeterPriceSource", "Shared production constant; actual 64e debit asserted separately",
                         "perimeterPrice", TerritoryFortification.PRICE, "newCommissionActions", 0));
                 NativeBuildingQa.captureGameplay("17-live-core-construction.png");
                 coreHudClientStage = 4;
@@ -749,6 +756,30 @@ final class NativeBuildingGameplay {
         snap.put("protectedMainHandRebindCount", ProtectedBuilderHandMirror.rebindCount(builder.getPersistentData()));
         snap.put("protectedMainHandRebindPending", ProtectedBuilderHandMirror.pending(builder.getPersistentData()));
         snap.put("protectedMainHandReviewRequired", ProtectedBuilderHandMirror.reviewNeeded(builder.getPersistentData()));
+        snap.put("protectedStorageDirtyNotifications", ProtectedStorageAccess.dirtyNotifications(builder));
+        snap.put("nativeInventoryClass", builder.getInventory().getClass().getName());
+        snap.put("nativeInventorySupportedByCapacityGuard", ProtectedTransferCapacity.supportedInventory(builder.getInventory()));
+        var requests = new ArrayList<Map<String, Object>>();
+        for (NeededItem request : builder.neededItems) {
+            if (request == null) { requests.add(Map.of("nullRequest", true)); continue; }
+            var metadata = new LinkedHashMap<String, Object>();
+            metadata.put("requestClass", request.getClass().getName());
+            metadata.put("exactNativeRequestClass", request.getClass() == NeededItem.class);
+            metadata.put("count", request.count); metadata.put("required", request.required);
+            metadata.put("sourceKeyIsNull", request.sourceKey == null);
+            metadata.put("trustedMatcher", ProtectedTransferCapacity.trustedMatcher(request.matcher));
+            if (request.matcher != null) {
+                Class<?> matcher = request.matcher.getClass();
+                metadata.put("matcherClass", matcher.getName());
+                metadata.put("matcherHidden", matcher.isHidden()); metadata.put("matcherSynthetic", matcher.isSynthetic());
+                metadata.put("matcherFinal", java.lang.reflect.Modifier.isFinal(matcher.getModifiers()));
+                metadata.put("matcherNestHost", matcher.getNestHost().getName());
+                metadata.put("matcherNestHostIsBuilderWorkGoal", matcher.getNestHost() == BuilderWorkGoal.class);
+                metadata.put("matcherLoaderIsBuilderWorkGoalLoader", matcher.getClassLoader() == BuilderWorkGoal.class.getClassLoader());
+            }
+            requests.add(Map.copyOf(metadata));
+        }
+        snap.put("nativeRequestMetadata", requests); // No predicate invocation or class-name-based trust inference.
         var slots = new ArrayList<Map<String, Object>>();
         var identities = new IdentityHashMap<ItemStack, Integer>();
         for (int i = 0; i < builder.getInventory().getContainerSize(); i++) {

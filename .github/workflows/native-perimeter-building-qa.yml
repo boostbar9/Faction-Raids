@@ -69,7 +69,7 @@ jobs:
           assert data['mode'] == 'perimeter-completion', data
           assert data['status'] == 'passed', data
           assert data['completedBlocks'] == 968, data
-          assert data['treasuryDebit'] == 900, data
+          assert data['treasuryDebit'] == 64, data
           assert data['materialCounts'] == {'minecraft:cobblestone': 748, 'minecraft:oak_planks': 220}, data
           assert data['nativeCompletionObserved'] and data['completedCaptureTerrainCompiled'], data
           assert 0 < data['constructionSeconds'] <= 1200, data
@@ -82,7 +82,7 @@ jobs:
           for mod in ['workers', 'recruits', 'smallships', 'siegeweapons']:
               assert len(data['loadedCompanionArtifacts'][mod]['sha256']) == 64, mod
           final = data['finalDiagnostics']
-          assert final['placed'] == 968 and final['treasury'] == 1100, final
+          assert final['placed'] == 968 and final['treasury'] == 1936, final
           assert final['placedCobble'] == 748 and final['placedOak'] == 220, final
           for key in ['chestCobble', 'chestOak', 'builderCobble', 'builderOak', 'looseCobble', 'looseOak']:
               assert final[key] == 0, (key, final)

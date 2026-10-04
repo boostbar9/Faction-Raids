@@ -10,9 +10,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class EconomyDefaultsTest extends MinecraftTestSupport {
 
     @Test
-    void v428TuningAndEstablishedLootPricesSurviveThePatchRebase() {
+    void newWholeTerritoryPerimeterHasAFlat64EmeraldFee() {
+        assertEquals(64, TerritoryFortification.PRICE);
+    }
+
+    @Test
+    void establishedLootAndUpgradePricesRemainUnchanged() {
         assertEquals(5, RaidConfig.VICTORY_EMERALDS_PER_WAVE.get());
-        assertEquals(900, TerritoryFortification.PRICE);
         assertArrayEquals(new int[] {480, 400}, SiegeYard.PRICES);
         assertArrayEquals(new int[] {700, 500, 900, 600}, TerritoryBuffs.PRICES);
         assertEquals(16, CoreLoot.price(0));

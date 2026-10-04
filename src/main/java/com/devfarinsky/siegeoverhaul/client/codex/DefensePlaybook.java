@@ -1,5 +1,6 @@
 package com.devfarinsky.siegeoverhaul.client.codex;
 
+import com.devfarinsky.siegeoverhaul.core.TerritoryFortification;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
@@ -54,7 +55,7 @@ public final class DefensePlaybook {
             new Tip("Builders","Supply the construction site",
                     "Stock the exact materials shown by your plan in your owned Workers storage area with Builders enabled. The whole worksite must remain within storage reach. Native Workers handles tools, materials and work hours. Building > Construction reports your loaded jobs within 128 blocks."),
             new Tip("Builders","Review the automatic perimeter",
-                    "Building > Auto perimeter gives you a free Perimeter Plan. Hold it to review the template-style wall inside your claim. Use to confirm or sneak-use to cancel. The 900-emerald faction Treasury commission is separate from supplied blocks. Changed, blocked, steep or oversized plans need a fresh review before payment."),
+                    "Building > Auto perimeter gives you a free Perimeter Plan. Hold it to review the template-style wall inside your claim. Use to confirm or sneak-use to cancel. The flat " + TerritoryFortification.PRICE + "-emerald faction Treasury commission covers the whole perimeter and is separate from supplied blocks. Changed, blocked, steep or oversized plans need a fresh review before payment."),
             new Tip("Builders","Protected construction and owner controls",
                     "New protected jobs require Workers 2.0.3 and Recruits 1.15.2. Builders clear only unchanged small plants; solid obstructions, inventories and reactive surroundings stay protected. Jobs pause when the owner is offline or the site changes. Inspect the native shovel to change projection or cancel the job. Cancel leaves placed blocks intact and does not refund supplies or the commission."),
             // === Intel ===

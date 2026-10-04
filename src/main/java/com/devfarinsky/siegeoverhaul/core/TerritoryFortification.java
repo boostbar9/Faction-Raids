@@ -40,7 +40,8 @@ import java.util.*;
  */
 public final class TerritoryFortification {
 
-    public static final int PRICE = 900;
+    /** Flat fee for a new complete-territory commission; saved paid jobs are never repriced. */
+    public static final int PRICE = 64;
     /** Height of the wall segments. */
     public static final int WALL_HEIGHT = 3;
     /** Additional pillar height above the wall at chunk corners. */

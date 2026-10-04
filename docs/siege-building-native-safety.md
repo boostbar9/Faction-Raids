@@ -240,9 +240,89 @@ chunks are already loaded. Readiness stays false and progress unknown meanwhile;
 retry happens at the assignment/worker boundary, before approach caches can be
 retained. No reload path uses creative placement or replaces an edited blueprint.
 
-The native scan's inclusive volume is `width * depth * (height + 1)`, with a linear
-placement-stack lookup at each cell. Server preflight separately bounds that volume
-times planned block count; no replacement scan or unproven performance claim is made.
+The native scan's inclusive volume is `width * depth * (height + 1)`. The guarded
+subclass retains the original native scan and builds a temporary first-pending-entry
+index only for that synchronous scan; ordinary work still reads the live queues.
+The index is cleared in `finally`. Server preflight bounds the inclusive volume plus
+pending-cell count, and the actual native serializer independently enforces its NBT
+quota. No replacement scan or measured runtime performance claim is made.
+
+## Guarded native inventory transfers
+
+Pinned-runtime run `37163228609` separately reproduced a timing-dependent source
+persistence defect: a chest held 0 cobblestone immediately before save and 32 again
+immediately after reload, while placed blocks and builder inventory were unchanged.
+A later green conservation run does not disprove that defect. Workers
+`GetNeededItemsFromStorage.takeNeededItems` shrinks live source stacks without
+notifying their container, and its partial-accept rollback can restore the entire
+extracted count even when the native inventory retained part of it.
+
+The protected path wraps the existing resupply, deposit, position-upkeep and
+entity/storage-upkeep goals. It preserves their original ticks, selection,
+food/payment amounts and normal timers. Before replacing goals, it resolves every
+known class/API and rejects running old lifecycles, duplicate goals and unknown
+subclasses. A first commission that catches a worker finishing native storage is a
+retryable pre-payment refusal. An existing active receipt must retain all wrappers.
+
+Each transfer rechecks the current complete receipt/generation and exact reservation,
+worker owner, original core and authoritative current faction/claim context through
+`NativeInventoryAuthority`. Building still needs the owner online; inventory upkeep
+uses the explicitly documented persisted UUID/name/scoreboard authority instead,
+without pretending that offline player-only permissions were checked. Resupply and
+deposit require the original owner's storage marker. Native shared upkeep storage
+additionally requires the worker's current faction team and native `canWorkHere`.
+
+The wrapper validates the actual cached scan envelope against the marker's current
+envelope, with an 8,192-cell loaded/read budget including chest-neighbor and above
+reads. It never forces a chunk to load. Every source is re-resolved against its live
+vanilla block entity, chest connectivity or explicitly supported native entity
+inventory. Loot-table containers, unknown implementations, replaced/moved sources
+and stale caches pause. Exact native private storage-upkeep fields are inspected
+read-only by their audited names/types; no private state is written. Unsupported
+inspection fails closed. Missing position-upkeep containers pause rather than
+running an unbounded or unapproved nearby-container fallback.
+
+Resupply accepts only exact native `NeededItem` records with bounded counts and
+hidden, synthetic, final predicates whose JVM nest host/class loader identify the
+audited `BuilderWorkGoal`. It never executes an unknown predicate or parses a lambda
+name/captured fields. Known pure matchers operate only on detached, full-NBT-verified
+copies. A bounded simulation preserves native reverse matching/removal order and
+reserves one empty cargo slot for every possible extraction in that tick. Live
+request-list identity, request fields, inventory identities, exact counts and full
+serialized data (including ForgeCaps) are rechecked before the original transfer.
+Partial merge capacity is deliberately not counted as guaranteed empty capacity.
+Fragmented supplies that would need more cargo slots than exist request stack
+consolidation or another source; ordinary stock does not reserve a slot for every
+unrequested chest stack.
+
+Deposit continues through its original native item-only merge code only when every
+possible same-item cargo/destination pairing has identical full data other than the
+standard Count field. Otherwise it asks the owner to unload/separate differing item
+data. This conservative check includes potentially retained food/tools rather than
+calling extra keep/food callbacks. Safe ordinary native deposit remains available
+so native DONE can clear forcedDeposit/farmedItems. Upkeep also reserves an empty
+cargo slot per possible full arrow-stack extraction: builders inherit the native
+ranged interface, and upkeep's arrow branch ignores addItem leftovers. Its normal
+one-item food loop and equipment/payment logic remain native.
+
+The exact prevalidated source containers are retained across the original tick and
+receive `setChanged` in a finally boundary, including foodless equipment withdrawals.
+Forge dirty notification can inspect a second neighbor through a conductor, so the
+Manhattan-radius-two read envelope of every actual block-container/chest half must
+already be loaded before transfer and any retained dirty cleanup, in all six directions.
+No stack amount is repaired or normalized. Shared cleanup ordering prevents an old
+deferred chest-close/payment finalization from being replayed after a later upkeep
+starts. Old source locations remain mandatory for cleanup even after cancellation
+or target changes; cleanup checks loading, not future withdrawal authority. A partial
+native stop exception is not blindly replayed. Unrelated combat, carried food and
+physics are not blocked by an ordinary capacity/source pause. Cancellation remains
+available and ends transfer protection; already incurred bounded cleanup obligations
+remain until safely completed. Unknown callback effects or a partial transfer failure
+require explicit inventory review; no count is guessed and no new refund is added.
+
+These source boundaries still require the actual pinned-runtime capacity, source
+change, upkeep/deposit and repeated-save conservation checks. Unit fixtures establish
+contract branches; they do not establish the native gameplay result.
 
 ## Verification status and release gate
 

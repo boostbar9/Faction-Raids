@@ -5,6 +5,7 @@ import com.devfarinsky.siegeoverhaul.compat.ClaimBridge;
 import com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import com.devfarinsky.siegeoverhaul.core.SiegeCore;
+import com.devfarinsky.siegeoverhaul.core.PerimeterTerritory;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -37,13 +38,18 @@ final class NativeConstructionPolicy {
         var anchor = RaidSavedData.get(level.getServer()).anchors.get(coreKey);
         var claim = RecruitsClaimsBridge.resolveDefendingClaim(level, anchor).orElse(null);
         if (claim == null) return "Paused: original faction claim is unavailable";
+        String territoryProblem = PerimeterTerritory.problem(level, area, claim.ownerFactionStringId());
+        if (territoryProblem != null) return territoryProblem;
+        boolean wholeTerritory = PerimeterTerritory.tracked(area);
         var identity = anchor.withIdentity(claim.ownerFactionStringId(), anchor.teamDisplay());
         Map<ChunkPos, Boolean> allowed = new HashMap<>();
         for (BlockPos pos : cells) {
             if (pos.equals(corePos) || !level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)
                     || pos.getY() < level.getMinBuildHeight() || pos.getY() >= level.getMaxBuildHeight())
                 return "Paused: a planned cell is protected or unloaded";
-            if (!allowed.computeIfAbsent(new ChunkPos(pos), chunk -> claim.chunks().contains(chunk)
+            if (!allowed.computeIfAbsent(new ChunkPos(pos), chunk -> (wholeTerritory
+                    ? RecruitsClaimsBridge.isChunkOwnedBy(level, chunk, claim.ownerFactionStringId())
+                    : claim.chunks().contains(chunk))
                     && !ClaimBridge.isForeignClaim(level, chunk, identity)) || !level.mayInteract(player, pos))
                 return "Paused: claim or building permission changed";
         }

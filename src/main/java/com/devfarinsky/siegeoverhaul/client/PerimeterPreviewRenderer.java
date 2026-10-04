@@ -2,6 +2,7 @@ package com.devfarinsky.siegeoverhaul.client;
 
 import com.devfarinsky.siegeoverhaul.SiegeOverhaul;
 import com.devfarinsky.siegeoverhaul.core.PerimeterPreview;
+import com.devfarinsky.siegeoverhaul.core.TerritoryFortification;
 import com.devfarinsky.siegeoverhaul.items.PerimeterPlanItem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
@@ -63,7 +64,7 @@ public final class PerimeterPreviewRenderer {
         if (selection == null || mc.level != world || mc.screen != null || mc.options.hideGui) return;
         int width = Math.max(40, Math.min(460, mc.getWindow().getGuiScaledWidth() - 16));
         var lines = new ArrayList<FormattedCharSequence>();
-        for (String text : new String[]{"PERIMETER REVIEW · 900 faction Treasury emeralds", selection.materials(),
+        for (String text : new String[]{"PERIMETER REVIEW · " + TerritoryFortification.PRICE + " faction Treasury emeralds", selection.materials(),
                 selection.ready() ? "Use: confirm · Sneak-use: cancel · No charge until accepted" : selection.problem(),
                 selection.ready() ? "Exact grouped outline within 128 blocks. The server rechecks before building."
                         : "Blocked preview. Fix the problem, then use the plan to refresh. No payment taken."})

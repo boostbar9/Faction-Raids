@@ -6,6 +6,7 @@ import com.devfarinsky.siegeoverhaul.RaidSavedData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -133,6 +134,78 @@ public final class RecruitsClaimsBridge {
     /** Convenience overload keyed by a block position. */
     public static Optional<ClaimSnapshot> getClaimAt(ServerLevel level, BlockPos pos) {
         return pos == null ? Optional.empty() : getClaimAt(level, new ChunkPos(pos));
+    }
+
+    /**
+     * Complete same-faction Overworld territory, including separate claim records and islands.
+     * A missing/incompatible registry or an exceeded bound returns no partial chunk union.
+     */
+    public static TerritorySnapshot getFactionTerritory(ServerLevel level, String factionStringId, int maxChunks) {
+        if (!available() || level == null || !Level.OVERWORLD.equals(level.dimension()))
+            return TerritorySnapshot.failed("The complete Overworld faction territory could not be verified.");
+        try {
+            Object manager = claimManagerField.get(null);
+            if (manager == null) return TerritorySnapshot.failed("Waiting for the complete faction claim registry.");
+            Object all = getAllClaims.invoke(manager);
+            if (!(all instanceof Collection<?> claims))
+                throw new ReflectiveOperationException("getAllClaims did not return a collection");
+            return collectTerritory(claims, factionStringId, maxChunks, new TerritoryReader() {
+                @Override public String owner(Object claim) throws ReflectiveOperationException {
+                    return (String) claimGetOwnerFactionStringID.invoke(claim);
+                }
+                @Override public Collection<?> chunks(Object claim) throws ReflectiveOperationException {
+                    return (Collection<?>) claimGetClaimedChunks.invoke(claim);
+                }
+            });
+        } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            FactionLogger.LOG.warn("[SiegeOverhaul] Complete faction territory lookup failed", unavailable);
+            return TerritorySnapshot.failed("The complete faction territory could not be verified; no partial plan was created.");
+        }
+    }
+
+    interface TerritoryReader {
+        String owner(Object claim) throws ReflectiveOperationException;
+        Collection<?> chunks(Object claim) throws ReflectiveOperationException;
+    }
+
+    /** The same bounded union used by the native registry adapter and independent regression fixtures. */
+    static TerritorySnapshot collectTerritory(Collection<?> claims, String factionStringId, int maxChunks,
+                                               TerritoryReader reader) throws ReflectiveOperationException {
+        String faction = factionStringId == null ? "" : factionStringId.startsWith("team:")
+                ? factionStringId.substring(5) : factionStringId;
+        if (faction.isBlank() || maxChunks < 1 || maxChunks > 4096 || claims == null || claims.size() > 65536)
+            return TerritorySnapshot.failed("The complete faction claim registry exceeds the supported planning bounds.");
+        Set<ChunkPos> union = new HashSet<>();
+        int records = 0, totalEntries = 0;
+        for (Object claim : claims) {
+            if (claim == null || ++records > 65536)
+                return TerritorySnapshot.failed("The complete faction claim registry could not be verified.");
+            String owner = reader.owner(claim);
+            if (owner == null || owner.isBlank())
+                return TerritorySnapshot.failed("A claim owner is unresolved; the complete faction territory cannot be verified.");
+            if (!faction.equals(owner)) continue;
+            Collection<?> chunks = reader.chunks(claim);
+            if (chunks == null || chunks.size() > maxChunks)
+                return TerritorySnapshot.failed("The entire faction territory exceeds the " + maxChunks + "-chunk planning limit.");
+            int entries = 0;
+            for (Object value : chunks) {
+                if (!(value instanceof ChunkPos chunk) || ++entries > maxChunks || ++totalEntries > 65536)
+                    return TerritorySnapshot.failed("A faction claim contains invalid or excessive chunk data.");
+                union.add(chunk);
+                if (union.size() > maxChunks)
+                    return TerritorySnapshot.failed("The entire faction territory exceeds the " + maxChunks + "-chunk planning limit.");
+            }
+        }
+        if (union.isEmpty()) return TerritorySnapshot.failed("Your faction has no verified territory to fortify.");
+        return new TerritorySnapshot(faction, union, null);
+    }
+
+    public record TerritorySnapshot(String factionStringId, Set<ChunkPos> chunks, String problem) {
+        public TerritorySnapshot {
+            chunks = chunks == null ? Set.of() : Set.copyOf(chunks);
+        }
+        static TerritorySnapshot failed(String reason) { return new TerritorySnapshot("", Set.of(), reason); }
+        public boolean ready() { return problem == null && factionStringId != null && !factionStringId.isBlank() && !chunks.isEmpty(); }
     }
 
     // ------------------------------------------------------------------ anchor-aware helpers

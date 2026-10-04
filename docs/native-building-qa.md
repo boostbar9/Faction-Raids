@@ -194,18 +194,18 @@ The initial bounded gameplay sequence covers:
   pickaxe and undergoes native NBT save/load. Equal-valued but distinct hand and
   inventory-slot-5 objects must be observed. Production acceptance, without a QA
   repair call, must bind them exactly once while preserving every inventory value.
-- Actual client plan-use confirmation, an exact 900-emerald Treasury debit, consumed
+- Actual client plan-use confirmation, an exact 64-emerald Treasury debit, consumed
   plan, paid protected marker and a second real framebuffer capture.
 - Authenticated explicit projection visibility for the large perimeter; real
   cancellation must detach the builder/retire the reservation and not refund.
   AI is paused for this transaction-only perimeter; it is not built to completion.
 - Before that cancellation, ordinary client block-use opens the actual core menu.
-  Client/server menu identity, native owner faction and live 1,100-emerald Treasury
+  Client/server menu identity, native owner faction and live 1,936-emerald Treasury
   must agree. Visible Building controls navigate Auto perimeter and Construction;
   the real subscription/response packets must deliver every `ConstructionReport.Job`
   field unchanged from the server snapshot. Captures `16-live-core-building-auto.png`
   and `17-live-core-construction.png` use this live fixture data, distinct from the
-  sample-menu images 09–12. The displayed 900-emerald price is a shared production
+  sample-menu images 09–12. The displayed 64-emerald price is a shared production
   constant, while the balance and job rows are server-fed. No review, plan pickup
   or commission button is clicked. Closing the actual menu must leave the paid
   job, reservation and Treasury unchanged.

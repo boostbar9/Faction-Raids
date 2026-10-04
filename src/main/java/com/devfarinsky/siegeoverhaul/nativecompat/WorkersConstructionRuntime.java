@@ -49,6 +49,8 @@ final class WorkersConstructionRuntime {
                 requireOverridable(area, "setTeamAccess", boolean.class);
                 requireOverridable(area, "getOriginPos"); requireOverridable(area, "createArea");
                 requireOverridable(area, "getStructureNBT");
+                requireOverridable(area, "scanBreakArea");
+                requireOverridable(area, "getStateFromPos", BlockPos.class);
                 requireOverridable(area, "canWorkHere", Class.forName("com.talhanation.workers.entities.AbstractWorkerEntity"));
                 for (String name : new String[]{"stackToPlace", "stackToPlaceMultiBlock", "stackToBreak", "stackToFree"})
                     if (!java.util.Stack.class.isAssignableFrom(area.getField(name).getType())) throw new NoSuchFieldException(name);
@@ -58,6 +60,12 @@ final class WorkersConstructionRuntime {
                 if (!goal.getField("state").getType().isEnum() || goal.getField("blockPos").getType() != BlockPos.class)
                     throw new NoSuchFieldException("native state");
                 goal.getDeclaredField("workDone");
+                Class<?> storage = Class.forName("com.talhanation.workers.entities.ai.GetNeededItemsFromStorage");
+                if (!storage.getField("state").getType().isEnum()
+                        || storage.getField("container").getType() != net.minecraft.world.Container.class
+                        || storage.getField("chestPos").getType() != BlockPos.class)
+                    throw new NoSuchFieldException("native storage state");
+                storage.getField("worker"); storage.getField("storageArea");
                 // Minecraft overrides are verified by the pinned Forge compile.
                 // Do not reflect Mojang method-name strings: production remaps them.
                 return null;

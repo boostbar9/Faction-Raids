@@ -9,6 +9,27 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class PaymentSourceTest extends TreasuryTestSupport {
+    @Test void exactPerimeterFeeDebitsTreasuryOnceWithoutTouchingSuppliedBlocks() {
+        var player = mock(ServerPlayer.class); var core = fund(player, 64);
+        assertEquals(64, TerritoryFortification.PRICE);
+        assertTrue(PaymentSource.consume(player, TerritoryFortification.PRICE));
+        assertEquals(0, FactionBank.balance(core));
+        assertFalse(PaymentSource.consume(player, TerritoryFortification.PRICE));
+        assertArrayEquals(new int[] {-64}, FactionBank.ledgerDeltas(core));
+        verify(player, never()).getInventory();
+    }
+    @Test void perimeterFeeRejects63TreasuryWithoutUsingPocketEmeralds() {
+        var player = mock(ServerPlayer.class); var core = fund(player, 63);
+        var inventory = new Inventory(player);
+        inventory.items.set(35, new ItemStack(Items.EMERALD, 64));
+        when(player.getInventory()).thenReturn(inventory);
+        assertEquals(63, PaymentSource.available(player, TerritoryFortification.PRICE));
+        assertFalse(PaymentSource.consume(player, TerritoryFortification.PRICE));
+        assertEquals(63, FactionBank.balance(core));
+        assertEquals(64, inventory.countItem(Items.EMERALD));
+        assertEquals(0, FactionBank.ledgerDeltas(core).length);
+        verify(player, never()).getInventory();
+    }
     @Test void inventoryCannotCoverTreasuryShortfallOrCausePartialDebit() {
         var player = mock(ServerPlayer.class);
         var core = fund(player, 15);

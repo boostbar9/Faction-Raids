@@ -61,6 +61,36 @@ class ConstructionResourcesTest extends MinecraftTestSupport {
         assertTrue(ConstructionResources.covers(List.of(new BlockPos(0,64,0)),new BlockPos(0,0,0)));
         assertFalse(ConstructionResources.covers(List.of(new BlockPos(0,64,0),new BlockPos(0,69,0)),new BlockPos(0,0,0)));
     }
+    @Test void multipleStorageCoverageIsCompleteOrRejectedWithoutClippingTheFootprint() {
+        var footprint = List.of(new BlockPos(0, 64, 0), new BlockPos(80, 64, 0), new BlockPos(160, 64, 0));
+        var first = new BlockPos(24, 64, 0); var second = new BlockPos(136, 64, 0);
+        assertFalse(ConstructionResources.covers(footprint, first));
+        assertFalse(ConstructionResources.covers(footprint, second));
+        assertTrue(ConstructionResources.coversAll(footprint, List.of(first, second)));
+        assertFalse(ConstructionResources.coversAll(footprint, List.of(first)));
+        assertFalse(ConstructionResources.coversAll(footprint, List.of(first, second.below(65))));
+        assertEquals(3, footprint.size());
+    }
+
+    @Test void distantStorageMarkersCanSupplyDifferentCompleteTerritorySections() {
+        var level=mock(ServerLevel.class);var player=mock(ServerPlayer.class);UUID owner=UUID.randomUUID();when(player.getUUID()).thenReturn(owner);
+        var worker=builder(24,1);var near=storage(24,24,2);var far=storage(152,24,3);
+        var claim=Set.of(new ChunkPos(1,1),new ChunkPos(9,1));
+        when(level.getEntitiesOfClass(eq(Mob.class),any(),any())).thenReturn(List.of(worker));
+        when(level.getEntitiesOfClass(eq(Entity.class),any(),any())).thenAnswer(call->{AABB box=call.getArgument(1);
+            assertTrue(box.contains(152.5,64,24.5));return List.of(near,far);});
+        try(var bridge=mockStatic(WorkersBridge.class);var resources=mockStatic(ConstructionResources.class,CALLS_REAL_METHODS)) {
+            bridge.when(()->WorkersBridge.isBuilder(worker)).thenReturn(true);bridge.when(()->WorkersBridge.readWorkerOwner(worker)).thenReturn(owner);
+            for(var supply:List.of(near,far)) {resources.when(()->ConstructionResources.storageArea(supply)).thenReturn(true);
+                bridge.when(()->WorkersBridge.readOwner(supply)).thenReturn(owner);bridge.when(()->WorkersBridge.hasBuilderStorage(supply)).thenReturn(true);}
+            var footprint=List.of(new BlockPos(16,64,16),new BlockPos(31,69,31),new BlockPos(144,64,16),new BlockPos(159,69,31));
+            var result=ConstructionResources.find(level,player,new BlockPos(24,64,24),claim,footprint);
+            assertNull(result.problem());assertSame(worker,result.builder());assertSame(near,result.storage());
+            bridge.when(()->WorkersBridge.readOwner(far)).thenReturn(UUID.randomUUID());
+            assertNotNull(ConstructionResources.find(level,player,new BlockPos(24,64,24),claim,footprint).problem());
+        }
+    }
+
     @Test void firstInsufficientStorageNeverHidesAnotherCompleteSupplier() {
         var level=mock(ServerLevel.class);var player=mock(ServerPlayer.class);UUID owner=UUID.randomUUID();when(player.getUUID()).thenReturn(owner);
         var worker=builder(24,1);var a=storage(0,0,2);var b=storage(24,24,3);var claim=new HashSet<ChunkPos>();

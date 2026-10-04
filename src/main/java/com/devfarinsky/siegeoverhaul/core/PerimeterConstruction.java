@@ -7,6 +7,7 @@ import com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import com.devfarinsky.siegeoverhaul.items.ModItems;
 import com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard;
+import com.devfarinsky.siegeoverhaul.nativecompat.BlueprintNetworkBudget;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -26,9 +27,13 @@ import java.util.function.Predicate;
 
 /** Reviewable template-style perimeter commissions. Legacy saved areas are never rewritten. */
 public final class PerimeterConstruction {
-    static final long MAX_NATIVE_SCAN_WORK = 64_000_000L;
+    static final long MAX_NATIVE_SCAN_WORK = 1_048_576L + 65_536L;
     public static final String SITE_MIN = "SiegeDefenseSiteMin", SITE_MAX = "SiegeDefenseSiteMax";
-    public record Preparation(Mob builder, PerimeterBlueprint.Plan plan, String claimIdentity, String problem) {
+    public record Preparation(Mob builder, PerimeterBlueprint.Plan plan, String claimIdentity, String problem,
+                              RecruitsClaimsBridge.TerritorySnapshot territory) {
+        Preparation(Mob builder, PerimeterBlueprint.Plan plan, String claimIdentity, String problem) {
+            this(builder, plan, claimIdentity, problem, null);
+        }
         static Preparation failed(String problem) { return new Preparation(null, null, "", problem); }
         public boolean ready() { return problem == null && builder != null && plan != null && plan.valid(); }
     }
@@ -102,8 +107,12 @@ public final class PerimeterConstruction {
                 : RecruitsClaimsBridge.resolveDefendingClaim(level, anchor);
         if (claim.isEmpty()) return Preparation.failed("Your core needs a valid faction claim.");
         var nativeClaim = claim.get();
+        var territory = RecruitsClaimsBridge.getFactionTerritory(level, nativeClaim.ownerFactionStringId(), PerimeterTerritory.MAX_CHUNKS);
+        if (!territory.ready()) return Preparation.failed(territory.problem());
+        if (!territory.chunks().contains(new ChunkPos(core)))
+            return Preparation.failed("Your active core must be inside the complete faction territory.");
         var identity = anchor.withIdentity(nativeClaim.ownerFactionStringId(), anchor.teamDisplay());
-        var limits = new PerimeterBlueprint.Limits(4096, TerritoryFortification.MAX_PERIMETER_BLOCKS,
+        var limits = new PerimeterBlueprint.Limits(PerimeterTerritory.MAX_CHUNKS, TerritoryFortification.MAX_PERIMETER_BLOCKS,
                 20480, PerimeterPreview.MAX_CELLS, TerritoryFortification.FOUNDATION_DEPTH,
                 level.getMinBuildHeight(), level.getMaxBuildHeight(), 256, 1048576L);
         var palette = switch (material) {
@@ -111,32 +120,36 @@ public final class PerimeterConstruction {
             case 2 -> PerimeterBlueprint.Palette.OAK;
             default -> PerimeterBlueprint.Palette.STONE_BRICKS;
         };
-        var plan = PerimeterBlueprint.create(nativeClaim.chunks(), (x, z) -> {
+        var plan = PerimeterBlueprint.create(territory.chunks(), (x, z) -> {
             BlockPos ground = WallSurface.ground(level, new BlockPos(x, core.getY(), z));
             return ground == null ? PerimeterBlueprint.Surface.blocked("Dry, unoccupied natural footing is required at " + x + ", " + z + ".")
                     : PerimeterBlueprint.Surface.ready(ground.getY());
         }, palette, limits);
         String claimIdentity = key + ":" + nativeClaim.ownerFactionStringId() + ":"
-                + nativeClaim.chunks().stream().map(ChunkPos::toLong).sorted().toList();
-        if (!plan.valid()) return new Preparation(null, plan, claimIdentity, plan.problemSummary());
+                + territory.chunks().stream().map(ChunkPos::toLong).sorted().toList();
+        if (!plan.valid()) return new Preparation(null, plan, claimIdentity, plan.problemSummary(), territory);
         if (!nativeScanWithinBudget(plan)) return new Preparation(null, plan, claimIdentity,
-                "The complete perimeter exceeds the bounded native Workers scan budget. Use smaller manual sections; no payment or partial job is created.");
+                "The complete perimeter exceeds the bounded native Workers scan budget. Use smaller manual sections; no payment or partial job is created.", territory);
+        String networkProblem = BlueprintNetworkBudget.problem(TerritoryFortification.blueprint(plan.blocks(), plan.min(), plan.max()));
+        if (networkProblem != null) return new Preparation(null, plan, claimIdentity, networkProblem, territory);
         Map<ChunkPos, Boolean> permissions = new HashMap<>();
         Predicate<BlockPos> permitted = p -> permissions.computeIfAbsent(new ChunkPos(p), chunk ->
-                nativeClaim.chunks().contains(chunk) && !ClaimBridge.isForeignClaim(level, chunk, identity))
+                territory.chunks().contains(chunk)
+                        && RecruitsClaimsBridge.isChunkOwnedBy(level, chunk, territory.factionStringId())
+                        && !ClaimBridge.isForeignClaim(level, chunk, identity))
                 && level.mayInteract(player, p);
         String problem = siteProblem(level, plan, permitted);
-        if (problem != null) return new Preparation(null, plan, claimIdentity, problem);
+        if (problem != null) return new Preparation(null, plan, claimIdentity, problem, territory);
         String nativeProblem = NativeConstructionGuard.availabilityProblem();
-        if (nativeProblem != null && !nativeProblem.isBlank()) return new Preparation(null, plan, claimIdentity, nativeProblem);
+        if (nativeProblem != null && !nativeProblem.isBlank()) return new Preparation(null, plan, claimIdentity, nativeProblem, territory);
         var supplySites = plan.columns().stream().flatMap(column -> java.util.stream.Stream.of(
                 column.foundationBase(), column.base().above(5))).toList();
-        var resources = ConstructionResources.find(level, player, core, nativeClaim.chunks(), supplySites);
-        if (resources.problem() != null) return new Preparation(null, plan, claimIdentity, resources.problem());
+        var resources = ConstructionResources.find(level, player, core, territory.chunks(), supplySites);
+        if (resources.problem() != null) return new Preparation(null, plan, claimIdentity, resources.problem(), territory);
         Mob builder = resources.builder();
         if (!player.isCreative() && PaymentSource.available(player, TerritoryFortification.PRICE) < TerritoryFortification.PRICE)
-            return new Preparation(builder, plan, claimIdentity, "You need 900 emeralds in the faction Treasury before commissioning.");
-        return new Preparation(builder, plan, claimIdentity, null);
+            return new Preparation(builder, plan, claimIdentity, "You need " + TerritoryFortification.PRICE + " emeralds in the faction Treasury before commissioning.", territory);
+        return new Preparation(builder, plan, claimIdentity, null, territory);
     }
 
     /** Validate every reserved cell, including empty walking headroom, before payment. */
@@ -157,7 +170,7 @@ public final class PerimeterConstruction {
                     || !support.isFaceSturdy(level, ground, Direction.UP)) return "The perimeter needs dry, safe, solid foundations.";
             for (int y = bottom.getY(); y <= column.base().getY() + 5; y++) {
                 BlockPos p = bottom.atY(y);
-                if (!permitted.test(p)) return "The entire footprint and walkway must remain inside your core's claim with building permission.";
+                if (!permitted.test(p)) return "The entire footprint and walkway must remain inside your faction territory with building permission.";
                 var current = level.getBlockState(p); String target = plan.blocks().get(p.asLong());
                 String currentId = String.valueOf(ForgeRegistries.BLOCKS.getKey(current.getBlock()));
                 boolean already = target != null && target.equals(currentId) && !current.hasBlockEntity()
@@ -183,15 +196,16 @@ public final class PerimeterConstruction {
         return Set.copyOf(cells);
     }
 
-    /** Native betweenClosedStream includes the Y endpoint; getStateFromPos scans the plan stacks. */
+    /** Native scan includes the Y endpoint; the protected area indexes only current pending stacks during that scan. */
     static boolean nativeScanWithinBudget(PerimeterBlueprint.Plan plan) {
         if (plan == null || !plan.valid()) return false;
         try {
             long width = (long) plan.max().getX() - plan.min().getX() + 1;
             long depth = (long) plan.max().getZ() - plan.min().getZ() + 1;
             long scannedHeight = (long) plan.max().getY() - plan.min().getY() + 2;
-            long work = Math.multiplyExact(Math.multiplyExact(Math.multiplyExact(width, depth), scannedHeight), plan.blocks().size());
-            return work <= MAX_NATIVE_SCAN_WORK;
+            long volume = Math.multiplyExact(Math.multiplyExact(width, depth), scannedHeight);
+            long work = Math.addExact(volume, plan.blocks().size());
+            return volume <= 1_048_576L && work <= MAX_NATIVE_SCAN_WORK;
         } catch (ArithmeticException overflow) { return false; }
     }
 
@@ -202,6 +216,7 @@ public final class PerimeterConstruction {
             var blueprint = TerritoryFortification.blueprint(plan.blocks(), min, max);
             area = WorkersBridge.createProtectedPlayerArea(player, builder, new BlockPos(max.getX(), min.getY(), min.getZ()),
                     max.getX() - min.getX() + 1, max.getZ() - min.getZ() + 1, max.getY() - min.getY() + 1, blueprint);
+            PerimeterTerritory.remember(area, prepared.territory());
             area.getPersistentData().putLong(SITE_MIN, min.asLong()); area.getPersistentData().putLong(SITE_MAX, max.asLong());
             ConstructionReport.remember(area, TerritoryFortification.material(material).label() + " template perimeter", plan.blocks().size());
             PlayerFortificationJobs.link(builder, area, player.getUUID());
@@ -215,7 +230,7 @@ public final class PerimeterConstruction {
             if (!WorkersBridge.assignBuildAreaDirectly(builder, area)) throw new IllegalStateException("Builder refused the plan");
             if (!PaymentSource.consume(player, TerritoryFortification.PRICE)) throw new IllegalStateException("Treasury payment rejected");
             committed = true; NativeConstructionGuard.activate(area);
-            player.sendSystemMessage(Component.literal("Template perimeter commissioned for 900 faction Treasury emeralds. Supply "
+            player.sendSystemMessage(Component.literal("Template perimeter commissioned for " + TerritoryFortification.PRICE + " faction Treasury emeralds. Supply "
                     + materials(plan) + ". Native Workers controls tools, materials and work hours."));
             player.sendSystemMessage(Component.literal("Native marker: " + area.blockPosition().toShortString()
                     + ". Building > Construction shows progress and any protection blockers. Guarded construction pauses while its owner is offline."));

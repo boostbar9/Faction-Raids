@@ -16,11 +16,14 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.network.NetworkHooks;
 
 import java.util.UUID;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
  * A NEW native BuildArea type with a sealed world origin and native renderer.
@@ -40,6 +43,8 @@ public final class ProtectedBuildArea extends BuildArea {
     private boolean completionVerified;
     private boolean retirementHandled;
     private UUID reservedBuilder;
+    private Map<BlockPos, BlockState> pendingScanIndex;
+    private QuarantinedNativeBlueprint quarantinedLoad;
 
     public ProtectedBuildArea(EntityType<?> type, Level level) { super(type, level); }
 
@@ -51,8 +56,10 @@ public final class ProtectedBuildArea extends BuildArea {
 
     void initialize(BlockPos origin, BlockPos markerFeet, UUID owner, String playerName,
                     UUID builder, int width, int depth, int height, CompoundTag blueprint) {
-        if (initialized || level().isClientSide) throw new IllegalStateException("Area already sealed");
+        if (initialized || quarantinedLoad != null || level().isClientSide) throw new IllegalStateException("Area already sealed");
         AcceptedConstructionPlan.decode(origin, Direction.SOUTH, width, depth, height, blueprint);
+        String networkProblem = BlueprintNetworkBudget.problem(blueprint);
+        if (networkProblem != null) throw new IllegalArgumentException(networkProblem);
         if (owner == null || builder == null) throw new IllegalArgumentException("Owned builder required");
         trustedChanges = true;
         try {
@@ -170,6 +177,31 @@ public final class ProtectedBuildArea extends BuildArea {
     @Override public void setDone(boolean value) {
         if (trustedChanges || value && completionVerified) super.setDone(value);
     }
+    /**
+     * Preserve native scan and first-pending-entry semantics without a bounds-volume × queue-size search.
+     * The index exists only while the synchronous native scan runs. Normal work always queries live queues.
+     */
+    @Override public void scanBreakArea() {
+        if (pendingScanIndex != null) throw new IllegalStateException("Nested native construction scan");
+        long volume;
+        try { volume = Math.multiplyExact(Math.multiplyExact((long) getWidthSize(), getDepthSize()), (long) getHeightSize() + 1); }
+        catch (ArithmeticException overflow) { throw new IllegalStateException("Native scan envelope overflows", overflow); }
+        if (volume < 1 || volume > 1_048_576L)
+            throw new IllegalStateException("Native scan envelope exceeds the bounded job limit");
+        if ((long) stackToPlace.size() + stackToPlaceMultiBlock.size() > AcceptedConstructionPlan.MAX_CELLS)
+            throw new IllegalStateException("Native pending queue exceeds the accepted bound");
+        Map<BlockPos, BlockState> index = new HashMap<>();
+        for (var block : stackToPlace) index.putIfAbsent(block.getPos().immutable(), block.getState());
+        for (var block : stackToPlaceMultiBlock) index.putIfAbsent(block.getPos().immutable(), block.getState());
+        pendingScanIndex = Map.copyOf(index);
+        try { super.scanBreakArea(); }
+        finally { pendingScanIndex = null; }
+    }
+
+    @Override public BlockState getStateFromPos(BlockPos pos) {
+        return pendingScanIndex == null ? super.getStateFromPos(pos) : pendingScanIndex.get(pos);
+    }
+
     @Override public void scanFreeArea() { stackToFree.clear(); }
     @Override public void setTime(int value) {
         // Native AI only resets to zero. The unauthenticated move packet adds
@@ -214,25 +246,57 @@ public final class ProtectedBuildArea extends BuildArea {
 
 
     @Override public void readAdditionalSaveData(CompoundTag tag) {
-        initialized = false; queuesReady = false; completionVerified = false;
+        initialized = false; queuesReady = false; completionVerified = false; reservedBuilder = null;
+        quarantinedLoad = null; pendingScanIndex = null;
+        stackToPlace.clear(); stackToPlaceMultiBlock.clear(); stackToBreak.clear(); stackToFree.clear();
+        entityData.set(ORIGIN_READY, false);
+        entityData.set(PLAYER_UUID, java.util.Optional.empty());
         trustedChanges = true;
         try {
+            String networkProblem = BlueprintNetworkBudget.problem(tag.getCompound("structureNBT"));
+            if (networkProblem != null || !QuarantinedNativeBlueprint.consistentIdentity(tag)) {
+                quarantine(tag, networkProblem == null ? "Paused: saved native owner or builder identity conflicts" : networkProblem);
+                return;
+            }
             super.readAdditionalSaveData(tag);
             super.setDone(false); // Completion is revalidated after reload, never trusted from a client control.
             boolean valid = tag.getBoolean(VALID) && tag.contains(ORIGIN) && tag.hasUUID(BUILDER);
+            if (!valid) {
+                quarantine(tag, "Paused: saved native seal is incomplete");
+                return;
+            }
             if (valid) {
                 entityData.set(NATIVE_ORIGIN, BlockPos.of(tag.getLong(ORIGIN)));
                 entityData.set(ORIGIN_READY, true);
                 reservedBuilder = tag.getUUID(BUILDER);
                 AcceptedConstructionPlan.capture(this);
                 initialized = true;
-            } else entityData.set(ORIGIN_READY, false);
+            }
         } catch (ReflectiveOperationException | RuntimeException unavailable) {
-            initialized = false; reservedBuilder = null; entityData.set(ORIGIN_READY, false);
+            quarantine(tag, "Paused: saved native construction recipe requires review");
         } finally { trustedChanges = false; }
     }
 
+    private void quarantine(CompoundTag tag, String reason) {
+        initialized = false; queuesReady = false; reservedBuilder = null;
+        entityData.set(ORIGIN_READY, false);
+        entityData.set(PLAYER_UUID, java.util.Optional.empty());
+        super.setStructureNBT(new CompoundTag());
+        super.setDone(false); super.setAlwaysShowProjection(false);
+        quarantinedLoad = new QuarantinedNativeBlueprint(tag);
+        if (quarantinedLoad.hasVerifiedIdentity()) {
+            // Only the sanitized empty recipe reaches the inherited synced STRUCTURE field.
+            super.readAdditionalSaveData(quarantinedLoad.safeNativeInput());
+            reservedBuilder = quarantinedLoad.reservedBuilder();
+        }
+        getPersistentData().putString("SiegeConstructionPause", reason);
+    }
+
     @Override public void addAdditionalSaveData(CompoundTag tag) {
+        if (quarantinedLoad != null) {
+            quarantinedLoad.save(tag);
+            return;
+        }
         super.addAdditionalSaveData(tag);
         tag.putBoolean(VALID, initialized && entityData.get(ORIGIN_READY));
         if (initialized && reservedBuilder != null) {

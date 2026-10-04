@@ -95,6 +95,8 @@ final class ProtectedNativeEntityContracts {
         invalid.setStartBuild(true);
         require(!invalid.nativeQueuesReady(), "Malformed new entity acquired native queues");
         checked.add("Real native save/load preserves origin and malformed sealed saves stay closed");
+        verifyRejectedBlueprintRecovery(level, owner, saved);
+        checked.add("Oversized saved blueprint remains unsynchronized and non-running; exact recipe/owner save and authenticated cancellation survive");
 
         // A distant never-requested chunk proves queue reconstruction does not
         // turn a marker load into a world load. It is never registered or rendered.
@@ -119,6 +121,61 @@ final class ProtectedNativeEntityContracts {
         require(scratch.abortBeforePayment() && scratch.isRemoved(), "Unpaid rollback could not clean up");
         checked.add("Real native area rejects unpaid and wrong-builder discovery; paid delete and unpaid rollback stay distinct");
         return List.copyOf(checked);
+    }
+
+    private static void verifyRejectedBlueprintRecovery(ServerLevel level, ServerPlayer owner, CompoundTag validSave) {
+        CompoundTag rejectedSave = validSave.copy();
+        UUID absentBuilder = UUID.randomUUID();
+        rejectedSave.putUUID("SiegeNativeBuilder", absentBuilder);
+        rejectedSave.remove("ForgeData"); // Dedicated unassigned fixture has no protected receipt to contradict its saved identity.
+        CompoundTag raw = validSave.getCompound("structureNBT").copy();
+        ListTag cells = raw.getList("blocks", 10);
+        CompoundTag first = cells.getCompound(0).copy();
+        while (cells.size() < 6600) cells.add(first.copy());
+        CompoundTag unknown = new CompoundTag(); unknown.putString("keep", "unrecognized original metadata");
+        raw.put("unrecognizedCapability", unknown);
+        rejectedSave.put("structureNBT", raw);
+        require(BlueprintNetworkBudget.problem(raw) != null, "Oversized fixture unexpectedly fits native synchronization");
+        ProtectedBuildArea rejected = ProtectedConstructionAreas.TYPE.get().create(level);
+        require(rejected != null, "Cannot construct quarantine fixture"); rejected.load(rejectedSave);
+        require(owner.getUUID().equals(rejected.getPlayerUUID()) && absentBuilder.equals(rejected.reservedBuilderId()),
+                "Rejected load lost authenticated cancellation identity");
+        require(rejected.getStructureNBT().isEmpty()
+                && rejected.getEntityData().get(com.talhanation.workers.entities.workarea.BuildArea.STRUCTURE).isEmpty(),
+                "Rejected raw blueprint entered native synchronized data");
+        expectFailure(rejected::rebuildAcceptedQueues, "Rejected blueprint reconstructed native queues");
+        require(!rejected.nativeQueuesReady() && rejected.stackToPlace.isEmpty(), "Rejected blueprint retained pending targets");
+        CompoundTag savedAgain = rejected.saveWithoutId(new CompoundTag());
+        require(savedAgain.getCompound("structureNBT").equals(raw)
+                && savedAgain.getUUID("playerUUID").equals(owner.getUUID())
+                && savedAgain.getUUID("SiegeNativeBuilder").equals(absentBuilder)
+                && savedAgain.getBoolean("SiegeNativeSealed") == rejectedSave.getBoolean("SiegeNativeSealed"),
+                "Rejected raw recipe or saved identity was normalized or lost");
+        ProtectedBuildArea reloaded = ProtectedConstructionAreas.TYPE.get().create(level);
+        require(reloaded != null, "Cannot reload quarantine fixture"); reloaded.load(savedAgain);
+        require(reloaded.getStructureNBT().isEmpty() && owner.getUUID().equals(reloaded.getPlayerUUID())
+                && reloaded.saveWithoutId(new CompoundTag()).getCompound("structureNBT").equals(raw),
+                "A repeated rejected reload changed recipe or ownership");
+        CompoundTag malformedIdentity = rejectedSave.copy();
+        malformedIdentity.putString("ForgeData", "original malformed identity evidence");
+        for (int reload = 0; reload < 3; reload++) {
+            ProtectedBuildArea untrusted = ProtectedConstructionAreas.TYPE.get().create(level);
+            require(untrusted != null, "Cannot construct malformed ForgeData quarantine fixture");
+            untrusted.load(malformedIdentity);
+            require(untrusted.getPlayerUUID() == null && untrusted.reservedBuilderId() == null
+                    && untrusted.getStructureNBT().isEmpty() && !untrusted.nativeQueuesReady(),
+                    "Malformed persistent identity acquired native authority after reload");
+            malformedIdentity = untrusted.saveWithoutId(new CompoundTag());
+            require("original malformed identity evidence".equals(malformedIdentity.getString("ForgeData"))
+                    && raw.equals(malformedIdentity.getCompound("structureNBT")),
+                    "Real Forge save ordering lost original malformed identity evidence");
+        }
+        require(level.addFreshEntity(reloaded), "Cannot register owner cancellation fixture");
+        var ledger = ConstructionEditLedger.get(level);
+        require(ledger.register(reloaded.getUUID(), java.util.Set.of(reloaded.blockPosition())), "Cannot register cancellation fixture reservation");
+        ProtectedConstructionActions.handle(owner, reloaded.getUUID(), ProtectedConstructionActions.CANCEL);
+        require(reloaded.isRemoved() && !ledger.contains(reloaded.getUUID()), "Authenticated owner could not cancel quarantined marker");
+        ledger.acknowledgeRetirement(reloaded.getUUID()); // The dedicated random worker never existed.
     }
 
     private static void require(boolean value, String message) { if (!value) throw new AssertionError(message); }

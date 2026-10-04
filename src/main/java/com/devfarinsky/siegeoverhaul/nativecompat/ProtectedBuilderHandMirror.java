@@ -92,5 +92,6 @@ final class ProtectedBuilderHandMirror {
         try { return snapshot(first).equals(snapshot(second)); }
         catch (RuntimeException | LinkageError unverified) { return false; }
     }
+    static void requireInventoryReview(CompoundTag data) { data.putBoolean(REVIEW, true); }
     private static String review(CompoundTag data) { data.putBoolean(REVIEW, true); return REVIEW_REASON; }
 }

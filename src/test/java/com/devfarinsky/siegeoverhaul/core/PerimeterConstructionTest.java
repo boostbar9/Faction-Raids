@@ -75,12 +75,15 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
         try(var bridge=mockStatic(WorkersBridge.class)) {bridge.when(()->WorkersBridge.isBuildArea(area)).thenReturn(true);
             assertNotNull(PerimeterConstruction.siteProblem(level,plan(),p->true));}
     }
-    @Test void nativeScanWorkIsBoundedBeforeHandingOffLargeSparseRings() {
+    @Test void pendingIndexMakesNativeScanLinearButKeepsItsEnvelopeBounded() {
         assertTrue(PerimeterConstruction.nativeScanWithinBudget(plan()));
         var chunks=new java.util.HashSet<ChunkPos>();
         for(int x=0;x<4;x++)for(int z=0;z<4;z++)chunks.add(new ChunkPos(x,z));
         var large=PerimeterBlueprint.create(chunks,(x,z)->PerimeterBlueprint.Surface.ready(64),PerimeterBlueprint.Palette.COBBLESTONE);
-        assertTrue(large.valid());assertFalse(PerimeterConstruction.nativeScanWithinBudget(large));
+        assertTrue(large.valid());assertTrue(PerimeterConstruction.nativeScanWithinBudget(large));
+        var oversized = new PerimeterBlueprint.Plan(large.blocks(), large.columns(), large.clearance(),
+                BlockPos.ZERO, new BlockPos(511, 32, 511), large.runs(), large.connections(), large.materialCounts(), List.of());
+        assertFalse(PerimeterConstruction.nativeScanWithinBudget(oversized));
     }
     @Test void materialsCountSharedCornerCellsOnlyOnce() {
         assertEquals(968,plan().blocks().size());assertTrue(PerimeterConstruction.materials(plan()).contains("748 cobblestone"));
