@@ -1,0 +1,89 @@
+{
+  "modId": "smallships",
+  "version": "2.0.0-b1.4",
+  "coordinate": "curse.maven:small-ships-450659:5566900",
+  "releaseUrl": "https://www.curseforge.com/minecraft/mc-mods/small-ships/files/5566900",
+  "minecraft": "1.20.1",
+  "forge": "47.4.16",
+  "sourceCommit": "afb855b4b095d77d67c64f9defa97a45a44632a6",
+  "sourceLog": "build/native-staged-qa/evidence/client-console.log",
+  "sourceLogSha256": "99763af8fe0fdbb561fadaf7087556f391091b7e7facaf8b98d89098511873d8",
+  "loadedRemappedDevelopmentJarSha256": "0ef1b6d62e200c1a83cd4ceea151e7f3597bb21b6b5a2ec8bc5f0043dc0fb1d5",
+  "gameplayValuesChanged": false,
+  "configs": {
+    "smallships-client.toml": {
+      "sha256": "bcb7919d3911085ed068e902f46de9971bf152a7b09376bc06e29e6d3d4fdf35",
+      "forgeDefaultLogLines": [
+        931,
+        956
+      ],
+      "declaredDefaultStrings": {
+        "schematicVersion": "2",
+        "Ship.shipModSpeedUnit": "0",
+        "Ship.General.Camera.Zoom.shipGeneralCameraZoomEnable": "true",
+        "Ship.General.Camera.Zoom.shipGeneralCameraZoomMax": "20.0",
+        "Ship.General.Camera.Zoom.shipGeneralCameraZoomMin": "5.0",
+        "Ship.General.Camera.shipGeneralCameraAutoThirdPerson": "true",
+        "General.smallshipsItemGroupEnable": "false"
+      }
+    },
+    "smallships-common.toml": {
+      "sha256": "2c2914337fc96d44520ac1758afed504616cd9b13a11a0992c3d3528c79a5c5b",
+      "forgeDefaultLogLines": [
+        1016,
+        1151
+      ],
+      "declaredDefaultStrings": {
+        "schematicVersion": "5",
+        "Ship.General.shipGeneralSailCooldown": "30",
+        "Ship.General.shipGeneralCollisionDamage": "7.5",
+        "Ship.General.shipGeneralCollisionKnockBack": "true",
+        "Ship.General.shipGeneralDoItemDrop": "true",
+        "Ship.General.Modifier.shipGeneralContainerModifier": "10.0",
+        "Ship.General.Modifier.shipGeneralCannonModifier": "2.5",
+        "Ship.General.Modifier.shipGeneralPaddlingModifier": "35.0",
+        "Ship.General.Modifier.shipGeneralBiomeModifier": "20.0",
+        "Ship.General.Modifier.shipGeneralShieldDamageReduction": "3.0",
+        "Ship.General.Modifier.shipGeneralDespawnTimeSunken": "15.0",
+        "Ship.General.Modifier.mountBlackList": "[minecraft:ender_dragon, minecraft:wither, minecraft:wither, minecraft:ghast, minecraft:warden, minecraft:ravager, alexmobs:cachalot_whale]",
+        "Ship.General.Modifier.shipGeneralCannonDamage": "25.0",
+        "Ship.General.Modifier.shipGeneralCannonDestruction": "1.0",
+        "Ship.General.Fleeing Water Animals.waterAnimalFleeRadius": "15.0",
+        "Ship.General.Fleeing Water Animals.waterAnimalFleeSpeed": "1.5",
+        "Ship.General.Fleeing Water Animals.waterAnimalFleeDistance": "10.0",
+        "Ship.Cog.Attributes.shipAttributeCogMaxHealth": "300.0",
+        "Ship.Cog.Attributes.shipAttributeCogMaxSpeed": "30.0",
+        "Ship.Cog.Attributes.shipAttributeCogMaxReverseSpeed": "0.1",
+        "Ship.Cog.Attributes.shipAttributeCogMaxRotationSpeed": "4.5",
+        "Ship.Cog.Attributes.shipAttributeCogAcceleration": "0.015",
+        "Ship.Cog.Attributes.shipAttributeCogRotationAcceleration": "0.7",
+        "Ship.Cog.Container.shipContainerCogContainerSize": "108",
+        "Ship.Cog.Modifier.shipModifierCogBiome": "COLD",
+        "Ship.Brigg.Attributes.shipAttributeBriggMaxHealth": "450.0",
+        "Ship.Brigg.Attributes.shipAttributeBriggMaxSpeed": "35.0",
+        "Ship.Brigg.Attributes.shipAttributeBriggMaxReverseSpeed": "0.1",
+        "Ship.Brigg.Attributes.shipAttributeBriggMaxRotationSpeed": "4.0",
+        "Ship.Brigg.Attributes.shipAttributeBriggAcceleration": "0.015",
+        "Ship.Brigg.Attributes.shipAttributeBriggRotationAcceleration": "0.55",
+        "Ship.Brigg.Container.shipContainerBriggContainerSize": "162",
+        "Ship.Brigg.Modifier.shipModifierBriggBiome": "COLD",
+        "Ship.Galley.Attributes.shipAttributeGalleyMaxHealth": "200.0",
+        "Ship.Galley.Attributes.shipAttributeGalleyMaxSpeed": "30.0",
+        "Ship.Galley.Attributes.shipAttributeGalleyMaxReverseSpeed": "0.1",
+        "Ship.Galley.Attributes.shipAttributeGalleyMaxRotationSpeed": "5.0",
+        "Ship.Galley.Attributes.shipAttributeGalleyAcceleration": "0.015",
+        "Ship.Galley.Attributes.shipAttributeGalleyRotationAcceleration": "1.0",
+        "Ship.Galley.Container.shipContainerGalleyContainerSize": "54",
+        "Ship.Galley.Modifier.shipModifierGalleyBiome": "WARM",
+        "Ship.Drakkar.Attributes.shipAttributeDrakkarMaxHealth": "200.0",
+        "Ship.Drakkar.Attributes.shipAttributeDrakkarMaxSpeed": "30.0",
+        "Ship.Drakkar.Attributes.shipAttributeDrakkarMaxReverseSpeed": "0.1",
+        "Ship.Drakkar.Attributes.shipAttributeDrakkarMaxRotationSpeed": "5.0",
+        "Ship.Drakkar.Attributes.shipAttributeDrakkarAcceleration": "0.015",
+        "Ship.Drakkar.Attributes.shipAttributeDrakkarRotationAcceleration": "1.0",
+        "Ship.Drakkar.Container.shipContainerDrakkarContainerSize": "54",
+        "Ship.Drakkar.Modifier.shipModifierDrakkarBiome": "COLD"
+      }
+    }
+  }
+}

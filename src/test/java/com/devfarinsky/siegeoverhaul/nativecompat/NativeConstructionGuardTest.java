@@ -34,7 +34,11 @@ class NativeConstructionGuardTest extends MinecraftTestSupport {
         var worker = mock(Mob.class); var data = new CompoundTag();
         when(worker.getPersistentData()).thenReturn(data);
         var level = mock(net.minecraft.server.level.ServerLevel.class);
-        try (var bridge = mockStatic(com.devfarinsky.siegeoverhaul.compat.WorkersBridge.class)) {
+        var server = mock(net.minecraft.server.MinecraftServer.class); when(level.getServer()).thenReturn(server); when(server.overworld()).thenReturn(level);
+        var ledger = new ConstructionEditLedger();
+        try (var bridge = mockStatic(com.devfarinsky.siegeoverhaul.compat.WorkersBridge.class);
+             var ledgers = mockStatic(ConstructionEditLedger.class)) {
+            ledgers.when(() -> ConstructionEditLedger.get(level)).thenReturn(ledger);
             bridge.when(() -> com.devfarinsky.siegeoverhaul.compat.WorkersBridge.isBuilder(worker)).thenReturn(true);
             NativeConstructionGuard.areaJoined(new net.minecraftforge.event.entity.EntityJoinLevelEvent(worker, level, false));
             assertFalse(ProtectedBuilderHandMirror.pending(data), "Fresh/legacy worker without receipt is untouched");
@@ -140,6 +144,14 @@ class NativeConstructionGuardTest extends MinecraftTestSupport {
         var data = new CompoundTag(); when(worker.getPersistentData()).thenReturn(data);
         var old = java.util.UUID.randomUUID(); var next = java.util.UUID.randomUUID();
         when(canceled.getUUID()).thenReturn(old); when(replacement.getUUID()).thenReturn(next);
+        when(worker.getUseItem()).thenReturn(net.minecraft.world.item.ItemStack.EMPTY);
+        var level=mock(net.minecraft.server.level.ServerLevel.class);var server=mock(net.minecraft.server.MinecraftServer.class);
+        when(worker.level()).thenReturn(level);when(level.getServer()).thenReturn(server);when(server.overworld()).thenReturn(level);
+        when(worker.getUUID()).thenReturn(java.util.UUID.randomUUID());var ledger=new ConstructionEditLedger();
+        assertTrue(ledger.retainHandLifecycle(data,worker.getUUID(),java.util.UUID.randomUUID(),old));
+        try(var storage=mockStatic(ProtectedStorageAccess.class);var ledgers=mockStatic(ConstructionEditLedger.class)) {
+        ledgers.when(()->ConstructionEditLedger.get(level)).thenReturn(ledger);
+        storage.when(()->ProtectedStorageAccess.drainCleanup(worker)).thenReturn(true);
         data.putUUID(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID, old);
         data.putUUID("SiegeProtectedAreaReceipt", old); worker.currentBuildArea = canceled;
         assertTrue(NativeConstructionGuard.retireBuilderAssociation(worker, old));
@@ -152,6 +164,7 @@ class NativeConstructionGuardTest extends MinecraftTestSupport {
         assertEquals(next, data.getUUID("SiegeProtectedAreaReceipt"));
         verify(worker, never()).getNavigation();
         verify(worker, never()).setItemSlot(any(), any());
+        }
     }
 
     @Test void pendingCommissionNeverDispatchesNativeWorkUntilActivated() {

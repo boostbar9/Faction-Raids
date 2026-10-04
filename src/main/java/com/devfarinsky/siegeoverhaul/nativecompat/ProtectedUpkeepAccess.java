@@ -57,6 +57,9 @@ final class ProtectedUpkeepAccess extends ProtectedInventoryGoal {
         fields=delegate.getClass()==RecruitStorageUpkeepGoal.class?new StorageFields():null;
     }
 
+    @Override ProtectedStorageAccess.Kind kind(){return kind;}
+    // Recruits 1.15.2 cff03e0 keeps pending payment/timer finalization in the goal,
+    // not entity NBT. A fresh goal cannot reconstruct or safely replay that stop.
     @Override boolean upkeep(){return true;}
 
     @Override String beforeStart() {

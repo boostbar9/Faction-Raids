@@ -41,6 +41,11 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
         assertFalse(plan.blocks().containsKey(headroom.asLong()));
         assertTrue(reserved.contains(headroom));
         assertTrue(plan.blocks().keySet().stream().allMatch(cell -> reserved.contains(BlockPos.of(cell))));
+        for (var column : plan.columns()) if (!column.parapet()) for (int y = 0; y < 3; y++) {
+            BlockPos cavity = column.base().above(y);
+            assertTrue(plan.clearance().contains(cavity.asLong())); assertTrue(reserved.contains(cavity));
+            assertFalse(plan.blocks().containsKey(cavity.asLong()));
+        }
         assertEquals(1320, reserved.size());
         assertFalse(reserved.contains(new BlockPos(8, 64, 8)));
         assertFalse(reserved.contains(new BlockPos(8, 69, 8)));
@@ -58,6 +63,17 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
         for(var block:List.of(Blocks.OAK_PLANKS,Blocks.CHEST,Blocks.WATER,Blocks.LAVA,Blocks.NETHER_PORTAL)) {
             var level=level();when(level.getBlockState(new BlockPos(2,68,2))).thenReturn(block.defaultBlockState());
             assertNotNull(PerimeterConstruction.siteProblem(level,plan(),p->true),block.toString());
+        }
+    }
+    @Test void existingBlocksInsideEveryBodyLayerRejectRatherThanExcavate() {
+        for (int inward = 1; inward <= 3; inward++) for (int y = 64; y < 67; y++) {
+            BlockPos cavity = new BlockPos(inward, y, 7);
+            assertTrue(plan().clearance().contains(cavity.asLong()));
+            for (var block : List.of(Blocks.COBBLESTONE, Blocks.OAK_PLANKS, Blocks.CHEST, Blocks.WATER)) {
+                var level = level(); when(level.getBlockState(cavity)).thenReturn(block.defaultBlockState());
+                assertNotNull(PerimeterConstruction.siteProblem(level, plan(), p -> true));
+                verify(level, never()).setBlock(any(), any(), anyInt(), anyInt());
+            }
         }
     }
     @Test void occupiedBuildCellsAndUnsafeGroundRejectCommission() {
@@ -86,7 +102,7 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
         assertFalse(PerimeterConstruction.nativeScanWithinBudget(oversized));
     }
     @Test void materialsCountSharedCornerCellsOnlyOnce() {
-        assertEquals(968,plan().blocks().size());assertTrue(PerimeterConstruction.materials(plan()).contains("748 cobblestone"));
+        assertEquals(572,plan().blocks().size());assertTrue(PerimeterConstruction.materials(plan()).contains("352 cobblestone"));
         assertTrue(PerimeterConstruction.materials(plan()).contains("220 oak planks"));
     }
 }

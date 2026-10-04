@@ -25,6 +25,26 @@ public final class ProtectedConstructionActions {
             area.projectionAuthorized(action == SHOW);
             return;
         }
+        // A native section is only one lease of the whole commission. Never retire it independently.
+        try {
+            if (PerimeterProjectAuthority.tracked(area)) {
+                var scope = PerimeterProjectAuthority.read(area.getPersistentData());
+                var project = PerimeterProjectAuthority.project(sender.serverLevel(), scope);
+                if (scope.stage() >= project.stages().size()
+                        || !project.stages().get(scope.stage()).areaId().equals(area.getUUID())
+                        || !project.stages().get(scope.stage()).digest().equals(scope.stageDigest())
+                        || !project.header().owner().equals(sender.getUUID())) {
+                    fail(sender, "The whole-perimeter cancellation identity could not be verified.");
+                    return;
+                }
+                if (!NativePerimeterProjects.cancelFromMarker(sender, area))
+                    fail(sender, "That whole perimeter could not be canceled from this marker.");
+                return;
+            }
+        } catch (RuntimeException | LinkageError unavailable) {
+            fail(sender, "Perimeter cancellation history is unavailable; no section was released.");
+            return;
+        }
         // Resolve durable state first. Failure must not detach a worker and then
         // discover that the reservation cannot be retired.
         ConstructionEditLedger ledger;
@@ -38,6 +58,10 @@ public final class ProtectedConstructionActions {
             return;
         }
         Mob builder = loadedReservedBuilder(sender, area.reservedBuilderId());
+        if (builder == null && ledger.handLifecycle(area.reservedBuilderId()) == null) {
+            fail(sender, "Older protected job cleanup needs original builder hand provenance. Load that builder if available; otherwise recovery review is required.");
+            return;
+        }
         if (builder != null && !NativeConstructionGuard.retireBuilderAssociation(builder, area.getUUID())) {
             fail(sender, "The native builder's exact job reference could not be verified; the job was kept.");
             return;
@@ -50,6 +74,34 @@ public final class ProtectedConstructionActions {
         ledger.retire(area.getUUID(), builder != null);
         sender.sendSystemMessage(Component.literal(
                 "Construction canceled. Placed blocks stay in the world; supplied materials and the commission are not refunded."));
+    }
+
+    /** Read-only cached authority for summaries; callers still filter every record by owner. */
+    public static com.devfarinsky.siegeoverhaul.core.PerimeterProjectStore.Snapshot projectsForReport(ServerPlayer sender) {
+        return PerimeterProjectAuthority.snapshot(sender.serverLevel(),
+                com.devfarinsky.siegeoverhaul.core.SiegeCore.key(sender));
+    }
+
+    /** Missing/malformed stage evidence must never fall back to an unrelated legacy job. */
+    public static boolean projectScoped(net.minecraft.world.entity.Entity area) {
+        try { return PerimeterProjectAuthority.tracked(area); }
+        catch (RuntimeException | LinkageError unavailable) { return true; }
+    }
+
+    /** Native queue counts are displayable only after exact current project/lease/snapshot validation. */
+    public static boolean validProjectProgress(net.minecraft.world.entity.Entity area, Mob builder,
+            com.devfarinsky.siegeoverhaul.core.PerimeterProject project) {
+        if (area == null || builder == null || project == null || project.active() == null
+                || !(area instanceof ProtectedBuildArea) || !area.isAlive() || !builder.isAlive()
+                || !project.active().areaId().equals(area.getUUID())
+                || !(area.level() instanceof net.minecraft.server.level.ServerLevel level)) return false;
+        try {
+            var scope = PerimeterProjectAuthority.read(area.getPersistentData());
+            return scope.projectId().equals(project.header().projectId())
+                    && scope.generation() == project.header().generation()
+                    && PerimeterProjectAuthority.project(level, scope).check().equals(project.check())
+                    && PerimeterProjectAuthority.problem(level, builder, area, false, true) == null;
+        } catch (RuntimeException | LinkageError unavailable) { return false; }
     }
 
     private static Mob loadedReservedBuilder(ServerPlayer sender, UUID builderId) {

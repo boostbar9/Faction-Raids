@@ -18,6 +18,9 @@ public final class NativeQaPerimeterTemplate {
         var plan = PerimeterBlueprint.create(Set.of(new ChunkPos(2, 0)),
                 (x, z) -> PerimeterBlueprint.Surface.ready(65), PerimeterBlueprint.Palette.COBBLESTONE);
         if (!plan.valid()) throw new AssertionError("Production perimeter fixture failed: " + plan.problemSummary());
+        if (plan.blocks().size() != 572 || !plan.materialCounts().equals(java.util.Map.of(
+                "minecraft:cobblestone", 352, "minecraft:oak_planks", 220)))
+            throw new AssertionError("Current-build thumbnail must use the hollow one-claim plan");
         BlockPos min = plan.min(), max = plan.max();
         return new Template(new BlockPos(max.getX(), min.getY(), min.getZ()),
                 max.getX() - min.getX() + 1, max.getZ() - min.getZ() + 1, max.getY() - min.getY() + 1,

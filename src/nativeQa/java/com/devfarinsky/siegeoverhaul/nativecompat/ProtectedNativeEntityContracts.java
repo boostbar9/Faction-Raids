@@ -1,6 +1,8 @@
 package com.devfarinsky.siegeoverhaul.nativecompat;
 
+import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import com.talhanation.workers.entities.AbstractWorkerEntity;
+import com.talhanation.workers.entities.BuilderEntity;
 import com.talhanation.workers.network.MessageUpdateBuildArea;
 import com.talhanation.workers.network.MessageUpdateOwner;
 import com.talhanation.workers.network.MessageUpdateWorkArea;
@@ -95,8 +97,8 @@ final class ProtectedNativeEntityContracts {
         invalid.setStartBuild(true);
         require(!invalid.nativeQueuesReady(), "Malformed new entity acquired native queues");
         checked.add("Real native save/load preserves origin and malformed sealed saves stay closed");
-        verifyRejectedBlueprintRecovery(level, owner, saved);
-        checked.add("Oversized saved blueprint remains unsynchronized and non-running; exact recipe/owner save and authenticated cancellation survive");
+        verifyRejectedBlueprintRecovery(level, owner, saved, builder);
+        checked.add("Oversized saved blueprint preserves raw recipe/owner; absent unproven builder cleanup is refused and authenticated cancellation succeeds with the real loaded fixture builder");
 
         // A distant never-requested chunk proves queue reconstruction does not
         // turn a marker load into a world load. It is never registered or rendered.
@@ -123,14 +125,18 @@ final class ProtectedNativeEntityContracts {
         return List.copyOf(checked);
     }
 
-    private static void verifyRejectedBlueprintRecovery(ServerLevel level, ServerPlayer owner, CompoundTag validSave) {
+    private static void verifyRejectedBlueprintRecovery(ServerLevel level, ServerPlayer owner, CompoundTag validSave, Mob nativeBuilder) throws Exception {
         CompoundTag rejectedSave = validSave.copy();
-        UUID absentBuilder = UUID.randomUUID();
+        Entity recoveryRaw = nativeBuilder.getType().create(level);
+        require(recoveryRaw instanceof BuilderEntity, "Cannot create real native quarantine recovery actor");
+        BuilderEntity recovery = (BuilderEntity) recoveryRaw;
+        UUID absentBuilder = recovery.getUUID(); // Native-generated identity; deliberately not yet registered in the world.
         rejectedSave.putUUID("SiegeNativeBuilder", absentBuilder);
         rejectedSave.remove("ForgeData"); // Dedicated unassigned fixture has no protected receipt to contradict its saved identity.
         CompoundTag raw = validSave.getCompound("structureNBT").copy();
         ListTag cells = raw.getList("blocks", 10);
         CompoundTag first = cells.getCompound(0).copy();
+        // Fixed malformed network-budget stress fixture, not a current wall geometry/material oracle.
         while (cells.size() < 6600) cells.add(first.copy());
         CompoundTag unknown = new CompoundTag(); unknown.putString("keep", "unrecognized original metadata");
         raw.put("unrecognizedCapability", unknown);
@@ -173,9 +179,33 @@ final class ProtectedNativeEntityContracts {
         require(level.addFreshEntity(reloaded), "Cannot register owner cancellation fixture");
         var ledger = ConstructionEditLedger.get(level);
         require(ledger.register(reloaded.getUUID(), java.util.Set.of(reloaded.blockPosition())), "Cannot register cancellation fixture reservation");
+        CompoundTag reservationBefore = ledger.save(new CompoundTag());
+        CompoundTag quarantineBefore = reloaded.saveWithoutId(new CompoundTag());
         ProtectedConstructionActions.handle(owner, reloaded.getUUID(), ProtectedConstructionActions.CANCEL);
-        require(reloaded.isRemoved() && !ledger.contains(reloaded.getUUID()), "Authenticated owner could not cancel quarantined marker");
-        ledger.acknowledgeRetirement(reloaded.getUUID()); // The dedicated random worker never existed.
+        require(ledger.save(new CompoundTag()).equals(reservationBefore)
+                        && reloaded.saveWithoutId(new CompoundTag()).equals(quarantineBefore)
+                        && !reloaded.isRemoved() && ledger.contains(reloaded.getUUID()) && !ledger.retired(reloaded.getUUID())
+                        && ledger.handLifecycle(absentBuilder) == null
+                        && owner.getUUID().equals(reloaded.getPlayerUUID()) && absentBuilder.equals(reloaded.reservedBuilderId())
+                        && reloaded.saveWithoutId(new CompoundTag()).getCompound("structureNBT").equals(raw),
+                "Missing old builder provenance released or normalized quarantined evidence");
+        // Explicit fixture setup: this empty, never-commissioned native actor was absent from the world above.
+        // No hand receipt, paid state, material stock or production acceptance is manufactured.
+        recovery.setPos(reloaded.position().add(-4, 0, 0));
+        recovery.setNoAi(true); WorkersBridge.enablePlayerJob(recovery, owner.getUUID());
+        require(recovery.getInventory().isEmpty() && recovery.getMainHandItem().isEmpty()
+                        && owner.getUUID().equals(WorkersBridge.readWorkerOwner(recovery))
+                        && level.addFreshEntity(recovery), "Cannot register empty owned quarantine recovery actor");
+        CompoundTag recoveryBefore = recovery.saveWithoutId(new CompoundTag());
+        ProtectedConstructionActions.handle(owner, reloaded.getUUID(), ProtectedConstructionActions.CANCEL);
+        require(reloaded.isRemoved() && !ledger.contains(reloaded.getUUID()) && !ledger.retired(reloaded.getUUID())
+                        && recovery.currentBuildArea == null && !WorkersBridge.hasActiveBuildArea(recovery)
+                        && recovery.isNoAi() && owner.getUUID().equals(WorkersBridge.readWorkerOwner(recovery))
+                        && !ProtectedBuilderHandLifecycle.selected(recovery.getPersistentData()) && ledger.handLifecycle(absentBuilder) == null
+                        && recovery.saveWithoutId(new CompoundTag()).getList("Items", 10).equals(recoveryBefore.getList("Items", 10))
+                        && recovery.saveWithoutId(new CompoundTag()).getList("HandItems", 10).equals(recoveryBefore.getList("HandItems", 10)),
+                "Authenticated loaded-builder quarantine cleanup changed inventory or retained construction");
+        recovery.discard();
     }
 
     private static void require(boolean value, String message) { if (!value) throw new AssertionError(message); }

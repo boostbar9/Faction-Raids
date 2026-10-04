@@ -1,6 +1,11 @@
 package com.devfarinsky.siegeoverhaul.nativecompat;
 
 import com.devfarinsky.siegeoverhaul.FactionLogger;
+import com.devfarinsky.siegeoverhaul.core.PerimeterProject;
+import com.devfarinsky.siegeoverhaul.core.PerimeterProjectStore;
+import com.devfarinsky.siegeoverhaul.core.PerimeterStageJournal;
+import com.devfarinsky.siegeoverhaul.core.PerimeterStageLayout;
+import com.devfarinsky.siegeoverhaul.core.PerimeterTerminalReceipt;
 import com.devfarinsky.siegeoverhaul.ModConstants;
 import com.devfarinsky.siegeoverhaul.RaidSavedData;
 import com.devfarinsky.siegeoverhaul.SiegeOverhaul;
@@ -49,6 +54,7 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
+import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModList;
@@ -82,7 +88,12 @@ public final class NativeTerritoryPerimeterQa {
     private static NativeTerritoryPerimeterFixture.Fixture fixture;
     private static CompletableFuture<Action> pending;
     private static Path directory, evidence;
-    private static UUID playerId, jobId;
+    private static UUID playerId, jobId, projectId;
+    private static PerimeterProject acceptedProject;
+    private static PerimeterStageLayout.Layout reviewedLayout;
+    private static BlockPos originalMarker;
+    private static final List<Map<String, Object>> AREA_JOINS = new ArrayList<>();
+    private static CompoundTag loadedProjectAuthority;
     private static long started, constructionStarted, lastProgress, lastSampleTick = -1, placedBefore = -1, stageTick;
     private static int clientPhase, stage, renderFrames, captureFrame;
     private static boolean finished, finishing;
@@ -99,12 +110,16 @@ public final class NativeTerritoryPerimeterQa {
     private static GetNeededItemsFromStorage liveStorageGoal;
     private static StopSnapshot stopped;
     private static Throwable stoppingFailure;
+    private static Throwable treasuryLoadFailure;
+    private static CompoundTag loadedTreasury;
     private static List<CompoundTag> loadedCargo;
     private static CompoundTag loadedMain, loadedOff;
+    private static NativeQaTreasury treasuryObserver;
     private record StopSnapshot(Map<Long, BlockState> geometry, List<List<CompoundTag>> chests,
                                 List<CompoundTag> cargo, CompoundTag main, CompoundTag off,
                                 CompoundTag scope, CompoundTag recipe, UUID ledgerGeneration,
-                                Set<Long> pendingCells, long treasury, long placed, long gameTime) {}
+                                Set<Long> pendingCells, long treasury, long placed, long gameTime,
+                                CompoundTag treasuryFields, long passiveCredits, CompoundTag projectAuthority, int activeStage) {}
     private enum Action { NONE, USE_PLAN, RELOAD, CAPTURE_COMPLETE, DONE }
 
     private NativeTerritoryPerimeterQa() {}
@@ -184,6 +199,9 @@ public final class NativeTerritoryPerimeterQa {
     private static Action step(ServerLevel level, ServerPlayer owner) throws Exception {
         require(owner != null && owner.isAlive(), "Real player missing/dead");
         long now = level.getGameTime();
+        PerimeterProject currentProject = projectId == null ? null : project(level);
+        jobId = currentProject != null && currentProject.active() != null ? currentProject.active().areaId() : null;
+        if (treasuryObserver != null) observeTreasury(level, core(owner));
         if (stage > 0 && stage != 4 && stage != 14) require(now - stageTick < 2400, "Nonconstruction stage timeout: " + stage);
         switch (stage) {
             case 0 -> {
@@ -201,12 +219,15 @@ public final class NativeTerritoryPerimeterQa {
                         "Production preparation omitted a same-faction claim record");
                 require(prepared.builder() == builder(level) && prepared.plan().blocks().equals(fixture.plan().blocks())
                         && prepared.plan().clearance().equals(fixture.plan().clearance()), "Production quote differs from exact multi-claim union oracle");
+                require(prepared.quote() != null && !prepared.quote().layout().stages().isEmpty(),
+                        "L territory needs a valid production section layout");
+                reviewedLayout = prepared.quote().layout();
                 require(PerimeterConstruction.review(owner, NativeTerritoryPerimeterFixture.CORE, 1), "Production review failed");
                 require(balance(owner) == 2000 && areaCount(level) == 0 && placed(level) == 0,
                         "Free review mutated blocks, charged money or created a job");
                 selectPlan(owner);
                 check("Fresh cheats-off survival owner, native core, two distinct same-faction claim records and three-chunk L territory");
-                check("Production full-territory review exactly matches independent 2376-block L oracle and is free");
+                check("Production full-territory review exactly matches independent 1404-block L oracle and is free");
                 sample(level, owner, "review"); advance(now, 1);
             }
             case 1 -> {
@@ -220,31 +241,39 @@ public final class NativeTerritoryPerimeterQa {
             case 2 -> {
                 if (now - stageTick < 20) return Action.NONE;
                 require(balance(owner) == 1936 && owner.getMainHandItem().isEmpty(), "Real plan-use packet did not charge exactly 64 and consume one plan");
-                require(builder(level).getPersistentData().hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID), "Production builder/job link missing");
-                jobId = builder(level).getPersistentData().getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID);
-                require(level.getEntity(jobId) instanceof ProtectedBuildArea, "Real paid protected job missing");
-                ProtectedBuildArea area = (ProtectedBuildArea) level.getEntity(jobId);
-                require(NativeConstructionGuard.commissionPaid(area) && NativeConstructionGuard.hasReservation(level, jobId)
-                        && areaCount(level) == 1, "Paid activation/reservation missing or duplicate job exists");
-                AcceptedConstructionPlan accepted = AcceptedConstructionPlan.capture(area);
-                require(accepted.cells.size() == NativeTerritoryPerimeterFixture.BLOCKS, "Native accepted plan count differs");
-                for (var entry : accepted.cells.entrySet()) require(fixture.plan().blocks().get(entry.getKey().asLong())
-                        .equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(entry.getValue().getBlock())))
-                        && NativeTerritoryPerimeterFixture.TERRITORY.contains(new net.minecraft.world.level.ChunkPos(entry.getKey()))
-                        && fixture.claimIds().contains(ClaimEvents.recruitsClaimManager.getClaim(new net.minecraft.world.level.ChunkPos(entry.getKey())).getUUID()),
-                        "Native transformed target leaves exact paid territory/real claim records");
-                verifyReceipt(level, area);
+                var projects = PerimeterProjectStore.all(core(owner));
+                require(projects.size() == 1, "Expected one whole-territory project");
+                acceptedProject = projects.get(0); projectId = acceptedProject.header().projectId();
+                require(acceptedProject.state() == PerimeterProject.State.RUNNING
+                        && acceptedProject.plan().blocks().equals(fixture.plan().blocks())
+                        && acceptedProject.layout().equals(reviewedLayout), "Paid L project differs from the complete reviewed union/layout");
+                verifyPayment(acceptedProject.payment());
+                var journal = PerimeterStageJournal.get(core(owner), acceptedProject);
+                require(journal != null && journal.attempts().size() == 1 && journal.at(0).state() == PerimeterStageJournal.State.LIVE,
+                        "First real native stage lacks durable admission history");
+                originalMarker = journal.at(0).marker(); jobId = acceptedProject.active().areaId();
+                ProtectedBuildArea area = area(level);
+                verifyProject(level, acceptedProject); verifyReceipt(level, area);
+                REPORT.put("projectId", projectId.toString()); REPORT.put("manifestHash", acceptedProject.manifestHash());
+                REPORT.put("originalMarker", originalMarker.toShortString());
+                REPORT.put("stageLayout", acceptedProject.stages().stream().map(part -> Map.of("index", part.index(), "area", part.areaId().toString(),
+                        "digest", part.digest(), "targets", part.layout().targets().size())).toList());
+                var residents = RaidSavedData.get(owner.server).civilianFactions.get(coreKey);
+                require(residents != null, "Real starter civilian ledger is unavailable");
+                treasuryObserver = new NativeQaTreasury(core(owner), bankRate(core(owner)), now, 2000, 64,
+                        residents.getCompound("Residents").size());
                 acceptedScope = area.getPersistentData().getCompound("SiegePerimeterTerritory").copy();
                 builder(level).setNoAi(false); // Last fixture write to the tested worker; native AI owns all movement/work now.
                 constructionStarted = lastProgress = System.nanoTime(); placedBefore = placed(level);
                 owner.teleportTo(level, 136.5, 65, -5.5, 0, 10); // Stationary survival observer, outside the claimed ring.
-                check("Actual client plan-use packet produces one guarded native job, exactly 64 Treasury debit and consumed plan");
+                check("Actual client plan-use packet produces one complete paid L project and its first native section, exactly 64 Treasury debit and consumed plan");
                 sample(level, owner, "commissioned-ai-enabled"); advance(now, 3);
                 return Action.USE_PLAN; // Ordinary second use of the now-empty hand must not commission again.
             }
             case 3 -> {
                 if (now - stageTick < 20) return Action.NONE;
-                require(balance(owner) == 1936 && areaCount(level) == 1, "Repeated client use charged or created another job");
+                require(balance(owner) == 1936 && PerimeterProjectStore.all(core(owner)).size() == 1 && areaCount(level) <= 1,
+                        "Repeated client use charged or created another project/native stage");
                 check("Repeated real client use after plan consumption cannot double-charge or create another job");
                 advance(now, 4);
             }
@@ -254,29 +283,32 @@ public final class NativeTerritoryPerimeterQa {
                 lastSampleTick = now;
                 long placed = placed(level);
                 if (placed != placedBefore) { lastProgress = System.nanoTime(); placedBefore = placed; }
-                require(balance(owner) == 1936, "Native construction charged Treasury again");
+                observeTreasury(level, core(owner));
                 conservation(level, owner);
+                if (currentProject != null) verifyProject(level, currentProject);
                 if (SAMPLES.isEmpty() || now % 200 < 20 || placed == NativeTerritoryPerimeterFixture.BLOCKS)
                     sample(level, owner, "native-progress");
                 require(System.nanoTime() - constructionStarted - pausedNanos <= CONSTRUCTION_SECONDS * SECOND, "Native completion exceeded count-derived construction bound");
                 require(System.nanoTime() - lastProgress <= 180 * SECOND, "Native perimeter placed no new block for three minutes");
-                if (!restartVerified && placed >= NativeTerritoryPerimeterFixture.BLOCKS / 4) {
+                if (!restartVerified && placed >= NativeTerritoryPerimeterFixture.BLOCKS / 4
+                        && currentProject != null && currentProject.state() == PerimeterProject.State.RUNNING
+                        && activePlaced(level, currentProject) > 0
+                        && activePlaced(level, currentProject) < currentProject.active().layout().targets().size()) {
                     require(placed < NativeTerritoryPerimeterFixture.BLOCKS, "Restart was not at genuine partial progress");
                     owner.setGameMode(GameType.SPECTATOR); pausedStarted = System.nanoTime(); pausedGeometry = geometry(level);
                     advance(now, 10); return Action.NONE;
                 }
-                if (placed < NativeTerritoryPerimeterFixture.BLOCKS) return Action.NONE;
+                if (placed < NativeTerritoryPerimeterFixture.BLOCKS || !completeAuthority(level)) return Action.NONE;
                 require(restartVerified, "Completion did not exercise an actual partial-progress restart");
                 verifyExactCompletion(level, owner);
                 REPORT.put("constructionSeconds", (System.nanoTime() - constructionStarted - pausedNanos) / (double) SECOND);
-                check("Production-wrapped native builder goal, native storage collection and pathfinding placed all 2376 exact L-territory perimeter blocks through two finite native storages and a genuine restart");
+                check("Production-wrapped native builder goal, native storage collection and pathfinding placed all 1404 exact L-territory perimeter blocks through two finite native storages and a genuine restart");
                 advance(now, 5);
             }
             case 5 -> {
                 if (now - stageTick < 100) return Action.NONE;
                 verifyExactCompletion(level, owner);
-                require(level.getEntity(jobId) == null || ((ProtectedBuildArea) level.getEntity(jobId)).isDone(),
-                        "Exact world completion did not reach native marker completion");
+                require(completeAuthority(level), "Exact world completion lacks a durable COMPLETE project or terminal");
                 REPORT.put("finalDiagnostics", diagnostics(level, owner, true));
                 REPORT.put("completedBlocks", placed(level)); REPORT.put("treasuryDebit", 64);
                 REPORT.put("materialCounts", Map.of("minecraft:cobblestone", NativeTerritoryPerimeterFixture.COBBLE, "minecraft:oak_planks", NativeTerritoryPerimeterFixture.OAK));
@@ -295,13 +327,15 @@ public final class NativeTerritoryPerimeterQa {
             }
             case 7 -> {
                 require(SHOTS.contains("01-native-completed-territory-perimeter.png"), "Missing actual completed-ring framebuffer");
+                verifyExactCompletion(level, owner);
+                REPORT.put("finalDiagnostics", diagnostics(level, owner, true));
                 return Action.DONE;
             }
             case 10 -> {
                 require(geometry(level).equals(pausedGeometry), "Native construction continued after owner permission pause");
                 if (now - stageTick < 60) return Action.NONE;
-                require(NativeConstructionGuard.status(area(level)).toLowerCase(java.util.Locale.ROOT).contains("permission"),
-                        "Actual permission-loss guard pause was not observed");
+                require(pauseReason(level).contains("permission") || pauseReason(level).contains("owner"),
+                        "Actual permission-loss project/native guard pause was not observed: " + pauseReason(level));
                 var second = detachedClaimUpdate(ClaimEvents.recruitsClaimManager.getClaim(fixture.claimIds().get(1)));
                 require(second != null && !second.getClaimedChunks().contains(NativeTerritoryPerimeterFixture.EXPANSION),
                         "Unexpected expansion fixture claim state");
@@ -317,7 +351,7 @@ public final class NativeTerritoryPerimeterQa {
                 advance(now, 11);
             }
             case 11 -> {
-                require(geometry(level).equals(pausedGeometry) && balance(owner) == 1936,
+                require(geometry(level).equals(pausedGeometry),
                         "Expanded territory/permission pause changed paid geometry or Treasury");
                 if (now - stageTick < 60) return Action.NONE;
                 conservation(level, owner); sample(level, owner, "partial-before-save-request");
@@ -328,6 +362,8 @@ public final class NativeTerritoryPerimeterQa {
             }
             case 12 -> {
                 require(stopped != null && stoppingFailure == null, "Final pre-shutdown snapshot missing: " + stoppingFailure);
+                require(treasuryLoadFailure == null && loadedTreasury != null && loadedTreasury.equals(stopped.treasuryFields()),
+                        "Exact Treasury load-boundary persistence failed: " + treasuryLoadFailure);
                 require(owner.isSpectator(), "Actual saved owner permission state did not survive restart");
                 require(geometry(level).equals(stopped.geometry()) && pendingCells(level).equals(stopped.pendingCells()),
                         "World restart changed accepted partial geometry/pending targets");
@@ -340,11 +376,25 @@ public final class NativeTerritoryPerimeterQa {
                         && area(level).getPersistentData().getCompound("SiegeProtectedConstructionV1").equals(stopped.recipe())
                         && ConstructionEditLedger.get(level).sameGeneration(stopped.ledgerGeneration())
                         && NativeConstructionGuard.hasReservation(level, jobId)
-                        && NativeConstructionGuard.commissionPaid(area(level)) && balance(owner) == stopped.treasury(),
+                        && NativeConstructionGuard.commissionPaid(area(level))
+                        && currentProject != null && currentProject.activeStage() == stopped.activeStage()
+                        && ConstructionEditLedger.get(level).matchesProjectReservation(currentProject)
+                        && loadedProjectAuthority != null && loadedProjectAuthority.equals(stopped.projectAuthority())
+                        && balance(owner) == stopped.treasury()
+                        + treasuryObserver.passiveCredits() - stopped.passiveCredits(),
                         "Full paid recipe/reservation/scope/ledger did not persist exactly");
                 verifyCurrentTerritory(level, expandedTerritory()); verifyReceipt(level, area(level)); conservation(level, owner);
                 REPORT.put("restartPlacedBlocks", stopped.placed()); REPORT.put("restartPendingCells", stopped.pendingCells().size());
+                var stoppedPart = acceptedProject.stages().get(stopped.activeStage()).layout();
+                long stoppedPartPending = stoppedPart.targets().entrySet().stream().filter(entry -> !entry.getValue().equals(
+                        String.valueOf(ForgeRegistries.BLOCKS.getKey(stopped.geometry().get(entry.getKey()).getBlock())))).count();
+                require(stoppedPartPending > 0 && stoppedPartPending < stoppedPart.targets().size(),
+                        "Saved restart was not genuinely inside an unfinished native section");
+                REPORT.put("restartActiveStage", stopped.activeStage()); REPORT.put("restartActiveStageTargets", stoppedPart.targets().size());
+                REPORT.put("restartActiveStagePending", stoppedPartPending);
+                REPORT.put("reloadProjectBoundary", "ServerStartedEvent before resumed ticks: exact whole-project record and native stage journal preserved");
                 REPORT.put("shutdownSnapshotGameTime", stopped.gameTime());
+                REPORT.put("verifiedPassiveCreditsAfterStop", treasuryObserver.passiveCredits() - stopped.passiveCredits());
                 REPORT.put("reloadStockSnapshotBoundary", "ServerStoppingEvent after the final native simulation tick; entity cargo compared at EntityJoinLevelEvent before native AI");
                 sample(level, owner, "actual-world-reload-exact-stock-and-recipe");
                 check("Genuine partial-progress close/reopen preserves both native chests, entity cargo, full recipe, reserved scope, pending geometry, paid state and ledger");
@@ -354,12 +404,12 @@ public final class NativeTerritoryPerimeterQa {
             }
             case 13 -> {
                 require(!owner.isSpectator() && owner.mayBuild() && !owner.isCreative(), "Territory-only pause lacks a real permitted Survival owner");
-                require(geometry(level).equals(pausedGeometry) && balance(owner) == 1936,
+                require(geometry(level).equals(pausedGeometry),
                         "Native construction mutated accepted geometry or Treasury while complete territory scope differed");
                 verifyReceipt(level, area(level)); conservation(level, owner);
                 if (now - stageTick < 100) return Action.NONE;
-                require(NativeConstructionGuard.status(area(level)).toLowerCase(java.util.Locale.ROOT).contains("territory"),
-                        "Native scope-change pause is masked by another guard: " + NativeConstructionGuard.status(area(level)));
+                require(pauseReason(level).contains("territory"),
+                        "Native/project scope-change pause is masked by another guard: " + pauseReason(level));
                 check("After restart, Survival owner with expanded same-faction territory remains paused for 100 ticks with exact old scope and no mutation or payment");
                 var second = detachedClaimUpdate(ClaimEvents.recruitsClaimManager.getClaim(fixture.claimIds().get(1)));
                 require(second != null, "Second native claim record vanished");
@@ -374,13 +424,15 @@ public final class NativeTerritoryPerimeterQa {
                 advance(now, 14);
             }
             case 14 -> {
-                conservation(level, owner); require(balance(owner) == 1936, "Restart/resume charged again");
+                conservation(level, owner); observeTreasury(level, core(owner));
                 require(System.nanoTime() - lastProgress < 180 * SECOND, "Native AI did not resume within the normal no-placement bound");
                 if (placed(level) <= stopped.placed()) return Action.NONE;
                 require(area(level).nativeQueuesReady(), "Native accepted queues were not rebuilt after reload");
                 var queued = new java.util.HashSet<Long>();
                 for (var block : area(level).stackToPlace) require(queued.add(block.getPos().asLong()), "Duplicate native pending target after reload");
-                require(queued.equals(pendingCells(level)), "Rebuilt native pending queue differs from exact remaining accepted geometry");
+                require(currentProject != null && currentProject.activeStage() == stopped.activeStage()
+                        && queued.equals(activePendingCells(level, currentProject)), "Rebuilt native pending queue differs from the exact remaining active section");
+                verifyProject(level, currentProject);
                 restartVerified = true; lastProgress = System.nanoTime(); placedBefore = placed(level);
                 check("Restoring original complete territory resumes actual native AI with an exact rebuilt remaining-target queue and no second charge");
                 sample(level, owner, "native-resumed-after-restart-and-scope-restore");
@@ -393,9 +445,10 @@ public final class NativeTerritoryPerimeterQa {
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void nativeEntityJoined(EntityJoinLevelEvent event) {
-        if (!ENABLED || fixture == null || event.getLevel().isClientSide()
-                || !(event.getEntity() instanceof BuilderEntity builder)
-                || !builder.getUUID().equals(fixture.builderId())) return;
+        if (!ENABLED || fixture == null || event.getLevel().isClientSide()) return;
+        if (event.getEntity() instanceof ProtectedBuildArea area) AREA_JOINS.add(Map.of("area", area.getUUID().toString(),
+                "marker", area.blockPosition().toShortString(), "loadedFromDisk", event.loadedFromDisk()));
+        if (!(event.getEntity() instanceof BuilderEntity builder) || !builder.getUUID().equals(fixture.builderId())) return;
         // This reads the actual freshly loaded native goals before production installs its wrappers.
         liveBuildGoal = builder.goalSelector.getAvailableGoals().stream().map(g -> g.getGoal())
                 .filter(BuilderWorkGoal.class::isInstance).map(BuilderWorkGoal.class::cast).findFirst().orElse(null);
@@ -418,15 +471,39 @@ public final class NativeTerritoryPerimeterQa {
             require(geometry(level).equals(pausedGeometry), "Native target changed during final shutdown ticks");
             conservation(level, null); verifyReceipt(level, area);
             CompoundTag core = RaidSavedData.get(event.getServer()).siegeCores.get(coreKey);
-            require(core != null && FactionBank.balance(core) == 1936, "Final shutdown Treasury changed");
+            require(core != null, "Final shutdown Treasury missing"); observeTreasury(level, core);
             stopped = new StopSnapshot(geometry(level), chestValues(level), constructionValues(builder.getInventory()),
                     builder.getMainHandItem().save(new CompoundTag()), builder.getOffhandItem().save(new CompoundTag()),
                     area.getPersistentData().getCompound("SiegePerimeterTerritory").copy(),
                     area.getPersistentData().getCompound("SiegeProtectedConstructionV1").copy(),
-                    ConstructionEditLedger.get(level).generation(), pendingCells(level), FactionBank.balance(core), placed(level), level.getGameTime());
+                    ConstructionEditLedger.get(level).generation(), pendingCells(level), FactionBank.balance(core), placed(level), level.getGameTime(),
+                    treasuryFields(core), treasuryObserver.passiveCredits(), projectAuthority(core), project(level).activeStage());
             REPORT.put("stoppingStock", Map.of("chestCobble", chestStock(level, Items.COBBLESTONE), "chestOak", chestStock(level, Items.OAK_PLANKS),
                     "builderCobble", workerStock(builder, Items.COBBLESTONE), "builderOak", workerStock(builder, Items.OAK_PLANKS), "placed", placed(level)));
         } catch (Throwable problem) { stoppingFailure = problem; }
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void serverStarted(ServerStartedEvent event) {
+        if (!ENABLED || !restartRequested || stopped == null
+                || !NativeTerritoryPerimeterFixture.WORLD.equals(event.getServer().getWorldData().getLevelName())) return;
+        try {
+            ServerLevel level = event.getServer().overworld();
+            CompoundTag core = RaidSavedData.get(event.getServer()).siegeCores.get(coreKey);
+            require(core != null && level.getGameTime() == stopped.gameTime(), "Treasury load boundary was not before resumed server ticks");
+            loadedTreasury = treasuryFields(core);
+            loadedProjectAuthority = projectAuthority(core);
+            require(loadedTreasury.equals(stopped.treasuryFields()), "Saved Treasury counters/ledger changed before resumed ticks");
+            require(loadedProjectAuthority.equals(stopped.projectAuthority()), "Saved complete project/stage journal changed before resumed ticks");
+            REPORT.put("reloadTreasuryBoundary", "ServerStartedEvent before resumed ticks: exact balance, interest clock/remainder, tax counter and ledger preserved");
+        } catch (Throwable problem) { treasuryLoadFailure = problem; }
+    }
+
+    private static CompoundTag treasuryFields(CompoundTag core) {
+        CompoundTag snapshot = new CompoundTag();
+        for (String key : List.of("BankEmeralds", "BankInterestAt", "BankInterestRemainder", "CivilianTaxesTotal", "BankLedger"))
+            if (core.contains(key)) snapshot.put(key, core.get(key).copy());
+        return snapshot;
     }
 
     private static ProtectedBuildArea area(ServerLevel level) {
@@ -469,16 +546,82 @@ public final class NativeTerritoryPerimeterQa {
         CompoundTag recipe = area.getPersistentData().getCompound("SiegeProtectedConstructionV1");
         AcceptedConstructionPlan accepted = AcceptedConstructionPlan.load(recipe);
         AcceptedConstructionReservation reservation = AcceptedConstructionReservation.load(accepted, recipe.getCompound("Reservation"));
+        PerimeterProject project = project(level);
+        require(project != null && project.active() != null && project.active().areaId().equals(area.getUUID()),
+                "Native receipt is not the current staged project section");
         Map<Long, String> cells = new LinkedHashMap<>();
         accepted.cells.forEach((pos, state) -> cells.put(pos.asLong(), String.valueOf(ForgeRegistries.BLOCKS.getKey(state.getBlock()))));
-        require(cells.equals(fixture.plan().blocks()), "Persisted native recipe omits or changes full-territory cells");
+        require(cells.equals(project.active().layout().targets()), "Persisted native recipe changes the exact active L section");
         Set<BlockPos> expectedReservation = new java.util.HashSet<>();
-        fixture.plan().blocks().keySet().forEach(p -> expectedReservation.add(BlockPos.of(p)));
-        fixture.plan().clearance().forEach(p -> expectedReservation.add(BlockPos.of(p)));
+        project.active().reservation().forEach(p -> expectedReservation.add(BlockPos.of(p)));
         require(reservation.cells.equals(expectedReservation)
-                && NativeConstructionGuard.hasReservation(level, jobId) && NativeConstructionGuard.commissionPaid(area),
-                "Persisted exact structural/headroom reservation or single paid commission missing");
+                && NativeConstructionGuard.hasReservation(level, area.getUUID()) && NativeConstructionGuard.commissionPaid(area)
+                && ConstructionEditLedger.get(level).matchesProjectReservation(project),
+                "Native section lease or complete global L reservation is missing");
     }
+
+
+    private static CompoundTag projectAuthority(CompoundTag core) {
+        CompoundTag saved = new CompoundTag();
+        for (String key : List.of(PerimeterProjectStore.KEY, PerimeterStageJournal.KEY)) if (core.contains(key)) saved.put(key, core.get(key).copy());
+        return saved;
+    }
+    private static PerimeterProject project(ServerLevel level) { return PerimeterProjectAuthority.snapshot(level, coreKey).get(projectId); }
+    private static long activePlaced(ServerLevel level, PerimeterProject project) {
+        return project.active().layout().targets().size() - activePendingCells(level, project).size();
+    }
+    private static Set<Long> activePendingCells(ServerLevel level, PerimeterProject project) {
+        var pending = new java.util.HashSet<Long>();
+        project.active().layout().targets().forEach((cell, material) -> {
+            if (!material.equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(level.getBlockState(BlockPos.of(cell)).getBlock())))) pending.add(cell);
+        });
+        return Set.copyOf(pending);
+    }
+    private static String pauseReason(ServerLevel level) {
+        var project = project(level);
+        return ((project == null ? "" : project.blocker()) + " " + NativeConstructionGuard.status(area(level))).toLowerCase(java.util.Locale.ROOT);
+    }
+    private static void verifyPayment(PerimeterProject.PaymentReceipt payment) {
+        require(payment != null && payment.projectId().equals(projectId) && payment.generation() == acceptedProject.header().generation()
+                && payment.manifestHash().equals(acceptedProject.manifestHash()) && payment.quotedPrice() == 64 && payment.debited() == 64
+                && !payment.creative(), "Changed exact single noncreative L commission receipt");
+    }
+    private static void verifyProject(ServerLevel level, PerimeterProject project) {
+        require(project.header().equals(acceptedProject.header()) && project.manifestHash().equals(acceptedProject.manifestHash())
+                && project.layout().equals(reviewedLayout) && project.targets().equals(acceptedProject.targets()), "Whole L manifest or partition changed");
+        verifyPayment(project.payment());
+        var journal = PerimeterStageJournal.get(RaidSavedData.get(level.getServer()).siegeCores.get(coreKey), project);
+        require(journal != null && journal.at(0) != null, "Native staged L creation journal missing");
+        for (var attempt : journal.attempts()) require(attempt.marker().equals(originalMarker)
+                && attempt.area().equals(acceptedProject.stages().get(attempt.stage()).areaId()), "L section changed its original shovel site or native identity");
+        if (project.state() != PerimeterProject.State.COMPLETE) require(ConstructionEditLedger.get(level).matchesProjectReservation(project), "Complete L reservation disappeared between sections");
+        require(areaCount(level) <= 1, "Concurrent native section assignments");
+        for (var receipt : project.receipts()) {
+            var expected = acceptedProject.stages().get(receipt.stageIndex());
+            require(receipt.projectId().equals(projectId) && receipt.generation() == acceptedProject.header().generation()
+                    && receipt.manifestHash().equals(acceptedProject.manifestHash()) && receipt.areaId().equals(expected.areaId())
+                    && receipt.stageDigest().equals(expected.digest()) && receipt.verifiedTargets() == expected.layout().targets().size(), "Changed native L section receipt");
+        }
+    }
+    private static boolean completeAuthority(ServerLevel level) {
+        var snapshot = PerimeterProjectAuthority.snapshot(level, coreKey); var current = snapshot.get(projectId); var terminal = snapshot.terminal(projectId);
+        if (current != null) {
+            if (current.state() != PerimeterProject.State.COMPLETE) return false;
+            verifyProject(level, current);
+            require(current.completedTargetCount() == NativeTerritoryPerimeterFixture.BLOCKS
+                    && current.receipts().size() == acceptedProject.stages().size(), "Full COMPLETE record lacks all L section receipts");
+            REPORT.put("completionAuthority", "COMPLETE full durable project"); REPORT.put("completionAuthorityNbt", current.save().toString()); return true;
+        }
+        require(terminal != null, "Neither full L project nor terminal authority remains");
+        require(terminal.state() == PerimeterProject.State.COMPLETE && terminal.projectId().equals(projectId)
+                && terminal.manifestHash().equals(acceptedProject.manifestHash()) && terminal.totalTargetCount() == NativeTerritoryPerimeterFixture.BLOCKS
+                && terminal.verifiedStages() == acceptedProject.stages().size() && terminal.claimChunkCount() == NativeTerritoryPerimeterFixture.TERRITORY.size()
+                && terminal.stages().stream().map(PerimeterTerminalReceipt.Stage::areaId).toList()
+                    .equals(acceptedProject.stages().stream().map(PerimeterProject.Stage::areaId).toList()), "Compact COMPLETE does not cover the exact whole L project");
+        verifyPayment(terminal.payment());
+        REPORT.put("completionAuthority", "COMPLETE compact terminal receipt"); REPORT.put("completionAuthorityNbt", terminal.save().toString()); return true;
+    }
+
     private static void verifyPreview(PerimeterPreview.Selection selection) {
         Map<Long, String> expanded = new LinkedHashMap<>();
         for (var box : selection.boxes()) {
@@ -521,7 +664,16 @@ public final class NativeTerritoryPerimeterQa {
     }
 
     private static void verifyExactCompletion(ServerLevel level, ServerPlayer owner) {
-        require(placed(level) == NativeTerritoryPerimeterFixture.BLOCKS && balance(owner) == 1936, "Completion geometry/payment mismatch");
+        NativeHollowWallOracle.assertCavitiesAir(level, NativeTerritoryPerimeterFixture.TERRITORY);
+        require(completeAuthority(level), "Marker absence is not complete staged authority");
+        var joined = AREA_JOINS.stream().map(entry -> entry.get("area")).collect(java.util.stream.Collectors.toSet());
+        require(joined.equals(acceptedProject.stages().stream().map(part -> part.areaId().toString()).collect(java.util.stream.Collectors.toSet()))
+                && AREA_JOINS.stream().filter(entry -> Boolean.FALSE.equals(entry.get("loadedFromDisk"))).count() == acceptedProject.stages().size()
+                && AREA_JOINS.stream().allMatch(entry -> originalMarker.toShortString().equals(entry.get("marker"))),
+                "Missing/duplicate native stage creation or changed original shovel site");
+        REPORT.put("nativeStageJoins", List.copyOf(AREA_JOINS));
+        require(placed(level) == NativeTerritoryPerimeterFixture.BLOCKS, "Completion geometry mismatch");
+        observeTreasury(level, core(owner));
         for (var entry : fixture.plan().blocks().entrySet()) {
             BlockState expected = ForgeRegistries.BLOCKS.getValue(new net.minecraft.resources.ResourceLocation(entry.getValue())).defaultBlockState();
             require(level.getBlockState(BlockPos.of(entry.getKey())).equals(expected), "Wrong exact block state at " + BlockPos.of(entry.getKey()));
@@ -582,8 +734,14 @@ public final class NativeTerritoryPerimeterQa {
     private static Map<String, Object> diagnostics(ServerLevel level, ServerPlayer owner, boolean detailed) {
         var result = new LinkedHashMap<String, Object>(); result.put("stage", stage); result.put("gameTime", level.getGameTime());
         if (fixture == null) return result;
+        if (projectId != null) {
+            var project = project(level);
+            result.put("project", project == null ? "compact terminal" : Map.of("state", project.state().name(), "activeStage", project.activeStage(),
+                    "receipts", project.receipts().size(), "blocker", project.blocker(), "manifest", project.manifestHash()));
+        }
         BuilderEntity builder = builder(level); var goal = liveBuildGoal; var storageGoal = liveStorageGoal;
         result.put("placed", placed(level)); result.put("treasury", owner == null ? -1 : balance(owner));
+        if (treasuryObserver != null) result.put("treasuryObservation", treasuryObserver.lastObservation());
         result.put("builderPosition", builder.position().toString()); result.put("builderNoAi", builder.isNoAi());
         var builderData = builder.getPersistentData();
         result.put("selfClearanceRequests", builderData.getInt("SiegeSelfClearanceRequests"));
@@ -693,6 +851,13 @@ public final class NativeTerritoryPerimeterQa {
         var tag = RaidSavedData.get(owner.server).siegeCores.get(SiegeCore.key(owner)); require(tag != null, "Core treasury missing"); return tag;
     }
     private static long balance(ServerPlayer owner) { return FactionBank.balance(core(owner)); }
+    private static int bankRate(CompoundTag core) {
+        return FactionBank.interestRate(core, com.devfarinsky.siegeoverhaul.RaidConfig.BANK_INTEREST_BASIS_POINTS.get());
+    }
+    private static void observeTreasury(ServerLevel level, CompoundTag core) {
+        require(treasuryObserver != null, "Treasury observer was not initialized after the exact fee");
+        treasuryObserver.observe(core, bankRate(core), level.getGameTime());
+    }
     private static void selectPlan(ServerPlayer owner) {
         int found = -1;
         for (int i = 0; i < owner.getInventory().getContainerSize(); i++) if (owner.getInventory().getItem(i).is(ModItems.PERIMETER_PLAN.get())) { found = i; break; }
@@ -708,10 +873,11 @@ public final class NativeTerritoryPerimeterQa {
         require(directory.endsWith(Path.of("build", "native-territory-qa", "client"))
                 && mc.gameDirectory.toPath().toRealPath().equals(directory.toRealPath()), "Unsafe active QA game directory");
         evidence = directory.getParent().resolve("evidence"); Files.createDirectories(evidence);
+        REPORT.put("treasuryObserverContracts", NativeQaTreasuryContracts.verify());
         REPORT.put("startedUtc", Instant.now().toString()); REPORT.put("mode", "territory-perimeter");
         REPORT.put("constructionLimitSeconds", CONSTRUCTION_SECONDS);
-        REPORT.put("timeoutBasis", "One chunk measured 714.39s / 968 blocks = 0.738s per block; allow 1s per target plus 180s = 2556s for 2376 blocks, below 45min. Separate 8min setup/reload cap; normal 20TPS, no build-speed change.");
-        REPORT.put("scope", "Fresh integrated survival world; two native Recruits same-faction claim records forming a three-chunk L; actual production free-plan/commission packets and native Workers AI with two finite single-chest storage areas. Actual partial-progress save/reopen, persisted complete scope and Survival territory-change pause. Fixture-only bounded terrain/setup and parked unrelated NPCs; spectator permission pause exercises production guard, aerial camera only after exact completion.");
+        REPORT.put("timeoutBasis", "Historical solid one-claim calibration was 714.39s / 968 blocks = 0.738s per block; allow 1s per current hollow target plus 180s = 1584s for 1404 blocks, below 45min. Separate 8min setup/reload cap; normal 20TPS, no build-speed change.");
+        REPORT.put("scope", "Fresh integrated survival world; two native Recruits same-faction claim records forming a three-chunk L; actual production free-plan/commission packets and native Workers AI with two finite single-chest storage areas. Actual partial-progress save/reopen, persisted whole-project/native-stage journal and complete scope, Survival territory-change pause, and final durable COMPLETE across every native section. Fixture-only bounded terrain/setup and parked unrelated NPCs; spectator permission pause exercises production guard, aerial camera only after exact completion.");
         REPORT.put("notCovered", List.of("Dedicated-server networking", "Disjoint or holed territory native pathfinding", "Uneven terrain/other material palettes", "Storage coverage beyond 64 blocks", "Claim/block planning-cap boundaries (separate unit tests)", "Baseline HUD/mutation-matrix tests (separate QA workflow)"));
         var mods = new LinkedHashMap<String, String>(); var artifacts = new LinkedHashMap<String, Object>();
         for (String id : List.of("minecraft", "forge", "siegeoverhaul", "workers", "recruits", "smallships", "siegeweapons")) {
@@ -765,6 +931,8 @@ public final class NativeTerritoryPerimeterQa {
         REPORT.put("status", failure == null ? "passed" : "failed"); REPORT.put("stage", stage);
         REPORT.put("finishedUtc", Instant.now().toString()); REPORT.put("assertions", List.copyOf(CHECKS));
         REPORT.put("samples", List.copyOf(SAMPLES)); REPORT.put("screenshots", List.copyOf(SHOTS));
+        REPORT.put("nativeStageJoins", List.copyOf(AREA_JOINS));
+        if (treasuryObserver != null) REPORT.put("treasuryAccounting", treasuryObserver.evidence());
         if (failure != null) REPORT.put("failure", failure.toString());
         try { if (evidence != null) Files.writeString(evidence.resolve("result.json"), new GsonBuilder().setPrettyPrinting().create().toJson(REPORT)); }
         catch (Exception writeFailure) { FactionLogger.LOG.error("Could not write full-perimeter evidence", writeFailure); }

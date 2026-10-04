@@ -29,8 +29,17 @@ import java.util.function.Predicate;
 public final class PerimeterConstruction {
     static final long MAX_NATIVE_SCAN_WORK = 1_048_576L + 65_536L;
     public static final String SITE_MIN = "SiegeDefenseSiteMin", SITE_MAX = "SiegeDefenseSiteMax";
+    public record Quote(BlockPos core, int material, UUID owner, UUID builder,
+                        PerimeterStageLayout.Layout layout, Map<Long, net.minecraft.world.level.block.state.BlockState> before,
+                        Map<Long, net.minecraft.world.level.block.state.BlockState> clearance, String fingerprint) {
+        public Quote { core=core.immutable(); before=Map.copyOf(before); clearance=Map.copyOf(clearance); }
+    }
     public record Preparation(Mob builder, PerimeterBlueprint.Plan plan, String claimIdentity, String problem,
-                              RecruitsClaimsBridge.TerritorySnapshot territory) {
+                              RecruitsClaimsBridge.TerritorySnapshot territory, Quote quote) {
+        Preparation(Mob builder, PerimeterBlueprint.Plan plan, String claimIdentity, String problem,
+                    RecruitsClaimsBridge.TerritorySnapshot territory) {
+            this(builder,plan,claimIdentity,problem,territory,null);
+        }
         Preparation(Mob builder, PerimeterBlueprint.Plan plan, String claimIdentity, String problem) {
             this(builder, plan, claimIdentity, problem, null);
         }
@@ -130,8 +139,13 @@ public final class PerimeterConstruction {
         if (!plan.valid()) return new Preparation(null, plan, claimIdentity, plan.problemSummary(), territory);
         if (!nativeScanWithinBudget(plan)) return new Preparation(null, plan, claimIdentity,
                 "The complete perimeter exceeds the bounded native Workers scan budget. Use smaller manual sections; no payment or partial job is created.", territory);
-        String networkProblem = BlueprintNetworkBudget.problem(TerritoryFortification.blueprint(plan.blocks(), plan.min(), plan.max()));
-        if (networkProblem != null) return new Preparation(null, plan, claimIdentity, networkProblem, territory);
+        PerimeterStageLayout.Layout layout;
+        try {
+            layout=PerimeterStageLayout.partition(plan, part -> BlueprintNetworkBudget.problem(
+                    TerritoryFortification.blueprint(part.targets(),part.min(),part.max())));
+        } catch(IllegalArgumentException unavailable) {
+            return new Preparation(null,plan,claimIdentity,"The complete perimeter cannot be represented as bounded native sections. No payment or partial job is created.",territory);
+        }
         Map<ChunkPos, Boolean> permissions = new HashMap<>();
         Predicate<BlockPos> permitted = p -> permissions.computeIfAbsent(new ChunkPos(p), chunk ->
                 territory.chunks().contains(chunk)
@@ -149,10 +163,15 @@ public final class PerimeterConstruction {
         Mob builder = resources.builder();
         if (!player.isCreative() && PaymentSource.available(player, TerritoryFortification.PRICE) < TerritoryFortification.PRICE)
             return new Preparation(builder, plan, claimIdentity, "You need " + TerritoryFortification.PRICE + " emeralds in the faction Treasury before commissioning.", territory);
-        return new Preparation(builder, plan, claimIdentity, null, territory);
+        Map<Long,net.minecraft.world.level.block.state.BlockState> before=new HashMap<>(),clearance=new HashMap<>();
+        for(long cell:plan.blocks().keySet())before.put(cell,level.getBlockState(BlockPos.of(cell)));
+        for(long cell:plan.clearance())clearance.put(cell,level.getBlockState(BlockPos.of(cell)));
+        String hash=PerimeterReviewFingerprint.create(plan,layout,before,clearance,core,material,claimIdentity,player.getUUID(),builder.getUUID());
+        Quote quote=new Quote(core,material,player.getUUID(),builder.getUUID(),layout,before,clearance,hash);
+        return new Preparation(builder,plan,claimIdentity,null,territory,quote);
     }
 
-    /** Validate every reserved cell, including empty walking headroom, before payment. */
+    /** Validate every reserved cell, including the hollow body and empty walking headroom, before payment. */
     static String siteProblem(ServerLevel level, PerimeterBlueprint.Plan plan, Predicate<BlockPos> permitted) {
         if (plan == null || !plan.valid()) return "The full perimeter plan is not ready.";
         for (var column : plan.columns()) {
@@ -188,7 +207,7 @@ public final class PerimeterConstruction {
         return null;
     }
 
-    /** Reserve real wall columns and walkway headroom without claiming the hollow courtyard. */
+    /** Reserve wall targets, under-deck cavities and walkway headroom, but not the open courtyard. */
     static Set<BlockPos> reservedCells(PerimeterBlueprint.Plan plan) {
         Set<BlockPos> cells = new HashSet<>();
         plan.blocks().keySet().forEach(p -> cells.add(BlockPos.of(p)));
@@ -210,39 +229,16 @@ public final class PerimeterConstruction {
     }
 
     static boolean startJob(ServerPlayer player, Preparation prepared, int material) {
-        Entity area = null; Mob builder = prepared.builder(); boolean assigned = false, committed = false;
-        try {
-            var plan = prepared.plan(); BlockPos min = plan.min(), max = plan.max();
-            var blueprint = TerritoryFortification.blueprint(plan.blocks(), min, max);
-            area = WorkersBridge.createProtectedPlayerArea(player, builder, new BlockPos(max.getX(), min.getY(), min.getZ()),
-                    max.getX() - min.getX() + 1, max.getZ() - min.getZ() + 1, max.getY() - min.getY() + 1, blueprint);
-            PerimeterTerritory.remember(area, prepared.territory());
-            area.getPersistentData().putLong(SITE_MIN, min.asLong()); area.getPersistentData().putLong(SITE_MAX, max.asLong());
-            ConstructionReport.remember(area, TerritoryFortification.material(material).label() + " template perimeter", plan.blocks().size());
-            PlayerFortificationJobs.link(builder, area, player.getUUID());
-            if (!player.serverLevel().addFreshEntity(area)) throw new IllegalStateException("Build marker rejected");
-            WorkersBridge.startBlueprint(area, blueprint);
-            if (!NativeConstructionGuard.protect(player, builder, area, reservedCells(plan)))
-                throw new IllegalStateException("The native job could not be safely protected");
-            WorkersBridge.enableWallProjection(area, plan.blocks().size());
-            WorkersBridge.enablePlayerJob(builder, player.getUUID()); WallBuilderAccess.install(builder);
-            assigned = true;
-            if (!WorkersBridge.assignBuildAreaDirectly(builder, area)) throw new IllegalStateException("Builder refused the plan");
-            if (!PaymentSource.consume(player, TerritoryFortification.PRICE)) throw new IllegalStateException("Treasury payment rejected");
-            committed = true; NativeConstructionGuard.activate(area);
-            player.sendSystemMessage(Component.literal("Template perimeter commissioned for " + TerritoryFortification.PRICE + " faction Treasury emeralds. Supply "
-                    + materials(plan) + ". Native Workers controls tools, materials and work hours."));
-            player.sendSystemMessage(Component.literal("Native marker: " + area.blockPosition().toShortString()
-                    + ". Building > Construction shows progress and any protection blockers. Guarded construction pauses while its owner is offline."));
-            return true;
-        } catch (ReflectiveOperationException | RuntimeException failure) {
-            if (committed) { FactionLogger.LOG.warn("[SiegeOverhaul] Paid perimeter feedback failed", failure); return true; }
-            if (area != null && (!assigned || WorkersBridge.releasePlayerJob(builder, area))) {
-                PlayerFortificationJobs.unlink(builder, area.getUUID()); WorkersBridge.discardPlayerArea(area);
-            }
-            FactionLogger.LOG.warn("[SiegeOverhaul] Template perimeter could not start", failure);
-            return fail(player, "The perimeter could not start safely. No payment was taken; your plan is kept. " + failure.getMessage());
-        }
+        if(player==null || prepared==null || !prepared.ready() || prepared.quote()==null
+                || prepared.territory()==null || !prepared.territory().ready())return false;
+        Quote quote=prepared.quote();
+        if(quote.material()!=material || !quote.owner().equals(player.getUUID())
+                || !quote.builder().equals(prepared.builder().getUUID()))return false;
+        String exact=PerimeterReviewFingerprint.create(prepared.plan(),quote.layout(),quote.before(),quote.clearance(),
+                quote.core(),material,prepared.claimIdentity(),player.getUUID(),prepared.builder().getUUID());
+        if(!exact.equals(quote.fingerprint()))return false;
+        return com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.start(player,prepared.builder(),quote.core(),material,
+                prepared.plan(),quote.layout(),quote.before(),quote.clearance(),prepared.territory(),quote.fingerprint());
     }
 
     private static void writePreview(ItemStack stack, ServerPlayer player, BlockPos core, int material, Preparation result) {
@@ -250,9 +246,11 @@ public final class PerimeterConstruction {
         PerimeterPreview.set(stack, player.getUUID(), player.level().dimension().location(), core, material,
                 player.level().getGameTime(), fingerprint(result, core, material), result.problem(),
                 result.plan() == null || !result.plan().valid() ? "Materials are calculated once a complete safe plan is available."
-                        : materials(result.plan()), cells);
+                        : materials(result.plan())+(result.quote()==null?"":"; "+result.quote().layout().stages().size()+" native sections; one "+TerritoryFortification.PRICE+"-emerald fee"), cells);
     }
     private static String fingerprint(Preparation result, BlockPos core, int material) {
+        if(result.quote()!=null)return result.quote().fingerprint();
+        // Unready reviews and injected lifecycle-test preparations do not carry an accepted staged quote.
         return result.plan() == null || !result.plan().valid() ? "" : PerimeterPreview.fingerprint(result.plan().blocks(), core, material, result.claimIdentity());
     }
     static String materials(PerimeterBlueprint.Plan plan) {

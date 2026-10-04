@@ -6,6 +6,18 @@ It is separate from the normal Build/JUnit check. A green ordinary Build does no
 prove this test ran. A green fixture does not prove the untested gameplay matrix.
 The Java harness lives only in `src/nativeQa`; it is not packaged in release JARs.
 
+The transaction-only perimeter uses the production staged project. Its default
+projection follows the actual active native section's target count and the
+unchanged 1,024-cell threshold; the whole manifest can be larger. The harness then
+sends real authenticated HIDE and SHOW packets. Existing native focus/raycast,
+marker-position, transform and framebuffer checks remain separate and unchanged.
+The real Survival same-state edit snapshots the complete project reservation and
+requires retained global edit history plus the production edit-history pause.
+Normal marker cancellation must cancel the whole project and retire all child and
+global reservations before the manual-wall scenario continues. A bounded
+30-second observation window permits ordinary native item-use/cleanup completion;
+world, stock, Treasury and ledger checks remain active throughout that wait.
+
 ## Exact dependencies
 
 The QA invocation resolves these official CurseForge file coordinates through the
@@ -50,8 +62,13 @@ injection failure checks remain enabled.
 For an already isolated development checkout with display access:
 
 ```sh
+python3 scripts/prepare-native-client-defaults.py --mode baseline --smallships-version 2.0.0-b1.4
 ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true runClient
 ```
+
+Run preparation first, before any other game-directory setup. The helper installs
+only byte-identical pinned native Small Ships defaults in a fresh QA directory;
+see [startup provenance and strict refusal rules](native-client-defaults-qa.md).
 
 For Linux without a physical display, the workflow installs Xvfb/Mesa from Ubuntu
 and runs the same command under `xvfb-run`. Its generated `options.txt` dismisses
@@ -101,6 +118,12 @@ Assertions and thirteen real framebuffer screenshots cover:
     points, all movement overloads, defensive NBT, malformed saves, queue
     reconstruction, unloaded-origin safety and unpaid/paid deletion boundaries.
     Each successful contract is separately listed in `result.json`.
+    Quarantined oversized-NBT cleanup first verifies that a nonexistent reserved
+    builder with no hand provenance leaves the marker, raw recipe and reservation
+    intact. A separately created empty owned native fixture builder then permits
+    authenticated cleanup without changing its owner/items or creating a hand
+    lifecycle receipt. This is uncommissioned fixture recovery, not migration of
+    an older guarded worker whose original hand proof is lost.
 
 Every PNG is captured from Minecraft's actual render target, must have nontrivial
 pixels, and must exist with the exact expected name. A missing result, missing
@@ -233,23 +256,37 @@ The initial bounded gameplay sequence covers:
   path, record `Cleared`, preserve both receipts through the real reload, and
   finally place the planned cobblestone. QA never removes that plant. Its support
   must remain solid (grass may naturally become dirt under the completed wall),
-  and neither the 110 planned blocks nor supplied construction totals changes.
+  and neither the 83 planned blocks nor supplied construction totals changes.
 - Real claim loss and owner permission loss must produce native pause reasons and
   zero further accepted-cell changes over observed intervals, with no extra debit.
 - A raw fixture solid inserted into reserved, non-structural headroom must pause
   the live native job without a single further structural mutation or removal of
-  that obstruction. The obstruction is carried through the real world reload;
-  queues must remain unready even after owner permission returns. Only restoring
-  the original clearance allows normal resumption without another charge. This
-  is an environmental regression, not an actual player BlockEvent/history test.
+  that obstruction. After restoring top headroom, a separate raw obstruction is
+  inserted into a protected body cavity while top headroom remains clear. That
+  cavity-only obstruction must independently pause work, survive the real world
+  reload, and leave queues unready even after owner permission returns. Only
+  restoring the original cavity AIR permits resumption without another charge.
+  These are environmental regressions, not actual player BlockEvent/history tests.
 - Full client/server world close/reopen mid-job preserves the exact paused cells,
   paid state, reserved job and ledger identity. Native work resumes and completes
-  the exact 110-block wall; chest + native builder stock + placed blocks must equal
+  the exact 83-block capped hollow wall; chest + native builder stock + placed blocks must equal
   the measured supplied quantities for each construction material.
+- The independent manual oracle requires 58 cobblestone and 25 oak targets. All 27
+  omitted body cells must be reserved at payment and still AIR after completion;
+  actual native oak deck placement above the central nine columns and unchanged
+  stone footing below them are required receipt fields. Cavities never become
+  AIR jobs and QA never writes completed structure blocks.
 - The protected builder's main hand must share the native inventory slot-5 object
   after reload. The guarded rebind count must increase exactly once, with no pending
   or review flag and no change to any item/tag/count, through final completion.
-- Only after full completion and repeated strict material conservation checks,
+- After manual completion and forty elapsed ordinary ticks with repeatedly
+  observed closed native state, an additional
+  real save/close/reopen verifies the detached builder's exact pre-AI saved cargo
+  and hand values, its equal-valued split main-hand mirror and one value-preserving
+  production rebind. Construction links and the reservation must stay retired;
+  83 blocks, 27 cavity AIR cells, chest contents and Treasury remain unchanged.
+  QA never binds hands, changes items or disables the completed builder's AI.
+- Only after full completion, completed-job reload and repeated strict material conservation checks,
   `18-completed-manual-wall-and-builder.png` captures the actual synchronized world
   blocks with the real native builder. Only the fixture observer is repositioned;
   the builder is neither teleported nor AI-disabled for that capture. A projection
@@ -317,3 +354,7 @@ server EULA acceptance, credentials or authentication changes are automated here
   builder was eating, with its explicit no-payment message. The harness had
   assumed immediate acceptance. Its bounded natural wait/retry now preserves that
   production guard and checks exact unpaid plan/Treasury/reservation state.
+
+### Deterministic compact viewport
+
+Before any world or inspection capture, the fixture restores only its own window and requests a 960×720 client viewport through the existing GLFW/Window APIs. It waits at most ten seconds for the actual window and framebuffer dimensions. It does not change the desktop resolution or system settings. Native inspection and Building at GUI scale 3 must both report an actual 320×240 logical viewport; the verifier also checks every raw PNG is 960×720. The original cloud attempt had a readable 1180×812 maximized window, which did not exercise the intended compact height and correctly failed its fixture assertion.

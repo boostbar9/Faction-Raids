@@ -21,8 +21,8 @@ import java.util.Set;
  * Read-only, exact claim-boundary compiler for the five-wide manual wall style.
  *
  * <p>The footprint is the first five Chebyshev-distance layers inside the claim.
- * Layers one and five carry parapets; layers two through four form the three-wide
- * walk. Using diagonal neighbours is important: without them an inward corner
+ * Layers one and five carry the body skins and parapets; layers two through four form the three-wide
+ * walk above protected, unexcavated hollow space. Using diagonal neighbours is important: without them an inward corner
  * leaves a hole between two otherwise correct edge strips. Nothing is rounded
  * to the manual structures' global five-block grid.</p>
  *
@@ -241,7 +241,7 @@ public final class PerimeterBlueprint {
             }
             Column result = new Column(pos.at(baseY), support, column.distance(), column.componentId());
             columns.add(result);
-            blockCount += support + 4L + (result.parapet() ? 1 : 0);
+            blockCount += support + 1L + (result.parapet() ? DECK_OFFSET + 1 : 0);
             minX = Math.min(minX, pos.x()); maxX = Math.max(maxX, pos.x());
             minZ = Math.min(minZ, pos.z()); maxZ = Math.max(maxZ, pos.z());
             minY = Math.min(minY, surfaceY.get(pos)); maxY = Math.max(maxY, baseY + CLEAR_HEIGHT - 1);
@@ -260,7 +260,7 @@ public final class PerimeterBlueprint {
         for (Column column : columns) {
             for (int y = -column.supportDepth(); y < CLEAR_HEIGHT; y++) {
                 String material = y < 0 ? palette.foundation()
-                        : y < DECK_OFFSET ? palette.wall()
+                        : y < DECK_OFFSET ? (column.parapet() ? palette.wall() : null)
                         : y == DECK_OFFSET ? palette.deck()
                         : y == DECK_OFFSET + 1 && column.parapet() ? palette.wall() : null;
                 long position = column.base().above(y).asLong();

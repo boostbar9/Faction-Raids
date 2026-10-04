@@ -6,6 +6,7 @@ This is The Siege Overhaul (formerly Faction Raids), a Minecraft 1.20.1 Forge 47
 - Use the checked-in Gradle wrapper, never a globally installed Gradle. Linux: ./gradlew --no-daemon --console=plain clean build. Windows: .\gradlew.bat clean build.
 - For focused regression work: ./gradlew --no-daemon test --tests 'com.devfarinsky.siegeoverhaul.core.EnemyHeroesTest'. Finish gameplay changes with the full build.
 - Tests use JUnit 5 and Mockito. Minecraft-dependent tests extend MinecraftTestSupport. Reports are in build/test-results/test and build/reports/tests/test.
+- Prefer focused representative gameplay and targeted regression checks. Reserve long complete-build walkthroughs for a justified risk or an explicit request; label synthetic QA setup and partial evidence honestly. This does not replace the full regression build or relevant safety checks.
 - Production output is build/libs/siegeoverhaul-<mod_version>.jar, reobfuscated by the build. Passing unit tests does not prove interactive Minecraft behavior.
 - Keep required runtime mods: Villager Recruits 1.15.2+, Villager Workers 2 2.0.3+, Small Ships and Siege Weapons. They are integrated through compatibility bridges and are not automatically installed for runClient/runServer.
 - Do not disable tests, dependency checks, the agent firewall or security checks to get a green result. Report blocked access precisely.

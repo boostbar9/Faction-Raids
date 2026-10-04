@@ -52,7 +52,7 @@ final class NativeTerritoryPerimeterFixture {
     static final Set<ChunkPos> TERRITORY = Set.of(CORE_CLAIM.get(0), CORE_CLAIM.get(1), SECOND_CLAIM);
     static final BlockPos CORE = new BlockPos(135, 65, 7);
     static final List<BlockPos> CHESTS = List.of(new BlockPos(136, 65, 8), new BlockPos(151, 65, 8));
-    static final int COBBLE = 1836, OAK = 540, BLOCKS = 2376;
+    static final int COBBLE = 864, OAK = 540, BLOCKS = 1404;
     static final AABB BOUNDS = new AABB(104, 63, -24, 184, 80, 56);
 
     record Fixture(UUID builderId, List<UUID> storageIds, List<UUID> claimIds, PerimeterBlueprint.Plan plan,
@@ -123,7 +123,7 @@ final class NativeTerritoryPerimeterFixture {
             Container chest = (Container) level.getBlockEntity(chestPos);
             require(chest.isEmpty() && chest.getContainerSize() == 27, "Fixture requires two empty separate single chests");
             int slot = 0;
-            // Each exact half requires 15 cobble stacks + 5 oak stacks. Neither is replenished.
+            // Each exact half requires 7 cobble stacks + 5 oak stacks. Neither is replenished.
             for (var material : Map.of(Items.COBBLESTONE, COBBLE / 2, Items.OAK_PLANKS, OAK / 2).entrySet()) {
                 int remaining = material.getValue();
                 while (remaining > 0) {
@@ -131,7 +131,7 @@ final class NativeTerritoryPerimeterFixture {
                     chest.setItem(slot++, new ItemStack(material.getKey(), count)); remaining -= count;
                 }
             }
-            require(slot == 20, "Unexpected finite stock packing");
+            require(slot == 12, "Unexpected finite stock packing");
             chest.setChanged(); // Initial fixture supply only, never a native-transfer/reload workaround.
             var raw = WorkersBridge.createPlayerArea(level, "storagearea", chestPos, owner.getUUID(),
                     owner.getScoreboardName(), 1, 1, 1);
@@ -176,6 +176,8 @@ final class NativeTerritoryPerimeterFixture {
         require(plan.valid() && plan.blocks().size() == BLOCKS
                 && plan.materialCounts().equals(Map.of("minecraft:cobblestone", COBBLE, "minecraft:oak_planks", OAK)),
                 "Expected flat L-territory totals changed");
+        NativeHollowWallOracle.assertFlatPlan(plan, TERRITORY);
+        NativeHollowWallOracle.assertCavitiesAir(level, TERRITORY);
         for (long cell : plan.blocks().keySet()) require(TERRITORY.contains(new ChunkPos(BlockPos.of(cell)))
                 && level.getBlockState(BlockPos.of(cell)).isAir(), "Plan leaves actual claim or starts prebuilt");
         require(!plan.blocks().containsKey(CORE.asLong()) && CHESTS.stream().noneMatch(p -> plan.blocks().containsKey(p.asLong())),
@@ -211,7 +213,8 @@ final class NativeTerritoryPerimeterFixture {
                     if (!TERRITORY.contains(new ChunkPos(new BlockPos(x + dx, 65, z + dz))))
                         distance = Math.min(distance, Math.max(Math.abs(dx), Math.abs(dz)));
                 if (distance > 5) continue;
-                for (int dy = 0; dy < 3; dy++) cells.put(new BlockPos(x, 65 + dy, z).asLong(), "minecraft:cobblestone");
+                if (distance == 1 || distance == 5)
+                    for (int dy = 0; dy < 3; dy++) cells.put(new BlockPos(x, 65 + dy, z).asLong(), "minecraft:cobblestone");
                 cells.put(new BlockPos(x, 68, z).asLong(), "minecraft:oak_planks");
                 if (distance == 1 || distance == 5) cells.put(new BlockPos(x, 69, z).asLong(), "minecraft:cobblestone");
             }

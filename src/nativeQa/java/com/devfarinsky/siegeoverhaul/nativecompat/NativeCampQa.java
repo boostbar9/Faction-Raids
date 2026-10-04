@@ -140,6 +140,8 @@ public final class NativeCampQa {
             require(RaidConfig.BUILD_WAR_CAMPS.get() && RaidConfig.CAMP_TERRAFORM.get() && RaidConfig.LEVEL_CAMP_TERRAIN.get()
                             && RaidConfig.CLEANUP_WAR_CAMPS.get() && RaidConfig.ENABLE_CAMP_CONSTRUCTION.get(),
                     "Required production camp settings are disabled; QA will not bypass them");
+            require(RaidConfig.ENABLE_NARRATIVE.get() && RaidConfig.ALLOWED_RAIDER_FACTIONS.get().equals(List.of("wilds_marauders")),
+                    "Isolated camp QA must select the existing Artemis doctrine through its supported configuration");
             stage = 1; return Action.START_COMMAND;
         }
         RaidSavedData.RaidState raid = RaidSavedData.get(owner.server).raids.get(coreKey);
@@ -181,6 +183,10 @@ public final class NativeCampQa {
                 require(level.getGameTime() - establishedAt < 1200, "Camp claim exists but its actual enemy core/crew did not establish within 60 seconds");
                 return Action.NONE;
             }
+            // beginRaid creates workers before publishing the raid in SavedData. Their native
+            // faction resolves on the normal 20-tick RaiderFactions.sync pass; observe that
+            // lifecycle without invoking it or rewriting the entity/raid ourselves.
+            if (level.getGameTime() - establishedAt < 60) return Action.NONE;
             require(raid.campClaimId != null && CampClaims.owns(level, raid), "Camp lacks its real native enemy claim");
             var claim = ClaimEvents.recruitsClaimManager.getClaim(raid.campClaimId);
             require(claim != null && claim.getOwnerFactionStringID().equals(RaiderFactions.id(raid.factionId))
@@ -192,26 +198,69 @@ public final class NativeCampQa {
             require(raid.campfirePos != null && level.getBlockState(raid.campfirePos).is(Blocks.CAMPFIRE)
                             && raid.barrelPos != null && level.getBlockState(raid.barrelPos).is(Blocks.BARREL)
                             && raid.bannerPos != null && !level.getBlockState(raid.bannerPos).isAir(), "Camp strategic blocks are incomplete");
+            // NativeCampConstruction gives the crew and its work areas a private job owner,
+            // distinct from the guards' shared hostile leader. Verify that actual persisted link.
+            require(com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.active(raid),
+                    "Controlled camp did not establish its actual native construction job");
+            UUID nativeOwner = raid.nativeCamp.getUUID(ModConstants.Tags.CAMP_OWNER);
+            require(!nativeOwner.equals(owner.getUUID()) && !nativeOwner.equals(RecruitsBridge.RAIDERS_LEADER_UUID),
+                    "Native camp job must retain its separate non-player supply owner");
+            var nativeBuild = level.getEntity(raid.nativeCamp.getUUID(ModConstants.Tags.CAMP_BUILD_AREA));
+            var nativeStorage = level.getEntity(raid.nativeCamp.getUUID(ModConstants.Tags.CAMP_STORAGE_AREA));
+            BlockPos nativeSupply = BlockPos.of(raid.nativeCamp.getLong(ModConstants.Tags.CAMP_SUPPLY_POS));
+            var supplyEntity = level.getBlockEntity(nativeSupply);
+            require(nativeBuild instanceof com.talhanation.workers.entities.workarea.BuildArea
+                            && nativeStorage instanceof com.talhanation.workers.entities.workarea.StorageArea storage
+                            && storage.getStorageTypes().contains(com.talhanation.workers.entities.workarea.StorageArea.StorageType.BUILDERS)
+                            && nativeOwner.equals(WorkersBridge.readOwner(nativeBuild))
+                            && nativeOwner.equals(WorkersBridge.readOwner(nativeStorage))
+                            && coreKey.equals(nativeBuild.getPersistentData().getString(ModConstants.Tags.CAMP_AREA_TEAM))
+                            && coreKey.equals(nativeStorage.getPersistentData().getString(ModConstants.Tags.CAMP_AREA_TEAM))
+                            && level.getBlockState(nativeSupply).is(Blocks.BARREL)
+                            && supplyEntity != null && supplyEntity.getPersistentData().hasUUID(ModConstants.Tags.CAMP_SUPPLY_OWNER)
+                            && nativeOwner.equals(supplyEntity.getPersistentData().getUUID(ModConstants.Tags.CAMP_SUPPLY_OWNER)),
+                    "Native camp worker/build/storage/supply ownership is not one isolated persisted job");
             var workers = new ArrayList<Map<String, Object>>();
             for (UUID id : raid.campWorkers) {
                 require(level.getEntity(id) instanceof Mob, "Recorded native camp worker is not loaded");
                 Mob worker = (Mob)level.getEntity(id);
                 require(worker.isAlive() && !worker.isNoAi() && WorkersBridge.isBuilder(worker)
+                                && worker instanceof com.talhanation.workers.entities.BuilderEntity nativeWorker
+                                && nativeWorker.getIsOwned() && !nativeWorker.getListen()
+                                && ((com.talhanation.workers.entities.workarea.BuildArea)nativeBuild).canWorkHere(nativeWorker)
+                                && ((com.talhanation.workers.entities.workarea.StorageArea)nativeStorage).canWorkHere(nativeWorker)
                                 && worker.getTeam() != null && RaiderFactions.id(raid.factionId).equals(worker.getTeam().getName())
                                 && coreKey.equals(worker.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM))
-                                && WorkersBridge.readWorkerOwner(worker) != null && !owner.getUUID().equals(WorkersBridge.readWorkerOwner(worker)),
+                                && nativeOwner.equals(WorkersBridge.readWorkerOwner(worker)),
                         "Camp worker is missing real native hostile ownership/crew identity");
                 workers.add(entity(worker));
             }
             var guards = new ArrayList<Map<String, Object>>();
+            var roles = com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.forFaction(raid.factionId).campDoctrine().guardRoles();
+            Set<Integer> expectedGuardSlots = new LinkedHashSet<>(), actualGuardSlots = new LinkedHashSet<>();
+            for (int slot = 0; slot < roles.size(); slot++)
+                if (ForgeRegistries.ENTITY_TYPES.containsKey(new net.minecraft.resources.ResourceLocation("recruits", roles.get(slot))))
+                    expectedGuardSlots.add(slot);
             for (UUID id : raid.campGuards) {
                 require(level.getEntity(id) instanceof com.talhanation.recruits.entities.AbstractRecruitEntity guard
                                 && guard.isAlive() && !guard.isNoAi() && guard.getTeam() != null
                                 && RaiderFactions.id(raid.factionId).equals(guard.getTeam().getName())
                                 && com.devfarinsky.siegeoverhaul.RecruitsBridge.RAIDERS_LEADER_UUID.equals(WorkersBridge.readWorkerOwner(guard))
                                 && coreKey.equals(guard.getPersistentData().getString(CampGuards.TEAM_TAG)), "Native active camp guard type/faction/identity is missing");
-                guards.add(entity((Mob)level.getEntity(id)));
+                Mob guard = (Mob)level.getEntity(id);
+                int slot = guard.getPersistentData().getInt("SiegeGuardSlot");
+                require(expectedGuardSlots.contains(slot) && actualGuardSlots.add(slot)
+                                && new net.minecraft.resources.ResourceLocation("recruits", roles.get(slot)).equals(ForgeRegistries.ENTITY_TYPES.getKey(guard.getType())),
+                        "Native camp guard does not match its exact requested registered role/slot");
+                guards.add(entity(guard));
             }
+            require(actualGuardSlots.equals(expectedGuardSlots), "Controlled camp failed to establish every registered requested guard role: expected="
+                    + expectedGuardSlots + ", actual=" + actualGuardSlots);
+            require("wilds_marauders".equals(raid.factionId) && roles.equals(List.of("bowman", "scout", "crossbowman", "bowman", "scout", "assassin"))
+                            && !ForgeRegistries.ENTITY_TYPES.containsKey(new net.minecraft.resources.ResourceLocation("recruits", "assassin"))
+                            && guards.size() == 5 && guards.stream().filter(guard -> "recruits:scout".equals(guard.get("type"))
+                            && Boolean.TRUE.equals(guard.get("scoutSpawnTailRecovered"))).count() == 2,
+                    "Camp acceptance did not exercise both actual native scout recoveries and the unavailable assassin slot");
             NativeCampFixture.verifyProtected(level, fixture);
             require(raid.campBlocks.keySet().stream().noneMatch(pos -> fixture.protectedCells().containsKey(BlockPos.of(pos))),
                     "Camp restoration ledger includes a protected player/neighbor cell");
@@ -224,10 +273,19 @@ public final class NativeCampQa {
             var result = new LinkedHashMap<String, Object>(sample(level, owner));
             result.put("status", "passed"); result.put("enemyCore", enemyCore.toShortString());
             result.put("expectedEnemyFaction", RaiderFactions.id(raid.factionId));
+            result.put("nativeJobOwner", nativeOwner.toString());
+            result.put("guardOwner", RecruitsBridge.RAIDERS_LEADER_UUID.toString());
+            result.put("nativeJobOwnershipVerified", true);
+            result.put("nativeWorkAreaAccessVerified", true); result.put("nativeBuilderStorageEnabled", true);
+            result.put("nativeJobAreas", Map.of("build", nativeBuild.getUUID().toString(), "storage", nativeStorage.getUUID().toString(),
+                    "buildOwner", WorkersBridge.readOwner(nativeBuild).toString(), "storageOwner", WorkersBridge.readOwner(nativeStorage).toString(),
+                    "supplyOwner", supplyEntity.getPersistentData().getUUID(ModConstants.Tags.CAMP_SUPPLY_OWNER).toString()));
             result.put("nativeClaimChunks", claim.getClaimedChunks().size()); result.put("workers", workers); result.put("guards", guards);
+            result.put("registeredGuardRoleCount", expectedGuardSlots.size());
             result.put("protectedCellCount", fixture.protectedCells().size()); result.put("protectedChests", fixture.protectedContainers().size());
             result.put("entry", "Actual non-op client /siegeoverhaul start command; normal production raid/scouting ticks");
             result.put("elapsedSeconds", (System.nanoTime() - scenarioStarted) / (double)SECOND);
+            result.put("ordinaryTicksSinceEstablishment", level.getGameTime() - establishedAt);
             result.put("recordedOriginalTerrainCounts", originalTerrain);
             if (landingEvidence != null) result.put("controlledHostileTerrain", landingEvidence);
             result.put("constructionScope", "Camp claim, core, strategic blocks and live native crew established; full decorative build-out and waves are not asserted");
@@ -253,18 +311,37 @@ public final class NativeCampQa {
         var raid = RaidSavedData.get(level.getServer()).raids.get(coreKey);
         if (raid != null) {
             result.put("campPosition", String.valueOf(raid.campPos)); result.put("claimId", String.valueOf(raid.campClaimId));
+            result.put("nativeJobOwner", raid.nativeCamp.hasUUID(ModConstants.Tags.CAMP_OWNER)
+                    ? raid.nativeCamp.getUUID(ModConstants.Tags.CAMP_OWNER).toString() : "absent");
             result.put("searchStep", raid.campSearchStep); result.put("searchElapsedTicks", raid.campSearchElapsedTicks);
             result.put("searchCandidate", String.valueOf(raid.campSearchPos)); result.put("terraformFallback", raid.campTerraformed);
             result.put("searchAbandoned", raid.campSearchAbandoned); result.put("crewStarted", raid.campCrewStarted);
             result.put("workers", raid.campWorkers.size()); result.put("guards", raid.campGuards.size());
+            result.put("workerEntities", raid.campWorkers.stream().map(id -> crewEntity(level, id)).toList());
+            result.put("guardEntities", raid.campGuards.stream().map(id -> crewEntity(level, id)).toList());
+            var roles = com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.forFaction(raid.factionId).campDoctrine().guardRoles();
+            result.put("requestedGuardRoles", roles);
+            result.put("unregisteredGuardRoles", roles.stream().filter(role -> !ForgeRegistries.ENTITY_TYPES.containsKey(
+                    new net.minecraft.resources.ResourceLocation("recruits", role))).toList());
             result.put("enemyCore", String.valueOf(EnemyCore.position(raid))); result.put("constructionPause", raid.constructionPauseReason);
         }
         return result;
     }
     private static Map<String, Object> entity(Mob entity) {
-        return Map.of("uuid", entity.getUUID().toString(), "type", String.valueOf(ForgeRegistries.ENTITY_TYPES.getKey(entity.getType())),
+        var result = new LinkedHashMap<String, Object>(Map.of("uuid", entity.getUUID().toString(), "type", String.valueOf(ForgeRegistries.ENTITY_TYPES.getKey(entity.getType())),
                 "position", entity.position().toString(), "noAi", entity.isNoAi(), "owner", String.valueOf(WorkersBridge.readWorkerOwner(entity)),
-                "faction", entity.getTeam() == null ? "" : entity.getTeam().getName());
+                "faction", entity.getTeam() == null ? "" : entity.getTeam().getName(), "alive", entity.isAlive(),
+                "workerTeamTag", entity.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM),
+                "guardTeamTag", entity.getPersistentData().getString(CampGuards.TEAM_TAG),
+                "scoutSpawnTailRecovered", entity.getPersistentData().getBoolean("SiegeScoutSpawnTailRecovered")));
+        if (entity instanceof com.talhanation.recruits.entities.AbstractRecruitEntity recruit) {
+            result.put("owned", recruit.getIsOwned()); result.put("listening", recruit.getListen());
+        }
+        return result;
+    }
+    private static Map<String, Object> crewEntity(ServerLevel level, UUID id) {
+        return level.getEntity(id) instanceof Mob mob ? entity(mob)
+                : Map.of("uuid", id.toString(), "missingOrWrongType", true);
     }
     private static long horizontalDistanceSquared(BlockPos a, BlockPos b) { long x = a.getX() - b.getX(), z = a.getZ() - b.getZ(); return x*x + z*z; }
 

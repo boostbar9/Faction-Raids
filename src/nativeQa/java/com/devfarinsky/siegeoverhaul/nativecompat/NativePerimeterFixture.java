@@ -50,7 +50,7 @@ final class NativePerimeterFixture {
     static final ChunkPos CLAIM_CHUNK = new ChunkPos(8, 0);
     static final BlockPos CORE = new BlockPos(135, 65, 7);
     static final BlockPos CHEST = new BlockPos(136, 65, 8);
-    static final int COBBLE = 748, OAK = 220, BLOCKS = 968;
+    static final int COBBLE = 352, OAK = 220, BLOCKS = 572;
     static final AABB BOUNDS = new AABB(104, 63, -24, 168, 80, 40);
 
     record Fixture(UUID builderId, UUID storageId, UUID claimId, PerimeterBlueprint.Plan plan,
@@ -157,6 +157,8 @@ final class NativePerimeterFixture {
         require(plan.valid() && plan.blocks().size() == BLOCKS
                 && plan.materialCounts().equals(Map.of("minecraft:cobblestone", COBBLE, "minecraft:oak_planks", OAK)),
                 "Independent one-claim perimeter oracle changed");
+        NativeHollowWallOracle.assertFlatPlan(plan, Set.of(CLAIM_CHUNK));
+        NativeHollowWallOracle.assertCavitiesAir(level, Set.of(CLAIM_CHUNK));
         for (long cell : plan.blocks().keySet()) require(CLAIM_CHUNK.equals(new ChunkPos(BlockPos.of(cell)))
                 && level.getBlockState(BlockPos.of(cell)).isAir(), "Plan leaves actual claim or starts prebuilt");
         require(!plan.blocks().containsKey(CORE.asLong()) && !plan.blocks().containsKey(CHEST.asLong()),

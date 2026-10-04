@@ -59,6 +59,9 @@ final class NativeBuildingGameplay {
     private static CompletableFuture<Action> pending;
     private static NativeGameplayFixture.Fixture fixture;
     private static UUID playerId, jobId, ledgerGeneration;
+    private static PerimeterProject acceptedPerimeter;
+    private static UUID perimeterLedgerGeneration;
+    private static int activeProjectionTargets;
     private static int clientStage, stage;
     private static long stageSince = -1, resumeAt, lastChange, lastPlaced = -1;
     private static long bankAfterManual;
@@ -66,8 +69,8 @@ final class NativeBuildingGameplay {
     private static Map<Long, BlockState> pausedCells;
     private static List<ChunkPos> claimChunks;
     private static RecruitsClaim claim;
-    private static BlockPos headroomCell;
-    private static BlockState originalHeadroom;
+    private static BlockPos headroomCell, cavityCell;
+    private static BlockState originalHeadroom, originalCavity;
     private static boolean done;
     private static long observedPlaced = -1;
     private static String observedHand = "";
@@ -76,6 +79,10 @@ final class NativeBuildingGameplay {
     private static List<Map<String, Object>> inventoryBeforeReload;
     private static Map<String, Object> mainHandBeforeReload;
     private static List<Map<String, Object>> chestBeforeReload;
+    private static long completedClosedSince = -1;
+    private static CompoundTag completedInventoryBeforeReload, completedInventoryLoaded;
+    private static boolean completedLoadedSplitMirror;
+    private static int completedRebindsBeforeReload;
     private static int rebindsBeforeFirstCommission;
     private static List<Map<String, Object>> inventoryBeforeFirstCommission;
     private static Map<String, Object> mainHandBeforeFirstCommission;
@@ -91,7 +98,7 @@ final class NativeBuildingGameplay {
     private static boolean recordedNativeRequestMetadata;
     private static final Map<UUID, BuilderWorkGoal> NATIVE_BUILD_GOALS = new HashMap<>();
 
-    private enum Action { NONE, USE_BLOCK, USE_AIR, CANCEL, SHOW, RELOAD, CAPTURE_REVIEW, CAPTURE_PAID, CAPTURE_COMPLETED, AIM_WALL, OPEN_CORE, LIVE_CORE_HUD, PLACE_EDIT, START_BREAK_EDIT, CONTINUE_BREAK_EDIT, DONE }
+    private enum Action { NONE, USE_BLOCK, USE_AIR, CANCEL, HIDE, SHOW, RELOAD, CAPTURE_REVIEW, CAPTURE_PAID, CAPTURE_COMPLETED, AIM_WALL, OPEN_CORE, LIVE_CORE_HUD, PLACE_EDIT, START_BREAK_EDIT, CONTINUE_BREAK_EDIT, DONE }
     private NativeBuildingGameplay() {}
 
     static boolean tick(Minecraft mc) throws Exception {
@@ -207,6 +214,7 @@ final class NativeBuildingGameplay {
                     return false;
                 }
                 case CANCEL -> RaidNetwork.protectedConstructionAction(jobId, ProtectedConstructionActions.CANCEL);
+                case HIDE -> RaidNetwork.protectedConstructionAction(jobId, ProtectedConstructionActions.HIDE);
                 case SHOW -> RaidNetwork.protectedConstructionAction(jobId, ProtectedConstructionActions.SHOW);
                 case RELOAD -> {
                     mc.level.disconnect(); mc.clearLevel(); mc.setScreen(new TitleScreen()); clientStage = 4;
@@ -245,6 +253,12 @@ final class NativeBuildingGameplay {
     static void observeNativeBuilder(EntityJoinLevelEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level) || !WORLD.equals(level.getServer().getWorldData().getLevelName())
                 || !(event.getEntity() instanceof BuilderEntity builder)) return;
+        if (stage == 22 && fixture != null && builder.getUUID().equals(fixture.builderId())) {
+            // This HIGHEST-priority join observer reads native NBT restoration before the living AI tick.
+            completedInventoryLoaded = inventoryAndHands(builder);
+            completedLoadedSplitMirror = builder.getMainHandItem() != builder.getInventory().getItem(5)
+                    && ProtectedBuilderHandMirror.sameValue(builder.getMainHandItem(), builder.getInventory().getItem(5));
+        }
         // Read the original goal before the production listener installs its wrapper; never alter it.
         builder.goalSelector.getAvailableGoals().stream().map(goal -> goal.getGoal())
                 .filter(BuilderWorkGoal.class::isInstance).map(BuilderWorkGoal.class::cast).findFirst()
@@ -307,7 +321,16 @@ final class NativeBuildingGameplay {
                 jobId = linkedJob(level);
                 var area = area(level);
                 require(NativeConstructionGuard.commissionPaid(area), "Perimeter was not activated after payment");
-                require(!area.getAlwaysShowProjection(), "Large perimeter default should be focus-only");
+                var projects = PerimeterProjectStore.all(core(owner));
+                require(projects.size() == 1 && projects.get(0).active() != null
+                                && projects.get(0).active().areaId().equals(jobId), "Paid native area is not the active whole-perimeter section");
+                acceptedPerimeter = projects.get(0); perimeterLedgerGeneration = ConstructionEditLedger.get(level).generation();
+                activeProjectionTargets = AcceptedConstructionPlan.capture(area).cells.size();
+                require(activeProjectionTargets == acceptedPerimeter.active().layout().targets().size()
+                                && area.getAlwaysShowProjection() == (activeProjectionTargets > 0 && activeProjectionTargets <= 1024),
+                        "Native projection default differs from the established active-area target threshold");
+                RESULT.put("perimeterProjection", Map.of("wholeTargets", acceptedPerimeter.targets().size(), "activeTargets", activeProjectionTargets,
+                        "alwaysShownThreshold", 1024, "defaultAlwaysShown", area.getAlwaysShowProjection()));
                 require(owner.getMainHandItem().isEmpty(), "Confirmed perimeter plan was not consumed");
                 stockSnapshot(level, "after-first-production-commission-idle-reload-handoff");
                 assertHandRebind(level, rebindsBeforeFirstCommission + 1);
@@ -318,10 +341,16 @@ final class NativeBuildingGameplay {
                 check("Real perimeter plan packet commissions once, consumes plan and debits exactly 64 Treasury");
                 advance(now, 101, 20); return Action.CAPTURE_PAID;
             }
-            case 101 -> { advance(now, 3, 20); return Action.SHOW; }
+            case 101 -> { advance(now, 102, 20); return Action.HIDE; }
+            case 102 -> {
+                require(!area(level).getAlwaysShowProjection(), "Authenticated native-section hide action failed");
+                RESULT.put("authenticatedProjectionHide", true);
+                advance(now, 3, 20); return Action.SHOW;
+            }
             case 3 -> {
-                require(area(level).getAlwaysShowProjection(), "Authenticated explicit large-plan projection control failed");
-                check("Authenticated owner projection action overrides large-plan focus-only default");
+                require(area(level).getAlwaysShowProjection(), "Authenticated native-section show action failed");
+                RESULT.put("authenticatedProjectionShow", true);
+                check("Native active-area target count determines the unchanged 1024 threshold; authenticated owner hide/show controls both work");
                 owner.teleportTo(fixture.corePos().getX() + 3.5, 65, fixture.corePos().getZ() - 2.5);
                 advance(now, 300, 20);
             }
@@ -337,7 +366,8 @@ final class NativeBuildingGameplay {
                 // factionName is a client packet cache; the authoritative server value is its actual PlayerTeam.
                 coreHudMenuId = menu.containerId;
                 coreHudExpectedJobs = ConstructionReport.snapshot(owner);
-                require(coreHudExpectedJobs.size() == 1 && coreHudExpectedJobs.get(0).label().toLowerCase(Locale.ROOT).contains("perimeter"),
+                require(coreHudExpectedJobs.size() == 1 && coreHudExpectedJobs.get(0).label().toLowerCase(Locale.ROOT).contains("perimeter")
+                                && acceptedPerimeter.header().projectId().equals(coreHudExpectedJobs.get(0).projectId()),
                         "Live paid perimeter is missing from server construction report");
                 coreHudDeadline = System.nanoTime() + 30L * 1_000_000_000;
                 advance(now, 302, 0); return Action.LIVE_CORE_HUD;
@@ -349,16 +379,21 @@ final class NativeBuildingGameplay {
                                 && NativeConstructionGuard.hasReservation(level, jobId),
                         "Read-only live Building navigation changed Treasury, job or reservation");
                 check("Production core-use packets open live owner/faction/Treasury menu; actual Building navigation receives exact server construction rows without commissioning");
-                sameStateEditCell = new BlockPos(128, 65, 14);
+                // Use a real accepted base cell from the active section, preserving the western-edge
+                // Survival placement/mining approach even if native serialization splits that section further.
+                sameStateEditCell = AcceptedConstructionPlan.capture(area(level)).cells.keySet().stream()
+                        .filter(pos -> pos.getX() == acceptedPerimeter.plan().min().getX() && pos.getY() == 65)
+                        .filter(pos -> level.getBlockState(pos).isAir() && level.getBlockState(pos.below()).is(Blocks.STONE))
+                        .min(Comparator.comparingInt((BlockPos pos) -> Math.abs(pos.getZ() - 14)).thenComparingInt(BlockPos::getZ)).orElseThrow();
                 require(!owner.isCreative() && !owner.hasPermissions(2) && owner.mayBuild()
                                 && level.mayInteract(owner, sameStateEditCell), "Same-state edit actor lacks real non-op Survival permission");
                 require(AcceptedConstructionPlan.capture(area(level)).cells.containsKey(sameStateEditCell)
                                 && level.getBlockState(sameStateEditCell).is(Blocks.AIR)
                                 && level.getBlockState(sameStateEditCell.below()).is(Blocks.STONE),
                         "Chosen same-state edit cell is not accepted AIR with existing solid footing");
-                long[] reserved = area(level).getPersistentData().getCompound("SiegeProtectedConstructionV1")
-                        .getCompound("Reservation").getLongArray("Cells");
-                require(reserved.length > 0, "Paid perimeter reservation cells unavailable for edit observation");
+                Set<Long> reserved = acceptedPerimeter.reservation();
+                require(!reserved.isEmpty() && ConstructionEditLedger.get(level).matchesProjectReservation(acceptedPerimeter),
+                        "Complete paid perimeter reservation unavailable before the real player edit");
                 Map<Long, BlockState> beforeEdit = new HashMap<>();
                 for (long pos : reserved) beforeEdit.put(pos, level.getBlockState(BlockPos.of(pos)));
                 perimeterBeforeEdit = Map.copyOf(beforeEdit);
@@ -388,8 +423,14 @@ final class NativeBuildingGameplay {
                 advance(now, 306, 120);
             }
             case 306 -> {
-                require(NativeConstructionGuard.status(area(level)).contains("site was edited"),
-                        "Real native AI did not expose its player-edit pause: " + NativeConstructionGuard.status(area(level)));
+                var currentPerimeter = PerimeterProjectStore.get(core(owner), acceptedPerimeter.header().projectId());
+                String editPause = NativeConstructionGuard.status(area(level)) + " " + (currentPerimeter == null ? "" : currentPerimeter.blocker());
+                require(editPause.contains("site was edited") || editPause.contains("edit history"),
+                        "Real staged/native authority did not expose its player-edit pause: " + editPause);
+                require(ConstructionEditLedger.get(level).sameGeneration(perimeterLedgerGeneration)
+                                && ConstructionEditLedger.get(level).matchesProjectIdentity(acceptedPerimeter)
+                                && ConstructionEditLedger.get(level).edited(acceptedPerimeter.header().projectId()),
+                        "Actual player edit was not retained by the complete perimeter ledger");
                 require(perimeterUnchanged(level) && ConstructionEditLedger.get(level).edited(jobId)
                                 && balance(owner) == 1936 && NativeConstructionGuard.commissionPaid(area(level)),
                         "Native AI altered accepted cells, edit history or payment after a same-state player edit");
@@ -404,11 +445,28 @@ final class NativeBuildingGameplay {
                 advance(now, 4, 20); return Action.CANCEL;
             }
             case 4 -> {
+                var canceled = PerimeterProjectStore.get(core(owner), acceptedPerimeter.header().projectId());
+                var terminal = PerimeterProjectStore.terminal(core(owner), acceptedPerimeter.header().projectId());
+                require(canceled != null && canceled.state() == PerimeterProject.State.CANCELED
+                                || terminal != null && terminal.state() == PerimeterProject.State.CANCELED,
+                        "Native marker cancellation did not cancel the whole paid project");
+                require(ConstructionEditLedger.get(level).sameGeneration(perimeterLedgerGeneration)
+                                && balance(owner) == 1936 && perimeterUnchanged(level), "Canceled project changed ledger generation, Treasury or accepted cells");
+                conservation(level);
+                boolean wholeCleanup = !ConstructionEditLedger.get(level).contains(acceptedPerimeter.header().projectId())
+                                && acceptedPerimeter.stages().stream().noneMatch(part -> ConstructionEditLedger.get(level).contains(part.areaId()))
+                                && !PerimeterProjectLink.reserved(builder(level));
+                if (!wholeCleanup) {
+                    require(now - stageSince < 600, "Whole-project cancellation did not finish native cleanup within 30 seconds");
+                    return Action.NONE; // Native item use or transfer cleanup can finish on ordinary ticks.
+                }
                 require(level.getEntity(jobId) == null && !NativeConstructionGuard.hasReservation(level, jobId),
                         "Real perimeter cancellation did not retire marker/reservation");
                 require(balance(owner) == 1936 && builder(level).currentBuildArea == null,
                         "Perimeter cancellation refunded or left builder attached");
-                check("Real perimeter cancellation retires reservation/builder without refund");
+                RESULT.put("canceledWholePerimeter", Map.of("project", acceptedPerimeter.header().projectId().toString(),
+                        "globalTargets", acceptedPerimeter.targets().size(), "stageCount", acceptedPerimeter.stages().size(), "treasury", balance(owner)));
+                check("Real perimeter cancellation retires every global/stage reservation and builder association without refund");
                 plantCell = fixture.wallAnchor().offset(2, 0, 2);
                 require("minecraft:cobblestone".equals(fixture.expectedPlan().blocks().get(plantCell.asLong()))
                                 && !fixture.expectedPlan().blocks().containsKey(plantCell.below().asLong()),
@@ -433,7 +491,7 @@ final class NativeBuildingGameplay {
                 assertLivePlant(level);
                 require(balance(owner) == 0 && protectedAreas(level) == 0 && owner.getMainHandItem().getItem() instanceof DefensePlanItem,
                         "Free manual preview changed Treasury, plan or job count");
-                require(DefensePreview.read(owner.getMainHandItem(), level.dimension().location(), owner.getUUID(), now) != null,
+                require(DefensePreview.read(owner.getMainHandItem(), DefenseBlueprint.Kind.WALL, level.dimension().location(), owner.getUUID(), now) != null,
                         "Actual plan use did not create an owner-bound preview");
                 advance(now, 7, 20); return Action.USE_BLOCK;
             }
@@ -454,7 +512,7 @@ final class NativeBuildingGameplay {
                     require(protectedAreas(level) == 0
                                     && owner.getMainHandItem().getItem() instanceof DefensePlanItem
                                     && owner.getMainHandItem().save(new CompoundTag()).equals(manualConfirmationPlan)
-                                    && DefensePreview.read(owner.getMainHandItem(), level.dimension().location(), owner.getUUID(), now) != null
+                                    && DefensePreview.read(owner.getMainHandItem(), DefenseBlueprint.Kind.WALL, level.dimension().location(), owner.getUUID(), now) != null
                                     && !ConstructionEditLedger.get(level).reserves(plannedPositions()),
                             "Temporary manual confirmation refusal changed the plan, jobs or reservations");
                     String temporary = NativeConstructionGuard.commissionProblem(builder(level));
@@ -480,6 +538,21 @@ final class NativeBuildingGameplay {
                 require(hasAcceptedPlant(level) && !NativeConstructionGuard.reserves(level, List.of(plantCell.below())),
                         "Paid native acceptance did not record the live dandelion or reserved its support for mutation");
                 check("Persistent single-cell dandelion survives free/unpaid review and is recorded intact in the real paid acceptance snapshot");
+                NativeHollowWallOracle.assertManualCavitiesAir(level, fixture.wallAnchor());
+                CompoundTag paidRecipe = area(level).getPersistentData().getCompound("SiegeProtectedConstructionV1");
+                var acceptedWall = AcceptedConstructionPlan.load(paidRecipe);
+                var acceptedReservation = AcceptedConstructionReservation.load(acceptedWall, paidRecipe.getCompound("Reservation"));
+                for (long cavity : NativeHollowWallOracle.manualCavities(fixture.wallAnchor())) {
+                    BlockPos cell = BlockPos.of(cavity);
+                    require(!acceptedWall.cells.containsKey(cell) && acceptedReservation.clearance.containsKey(cell)
+                                    && acceptedReservation.clearance.get(cell).isAir()
+                                    && NativeConstructionGuard.reserves(level, List.of(cell)),
+                            "Paid manual job omitted a cavity from explicit AIR clearance/reservation: " + cell);
+                }
+                require(acceptedWall.cells.size() == 83 && acceptedWall.cells.values().stream().noneMatch(BlockState::isAir),
+                        "Native paid recipe differs from the hollow solid-target-only contract");
+                RESULT.put("manualHollowGeometry", Map.of("targets", 83, "cobblestone", 58, "oakPlanks", 25,
+                        "cavityCells", 27, "cavityReservedAtAcceptance", true, "airPlacementTargets", 0));
                 check("Actual manual plan confirmation consumes one plan and charges exactly 90 Treasury");
                 advance(now, 9, 20); return Action.USE_BLOCK;
             }
@@ -554,6 +627,33 @@ final class NativeBuildingGameplay {
                         "Native job mutated structural cells or obstruction during the headroom pause");
                 require(balance(owner) == bankAfterManual, "Headroom pause charged again");
                 check("Raw fixture solid in reserved non-structural headroom pauses actual mutation and is preserved");
+                // Restore top headroom first, then test an independent protected body cavity by itself.
+                level.setBlock(headroomCell, originalHeadroom, 3);
+                cavityCell = fixture.wallAnchor().above();
+                require(NativeHollowWallOracle.manualCavities(fixture.wallAnchor()).contains(cavityCell.asLong())
+                                && !fixture.expectedPlan().blocks().containsKey(cavityCell.asLong())
+                                && NativeConstructionGuard.reserves(level, List.of(cavityCell)),
+                        "Chosen body cavity is not independently reserved non-target clearance");
+                originalCavity = level.getBlockState(cavityCell);
+                require(originalCavity.isAir(), "Protected body cavity was filled during native work");
+                level.setBlock(cavityCell, Blocks.STONE.defaultBlockState(), 3);
+                pausedCells = snapshot(level);
+                RESULT.put("cavityObstructionCell", cavityCell.toShortString());
+                advance(now, 204, 20);
+            }
+            case 204 -> {
+                require(NativeConstructionGuard.status(area(level)).contains("headroom")
+                                && snapshot(level).equals(pausedCells) && level.getBlockState(cavityCell).is(Blocks.STONE)
+                                && level.getBlockState(headroomCell).equals(originalHeadroom),
+                        "Body-cavity-only obstruction did not independently pause native mutation");
+                advance(now, 205, 80);
+            }
+            case 205 -> {
+                require(snapshot(level).equals(pausedCells) && level.getBlockState(cavityCell).is(Blocks.STONE)
+                                && balance(owner) == bankAfterManual,
+                        "Native job changed protected cavity obstruction, structure or payment while paused");
+                RESULT.put("cavityObstructionPaused", true);
+                check("Raw body-cavity obstruction independently pauses native work without an AIR job or excavation");
                 owner.setGameMode(GameType.SPECTATOR); advance(now, 15, 20);
             }
             case 15 -> {
@@ -591,16 +691,18 @@ final class NativeBuildingGameplay {
                 require(hasAcceptedPlant(level) && hasClearedPlant(level), "Native plant before/cleared receipts did not survive real reload");
                 check("Single-cell native plant clearance and original acceptance receipts survive real world reload");
                 check("Mid-job real world restart preserves exact cells, paid state and durable ledger identity");
-                require(level.getBlockState(headroomCell).is(Blocks.STONE) && !area(level).nativeQueuesReady(),
+                require(level.getBlockState(cavityCell).is(Blocks.STONE)
+                                && level.getBlockState(headroomCell).equals(originalHeadroom) && !area(level).nativeQueuesReady(),
                         "Reload adopted obstructed clearance or enabled native queues");
                 owner.setGameMode(GameType.SURVIVAL); advance(now, 203, 60);
             }
             case 203 -> {
-                require(snapshot(level).equals(pausedCells) && level.getBlockState(headroomCell).is(Blocks.STONE)
-                                && !area(level).nativeQueuesReady(),
-                        "Restoring owner permission bypassed the saved headroom obstruction");
-                check("Headroom obstruction survives real reload and keeps native queues unready even after owner permission returns");
-                level.setBlock(headroomCell, originalHeadroom, 3);
+                require(snapshot(level).equals(pausedCells) && level.getBlockState(cavityCell).is(Blocks.STONE)
+                                && level.getBlockState(headroomCell).equals(originalHeadroom) && !area(level).nativeQueuesReady(),
+                        "Restoring owner permission bypassed the saved body-cavity obstruction");
+                RESULT.put("cavityObstructionRestartVerified", true);
+                check("Body-cavity obstruction survives real reload and keeps native queues unready even after owner permission returns");
+                level.setBlock(cavityCell, originalCavity, 3);
                 replenish(level, 128, 128); advance(now, 18, 0);
             }
             case 18 -> {
@@ -618,6 +720,17 @@ final class NativeBuildingGameplay {
                         "Native worker excavated the plant support outside its mutation plan");
                 check("Native clearing replaces only the accepted dandelion with planned cobblestone, preserving its support and exact material totals");
                 check("Restoring original raw fixture clearance resumes protected native work without another charge");
+                NativeHollowWallOracle.assertManualCavitiesAir(level, fixture.wallAnchor());
+                for (int x = -1; x <= 1; x++) for (int z = -1; z <= 1; z++) {
+                    require(level.getBlockState(fixture.wallAnchor().offset(x, 3, z)).is(Blocks.OAK_PLANKS),
+                            "Native completion did not place the walkable deck above the hollow body");
+                    require(level.getBlockState(fixture.wallAnchor().offset(x, -1, z)).is(Blocks.STONE),
+                            "Native construction excavated full-width footing below the hollow body");
+                }
+                RESULT.put("nativeDeckOverCavityVerified", true);
+                RESULT.put("finalCavityAirCells", 27);
+                RESULT.put("unchangedCavityFootingColumns", 9);
+                check("Native AI places the actual nine-cell central deck above 27 untouched AIR cavity cells and intact footing");
                 check("Native AI completes the exact manual template after resupply/restart with material conservation");
                 RESULT.put("completedManualBlocks", placed(level));
                 RESULT.put("manualTreasuryDebit", 90); RESULT.put("perimeterTreasuryDebit", 64);
@@ -626,12 +739,58 @@ final class NativeBuildingGameplay {
             case 19 -> {
                 require(level.getEntity(jobId) == null || ((ProtectedBuildArea) level.getEntity(jobId)).isDone(),
                         "Native completion did not retire or complete its marker");
+                BuilderEntity worker = builder(level);
+                if (!completedConstructionDetached(level) || ProtectedBuilderHandMirror.activeUse(worker)
+                        || !worker.neededItems.isEmpty() || !ProtectedInventoryCleanup.read(worker.getPersistentData()).isEmpty()
+                        || ProtectedStorageAccess.runningProblem(worker) != null) {
+                    completedClosedSince = -1; return Action.NONE;
+                }
+                if (completedClosedSince < 0) completedClosedSince = now;
+                if (now - completedClosedSince < 40) return Action.NONE;
+                require(!worker.isNoAi() && !worker.getMainHandItem().isEmpty()
+                                && worker.getMainHandItem() == worker.getInventory().getItem(5),
+                        "Completed reload checkpoint lacks an active native builder with a nonempty shared hand mirror");
+                conservation(level); stockSnapshot(level, "completed-detached-before-world-save");
+                pausedCells = snapshot(level); ledgerGeneration = ConstructionEditLedger.get(level).generation();
+                completedInventoryBeforeReload = inventoryAndHands(worker); completedInventoryLoaded = null;
+                completedRebindsBeforeReload = ProtectedBuilderHandMirror.rebindCount(worker.getPersistentData());
+                chestBeforeReload = containerValues((Container) level.getBlockEntity(fixture.chestPos()));
+                owner.server.saveEverything(false, true, true);
+                advance(now, 22, 0); return Action.RELOAD;
+            }
+            case 22 -> {
+                stockSnapshot(level, "completed-detached-after-world-reload");
+                require(completedInventoryLoaded != null && completedInventoryLoaded.equals(completedInventoryBeforeReload)
+                                && completedLoadedSplitMirror,
+                        "Completed native reload did not preserve exact inventory/equipment values and expose the pinned split mirror");
+                assertHandRebind(level, completedRebindsBeforeReload + 1);
+                require(inventoryAndHands(builder(level)).equals(completedInventoryBeforeReload),
+                        "Completed production hand rebind changed serialized inventory or equipment values");
+                require(completedConstructionDetached(level) && !builder(level).isNoAi()
+                                && ProtectedInventoryCleanup.read(builder(level).getPersistentData()).isEmpty(),
+                        "Completed reload recreated active construction or left native cleanup pending");
+                require(snapshot(level).equals(pausedCells) && placed(level) == fixture.expectedPlan().blocks().size()
+                                && ConstructionEditLedger.get(level).sameGeneration(ledgerGeneration)
+                                && containerValues((Container) level.getBlockEntity(fixture.chestPos())).equals(chestBeforeReload)
+                                && balance(owner) == bankAfterManual,
+                        "Completed reload changed geometry, ledger identity, native chest or Treasury");
+                NativeHollowWallOracle.assertManualCavitiesAir(level, fixture.wallAnchor());
+                conservation(level);
+                RESULT.put("completedManualRestart", Map.of("verified", true, "preAiExactInventoryValues", true,
+                        "preAiEqualSplitMirror", completedLoadedSplitMirror, "singleValuePreservingRebind", true,
+                        "constructionDetached", true, "reservationRetired", true, "placedBlocks", placed(level),
+                        "cavityAirCells", 27, "treasury", balance(owner)));
+                check("Actual completed manual job close/reopen preserves exact stock,83 blocks and27 cavity AIR; native hand rebinds once while all construction links/reservations stay retired");
                 owner.teleportTo(fixture.wallAnchor().getX() + 7.5, 65, fixture.wallAnchor().getZ() - 8.5);
                 advance(now, 20, 40);
             }
             case 20 -> {
                 require(placed(level) == fixture.expectedPlan().blocks().size(), "Finished manual wall changed before capture");
                 conservation(level);
+                assertHandRebind(level, completedRebindsBeforeReload + 1);
+                require(inventoryAndHands(builder(level)).equals(completedInventoryBeforeReload),
+                        "Completed inventory/equipment changed during the ordinary post-reload observation window");
+                require(completedConstructionDetached(level), "Completed job resumed construction after reload");
                 advance(now, 21, 10); return Action.CAPTURE_COMPLETED;
             }
             case 21 -> {
@@ -836,6 +995,19 @@ final class NativeBuildingGameplay {
             hands.add(stackDescription(ItemStack.of((CompoundTag) value)));
         snap.put("serializedHandItems", hands);
         STOCK.add(Map.copyOf(snap));
+    }
+    private static CompoundTag inventoryAndHands(BuilderEntity builder) {
+        CompoundTag saved = builder.saveWithoutId(new CompoundTag()), values = new CompoundTag();
+        for (String key : List.of("Items", "HandItems"))
+            values.put(key, saved.getList(key, Tag.TAG_COMPOUND).copy());
+        return values;
+    }
+    private static boolean completedConstructionDetached(ServerLevel level) {
+        BuilderEntity worker = builder(level);
+        return worker.currentBuildArea == null && !WorkersBridge.hasActiveBuildArea(worker)
+                && !worker.getPersistentData().contains(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
+                && !NativeConstructionGuard.hasProtectedReceipt(worker) && !PerimeterProjectLink.reserved(worker)
+                && !NativeConstructionGuard.hasReservation(level, jobId);
     }
     private static void assertSingleHandRebind(ServerLevel level) {
         assertHandRebind(level, rebindsBeforeReload + 1);

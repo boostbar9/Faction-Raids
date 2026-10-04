@@ -44,7 +44,7 @@ public final class DefensePreviewRenderer {
         ItemStack held = mc.player.getMainHandItem();
         if (!(held.getItem() instanceof DefensePlanItem)) held = mc.player.getOffhandItem();
         if (!(held.getItem() instanceof DefensePlanItem item)) { selection = null; plan = null; return; }
-        var next = DefensePreview.read(held, world.dimension().location(), mc.player.getUUID(), world.getGameTime());
+        var next = DefensePreview.read(held, item.kind(), world.dimension().location(), mc.player.getUUID(), world.getGameTime());
         if (next == null || mc.player.distanceToSqr(next.origin().getX() + .5, next.origin().getY(), next.origin().getZ() + .5)
                 > DefensePreview.RANGE * DefensePreview.RANGE) { selection = null; plan = null; return; }
         boolean changed = plan == null || kind != item.kind() || selection == null

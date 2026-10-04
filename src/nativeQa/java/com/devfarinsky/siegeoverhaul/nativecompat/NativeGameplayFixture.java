@@ -169,8 +169,10 @@ final class NativeGameplayFixture {
         owner.teleportTo(level, 141.5, 65, 12.5, 0, 25);
         require(SiegeCore.canUse(owner, CORE), "Fixture owner is out of core interaction range");
         require(DefenseBlueprint.Kind.WALL.anchor(WALL).equals(WALL), "Fixture wall anchor is not on the native plan grid");
-        return new Fixture(builder.getUUID(), storage.getUUID(), claim.getUUID(), FACTION, CORE, CHEST, WALL,
-                DefenseBlueprint.create(DefenseBlueprint.Kind.WALL, WALL, Direction.SOUTH));
+        var wallPlan = DefenseBlueprint.create(DefenseBlueprint.Kind.WALL, WALL, Direction.SOUTH);
+        NativeHollowWallOracle.assertManualWallPlan(wallPlan, WALL);
+        NativeHollowWallOracle.assertManualCavitiesAir(level, WALL);
+        return new Fixture(builder.getUUID(), storage.getUUID(), claim.getUUID(), FACTION, CORE, CHEST, WALL, wallPlan);
     }
 
     /** Adds all requested material or throws before changing any chest slot. Never clears old stock. */

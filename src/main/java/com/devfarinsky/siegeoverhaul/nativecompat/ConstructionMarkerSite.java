@@ -29,6 +29,12 @@ final class ConstructionMarkerSite {
     private ConstructionMarkerSite() {}
 
     static BlockPos find(ServerPlayer owner, AcceptedConstructionPlan plan) {
+        return find(owner,plan,java.util.Set.of(),null);
+    }
+
+    /** A staged commission may use any still-owned reviewed claim, with all future cells excluded. */
+    static BlockPos find(ServerPlayer owner, AcceptedConstructionPlan plan, java.util.Set<Long> reserved,
+                         java.util.Set<ChunkPos> territory) {
         ServerLevel level = owner.serverLevel();
         String key = SiegeCore.key(owner);
         var anchor = RaidSavedData.get(level.getServer()).anchors.get(key);
@@ -37,7 +43,9 @@ final class ConstructionMarkerSite {
         var identity = anchor.withIdentity(claim.ownerFactionStringId(), anchor.teamDisplay());
         Map<ChunkPos, Boolean> permissions = new HashMap<>();
         Predicate<BlockPos> permitted = pos -> permissions.computeIfAbsent(new ChunkPos(pos), chunk ->
-                claim.chunks().contains(chunk) && !ClaimBridge.isForeignClaim(level, chunk, identity))
+                (territory==null?claim.chunks():territory).contains(chunk)
+                        && (territory==null || RecruitsClaimsBridge.isChunkOwnedBy(level,chunk,claim.ownerFactionStringId()))
+                        && !ClaimBridge.isForeignClaim(level, chunk, identity))
                 && level.mayInteract(owner, pos);
         BlockPos anchorPos = owner.blockPosition();
         var columns = new ArrayList<BlockPos>();
@@ -52,19 +60,39 @@ final class ConstructionMarkerSite {
                 if (y == column.getY() || Math.abs(y - column.getY()) > 2) continue;
                 feet = column.atY(y);
             }
-            if (safe(level, owner, feet, plan, permitted)) return feet;
+            if (safe(level, owner, feet, plan, permitted,reserved)) return feet;
         }
         return null;
     }
 
     static boolean safe(ServerLevel level, ServerPlayer owner, BlockPos feet,
                         AcceptedConstructionPlan plan, Predicate<BlockPos> permitted) {
+        return safe(level,owner,feet,plan,permitted,java.util.Set.of());
+    }
+    static boolean safe(ServerLevel level, ServerPlayer owner, BlockPos feet,
+                        AcceptedConstructionPlan plan, Predicate<BlockPos> permitted, java.util.Set<Long> reserved) {
+        return safe(level,owner,feet,plan,permitted,reserved,true);
+    }
+    /** Subsequent sections reuse the original accepted site, never an unseen new marker location. */
+    static boolean reusable(ServerPlayer owner,BlockPos feet,AcceptedConstructionPlan plan,
+                            java.util.Set<Long> reserved,java.util.Set<ChunkPos> territory) {
+        ServerLevel level=owner.serverLevel();var anchor=RaidSavedData.get(level.getServer()).anchors.get(SiegeCore.key(owner));
+        var claim=RecruitsClaimsBridge.resolveDefendingClaim(level,anchor).orElse(null);if(claim==null)return false;
+        var identity=anchor.withIdentity(claim.ownerFactionStringId(),anchor.teamDisplay());
+        Map<ChunkPos,Boolean> permissions=new HashMap<>();
+        return safe(level,owner,feet,plan,pos->permissions.computeIfAbsent(new ChunkPos(pos),chunk->territory.contains(chunk)
+                &&RecruitsClaimsBridge.isChunkOwnedBy(level,chunk,claim.ownerFactionStringId())
+                &&!ClaimBridge.isForeignClaim(level,chunk,identity))&&level.mayInteract(owner,pos),reserved,false);
+    }
+    private static boolean safe(ServerLevel level, ServerPlayer owner, BlockPos feet,
+                                AcceptedConstructionPlan plan, Predicate<BlockPos> permitted,
+                                java.util.Set<Long> reserved,boolean requireInitialVisibility) {
         AABB box = markerBox(feet);
         if (feet.getY() <= level.getMinBuildHeight() || box.maxY >= level.getMaxBuildHeight()
                 || !level.getWorldBorder().isWithinBounds(box)) return false;
         for (BlockPos cell : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY - 1, box.minZ),
                 BlockPos.containing(Math.nextDown(box.maxX), Math.nextDown(box.maxY), Math.nextDown(box.maxZ)))) {
-            if (!level.hasChunkAt(cell) || !permitted.test(cell) || plan.cells.containsKey(cell)) return false;
+            if (!level.hasChunkAt(cell) || !permitted.test(cell) || plan.cells.containsKey(cell) || reserved.contains(cell.asLong())) return false;
             BlockState state = level.getBlockState(cell);
             if (state.hasBlockEntity() || level.getBlockEntity(cell) != null || !state.getFluidState().isEmpty() || hazardous(state)) return false;
             if (cell.getY() >= feet.getY() && !state.isAir()) return false;
@@ -74,6 +102,7 @@ final class ConstructionMarkerSite {
         if (!level.getBlockState(floor).isFaceSturdy(level, floor, Direction.UP)
                 || !level.noCollision((Entity) null, box)
                 || !level.getEntities((Entity) null, box, NativeConstructionGuard::blocksPlacement).isEmpty()) return false;
+        if(!requireInitialVisibility)return true;
         Vec3 eye = owner.getEyePosition(), target = new Vec3(feet.getX() + .5, feet.getY() + 1, feet.getZ() + .5);
         // A close current ray target is usable without assuming a creative reach extension.
         if (eye.distanceToSqr(target) > 3 * 3) return false;
@@ -83,7 +112,7 @@ final class ConstructionMarkerSite {
         for (BlockPos cell : BlockPos.betweenClosed(BlockPos.containing(rayBounds.minX, rayBounds.minY, rayBounds.minZ),
                 BlockPos.containing(rayBounds.maxX, rayBounds.maxY, rayBounds.maxZ))) {
             if (!level.hasChunkAt(cell)) return false;
-            if (plan.cells.containsKey(cell) && new AABB(cell).clip(eye, target).isPresent()) return false;
+            if ((plan.cells.containsKey(cell)||reserved.contains(cell.asLong())) && new AABB(cell).clip(eye, target).isPresent()) return false;
         }
         return level.clip(new ClipContext(eye, target, ClipContext.Block.COLLIDER, ClipContext.Fluid.ANY, owner))
                 .getType() == HitResult.Type.MISS;

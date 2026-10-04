@@ -95,6 +95,8 @@ public final class ProtectedBuildArea extends BuildArea {
     }
 
     public boolean nativeQueuesReady() { return queuesReady; }
+    /** Opaque identity only; all permitted recipe writes replace the tag and public getters copy it. */
+    Object nativeRecipeIdentity() { return entityData.get(STRUCTURE); }
 
     void verifyCompletion() { completionVerified = true; }
 

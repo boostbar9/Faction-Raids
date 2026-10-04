@@ -166,7 +166,7 @@ public final class NativePerimeterCompletionQa {
                         "Free review mutated blocks, charged money or created a job");
                 selectPlan(owner);
                 check("Fresh cheats-off non-op survival owner, native faction/core and one actual 16x16 claim");
-                check("Production review exactly matches 968-block oracle and is free");
+                check("Production review exactly matches 572-block oracle and is free");
                 sample(level, owner, "review"); advance(now, 1);
             }
             case 1 -> {
@@ -218,7 +218,7 @@ public final class NativePerimeterCompletionQa {
                 if (placed < NativePerimeterFixture.BLOCKS) return Action.NONE;
                 verifyExactCompletion(level, owner);
                 REPORT.put("constructionSeconds", (System.nanoTime() - constructionStarted) / (double) SECOND);
-                check("Production-wrapped native builder goal, native storage collection and pathfinding placed all 968 exact perimeter blocks");
+                check("Production-wrapped native builder goal, native storage collection and pathfinding placed all 572 exact perimeter blocks");
                 advance(now, 5);
             }
             case 5 -> {
@@ -249,6 +249,7 @@ public final class NativePerimeterCompletionQa {
     }
 
     private static void verifyExactCompletion(ServerLevel level, ServerPlayer owner) {
+        NativeHollowWallOracle.assertCavitiesAir(level, Set.of(NativePerimeterFixture.CLAIM_CHUNK));
         require(placed(level) == NativePerimeterFixture.BLOCKS && balance(owner) == 1936, "Completion geometry/payment mismatch");
         for (var entry : fixture.plan().blocks().entrySet()) {
             BlockState expected = ForgeRegistries.BLOCKS.getValue(new net.minecraft.resources.ResourceLocation(entry.getValue())).defaultBlockState();

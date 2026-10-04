@@ -25,8 +25,19 @@ public final class CampGuards {
             String id=guardRoles.get(slot);
             int total = data.raids.values().stream().mapToInt(r -> r.raiders.size() + r.campGuards.size()).sum();
             if (total >= RaidConfig.MAX_GLOBAL_RAIDERS.get() || raid.raiders.size()+raid.campGuards.size() >= RaidConfig.MAX_ACTIVE_RAIDERS.get()) break;
-            var type = ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("recruits", id));
-            if (type == null || !(type.create(level) instanceof Mob guard)) continue;
+            var requested = new ResourceLocation("recruits", id);
+            var type = CampGuardSpawn.exactType(ForgeRegistries.ENTITY_TYPES, requested);
+            if (type == null) {
+                FactionLogger.LOG.warn("Camp {} guard slot {} unavailable: requested native type {} is not registered; no replacement spawned", raid.teamKey, slot, requested);
+                continue;
+            }
+            var candidate = type.create(level);
+            if (!(candidate instanceof Mob guard)) { if (candidate != null) candidate.discard(); continue; }
+            if (!CampGuardSpawn.nativeRecruit(guard, type)) {
+                guard.discard();
+                FactionLogger.LOG.warn("Camp {} guard slot {} rejected: {} did not create its exact native Recruit type", raid.teamKey, slot, requested);
+                continue;
+            }
             boolean placed = false;
             for (BlockPos p : candidates(raid,slot)) {
                 if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p)
@@ -37,7 +48,7 @@ public final class CampGuards {
             }
             if (!placed) { guard.discard(); continue; }
             try {
-                guard.finalizeSpawn(level, level.getCurrentDifficultyAt(guard.blockPosition()), MobSpawnType.EVENT,null,null);
+                CampGuardSpawn.finalizeGuard(level, guard);
                 guard.getPersistentData().putString(TEAM_TAG,raid.teamKey);
                 guard.getPersistentData().putInt("SiegeGuardSlot",slot);
                 guard.getPersistentData().putLong("SiegeGuardPost",guard.blockPosition().asLong());

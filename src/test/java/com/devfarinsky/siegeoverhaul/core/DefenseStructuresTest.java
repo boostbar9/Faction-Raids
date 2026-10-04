@@ -105,6 +105,22 @@ class DefenseStructuresTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void everyManualBodyCavityIsReservedAndOccupiedCavitiesRejectWithoutExcavation() {
+        for (var kind : List.of(DefenseBlueprint.Kind.WALL, DefenseBlueprint.Kind.CORNER))
+            for (var facing : Direction.Plane.HORIZONTAL) {
+                var plan = DefenseBlueprint.create(kind, origin, facing); var reserved = DefenseStructures.reservedCells(plan);
+                for (int x = -1; x <= 1; x++) for (int z = -1; z <= 1; z++) for (int y = 0; y < 3; y++) {
+                    var cell = origin.relative(facing.getClockWise(), x).relative(facing, z).above(y);
+                    assertTrue(reserved.contains(cell)); assertFalse(plan.blocks().containsKey(cell.asLong()));
+                }
+                for (int y = 0; y < 3; y++) for (var block : List.of(Blocks.COBBLESTONE, Blocks.CHEST, Blocks.WATER)) {
+                    var level = clearLevel(); when(level.getBlockState(origin.above(y))).thenReturn(block.defaultBlockState());
+                    assertNotNull(DefenseStructures.siteProblem(level, plan, p -> true));
+                    verify(level, never()).setBlock(any(), any(), anyInt(), anyInt());
+                }
+            }
+    }
+
     @Test void clearFlatClaimedSiteIsAccepted() {
         assertNull(DefenseStructures.siteProblem(clearLevel(), tower(), p -> true));
     }

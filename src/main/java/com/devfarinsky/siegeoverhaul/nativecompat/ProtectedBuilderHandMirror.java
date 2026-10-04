@@ -12,11 +12,11 @@ import java.util.ArrayList;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/** Value-preserving repair of the pinned Recruits load-time main-hand mirror, for guarded jobs only. */
+/** Value-preserving binding of the pinned Recruits load-time main-hand mirror, for authenticated guarded lifecycles only. */
 final class ProtectedBuilderHandMirror {
     private static final String PENDING = "SiegeProtectedHandRefreshPending",
             REVIEW = "SiegeProtectedHandReviewRequired", REBINDS = "SiegeProtectedHandRebinds";
-    private static final String REVIEW_REASON = "Paused: protected builder inventory needs review; no item amounts were selected. Cancel remains available.";
+    private static final String REVIEW_REASON = "Paused: protected builder inventory needs review; no item amounts were selected. Native cleanup is deferred.";
     private ProtectedBuilderHandMirror() {}
 
     static void arm(CompoundTag data) { data.putBoolean(PENDING, true); }
@@ -31,7 +31,7 @@ final class ProtectedBuilderHandMirror {
         return worker.isUsingItem() || useItem == null || !useItem.isEmpty() || worker.getUseItemRemainingTicks() != 0;
     }
 
-    /** Call only after the guard verifies the active durable receipt and exact companion runtime. */
+    /** Call only after the guard verifies durable job/lifecycle provenance and the exact companion runtime. */
     static String restore(Mob worker) {
         if (!(worker instanceof BuilderEntity builder)) return "Paused: protected builder inventory API is unavailable";
         CompoundTag data = worker.getPersistentData();

@@ -50,8 +50,12 @@ jobs:
       - name: Initialize a new isolated game directory
         run: |
           set -euo pipefail
-          test ! -e build/native-qa/client/saves/siege-native-qa-fixture
-          mkdir -p build/native-qa/client build/native-qa/evidence
+          test ! -e build/native-qa/client
+          test ! -e build/native-qa/evidence
+          python3 -B -m unittest discover -s scripts/tests -p 'test_prepare_native_client_defaults.py'
+          python3 scripts/prepare-native-client-defaults.py --mode baseline --smallships-version 2.0.0-b1.4
+          mkdir -p build/native-qa/evidence
+          cp build/native-qa/client/.native-smallships-defaults.json build/native-qa/evidence/smallships-default-config-provenance.json
           printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:4\nsimulationDistance:5\nmaxFps:30\nvsync:false\n' > build/native-qa/client/options.txt
           git rev-parse HEAD > build/native-qa/evidence/source-commit.txt
           java -version 2> build/native-qa/evidence/java-version.txt
@@ -72,15 +76,40 @@ jobs:
       - name: Verify evidence contract
         run: |
           python3 - <<'PY'
-          import json
+          import json, struct
           from pathlib import Path
           root = Path('build/native-qa/evidence')
           data = json.loads((root / 'result.json').read_text())
           audit = json.loads((root / 'native-bytecode-audit.json').read_text())
           assert audit['status'] == 'passed' and audit['noVendorJarsUploaded'], audit
-          assert sum(len(v['classes']) for v in audit['artifacts'].values()) == 13, audit
+          assert sum(len(v['classes']) for v in audit['artifacts'].values()) == 18, audit
           assert data['status'] == 'passed', data
+          viewport = data['viewportSetup']
+          assert viewport['framebufferWidth'] == viewport['windowWidth'] == 960, viewport
+          assert viewport['framebufferHeight'] == viewport['windowHeight'] == 720, viewport
+          for name in ['nativeInspectionScale3', 'buildingScale3']:
+              compact = data['guiScaleEvidence'][name]
+              assert compact['framebufferWidth'] == 960 and compact['framebufferHeight'] == 720, compact
+              assert compact['requestedGuiScale'] == 3 and compact['guiWidth'] == 320 and compact['guiHeight'] == 240, compact
           assert data['gameplay']['status'] == 'passed', data.get('gameplay')
+          gameplay = data['gameplay']
+          assert gameplay['completedManualBlocks'] == 83 and data['perimeterTemplateBlocks'] == 572, data
+          assert gameplay['manualHollowGeometry'] == {'targets': 83, 'cobblestone': 58, 'oakPlanks': 25,
+              'cavityCells': 27, 'cavityReservedAtAcceptance': True, 'airPlacementTargets': 0}, gameplay
+          assert gameplay['cavityObstructionPaused'] and gameplay['cavityObstructionRestartVerified'], gameplay
+          assert gameplay['nativeDeckOverCavityVerified'] and gameplay['finalCavityAirCells'] == 27, gameplay
+          assert gameplay['unchangedCavityFootingColumns'] == 9, gameplay
+          completed = gameplay['completedManualRestart']
+          assert completed['verified'] and completed['preAiExactInventoryValues'] and completed['preAiEqualSplitMirror'], completed
+          assert completed['singleValuePreservingRebind'] and completed['constructionDetached'] and completed['reservationRetired'], completed
+          assert completed['placedBlocks'] == 83 and completed['cavityAirCells'] == 27, completed
+          projection = data['gameplay']['perimeterProjection']
+          assert projection['alwaysShownThreshold'] == 1024 and projection['activeTargets'] > 0, projection
+          assert projection['defaultAlwaysShown'] == (projection['activeTargets'] <= 1024), projection
+          assert projection['wholeTargets'] >= projection['activeTargets'], projection
+          assert data['gameplay']['authenticatedProjectionHide'] and data['gameplay']['authenticatedProjectionShow'], data
+          canceled = data['gameplay']['canceledWholePerimeter']
+          assert canceled['globalTargets'] == projection['wholeTargets'] and canceled['stageCount'] >= 1 and canceled['treasury'] == 1936, canceled
           expected = [
               '01-marker-focused.png', '02-native-inspection-scale2.png',
               '03-native-inspection-scale3.png', '04-projection-unfocused.png',
@@ -97,6 +126,7 @@ jobs:
           for name in expected:
               content = (root / name).read_bytes()
               assert content.startswith(b'\x89PNG\r\n\x1a\n') and len(content) > 4096, name
+              assert struct.unpack('>II', content[16:24]) == (960, 720), name
           for mod in ['workers', 'recruits', 'smallships', 'siegeweapons']:
               assert mod in data['loadedModVersions'], mod
               artifact = data['loadedCompanionArtifacts'][mod]

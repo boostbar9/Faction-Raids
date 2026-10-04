@@ -21,7 +21,7 @@ class PerimeterPreviewTest extends MinecraftTestSupport {
     private ItemStack preview() {
         ItemStack stack = new ItemStack(Items.PAPER); var cells = wall();
         PerimeterPreview.set(stack, owner, Level.OVERWORLD.location(), core, 1, 100,
-                PerimeterPreview.fingerprint(cells, core, 1, "claim"), null, "748 cobblestone, 220 oak planks", cells);
+                PerimeterPreview.fingerprint(cells, core, 1, "claim"), null, "352 cobblestone, 220 oak planks", cells);
         return stack;
     }
     @Test void exactWorldCellsSurviveMergedPrismsAndInventoryRoundTrip() {
@@ -34,7 +34,7 @@ class PerimeterPreviewTest extends MinecraftTestSupport {
                 assertTrue(reconstructed.add(pos.asLong()), "Preview prisms must not overlap"); volume++;
             }
         }
-        assertEquals(wall().keySet(), reconstructed); assertEquals(968, volume);
+        assertEquals(wall().keySet(), reconstructed); assertEquals(572, volume);
         assertTrue(selection.boxes().size() < 100, "A simple ring must not render a box per voxel");
     }
     @Test void canonicalFingerprintIsIndependentOfIterationOrderAndTracksMaterialGeometryAndIdentity() {

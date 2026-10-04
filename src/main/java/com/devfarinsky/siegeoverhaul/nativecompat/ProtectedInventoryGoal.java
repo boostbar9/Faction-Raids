@@ -5,6 +5,7 @@ import net.minecraft.world.Container;
 import net.minecraft.world.entity.ai.goal.Goal;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 
@@ -15,13 +16,36 @@ abstract class ProtectedInventoryGoal extends Goal {
         final LinkedHashSet<ProtectedInventoryGoal> pending = new LinkedHashSet<>();
         private boolean draining;
         private ProtectedInventoryGoal upkeepOwner;
+        private final EnumMap<ProtectedStorageAccess.Kind,ProtectedInventoryGoal> owners =
+                new EnumMap<>(ProtectedStorageAccess.Kind.class);
         Session(BuilderEntity worker) { this.worker = worker; }
-        boolean admitted(ProtectedInventoryGoal goal) { return !goal.upkeep() || upkeepOwner==null || upkeepOwner==goal; }
-        void claim(ProtectedInventoryGoal goal) { if(goal.upkeep())upkeepOwner=goal; }
-        void release(ProtectedInventoryGoal goal) { if(upkeepOwner==goal)upkeepOwner=null; }
+        boolean admitted(ProtectedInventoryGoal goal) {
+            return (!owners.containsKey(goal.kind()) || owners.get(goal.kind())==goal)
+                    && (!goal.upkeep() || upkeepOwner==null || upkeepOwner==goal);
+        }
+        void claim(ProtectedInventoryGoal goal) { owners.put(goal.kind(),goal);if(goal.upkeep())upkeepOwner=goal; }
+        void release(ProtectedInventoryGoal goal) { owners.remove(goal.kind(),goal);if(upkeepOwner==goal)upkeepOwner=null; }
+        boolean owns(ProtectedInventoryGoal goal) { return owners.get(goal.kind())==goal; }
+        boolean orphanedCleanup() {
+            try {
+                for(var kind:ProtectedInventoryCleanup.read(worker.getPersistentData()).keySet())
+                    if(!owners.containsKey(kind))return true;
+                return false;
+            } catch(RuntimeException | LinkageError unavailable) { return true; }
+        }
+        boolean cleanupComplete() {
+            return !draining && pending.isEmpty() && owners.isEmpty() && upkeepOwner==null
+                    && !ProtectedInventoryCleanup.outstanding(worker.getPersistentData());
+        }
         boolean ready() { return ready(null); }
         boolean ready(ProtectedInventoryGoal caller) {
             if (draining) return false;
+            try {
+                if(orphanedCleanup() || ProtectedInventoryCleanup.read(worker.getPersistentData()).containsValue(ProtectedInventoryCleanup.REVIEW)) {
+                    NativeConstructionGuard.pauseStorage(worker,"Paused: interrupted native inventory cleanup needs review; callbacks were not replayed");
+                    return false;
+                }
+            } catch(RuntimeException | LinkageError unavailable) { return false; }
             draining = true;
             try {
                 boolean blocked=false;
@@ -44,6 +68,7 @@ abstract class ProtectedInventoryGoal extends Goal {
     ProtectedInventoryGoal(BuilderEntity worker, Goal delegate, Session session) {
         this.worker=worker; this.delegate=delegate; this.session=session; setFlags(delegate.getFlags());
     }
+    abstract ProtectedStorageAccess.Kind kind();
     abstract String beforeStart();
     abstract String beforeTick();
     abstract String cleanup();
@@ -51,6 +76,25 @@ abstract class ProtectedInventoryGoal extends Goal {
     void afterTick() {}
     void stopped() {}
     boolean upkeep() { return false; }
+    /** Only audited stable checkpoints may omit a post-reload cleanup obligation. */
+    boolean cleanupObligation() { return true; }
+    private void checkpoint() {
+        if(cleanupObligation())ProtectedInventoryCleanup.record(worker.getPersistentData(),kind(),ProtectedInventoryCleanup.CLEANUP);
+        else ProtectedInventoryCleanup.complete(worker.getPersistentData(),kind());
+    }
+    private void callbackFence() {
+        ProtectedInventoryCleanup.record(worker.getPersistentData(),kind(),ProtectedInventoryCleanup.REVIEW);
+    }
+    private void failedCallback() {
+        started=false;stopFailed=true;session.pending.add(this);
+        // start/tick may call the native stop internally. No callback may be replayed
+        // after an exception, even when there were no selected transfer writes.
+        try { callbackFence(); }
+        catch(RuntimeException | LinkageError unavailable) { /* Preserve unknown durable data verbatim. */ }
+    }
+    /** Cleanup-only inspection; callers cannot rewrite or discard the lifecycle. */
+    final boolean legacyLifecycleActive() { return started && !protectedLifecycle; }
+    final boolean cleanupComplete() { return !started && !protectedLifecycle && !stopFailed; }
 
     private String safeCleanup() {
         try { return cleanup(); }
@@ -75,16 +119,16 @@ abstract class ProtectedInventoryGoal extends Goal {
     @Override public boolean isInterruptable() { return delegate.isInterruptable(); }
     @Override public boolean requiresUpdateEveryTick() { return delegate.requiresUpdateEveryTick(); }
     @Override public void start() {
-        if(!session.ready(this)||!session.admitted(this))return;
+        if(started || !session.ready(this)||!session.admitted(this))return;
         if(NativeConstructionGuard.hasProtectedReceipt(worker)&&!check(true))return;
         protectedLifecycle=NativeConstructionGuard.hasProtectedReceipt(worker);
         started=true;
         if(protectedLifecycle)session.claim(this);
         if(!protectedLifecycle){delegate.start();return;}
-        try { delegate.start(); afterStart(); }
+        try { callbackFence();delegate.start();afterStart();checkpoint(); }
         catch(RuntimeException|LinkageError unavailable) {
-            started=false; session.pending.add(this);
-            NativeConstructionGuard.pauseStorage(worker,"Paused: native inventory start could not be verified");
+            failedCallback();
+            NativeConstructionGuard.pauseStorage(worker,"Paused: native inventory start/cleanup needs review; callbacks were not replayed");
         }
     }
     @Override public void stop() {
@@ -99,21 +143,33 @@ abstract class ProtectedInventoryGoal extends Goal {
         }
         // A protected lifecycle keeps its bounded close/dirty obligation after owner cancellation.
         // This checks loading/known read locations only; it does not resurrect transfer authority.
-        String problem=protectedLifecycle?safeCleanup():null;
-        if(problem!=null){NativeConstructionGuard.pauseStorage(worker,problem);return false;}
-        try { delegate.stop(); protectedLifecycle=false; session.release(this); stopped(); return true; }
+        try {
+            if(protectedLifecycle)ProtectedInventoryCleanup.record(worker.getPersistentData(),kind(),ProtectedInventoryCleanup.CLEANUP);
+            String problem=protectedLifecycle?safeCleanup():null;
+            if(problem!=null){NativeConstructionGuard.pauseStorage(worker,problem);return false;}
+            callbackFence();delegate.stop();stopped();
+            ProtectedInventoryCleanup.complete(worker.getPersistentData(),kind());
+            protectedLifecycle=false;session.release(this);return true;
+        }
         catch(RuntimeException|LinkageError unavailable) {
-            stopFailed=true; // A partly completed payment/timer callback must never be replayed blindly.
+            failedCallback(); // A partly completed payment/timer callback must never be replayed blindly.
             NativeConstructionGuard.pauseStorage(worker,"Paused: native inventory cleanup needs review");return false;
         }
     }
     @Override public void tick() {
         if(!started)return;
+        // Cancellation can remove the receipt before GoalSelector calls stop.
+        // A lifecycle admitted under protection must finish through guarded
+        // cleanup, never turn into a legacy transfer halfway through its work.
+        if(protectedLifecycle && !NativeConstructionGuard.hasProtectedReceipt(worker)) {
+            stop();return;
+        }
         if(!session.ready(this)||!session.admitted(this))return; // Shared across all adapters: no late old stop can finalize a new transfer.
         if(!NativeConstructionGuard.hasProtectedReceipt(worker)){delegate.tick();return;}
         writes=List.of();
         if(!check(false))return;
         try {
+            callbackFence();
             try { delegate.tick(); }
             finally {
                 Throwable failure=null;
@@ -122,8 +178,9 @@ abstract class ProtectedInventoryGoal extends Goal {
                 } catch(RuntimeException|LinkageError unavailable){if(failure==null)failure=unavailable;}
                 if(failure!=null)throw new IllegalStateException("Native source dirty notification failed",failure);
             }
-            afterTick();
+            afterTick();checkpoint();
         } catch(RuntimeException|LinkageError unavailable) {
+            failedCallback();
             if(!writes.isEmpty())ProtectedBuilderHandMirror.requireInventoryReview(worker.getPersistentData());
             NativeConstructionGuard.pauseStorage(worker,"Paused: native inventory operation needs review; no amounts were selected");
         }

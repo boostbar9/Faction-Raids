@@ -71,6 +71,9 @@ class CampScoutingTest extends MinecraftTestSupport {
         assertEquals(3600, state.ticksToNextWave);
         assertNull(state.campPos);
         assertNull(state.campClaimId);
+        assertTrue(state.campSearchDiagnostics.exhausted());
+        assertEquals(2, state.campSearchDiagnostics.save().getInt("UNLOADED"));
+        assertTrue(CampScouting.noCampStatus(state).contains("terrain was not loaded in time"));
     }
 
     @Test void disabledTerraformFallsBackOnceWithAFullPreparationPeriod() {

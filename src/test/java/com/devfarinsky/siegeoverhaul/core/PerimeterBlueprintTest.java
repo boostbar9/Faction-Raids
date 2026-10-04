@@ -26,8 +26,8 @@ class PerimeterBlueprintTest extends MinecraftTestSupport {
         var plan = flat(Set.of(new ChunkPos(0, 0)));
         assertTrue(plan.valid(), plan.problemSummary());
         assertEquals(220, plan.footprint().size());
-        assertEquals(968, plan.blocks().size());
-        assertEquals(Map.of("minecraft:cobblestone", 748, "minecraft:oak_planks", 220), plan.materialCounts());
+        assertEquals(572, plan.blocks().size());
+        assertEquals(Map.of("minecraft:cobblestone", 352, "minecraft:oak_planks", 220), plan.materialCounts());
         assertEquals(new BlockPos(0, 64, 0), plan.min());
         assertEquals(new BlockPos(15, 69, 15), plan.max());
         assertEquals(4, plan.runs().size());
@@ -42,7 +42,18 @@ class PerimeterBlueprintTest extends MinecraftTestSupport {
                 new BlockPos(13, 67, 2), new BlockPos(13, 67, 13)), corners);
     }
 
-    @Test void eachConvexCornerExactlyMatchesAnExistingRotatedManualCorner() {
+    @Test void lClaimAndFiveByFiveHaveExactApprovedHollowMaterialTotals() {
+        var l = flat(Set.of(new ChunkPos(0, 0), new ChunkPos(1, 0), new ChunkPos(0, 1)));
+        assertEquals(Map.of("minecraft:cobblestone", 864, "minecraft:oak_planks", 540), l.materialCounts());
+        assertEquals(1404, l.blocks().size());
+        var large = flat(rectangle(-2, -2, 5, 5));
+        assertEquals(Map.of("minecraft:cobblestone", 2400, "minecraft:oak_planks", 1500), large.materialCounts());
+        assertEquals(3900, large.blocks().size());
+        assertReservedCellsInsideClaim(l, Set.of(new ChunkPos(0, 0), new ChunkPos(1, 0), new ChunkPos(0, 1)));
+        assertReservedCellsInsideClaim(large, rectangle(-2, -2, 5, 5));
+    }
+
+    @Test void eachConvexCornerMatchesManualVisibleFacesDeckAndRailsWithoutHiddenEndcaps() {
         var plan = flat(Set.of(new ChunkPos(0, 0)));
         for (int x : List.of(2, 13)) for (int z : List.of(2, 13)) {
             BlockPos center = new BlockPos(x, BASE_Y, z);
@@ -55,17 +66,28 @@ class PerimeterBlueprintTest extends MinecraftTestSupport {
             boolean matches = false;
             for (Direction direction : Direction.Plane.HORIZONTAL) {
                 var manual = DefenseBlueprint.create(DefenseBlueprint.Kind.CORNER, center, direction);
-                matches |= manual.blocks().equals(cornerCells);
+                // Manual ends remain capped; automatic closed rings omit their hidden internal caps.
+                boolean same = cornerCells.entrySet().stream().allMatch(e -> e.getValue().equals(manual.blocks().get(e.getKey())));
+                for (var entry : manual.blocks().entrySet()) {
+                    BlockPos cell = BlockPos.of(entry.getKey());
+                    boolean visible = cell.getY() >= BASE_Y + 3 || cell.getX() == 0 || cell.getX() == 15
+                            || cell.getZ() == 0 || cell.getZ() == 15;
+                    if (visible && !entry.getValue().equals(cornerCells.get(entry.getKey()))) same = false;
+                }
+                matches |= same;
             }
             assertTrue(matches, "Manual corner mismatch at " + center);
         }
     }
 
-    @Test void straightCrossSectionHasThreeStoneLayersOakDeckAndThreeWideClearWalk() {
+    @Test void straightCrossSectionHasTwoSkinsProtectedHollowBodyOakDeckAndThreeWideClearWalk() {
         var plan = flat(Set.of(new ChunkPos(0, 0)));
         for (int x = 0; x < 5; x++) {
-            for (int y = 0; y < 3; y++)
-                assertEquals("minecraft:cobblestone", plan.blocks().get(new BlockPos(x, BASE_Y + y, 7).asLong()));
+            for (int y = 0; y < 3; y++) {
+                long cell = new BlockPos(x, BASE_Y + y, 7).asLong();
+                assertEquals(x == 0 || x == 4 ? "minecraft:cobblestone" : null, plan.blocks().get(cell));
+                assertEquals(x > 0 && x < 4, plan.clearance().contains(cell));
+            }
             assertEquals("minecraft:oak_planks", plan.blocks().get(new BlockPos(x, 67, 7).asLong()));
             assertEquals(x == 0 || x == 4 ? "minecraft:cobblestone" : null,
                     plan.blocks().get(new BlockPos(x, 68, 7).asLong()));
@@ -130,7 +152,7 @@ class PerimeterBlueprintTest extends MinecraftTestSupport {
                 Set.of(new ChunkPos(-1, -1), new ChunkPos(0, 0)))) {
             var plan = flat(chunks);
             assertTrue(plan.valid(), plan.problemSummary());
-            assertEquals(1936, plan.blocks().size());
+            assertEquals(1144, plan.blocks().size());
             assertEquals(8, plan.runs().size());
             assertAllWalkCellsConnected(plan, 2);
             assertEquals(2, plan.columns().stream().map(PerimeterBlueprint.Column::componentId).distinct().count());
@@ -191,7 +213,7 @@ class PerimeterBlueprintTest extends MinecraftTestSupport {
                 (x, z) -> PerimeterBlueprint.Surface.ready(x < 8 ? 60 : 64), COBBLE);
         assertTrue(plan.valid(), plan.problemSummary());
         assertEquals(440, plan.materialCounts().get("minecraft:dirt"));
-        assertEquals(1408, plan.blocks().size());
+        assertEquals(1012, plan.blocks().size());
         assertEquals(new BlockPos(0, 60, 0), plan.min());
         for (var column : plan.columns()) {
             assertEquals(64, column.base().getY());
@@ -207,7 +229,7 @@ class PerimeterBlueprintTest extends MinecraftTestSupport {
         assertTrue(plan.valid(), plan.problemSummary());
         assertFalse(plan.materialCounts().containsKey("minecraft:dirt"));
         for (var column : plan.columns()) assertEquals(column.base().getX() < 16 ? 64 : 72, column.base().getY());
-        assertEquals(1936, plan.blocks().size());
+        assertEquals(1144, plan.blocks().size());
     }
 
     @Test void eightSupportBlocksAreAllowedButNineBlockReliefRejectsTheWholeWall() {
@@ -251,17 +273,17 @@ class PerimeterBlueprintTest extends MinecraftTestSupport {
         PerimeterBlueprint.SurfaceResolver resolver = (x, z) -> {
             reads.incrementAndGet(); return PerimeterBlueprint.Surface.ready(64);
         };
-        var limits = new PerimeterBlueprint.Limits(1, 64, 220, 968, 8, -64, 320, 256, 1_048_576L);
+        var limits = new PerimeterBlueprint.Limits(1, 64, 220, 572, 8, -64, 320, 256, 1_048_576L);
         assertTrue(PerimeterBlueprint.create(Set.of(new ChunkPos(0, 0)), resolver, COBBLE, limits).valid());
         assertEquals(220, reads.get()); reads.set(0);
         assertBlocked(PerimeterBlueprint.create(rectangle(0, 0, 2, 1), resolver, COBBLE, limits),
                 PerimeterBlueprint.ProblemCode.CLAIM_LIMIT);
         assertEquals(0, reads.get());
-        limits = new PerimeterBlueprint.Limits(10, 63, 220, 968, 8, -64, 320, 256, 1_048_576L);
+        limits = new PerimeterBlueprint.Limits(10, 63, 220, 572, 8, -64, 320, 256, 1_048_576L);
         assertBlocked(PerimeterBlueprint.create(Set.of(new ChunkPos(0, 0)), resolver, COBBLE, limits),
                 PerimeterBlueprint.ProblemCode.BOUNDARY_LIMIT);
         assertEquals(0, reads.get());
-        limits = new PerimeterBlueprint.Limits(10, 100, 219, 968, 8, -64, 320, 256, 1_048_576L);
+        limits = new PerimeterBlueprint.Limits(10, 100, 219, 572, 8, -64, 320, 256, 1_048_576L);
         assertBlocked(PerimeterBlueprint.create(Set.of(new ChunkPos(0, 0)), resolver, COBBLE, limits),
                 PerimeterBlueprint.ProblemCode.FOOTPRINT_LIMIT);
         assertEquals(0, reads.get());
@@ -269,7 +291,7 @@ class PerimeterBlueprintTest extends MinecraftTestSupport {
         assertBlocked(PerimeterBlueprint.create(Set.of(new ChunkPos(0, 0), new ChunkPos(2, 0)), resolver, COBBLE, limits),
                 PerimeterBlueprint.ProblemCode.BOUNDS_LIMIT);
         assertEquals(0, reads.get());
-        limits = new PerimeterBlueprint.Limits(10, 100, 220, 967, 8, -64, 320, 256, 1_048_576L);
+        limits = new PerimeterBlueprint.Limits(10, 100, 220, 571, 8, -64, 320, 256, 1_048_576L);
         assertBlocked(PerimeterBlueprint.create(Set.of(new ChunkPos(0, 0)), resolver, COBBLE, limits),
                 PerimeterBlueprint.ProblemCode.BLOCK_LIMIT);
     }
@@ -290,8 +312,8 @@ class PerimeterBlueprintTest extends MinecraftTestSupport {
             var plan = PerimeterBlueprint.create(Set.of(new ChunkPos(0, 0)),
                     (x, z) -> PerimeterBlueprint.Surface.ready(64), palette);
             assertTrue(plan.valid(), plan.problemSummary());
-            assertEquals(968, plan.blocks().size());
-            assertEquals(968, plan.materialCounts().values().stream().mapToInt(Integer::intValue).sum());
+            assertEquals(572, plan.blocks().size());
+            assertEquals(572, plan.materialCounts().values().stream().mapToInt(Integer::intValue).sum());
             assertEquals(palette.wall(), plan.blocks().get(new BlockPos(0, 64, 0).asLong()));
             assertEquals("minecraft:oak_planks", plan.blocks().get(new BlockPos(0, 67, 0).asLong()));
             assertEquals(palette == PerimeterBlueprint.Palette.OAK ? 1 : 2, plan.materialCounts().size());
@@ -336,6 +358,16 @@ class PerimeterBlueprintTest extends MinecraftTestSupport {
         Set<Long> cells = new HashSet<>(plan.blocks().keySet());
         assertTrue(Collections.disjoint(cells, plan.clearance()));
         cells.addAll(plan.clearance());
+        for (var column : plan.columns()) for (int y = 0; y < 6; y++) {
+            long cell = column.base().above(y).asLong();
+            assertTrue(cells.contains(cell), "Every body and headroom cell remains reserved");
+            if (y < 3) {
+                boolean skin = column.inwardDistance() == 1 || column.inwardDistance() == 5;
+                assertEquals(skin, plan.blocks().containsKey(cell));
+                assertEquals(!skin, plan.clearance().contains(cell));
+            }
+        }
+        assertFalse(plan.blocks().containsValue("minecraft:air"), "Clearance must never become excavation targets");
         for (long packed : cells) {
             BlockPos pos = BlockPos.of(packed);
             assertTrue(chunks.contains(new ChunkPos(pos)), "Outside claim: " + pos);

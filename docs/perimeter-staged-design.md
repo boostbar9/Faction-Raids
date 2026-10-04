@@ -1,6 +1,6 @@
-# Proposal: one complete perimeter, several native build areas
+# Historical proposal: one complete perimeter, several native build areas
 
-Status: design only. No stage scheduler, payment API, reservation delegation or compact native synchronization is implemented by this document. Keep the reviewed union/index/network-budget changes separate. The production architectural choice is staged native areas using the original Workers blueprint serializer.
+Historical design record. Its initial integration status and 6,600-target completion requirements are superseded by the implemented staged path and [current hollow-wall QA](native-hollow-wall-qa.md), [representative handoff](native-staged-handoff-qa.md) and [configured unload](native-staged-unload-qa.md) documentation. Representative native gameplay, targeted regressions and applicable safety checks are the default acceptance; complete large-build walkthroughs are optional risk-based stress tests. The proposal below records design intent and must not be read as current implementation status or a release checklist. Staged native areas retain the original Workers blueprint serializer; compact-sync changes were not implemented.
 
 ## Contract
 
@@ -38,7 +38,7 @@ Malformed counts, duplicate IDs/cells, unknown versions, out-of-range stage inde
 
 ## Payment and activation sequence
 
-The existing `PaymentSource.consume` debits Treasury but has no operation receipt. Add a narrowly scoped `consumePerimeterOnce` only after reviewing this design. The debit, signed Treasury record and `(commission UUID, manifest hash, price)` receipt must be written to the same core compound and dirtied together. Repeating the same UUID/hash/price returns its existing result; a conflicting tuple is rejected. A normal stage activation never debits.
+The existing `PaymentSource.consume` debits Treasury but has no operation receipt. Add a narrowly scoped `consumePerimeterOnce` only after reviewing this design. The debit, Treasury debit record and `(commission UUID, manifest hash, price)` receipt must be written to the same core compound and dirtied together. Repeating the same UUID/hash/price returns its existing result; a conflicting tuple is rejected. A normal stage activation never debits.
 
 Initial commission order:
 

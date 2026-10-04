@@ -332,12 +332,9 @@ public final class WallBuilderAccess extends Goal {
             Set<BlockPos> sites = pendingSites;
             pendingPath = null;
             pendingSites = Set.of();
-            if (now <= pendingUntil && pathReady(ready) && ready.canReach()
-                    && sites.contains(ready.getTarget())
-                    && standingSites(level, worker, target, selfRecovery ? 6 : 3,
-                            selfRecovery ? nativeReachSquared : 16).contains(ready.getTarget())
-                    && (!selfRecovery || recoveryMargin(ready.getTarget(), reservedColumns, worker.getBbWidth()))
-                    && moveToSite(ready.getTarget())) destination = ready.getTarget();
+            BlockPos reached = now <= pendingUntil ? reachedSite(ready, sites) : null;
+            if (reached != null && routeSites(level, target, nativeReachSquared, selfRecovery).contains(reached)
+                    && moveToSite(reached)) destination = reached;
             return;
         }
         if (now < nextSearch && now >= nextSearch - 40) {
@@ -349,10 +346,7 @@ public final class WallBuilderAccess extends Goal {
         nextSearch = now + 40;
         lastTarget = target.immutable();
         destination = null;
-        Set<BlockPos> candidates = standingSites(level, worker, target, selfRecovery ? 6 : 3,
-                selfRecovery ? nativeReachSquared : 16);
-        candidates.removeIf(p -> reservedColumns.contains(p.atY(0).asLong())
-                || selfRecovery && !recoveryMargin(p, reservedColumns, worker.getBbWidth()));
+        Set<BlockPos> candidates = routeSites(level, target, nativeReachSquared, selfRecovery);
         if (candidates.isEmpty()) return;
         var path = nav.createPath(candidates, 0);
         if (path == null) return;
@@ -360,9 +354,29 @@ public final class WallBuilderAccess extends Goal {
             pendingPath = path;
             pendingSites = Set.copyOf(candidates);
             pendingUntil = now + 100;
-        } else if (path.canReach() && candidates.contains(path.getTarget()) && moveToSite(path.getTarget())) {
-            destination = path.getTarget();
+        } else {
+            BlockPos reached = reachedSite(path, candidates);
+            if (reached != null && moveToSite(reached)) destination = reached;
         }
+    }
+
+    private Set<BlockPos> routeSites(ServerLevel level, BlockPos target, int nativeReachSquared, boolean selfRecovery) {
+        Set<BlockPos> sites = standingSites(level, worker, target, selfRecovery ? 6 : 3,
+                selfRecovery ? nativeReachSquared : 16);
+        sites.removeIf(p -> reservedColumns.contains(p.atY(0).asLong())
+                || selfRecovery && !recoveryMargin(p, reservedColumns, worker.getBbWidth()));
+        return sites;
+    }
+
+    private static BlockPos reachedSite(Path path, Set<BlockPos> sites) {
+        if (!pathReady(path) || !path.canReach()) return null;
+        // Workers 2.0.3 labels a successful multi-target path with its FIRST target,
+        // even when it reached a different candidate. Only its actual end node
+        // proves which safe standing site native movement can reach.
+        var end = path.getEndNode();
+        if (end == null) return null;
+        BlockPos reached = new BlockPos(end.x, end.y, end.z);
+        return sites.contains(reached) ? reached : null;
     }
 
     private boolean moveToSite(BlockPos site) {

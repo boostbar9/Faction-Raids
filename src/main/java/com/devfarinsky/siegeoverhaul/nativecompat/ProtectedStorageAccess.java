@@ -27,11 +27,16 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
     private AABB scannedBounds;
     private String phase;
     private ProtectedStorageContext.Source selected;
+    private boolean closeOutstanding;
 
     private ProtectedStorageAccess(BuilderEntity worker, AbstractChestGoal delegate, Kind kind, Session session) {
         super(worker,delegate,session);this.chest=delegate;this.kind=kind;
     }
+    @Override Kind kind(){return kind;}
+    @Override boolean cleanupObligation(){return closeOutstanding;}
     static String runningProblem(Mob worker) {
+        if(ProtectedInventoryCleanup.outstanding(worker.getPersistentData()))
+            return "Builder has unfinished native inventory cleanup; review or finish it before commissioning. No payment taken.";
         if(worker.goalSelector==null)return null; // Installation independently rejects an unavailable selector.
         for(var wrapped:worker.goalSelector.getAvailableGoals())
             if(family(wrapped.getGoal()) && (wrapped.isRunning()
@@ -40,6 +45,98 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
         if(worker instanceof BuilderEntity builder && builder.neededItems!=null && !builder.neededItems.isEmpty())
             return "Builder has unfinished native supply requests; let them finish before commissioning. No payment taken.";
         return null;
+    }
+    /** A loaded journal has no owner until the original in-memory lifecycle proves ownership. */
+    static boolean recoveryBlocked(Mob worker) {
+        try {
+            var entries=ProtectedInventoryCleanup.read(worker.getPersistentData());
+            if(entries.isEmpty())return false;
+            if(entries.containsValue(ProtectedInventoryCleanup.REVIEW) || worker.goalSelector==null)return true;
+            var goals=worker.goalSelector.getAvailableGoals();if(goals.size()>128)return true;
+            for(var kind:entries.keySet()) {
+                boolean owned=false;
+                for(var wrapped:goals)if(wrapped.getGoal() instanceof ProtectedInventoryGoal adapter
+                        && adapter.worker==worker && adapter.session.worker==worker && adapter.kind()==kind
+                        && adapter.session.owns(adapter))owned=true;
+                if(!owned)return true;
+            }
+            return false;
+        } catch(RuntimeException | LinkageError unavailable) { return true; }
+    }
+
+    /** Forge 47.4.16 posts ServerStopping before MinecraftServer.stopServer saves worlds.
+     * Only already-admitted live wrappers are drained; unloaded entities and orphaned
+     * journals are neither reconstructed nor replayed. No new start/tick is dispatched. */
+    static void drainOnShutdown(net.minecraft.server.MinecraftServer server) {
+        for(var level:server.getAllLevels()) {
+            var loaded=new ArrayList<BuilderEntity>();
+            for(var entity:level.getAllEntities())if(entity instanceof BuilderEntity worker)loaded.add(worker);
+            for(var worker:loaded)if(worker.goalSelector!=null) {
+                try {
+                    var goals=worker.goalSelector.getAvailableGoals();if(goals.size()>128)continue;
+                    boolean live=false;
+                    for(var wrapped:goals)if(wrapped.getGoal() instanceof ProtectedInventoryGoal adapter
+                            && !adapter.legacyLifecycleActive() && !adapter.cleanupComplete())live=true;
+                    if(live)drainCleanup(worker,new ArrayList<>(goals));
+                } catch(RuntimeException | LinkageError unavailable) { /* Existing journal survives the final save. */ }
+            }
+        }
+    }
+
+    /**
+     * Stop only already-admitted protected lifecycles and drain their guarded
+     * close/dirty callbacks. This grants no new transfer authority. Dormant
+     * neededItems, inventory and review flags remain untouched; admission may
+     * continue using runningProblem to wait on those original requests.
+     */
+    static boolean drainCleanup(Mob mob) {
+        if(!(mob instanceof BuilderEntity worker) || worker.goalSelector==null)return false;
+        return drainCleanup(worker,new ArrayList<>(worker.goalSelector.getAvailableGoals()));
+    }
+    /** Package-visible bounded goal snapshot for focused lifecycle tests. */
+    static boolean drainCleanup(BuilderEntity worker,java.util.Collection<WrappedGoal> goals) {
+        if(worker==null || goals==null || goals.size()>128)return false;
+        try {
+            var managed=new EnumMap<Kind,WrappedGoal>(Kind.class);
+            Set<ProtectedInventoryGoal> adapters=java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+            Set<Session> sessions=java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+            // Inspect everything first. Never stop an unrelated legacy lifecycle
+            // or partially drain a set whose owners/classes cannot be verified.
+            for(var wrapped:goals) {
+                if(wrapped==null || wrapped.getGoal()==null)return false;
+                Goal goal=wrapped.getGoal();if(!family(goal))continue;
+                Kind kind=kind(goal);
+                if(managed.put(kind,wrapped)!=null)return false;
+                if(goal instanceof ProtectedInventoryGoal adapter) {
+                    if(adapter.worker!=worker || adapter.session.worker!=worker || adapter.legacyLifecycleActive())return false;
+                    if(kind(adapter.delegate)!=kind || !delegateOwnedBy(adapter.delegate,worker))return false;
+                    adapters.add(adapter);sessions.add(adapter.session);
+                } else if(wrapped.isRunning())return false;
+            }
+            if(managed.size()!=Kind.values().length)return false;
+            for(Session session:sessions) {
+                if(session.pending.size()>128 || session.orphanedCleanup())return false;
+                for(var pending:session.pending)if(pending==null || !adapters.contains(pending)
+                        || pending.session!=session || pending.worker!=worker || pending.legacyLifecycleActive())return false;
+            }
+            for(var wrapped:managed.values())if(wrapped.getGoal() instanceof ProtectedInventoryGoal adapter) {
+                if(wrapped.isRunning())wrapped.stop();
+                else if(!adapter.cleanupComplete())adapter.stop();
+            }
+            boolean ready=true;
+            for(Session session:sessions)if(!session.ready())ready=false;
+            if(!ready)return false;
+            for(var wrapped:managed.values())if(wrapped.getGoal() instanceof ProtectedInventoryGoal adapter
+                    && (wrapped.isRunning() || !adapter.cleanupComplete()))return false;
+            return sessions.stream().allMatch(Session::cleanupComplete)
+                    && !ProtectedInventoryCleanup.outstanding(worker.getPersistentData());
+        } catch(RuntimeException | LinkageError unavailable) { return false; }
+    }
+    private static boolean delegateOwnedBy(Goal goal,BuilderEntity worker) {
+        if(goal instanceof AbstractChestGoal chest)return chest.worker==worker;
+        if(goal instanceof RecruitUpkeepPosGoal upkeep)return upkeep.recruit==worker;
+        if(goal instanceof RecruitUpkeepEntityGoal upkeep)return upkeep.recruit==worker;
+        return false;
     }
     private static boolean family(Goal goal) {
         return goal instanceof ProtectedInventoryGoal || goal instanceof GetNeededItemsFromStorage
@@ -95,7 +192,7 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
         if(state==null)throw new IllegalStateException("Native storage state unavailable");return state.name();
     }
     @Override String beforeStart(){return null;}
-    @Override void afterStart(){scannedArea=null;scannedBounds=null;selected=null;}
+    @Override void afterStart(){scannedArea=null;scannedBounds=null;selected=null;closeOutstanding=false;}
     @Override String beforeTick() {
         phase=phase(); selected=null;
         String requests=ProtectedTransferCapacity.requestsProblem(worker);if(requests!=null)return requests;
@@ -140,6 +237,10 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
         return null;
     }
     @Override void afterTick() {
+        // Workers 2.0.3: search/travel has no external cleanup; successful close
+        // callbacks finish the obligation even while their native animation timer runs.
+        if(phase.equals("OPEN_CHEST"))closeOutstanding=true;
+        else if(phase.startsWith("CLOSE_CHEST_"))closeOutstanding=false;
         if(phase.equals("SCAN_STORAGE")) {
             if(scannedArea!=chest.storageArea || !scannedBounds.equals(ProtectedStorageContext.storage(worker,scannedArea,true)))
                 throw new IllegalStateException("Native scan source changed");
@@ -160,7 +261,7 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
             ProtectedStorageContext.cleanup(ProtectedStorageContext.level(worker),chest.container,chest.chestPos);
         return null;
     }
-    @Override void stopped(){scannedArea=null;scannedBounds=null;selected=null;writes=List.of();}
+    @Override void stopped(){closeOutstanding=false;scannedArea=null;scannedBounds=null;selected=null;writes=List.of();}
     static void notifyAfterNativeTransfer(Container selected,Runnable tick){try{tick.run();}finally{selected.setChanged();}}
     static void recordDirtyNotification(Mob worker) {
         var data=worker.getPersistentData();data.putInt(DIRTY_WRITES,(int)Math.min(Integer.MAX_VALUE,(long)dirtyNotifications(worker)+1));

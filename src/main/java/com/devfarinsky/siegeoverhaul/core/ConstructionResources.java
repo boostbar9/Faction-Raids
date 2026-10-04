@@ -23,6 +23,7 @@ final class ConstructionResources {
         builders.removeIf(b -> !WorkersBridge.isBuilder(b) || !player.getUUID().equals(WorkersBridge.readWorkerOwner(b))
                 || b.getPersistentData().contains(ModConstants.Tags.CAMP_WORKER_TEAM)
                 || b.getPersistentData().hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
+                || PerimeterProjectLink.reserved(b)
                 || WorkersBridge.hasActiveBuildArea(b) || WorkersBridge.isFleeing(b));
         builders.sort(Comparator.comparingDouble((Mob b) -> b.distanceToSqr(center.getX()+.5,center.getY(),center.getZ()+.5))
                 .thenComparing(Entity::getUUID));

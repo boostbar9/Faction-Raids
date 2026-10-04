@@ -79,7 +79,7 @@ public final class DefenseStructures {
         return new Preparation(builder, plan, null);
     }
 
-    /** Checks empty access space too, so the passage and stepped approach cannot start obstructed. */
+    /** Checks empty access space too, so hollow wall cavities, passages and stepped approaches cannot start obstructed. */
     static String siteProblem(ServerLevel level, DefenseBlueprint.Plan plan, Predicate<BlockPos> permitted) {
         if (plan.min().getY() - 1 < level.getMinBuildHeight() || plan.max().getY() >= level.getMaxBuildHeight())
             return "The structure would exceed the world's build height.";
@@ -109,7 +109,7 @@ public final class DefenseStructures {
         return null;
     }
 
-    /** The same complete footprint/headroom contract is checked before and retained after handoff. */
+    /** The same complete footprint, cavity and headroom contract is checked before and retained after handoff. */
     static java.util.Set<BlockPos> reservedCells(DefenseBlueprint.Plan plan) {
         var cells = new java.util.HashSet<BlockPos>();
         for (BlockPos base : plan.footprint()) for (int y = base.getY(); y <= plan.max().getY(); y++)

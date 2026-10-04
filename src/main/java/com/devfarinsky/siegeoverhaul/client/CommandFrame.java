@@ -22,25 +22,18 @@ public final class CommandFrame {
      * with the given dimensions.
      */
     public static void window(GuiGraphics g, int x, int y, int w, int h) {
-        // Deep floating shadow separates the command center from the world.
-        g.fill(x - 6, y + 4, x + w + 6, y + h + 8, CommandPalette.SHADOW_OUTER);
-        g.fill(x - 4, y + 2, x + w + 4, y + h + 6, CommandPalette.SHADOW_INNER);
+        // One quiet frame keeps the world separate without repeated bevels/rivets.
+        g.fill(x + 3, y + 4, x + w + 3, y + h + 4, CommandPalette.SHADOW_INNER);
+        g.fill(x - 1, y - 1, x + w + 1, y + h + 1, CommandPalette.CARD_BORDER);
+        g.fill(x, y, x + w, y + h, CommandPalette.PANEL_TOP);
+        g.fill(x, y, x + w, y + 1, CommandPalette.ACCENT_GOLD);
+    }
 
-        // Restrained aged-gold outline with a dark inner keyline.
-        g.fill(x - 2, y - 2, x + w + 2, y + h + 2, CommandPalette.BEVEL_DARK);
-        g.fill(x - 1, y - 1, x + w + 1, y + h + 1, CommandPalette.BEVEL_LIGHT);
-
-        // Midnight-navy body with a subtle vertical gradient and inner rim.
-        g.fillGradient(x, y, x + w, y + h,
-                CommandPalette.PANEL_TOP, CommandPalette.PANEL_BOTTOM);
-        g.fill(x + 2, y + 2, x + w - 2, y + 3, CommandPalette.PANEL_INSET);
-        g.fill(x + 2, y + h - 3, x + w - 2, y + h - 2, 0xff05070c);
-
-        // Small architectural corners read as bronze joinery, not mystery icons.
-        cornerBracket(g, x + 3, y + 3, +1, +1);
-        cornerBracket(g, x + w - 4, y + 3, -1, +1);
-        cornerBracket(g, x + 3, y + h - 4, +1, -1);
-        cornerBracket(g, x + w - 4, y + h - 4, -1, -1);
+    /** Quiet square content surface; information hierarchy comes from spacing and text. */
+    public static void surface(GuiGraphics g, int x, int y, int w, int h) {
+        if (w <= 0 || h <= 0) return;
+        g.fill(x, y, x + w, y + h, CommandPalette.CARD_BORDER);
+        if (w > 2 && h > 2) g.fill(x + 1, y + 1, x + w - 1, y + h - 1, CommandPalette.CARD_TOP);
     }
 
     /**
@@ -68,12 +61,8 @@ public final class CommandFrame {
      * cluster on the left plus a treasury chip on the right.
      */
     public static void header(GuiGraphics g, int x, int y, int w, int height) {
-        // Quiet gradient and a gold keyline keep the header crisp at any scale.
-        g.fillGradient(x + 4, y + 4, x + w - 4, y + 4 + height,
-                CommandPalette.HEADER_TOP, CommandPalette.HEADER_BOTTOM);
-        g.fill(x + 5, y + 5, x + w - 5, y + 6, CommandPalette.PANEL_INSET);
-        g.fill(x + 4, y + 4 + height, x + w - 4, y + 5 + height, CommandPalette.HAIRLINE);
-        g.fill(x + 4, y + 5 + height, x + w - 4, y + 6 + height, CommandPalette.PANEL_BOTTOM);
+        g.fill(x + 1, y + 1, x + w - 1, y + 4 + height, CommandPalette.HEADER_TOP);
+        g.fill(x + 4, y + 4 + height, x + w - 4, y + 5 + height, CommandPalette.DIVIDER);
     }
 
     /**
@@ -151,11 +140,11 @@ public final class CommandFrame {
      */
     public static void progress(GuiGraphics g, int x, int y, int w, int h,
                                 float progress, int accent) {
-        float p = Math.max(0f, Math.min(1f, progress));
-        g.fill(x, y, x + w, y + h, CommandPalette.CHIP_BORDER);
-        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, CommandPalette.CHIP_FILL);
-        int fill = Math.max(0, (int) ((w - 2) * p));
-        if (fill > 0) g.fill(x + 1, y + 1, x + 1 + fill, y + h - 1, accent);
+        if (w <= 0 || h <= 0) return;
+        float p = Float.isFinite(progress) ? Math.max(0f, Math.min(1f, progress)) : 0;
+        g.fill(x, y, x + w, y + h, CommandPalette.CHIP_FILL);
+        int fill = Math.max(0, Math.min(w, Math.round(w * p)));
+        if (fill > 0) g.fill(x, y, x + fill, y + h, accent);
     }
 
     private static void rivet(GuiGraphics g, int x, int y) {

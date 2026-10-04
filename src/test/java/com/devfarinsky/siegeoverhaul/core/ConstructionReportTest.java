@@ -74,4 +74,68 @@ class ConstructionReportTest extends MinecraftTestSupport {
             assertEquals(0, ConstructionReport.report(player));
         }
     }
+    @Test void wholeProjectsAreOwnerFilteredAndUnloadedStagesStayUnknownWithoutWorldMutations() {
+        var ours = PerimeterProjectTest.project();
+        var foreign = PerimeterProjectTest.project();
+        var before = ours.save();
+        var level = mock(ServerLevel.class); var player = mock(ServerPlayer.class);
+        var server = mock(net.minecraft.server.MinecraftServer.class);
+        var snapshot = mock(PerimeterProjectStore.Snapshot.class);
+        when(player.serverLevel()).thenReturn(level); when(player.getServer()).thenReturn(server);
+        when(player.getUUID()).thenReturn(ours.header().owner());
+        when(player.getBoundingBox()).thenReturn(new AABB(BlockPos.ZERO));
+        when(snapshot.projects()).thenReturn(List.of(ours, foreign));
+        when(snapshot.terminals()).thenReturn(List.of());
+        try (var cores = mockStatic(SiegeCore.class);
+             var read = mockStatic(com.devfarinsky.siegeoverhaul.nativecompat.ProtectedConstructionActions.class)) {
+            cores.when(() -> SiegeCore.key(player)).thenReturn("team:test");
+            read.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.ProtectedConstructionActions.projectsForReport(player)).thenReturn(snapshot);
+            var report = ConstructionReport.snapshot(player);
+            assertEquals(1, report.size());
+            assertEquals(ours.header().projectId(), report.get(0).projectId());
+            assertEquals(-1, report.get(0).percent());
+            assertTrue(report.get(0).progressText().contains("unknown"));
+            assertFalse(report.get(0).complete());
+            assertEquals(before, ours.save());
+            verify(level, never()).getBlockState(any());
+            verify(player, never()).sendSystemMessage(any(Component.class));
+        }
+    }
+
+    @Test void onlyTheThreeLatestOwnedTerminalSummariesAreIncluded() {
+        UUID owner = UUID.randomUUID();
+        var level = mock(ServerLevel.class); var player = mock(ServerPlayer.class);
+        var snapshot = mock(PerimeterProjectStore.Snapshot.class);
+        when(player.serverLevel()).thenReturn(level);
+        when(player.getServer()).thenReturn(mock(net.minecraft.server.MinecraftServer.class));
+        when(player.getUUID()).thenReturn(owner); when(player.getBoundingBox()).thenReturn(new AABB(BlockPos.ZERO));
+        when(snapshot.projects()).thenReturn(List.of());
+        var terminals = new java.util.ArrayList<PerimeterTerminalReceipt>();
+        for (int i = 0; i < 5; i++) {
+            var terminal = mock(PerimeterTerminalReceipt.class);
+            when(terminal.projectId()).thenReturn(UUID.randomUUID()); when(terminal.generation()).thenReturn(1L);
+            when(terminal.owner()).thenReturn(i == 3 ? UUID.randomUUID() : owner);
+            when(terminal.coreKey()).thenReturn("team:test"); when(terminal.state()).thenReturn(PerimeterProject.State.COMPLETE);
+            when(terminal.totalTargetCount()).thenReturn(600); when(terminal.completedTargetCount()).thenReturn(600);
+            when(terminal.totalStageCount()).thenReturn(2); when(terminal.verifiedStages()).thenReturn(2);
+            when(terminal.claimChunkCount()).thenReturn(1);
+            var payment = new PerimeterProject.PaymentReceipt(terminal.projectId(), 1, "a".repeat(64), 1, 64, 64, false);
+            when(terminal.payment()).thenReturn(payment);
+            terminals.add(terminal);
+        }
+        when(snapshot.terminals()).thenReturn(terminals);
+        try (var cores = mockStatic(SiegeCore.class);
+             var read = mockStatic(com.devfarinsky.siegeoverhaul.nativecompat.ProtectedConstructionActions.class)) {
+            cores.when(() -> SiegeCore.key(player)).thenReturn("team:test");
+            read.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.ProtectedConstructionActions.projectsForReport(player)).thenReturn(snapshot);
+            var report = ConstructionReport.snapshot(player);
+            assertEquals(3, report.size());
+            assertEquals(List.of(terminals.get(4).projectId(), terminals.get(2).projectId(), terminals.get(1).projectId()),
+                    report.stream().map(ConstructionReport.Job::projectId).toList());
+            assertTrue(report.stream().allMatch(ConstructionReport.Job::complete));
+            assertTrue(report.stream().noneMatch(ConstructionReport.Job::cancelable));
+            assertTrue(report.stream().allMatch(job -> job.sectionText().contains("64 emeralds paid once")));
+        }
+    }
+
 }

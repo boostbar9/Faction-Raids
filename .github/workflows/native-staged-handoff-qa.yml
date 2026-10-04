@@ -1,0 +1,94 @@
+name: Native Hollow Representative Stage Handoff QA
+
+# New hollow-plan oracle, synthetic partition, original native work, real restarts and authenticated cancellation.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-handoff-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-handoff-client:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       contains(github.event.pull_request.labels.*.name, 'native-handoff-qa'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      LIBGL_ALWAYS_SOFTWARE: 'true'
+      GALLIUM_DRIVER: llvmpipe
+    steps:
+      - name: Check out exact integrated source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+      - name: Install virtual display and software OpenGL
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y xvfb xauth mesa-utils libgl1-mesa-dri libglx-mesa0 libopenal1
+      - name: Prepare fresh isolated client defaults before any client directory exists
+        run: |
+          set -euo pipefail
+          test ! -e build/native-handoff-qa/client
+          python3 scripts/prepare-native-client-defaults.py --mode staged-handoff --smallships-version 2.0.0-b1.4
+          mkdir -p build/native-handoff-qa/evidence
+          printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:6\nsimulationDistance:6\nmaxFps:30\nvsync:false\n' > build/native-handoff-qa/client/options.txt
+          git rev-parse HEAD > build/native-handoff-qa/evidence/source-commit.txt
+          git rev-parse HEAD^{tree} > build/native-handoff-qa/evidence/source-tree.txt
+          java -version 2> build/native-handoff-qa/evidence/java-version.txt
+          cp build/native-handoff-qa/client/.native-smallships-defaults.json build/native-handoff-qa/evidence/
+      - name: Prepare compilation and client assets with a separate thirty-minute cap
+        run: |
+          set -euo pipefail
+          timeout --signal=KILL 1800s ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=staged-handoff nativeQaClasses prepareRunClient 2>&1 | tee build/native-handoff-qa/evidence/prepare-console.log
+      - name: Run representative lifecycle with a hard ten-minute process cap
+        run: |
+          set -euo pipefail
+          test ! -e build/native-handoff-qa/client/saves/siege-native-staged-handoff
+          test ! -e build/native-handoff-qa/evidence/result.json
+          # Kill the owned process group at 600 seconds; no early TERM can let the wrapper exit before descendant cleanup.
+          timeout --signal=KILL 600s xvfb-run -a -s '-screen 0 1280x720x24' bash -c '
+            set -euo pipefail
+            glxinfo -B | tee build/native-handoff-qa/evidence/opengl.txt
+            ./gradlew --no-daemon --offline --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=staged-handoff runClient
+          ' 2>&1 | tee build/native-handoff-qa/evidence/client-console.log
+      - name: Audit exact loaded native API bytecode
+        if: always()
+        run: python3 scripts/audit-native-inventory-bytecode.py build/native-handoff-qa/evidence
+      - name: Verify bounded hollow geometry and representative lifecycle evidence
+        run: python3 scripts/verify-native-staged-handoff.py build/native-handoff-qa/evidence
+      - name: Collect diagnostics without companion JARs or worlds
+        if: always()
+        run: |
+          mkdir -p build/native-handoff-qa/evidence/logs
+          if [ -d build/native-handoff-qa/client/logs ]; then
+            find build/native-handoff-qa/client/logs -maxdepth 1 -type f -name '*.log' -exec cp {} build/native-handoff-qa/evidence/logs/ \;
+          fi
+          if [ -d build/native-handoff-qa/client/crash-reports ]; then
+            cp -R build/native-handoff-qa/client/crash-reports build/native-handoff-qa/evidence/
+          fi
+      - name: Upload framebuffer and lifecycle evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-handoff-qa-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/native-handoff-qa/evidence/
+          if-no-files-found: error
+          retention-days: 7

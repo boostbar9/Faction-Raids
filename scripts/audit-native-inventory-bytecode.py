@@ -20,6 +20,11 @@ TARGETS = {
         'com.talhanation.recruits.inventory.RecruitSimpleContainer',
         'com.talhanation.recruits.world.RecruitsClaimManager',
         'com.talhanation.recruits.world.RecruitsClaim',
+        'com.talhanation.recruits.entities.ScoutEntity',
+        'com.talhanation.recruits.entities.BowmanEntity',
+        'com.talhanation.recruits.entities.ai.navigation.RecruitPathNavigation',
+        'com.talhanation.recruits.pathfinding.AsyncGroundPathNavigation',
+        'com.talhanation.recruits.init.ModEntityTypes',
     ]),
     'workers': ('workers-567450-8351157_mapped_official_1.20.1.jar', [
         'com.talhanation.workers.entities.ai.GetNeededItemsFromStorage',
@@ -70,7 +75,7 @@ def main():
             target = out / (name.rsplit('.', 1)[-1] + '.javap.txt')
             if target.exists():
                 raise RuntimeError('Refusing to overwrite bytecode evidence')
-            completed = subprocess.run([javap, '-J-Xmx256m', '-c', '-p', '-classpath', str(jar), name],
+            completed = subprocess.run([javap, '-J-Xmx256m', '-c', '-p', '-l', '-classpath', str(jar), name],
                                        check=True, capture_output=True, text=True, timeout=60)
             if not completed.stdout.strip() or name not in completed.stdout:
                 raise RuntimeError(f'Incomplete disassembly for {name}')
@@ -78,7 +83,7 @@ def main():
             outputs.append({'class': name, 'file': target.name, 'sha256': sha256(target)})
         report['artifacts'][mod] = {'fileName': filename, 'sha256': expected['sha256'], 'classes': outputs}
     (evidence / 'native-bytecode-audit.json').write_text(json.dumps(report, indent=2) + '\n')
-    print('Verified disassembly evidence for 13 exact pinned native inventory/goal/claim classes; no vendor JARs copied.')
+    print('Verified disassembly evidence for 18 exact pinned native inventory/goal/claim/spawn classes; no vendor JARs copied.')
 
 if __name__ == '__main__':
     main()

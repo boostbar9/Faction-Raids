@@ -67,7 +67,7 @@ import java.util.concurrent.CompletableFuture;
 @Mod.EventBusSubscriber(modid = SiegeOverhaul.MOD_ID, value = Dist.CLIENT)
 public final class NativeBuildingQa {
     private static final boolean ENABLED = Boolean.getBoolean("siegeoverhaul.nativeQa")
-            && !java.util.Set.of("perimeter-completion", "territory-perimeter", "camp-spawn")
+            && !java.util.Set.of("perimeter-completion", "territory-perimeter", "camp-spawn", "staged-perimeter", "staged-unload", "staged-handoff")
                     .contains(System.getProperty("siegeoverhaul.nativeQa.mode", "baseline"));
     private static final String WORLD = "siege-native-qa-fixture";
     private static final BlockPos ORIGIN = new BlockPos(8, 65, 8);
@@ -88,12 +88,23 @@ public final class NativeBuildingQa {
     private static int renderFrames;
     private static int screenshotReadyFrame;
     private static long started;
+    private static long viewportRequestedAt;
+    private static final Map<String, Object> GUI_SCALE_EVIDENCE = new LinkedHashMap<>();
     private static boolean finished;
     private static boolean sawEntities;
     private static boolean restoredCulling;
     private static String screenshot;
     private static Runnable afterScreenshot;
     private static CompletableFuture<Void> serverTask;
+
+    private static Map<String, Object> viewport(Minecraft mc) {
+        var window = mc.getWindow();
+        return Map.of("framebufferWidth", window.getWidth(), "framebufferHeight", window.getHeight(),
+                "windowWidth", window.getScreenWidth(), "windowHeight", window.getScreenHeight(),
+                "guiWidth", window.getGuiScaledWidth(), "guiHeight", window.getGuiScaledHeight(),
+                "requestedGuiScale", mc.options.guiScale().get(),
+                "maximized", org.lwjgl.glfw.GLFW.glfwGetWindowAttrib(window.getWindow(), org.lwjgl.glfw.GLFW.GLFW_MAXIMIZED) == org.lwjgl.glfw.GLFW.GLFW_TRUE);
+    }
 
     private NativeBuildingQa() {}
 
@@ -121,9 +132,26 @@ public final class NativeBuildingQa {
             switch (phase) {
                 case 0 -> {
                     if (!(mc.screen instanceof TitleScreen)) return;
-                    initializeEvidence(mc);
-                    require(!Files.exists(directory.resolve("saves").resolve(WORLD)),
-                            "Refusing to replace or reuse a pre-existing fixture world");
+                    if (viewportRequestedAt == 0) {
+                        initializeEvidence(mc);
+                        require(!Files.exists(directory.resolve("saves").resolve(WORLD)),
+                                "Refusing to replace or reuse a pre-existing fixture world");
+                        require(!mc.getWindow().isFullscreen(), "QA requires its own windowed client");
+                        REPORT.put("viewportBeforeSetup", viewport(mc));
+                        viewportRequestedAt = System.nanoTime();
+                        // Restore only this test client's window. A desktop window manager may
+                        // maximize it despite launch dimensions; never alter display/system settings.
+                        org.lwjgl.glfw.GLFW.glfwRestoreWindow(mc.getWindow().getWindow());
+                        mc.getWindow().setWindowed(960, 720);
+                        return;
+                    }
+                    REPORT.put("viewportDuringSetup", viewport(mc));
+                    require(System.nanoTime() - viewportRequestedAt < 10L * 1_000_000_000,
+                            "QA window did not reach the actual 960x720 viewport within ten seconds");
+                    if (mc.getWindow().getWidth() != 960 || mc.getWindow().getHeight() != 720
+                            || mc.getWindow().getScreenWidth() != 960 || mc.getWindow().getScreenHeight() != 720) return;
+                    REPORT.put("viewportSetup", viewport(mc));
+                    REPORT.put("guiScaleEvidence", GUI_SCALE_EVIDENCE);
                     mc.options.renderDistance().set(4);
                     mc.options.simulationDistance().set(5);
                     mc.options.guiScale().set(2);
@@ -180,6 +208,9 @@ public final class NativeBuildingQa {
                 case 7 -> {
                     require(mc.screen instanceof ProtectedConstructionScreen, "Inspection screen lost during resize");
                     assertInspectionControls(mc);
+                    require(mc.getWindow().getGuiScaledWidth() == 320 && mc.getWindow().getGuiScaledHeight() == 240,
+                            "Native inspection did not exercise the actual compact viewport");
+                    GUI_SCALE_EVIDENCE.put("nativeInspectionScale3", viewport(mc));
                     check("Native protected inspection Projection, Cancel job and Close fit compact GUI scale without overlap");
                     capture("03-native-inspection-scale3.png"); phase = 8;
                 }
@@ -305,6 +336,7 @@ public final class NativeBuildingQa {
                     require(mc.screen instanceof CoreHireScreen && hasVisibleButton(mc, "Construction"),
                             "Compact actual Building HUD lost its section navigation");
                     require(mc.getWindow().getGuiScaledHeight() <= 240, "Compact GUI-scale view was not exercised");
+                    GUI_SCALE_EVIDENCE.put("buildingScale3", viewport(mc));
                     check("Actual CoreHireScreen Building sections clicked/rendered, including compact construction fixture");
                     capture("12-building-construction-compact.png"); phase = 29;
                 }

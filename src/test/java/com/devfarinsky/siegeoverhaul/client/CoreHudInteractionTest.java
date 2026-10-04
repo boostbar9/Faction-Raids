@@ -170,4 +170,81 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
         assertSame(sections[BuildingSection.STRUCTURES.ordinal()], screen.getFocused());
     }
 
+    @Test void longConstructionLabelsAreExplicitlyEllipsizedAndUnknownProgressHasNoFakeBar() throws Exception {
+        var menu = mock(CoreHireMenu.class);
+        String longLabel = "Territory perimeter for the entire northern claim boundary with retained materials";
+        var job = new ConstructionReport.Job(longLabel, -1, "Progress unavailable until the marker is loaded",
+                "Marker 1200, 70, -3400", "Paused: marker unavailable. Load the site to inspect its status.",
+                "192 cobblestone, 64 oak planks and additional reported materials");
+        when(menu.construction()).thenReturn(java.util.List.of(job));
+        var screen = new CoreHireScreen(menu, mock(Inventory.class), Component.literal("Command"));
+        var font = mock(net.minecraft.client.gui.Font.class);
+        when(font.width(anyString())).thenAnswer(call -> ((String) call.getArgument(0)).length() * 6);
+        when(font.plainSubstrByWidth(anyString(), anyInt())).thenAnswer(call -> {
+            String value = call.getArgument(0);
+            int available = call.getArgument(1);
+            return value.substring(0, Math.min(value.length(), Math.max(0, available / 6)));
+        });
+        when(font.split(any(net.minecraft.network.chat.FormattedText.class), anyInt()))
+                .thenReturn(java.util.List.of());
+        var fontField = net.minecraft.client.gui.screens.Screen.class.getDeclaredField("font");
+        fontField.setAccessible(true);
+        fontField.set(screen, font);
+        var draw = CoreHireScreen.class.getDeclaredMethod("drawConstruction", net.minecraft.client.gui.GuiGraphics.class);
+        draw.setAccessible(true);
+        for (int[] size : new int[][]{{320, 240}, {640, 360}, {854, 480}}) {
+            var frame = CoreHireLayout.fit(size[0], size[1]);
+            var building = new CoreBuildingLayout(frame);
+            set(screen, "layout", frame);
+            var graphics = mock(net.minecraft.client.gui.GuiGraphics.class);
+            draw.invoke(screen, graphics);
+            var labels = org.mockito.ArgumentCaptor.forClass(String.class);
+            verify(graphics, atLeastOnce()).drawString(eq(font), labels.capture(), anyInt(), anyInt(), anyInt(), eq(false));
+            String title = labels.getAllValues().stream().filter(value -> value.startsWith("1/1  ")).findFirst().orElseThrow();
+            assertTrue(title.endsWith("…"));
+            assertTrue(font.width(title) <= building.reportMainWidth() - 20);
+            verify(graphics, never()).fill(eq(building.x() + 10),
+                    eq(building.reportY() + building.reportRowHeight() - 10), anyInt(), anyInt(),
+                    eq(CommandPalette.ACCENT_TEAL));
+        }
+    }
+
+    @Test void projectReportsUseOneUnambiguousCancelTargetAndKeepCompleteJobsNonCancelable() throws Exception {
+        var menu = mock(CoreHireMenu.class);
+        var pending = new ConstructionReport.Job("Territory perimeter", 100, "All placed; verifying", "Whole territory",
+                "Awaiting final verification", "", java.util.UUID.randomUUID(), 7,
+                "3 / 3 sections verified\n64 emeralds paid once · materials separate", true, false);
+        var complete = new ConstructionReport.Job("Territory perimeter", 100, "All verified", "Whole territory",
+                "Complete", "", java.util.UUID.randomUUID(), 8, "3 / 3 sections verified", false, true);
+        when(menu.construction()).thenReturn(java.util.List.of(pending, complete));
+        var screen = new CoreHireScreen(menu, mock(Inventory.class), Component.literal("Command"));
+        var rows = CoreHireScreen.class.getDeclaredMethod("constructionRows"); rows.setAccessible(true);
+        var pages = CoreHireScreen.class.getDeclaredMethod("constructionPages"); pages.setAccessible(true);
+        var selected = CoreHireScreen.class.getDeclaredMethod("selectedConstruction"); selected.setAccessible(true);
+        for (int[] size : new int[][]{{240, 180}, {320, 240}, {640, 360}, {1920, 1080}}) {
+            set(screen, "layout", CoreHireLayout.fit(size[0], size[1]));
+            assertEquals(1, rows.invoke(screen)); assertEquals(2, pages.invoke(screen));
+            set(screen, "constructionPage", 0); assertSame(pending, selected.invoke(screen));
+            set(screen, "constructionPage", 1); assertSame(complete, selected.invoke(screen));
+        }
+        assertTrue(pending.cancelable()); assertFalse(pending.complete());
+        assertFalse(complete.cancelable()); assertTrue(complete.complete());
+        assertEquals(CommandPalette.ACCENT_GOLD, CoreHireScreen.constructionProgressColor(pending));
+        assertEquals(CommandPalette.ACCENT_EMERALD, CoreHireScreen.constructionProgressColor(complete));
+    }
+
+    @Test void leavingConstructionClearsTheCancelButtonsKeyboardFocus() throws Exception {
+        var screen = new CoreHireScreen(mock(CoreHireMenu.class), mock(Inventory.class), Component.literal("Command"));
+        var cancel = mock(Button.class);
+        var sections = new Button[BuildingSection.values().length];
+        for (int i = 0; i < sections.length; i++) sections[i] = mock(Button.class);
+        set(screen, "buildingSections", sections);
+        set(screen, "buildingSection", BuildingSection.CONSTRUCTION);
+        set(screen, "constructionCancel", cancel);
+        screen.setFocused(cancel);
+        invoke(screen, "selectBuildingSection", BuildingSection.class, BuildingSection.PERIMETER);
+        assertSame(sections[BuildingSection.PERIMETER.ordinal()], screen.getFocused());
+        assertNotSame(cancel, screen.getFocused());
+    }
+
 }

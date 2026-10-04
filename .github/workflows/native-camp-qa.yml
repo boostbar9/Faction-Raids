@@ -46,8 +46,14 @@ jobs:
       - name: Prepare new isolated camp directory
         run: |
           set -euo pipefail
-          test ! -e build/native-camp-qa/client/saves
-          mkdir -p build/native-camp-qa/client build/native-camp-qa/evidence
+          test ! -e build/native-camp-qa/client
+          test ! -e build/native-camp-qa/evidence
+          python3 -B -m unittest discover -s scripts/tests -p 'test_prepare_native_client_defaults.py'
+          python3 scripts/prepare-native-client-defaults.py --mode camp-spawn --smallships-version 2.0.0-b1.4
+          mkdir -p build/native-camp-qa/evidence
+          cp build/native-camp-qa/client/.native-smallships-defaults.json build/native-camp-qa/evidence/smallships-default-config-provenance.json
+          test ! -e build/native-camp-qa/client/config/siegeoverhaul-common.toml
+          printf '[playerRaids]\nallowedRaiderFactions = ["wilds_marauders"]\n' > build/native-camp-qa/client/config/siegeoverhaul-common.toml
           printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:4\nsimulationDistance:5\nmaxFps:30\nvsync:false\n' > build/native-camp-qa/client/options.txt
           git rev-parse HEAD > build/native-camp-qa/evidence/source-commit.txt
           java -version 2> build/native-camp-qa/evidence/java-version.txt
@@ -59,6 +65,9 @@ jobs:
             glxinfo -B | tee build/native-camp-qa/evidence/opengl.txt
             timeout --signal=TERM --kill-after=60s 26m ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=camp-spawn runClient 2>&1 | tee build/native-camp-qa/evidence/client-console.log
           '
+      - name: Audit exact loaded native guard and inventory bytecode
+        if: always()
+        run: python3 scripts/audit-native-inventory-bytecode.py build/native-camp-qa/evidence
       - name: Verify real camp evidence contract
         run: |
           python3 - <<'PY'
@@ -67,6 +76,9 @@ jobs:
           root = Path('build/native-camp-qa/evidence')
           data = json.loads((root / 'result.json').read_text())
           assert data['mode'] == 'camp-spawn' and data['status'] == 'passed', data
+          audit = json.loads((root / 'native-bytecode-audit.json').read_text())
+          assert audit['status'] == 'passed' and audit['noVendorJarsUploaded'], audit
+          assert sum(len(v['classes']) for v in audit['artifacts'].values()) == 18, audit
           versions = data['loadedModVersions']
           for mod, version in {'minecraft': '1.20.1', 'forge': '47.4.16', 'workers': '2.0.3',
                                'recruits': '1.15.2', 'smallships': '2.0.0-b1.4', 'siegeweapons': '0.2.5'}.items():
@@ -81,8 +93,21 @@ jobs:
               assert case['terraformFallback'] == bool(index) and case['crewStarted'], case
               assert case['enemyCore'] and case['claimId'] != 'null', case
               assert case['workers'] and case['guards'], case
+              assert len(case['guards']) == case['registeredGuardRoleCount'], case
+              assert case['ordinaryTicksSinceEstablishment'] >= 60, case
+              assert case['unregisteredGuardRoles'] == ['assassin'], case
+              recovered = [guard for guard in case['guards'] if guard['type'] == 'recruits:scout' and guard['scoutSpawnTailRecovered']]
+              assert len(recovered) == 2 and len(case['guards']) == 5, case
               for unit in case['workers'] + case['guards']:
                   assert not unit['noAi'] and unit['faction'] == case['expectedEnemyFaction'], unit
+              assert case['nativeJobOwnershipVerified'] and case['nativeJobOwner'] != case['guardOwner'], case
+              assert case['nativeWorkAreaAccessVerified'] and case['nativeBuilderStorageEnabled'], case
+              for worker in case['workers']:
+                  assert worker['owner'] == case['nativeJobOwner'] and worker['owned'] and not worker['listening'], worker
+              for guard in case['guards']:
+                  assert guard['owner'] == case['guardOwner'] == 'fac10000-4a1d-4e75-8a1d-000000000001', guard
+              assert all(case['nativeJobAreas'][key] == case['nativeJobOwner']
+                         for key in ['buildOwner', 'storageOwner', 'supplyOwner']), case
               assert all(unit['type'].startswith('recruits:') for unit in case['guards']), case
               assert case['protectedCellCount'] >= 6144 and case['protectedChests'] >= 2, case
               assert case['entry'].startswith('Actual non-op client /siegeoverhaul start'), case

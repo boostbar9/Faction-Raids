@@ -3,9 +3,6 @@ name: Native Perimeter Completion QA
 # Separate long real-AI acceptance; baseline HUD/server suites remain independent.
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    types: [opened, reopened, synchronize, labeled]
 
 permissions:
   contents: read
@@ -16,10 +13,8 @@ concurrency:
 
 jobs:
   native-perimeter-client:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-       contains(github.event.pull_request.labels.*.name, 'native-perimeter-qa'))
+    # Long full-completion coverage is opt-in when a specific risk warrants it.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
@@ -46,8 +41,12 @@ jobs:
       - name: Prepare new isolated perimeter directory
         run: |
           set -euo pipefail
-          test ! -e build/native-perimeter-qa/client/saves/siege-native-perimeter-completion
-          mkdir -p build/native-perimeter-qa/client build/native-perimeter-qa/evidence
+          test ! -e build/native-perimeter-qa/client
+          test ! -e build/native-perimeter-qa/evidence
+          python3 -B -m unittest discover -s scripts/tests -p 'test_prepare_native_client_defaults.py'
+          python3 scripts/prepare-native-client-defaults.py --mode perimeter-completion --smallships-version 2.0.0-b1.4
+          mkdir -p build/native-perimeter-qa/evidence
+          cp build/native-perimeter-qa/client/.native-smallships-defaults.json build/native-perimeter-qa/evidence/smallships-default-config-provenance.json
           printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:4\nsimulationDistance:5\nmaxFps:30\nvsync:false\n' > build/native-perimeter-qa/client/options.txt
           git rev-parse HEAD > build/native-perimeter-qa/evidence/source-commit.txt
           java -version 2> build/native-perimeter-qa/evidence/java-version.txt
@@ -68,9 +67,9 @@ jobs:
           data = json.loads((root / 'result.json').read_text())
           assert data['mode'] == 'perimeter-completion', data
           assert data['status'] == 'passed', data
-          assert data['completedBlocks'] == 968, data
+          assert data['completedBlocks'] == 572, data
           assert data['treasuryDebit'] == 64, data
-          assert data['materialCounts'] == {'minecraft:cobblestone': 748, 'minecraft:oak_planks': 220}, data
+          assert data['materialCounts'] == {'minecraft:cobblestone': 352, 'minecraft:oak_planks': 220}, data
           assert data['nativeCompletionObserved'] and data['completedCaptureTerrainCompiled'], data
           assert 0 < data['constructionSeconds'] <= 1200, data
           assert data['screenshots'] == ['01-native-completed-perimeter.png'], data
@@ -82,8 +81,8 @@ jobs:
           for mod in ['workers', 'recruits', 'smallships', 'siegeweapons']:
               assert len(data['loadedCompanionArtifacts'][mod]['sha256']) == 64, mod
           final = data['finalDiagnostics']
-          assert final['placed'] == 968 and final['treasury'] == 1936, final
-          assert final['placedCobble'] == 748 and final['placedOak'] == 220, final
+          assert final['placed'] == 572 and final['treasury'] == 1936, final
+          assert final['placedCobble'] == 352 and final['placedOak'] == 220, final
           for key in ['chestCobble', 'chestOak', 'builderCobble', 'builderOak', 'looseCobble', 'looseOak']:
               assert final[key] == 0, (key, final)
           print('Exact full-perimeter native completion passed. Review the actual framebuffer and diagnostics.')
