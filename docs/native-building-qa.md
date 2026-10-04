@@ -261,3 +261,17 @@ server EULA acceptance, credentials or authentication changes are automated here
   is `a0d33b9a940bac89abe56d998123fcfc148e686195472d101f957b2aa1425e70`.
   The focused main-hand rebind and new headroom/reload regression require their
   own successful run; the strict material assertion has not been relaxed.
+
+- [Run 37163228609](https://github.com/boostbar9/Faction-Raids/actions/runs/37163228609)
+  passed initial idle-builder handoff binding, exact once-only mid-job binding,
+  unchanged builder inventory, and the live headroom obstruction/reload regression.
+  Hand/slot identity remained shared and the old extra 30-stack did not recur.
+  Strict conservation still failed, now at 168 supplied versus 200 accounted:
+  the real chest changed from zero cobblestone before save to 32 after reload,
+  while ten placed blocks and 30 builder-held cobblestone were unchanged. This
+  exposes a separate native container-persistence defect; it is not an accepted
+  completion. Workers' native withdrawal splits the live chest stack without a
+  container dirty notification. Exact chest slot/NBT snapshots, chunk-dirty
+  evidence and immediate post-reload stock equality are now required, without a
+  QA dirty-mark workaround. Artifact SHA-256:
+  `4ef06fcd6c247c3ae12b937f2e351271a62d17a6e9e77608750f7452f7bf7035`.

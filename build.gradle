@@ -227,6 +227,9 @@ tasks.named('test', Test).configure {
 
 // Opt-in native framebuffer/fixture QA. This source set is never part of jar.
 if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)) {
+    def nativeQaMode = providers.gradleProperty('nativeQaMode').getOrElse('baseline')
+    if (!(nativeQaMode in ['baseline', 'perimeter-completion'])) throw new GradleException('Unsupported nativeQaMode')
+    def nativeQaDirectory = nativeQaMode == 'perimeter-completion' ? 'build/native-perimeter-qa/client' : 'build/native-qa/client'
     configurations { nativeQaCompanions }
     dependencies {
         nativeQaCompanions fg.deobf('curse.maven:workers-567450:8351157')
@@ -245,13 +248,14 @@ if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)
         }
     }
     minecraft.runs.client {
-        workingDirectory project.file('build/native-qa/client')
+        workingDirectory project.file(nativeQaDirectory)
         // Companion release mixins retain SRG refmaps; translate those to the
         // named userdev runtime without disabling any native mixin or check.
         property 'mixin.env.remapRefMap', 'true'
         property 'mixin.env.refMapRemappingFile', project.file('build/createSrgToMcp/output.srg').absolutePath
         property 'siegeoverhaul.nativeQa', 'true'
-        property 'siegeoverhaul.nativeQa.directory', project.file('build/native-qa/client').absolutePath
+        property 'siegeoverhaul.nativeQa.mode', nativeQaMode
+        property 'siegeoverhaul.nativeQa.directory', project.file(nativeQaDirectory).absolutePath
         args '--width', '1280', '--height', '720'
         jvmArgs '-Xms512m', '-Xmx3G'
         mods {
@@ -259,4 +263,52 @@ if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)
         }
     }
     tasks.matching { it.name == 'runClient' }.configureEach { dependsOn tasks.named('nativeQaClasses') }
+}
+
+// Opt-in physical dedicated-server GameTests. No nativeQa client classes or QA output in jar.
+if (providers.gradleProperty('nativeServerQa').map { it.toBoolean() }.getOrElse(false)) {
+    if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)) {
+        throw new GradleException('Run nativeServerQa and nativeQa independently; client fixtures must not enter server QA.')
+    }
+    configurations { nativeServerQaCompanions }
+    dependencies {
+        nativeServerQaCompanions fg.deobf('curse.maven:workers-567450:8351157')
+        nativeServerQaCompanions fg.deobf('curse.maven:recruits-523860:8339846')
+        nativeServerQaCompanions fg.deobf('curse.maven:small-ships-450659:5566900')
+        nativeServerQaCompanions fg.deobf('curse.maven:siegeweapons-1259343:7906096')
+    }
+    configurations.runtimeOnly.extendsFrom(configurations.nativeServerQaCompanions)
+    sourceSets {
+        nativeServerQa {
+            java.srcDir 'src/nativeServerQa/java'
+            resources.srcDir 'src/nativeServerQa/resources'
+            compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+            runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+        }
+    }
+    minecraft.runs.gameTestServer {
+        workingDirectory project.file('build/native-server-qa/server')
+        property 'forge.enabledGameTestNamespaces', mod_id
+        property 'mixin.env.remapRefMap', 'true'
+        property 'mixin.env.refMapRemappingFile', project.file('build/createSrgToMcp/output.srg').absolutePath
+        property 'siegeoverhaul.nativeServerQa', 'true'
+        property 'siegeoverhaul.nativeServerQa.directory', project.file('build/native-server-qa/server').absolutePath
+        args '--universe', project.file('build/native-server-qa/server/worlds').absolutePath,
+                '--world', 'siege-native-server-fixture', '--nogui'
+        jvmArgs '-Xms512m', '-Xmx3G'
+        mods {
+            "${mod_id}" { source sourceSets.nativeServerQa }
+        }
+    }
+    tasks.matching { it.name == 'runGameTestServer' }.configureEach {
+        dependsOn tasks.named('nativeServerQaClasses')
+        doFirst {
+            def serverDirectory = project.file('build/native-server-qa/server')
+            if (new File(serverDirectory, 'worlds/siege-native-server-fixture').exists()
+                    || new File(serverDirectory, 'eula.txt').exists()
+                    || project.file('build/native-server-qa/evidence/result.json').exists()) {
+                throw new GradleException('Refusing existing server QA world, EULA file or result. Use a fresh isolated checkout/build directory.')
+            }
+        }
+    }
 }

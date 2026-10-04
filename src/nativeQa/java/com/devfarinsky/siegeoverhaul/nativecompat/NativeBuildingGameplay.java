@@ -69,6 +69,7 @@ final class NativeBuildingGameplay {
     private static int rebindsBeforeReload;
     private static List<Map<String, Object>> inventoryBeforeReload;
     private static Map<String, Object> mainHandBeforeReload;
+    private static List<Map<String, Object>> chestBeforeReload;
     private static int rebindsBeforeFirstCommission;
     private static List<Map<String, Object>> inventoryBeforeFirstCommission;
     private static Map<String, Object> mainHandBeforeFirstCommission;
@@ -361,6 +362,7 @@ final class NativeBuildingGameplay {
                 rebindsBeforeReload = ProtectedBuilderHandMirror.rebindCount(builder(level).getPersistentData());
                 inventoryBeforeReload = inventoryValues(builder(level));
                 mainHandBeforeReload = stackDescription(builder(level).getMainHandItem());
+                chestBeforeReload = containerValues((Container) level.getBlockEntity(fixture.chestPos()));
                 owner.server.saveEverything(false, true, true);
                 check("Owner permission loss pauses actual AI without changing world cells");
                 advance(now, 17, 0); return Action.RELOAD;
@@ -372,6 +374,10 @@ final class NativeBuildingGameplay {
                         "Protected reload changed native inventory or main-hand values");
                 assertSingleHandRebind(level);
                 check("Protected reload rebinds the equal main-hand mirror exactly once before AI, preserving every inventory value");
+                require(containerValues((Container) level.getBlockEntity(fixture.chestPos())).equals(chestBeforeReload),
+                        "Actual native storage chest changed item/tag/count values across world reload");
+                conservation(level);
+                check("Actual native chest withdrawals persist exact stock through world reload");
                 require(snapshot(level).equals(pausedCells) && balance(owner) == bankAfterManual,
                         "Mid-job world restart changed protected cells or Treasury");
                 require(NativeConstructionGuard.commissionPaid(area(level))
@@ -499,6 +505,9 @@ final class NativeBuildingGameplay {
         }
         snap.put("nativeInventorySlots", slots);
         Container chest = (Container) level.getBlockEntity(fixture.chestPos());
+        snap.put("chestInventorySlots", containerValues(chest));
+        snap.put("chestChunkUnsaved", level.getChunkAt(fixture.chestPos()).isUnsaved());
+        snap.put("serializedChest", level.getBlockEntity(fixture.chestPos()).saveWithFullMetadata().toString());
         snap.put("chestCobblestone", count(chest, Items.COBBLESTONE)); snap.put("chestOakPlanks", count(chest, Items.OAK_PLANKS));
         snap.put("nativeInventoryCobblestone", count(builder.getInventory(), Items.COBBLESTONE));
         snap.put("nativeInventoryOakPlanks", count(builder.getInventory(), Items.OAK_PLANKS));
@@ -531,9 +540,12 @@ final class NativeBuildingGameplay {
                 "Protected main-hand mirror was not rebound exactly once before native AI");
     }
     private static List<Map<String, Object>> inventoryValues(BuilderEntity builder) {
+        return containerValues(builder.getInventory());
+    }
+    private static List<Map<String, Object>> containerValues(Container inventory) {
         var values = new ArrayList<Map<String, Object>>();
-        for (int slot = 0; slot < builder.getInventory().getContainerSize(); slot++)
-            values.add(stackDescription(builder.getInventory().getItem(slot)));
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++)
+            values.add(stackDescription(inventory.getItem(slot)));
         return List.copyOf(values);
     }
     private static Map<String, Object> stackDescription(ItemStack stack) {
