@@ -83,7 +83,7 @@ public final class ProtectedConstructionScreen extends BuildAreaScreen {
         List<ItemStack> visible = List.copyOf(requiredItems.subList(from, Math.min(requiredItems.size(), from + capacity)));
         var box = layout.materials();
         requiredItemsDropDownMenu = new KeyboardMaterials(box.x(), box.y(), box.width(), box.height(), visible);
-        requiredItemsDropDownMenu.setBgFillSelected(0xFF535B67);
+        requiredItemsDropDownMenu.setBgFillSelected(CommandPalette.CONTROL_SELECTED);
         requiredItemsDropDownMenu.setCanSelectItem(false);
         requiredItemsDropDownMenu.setResetCount(false);
         addRenderableWidget(requiredItemsDropDownMenu);
@@ -92,8 +92,8 @@ public final class ProtectedConstructionScreen extends BuildAreaScreen {
     }
 
     private Button add(ProtectedInspectionLayout.Rect bounds, Component label, Button.OnPress action) {
-        return addRenderableWidget(Button.builder(label, action)
-                .bounds(bounds.x(), bounds.y(), bounds.width(), bounds.height()).build());
+        return addRenderableWidget(new CoreButton(label, action,
+                bounds.x(), bounds.y(), bounds.width(), bounds.height(), false, () -> false));
     }
 
     @Override public void resetScan() { /* The accepted native plan is immutable. */ }
@@ -129,21 +129,24 @@ public final class ProtectedConstructionScreen extends BuildAreaScreen {
     @Override public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
         if (layout == null) return;
         var box = layout.panel();
-        graphics.fill(box.x() - 1, box.y() - 1, box.right() + 1, box.bottom() + 1, 0xFF687487);
-        graphics.fill(box.x(), box.y(), box.right(), box.bottom(), 0xF019202A);
+        CommandFrame.window(graphics, box.x(), box.y(), box.width(), box.height());
+        if (layout.content()) {
+            var preview = layout.preview();
+            CommandFrame.surface(graphics, preview.x(), preview.y(), preview.width(), preview.height());
+        }
     }
     @Override public void renderForeground(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
         if (layout == null) return;
         var panel = layout.panel(); int x = panel.x() + layout.padding();
         int textWidth = panel.width() - 2 * layout.padding();
-        text(graphics, "Commissioned construction", x, panel.y() + 8, textWidth, 0xFFF0D0);
+        text(graphics, "Commissioned construction", x, panel.y() + 8, textWidth, CommandPalette.ACCENT_GOLD);
         if (panel.height() >= 150) text(graphics,
                 buildArea.getWidthSize() + " wide  x  " + buildArea.getDepthSize() + " deep  x  " + buildArea.getHeightSize() + " high",
-                x, panel.y() + 22, textWidth, 0xC8D0DB);
-        if (layout.details()) text(graphics, "Progress: Building > Construction", x, panel.y() + 36, textWidth, 0xAAB8C8);
+                x, panel.y() + 22, textWidth, CommandPalette.TEXT_MUTED);
+        if (layout.details()) text(graphics, "Progress: Building > Construction", x, panel.y() + 36, textWidth, CommandPalette.TEXT_DIM);
         if (layout.content()) text(graphics, previewFits ? "Drag: rotate. Right-drag: pan." : "Large plan: right-drag to pan.", layout.preview().x(),
-                layout.projection().y() - 10, layout.preview().width(), 0xAAB8C8);
-        else text(graphics, "Enlarge window for the native preview.", x, layout.preview().y(), textWidth, 0xAAB8C8);
+                layout.projection().y() - 10, layout.preview().width(), CommandPalette.TEXT_DIM);
+        else text(graphics, "Enlarge window for the native preview.", x, layout.preview().y(), textWidth, CommandPalette.TEXT_DIM);
     }
     private void text(GuiGraphics graphics, String value, int x, int y, int available, int color) {
         graphics.drawString(font, font.plainSubstrByWidth(value, Math.max(1, available)), x, y, color, false);

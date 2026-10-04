@@ -1,237 +1,442 @@
 package com.devfarinsky.siegeoverhaul.client;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.narration.NarratedElementType;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraftforge.common.ForgeConfigSpec;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
- * v4.18.0 auto-generated config screen for {@link com.devfarinsky.siegeoverhaul.RaidConfig}.
- *
- * <p>Walks the {@link ForgeConfigSpec} tree once at construction and builds
- * one entry widget per leaf: a click-to-toggle button for booleans, a text
- * field with numeric validation for ints and doubles, a cycle button for
- * enums, and a comma-separated text field for string lists. Scrolls a viewport instead
- * of trying to render 150+ rows onto one screen. Writes changes back to the
- * spec immediately so nothing gets lost if the player alt-tabs out.
+ * Type-preserving settings editor. Edits are retained across layout changes and
+ * nested screens, and committed only through the existing save-on-close path.
  */
 public final class SiegeOverhaulConfigScreen extends Screen {
-
-    private static final int ROW_HEIGHT = 22;
-    private static final int ROW_PADDING = 4;
-    private static final int LABEL_WIDTH = 220;
-    private static final int WIDGET_WIDTH = 180;
-
     private final Screen parent;
     private final ForgeConfigSpec spec;
     private final List<Entry> entries = new ArrayList<>();
-
-    private int scrollOffset;
-    private int maxScroll;
-    private int viewportTop;
-    private int viewportHeight;
+    private final List<RowWidget> rows = new ArrayList<>();
+    private List<Entry> shown = List.of();
+    private boolean loaded;
+    private ConfigScreenLayout layout;
+    private int firstRow;
     private EditBox filterBox;
+    private CoreButton done;
+    private CoreButton heroVisuals;
     private String filter = "";
+    private String focusKey = "filter";
+    private int filterCursor;
+    private boolean draggingScrollbar;
+    private double thumbGrab;
 
     public SiegeOverhaulConfigScreen(Screen parent, ForgeConfigSpec spec) {
-        super(Component.literal("Siege Overhaul Settings"));
+        super(Component.literal(spec == com.devfarinsky.siegeoverhaul.HeroVisualConfig.SPEC
+                ? "Hero visuals" : "Siege Overhaul Settings"));
         this.parent = parent;
         this.spec = spec;
     }
 
     @Override
-    @SuppressWarnings({"rawtypes", "unchecked"})
     protected void init() {
-        entries.clear();
-        collect("", spec.getValues().valueMap(), entries);
-
-        int filterWidth = 240;
-        filterBox = new EditBox(this.font, this.width / 2 - filterWidth / 2, 26,
-                filterWidth, 18, Component.literal("Filter"));
+        rememberFocus();
+        for (RowWidget row : rows) { row.visible = false; row.setFocused(false); }
+        clearWidgets();
+        setFocused(null);
+        rows.clear();
+        // Minecraft reinitializes the same screen after resize and a child screen.
+        // Re-reading the spec here used to discard every uncommitted edit.
+        if (!loaded) {
+            collect("", spec.getValues().valueMap(), entries);
+            loaded = true;
+        }
+        draggingScrollbar = false;
+        layout = ConfigScreenLayout.fit(width, height);
+        var bounds = layout.filter;
+        filterBox = new EditBox(font, bounds.x(), bounds.y(), bounds.width(), bounds.height(),
+                Component.literal("Filter settings by name or full path"));
+        filterBox.setMaxLength(256);
         filterBox.setHint(Component.literal("Filter settings"));
         filterBox.setValue(filter);
-        filterBox.setResponder(v -> { filter = v.toLowerCase(); scrollOffset = 0; layoutWidgets(); });
+        filterBox.moveCursorTo(Math.min(filterCursor, filter.length()));
+        filterBox.setTextColor(CommandPalette.TEXT);
+        filterBox.setResponder(this::filterChanged);
         addRenderableWidget(filterBox);
 
-        viewportTop = 54;
-        viewportHeight = this.height - viewportTop - 34;
-
-        addRenderableWidget(Button.builder(Component.literal("Done"),
-                b -> onClose()).bounds(spec == com.devfarinsky.siegeoverhaul.RaidConfig.SPEC ? this.width / 2 + 5 : this.width / 2 - 100,
-                        this.height - 28, spec == com.devfarinsky.siegeoverhaul.RaidConfig.SPEC ? 150 : 200, 20).build());
-
-        if (spec == com.devfarinsky.siegeoverhaul.RaidConfig.SPEC) {
-            addRenderableWidget(Button.builder(Component.literal("Hero visuals"),
-                    b -> minecraft.setScreen(new SiegeOverhaulConfigScreen(this, com.devfarinsky.siegeoverhaul.HeroVisualConfig.SPEC)))
-                    .bounds(this.width / 2 - 155,this.height-28,150,20).build());
+        boolean hasHero = spec == com.devfarinsky.siegeoverhaul.RaidConfig.SPEC;
+        int buttonWidth = hasHero ? (bounds.width() - 8) / 2 : bounds.width();
+        heroVisuals = null;
+        if (hasHero) {
+            heroVisuals = addRenderableWidget(new CoreButton(Component.literal("Hero visuals"), b -> {
+                rememberFocus();
+                minecraft.setScreen(new SiegeOverhaulConfigScreen(this, com.devfarinsky.siegeoverhaul.HeroVisualConfig.SPEC));
+            }, bounds.x(), layout.footerY, buttonWidth, 20, false, () -> false));
         }
-        layoutWidgets();
+        done = addRenderableWidget(new CoreButton(Component.literal("Done"), b -> onClose(),
+                hasHero ? bounds.right() - buttonWidth : bounds.x(), layout.footerY,
+                buttonWidth, 20, false, () -> false).primary());
+        shown = filtered();
+        int focusedIndex = indexOfFocusKey(focusKey);
+        firstRow = focusedIndex >= 0 ? layout.ensureVisible(firstRow, focusedIndex, shown.size())
+                : layout.clampFirst(firstRow, shown.size());
+        rebuildRows();
+        restoreFocus();
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        rememberFocus();
+        super.resize(minecraft, width, height);
+    }
+
+    @Override
+    public void removed() {
+        rememberFocus();
+        super.removed();
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     private void collect(String prefix, Map<String, Object> map, List<Entry> out) {
         for (Map.Entry<String, Object> e : map.entrySet()) {
             String key = prefix.isEmpty() ? e.getKey() : prefix + "." + e.getKey();
-            Object v = e.getValue();
-            if (v instanceof net.minecraftforge.common.ForgeConfigSpec.ConfigValue<?> cfg) {
-                Object raw = cfg.get();
-                out.add(new Entry(key, cfg, raw));
-            } else if (v instanceof com.electronwill.nightconfig.core.UnmodifiableConfig sub) {
+            Object value = e.getValue();
+            if (value instanceof ForgeConfigSpec.ConfigValue<?> cfg) {
+                out.add(new Entry(key, cfg, cfg.get()));
+            } else if (value instanceof com.electronwill.nightconfig.core.UnmodifiableConfig sub) {
                 collect(key, (Map<String, Object>) (Map) sub.valueMap(), out);
-            } else if (v instanceof Map<?, ?> submap) {
-                collect(key, (Map<String, Object>) submap, out);
+            } else if (value instanceof Map<?, ?> sub) {
+                collect(key, (Map<String, Object>) sub, out);
             }
         }
     }
 
     private List<Entry> filtered() {
-        if (filter.isEmpty()) return entries;
-        List<Entry> out = new ArrayList<>();
-        for (Entry e : entries) if (e.path.toLowerCase().contains(filter)) out.add(e);
-        return out;
+        String query = filter.toLowerCase(Locale.ROOT).trim();
+        if (query.isEmpty()) return List.copyOf(entries);
+        return entries.stream().filter(e -> e.path.toLowerCase(Locale.ROOT).contains(query)
+                || shortLabel(e.path).toLowerCase(Locale.ROOT).contains(query)).toList();
     }
 
-    private void layoutWidgets() {
-        // Remove old row widgets (keep filter + Done).
-        this.children().removeIf(c -> c instanceof RowWidget);
-        this.renderables.removeIf(r -> r instanceof RowWidget);
+    private void filterChanged(String value) {
+        filter = value;
+        firstRow = 0;
+        draggingScrollbar = false;
+        shown = filtered();
+        setFocused(filterBox);
+        rebuildRows();
+    }
 
-        List<Entry> shown = filtered();
-        int totalHeight = shown.size() * (ROW_HEIGHT + ROW_PADDING);
-        maxScroll = Math.max(0, totalHeight - viewportHeight);
-        if (scrollOffset > maxScroll) scrollOffset = maxScroll;
-
-        int x = this.width / 2 - (LABEL_WIDTH + WIDGET_WIDTH + 12) / 2 + LABEL_WIDTH + 12;
-        int i = 0;
-        for (Entry e : shown) {
-            int y = viewportTop + i * (ROW_HEIGHT + ROW_PADDING) - scrollOffset;
-            RowWidget w = buildRow(e, x, y);
-            addRenderableWidget(w);
-            i++;
+    private void rebuildRows() {
+        for (RowWidget row : rows) {
+            row.captureCursor();
+            row.visible = false;
+            row.setFocused(false);
+            removeWidget(row); // Removes children AND narration registrations.
+        }
+        rows.clear();
+        firstRow = layout.clampFirst(firstRow, shown.size());
+        for (int slot = 0; slot < layout.capacity() && firstRow + slot < shown.size(); slot++) {
+            var bounds = layout.input(slot);
+            RowWidget row = buildRow(shown.get(firstRow + slot), bounds);
+            rows.add(addWidget(row)); // Render manually, inside the viewport scissor.
         }
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private RowWidget buildRow(Entry e, int x, int y) {
-        Object v = e.value;
-        if (v instanceof Boolean b) {
-            return new ToggleRow(e, x, y, WIDGET_WIDTH, ROW_HEIGHT, b);
+    private RowWidget buildRow(Entry entry, ConfigScreenLayout.Bounds bounds) {
+        AbstractWidget control;
+        if (entry.pending instanceof Boolean || entry.pending instanceof Enum<?>) {
+            control = new CoreButton(Component.literal(entry.displayValue()), button -> {
+                entry.activate();
+                button.setMessage(Component.literal(entry.displayValue()));
+            }, bounds.x(), bounds.y(), bounds.width(), bounds.height(), false,
+                    () -> Boolean.TRUE.equals(entry.pending));
+        } else {
+            EditBox box = new EditBox(font, bounds.x(), bounds.y(), bounds.width(), bounds.height(),
+                    Component.literal(entry.path));
+            box.setMaxLength(ConfigTextCodec.editorLimit(entry.value, entry.text));
+            if (entry.value instanceof List<?>) box.setHint(Component.literal("comma-separated; blank = none"));
+            box.setValue(entry.text);
+            box.moveCursorTo(Math.min(entry.cursor, entry.text.length()));
+            box.setTextColor(entry.validText ? CommandPalette.TEXT : CommandPalette.ACCENT_BLOOD);
+            box.setResponder(value -> {
+                entry.edit(value);
+                box.setTextColor(entry.validText ? CommandPalette.TEXT : CommandPalette.ACCENT_BLOOD);
+            });
+            control = box;
         }
-        if (v instanceof Enum<?>) {
-            return new EnumRow(e, x, y, WIDGET_WIDTH, ROW_HEIGHT);
+        return new RowWidget(entry, control, layout.viewport);
+    }
+
+    @Override
+    public void setFocused(GuiEventListener target) {
+        // AbstractContainerEventHandler forwards focus changes to both children.
+        super.setFocused(target);
+        if (target != null) rememberFocus();
+    }
+
+    private void rememberFocus() {
+        if (filterBox != null) filterCursor = filterBox.getCursorPosition();
+        GuiEventListener focused = getFocused();
+        if (focused instanceof RowWidget row) {
+            row.captureCursor();
+            focusKey = "entry:" + row.entry.path;
+        } else if (focused != null) {
+            if (focused == filterBox) focusKey = "filter";
+            else if (focused == heroVisuals) focusKey = "hero";
+            else if (focused == done) focusKey = "done";
         }
-        // Numbers, strings, and string lists all use a type-preserving text row.
-        return new TextRow(this.font, e, x, y, WIDGET_WIDTH, ROW_HEIGHT);
+    }
+
+    private void restoreFocus() {
+        for (RowWidget row : rows) {
+            if (("entry:" + row.entry.path).equals(focusKey)) { setFocused(row); return; }
+        }
+        if (focusKey.equals("hero") && heroVisuals != null) setFocused(heroVisuals);
+        else if (focusKey.equals("done")) setFocused(done);
+        else setFocused(filterBox);
+    }
+
+    private int indexOfFocusKey(String key) {
+        return key.startsWith("entry:") ? indexOfPath(key.substring(6)) : -1;
+    }
+
+    private int indexOfPath(String path) {
+        for (int i = 0; i < shown.size(); i++) if (shown.get(i).path.equals(path)) return i;
+        return -1;
+    }
+
+    private void scrollTo(int first) {
+        int target = layout.clampFirst(first, shown.size());
+        if (target == firstRow) return;
+        rememberFocus();
+        firstRow = target;
+        rebuildRows();
+        restoreFocus(); // A hidden field cannot retain keyboard input.
+    }
+
+    private void focusEntry(int index) {
+        if (layout.capacity() == 0 || index < 0 || index >= shown.size()) return;
+        rememberFocus();
+        firstRow = layout.ensureVisible(firstRow, index, shown.size());
+        focusKey = "entry:" + shown.get(index).path;
+        rebuildRows();
+        restoreFocus();
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == GLFW.GLFW_KEY_TAB) {
+            rememberFocus();
+            // Include offscreen entries in logical Tab order, revealing each one
+            // before giving it focus. Native focus search only sees visible rows.
+            List<String> order = new ArrayList<>();
+            order.add("filter");
+            if (layout.capacity() > 0) for (Entry entry : shown) order.add("entry:" + entry.path);
+            if (heroVisuals != null) order.add("hero");
+            order.add("done");
+            int current = order.indexOf(focusKey);
+            int step = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0 ? -1 : 1;
+            String next = order.get(Math.floorMod(current + step, order.size()));
+            int index = indexOfFocusKey(next);
+            if (index >= 0) focusEntry(index);
+            else { focusKey = next; restoreFocus(); }
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_PAGE_DOWN || keyCode == GLFW.GLFW_KEY_PAGE_UP) {
+            int step = Math.max(1, layout.capacity()) * (keyCode == GLFW.GLFW_KEY_PAGE_DOWN ? 1 : -1);
+            if (getFocused() instanceof RowWidget row) {
+                focusEntry(Math.max(0, Math.min(shown.size() - 1, indexOfPath(row.entry.path) + step)));
+            } else scrollTo(firstRow + step);
+            return true;
+        }
+        if (getFocused() instanceof RowWidget row && !(row.control instanceof EditBox)) {
+            int index = indexOfPath(row.entry.path);
+            if (keyCode == GLFW.GLFW_KEY_UP || keyCode == GLFW.GLFW_KEY_DOWN) {
+                focusEntry(Math.max(0, Math.min(shown.size() - 1, index + (keyCode == GLFW.GLFW_KEY_DOWN ? 1 : -1))));
+                return true;
+            }
+            if (keyCode == GLFW.GLFW_KEY_HOME || keyCode == GLFW.GLFW_KEY_END) {
+                focusEntry(keyCode == GLFW.GLFW_KEY_HOME ? 0 : shown.size() - 1);
+                return true;
+            }
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public void tick() {
+        filterBox.tick();
+        for (RowWidget row : rows) if (row.control instanceof EditBox box) box.tick();
     }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(g);
-        g.drawCenteredString(this.font, this.title, this.width / 2, 8, 0xFFFFFF);
+        renderBackground(g);
+        var window = layout.window;
+        CommandFrame.window(g, window.x(), window.y(), window.width(), window.height());
+        CommandFrame.header(g, window.x(), window.y(), window.width(), 22);
+        drawFitted(g, title.getString(), layout.filter.x(), window.y() + 10, layout.filter.width(), CommandPalette.TEXT);
+        int count = shown.size();
+        String matches = layout.capacity() == 0 ? "Increase window height to edit"
+                : count == 0 ? "0 matching settings"
+                : (firstRow + 1) + "–" + Math.min(count, firstRow + rows.size()) + " of " + count
+                + (filter.isBlank() ? " settings" : " matches");
+        drawFitted(g, matches, layout.filter.x(), layout.filter.bottom() + 6, layout.filter.width(), CommandPalette.TEXT_MUTED);
+        drawFitted(g, "Changes save on close", layout.filter.x(), layout.footerY - 12, layout.filter.width(), CommandPalette.TEXT_DIM);
 
-        // Scissor to the viewport so scrolled rows don't bleed over the header/footer.
-        g.enableScissor(0, viewportTop, this.width, viewportTop + viewportHeight);
-        // Row labels: draw here so they scroll with the widgets.
-        int labelX = this.width / 2 - (LABEL_WIDTH + WIDGET_WIDTH + 12) / 2;
-        List<Entry> shown = filtered();
-        int i = 0;
-        for (Entry e : shown) {
-            int y = viewportTop + i * (ROW_HEIGHT + ROW_PADDING) - scrollOffset;
-            if (y + ROW_HEIGHT >= viewportTop && y <= viewportTop + viewportHeight) {
-                String label = shortLabel(e.path);
-                g.drawString(this.font, label, labelX + 4, y + 7, 0xE0E0E0, false);
+        var viewport = layout.viewport;
+        CommandFrame.surface(g, viewport.x(), viewport.y(), viewport.width(), viewport.height());
+        g.enableScissor(viewport.x(), viewport.y(), viewport.right(), viewport.bottom());
+        try {
+            for (int slot = 0; slot < rows.size(); slot++) {
+                RowWidget row = rows.get(slot);
+                var label = layout.label(slot);
+                drawFitted(g, shortLabel(row.entry.path), label.x(), label.y(), label.width(), CommandPalette.TEXT_MUTED);
+                row.render(g, mouseX, mouseY, partialTick);
             }
-            i++;
+            if (shown.isEmpty()) {
+                drawFitted(g, entries.isEmpty() ? "No settings available" : "No matching settings", viewport.x() + 8,
+                        viewport.y() + 12, viewport.width() - 16, CommandPalette.TEXT);
+                if (!entries.isEmpty()) drawFitted(g, "Try a shorter name or clear the filter.", viewport.x() + 8,
+                        viewport.y() + 26, viewport.width() - 16, CommandPalette.TEXT_MUTED);
+            } else if (layout.capacity() == 0) {
+                drawFitted(g, "Increase the window height to edit.", viewport.x() + 4, viewport.y() + 2,
+                        viewport.width() - 8, CommandPalette.TEXT_MUTED);
+            }
+        } finally {
+            g.disableScissor();
         }
-        g.disableScissor();
-
+        if (layout.maxFirst(count) > 0 && layout.capacity() > 0) {
+            var track = layout.scrollbar;
+            var thumb = layout.thumb(firstRow, count);
+            g.fill(track.x(), track.y(), track.right(), track.bottom(), CommandPalette.CHIP_FILL);
+            g.fill(thumb.x(), thumb.y(), thumb.right(), thumb.bottom(), CommandPalette.ACCENT_TEAL);
+        }
+        // Only fixed controls are renderables; row widgets never escape scissor.
         super.render(g, mouseX, mouseY, partialTick);
-
-        // Scrollbar on the right if content overflows.
-        if (maxScroll > 0) {
-            int barX = this.width - 6;
-            int barTop = viewportTop;
-            int barBottom = viewportTop + viewportHeight;
-            g.fill(barX, barTop, barX + 3, barBottom, 0x40000000);
-            int thumbHeight = Math.max(20, viewportHeight * viewportHeight / (viewportHeight + maxScroll));
-            int thumbY = barTop + (viewportHeight - thumbHeight) * scrollOffset / maxScroll;
-            g.fill(barX, thumbY, barX + 3, thumbY + thumbHeight, 0xFFAA7F2A);
-        }
-
-        // Tooltip on the hovered label.
-        int labelXX = this.width / 2 - (LABEL_WIDTH + WIDGET_WIDTH + 12) / 2;
-        if (mouseX >= labelXX && mouseX < labelXX + LABEL_WIDTH
-                && mouseY >= viewportTop && mouseY < viewportTop + viewportHeight) {
-            int idx = (mouseY - viewportTop + scrollOffset) / (ROW_HEIGHT + ROW_PADDING);
-            if (idx >= 0 && idx < shown.size()) {
-                Entry e = shown.get(idx);
-                String comment = spec.getLevelComment(splitPath(e.path));
-                if (comment != null && !comment.isEmpty()) {
-                    g.renderTooltip(this.font, this.font.split(Component.literal(comment), 260), mouseX, mouseY);
-                }
+        if (viewport.contains(mouseX, mouseY)) {
+            int slot = (mouseY - viewport.y()) / layout.rowHeight;
+            if (slot >= 0 && slot < rows.size() && (layout.label(slot).contains(mouseX, mouseY)
+                    || rows.get(slot).isMouseOver(mouseX, mouseY))) {
+                Entry entry = rows.get(slot).entry;
+                String comment = spec.getLevelComment(List.of(entry.path.split("\\.")));
+                String tooltip = entry.path + (comment == null || comment.isBlank() ? "" : "\n" + comment);
+                if (!entry.validText) tooltip += "\nInvalid number; the last valid value will be saved.";
+                g.renderTooltip(font, font.split(Component.literal(tooltip), Math.max(40, Math.min(320, width - 24))), mouseX, mouseY);
             }
         }
     }
 
-    private static List<String> splitPath(String path) {
-        return List.of(path.split("\\."));
+    private void drawFitted(GuiGraphics g, String value, int x, int y, int width, int color) {
+        if (width <= 0) return;
+        String fitted = font.plainSubstrByWidth(value, width);
+        if (!fitted.equals(value) && font.width("…") <= width) {
+            fitted = font.plainSubstrByWidth(value, width - font.width("…")) + "…";
+        }
+        g.drawString(font, fitted, x, y, color, false);
     }
 
-    private static String shortLabel(String path) {
+    static String shortLabel(String path) {
         int dot = path.lastIndexOf('.');
         String tail = dot < 0 ? path : path.substring(dot + 1);
-        // Split camelCase: "coneFallbackEnabled" -> "Cone Fallback Enabled".
         StringBuilder out = new StringBuilder();
         for (int i = 0; i < tail.length(); i++) {
             char c = tail.charAt(i);
             if (i > 0 && Character.isUpperCase(c) && !Character.isUpperCase(tail.charAt(i - 1))) out.append(' ');
-            if (i == 0) out.append(Character.toUpperCase(c));
-            else out.append(c);
+            out.append(i == 0 ? Character.toUpperCase(c) : c);
         }
         return out.toString();
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        if (mouseY >= viewportTop && mouseY <= viewportTop + viewportHeight) {
-            scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) (delta * 20)));
-            layoutWidgets();
+        if (layout.viewport.contains(mouseX, mouseY) || layout.scrollbar.contains(mouseX, mouseY)) {
+            if (delta != 0) scrollTo(firstRow + (delta > 0 ? -1 : 1));
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
     @Override
-    public void onClose() {
-        // Save any pending edits.
-        for (Entry e : entries) e.commit();
-        spec.save();
-        this.minecraft.setScreen(parent);
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0 && layout.capacity() > 0 && layout.maxFirst(shown.size()) > 0
+                && layout.scrollbar.contains(mouseX, mouseY)) {
+            var thumb = layout.thumb(firstRow, shown.size());
+            thumbGrab = thumb.contains(mouseX, mouseY) ? mouseY - thumb.y() : thumb.height() / 2.0;
+            draggingScrollbar = true;
+            scrollTo(layout.firstAtThumb(mouseY - thumbGrab, shown.size()));
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
-    // ----- entry model -----
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (draggingScrollbar && button == 0) {
+            scrollTo(layout.firstAtThumb(mouseY - thumbGrab, shown.size()));
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (draggingScrollbar && button == 0) { draggingScrollbar = false; return true; }
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    @Override
+    public void onClose() {
+        for (Entry entry : entries) entry.commit();
+        spec.save();
+        minecraft.setScreen(parent);
+    }
 
     static final class Entry {
         final String path;
-        @SuppressWarnings("rawtypes")
-        final net.minecraftforge.common.ForgeConfigSpec.ConfigValue cfg;
+        @SuppressWarnings("rawtypes") final ForgeConfigSpec.ConfigValue cfg;
         Object value;
         Object pending;
+        String text;
+        int cursor;
+        boolean validText = true;
 
         @SuppressWarnings("rawtypes")
-        Entry(String path, net.minecraftforge.common.ForgeConfigSpec.ConfigValue cfg, Object value) {
+        Entry(String path, ForgeConfigSpec.ConfigValue cfg, Object value) {
             this.path = path;
             this.cfg = cfg;
             this.value = value;
-            this.pending = value;
+            pending = value;
+            text = ConfigTextCodec.format(value);
+            cursor = text.length();
+        }
+
+        void edit(String text) {
+            this.text = text; // Keep incomplete numeric input through resize/filtering.
+            Object parsed = ConfigTextCodec.parse(text, value);
+            validText = parsed != null;
+            if (validText) pending = parsed;
+        }
+
+        void activate() {
+            if (pending instanceof Boolean state) pending = !state;
+            else if (pending instanceof Enum<?> current) {
+                Object[] values = current.getDeclaringClass().getEnumConstants();
+                pending = values[(current.ordinal() + 1) % values.length];
+            }
+        }
+
+        String displayValue() {
+            return pending instanceof Boolean state ? (state ? "Enabled" : "Disabled") : String.valueOf(pending);
         }
 
         @SuppressWarnings("unchecked")
@@ -243,101 +448,71 @@ public final class SiegeOverhaulConfigScreen extends Screen {
         }
     }
 
-    // ----- row widgets -----
+    /** Focus/narration bridge; only fully visible rows are registered on Screen. */
+    static final class RowWidget extends AbstractWidget {
+        final Entry entry;
+        final AbstractWidget control;
+        final ConfigScreenLayout.Bounds viewport;
 
-    abstract static class RowWidget extends net.minecraft.client.gui.components.AbstractWidget {
-        protected final Entry entry;
-
-        RowWidget(Entry entry, int x, int y, int w, int h) {
-            super(x, y, w, h, Component.literal(entry.path));
+        RowWidget(Entry entry, AbstractWidget control, ConfigScreenLayout.Bounds viewport) {
+            super(control.getX(), control.getY(), control.getWidth(), control.getHeight(), Component.literal(entry.path));
             this.entry = entry;
+            this.control = control;
+            this.viewport = viewport;
         }
 
-        @Override
-        protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput out) {}
-    }
+        private boolean available() {
+            return visible && active && control.visible && control.active
+                    && getX() >= viewport.x() && getY() >= viewport.y()
+                    && getX() + width <= viewport.right() && getY() + height <= viewport.bottom();
+        }
 
-    static final class ToggleRow extends RowWidget {
-        boolean state;
-        ToggleRow(Entry entry, int x, int y, int w, int h, boolean initial) {
-            super(entry, x, y, w, h);
-            this.state = initial;
+        void captureCursor() {
+            if (control instanceof EditBox box) entry.cursor = box.getCursorPosition();
         }
-        @Override
-        public void onClick(double mouseX, double mouseY) {
-            state = !state;
-            entry.pending = state;
-        }
-        @Override
-        protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-            int fill = state ? 0xFF2E7D32 : 0xFF7B1F1F;
-            g.fill(this.getX(), this.getY(), this.getX() + this.width, this.getY() + this.height, fill);
-            g.fill(this.getX(), this.getY(), this.getX() + this.width, this.getY() + 1, 0xFF000000);
-            g.fill(this.getX(), this.getY() + this.height - 1, this.getX() + this.width, this.getY() + this.height, 0xFF000000);
-            String label = state ? "Enabled" : "Disabled";
-            g.drawCenteredString(net.minecraft.client.Minecraft.getInstance().font, label,
-                    this.getX() + this.width / 2, this.getY() + 7, 0xFFFFFF);
-        }
-    }
 
-    static final class EnumRow extends RowWidget {
-        @SuppressWarnings({"rawtypes", "unchecked"})
-        EnumRow(Entry entry, int x, int y, int w, int h) {
-            super(entry, x, y, w, h);
+        @Override public void setFocused(boolean focused) {
+            captureCursor();
+            super.setFocused(focused && available());
+            control.setFocused(focused && available());
         }
-        @Override
-        @SuppressWarnings({"rawtypes", "unchecked"})
-        public void onClick(double mouseX, double mouseY) {
-            Enum current = (Enum) entry.pending;
-            Object[] values = current.getDeclaringClass().getEnumConstants();
-            int next = (current.ordinal() + 1) % values.length;
-            entry.pending = values[next];
+        @Override public boolean isMouseOver(double x, double y) {
+            return available() && viewport.contains(x, y) && control.isMouseOver(x, y);
         }
-        @Override
-        protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-            g.fill(this.getX(), this.getY(), this.getX() + this.width, this.getY() + this.height, 0xFF3A3A55);
-            g.fill(this.getX(), this.getY(), this.getX() + this.width, this.getY() + 1, 0xFF000000);
-            g.fill(this.getX(), this.getY() + this.height - 1, this.getX() + this.width, this.getY() + this.height, 0xFF000000);
-            g.drawCenteredString(net.minecraft.client.Minecraft.getInstance().font,
-                    entry.pending.toString(), this.getX() + this.width / 2, this.getY() + 7, 0xFFFFFF);
+        @Override public boolean mouseClicked(double x, double y, int button) {
+            return isMouseOver(x, y) && control.mouseClicked(x, y, button);
         }
-    }
-
-    static final class TextRow extends RowWidget {
-        final EditBox box;
-        TextRow(net.minecraft.client.gui.Font font, Entry entry, int x, int y, int w, int h) {
-            super(entry, x, y, w, h);
-            this.box = new EditBox(font, x + 1, y + 2, w - 2, h - 4, Component.literal(entry.path));
-            String formatted = ConfigTextCodec.format(entry.pending);
-            this.box.setMaxLength(ConfigTextCodec.editorLimit(entry.value, formatted));
-            if (entry.value instanceof List<?>) {
-                this.box.setHint(Component.literal("comma-separated; blank = none"));
+        @Override public boolean mouseDragged(double x, double y, int button, double dx, double dy) {
+            return available() && isFocused() && viewport.contains(x, y) && control.mouseDragged(x, y, button, dx, dy);
+        }
+        @Override public boolean mouseReleased(double x, double y, int button) {
+            return available() && control.mouseReleased(x, y, button);
+        }
+        @Override public boolean keyPressed(int key, int scan, int mods) {
+            return available() && isFocused() && control.keyPressed(key, scan, mods);
+        }
+        @Override public boolean charTyped(char value, int mods) {
+            return available() && isFocused() && control.charTyped(value, mods);
+        }
+        @Override protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+            if (!available()) return;
+            if (isFocused()) {
+                g.fill(getX() - 1, getY() - 1, getX() + width + 1, getY(), CommandPalette.ACCENT_TEAL);
+                g.fill(getX() - 1, getY() + height, getX() + width + 1, getY() + height + 1, CommandPalette.ACCENT_TEAL);
+                g.fill(getX() - 1, getY(), getX(), getY() + height, CommandPalette.ACCENT_TEAL);
+                g.fill(getX() + width, getY(), getX() + width + 1, getY() + height, CommandPalette.ACCENT_TEAL);
             }
-            // Raise the limit before loading the value: EditBox otherwise
-            // truncates long existing lists to its vanilla default length.
-            this.box.setValue(formatted);
-            this.box.setResponder(v -> {
-                Object parsed = ConfigTextCodec.parse(v, entry.value);
-                if (parsed != null) entry.pending = parsed;
-            });
+            control.render(g, mouseX, mouseY, partialTick);
         }
-        @Override
-        protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-            this.box.setX(this.getX() + 1);
-            this.box.setY(this.getY() + 2);
-            this.box.render(g, mouseX, mouseY, partialTick);
-        }
-        @Override
-        public boolean mouseClicked(double mouseX, double mouseY, int button) {
-            boolean hit = this.box.mouseClicked(mouseX, mouseY, button);
-            this.box.setFocused(hit);
-            return hit;
-        }
-        @Override
-        public boolean charTyped(char c, int mods) { return this.box.charTyped(c, mods); }
-        @Override
-        public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-            return this.box.keyPressed(keyCode, scanCode, modifiers);
+        @Override protected void updateWidgetNarration(NarrationElementOutput out) {
+            if (!available()) return;
+            String value = control instanceof EditBox ? entry.text : entry.displayValue();
+            out.add(NarratedElementType.TITLE, Component.literal(entry.path + ": " + value));
+            out.add(NarratedElementType.USAGE, Component.literal(control instanceof EditBox
+                    ? "Type to edit. Tab moves to the next setting. Page Up and Page Down scroll settings."
+                    : "Press Enter or Space to change. Tab moves to the next setting. Page Up and Page Down scroll settings."));
+            if (!entry.validText) out.add(NarratedElementType.HINT,
+                    Component.literal("Invalid number. The last valid value will be saved on close."));
         }
     }
 }
