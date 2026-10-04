@@ -28,8 +28,9 @@ public final class CampTerrain {
     private CampTerrain() {}
 
     public record Change(BlockPos pos, BlockState before, BlockState after) {}
-    public record Plan(List<Change> changes, net.minecraft.core.Direction entrance) {
-        public Plan(List<Change> changes) { this(changes, null); }
+    public record Plan(List<Change> changes, net.minecraft.core.Direction entrance, boolean preservedSteepEdges) {
+        public Plan(List<Change> changes) { this(changes, null, false); }
+        public Plan(List<Change> changes, net.minecraft.core.Direction entrance) { this(changes, entrance, false); }
         public Plan { changes = List.copyOf(changes); }
     }
 
@@ -133,6 +134,7 @@ public final class CampTerrain {
         // Extend the fixed flat camp and actual untouched boundary with one-block slopes.
         // Independent ring clamps can leave two-block steps along a ring. Use all boundary
         // constraints instead, and leave unrelated steps BETWEEN untouched columns alone.
+        boolean incompatibleEdge = false;
         for (var entry : original.entrySet()) {
             BlockPos column = entry.getKey();
             int dx = Math.abs(column.getX() - center.getX());
@@ -146,8 +148,31 @@ public final class CampTerrain {
                 low = Math.max(low, edgeY - steps);
                 high = Math.min(high, edgeY + steps);
             }
-            if (low > high) return reject(rejected, Rejection.EDGE);
+            if (low > high) { incompatibleEdge = true; break; }
             heights.put(column, Math.max(low, Math.min(high, center.getY())));
+        }
+        if (incompatibleEdge) {
+            // A cliff wholly outside a flat camp must not require grading the entire
+            // surrounding landscape. Only the expanded fallback may retain existing
+            // outer slopes, and only with a continuous, three-wide way out.
+            if (!fallback) return reject(rejected, Rejection.EDGE);
+            Map<BlockPos, Integer> recovered = null;
+            var preferred = entrance;
+            for (var direction : new net.minecraft.core.Direction[]{preferred, preferred.getClockWise(),
+                    preferred.getCounterClockWise(), preferred.getOpposite()}) {
+                var exit = direction == entrance ? Optional.of(exitChanges)
+                        : prepareExit(level, center, radius + 1, direction, excluded);
+                if (exit.isEmpty()) continue;
+                var proposal = preserveOuterRelief(original, center, radius, direction);
+                if (proposal.isEmpty()) continue;
+                recovered = proposal.get();
+                entrance = direction;
+                exitChanges = exit.get();
+                break;
+            }
+            if (recovered == null) return reject(rejected, Rejection.EDGE);
+            heights.clear();
+            heights.putAll(recovered);
         }
         int canopyTop = columns.values().stream().filter(CampGround.Column::tree)
                 .mapToInt(c -> c.top()+2).max().orElse(Integer.MIN_VALUE);
@@ -192,7 +217,85 @@ public final class CampTerrain {
                 if (changes.size() > budget) return reject(rejected, Rejection.BUDGET);
             }
         }
-        return Optional.of(new Plan(changes, entrance));
+        return Optional.of(new Plan(changes, entrance, incompatibleEdge));
+    }
+
+    /**
+     * Preserve old remote cliffs rather than create new ones. Core, its first
+     * shoulder and the complete three-wide entrance remain one-block walkable.
+     * The remaining adjacent slopes may not exceed their original steepness.
+     * Three bounded distance transforms solve the fixed-height constraints and
+     * project the old terrain onto them. No world reads or mutations occur here.
+     */
+    private static Optional<Map<BlockPos, Integer>> preserveOuterRelief(Map<BlockPos, Integer> original,
+            BlockPos center, int radius, net.minecraft.core.Direction entrance) {
+        Map<BlockPos, Integer> upperSeeds = new HashMap<>(), lowerSeeds = new HashMap<>();
+        for (var entry : original.entrySet()) {
+            int ring = ring(center, entry.getKey());
+            if (ring <= CAMP_RADIUS || ring > radius) {
+                int height = ring <= CAMP_RADIUS ? center.getY() : entry.getValue();
+                upperSeeds.put(entry.getKey(), height);
+                lowerSeeds.put(entry.getKey(), -height);
+            }
+        }
+        var upper = reliefEnvelope(original, center, radius, entrance, upperSeeds);
+        var negativeLower = reliefEnvelope(original, center, radius, entrance, lowerSeeds);
+        for (BlockPos column : original.keySet())
+            if (-negativeLower.get(column) > upper.get(column)) return Optional.empty();
+        // Raw terrain need not be smooth in the required collar/entrance. Its
+        // lower envelope is slope-valid; clipping it between two slope-valid
+        // envelopes preserves every adjacent bound (unlike clipping raw heights).
+        var desired = reliefEnvelope(original, center, radius, entrance, original);
+        Map<BlockPos, Integer> result = new HashMap<>();
+        for (BlockPos column : original.keySet())
+            result.put(column, Math.max(-negativeLower.get(column),
+                    Math.min(upper.get(column), desired.get(column))));
+        return Optional.of(result);
+    }
+
+    private record ReliefStep(BlockPos column, int height) {}
+
+    /** Multi-source Dijkstra: minimum seed height plus non-negative edge costs. */
+    private static Map<BlockPos, Integer> reliefEnvelope(Map<BlockPos, Integer> original,
+            BlockPos center, int radius, net.minecraft.core.Direction entrance,
+            Map<BlockPos, Integer> seeds) {
+        Map<BlockPos, Integer> values = new HashMap<>(seeds);
+        PriorityQueue<ReliefStep> queue = new PriorityQueue<>(Comparator.comparingInt(ReliefStep::height));
+        seeds.forEach((column, height) -> queue.add(new ReliefStep(column, height)));
+        while (!queue.isEmpty()) {
+            ReliefStep next = queue.remove();
+            if (next.height() != values.get(next.column())) continue;
+            for (var direction : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+                BlockPos adjacent = next.column().relative(direction);
+                if (!original.containsKey(adjacent)) continue;
+                // Existing discontinuities between two untouched boundary cells
+                // are not part of the grading work, as in the strict solver.
+                if (ring(center, next.column()) > radius && ring(center, adjacent) > radius) continue;
+                boolean walkable = ring(center, next.column()) <= CAMP_RADIUS + 1
+                        || ring(center, adjacent) <= CAMP_RADIUS + 1
+                        || entranceColumn(center, next.column(), entrance)
+                        || entranceColumn(center, adjacent, entrance);
+                int cost = walkable ? 1 : Math.max(1,
+                        Math.abs(original.get(next.column()) - original.get(adjacent)));
+                int proposed = next.height() + cost;
+                if (proposed < values.getOrDefault(adjacent, Integer.MAX_VALUE)) {
+                    values.put(adjacent, proposed);
+                    queue.add(new ReliefStep(adjacent, proposed));
+                }
+            }
+        }
+        return values;
+    }
+
+    private static int ring(BlockPos center, BlockPos column) {
+        return Math.max(Math.abs(column.getX() - center.getX()), Math.abs(column.getZ() - center.getZ()));
+    }
+
+    private static boolean entranceColumn(BlockPos center, BlockPos column, net.minecraft.core.Direction entrance) {
+        int dx = column.getX() - center.getX(), dz = column.getZ() - center.getZ();
+        int forward = dx * entrance.getStepX() + dz * entrance.getStepZ();
+        int sideways = dx * entrance.getStepZ() - dz * entrance.getStepX();
+        return forward >= CAMP_RADIUS && Math.abs(sideways) <= 1;
     }
 
     /** A short supported, three-wide way out, never an island with no landing. */

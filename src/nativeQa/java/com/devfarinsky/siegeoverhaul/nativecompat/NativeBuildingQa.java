@@ -67,7 +67,7 @@ import java.util.concurrent.CompletableFuture;
 @Mod.EventBusSubscriber(modid = SiegeOverhaul.MOD_ID, value = Dist.CLIENT)
 public final class NativeBuildingQa {
     private static final boolean ENABLED = Boolean.getBoolean("siegeoverhaul.nativeQa")
-            && !java.util.Set.of("perimeter-completion", "territory-perimeter", "camp-spawn", "staged-perimeter", "staged-unload", "staged-handoff", "hud")
+            && !java.util.Set.of("perimeter-completion", "territory-perimeter", "camp-spawn", "camp-lifecycle", "staged-perimeter", "staged-unload", "staged-handoff", "hud")
                     .contains(System.getProperty("siegeoverhaul.nativeQa.mode", "baseline"));
     private static final String WORLD = "siege-native-qa-fixture";
     private static final BlockPos ORIGIN = new BlockPos(8, 65, 8);

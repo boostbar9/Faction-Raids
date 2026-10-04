@@ -1683,6 +1683,7 @@ public final class RaidEvents {
         }
         state.campSearchPos = null;
         state.campSearchTicks = 0;
+        state.campSearchRetryTicks = 0;
         state.campSearchAbandoned = true;
         state.campBuildAttempted = true;
         state.preparationTotalTicks = RaidConfig.PREPARATION_MINUTES.get() * 1200;
@@ -2122,19 +2123,27 @@ public final class RaidEvents {
                         "No natural camp site found in time. Scouts are checking ground for safe earthworks.")
                         .withStyle(ChatFormatting.GOLD), true);
                 data.setDirty();
+            } else if (scouting == com.devfarinsky.siegeoverhaul.camp.CampScouting.Result.RECOVERING) {
+                announce(server, teamKey, Component.literal(
+                        "Nearby camp sites could not be safely prepared. Scouts will regroup for one minute, then search farther away. Preparation stays paused.")
+                        .withStyle(ChatFormatting.GOLD), true);
+                FactionLogger.LOG.info("Camp search {}: starting bounded wider recovery; {}",
+                        teamKey, state.campSearchDiagnostics.summary());
+                data.setDirty();
             } else if (scouting == com.devfarinsky.siegeoverhaul.camp.CampScouting.Result.ABANDONED) {
                 announce(server, teamKey, Component.literal(
                         state.campSearchDiagnostics.summary()
                                 + " Raiders will attack without a fortified camp. Preparation starts now.")
                         .withStyle(ChatFormatting.GOLD), true);
-                FactionLogger.LOG.info("Camp search {} exhausted after {} candidates in final pass; running camp-less",
-                        teamKey, state.campSearchStep);
+                FactionLogger.LOG.info("Camp search {} exhausted after {} candidates in final pass (wider recovery={}); running camp-less",
+                        teamKey, state.campSearchStep, state.campSearchRecovery);
                 data.setDirty();
                 setRaidMobsFrozen(level, state, false);
                 return;
             }
-            com.devfarinsky.siegeoverhaul.camp.CampScouting.selectCandidate(state, point.pos(),
-                    candidate -> com.devfarinsky.siegeoverhaul.compat.CampClaims.canClaim(level, candidate));
+            if (scouting != com.devfarinsky.siegeoverhaul.camp.CampScouting.Result.WAITING)
+                com.devfarinsky.siegeoverhaul.camp.CampScouting.selectCandidate(state, point.pos(),
+                        candidate -> com.devfarinsky.siegeoverhaul.compat.CampClaims.canClaim(level, candidate));
             if(state.campSearchPos!=null) {
                 com.devfarinsky.siegeoverhaul.camp.CampLoading.keep(level,state.campSearchPos);
                 state.campSearchTicks+=20;
@@ -3438,25 +3447,28 @@ public final class RaidEvents {
                 com.devfarinsky.siegeoverhaul.camp.CampTerrain.Rejection.class);
         int cap = remote ? (state != null && state.campTerraformed ? 25 : 9) : 128;
         for (int attempt = 0; attempt < cap; attempt++) {
-            // First prefer the invasion approach, then search the surrounding ring for clear terrain.
-            double angle = approachAngle + (attempt < 32 ? (level.random.nextDouble() - 0.5D) * 0.5D
-                    : (attempt - 32) * 2.399963229728653);
-            int distance = attempt < 32 ? Math.max(min, max - level.random.nextInt(Math.max(1, Math.min(16, max - min + 1))))
-                    : Math.max(max, 128) + ((attempt - 32) / 24) * 32 + level.random.nextInt(16);
-            int x = anchor.getX() + Mth.floor(Math.cos(angle) * distance);
-            int z = anchor.getZ() + Mth.floor(Math.sin(angle) * distance);
+            int x, z;
             if (remote) {
                 BlockPos local = com.devfarinsky.siegeoverhaul.camp.CampLoading.localCandidate(
                         state.campSearchPos, attempt, state.campTerraformed);
                 x = local.getX(); z = local.getZ();
+            } else {
+                // Prefer the invasion approach, then search the already-loaded surrounding ring.
+                double angle = approachAngle + (attempt < 32 ? (level.random.nextDouble() - 0.5D) * 0.5D
+                        : (attempt - 32) * 2.399963229728653);
+                int distance = attempt < 32 ? Math.max(min, max - level.random.nextInt(Math.max(1, Math.min(16, max - min + 1))))
+                        : Math.max(max, 128) + ((attempt - 32) / 24) * 32 + level.random.nextInt(16);
+                x = anchor.getX() + Mth.floor(Math.cos(angle) * distance);
+                z = anchor.getZ() + Mth.floor(Math.sin(angle) * distance);
             }
             if (!level.hasChunk(x >> 4, z >> 4)) { rejChunk++; continue; }
             if (!excludedChunks.isEmpty()
                     && excludedChunks.contains(new net.minecraft.world.level.ChunkPos(x >> 4, z >> 4))) { rejExcluded++; continue; }
             BlockPos center = surfacePosition(level, x, z);
-            if (state != null && state.campTerraformed && RaidConfig.LEVEL_CAMP_TERRAIN.get()
-                    && RaidConfig.CLEANUP_WAR_CAMPS.get())
-                center = com.devfarinsky.siegeoverhaul.camp.CampTerrain.earthworksCenter(level, center, true);
+            boolean terraformFallback = state != null && state.campTerraformed;
+            boolean plannedEarthworks = RaidConfig.LEVEL_CAMP_TERRAIN.get() && RaidConfig.CLEANUP_WAR_CAMPS.get();
+            if (plannedEarthworks)
+                center = com.devfarinsky.siegeoverhaul.camp.CampTerrain.earthworksCenter(level, center, terraformFallback);
             if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.canClaim(level, center)
                     || com.devfarinsky.siegeoverhaul.compat.CampClaims.footprint(center).stream().anyMatch(excludedChunks::contains)) { rejClaim++; continue; }
             if (remote && RaidConfig.RESPECT_FOREIGN_CLAIMS.get() && anchorRecord!=null
@@ -3465,13 +3477,17 @@ public final class RaidEvents {
             // v4.36.0: on the terraforming fallback path, accept sites
             // that the paver can normalize (water, cliffs, small height
             // variance) instead of the strict natural-terrain check.
-            boolean terraformFallback = state != null && state.campTerraformed;
             if (terraformFallback) {
                 if (!com.devfarinsky.siegeoverhaul.camp.CampTerraforming.acceptableForTerraforming(
                         level, center, anchor, RaidConfig.LEVEL_CAMP_TERRAIN.get() && RaidConfig.CLEANUP_WAR_CAMPS.get()
                                 ? Math.max(RaidConfig.CAMP_TERRAFORM_MAX_DEPTH.get(), com.devfarinsky.siegeoverhaul.camp.CampTerrain.FALLBACK_MAX_CHANGE)
                                 : RaidConfig.CAMP_TERRAFORM_MAX_DEPTH.get())) { rejSurface++; continue; }
-            } else if (!validCampSurface(level, center, anchor)) { rejSurface++; continue; }
+            } else if (plannedEarthworks
+                    ? !level.getWorldBorder().isWithinBounds(center) || Math.abs(center.getY() - anchor.getY()) > 48
+                    : !validCampSurface(level, center, anchor)) { rejSurface++; continue; }
+            // The full immutable terrain plan is the authority when grading is enabled.
+            // The legacy +/-3 sampled-surface test rejected safe six-block cut/fill
+            // before that plan could run, including ordinary isolated soil mounds.
             // v2.16.1 - keep the palisade clear of the boat spawn. The
             // camp footprint is 19x19 (9 per side + gate); anything closer
             // than 24 blocks would put boats inside the fence.
@@ -3492,6 +3508,7 @@ public final class RaidEvents {
                     com.devfarinsky.siegeoverhaul.compat.CampClaims.cleanOrphans(level, RaidSavedData.get(level.getServer()));
                     rejTerrainApply++; continue;
                 }
+                state.campaign.putBoolean("CampGradePreservedEdges", terrain.get().preservedSteepEdges());
             } else if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.create(level, state, center)) { rejClaimCreate++; continue; }
             return center;
         }

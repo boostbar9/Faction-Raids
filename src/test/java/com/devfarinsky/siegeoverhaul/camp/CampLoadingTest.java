@@ -52,4 +52,21 @@ class CampLoadingTest extends MinecraftTestSupport {
         for(int i=0;i<9;i++)assertEquals(scout.offset((i%3-1)*6,0,(i/3-1)*6),CampLoading.localCandidate(scout,i,false));
     }
 
+    @Test void widerRecoveryIsDistinctBoundedAndReachesEveryRadiusBeforeSlowLoadsStarveIt() {
+        for (BlockPos core : List.of(new BlockPos(351,81,120),new BlockPos(-40,64,-83))) {
+            Set<ChunkPos> original = new HashSet<>(), recovery = new HashSet<>();
+            for(int i=0;i<200;i++) original.add(new ChunkPos(CampLoading.candidate(core,.8,i)));
+            for(int i=0;i<200;i++) {
+                BlockPos p=CampLoading.recoveryCandidate(core,.8,i);
+                double distance=Math.sqrt(p.distSqr(core));
+                assertTrue(distance>=592 && distance<=1008);
+                assertFalse(original.contains(new ChunkPos(p)),"Recovery repeats rejected nearby terrain");
+                assertTrue(recovery.add(new ChunkPos(p)),"Recovery repeats its own candidate");
+                assertEquals(8,Math.floorMod(p.getX(),16)); assertEquals(8,Math.floorMod(p.getZ(),16));
+                if(i<7) assertEquals(608+i*64,distance,16);
+            }
+            assertEquals(CampLoading.recoveryCandidate(core,.8,0),CampLoading.recoveryCandidate(core,.8,200));
+        }
+    }
+
 }

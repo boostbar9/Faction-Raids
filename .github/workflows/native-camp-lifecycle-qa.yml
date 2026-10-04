@@ -1,0 +1,91 @@
+name: Native Camp Lifecycle QA
+
+# Real bounded failures, actual cooldown reload and recovery-range camp through first waves.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-camp-lifecycle-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-camp-lifecycle:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       contains(github.event.pull_request.labels.*.name, 'native-camp-lifecycle-qa'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      LIBGL_ALWAYS_SOFTWARE: 'true'
+      GALLIUM_DRIVER: llvmpipe
+    steps:
+      - name: Check out exact integrated source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+      - name: Install virtual display and software OpenGL from Ubuntu
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y xvfb xauth mesa-utils libgl1-mesa-dri libglx-mesa0 libopenal1
+      - name: Prepare new isolated lifecycle directory
+        run: |
+          set -euo pipefail
+          test ! -e build/native-camp-lifecycle-qa/client
+          test ! -e build/native-camp-lifecycle-qa/evidence
+          python3 -B -m unittest discover -s scripts/tests -p 'test_prepare_native_client_defaults.py'
+          python3 -B -m unittest discover -s scripts/tests -p 'test_native_camp_lifecycle_contract.py'
+          python3 scripts/prepare-native-client-defaults.py --mode camp-lifecycle --smallships-version 2.0.0-b1.4
+          mkdir -p build/native-camp-lifecycle-qa/evidence
+          cp build/native-camp-lifecycle-qa/client/.native-smallships-defaults.json build/native-camp-lifecycle-qa/evidence/smallships-default-config-provenance.json
+          test ! -e build/native-camp-lifecycle-qa/client/config/siegeoverhaul-common.toml
+          printf '[playerRaids]\nallowedRaiderFactions = ["wilds_marauders"]\nsiegePreparationMinutes = 3\n' > build/native-camp-lifecycle-qa/client/config/siegeoverhaul-common.toml
+          printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:4\nsimulationDistance:5\nmaxFps:30\nvsync:false\n' > build/native-camp-lifecycle-qa/client/options.txt
+          git rev-parse HEAD > build/native-camp-lifecycle-qa/evidence/source-commit.txt
+          java -version 2> build/native-camp-lifecycle-qa/evidence/java-version.txt
+      - name: Run actual failed searches, persisted cooldown, recovery and first waves
+        run: |
+          set -euo pipefail
+          xvfb-run -a -s '-screen 0 1280x720x24' bash -c '
+            set -euo pipefail
+            glxinfo -B | tee build/native-camp-lifecycle-qa/evidence/opengl.txt
+            timeout --signal=TERM --kill-after=60s 45m ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=camp-lifecycle runClient 2>&1 | tee build/native-camp-lifecycle-qa/evidence/client-console.log
+          '
+      - name: Audit exact loaded companion bytecode
+        if: always()
+        run: python3 scripts/audit-native-inventory-bytecode.py build/native-camp-lifecycle-qa/evidence
+      - name: Verify complete lifecycle evidence contract
+        run: python3 scripts/verify-native-camp-lifecycle-evidence.py build/native-camp-lifecycle-qa/evidence
+      - name: Collect diagnostics without companion JARs or worlds
+        if: always()
+        run: |
+          mkdir -p build/native-camp-lifecycle-qa/evidence/logs
+          if [ -d build/native-camp-lifecycle-qa/client/logs ]; then
+            find build/native-camp-lifecycle-qa/client/logs -maxdepth 1 -type f -name '*.log' -exec cp {} build/native-camp-lifecycle-qa/evidence/logs/ \;
+          fi
+          if [ -d build/native-camp-lifecycle-qa/client/crash-reports ]; then
+            cp -R build/native-camp-lifecycle-qa/client/crash-reports build/native-camp-lifecycle-qa/evidence/
+          fi
+      - name: Upload actual framebuffers and diagnostic evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-camp-lifecycle-qa-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/native-camp-lifecycle-qa/evidence/
+          if-no-files-found: error
+          retention-days: 7

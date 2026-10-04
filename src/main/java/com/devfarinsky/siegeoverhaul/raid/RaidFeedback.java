@@ -25,8 +25,12 @@ public final class RaidFeedback {
                                boolean campsEnabled, boolean breachEnabled) {
         if (paused) return "Paused";
         if (state.coreCaptured) return "Reclaim core";
-        if (campsEnabled && state.campPos == null && !state.campSearchAbandoned)
+        if (campsEnabled && state.campPos == null && !state.campSearchAbandoned) {
+            if (state.campSearchRetryTicks > 0) return "Regrouping camp scouts";
+            if (state.campSearchRecovery) return state.campSearchPos == null
+                    ? "Searching farther for camp land" : "Waiting for farther camp terrain";
             return state.campSearchPos == null ? "Searching for camp land" : "Waiting for camp terrain";
+        }
         if (state.preparationTicks > 0)
             return preparation(state) + " • " + (state.preparationTicks + 1199) / 1200 + "m preparation left";
         if ("siege_core".equals(state.defensePointName) && state.wave > 0) return "Defend core";

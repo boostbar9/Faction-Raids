@@ -28,6 +28,17 @@ class RaidFeedbackTest extends MinecraftTestSupport {
         assertNull(state.campPos);
     }
 
+    @Test void regroupingAndWiderRecoveryNeverClaimThatPreparationHasStarted() {
+        var state = raid(); state.preparationTicks = 3600;
+        state.campSearchRecovery = true; state.campSearchRetryTicks = 1200;
+        assertEquals("Regrouping camp scouts", RaidFeedback.phase(state,false,true,true));
+        state.campSearchRetryTicks = 0;
+        assertEquals("Searching farther for camp land", RaidFeedback.phase(state,false,true,true));
+        state.campSearchPos = new BlockPos(608,64,8);
+        assertEquals("Waiting for farther camp terrain", RaidFeedback.phase(state,false,true,true));
+        assertEquals(3600,state.preparationTicks); assertFalse(state.campSearchAbandoned);
+    }
+
     @Test void abandonedSearchBecomesCamplessPreparationThenAnAssault() {
         var state = raid();
         state.campSearchAbandoned = true;

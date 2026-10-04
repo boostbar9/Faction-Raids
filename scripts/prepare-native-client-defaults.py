@@ -18,6 +18,7 @@ GAME_DIRECTORIES = {
     'perimeter-completion': 'build/native-perimeter-qa/client',
     'territory-perimeter': 'build/native-territory-qa/client',
     'camp-spawn': 'build/native-camp-qa/client',
+    'camp-lifecycle': 'build/native-camp-lifecycle-qa/client',
     'staged-perimeter': 'build/native-staged-qa/client',
     'staged-unload': 'build/native-unload-qa/client',
     'staged-handoff': 'build/native-handoff-qa/client',

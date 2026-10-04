@@ -1,5 +1,7 @@
 # Enemy-camp spawning: bounded rough-world coverage
 
+The 4.52.5 recovery changes and their current verification contract are documented in [camp-search-recovery.md](camp-search-recovery.md). The 4.52.0/4.52.1 audit and evidence below are historical; the single-fallback-pass description is superseded by that bounded wider-recovery design.
+
 Audit baseline: main `79609cb1499f87ab5c1f32d1d7316ce018e102c4`, tree `1d6ebcb1c85edcdd70943459e922117bf9a6eeec` (4.52.0). The next scoped change is the exposed-rock height proposal described below. This document distinguishes source constraints, unit fixtures and actual native gameplay evidence.
 
 ## Current production path and hard boundaries

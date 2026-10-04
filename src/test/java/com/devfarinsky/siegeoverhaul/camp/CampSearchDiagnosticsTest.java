@@ -21,6 +21,10 @@ class CampSearchDiagnosticsTest extends MinecraftTestSupport {
         var loaded = RaidSavedData.RaidState.load(state.save());
         loaded.campSearchDiagnostics.recordTerrain(CampTerrain.Rejection.NO_LAND_EXIT, 25);
         loaded.campSearchStep = CampScouting.MAX_CANDIDATES;
+        assertEquals(CampScouting.Result.RECOVERING, CampScouting.advance(null, loaded, true, 3600));
+        assertFalse(loaded.campSearchDiagnostics.exhausted());
+        for (int second = 0; second < 60; second++) CampScouting.advance(null, loaded, true, 3600);
+        loaded.campSearchStep = CampScouting.MAX_CANDIDATES;
         assertEquals(CampScouting.Result.ABANDONED, CampScouting.advance(null, loaded, true, 3600));
         String message = CampScouting.noCampStatus(loaded);
         assertEquals("No safe camp site found within the search limits. Observed blockers: "
@@ -35,6 +39,9 @@ class CampSearchDiagnosticsTest extends MinecraftTestSupport {
         var state = new RaidSavedData.RaidState("private-team", "private-core", 0);
         CampScouting.selectCandidate(state, new BlockPos(123456, 71, -987654), pos -> false);
         assertEquals(8, state.campSearchDiagnostics.save().getInt(CLAIM_SAFETY.name()));
+        state.campSearchStep = CampScouting.MAX_CANDIDATES;
+        CampScouting.advance(null, state, false, 3600);
+        for (int second = 0; second < 60; second++) CampScouting.advance(null, state, false, 3600);
         state.campSearchStep = CampScouting.MAX_CANDIDATES;
         CampScouting.advance(null, state, false, 3600);
         String message = CampScouting.noCampStatus(state);
