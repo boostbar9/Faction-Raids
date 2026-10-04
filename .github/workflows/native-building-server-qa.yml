@@ -84,6 +84,9 @@ jobs:
           assert console.count('SIEGE_NATIVE_SERVER_QA_COMPLETED tests=1 checks=8') == 1, console[-5000:]
           authority = data['inventoryAuthority']
           assert authority['ownerConnected'] is False, authority
+          assert authority['profileCacheSource'] == 'Explicit isolated GameProfileCache dependency; GameTest server cache remains absent', authority
+          assert 'cached UUID identity' in authority['productionEntryWithoutProfileCache'], authority
+          assert authority['profileRepositoryLookups'] == 0, authority
           assert authority['coreAnchorDiskRoundTrip'] == 'passed', authority
           assert authority['scoreboardDiskRoundTrip'] == 'passed', authority
           assert authority['nativeRosterMembersBeforeDisk'] == 1, authority

@@ -302,9 +302,10 @@ final class NativeBuildingGameplay {
                 if (!(owner.containerMenu instanceof CoreHireMenu menu)) return Action.NONE;
                 require(menu.stillValid(owner) && balance(owner) == 1100 && menu.bank() == 1100,
                         "Real core menu has wrong owner access or Treasury");
-                require(owner.getTeam() != null && fixture.factionId().equals(owner.getTeam().getName()),
+                require(owner.getTeam() instanceof net.minecraft.world.scores.PlayerTeam
+                                && fixture.factionId().equals(owner.getTeam().getName()),
                         "Real core menu owner has wrong faction identity");
-                coreHudFaction = owner.getTeam().getDisplayName().getString();
+                coreHudFaction = ((net.minecraft.world.scores.PlayerTeam) owner.getTeam()).getDisplayName().getString();
                 require(menu.factionName().equals(coreHudFaction), "Server core menu has wrong faction display");
                 coreHudMenuId = menu.containerId;
                 coreHudExpectedJobs = ConstructionReport.snapshot(owner);

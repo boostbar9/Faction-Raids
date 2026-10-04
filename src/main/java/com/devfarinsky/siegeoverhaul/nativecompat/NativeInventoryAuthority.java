@@ -11,6 +11,7 @@ import com.talhanation.recruits.FactionEvents;
 import com.talhanation.recruits.world.RecruitsFaction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.players.GameProfileCache;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
@@ -19,6 +20,7 @@ import net.minecraft.world.scores.Scoreboard;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Inventory authority for an already accepted protected job, not permission to build.
@@ -37,6 +39,17 @@ final class NativeInventoryAuthority {
 
     static String problem(ServerLevel level, Mob worker, UUID owner, String coreKey,
                           BlockPos corePos, Set<BlockPos> sources) {
+        return problem(level, worker, owner, coreKey, corePos, sources,
+                () -> level.getServer().getProfileCache());
+    }
+
+    /**
+     * Internal read dependency seam for the NO_SERVICES GameTest server. Every
+     * production caller uses the server-owned cache through the entry above.
+     * This never installs a cache or changes server authentication/services.
+     */
+    static String problem(ServerLevel level, Mob worker, UUID owner, String coreKey,
+                          BlockPos corePos, Set<BlockPos> sources, Supplier<GameProfileCache> profileCache) {
         if (level == null || worker == null || owner == null || corePos == null
                 || coreKey == null || !coreKey.startsWith("team:") || coreKey.length() <= 5
                 || coreKey.length() > 517 || sources == null || sources.size() > MAX_SOURCES)
@@ -51,7 +64,7 @@ final class NativeInventoryAuthority {
                 return "Paused: current inventory claim authority is unavailable";
             String factionId = coreKey.substring(5);
             var faction = FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
-            var profiles = level.getServer().getProfileCache();
+            var profiles = profileCache.get();
             // The UUID overload is a local cache read, not the name overload's network lookup.
             GameProfile profile = profiles == null ? null : profiles.get(owner).orElse(null);
             String membership = membershipProblem(faction, level.getScoreboard(), owner, factionId, profile);

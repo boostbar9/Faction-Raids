@@ -55,6 +55,7 @@ import java.util.UUID;
 public final class NativeBuildingServerGameTests {
     public static final String LIMITATION = "Physical dedicated distribution in Forge GameTestServer with real companion mods. "
             + "FakePlayer actors test direct server APIs only; real multiplayer connection/authentication remains unverified. "
+            + "Inventory authority policy cases inject an isolated real profile cache because GameTestServer supplies none. "
             + "Fixture initialization is not production commissioning, native AI construction, rendering, or a full server restart.";
     private static final List<String> CHECKS = new ArrayList<>();
     private static final Map<String, Object> REPORT = new LinkedHashMap<>();

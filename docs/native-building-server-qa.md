@@ -47,10 +47,15 @@ hashes, assertions, and limitations to `build/native-server-qa/evidence/result.j
 7. Direct handler calls with explicitly labeled Forge FakePlayer actors reject
    outsiders, distant owners, and spectators, while nearby owner show/hide/cancel
    preserves stock/ownership and retires the exact loaded native job reference.
-8. The full production inventory-authority helper accepts an offline owner absent
-   from both connected-player lists. Setup uses public native faction/claim APIs,
+8. The shared inventory-authority implementation accepts an offline owner absent
+   from both connected-player lists. The unchanged production entry must first
+   fail closed because supported GameTestServer deliberately has no profile cache.
+   The policy cases pass a real, isolated `GameProfileCache` to a package-private
+   dependency seam; its repository callback throws on any name/network lookup.
+   No server services, private fields or authentication settings are changed.
+   Setup uses public native faction/claim APIs,
    an actual Core block and `SiegeCore.placed`, a separate source-claim chunk, and
-   an explicit synthetic entry in this isolated server's local profile cache.
+   an explicit synthetic entry in that isolated dependency cache.
    Actual Core/anchor, scoreboard and native faction SavedData are flushed/read
    from disk. The pinned native faction SavedData drops its UUID member roster;
    this is asserted and reported, never represented as retained membership. Its
@@ -68,6 +73,8 @@ unloaded-source probe must stay unloaded. Restoring fixture membership directly
 is labeled separately from the real native offline-removal path, since native
 joining requires a connected player. A SavedData manager reload and disk-read
 scoreboard check are not a full server restart or profile-cache restart test.
+Valid production-server profile-cache retrieval requires separate integrated or
+connected-server coverage; injected-cache policy cases do not establish it.
 These added cases require a successful run on their exact source commit before
 being considered verified.
 
@@ -85,6 +92,8 @@ connection/authentication remains unverified. Fixture initialization is not
 production commissioning, native AI construction, rendering, or a full server
 restart. The entity round trip and actual SavedData disk flush/read are not a
 server-process restart. Client QA covers separate gameplay/rendering scenarios.
+Inventory-authority policy cases explicitly inject an isolated real profile cache,
+since GameTestServer has none; the unchanged production entry must fail closed.
 The actual native roster-loss assertion covers the pinned Recruits persistence
 format; it does not assert that the helper is authorized by a retained UUID roster.
 

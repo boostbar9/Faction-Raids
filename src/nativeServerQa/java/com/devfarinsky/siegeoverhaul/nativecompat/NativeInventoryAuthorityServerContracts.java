@@ -18,6 +18,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.players.GameProfileCache;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ChunkPos;
@@ -28,10 +29,12 @@ import net.minecraft.world.scores.ScoreboardSaveData;
 import net.minecraftforge.common.util.FakePlayer;
 
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** Direct native fixture setup in the isolated GameTest world, never a commissioning/AI test. */
 final class NativeInventoryAuthorityServerContracts {
@@ -51,9 +54,20 @@ final class NativeInventoryAuthorityServerContracts {
         require(level.getServer().getPlayerList().getPlayer(owner.getUUID()) == null
                         && level.getServer().getPlayerList().getPlayerCount() == 0 && !level.players().contains(owner),
                 "Authority owner must not be in either connected player list");
-        var profiles = level.getServer().getProfileCache();
-        require(profiles != null, "Actual local profile cache is unavailable");
-        // Synthetic identity entry in this disposable server's own cache, with no login or remote lookup.
+        require(level.getServer().getProfileCache() == null, "Expected supported GameTest NO_SERVICES profile cache");
+        Path directory = Path.of(System.getProperty("siegeoverhaul.nativeServerQa.directory")).toRealPath();
+        require(directory.equals(Path.of("").toRealPath())
+                        && directory.endsWith(Path.of("build", "native-server-qa", "server")),
+                "Unsafe isolated profile-cache fixture directory");
+        Path cacheFile = directory.resolve("inventory-authority-fixture-profiles.json");
+        require(!Files.exists(cacheFile), "Refusing to reuse inventory-authority fixture profiles");
+        AtomicInteger profileLookups = new AtomicInteger();
+        // GameTest intentionally supplies NO_SERVICES. Inject this real local cache only into
+        // the shared authority-policy seam; never change server services or authentication.
+        GameProfileCache profiles = new GameProfileCache((names, agent, callback) -> {
+            profileLookups.incrementAndGet();
+            throw new AssertionError("Inventory authority attempted a name/network profile lookup");
+        }, cacheFile.toFile());
         profiles.add(owner.getGameProfile());
 
         // Public native command-style setup. No faction menu, fee or authenticated packet is tested.
@@ -89,9 +103,14 @@ final class NativeInventoryAuthorityServerContracts {
         int stock = builder.getInventory().countItem(Items.COBBLESTONE);
         result.put("fixtureSetup", "Public native faction/claim APIs, direct Core block and SiegeCore.placed; no commissioning or AI");
         result.put("ownerConnected", false);
+        result.put("profileCacheSource", "Explicit isolated GameProfileCache dependency; GameTest server cache remains absent");
+        String productionProblem = NativeInventoryAuthority.problem(level, builder, owner.getUUID(), coreKey, corePos, sources);
+        require(productionProblem != null && productionProblem.contains("cached UUID identity"),
+                "Production entry did not fail closed with GameTest NO_SERVICES: " + productionProblem);
+        result.put("productionEntryWithoutProfileCache", productionProblem);
         Map<String, String> outcomes = new LinkedHashMap<>();
         result.put("outcomes", outcomes);
-        expect(level, builder, owner, coreKey, corePos, sources, null, "offline-native-owner-valid", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, null, "offline-native-owner-valid", outcomes);
 
         // Flush/read the actual anchor file, separately from native faction roster persistence.
         level.getDataStorage().save();
@@ -126,66 +145,69 @@ final class NativeInventoryAuthorityServerContracts {
         FactionEvents.recruitsFactionManager.load(level);
         faction = FactionEvents.recruitsFactionManager.getFactionByStringID(FACTION);
         require(faction != null && faction.getMembers().isEmpty(), "Native manager did not reload the lossy disk data");
-        expect(level, builder, owner, coreKey, corePos, sources, null, "native-manager-disk-reload-valid", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, null, "native-manager-disk-reload-valid", outcomes);
 
         FactionEvents.removeOfflinePlayerFromTeam(owner, owner.getScoreboardName(), level);
         require(level.getScoreboard().getPlayersTeam(owner.getScoreboardName()) == null,
                 "Public native offline removal did not remove current scoreboard membership");
-        expect(level, builder, owner, coreKey, corePos, sources, "scoreboard", "removed-native-member", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, "scoreboard", "removed-native-member", outcomes);
         // Explicit fixture restoration: the public native join command requires a connected player.
         faction.addMember(owner.getUUID(), owner.getScoreboardName());
         level.getScoreboard().addPlayerToTeam(owner.getScoreboardName(), level.getScoreboard().getPlayerTeam(FACTION));
         FactionEvents.addPlayerToData(level, FACTION, 1, owner.getScoreboardName());
-        expect(level, builder, owner, coreKey, corePos, sources, null, "membership-restored", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, null, "membership-restored", outcomes);
 
         faction.getMembers().get(0).setName("StaleSupplyName");
-        expect(level, builder, owner, coreKey, corePos, sources, "owner membership is ambiguous", "stale-native-roster-name", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, "owner membership is ambiguous", "stale-native-roster-name", outcomes);
         faction.getMembers().get(0).setName(owner.getScoreboardName());
-        expect(level, builder, owner, coreKey, corePos, sources, null, "native-roster-name-restored", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, null, "native-roster-name-restored", outcomes);
         faction.addMember(UUID.fromString("b108ee44-edf1-4b5f-99b9-871d2c38f9be"), owner.getScoreboardName());
-        expect(level, builder, owner, coreKey, corePos, sources, "conflicts with another native UUID", "conflicting-native-roster-uuid", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, "conflicts with another native UUID", "conflicting-native-roster-uuid", outcomes);
         faction.removeMember(owner.getScoreboardName());
         faction.addMember(owner.getUUID(), owner.getScoreboardName());
-        expect(level, builder, owner, coreKey, corePos, sources, null, "native-roster-uuid-restored", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, null, "native-roster-uuid-restored", outcomes);
         profiles.add(new GameProfile(owner.getUUID(), "StaleSupplyName"));
-        expect(level, builder, owner, coreKey, corePos, sources, "owner membership is ambiguous", "stale-cached-profile-name", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, "owner membership is ambiguous", "stale-cached-profile-name", outcomes);
         profiles.add(owner.getGameProfile());
-        expect(level, builder, owner, coreKey, corePos, sources, null, "identity-conflicts-restored", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, null, "identity-conflicts-restored", outcomes);
 
         var board = level.getScoreboard();
         board.addPlayerToTeam(owner.getScoreboardName(), board.getPlayerTeam(FOREIGN));
-        expect(level, builder, owner, coreKey, corePos, sources, "scoreboard", "scoreboard-transferred", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, "scoreboard", "scoreboard-transferred", outcomes);
         board.addPlayerToTeam(owner.getScoreboardName(), board.getPlayerTeam(FACTION));
-        expect(level, builder, owner, coreKey, corePos, sources, null, "scoreboard-restored", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, null, "scoreboard-restored", outcomes);
 
         builder.setOwnerUUID(java.util.Optional.of(outsider.getUUID()));
-        expect(level, builder, owner, coreKey, corePos, sources, "ownership", "worker-owner-transferred", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, "ownership", "worker-owner-transferred", outcomes);
         builder.setOwnerUUID(java.util.Optional.of(owner.getUUID()));
-        expect(level, builder, owner, coreKey, corePos, sources, null, "worker-owner-restored", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, null, "worker-owner-restored", outcomes);
 
         sourceClaim.setOwnerFaction(foreign);
         ClaimEvents.recruitsClaimManager.addOrUpdateClaim(level, sourceClaim);
         require(SiegeCore.point(level.getServer(), coreKey) != null, "Source transfer invalidated the separate original Core");
-        expect(level, builder, owner, coreKey, corePos, sources, "foreign claim", "foreign-source-claim", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, "foreign claim", "foreign-source-claim", outcomes);
         sourceClaim.setOwnerFaction(faction);
         ClaimEvents.recruitsClaimManager.addOrUpdateClaim(level, sourceClaim);
-        expect(level, builder, owner, coreKey, corePos, sources, null, "source-claim-restored", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, null, "source-claim-restored", outcomes);
 
         BlockPos unloaded = new BlockPos(20_000_016, corePos.getY(), 20_000_016);
         require(!level.hasChunkAt(unloaded), "Unloaded inventory source probe already loaded");
-        expect(level, builder, owner, coreKey, corePos, Set.of(unloaded), "loaded safe world", "unloaded-source-denied", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, Set.of(unloaded), "loaded safe world", "unloaded-source-denied", outcomes);
         require(!level.hasChunkAt(unloaded), "Inventory authority force-loaded the denied source");
 
         level.setBlock(corePos, Blocks.AIR.defaultBlockState(), 3);
-        expect(level, builder, owner, coreKey, corePos, sources, "original protected inventory core", "original-core-lost", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, "original protected inventory core", "original-core-lost", outcomes);
         level.setBlock(corePos, CoreBlocks.CORE.get().defaultBlockState(), 3);
         saved.siegeCores.put(coreKey, originalCore.copy());
-        expect(level, builder, owner, coreKey, corePos, sources, null, "original-core-restored", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, null, "original-core-restored", outcomes);
         saved.anchors.remove(coreKey);
-        expect(level, builder, owner, coreKey, corePos, sources, "original protected inventory core", "original-anchor-lost", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, "original protected inventory core", "original-anchor-lost", outcomes);
         saved.anchors.put(coreKey, originalAnchor);
         saved.setDirty();
-        expect(level, builder, owner, coreKey, corePos, sources, null, "valid-context-restored", outcomes);
+        expect(profiles, level, builder, owner, coreKey, corePos, sources, null, "valid-context-restored", outcomes);
+        require(profileLookups.get() == 0 && level.getServer().getProfileCache() == null,
+                "Authority fixture performed profile lookups or changed GameTest services");
+        result.put("profileRepositoryLookups", profileLookups.get());
         require(builder.getInventory().countItem(Items.COBBLESTONE) == stock
                         && owner.getUUID().equals(WorkersBridge.readWorkerOwner(builder))
                         && level.getServer().getPlayerList().getPlayer(owner.getUUID()) == null
@@ -206,9 +228,9 @@ final class NativeInventoryAuthorityServerContracts {
         return claim;
     }
 
-    private static void expect(ServerLevel level, BuilderEntity builder, FakePlayer owner, String key,
+    private static void expect(GameProfileCache profiles, ServerLevel level, BuilderEntity builder, FakePlayer owner, String key,
                                BlockPos core, Set<BlockPos> sources, String problem, String id, Map<String, String> outcomes) {
-        String actual = NativeInventoryAuthority.problem(level, builder, owner.getUUID(), key, core, sources);
+        String actual = NativeInventoryAuthority.problem(level, builder, owner.getUUID(), key, core, sources, () -> profiles);
         require(problem == null ? actual == null : actual != null && actual.startsWith("Paused:") && actual.contains(problem),
                 "Inventory authority " + id + " expected " + (problem == null ? "allow" : problem) + ", got " + actual);
         outcomes.put(id, actual == null ? "allowed" : actual);
