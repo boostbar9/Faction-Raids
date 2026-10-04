@@ -14,9 +14,14 @@ multiplayer players to coordinate matching client and server versions.
 After CurseForge accepts a release and its download is publicly available, update
 `updates.json` on main: add its changelog under `1.20.1` and set `1.20.1-latest` to
 the published version. Do not advertise a PR, CI-only build, or pending upload.
-Only add `1.20.1-recommended` for a stable release; the current release channel is beta.
-The initial entry is the confirmed 4.21.2 upload; advance it to the latest publicly
-verified release when shipping this feature. Do not bump the feed during builds.
+Set `1.20.1-recommended` only for a publicly verified Release-channel version that
+has been selected as recommended. Other published release channels may advance
+`1.20.1-latest` after public verification; this does not require future versions to
+use the Release channel. Do not bump the feed during builds.
+
+The current publicly verified recommended Release is **4.52.0**.
+The [4.52.0 release record](release-4.52.0.md) identifies its exact source, artifact,
+Release channel and public-verification evidence.
 
 Players must install a version containing this feature before chat notifications
 can appear; older installed JARs cannot be retroactively changed. Forge's global

@@ -73,17 +73,17 @@ Open each bag when ready. If your inventory fills, undelivered contents remain i
 
 Use the **Warlord's Codex** for concise siege guidance, status, and access to the native faction and claim interfaces.
 
-## Building System Candidate
+## Building System
 
-The unreleased 4.52.0 candidate brings perimeter review, six existing placeable plans and nearby construction into **Building**, with cleaner dark panels and source-based plan thumbnails. New automatic perimeters follow the full claimed boundary in the existing five-wide wall style, with an oak walkway, parapets and a hollow enclosed body. Shared internal claim edges stay open. Review is free; commissioning costs **one flat 64 faction Treasury emeralds for the whole territory**, plus separately supplied blocks. Manual Wall Section and Wall Corner plans also gain hollow bodies with retained end caps; their prices and other variants are unchanged.
+Version 4.52.0 brings perimeter review, six existing placeable plans and nearby construction into **Building**, with cleaner dark panels and source-based plan thumbnails. New automatic perimeters follow the full claimed boundary in the existing five-wide wall style, with an oak walkway, parapets and a hollow enclosed body. Shared internal claim edges stay open. Review is free; commissioning costs **one flat 64 faction Treasury emeralds for the whole territory**, plus separately supplied blocks. Manual Wall Section and Wall Corner plans also gain hollow bodies with retained end caps; their prices and other variants are unchanged.
 
 Already-paid jobs keep their saved geometry, supplies and payment. Old unpaid previews of changed geometry require fresh review. Cavities are protected clearance, never excavation targets. Builders only clear unchanged supported single-cell plants; player builds, containers, fluids and solid obstructions remain protected. Canceling leaves placed blocks intact and does not refund supplies or the commission.
 
-Protected construction and post-load inventory verification for previously protected builders require the audited **Workers 2.0.3 + Recruits 1.15.2** runtime. Other companion versions pause those jobs and reload checks; ordinary unmarked legacy native workers retain their existing behavior. Install the same Siege Overhaul build on server and every client; this candidate uses network protocol 19. Optional integrations remain optional, and these checks do not establish compatibility with every optional-mod combination or modpack.
+Protected construction and post-load inventory verification for previously protected builders require the audited **Workers 2.0.3 + Recruits 1.15.2** runtime. Other companion versions pause those jobs and reload checks; ordinary unmarked legacy native workers retain their existing behavior. Install the same Siege Overhaul build on server and every client; 4.52.0 uses network protocol 19. Optional integrations remain optional, and these checks do not establish compatibility with every optional-mod combination or modpack.
 
 Whole-territory projects use bounded native sections, one payment and durable progress. A complete plan must pass the initial loaded-terrain, permission, storage and size checks. Later unavailable sections pause; they are never silently omitted. Suitable paths and supplied native builder storage are still required.
 
-Real-client camp checks passed ordinary terrain and a controlled shallow-water/forest fallback with protected content unchanged. Some terrain cannot safely support a camp; bounded search reports the reason rather than promising universal placement. This verifies establishment, not complete decorative construction or every modpack. Representative real section handoff, canceled-project reload and completed-manual-wall reload checks passed. Publication is still pending.
+Real-client camp checks passed ordinary terrain and a controlled shallow-water/forest fallback with protected content unchanged. Some terrain cannot safely support a camp; bounded search reports the reason rather than promising universal placement. This verifies establishment, not complete decorative construction or every modpack. Representative real section handoff, canceled-project reload and completed-manual-wall reload checks passed.
 
 ## Victory and Restoration
 
@@ -162,7 +162,7 @@ The bank earns **1% interest per real 24-hour day** by default, configurable fro
 
 Core sieges continue through progressively stronger five-wave chapters. Reinforcements are staged under existing active-entity and performance caps. Every fifth cleared wave offers a 60-second clickable retreat vote to the faction's eligible online members. Each member gets one ballot; a strict majority accepts retreat. A tie or no majority continues the siege. Capturing the enemy core on its War Gate pad also ends the invasion: outnumber the defenders in the capture radius for the configured recapture duration. Camp restoration still runs afterward.
 
-Bank withdrawals, buffs, and voting are validated on the server. Matching server/client versions are required. The original 4.11.0 entry had automated-only validation. Current release coverage and its limits are recorded in the candidate notes and native QA reports.
+Bank withdrawals, buffs, and voting are validated on the server. Matching server/client versions are required. The original 4.11.0 entry had automated-only validation. Current release coverage and its limits are recorded in the [4.52.0 release notes](https://github.com/boostbar9/Faction-Raids/blob/main/docs/release-4.52.0.md) and native QA reports.
 
 
 ### Long-campaign reliability (4.11.2)
