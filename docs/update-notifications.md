@@ -19,8 +19,8 @@ has been selected as recommended. Other published release channels may advance
 `1.20.1-latest` after public verification; this does not require future versions to
 use the Release channel. Do not bump the feed during builds.
 
-The current publicly verified recommended Release is **4.52.0**.
-The [4.52.0 release record](release-4.52.0.md) identifies its exact source, artifact,
+The current publicly verified recommended Release is **4.52.2**.
+The [4.52.2 release record](release-4.52.2.md) identifies its exact source, artifact,
 Release channel and public-verification evidence.
 
 Players must install a version containing this feature before chat notifications

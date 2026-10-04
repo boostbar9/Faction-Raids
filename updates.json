@@ -19,10 +19,11 @@
     "4.28.6": "Catapults now spawn with Cobble Cluster Shot instead of raw cobblestone, so their AI actually fires.",
     "4.28.7": "Block player interaction with enemy siege camp storage and build areas.",
     "4.52.0": "Unified Building controls, flat 64-emerald automatic perimeters, hollow new walls, safer native construction/reload recovery, and camp-placement reliability. Back up worlds and update server and clients together; protected jobs require Workers 2.0.3 and Recruits 1.15.2.",
-    "4.52.1": "Fallback camp scouting can raise its ground plane over exposed natural rock without cutting it. Existing protection, exit and finite earthworks limits remain; some locations cannot support a safe camp. Back up worlds and update server and clients together."
+    "4.52.1": "Fallback camp scouting can raise its ground plane over exposed natural rock without cutting it. Existing protection, exit and finite earthworks limits remain; some locations cannot support a safe camp. Back up worlds and update server and clients together.",
+    "4.52.2": "Building previews identify nearby blocks that prevent a safe start. Perimeter messages report blocked coordinates and unloaded, wet or occupied ground; failed commissions show the known refusal reason. Existing protections remain. Back up worlds and update server and clients together."
   },
   "promos": {
-    "1.20.1-latest": "4.52.1",
-    "1.20.1-recommended": "4.52.1"
+    "1.20.1-latest": "4.52.2",
+    "1.20.1-recommended": "4.52.2"
   }
 }
