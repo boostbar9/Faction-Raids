@@ -5,6 +5,8 @@ import io
 import json
 from pathlib import Path
 import re
+import shutil
+import subprocess
 import struct
 import tempfile
 import unittest
@@ -55,6 +57,58 @@ class NativeHudSourceContracts(unittest.TestCase):
             self.assertNotIn(action, source)
         self.assertIn('click("No")', source)
         self.assertNotIn('click("Yes")', source)
+
+    def test_headless_hint_is_changed_only_after_isolation_and_before_awt_initialization(self):
+        source = HARNESS.read_text()
+        start = source.index('private static void initialize(Minecraft mc)')
+        keyboard_start = source.index('private static void initializeKeyboard(Minecraft mc)')
+        initialize = source[start:keyboard_start]
+        self.assertLess(initialize.index('REPORT.put("mode", "hud")'), initialize.index('initializeKeyboard(mc)'))
+        self.assertLess(initialize.index('REPORT.put("coverage"'), initialize.index('initializeKeyboard(mc)'))
+        self.assertLess(initialize.index('directory.toRealPath()'), initialize.index('initializeKeyboard(mc)'))
+        self.assertLess(initialize.index('REPORT.put("loadedModVersions"'), initialize.index('initializeKeyboard(mc)'))
+        keyboard = source[keyboard_start:source.index('private static void requestViewport', keyboard_start)]
+        self.assertIn('mc.screen instanceof TitleScreen && mc.level == null && mc.getSingleplayerServer() == null', keyboard)
+        self.assertIn('GLFW.GLFW_VISIBLE', keyboard)
+        self.assertIn('System.getenv("DISPLAY")', keyboard)
+        self.assertLess(keyboard.index('"ready", false'), keyboard.index('System.setProperty("java.awt.headless", "false")'))
+        self.assertLess(keyboard.index('System.setProperty("java.awt.headless", "false")'), keyboard.index('java.awt.GraphicsEnvironment.isHeadless()'))
+        self.assertLess(keyboard.index('require(!headless'), keyboard.index('new Robot()'))
+        self.assertLess(keyboard.index('new Robot()'), keyboard.index('"ready", true'))
+        self.assertIn('refusing to replace cached AWT state', keyboard)
+        self.assertNotIn('getDeclaredField', keyboard)
+        self.assertNotIn('setAccessible', keyboard)
+        self.assertNotIn('keyPressed(', keyboard)
+        self.assertEqual(source.count('System.setProperty("java.awt.headless"'), 1)
+
+    @unittest.skipUnless(shutil.which('java'), 'Java is required for the isolated AWT cache contract')
+    def test_awt_property_respects_cached_headless_state_in_separate_jvms(self):
+        # This proves the JVM property timing only; it does not open a display,
+        # construct Robot, deliver keys or stand in for native Minecraft QA.
+        source = r"""
+        public class HudHeadlessTiming {
+            public static void main(String[] args) {
+                System.setProperty("java.awt.headless", "true");
+                boolean cachedCase = args[0].equals("cached");
+                if (cachedCase && !java.awt.GraphicsEnvironment.isHeadless())
+                    throw new AssertionError("Initial headless state was not cached");
+                System.setProperty("java.awt.headless", "false");
+                boolean headless = java.awt.GraphicsEnvironment.isHeadless();
+                if (headless != cachedCase)
+                    throw new AssertionError("Headless cache changed or early property was ignored");
+                System.out.println("graphicsEnvironmentHeadless=" + headless);
+            }
+        }
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'HudHeadlessTiming.java'
+            path.write_text(source)
+            for mode, result in [('before', 'false'), ('cached', 'true')]:
+                with self.subTest(mode=mode):
+                    completed = subprocess.run([shutil.which('java'), str(path), mode],
+                                               text=True, capture_output=True, timeout=20)
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    self.assertIn('graphicsEnvironmentHeadless=' + result, completed.stdout)
 
     def test_workflow_read_only_and_bounded_online_then_offline(self):
         workflow = (REPO / '.github/workflows/native-hud-qa.yml').read_text()

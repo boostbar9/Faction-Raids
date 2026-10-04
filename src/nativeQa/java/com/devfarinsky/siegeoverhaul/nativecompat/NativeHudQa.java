@@ -649,6 +649,12 @@ public final class NativeHudQa {
     }
 
     private static void initialize(Minecraft mc) throws Exception {
+        // A startup failure must still identify its mode and fixture scope.
+        REPORT.put("mode", "hud"); REPORT.put("startedUtc", Instant.now().toString());
+        REPORT.put("coverage", "Actual Minecraft frames, fonts, sprites and production screen widgets in a fresh isolated world. Labeled client-menu and dashboard samples only; not server-generated transactions or reports.");
+        REPORT.put("notCovered", List.of("Paid actions or server authorization/payment/reward state", "Real faction claims, construction or native worker AI",
+                "Dedicated-server connection", "Resource-pack, shader, localization, screen-reader and physical GPU matrix",
+                "OS mouse routing: navigation uses actual Screen.mouseClicked hitboxes; keyboard uses native OS input"));
         String configured = System.getProperty("siegeoverhaul.nativeQa.directory", "");
         require(!configured.isBlank(), "Missing isolated HUD QA directory");
         directory = Path.of(configured).toAbsolutePath().normalize();
@@ -658,12 +664,6 @@ public final class NativeHudQa {
         require(!Files.exists(evidence.resolve("result.json")), "Refusing to overwrite existing HUD evidence");
         require(!mc.getWindow().isFullscreen(), "HUD QA requires its own windowed client");
         mc.options.pauseOnLostFocus = false; mc.options.renderDistance().set(4); mc.options.simulationDistance().set(5);
-        keyboard = new Robot(); keyboard.setAutoDelay(0);
-        REPORT.put("mode", "hud"); REPORT.put("startedUtc", Instant.now().toString());
-        REPORT.put("coverage", "Actual Minecraft frames, fonts, sprites and production screen widgets in a fresh isolated world. Labeled client-menu and dashboard samples only; not server-generated transactions or reports.");
-        REPORT.put("notCovered", List.of("Paid actions or server authorization/payment/reward state", "Real faction claims, construction or native worker AI",
-                "Dedicated-server connection", "Resource-pack, shader, localization, screen-reader and physical GPU matrix",
-                "OS mouse routing: navigation uses actual Screen.mouseClicked hitboxes; keyboard uses native OS input"));
         Map<String, String> mods = new LinkedHashMap<>(); Map<String, Object> artifacts = new LinkedHashMap<>();
         for (String id : List.of("minecraft", "forge", "siegeoverhaul", "workers", "recruits", "smallships", "siegeweapons")) {
             var container = ModList.get().getModContainerById(id);
@@ -682,6 +682,42 @@ public final class NativeHudQa {
         REPORT.put("openGlVendor", GL11.glGetString(GL11.GL_VENDOR)); REPORT.put("openGlRenderer", GL11.glGetString(GL11.GL_RENDERER));
         REPORT.put("openGlVersion", GL11.glGetString(GL11.GL_VERSION));
         check("All four pinned real companion mods loaded in isolated HUD runtime");
+        initializeKeyboard(mc);
+    }
+
+    private static void initializeKeyboard(Minecraft mc) throws Exception {
+        Map<String, Object> input = new LinkedHashMap<>();
+        REPORT.put("nativeKeyboard", input);
+        input.put("backend", "java.awt.Robot native platform input queue");
+        input.put("ready", false);
+        input.put("headlessPropertyBefore", System.getProperty("java.awt.headless", "<unset>"));
+        require(ENABLED && mc.screen instanceof TitleScreen && mc.level == null && mc.getSingleplayerServer() == null,
+                "Native HUD input must initialize in its isolated title screen, before world creation");
+        long window = mc.getWindow().getWindow();
+        require(window != 0 && GLFW.glfwGetWindowAttrib(window, GLFW.GLFW_VISIBLE) == GLFW.GLFW_TRUE
+                        && mc.getWindow().getWidth() > 0 && mc.getWindow().getHeight() > 0,
+                "Native HUD input requires its actual visible GLFW window");
+        String display = System.getenv("DISPLAY");
+        boolean linux = System.getProperty("os.name", "").startsWith("Linux");
+        input.put("xDisplayPresent", display != null && !display.isBlank());
+        require(!linux || display != null && !display.isBlank(), "Native HUD input requires the existing X display on Linux");
+
+        // Official Minecraft 1.20.1 client SHA1 0c3ec587af28e5a785c0b4a7b8a30f9a8f78f838:
+        // Main.<clinit> sets java.awt.headless=true before main constructs Minecraft.
+        // A JVM launch flag is therefore overwritten. Vanilla client startup uses
+        // GLFW; the server favicon's AWT image path is later than this title-screen
+        // setup. Reset this JVM-only hint BEFORE this fixture first queries AWT.
+        // GraphicsEnvironment lazily caches it on Java 17. If Forge/a companion
+        // already initialized AWT headless, the check below fails; never reflectively
+        // reset its cache, weaken permission checks, or substitute screen key calls.
+        System.setProperty("java.awt.headless", "false");
+        boolean headless = java.awt.GraphicsEnvironment.isHeadless();
+        input.put("headlessPropertyAfter", System.getProperty("java.awt.headless"));
+        input.put("graphicsEnvironmentHeadless", headless);
+        require(!headless, "AWT initialized headless before HUD setup; refusing to replace cached AWT state");
+        keyboard = new Robot(); keyboard.setAutoDelay(0);
+        input.put("ready", true);
+        check("Actual display-backed Robot initialized before world creation; native keyboard assertions remain required");
     }
 
     private static void requestViewport(int width, int height, int scale) {
