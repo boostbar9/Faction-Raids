@@ -224,13 +224,13 @@ class DefenseStructuresTest extends MinecraftTestSupport {
             bridge.when(() -> WorkersBridge.discardPlayerArea(area)).thenAnswer(call -> { area.discard(); return true; });
             bridge.when(() -> WorkersBridge.assignBuildAreaDirectly(builder, area)).thenReturn(accepts);
             bridge.when(() -> WorkersBridge.releasePlayerJob(builder, area)).thenReturn(true);
-            payment.when(() -> PaymentSource.consume(player, 300)).thenAnswer(call -> {
+            payment.when(() -> PaymentSource.consume(player, DefenseBlueprint.Kind.WATCHTOWER.price)).thenAnswer(call -> {
                 bridge.verify(() -> WorkersBridge.startBlueprint(eq(area), any()));
                 bridge.verify(() -> WorkersBridge.assignBuildAreaDirectly(builder, area));
                 return pays;
             });
             assertEquals(success, DefenseStructures.startJob(player, builder, tower(), DefenseBlueprint.Kind.WATCHTOWER));
-            payment.verify(() -> PaymentSource.consume(player, 300), accepts ? times(1) : never());
+            payment.verify(() -> PaymentSource.consume(player, DefenseBlueprint.Kind.WATCHTOWER.price), accepts ? times(1) : never());
             guard.verify(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.activate(area), success ? times(1) : never());
             if (!success) {
                 verify(area).discard();

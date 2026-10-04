@@ -599,6 +599,8 @@ public final class RaidSavedData extends SavedData {
          */
         public int defenderDeaths;
         public boolean rewardEligible = true;
+        public final com.devfarinsky.siegeoverhaul.core.WaveLootRewards waveLootRewards =
+                new com.devfarinsky.siegeoverhaul.core.WaveLootRewards();
         public int lastWarningSecond = Integer.MAX_VALUE;
         public final Set<UUID> raiders = new HashSet<>();
         public final Set<UUID> retreatedRaiders = new HashSet<>();
@@ -821,6 +823,7 @@ public final class RaidSavedData extends SavedData {
             tag.putInt("TotalEscaped", totalEscaped);
             tag.putInt("DefenderDeaths", defenderDeaths);
             tag.putBoolean("RewardEligible", rewardEligible);
+            tag.put("WaveLootRewards", waveLootRewards.save());
             ListTag ids = new ListTag();
             raiders.forEach(id -> ids.add(StringTag.valueOf(id.toString())));
             tag.put("Raiders", ids);
@@ -1000,6 +1003,7 @@ public final class RaidSavedData extends SavedData {
             state.defenderDeaths = tag.getInt("DefenderDeaths");
             state.rewardEligible = !tag.contains("RewardEligible", Tag.TAG_BYTE) ||
                     tag.getBoolean("RewardEligible");
+            state.waveLootRewards.load(tag.get("WaveLootRewards"), state.wave);
             ListTag ids = tag.getList("Raiders", Tag.TAG_STRING);
             for (int i = 0; i < ids.size(); i++) {
                 try {

@@ -65,7 +65,9 @@ world, account or authentication file is uploaded.
   retain real vanilla equipment sprites alongside the actual 3D characters.
 - Labeled sample Hired, unavailable, insufficient and affordable hire states;
   loading/empty construction reports; empty Treasury; civilian capacity; active
-  territory upgrades; first-click local loot confirmation and its navigation
+  territory upgrades and retained unavailable ownership; both unavailable upgrade
+  buttons remain disabled and are excluded from the active count at every scale;
+  first-click local loot confirmation and its navigation
   cancellation. The second, paid loot click is never performed.
 - Intel search focus via its visible hitbox, real OS E typing without closing the
   inventory, no-result and Clear states, wheel scrolling, per-section scroll

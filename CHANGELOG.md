@@ -1,3 +1,13 @@
+## 4.52.4 — Clearer emerald costs and earned rewards
+
+- Update the server and every client together. Network protocol 20 rejects older clients so the displayed prices and upgrade availability match the server. Saved worlds and accepted construction jobs remain compatible.
+- Reduce new manual construction commissions to 8 emeralds for a wall section or corner, 12 for stairs or an archer barricade, 32 for a watchtower and 48 for a gatehouse. The whole-perimeter fee stays 64. Builders, supplied materials and normal work time remain separate requirements.
+- Require a fresh review for older unpaid plan quotes. Accepted jobs keep their saved geometry, materials and payment, and existing server configuration is not rewritten.
+- Stop selling Fortified Walls and Watchtower territory upgrades while their advertised effects are unavailable. Previous ownership stays saved; these entries are clearly unavailable and no longer counted as active benefits. Provisioning and Iron Levy keep their current prices and behavior.
+- Award eligible cleared-wave loot before checkpoint retreat decisions, with a saved once-only receipt and retained random outcome. Practice raids with rewards disabled no longer award wave boxes or bonus barrel emeralds; barrel bonuses require a defending player.
+- Existing raids without a trustworthy loot receipt do not backfill their current wave’s box, avoiding duplicate rewards after an update; later waves use the new receipt.
+- Keep all other hiring, hero, civilian, loot, blessing, siege-crew and Treasury interest settings unchanged. This is a targeted consistency pass, not a claim that every economy style has been play-balanced.
+
 ## 4.52.3 — Clearer command screens and feedback
 
 - Keep live unit models and 3D building plans visible at more GUI sizes. Small Building screens page through the plans instead of replacing their previews with material icons.

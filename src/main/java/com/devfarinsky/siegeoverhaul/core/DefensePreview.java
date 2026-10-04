@@ -28,11 +28,15 @@ public final class DefensePreview {
         tag.putString("Dimension", dimension.toString()); tag.putUUID("Owner", owner);
         tag.putLong("Created", now); tag.putString("Problem", bounded(problem));
         tag.putString("Geometry", geometry(kind));
+        tag.putInt("QuotedPrice", kind.price);
         stack.getOrCreateTag().put(TAG, tag);
     }
     public static Selection read(ItemStack stack, DefenseBlueprint.Kind kind, ResourceLocation dimension, UUID owner, long now) {
         if (!stack.hasTag() || !stack.getTag().contains(TAG)) return null;
         CompoundTag tag = stack.getTag().getCompound(TAG);
+        // Only unpaid placement intent is repriced. A missing, stale or malformed quote
+        // must be reviewed again, with a fresh confirmation delay, before any charge.
+        if (!tag.contains("QuotedPrice", Tag.TAG_INT) || tag.getInt("QuotedPrice") != kind.price) return null;
         // Pre-version previews are safe only for variants whose geometry did not change.
         // Never replace their old reviewed shape in place and leave its confirmation delay satisfied.
         if (tag.contains("Geometry") ? !tag.contains("Geometry", Tag.TAG_STRING)

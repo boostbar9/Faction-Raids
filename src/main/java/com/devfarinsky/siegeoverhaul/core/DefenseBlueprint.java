@@ -10,15 +10,15 @@ import java.util.Map;
 /** Small, bounded full-block plans; stairs are walkable one-block steps, not special block states. */
 public final class DefenseBlueprint {
     public enum Kind {
-        BARRICADE("Archer Barricade", 7, 3, 3, 120,
+        BARRICADE("Archer Barricade", 7, 3, 3, 12,
                 "A low stone screen with a raised firing step."),
-        WATCHTOWER("Watchtower", 5, 9, 6, 300,
+        WATCHTOWER("Watchtower", 5, 9, 6, 32,
                 "An open firing deck with a broad stepped approach."),
-        GATEHOUSE("Gatehouse", 9, 9, 6, 450,
+        GATEHOUSE("Gatehouse", 9, 9, 6, 48,
                 "A raised fighting deck over an open three-block passage. No moving gate."),
-        WALL("Wall Section", 5, 5, 6, 90, "A raised wall walk with open ends. Snaps to a five-block grid."),
-        CORNER("Wall Corner", 5, 5, 6, 90, "Turns the wall walk right. Rotate to connect matching openings."),
-        STAIRS("Wall Stairs", 5, 5, 6, 100, "A stepped approach to the wall walk. The far end joins a wall.");
+        WALL("Wall Section", 5, 5, 6, 8, "A raised wall walk with open ends. Snaps to a five-block grid."),
+        CORNER("Wall Corner", 5, 5, 6, 8, "Turns the wall walk right. Rotate to connect matching openings."),
+        STAIRS("Wall Stairs", 5, 5, 6, 12, "A stepped approach to the wall walk. The far end joins a wall.");
 
         public final String label, description;
         public final int width, depth, height, price;

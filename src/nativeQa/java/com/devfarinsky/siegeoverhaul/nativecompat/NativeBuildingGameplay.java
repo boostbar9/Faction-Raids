@@ -246,7 +246,7 @@ final class NativeBuildingGameplay {
         result.put("stockSnapshots", List.copyOf(STOCK));
         result.put("assertions", List.copyOf(CHECKS));
         result.put("scope", "Fresh cheats-off integrated world; real survival player, real Recruits claims, production plan item packets and native worker AI. Fixture-only terrain/faction/core/stock setup.");
-        result.put("notCovered", List.of("Dedicated network server", "All shader/resource-pack combinations", "Offline owner with a separately connected second player", "Scan-work upper-bound performance", "Malicious custom client fuzzing", "Additional player-edit/restart combinations beyond the enumerated same-state case", "1024/1025 exact rendered geometry", "Competing active builder integration"));
+        result.put("notCovered", List.of("Dedicated network server", "All shader/resource-pack combinations", "Offline owner with a separately connected second player", "Scan-work upper-bound performance", "Malicious custom client fuzzing", "Additional player-edit/restart combinations beyond the enumerated same-state case", "1024/1025 exact rendered geometry", "Competing active builder integration", "Fought raid combat; economy uses explicitly seeded cleared-wave states", "Process crash between independent player/world SavedData writes"));
         return result;
     }
 
@@ -530,7 +530,8 @@ final class NativeBuildingGameplay {
                     resumeAt = now + 20; // Keep the original stage deadline; retries cannot extend it.
                     return Action.USE_BLOCK;
                 }
-                require(balance(owner) == 910, "Manual commissioning did not debit exactly 90 Treasury emeralds");
+                require(DefenseBlueprint.Kind.WALL.price == 8 && balance(owner) == 1000 - DefenseBlueprint.Kind.WALL.price
+                                && balance(owner) == 992, "Manual commissioning did not debit exactly 8 Treasury emeralds");
                 bankAfterManual = balance(owner); jobId = linkedJob(level);
                 require(NativeConstructionGuard.commissionPaid(area(level)) && owner.getMainHandItem().isEmpty(),
                         "Manual job was not paid/activated or plan remains");
@@ -553,7 +554,7 @@ final class NativeBuildingGameplay {
                         "Native paid recipe differs from the hollow solid-target-only contract");
                 RESULT.put("manualHollowGeometry", Map.of("targets", 83, "cobblestone", 58, "oakPlanks", 25,
                         "cavityCells", 27, "cavityReservedAtAcceptance", true, "airPlacementTargets", 0));
-                check("Actual manual plan confirmation consumes one plan and charges exactly 90 Treasury");
+                check("Actual manual plan confirmation consumes one plan and charges exactly 8 Treasury");
                 advance(now, 9, 20); return Action.USE_BLOCK;
             }
             case 9 -> {
@@ -733,7 +734,7 @@ final class NativeBuildingGameplay {
                 check("Native AI places the actual nine-cell central deck above 27 untouched AIR cavity cells and intact footing");
                 check("Native AI completes the exact manual template after resupply/restart with material conservation");
                 RESULT.put("completedManualBlocks", placed(level));
-                RESULT.put("manualTreasuryDebit", 90); RESULT.put("perimeterTreasuryDebit", 64);
+                RESULT.put("manualTreasuryDebit", DefenseBlueprint.Kind.WALL.price); RESULT.put("manualPaidTreasury", bankAfterManual); RESULT.put("perimeterTreasuryDebit", 64);
                 advance(now, 19, 30);
             }
             case 19 -> {
@@ -794,6 +795,12 @@ final class NativeBuildingGameplay {
                 advance(now, 21, 10); return Action.CAPTURE_COMPLETED;
             }
             case 21 -> {
+                NativeEconomyContracts.beforeReload(level, owner, fixture.corePos());
+                advance(now, 23, 0); return Action.RELOAD;
+            }
+            case 23 -> {
+                RESULT.put("economy", NativeEconomyContracts.afterReload(level, owner, fixture.corePos()));
+                check("Real Survival economy rejects unavailable buffs, retains ownership through disk reload and grants eligible checkpoint loot exactly once with actual inventory overflow");
                 RESULT.put("status", "passed"); return Action.DONE;
             }
             default -> throw new AssertionError("Unexpected gameplay stage " + stage);

@@ -53,6 +53,7 @@ jobs:
           test ! -e build/native-qa/client
           test ! -e build/native-qa/evidence
           python3 -B -m unittest discover -s scripts/tests -p 'test_prepare_native_client_defaults.py'
+          python3 -B -m unittest discover -s scripts/tests -p 'test_native_economy_qa.py'
           python3 scripts/prepare-native-client-defaults.py --mode baseline --smallships-version 2.0.0-b1.4
           mkdir -p build/native-qa/evidence
           cp build/native-qa/client/.native-smallships-defaults.json build/native-qa/evidence/smallships-default-config-provenance.json
@@ -135,6 +136,7 @@ jobs:
           assert data['loadedModVersions']['forge'] == '47.4.16', data
           print('Actual native-client fixture passed. See screenshots for visual review and result.json for exclusions.')
           PY
+          python3 scripts/verify-native-economy.py build/native-qa/evidence/result.json
 
       - name: Collect logs without redistributing companion JARs or worlds
         if: always()

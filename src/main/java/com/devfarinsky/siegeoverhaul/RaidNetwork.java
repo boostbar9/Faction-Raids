@@ -17,14 +17,15 @@ import java.util.function.Supplier;
 public final class RaidNetwork {
     // v4 introduced in 2.12.0: added threat breakdown, defense explainer,
     // discovered units/factions, and War Journal rows to DashboardSync.
-    // Bump whenever the wire format changes so mismatched builds refuse to connect
-    // instead of silently corrupting the dashboard payload.
-    private static final String PROTOCOL = "19";
+    // Bump for wire changes or client-visible purchase contracts. Protocol 20 also
+    // prevents older clients from showing obsolete manual prices or active unavailable upgrades.
+    private static final String PROTOCOL = "20";
+    static boolean acceptsProtocol(String version) { return PROTOCOL.equals(version); }
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(SiegeOverhaul.MOD_ID, "main"))
             .networkProtocolVersion(() -> PROTOCOL)
-            .clientAcceptedVersions(PROTOCOL::equals)
-            .serverAcceptedVersions(PROTOCOL::equals)
+            .clientAcceptedVersions(RaidNetwork::acceptsProtocol)
+            .serverAcceptedVersions(RaidNetwork::acceptsProtocol)
             .simpleChannel();
     private static int messageId;
 
