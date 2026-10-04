@@ -1,3 +1,10 @@
+## 4.52.2 — Actionable building checks
+
+- Perimeter reviews distinguish unloaded boundary terrain, fluids, protected ground and occupied build space, reporting the exact rejected block and full coordinates when available. Existing surface and structure protections remain unchanged.
+- Manual defense previews check the same nearby-block safety rule used during native builder admission, so a reactive or protected neighbor is identified before commissioning. This does not expand the native construction allowlist.
+- Failed manual commissions retain their known native safety refusal and commissioning stage in the player message and log. Unknown exceptions stay in the log; no payment, rollback, claim, inventory or placement rules change.
+- Adds focused regressions for negative-coordinate footing, clear grass with flowers, protected surfaces, unloaded terrain, preview/admission disagreement and unpaid handoff diagnostics. These diagnostics do not claim that every reported building failure has been resolved.
+
 ## 4.52.1 — Safe camp support on rough ground
 
 - Fallback camp scouting can raise its proposed ground plane over exposed raw-rock bumps inside the camp core instead of rejecting a median plane that would require quarrying. The rock remains untouched; all existing claim, structure, exit, relief, height and finite earthworks limits still apply.

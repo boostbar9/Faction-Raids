@@ -13,6 +13,12 @@ import java.util.Set;
 final class WallSurface {
     private WallSurface() {}
 
+    /** Carries the actual rejected column to the free review without changing placement rules. */
+    record Ground(BlockPos base, String problem) {
+        static Ground ready(BlockPos base) { return new Ground(base, null); }
+        static Ground blocked(String problem) { return new Ground(null, problem); }
+    }
+
     static BlockPos base(ServerLevel level, Set<ChunkPos> claim, BlockPos column) {
         BlockPos surface = ground(level, column);
         if (surface == null) return null;
@@ -68,21 +74,41 @@ final class WallSurface {
     }
 
     static BlockPos ground(ServerLevel level, BlockPos column) {
-        if (!level.hasChunkAt(column) || !level.getWorldBorder().isWithinBounds(column)) return null;
+        return inspectGround(level, column).base();
+    }
+
+    static Ground inspectGround(ServerLevel level, BlockPos column) {
+        String horizontal = "X " + column.getX() + ", Z " + column.getZ();
+        if (!level.hasChunkAt(column))
+            return Ground.blocked("Perimeter terrain is not loaded at " + horizontal + ". Load the whole boundary and review again; no payment taken.");
+        if (!level.getWorldBorder().isWithinBounds(column))
+            return Ground.blocked("The perimeter crosses the world border at " + horizontal + ". No payment taken.");
         int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.getX(), column.getZ());
         // Ignore canopy height, but never put jobs beneath preserved tree trunks.
         for (int i=0; i<16 && y>level.getMinBuildHeight(); i++,y--) {
             BlockPos below=column.atY(y-1);
             var support=level.getBlockState(below);
             if (support.is(BlockTags.LEAVES) || support.is(BlockTags.LOGS) || support.is(BlockTags.SAPLINGS)) continue;
-            if (y>=level.getMaxBuildHeight() || !naturalGround(support)
-                    || !support.isFaceSturdy(level,below,Direction.UP)
-                    || !support.getFluidState().isEmpty() || support.is(Blocks.WATER) || support.is(Blocks.LAVA)
+            if (y>=level.getMaxBuildHeight())
+                return Ground.blocked("The perimeter footing exceeds the build height at " + horizontal + ". No payment taken.");
+            if (!support.getFluidState().isEmpty() || support.is(Blocks.WATER) || support.is(Blocks.LAVA))
+                return Ground.blocked("Fluid blocks perimeter footing at " + describe(below, support) + ". Fluids are protected; no payment taken.");
+            if (!naturalGround(support))
+                return Ground.blocked("Perimeter footing is not natural ground at " + describe(below, support) + ". Existing structures are protected; no payment taken.");
+            if (!support.isFaceSturdy(level,below,Direction.UP)
                     || support.is(Blocks.MAGMA_BLOCK) || support.is(Blocks.CAMPFIRE)
-                    || support.is(Blocks.SOUL_CAMPFIRE) || support.is(Blocks.CACTUS)) return null;
+                    || support.is(Blocks.SOUL_CAMPFIRE) || support.is(Blocks.CACTUS))
+                return Ground.blocked("Perimeter footing is not a safe solid surface at " + describe(below, support) + ". No payment taken.");
             BlockPos feet=column.atY(y);
-            return TerritoryFortification.safeWallReplacement(level.getBlockState(feet)) ? feet : null;
+            var occupied = level.getBlockState(feet);
+            return TerritoryFortification.safeWallReplacement(occupied) ? Ground.ready(feet)
+                    : Ground.blocked("Perimeter build space is occupied at " + describe(feet, occupied)
+                    + ". Existing blocks are protected; no payment taken.");
         }
-        return null;
+        return Ground.blocked("No natural perimeter footing was found within the bounded surface check at " + horizontal + ". No payment taken.");
+    }
+
+    private static String describe(BlockPos pos, net.minecraft.world.level.block.state.BlockState state) {
+        return pos.toShortString() + " (" + net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(state.getBlock()) + ")";
     }
 }

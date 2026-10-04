@@ -130,9 +130,9 @@ public final class PerimeterConstruction {
             default -> PerimeterBlueprint.Palette.STONE_BRICKS;
         };
         var plan = PerimeterBlueprint.create(territory.chunks(), (x, z) -> {
-            BlockPos ground = WallSurface.ground(level, new BlockPos(x, core.getY(), z));
-            return ground == null ? PerimeterBlueprint.Surface.blocked("Dry, unoccupied natural footing is required at " + x + ", " + z + ".")
-                    : PerimeterBlueprint.Surface.ready(ground.getY());
+            WallSurface.Ground ground = WallSurface.inspectGround(level, new BlockPos(x, core.getY(), z));
+            return ground.base() == null ? PerimeterBlueprint.Surface.blocked(ground.problem())
+                    : PerimeterBlueprint.Surface.ready(ground.base().getY());
         }, palette, limits);
         String claimIdentity = key + ":" + nativeClaim.ownerFactionStringId() + ":"
                 + territory.chunks().stream().map(ChunkPos::toLong).sorted().toList();

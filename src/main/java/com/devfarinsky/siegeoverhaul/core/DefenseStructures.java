@@ -22,6 +22,19 @@ import java.util.function.Predicate;
 /** Server-side plan delivery, whole-site validation and native Workers commission. */
 public final class DefenseStructures {
     private static final String SITE_MIN = "SiegeDefenseSiteMin", SITE_MAX = "SiegeDefenseSiteMax";
+    private enum CommissionStage {
+        BLUEPRINT("blueprint preparation"), MARKER("build marker creation"),
+        REGISTRATION("build marker registration"), QUEUES("native blueprint setup"),
+        PROTECTION("site protection"), ASSIGNMENT("builder assignment"), PAYMENT("Treasury payment");
+        final String label;
+        CommissionStage(String label) { this.label = label; }
+    }
+    // Only these locally defined marker refusals may be copied from an exception to chat.
+    // Other exception messages can contain implementation details and remain server-log only.
+    private static final java.util.Set<String> MARKER_REFUSALS = java.util.Set.of(
+            "Move onto clear ground inside your claim near the build site; no accessible native marker position is available.",
+            "The complete plan is too far from an accessible native marker; use a smaller construction job.",
+            "Native marker entity is unavailable");
     private DefenseStructures() {}
 
     public static boolean givePlan(ServerPlayer player, int index) {
@@ -104,6 +117,9 @@ public final class DefenseStructures {
             if (!level.getEntities((Entity) null, new AABB(BlockPos.of(cell)), Entity::isAlive).isEmpty())
                 return "Move players, creatures and vehicles out of the planned blocks, then try again.";
         }
+        String neighborhood = com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.placementNeighborhoodProblem(
+                level, plan.blocks().keySet().stream().map(BlockPos::of).toList());
+        if (neighborhood != null) return neighborhood;
         String reservation = ConstructionReservations.problem(level, reservedCells(plan));
         if (reservation != null) return reservation;
         return null;
@@ -120,24 +136,35 @@ public final class DefenseStructures {
     static boolean startJob(ServerPlayer player, Mob builder, DefenseBlueprint.Plan plan, DefenseBlueprint.Kind kind) {
         Entity build = null;
         boolean committed = false;
+        CommissionStage stage = CommissionStage.BLUEPRINT;
+        String refusal = "";
         try {
             BlockPos min = plan.min(), max = plan.max();
             var blueprint = TerritoryFortification.blueprint(plan.blocks(), min, max);
+            stage = CommissionStage.MARKER;
             build = WorkersBridge.createProtectedPlayerArea(player, builder,
                     new BlockPos(max.getX(), min.getY(), min.getZ()), max.getX() - min.getX() + 1,
                     max.getZ() - min.getZ() + 1, max.getY() - min.getY() + 1, blueprint);
+            stage = CommissionStage.REGISTRATION;
             build.getPersistentData().putLong(SITE_MIN, min.asLong());
             build.getPersistentData().putLong(SITE_MAX, max.asLong());
             ConstructionReport.remember(build, kind.label, plan.blocks().size());
             PlayerFortificationJobs.link(builder, build, player.getUUID());
             if (!player.serverLevel().addFreshEntity(build)) throw new IllegalStateException("Build area rejected");
+            stage = CommissionStage.QUEUES;
             WorkersBridge.startBlueprint(build, blueprint);
-            if (!com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.protect(player, builder, build, reservedCells(plan)))
+            stage = CommissionStage.PROTECTION;
+            if (!com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.protect(player, builder, build, reservedCells(plan))) {
+                // Capture the guard's bounded, locally generated refusal before rollback removes its marker.
+                refusal = boundedRefusal(com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.status(build));
                 throw new IllegalStateException("The native job could not be safely protected");
+            }
+            stage = CommissionStage.ASSIGNMENT;
             WorkersBridge.enableWallProjection(build, plan.blocks().size());
             WorkersBridge.enablePlayerJob(builder, player.getUUID());
             WallBuilderAccess.install(builder);
             if (!WorkersBridge.assignBuildAreaDirectly(builder, build)) throw new IllegalStateException("Builder refused the plan");
+            stage = CommissionStage.PAYMENT;
             if (!PaymentSource.consume(player, kind.price)) throw new IllegalStateException("Treasury payment rejected");
             committed = true;
             com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.activate(build);
@@ -151,13 +178,26 @@ public final class DefenseStructures {
                 FactionLogger.LOG.warn("[SiegeOverhaul] Defense job started, but feedback failed", ex);
                 return true;
             }
+            if (stage == CommissionStage.MARKER && ex.getMessage() != null && MARKER_REFUSALS.contains(ex.getMessage()))
+                refusal = boundedRefusal(ex.getMessage());
+            // Preserve the original failure even if cleanup itself cannot finish.
+            FactionLogger.LOG.warn("[SiegeOverhaul] Defense commission failed during {} (refusal: {})",
+                    stage.label, refusal.isEmpty() ? "see exception" : refusal, ex);
             if (build != null && WorkersBridge.releasePlayerJob(builder, build)) {
                 PlayerFortificationJobs.unlink(builder, build.getUUID());
                 WorkersBridge.discardPlayerArea(build);
             }
-            FactionLogger.LOG.warn("[SiegeOverhaul] Defense commission failed", ex);
-            return fail(player, "The builder could not start this defense. No payment was taken; your plan is kept.");
+            String detail = refusal.isEmpty() ? "See the server log for details. "
+                    : refusal + (refusal.endsWith(".") ? " " : ". ");
+            return fail(player, "The builder could not start this defense (" + stage.label + "). " + detail
+                    + "No payment was taken; your plan is kept.");
         }
+    }
+
+    private static String boundedRefusal(String reason) {
+        if (reason == null) return "";
+        String singleLine = reason.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').trim();
+        return singleLine.substring(0, Math.min(160, singleLine.length()));
     }
 
     private static boolean fail(ServerPlayer player, String message) {

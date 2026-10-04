@@ -207,6 +207,8 @@ public final class NativeConstructionGuard {
             pause(area, "Paused: commission not completed");
             return true;
         } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            com.devfarinsky.siegeoverhaul.FactionLogger.LOG.warn(
+                    "[SiegeOverhaul] Native construction admission failed before payment", unavailable);
             return pause(area, "Paused: native construction protection is unavailable");
         }
     }
@@ -712,6 +714,15 @@ public final class NativeConstructionGuard {
         return null;
     }
 
+    /** Read-only preview of the same neighboring-block gate that still runs at native admission/placement. */
+    public static String placementNeighborhoodProblem(ServerLevel level, Collection<BlockPos> targets) {
+        for (BlockPos target : targets) {
+            String problem = neighborhoodProblem(level, target);
+            if (problem != null) return problem;
+        }
+        return null;
+    }
+
     static String neighborhoodProblem(ServerLevel level, BlockPos target) {
         // Conductors can query a second neighbor ring while resolving power.
         // Validate that bounded envelope before any state/signal read.
@@ -724,8 +735,12 @@ public final class NativeConstructionGuard {
             neighbors.add(pos);
         }
         for (BlockPos neighbor : neighbors) {
-            if (!stableNeighbor(level.getBlockState(neighbor)) || level.getBlockEntity(neighbor) != null)
-                return "Paused: a reactive or protected neighboring block needs manual review";
+            BlockState state = level.getBlockState(neighbor);
+            if (!stableNeighbor(state) || level.getBlockEntity(neighbor) != null) {
+                String block = state == null ? "unreadable block"
+                        : net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
+                return "Paused: neighboring " + block + " at " + neighbor.toShortString() + " needs manual review";
+            }
         }
         if (level.hasNeighborSignal(target)) return "Paused: powered construction sites need manual review";
         return null;
