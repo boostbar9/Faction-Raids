@@ -1,0 +1,522 @@
+# One-use exact-artifact publisher; do not merge this workflow into main.
+# Five deliberately invalid pins must be filled only after independent remote checks.
+# No checkout, rebuild, release tag, GitHub Release or updates.json mutation.
+name: Publish tested 4.52.0 release to CurseForge
+
+on:
+  push:
+    branches: [publish/curseforge-v4.52.0]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: curseforge-1364352-v4.52.0
+  cancel-in-progress: false
+
+env:
+  REVIEWED_SOURCE_SHA: '9d7e1e3205ab3821bb022d1d85d44363f621aafe'
+  MERGED_SOURCE_SHA: '53b805b7590443148a4e3bd7713dec7890af7b2b'
+  SOURCE_TREE_SHA: 'ca6dbed762bc7269185028886ddbdac1825b4501'
+  BUILD_RUN_ID: '37209549373'
+  ARTIFACT_SHA256: 'b4a77cd802dceb6ff0041a80f5e862abd6a777a2e659a3f9b08108fb9b529760'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prevent duplicate release uploads
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          """One-use upload guard. GitHub reads only; no CurseForge credentials."""
+          import json
+          import os
+          import urllib.parse
+          import urllib.request
+
+
+          def get(path):
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+
+
+          def pages(path, key, params=None):
+              seen = 0
+              total = None
+              for page in range(1, 11):
+                  query = urllib.parse.urlencode(dict(params or {}, per_page=100, page=page))
+                  response = get(path + '?' + query)
+                  if (not isinstance(response, dict) or not isinstance(response.get(key), list)
+                          or type(response.get('total_count')) is not int):
+                      raise RuntimeError('Missing or malformed history metadata; inspect before publishing.')
+                  if total is None:
+                      total = response['total_count']
+                  elif total != response['total_count']:
+                      raise RuntimeError('History changed during inspection; inspect before publishing.')
+                  items = response[key]
+                  seen += len(items)
+                  yield from items
+                  if len(items) < 100:
+                      if seen != total:
+                          raise RuntimeError('Incomplete history returned; inspect before publishing.')
+                      return
+              raise RuntimeError('History exceeded the bounded scan; inspect before publishing.')
+
+
+          def classify(step):
+              """Success means accepted; skipped/definitely unstarted means no attempt."""
+              if step.get('conclusion') == 'success':
+                  return 'accepted'
+              if step.get('conclusion') == 'skipped':
+                  return 'not_started'
+              if (step.get('status') in ('queued', 'pending')
+                      and not step.get('started_at') and not step.get('completed_at')
+                      and step.get('conclusion') is None):
+                  return 'not_started'
+              # Failed/canceled/timed-out, in-progress, or incomplete/unknown metadata
+              # cannot prove that CurseForge did not accept a request.
+              return 'ambiguous'
+
+
+          def definitely_unstarted(item):
+              return (item.get('conclusion') == 'skipped'
+                      or (item.get('status') in ('queued', 'pending')
+                          and not item.get('started_at') and not item.get('run_started_at')
+                          and not item.get('completed_at') and item.get('conclusion') is None))
+
+
+          def classify_job(job):
+              if not isinstance(job, dict):
+                  return 'ambiguous'
+              steps = job.get('steps')
+              if not isinstance(steps, list) or any(not isinstance(step, dict) for step in steps):
+                  return 'not_started' if definitely_unstarted(job) else 'ambiguous'
+              uploads = [step for step in steps if step.get('name') == 'Publish to CurseForge']
+              if len(uploads) != 1:
+                  return 'not_started' if not uploads and definitely_unstarted(job) else 'ambiguous'
+              return classify(uploads[0])
+
+
+          def main():
+              current = int(os.environ['GITHUB_RUN_ID'])
+              current_attempt = int(os.environ.get('GITHUB_RUN_ATTEMPT', '1'))
+              accepted = []
+              ambiguous = []
+              runs = list(pages('actions/workflows/publish-curseforge-v4.52.0.yml/runs', 'workflow_runs', {
+                  'branch': 'publish/curseforge-v4.52.0', 'event': 'push'}))
+              # The running attempt may not yet appear in list results. Always inspect
+              # its prior attempts explicitly, and every attempt of earlier runs.
+              inspect = {(current, attempt): None for attempt in range(1, current_attempt)}
+              for run in runs:
+                  if (not isinstance(run, dict) or type(run.get('id')) is not int
+                          or type(run.get('run_attempt')) is not int or run['run_attempt'] < 1):
+                      raise RuntimeError('Incomplete run identity/attempt history; inspect before publishing.')
+                  if run['id'] == current:
+                      continue
+                  if run.get('path', '').split('@', 1)[0] != '.github/workflows/publish-curseforge-v4.52.0.yml':
+                      raise RuntimeError('Unexpected or missing publisher workflow identity; inspect before publishing.')
+                  inspect.update({(run['id'], attempt): run
+                                  for attempt in range(1, run['run_attempt'] + 1)})
+              for run_id, attempt in sorted(inspect):
+                  jobs = list(pages(f'actions/runs/{run_id}/attempts/{attempt}/jobs', 'jobs'))
+                  run_metadata = inspect[(run_id, attempt)]
+                  if not jobs and not (run_metadata and attempt == run_metadata['run_attempt']
+                                       and definitely_unstarted(run_metadata)):
+                      ambiguous.append({'run': run_id, 'attempt': attempt, 'reason': 'No job history returned'})
+                  for job in jobs:
+                      state = classify_job(job)
+                      evidence = {'run': run_id, 'attempt': attempt,
+                                  'job': job.get('id') if isinstance(job, dict) else None,
+                                  'state': state}
+                      if state == 'accepted':
+                          accepted.append(evidence)
+                      elif state == 'ambiguous':
+                          ambiguous.append(evidence)
+              if accepted:
+                  publish = False
+                  print('Prior successful upload found; skipping duplicate:', json.dumps(accepted))
+                  print('Inspect its receipt and CurseForge public status separately.')
+              elif ambiguous:
+                  raise RuntimeError('An earlier upload may have been accepted. Inspect its logs, '
+                                     'receipt and existing CurseForge files before any retry; '
+                                     'there is no override flag. Evidence: ' + json.dumps(ambiguous))
+              else:
+                  publish = True
+                  print('No prior successful or ambiguous upload attempt; publishing once.')
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                  output.write('publish=' + str(publish).lower() + '\n')
+
+
+          if __name__ == '__main__':
+              main()
+          CHECK
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Verify successful tested build and identical merged tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          """Bind the exact merged Build, PR, current main and source tree."""
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import urllib.request
+
+
+          def get(path):
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+
+
+          def main():
+              reviewed_sha = os.environ['REVIEWED_SOURCE_SHA']
+              merged_sha = os.environ['MERGED_SOURCE_SHA']
+              source_tree = os.environ['SOURCE_TREE_SHA']
+              build_run = os.environ['BUILD_RUN_ID']
+              for value in (reviewed_sha, merged_sha, source_tree):
+                  assert re.fullmatch(r'[0-9a-f]{40}', value), 'Unfilled or invalid source pin'
+              assert re.fullmatch(r'[1-9][0-9]*', build_run), 'Unfilled or invalid Build run'
+              assert re.fullmatch(r'[0-9a-f]{64}', os.environ['ARTIFACT_SHA256']), 'Unfilled JAR digest'
+              assert os.environ['GITHUB_REPOSITORY'] == 'boostbar9/Faction-Raids'
+              run = get('actions/runs/' + build_run)
+              assert run['id'] == int(build_run)
+              assert run['status'] == 'completed' and run['conclusion'] == 'success'
+              assert run['event'] == 'push' and run['head_branch'] == 'main'
+              assert run['head_sha'] == merged_sha
+              assert run['name'] == 'Build' and run['path'] == '.github/workflows/build.yml'
+              assert run['repository']['full_name'] == 'boostbar9/Faction-Raids'
+              assert run['head_repository']['full_name'] == 'boostbar9/Faction-Raids'
+              workflow = get('actions/workflows/' + str(run['workflow_id']))
+              assert workflow['path'] == '.github/workflows/build.yml'
+              pr = get('pulls/255')
+              assert pr['merged'] and pr['merge_commit_sha'] == merged_sha
+              assert pr['head']['sha'] == reviewed_sha
+              assert pr['base']['ref'] == 'main'
+              assert pr['base']['repo']['full_name'] == 'boostbar9/Faction-Raids'
+              assert pr['head']['repo']['full_name'] == 'boostbar9/Faction-Raids'
+              main_sha = get('branches/main')['commit']['sha']
+              assert main_sha == merged_sha, 'Main advanced; reconcile explicitly before upload'
+              for sha in (reviewed_sha, merged_sha, run['head_sha'], main_sha):
+                  assert get('git/commits/' + sha)['tree']['sha'] == source_tree
+              tree = get('git/trees/' + source_tree + '?recursive=1')
+              assert tree['sha'] == source_tree and not tree['truncated']
+              paths = [entry['path'] for entry in tree['tree'] if entry['type'] == 'blob']
+              source_roots = sorted(path[len('src/main/java/'):-len('.java')]
+                                    for path in paths
+                                    if path.startswith('src/main/java/') and path.endswith('.java'))
+              assert source_roots and len(source_roots) == len(set(source_roots))
+              excluded_roots = sorted(path.split('/java/', 1)[1][:-len('.java')]
+                                      for path in paths
+                                      if path.startswith(('src/test/java/', 'src/nativeQa/java/', 'src/nativeServerQa/java/'))
+                                      and path.endswith('.java'))
+              assert not set(source_roots).intersection(excluded_roots)
+              artifacts = get('actions/runs/' + build_run + '/artifacts?per_page=100')
+              assert artifacts['total_count'] == len(artifacts['artifacts']), 'Artifact list truncated'
+              selected = {}
+              for name in ('Faction-Raids-Forge-1.20.1', 'regression-test-results'):
+                  matches = [item for item in artifacts['artifacts'] if item['name'] == name]
+                  assert len(matches) == 1, name
+                  item = matches[0]
+                  assert not item['expired'] and item['size_in_bytes'] > 0
+                  assert item['workflow_run']['id'] == int(build_run)
+                  assert item['workflow_run']['head_sha'] == merged_sha
+                  assert item['workflow_run']['head_branch'] == 'main'
+                  selected[name] = item['id']
+              manifest = {
+                  'reviewed_source': reviewed_sha, 'merged_source': merged_sha,
+                  'source_tree': source_tree, 'build_run': int(build_run),
+                  'build_attempt': run['run_attempt'], 'artifacts': selected,
+                  'production_class_roots': source_roots, 'excluded_class_roots': excluded_roots,
+              }
+              Path('verified-source.json').write_text(json.dumps(manifest, sort_keys=True, indent=2) + '\n')
+              print('Verified PR255, successful merged-main Build, unchanged current main and source tree.')
+              print('Artifact IDs:', json.dumps(selected, sort_keys=True))
+
+
+          if __name__ == '__main__':
+              main()
+          CHECK
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download exact tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: Faction-Raids-Forge-1.20.1
+          run-id: ${{ env.BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: dist
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download regression results
+        uses: actions/download-artifact@v4
+        with:
+          name: regression-test-results
+          run-id: ${{ env.BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: regression
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Verify tested bytes, metadata, dependencies, and regressions
+        run: |
+          python3 - <<'CHECK'
+          """Verify exact JAR bytes and the complete recorded regression suite set."""
+          from pathlib import Path
+          import hashlib
+          import json
+          import os
+          import tomllib
+          import xml.etree.ElementTree as ET
+          import zipfile
+
+
+          def main():
+              jar = Path('dist/siegeoverhaul-4.52.0.jar')
+              assert sorted(Path('dist').rglob('*.jar')) == [jar], 'Exactly one intended production JAR required'
+              digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+              assert digest == os.environ['ARTIFACT_SHA256'], 'JAR does not match independently verified merged-main artifact'
+              source = json.loads(Path('verified-source.json').read_text())
+              production = set(source['production_class_roots'])
+              excluded = set(source['excluded_class_roots'])
+              with zipfile.ZipFile(jar) as archive:
+                  assert archive.testzip() is None
+                  names = archive.namelist()
+                  entries = set(names)
+                  assert len(names) == len(entries), 'Duplicate ZIP entries'
+                  assert not any(name.lower().endswith('.jar') for name in entries), 'Nested JAR'
+                  classes = [name for name in entries if name.endswith('.class')]
+                  assert classes
+                  for entry in classes:
+                      root = entry[:-len('.class')].split('$', 1)[0]
+                      assert root in production and root not in excluded, 'Non-production/QA/test/vendor class: ' + entry
+                      data = archive.read(entry)
+                      assert data[:4] == b'\xca\xfe\xba\xbe' and int.from_bytes(data[6:8], 'big') == 61, entry
+                  for entry in (
+                      'com/devfarinsky/siegeoverhaul/camp/CampTerrain.class',
+                      'com/devfarinsky/siegeoverhaul/camp/CampGround.class',
+                      'com/devfarinsky/siegeoverhaul/client/WorkersProjectionVisibility.class',
+                      'com/devfarinsky/siegeoverhaul/client/ProjectionCulling.class',
+                      'com/devfarinsky/siegeoverhaul/compat/WorkersProjectionView.class',
+                      'com/devfarinsky/siegeoverhaul/compat/WorkersBridge.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/ProtectedBuilderHandLifecycle.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/ProtectedBuilderHandMirror.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/ProtectedInventoryCleanup.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/NativePerimeterProjects.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/ProtectedBuildArea.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/ConstructionProjectLeases.class',
+                  ):
+                      assert entry in entries, entry
+                  assert b'foundation' in archive.read('com/devfarinsky/siegeoverhaul/camp/CampTerrain.class')
+                  assert b'playerBuilderArrival' in archive.read('com/devfarinsky/siegeoverhaul/compat/WorkersBridge.class')
+                  data = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+              assert data['modLoader'] == 'javafml' and data['loaderVersion'] == '[47,)'
+              assert len(data['mods']) == 1
+              mod = data['mods'][0]
+              assert mod['modId'] == 'siegeoverhaul' and mod['version'] == '4.52.0'
+              assert mod['displayTest'] == 'MATCH_VERSION'
+              raw_dependencies = data['dependencies']['siegeoverhaul']
+              dependencies = {entry['modId']: entry for entry in raw_dependencies}
+              expected = {
+                  'forge': (True, '[47,)', 'NONE'),
+                  'minecraft': (True, '[1.20.1,1.21)', 'NONE'),
+                  'recruits': (True, '[1.15.2,)', 'AFTER'),
+                  'workers': (True, '[2.0.3,)', 'AFTER'),
+                  'smallships': (True, '[0,)', 'AFTER'),
+                  'siegeweapons': (True, '[0,)', 'AFTER'),
+                  'ftbchunks': (False, '[0,)', 'AFTER'),
+                  'openpartiesandclaims': (False, '[0,)', 'AFTER'),
+                  'corpse': (False, '[0,)', 'AFTER'),
+                  'magistuarmory': (False, '[0,)', 'AFTER'),
+                  'musketmod': (False, '[0,)', 'AFTER'),
+                  'curios': (False, '[5.14.1,6)', 'AFTER'),
+              }
+              assert len(dependencies) == len(raw_dependencies) and set(dependencies) == set(expected)
+              for mod_id, (mandatory, version_range, ordering) in expected.items():
+                  dep = dependencies[mod_id]
+                  assert dep['mandatory'] is mandatory and dep['side'] == 'BOTH', mod_id
+                  assert dep['versionRange'] == version_range and dep['ordering'] == ordering, mod_id
+              totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0)
+              reports = list(Path('regression').rglob('TEST-*.xml'))
+              assert len(reports) == 236, len(reports)
+              suite_counts = {}
+              for report in reports:
+                  result = ET.parse(report).getroot()
+                  assert result.tag == 'testsuite', report
+                  name = result.get('name')
+                  assert name and name not in suite_counts, 'Duplicate or missing suite name: ' + str(name)
+                  assert report.name == 'TEST-' + name + '.xml', report
+                  suite_counts[name] = int(result.get('tests'))
+                  testcases = result.findall('testcase')
+                  assert len(testcases) == suite_counts[name], name
+                  assert all(case.find(child) is None for case in testcases for child in ('failure', 'error', 'skipped')), name
+                  for key in totals:
+                      value = int(result.get(key))
+                      assert value >= 0, (name, key)
+                      totals[key] += value
+              assert totals == {'tests': 1375, 'failures': 0, 'errors': 0, 'skipped': 0}, totals
+              assert len(suite_counts) == 236
+              # Canonical name/count manifest independently derived from final a0eb806 XML.
+              # This fixes all 236 expected suites, rather than accepting any equal total.
+              suite_digest = hashlib.sha256(json.dumps(suite_counts, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+              assert suite_digest == '0814c3a69612e082cadbbe4602dc7f41081cadcf13d1cc290ac83430c04a7867', suite_digest
+              expected_suites = {
+                  'com.devfarinsky.siegeoverhaul.camp.CampTerrainTest': 50,
+                  'com.devfarinsky.siegeoverhaul.camp.CampLoadingTest': 4,
+                  'com.devfarinsky.siegeoverhaul.client.ProjectionCullingTest': 7,
+                  'com.devfarinsky.siegeoverhaul.compat.WorkersProjectionViewTest': 7,
+                  'com.devfarinsky.siegeoverhaul.compat.WorkersBridgeTest': 19,
+                  'com.devfarinsky.siegeoverhaul.nativecompat.NativeHandLifecycleBoundaryTest': 9,
+                  'com.devfarinsky.siegeoverhaul.nativecompat.ProtectedBuilderHandLifecycleTest': 6,
+                  'com.devfarinsky.siegeoverhaul.nativecompat.ProtectedBuilderHandMirrorTest': 15,
+                  'com.devfarinsky.siegeoverhaul.nativecompat.HollowWallReservationTest': 3,
+                  'com.devfarinsky.siegeoverhaul.nativecompat.PerimeterDestroyedBuilderCleanupTest': 16,
+                  'com.devfarinsky.siegeoverhaul.nativecompat.PerimeterRetirementLifecycleTest': 10,
+                  'com.devfarinsky.siegeoverhaul.core.PerimeterStageJournalTest': 10,
+              }
+              for name, count in expected_suites.items():
+                  assert suite_counts[name] == count, name
+              Path('verified-sha256.txt').write_text(digest)
+              Path('verified-regressions.json').write_text(json.dumps({
+                  **totals, 'suites': len(suite_counts), 'suite_manifest_sha256': suite_digest}, sort_keys=True) + '\n')
+              print('Verified', jar.name, digest, totals, '236 unique suites')
+
+
+          if __name__ == '__main__':
+              main()
+          CHECK
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/siegeoverhaul-4.52.0.jar
+          name: The Siege Overhaul v4.52.0 - Building and camp reliability
+          version: v4.52.0
+          version-type: release
+          changelog: |
+            # 4.52.0 — Building and camp reliability
+
+            ## What changes
+
+            - One Building section brings automatic perimeter review, all six existing placeable plans and nearby construction progress together. Dark panels, native block-model thumbnails, readable costs and compact layouts retain Minecraft fonts and ordinary controls.
+            - Automatic walls follow the complete claimed boundary, leaving shared internal edges open. New projects cost one flat **64 faction Treasury emeralds**, with blocks supplied separately and no size or section surcharge. Manual plan prices and claim purchase prices are unchanged.
+            - New perimeter, Wall Section and Wall Corner bodies are hollow underneath the oak walkway. Visible outer faces and parapets are retained; manual modules retain end caps. Terrain footings remain intact. In the flat 5×5 cobblestone/oak example, the recipe falls from 6,600 to 3,900 blocks; this 40.9% reduction is specific to that geometry.
+            - Larger work is partitioned into bounded native Workers sections under one durable project, payment and reservation. Progress reflects verified world placement; unavailable sections or uncertain recovery pause rather than disappear or count as complete.
+            - Native shovel rendering, picking, blueprint transforms, builder goals, supplies and schedules stay in use. Guarded clearing handles only unchanged supported single-cell plants. Player edits, solids, inventories, unsafe neighbors and lost permissions stop work. Cavities are protected clearance, never AIR excavation jobs.
+            - A pinned native multi-target approach mismatch now uses the actual verified reached endpoint, preventing the reproduced stall on a previously completed wall.
+            - Interrupted native inventory callbacks retain durable cleanup obligations and cannot be replayed automatically. Authenticated hand-only provenance survives completion/cancellation, allowing equal load-time main-hand/inventory mirrors to be rebound without changing any item amount, NBT or capability. It grants no work or storage authority. Authenticated whole-project cancellation preserves placed blocks and does not refund the commission or consumed materials.
+            - Camp placement gains clearer bounded failure reasons, exact registered guard lookup and a narrowly matched Recruits 1.15.2 scout-initialization correction. Safe natural forest clearing, leveling and shallow-water fallback retain claim/build protection. Some locations genuinely cannot support a camp.
+
+            ## Updating a world
+
+            Back up the world first and install the same Siege Overhaul build on the server and every client. **Network protocol 19 requires matching peers.**
+
+            Already-paid/accepted jobs retain their exact saved geometry, native blueprint, material state and payment, including older solid walls and previously paid legacy perimeter commissions. They are not hollowed, repriced, recharged or refunded. Changed unpaid previews need fresh review. Existing world blocks are not carved out.
+
+            Protected construction and post-load inventory verification for previously protected builders require the audited **Workers 2.0.3 and Recruits 1.15.2** runtime. Other companion versions pause those jobs and reload checks; ordinary unmarked legacy native workers retain their existing behavior. The broader minimum versions in mod metadata do not extend that audited protected-lifecycle support. Minecraft 1.20.1, Forge 47.x and Java 17 remain required, as do Small Ships and Siege Weapons. Runtime evidence uses Forge 47.4.16, Small Ships 2.0.0-b1.4 and Siege Weapons 0.2.5. Optional integrations remain optional.
+
+            A complete initial perimeter review requires loaded terrain and passes finite permission, storage, geometry, scan and serialization bounds. Oversized or unsafe plans are rejected as a whole. Later unloaded sections wait; no force-loading or silent partial acceptance is introduced. Default Recruits chunk loading may keep the worker's vicinity loaded.
+
+            The receipt keeps the original commissioning owner as history; later native ownership transfer does not invalidate hand-only verification or grant construction/storage permission. Hand-only history retains at most 4,096 builder identities per Overworld ledger; existing matching builders remain reusable at capacity. It is not a job reservation or permission grant. Authenticated old protected jobs migrate while their original proof is available. Missing or inconsistent proof can defer cleanup; an unavailable/dead old builder may require recovery review rather than simply loading it. Post-load verification with active item use pauses without stopping use or guessing at inventory.
+
+            ## Verification and limits
+
+            - A clean production build passed **1,375 tests in 236 unique suites**, with zero failures, errors or skips, plus native QA compilation. Reobfuscated 4.52.0 metadata, dependencies and packaged content were checked; no QA/vendor classes or nested JARs were packaged.
+            - A real client completed an **83-block hollow manual wall** through native AI, finite stock/resupply and real save/reopen. All 27 cavity cells remained AIR at completion; the nine-column footing and nine-cell deck were intact. A deliberate cavity obstruction was preserved through pause/reload before the QA fixture was restored. Accepted plant clearing, player-edit/headroom/cavity/claim/permission pauses, payments and material conservation passed.
+            - The same run checked native shovel/render/raycast/reload, the server-fed multi-claim HUD, the 64-emerald perimeter transaction and authenticated cancellation. All 18 raw framebuffers passed dimension/nonblank checks; selected native-inspection, Building and completed-wall frames were visually reviewed. Native inspection and Building fit a 320×240 logical viewport.
+            - Camp checks established ordinary-terrain and controlled shallow-water/forest camps with native work access, leaving 6,146 protected cells and three chests unchanged. This covers establishment, not complete decorative building or a full battle.
+            - Configured unload checks demonstrated actual chunk/entity absence, disk-loaded resumption, one charge and terminal cancellation for a **solid accepted manifest with RecruitsChunkLoading=false**. This does not establish default-setting unload or hollow-geometry unload behavior.
+            - All eight existing dedicated-side contract groups passed on a physical Forge GameTestServer with all four companions and zero network players. FakePlayer/direct-handler coverage does not establish an authenticated external client connection.
+            - A short hollow handoff completed the first 95-target native section and placed three targets in the next. Mid-section, between-section and canceled-project save/close/reopen passed with exact stock, preserved cavities, one charge and authenticated cancellation. Real screen handlers verified Tab/Enter navigation and Escape/back before Yes. This uses an explicitly **synthetic maximum-96-target partition** of the complete 572-target production quote and direct server admission; it does not claim full-plan completion.
+            - Completed-wall reload retained all 83 blocks and 27 cavity AIR cells, detached construction and retired its reservation. The equal 40-cobblestone hand/slot pair was rebound once without changing serialized inventory, immediately or through 40 further ticks. Final accounting was 70 chest + 40 builder + 58 placed = 168 cobblestone and 143 chest + 25 placed = 168 oak.
+
+            Earlier runtime checks used 4.52.0-preview.1 development metadata; the current handoff, completed-wall and dedicated-side checks used 4.52.0 development metadata. Companion hashes in the evidence identify ForgeGradle-remapped artifacts, not original release JARs. Separately installed-release-JAR gameplay is not claimed.
+
+            Complete 3,900-block walkthroughs remain optional risk-based stress tests. Earlier 561/6,600 and 512/6,600 observations remain partial, solid-profile evidence. All shaders/resource packs, optional-mod combinations, real authenticated multiplayer and a live upgrade of an old player world are not claimed as tested. Release-channel selection is not a claim of universal modpack compatibility.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            ftb-chunks-forge(optional)
+            open-parties-and-claims(optional)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+            curios(optional)
+          fail-mode: fail
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Record accepted upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          """Record accepted upload; public moderation/download checks remain separate."""
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          from urllib.parse import urlsplit
+
+
+          def main():
+              digest = hashlib.sha256(Path('dist/siegeoverhaul-4.52.0.jar').read_bytes()).hexdigest()
+              assert digest == Path('verified-sha256.txt').read_text() == os.environ['ARTIFACT_SHA256']
+              source = json.loads(Path('verified-source.json').read_text())
+              regressions = json.loads(Path('verified-regressions.json').read_text())
+              assert source['reviewed_source'] == os.environ['REVIEWED_SOURCE_SHA']
+              assert source['merged_source'] == os.environ['MERGED_SOURCE_SHA']
+              assert source['source_tree'] == os.environ['SOURCE_TREE_SHA']
+              assert source['build_run'] == int(os.environ['BUILD_RUN_ID'])
+              file_id = os.environ['RELEASE_FILE_ID']
+              url = os.environ['RELEASE_URL']
+              assert re.fullmatch(r'[1-9][0-9]*', file_id), 'Missing or invalid accepted CurseForge file ID'
+              location = urlsplit(url)
+              assert location.scheme == 'https' and location.hostname in ('www.curseforge.com', 'curseforge.com')
+              assert location.path.rstrip('/').endswith('/files/' + file_id), 'File ID/URL mismatch'
+              assert not location.username and not location.password
+              result = {
+                  'version': '4.52.0', 'version_type': 'release', 'curseforge_project': 1364352,
+                  'file_id': file_id, 'url': url,
+                  'status': 'accepted_upload', 'public_availability': 'not_yet_verified',
+                  'pull_request': 255, 'reviewed_source': source['reviewed_source'],
+                  'tested_source': source['merged_source'], 'merged_source': source['merged_source'],
+                  'source_tree': source['source_tree'], 'build_run': source['build_run'],
+                  'build_attempt': source['build_attempt'], 'artifacts': source['artifacts'],
+                  **regressions, 'sha256': digest,
+                  'publisher_run': int(os.environ['GITHUB_RUN_ID']),
+                  'publisher_attempt': int(os.environ.get('GITHUB_RUN_ATTEMPT', '1')),
+              }
+              Path('curseforge-4.52.0-receipt.json').write_text(json.dumps(result, sort_keys=True, indent=2) + '\n')
+              print(json.dumps(result, sort_keys=True))
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+                  summary.write('Accepted upload (moderation/public availability separate): '
+                                + json.dumps(result, sort_keys=True) + '\n')
+
+
+          if __name__ == '__main__':
+              main()
+          RECEIPT
