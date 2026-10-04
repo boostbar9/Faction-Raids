@@ -64,14 +64,14 @@ public final class NativeCampLifecycleQa {
     private static BlockPos islandCenter, captureCenter;
     private static Vec3 captureObserver;
     private static long started, scenarioStarted, lastSample = -1, establishedAt = -1, fallbackAt = -1;
-    private static long firstRecoveryAt = -1, islandCompletedAt = -1, firstWaveAt = -1, captureStarted;
+    private static long firstRecoveryAt = -1, firstRecoverySearchAt = -1, islandCompletedAt = -1, firstWaveAt = -1, captureStarted;
     private static long searchObservedTicks, cooldownObservedTicks, previousObservedTick = -1, lastIslandTick = -1;
     private static int scenario, clientPhase, stage, islandCursor, captureReadyFrames, captureAttempts;
     private static boolean finished, restartRequested, reloaded, scenarioComplete, crewVerified;
     private static boolean sawNatural, sawEarthworks, sawRecovery, sawCooldown;
     private static volatile Throwable observerFailure, stoppingFailure, loadFailure;
     private static CompoundTag stoppedAuthority, loadedAuthority;
-    private static long stoppedGameTime;
+    private static long stoppedGameTime, loadedGameTime;
     private static Map<String,Object> crewEvidence;
     private enum Action { NONE, START_COMMAND, RELOAD, CAPTURE, NEXT_WORLD, DONE }
     private NativeCampLifecycleQa() {}
@@ -201,8 +201,7 @@ public final class NativeCampLifecycleQa {
             reloaded = true; stage = 2;
         }
         if (scenario == 1 && raid.campPos != null && !crewVerified) {
-            if (establishedAt < 0) establishedAt = level.getGameTime();
-            if (level.getGameTime() - establishedAt >= 60) {
+            if (establishedAt >= 0 && level.getGameTime() - establishedAt >= 60) {
                 crewEvidence = verifyNativeCamp(level, raid); crewVerified = true;
             }
         }
@@ -229,11 +228,19 @@ public final class NativeCampLifecycleQa {
             result.put("cooldownTicksWithoutWaveOrAttackers", cooldownObservedTicks);
             result.put("passes", new LinkedHashMap<>(PASSES)); result.put("realWorldReload", reloaded);
             result.put("savedSearchAuthorityVerified", reloaded && loadedAuthority.equals(stoppedAuthority));
-            if (reloaded) result.put("reloadedAuthority", loadedAuthority.toString());
+            if (reloaded) {
+                result.put("reloadedAuthority", loadedAuthority.toString());
+                result.put("savedSearchAuthorityGameTime", stoppedGameTime);
+                result.put("loadedSearchAuthorityGameTime", loadedGameTime);
+                result.put("savedSearchAuthority", typedAuthority(stoppedAuthority));
+                result.put("loadedSearchAuthority", typedAuthority(loadedAuthority));
+            }
             result.put("protectedCellCount", fixture.protectedCells().size());
             result.put("protectedChests", fixture.protectedContainers().size());
             result.put("restorationExcludedProtectedCells", true);
-            result.put("recoveryCooldownAtGameTime", firstRecoveryAt); result.put("fallbackAtGameTime", fallbackAt);
+            result.put("recoveryCooldownAtGameTime", firstRecoveryAt);
+            result.put("firstRecoverySearchAtGameTime", firstRecoverySearchAt);
+            result.put("fallbackAtGameTime", fallbackAt);
             result.put("establishedAtGameTime", establishedAt); result.put("firstWaveAtGameTime", firstWaveAt);
             result.put("wave", raid.wave); result.put("totalSpawned", raid.totalSpawned);
             result.put("campSearchAbandoned", raid.campSearchAbandoned);
@@ -266,11 +273,15 @@ public final class NativeCampLifecycleQa {
             previousObservedTick = now;
             if (raid.campSearchRecovery && firstRecoveryAt < 0) firstRecoveryAt = now;
             if (raid.campSearchAbandoned && fallbackAt < 0) fallbackAt = now;
+            if (raid.campPos != null && establishedAt < 0) establishedAt = now;
             if (raid.wave > 0 && firstWaveAt < 0) firstWaveAt = now;
             // A previously generated candidate may establish in its selection tick.
             // Seeing the genuine recovery phase/step is sufficient; no artificial
             // loading wait is required for coverage.
-            if (raid.campSearchRecovery && raid.campSearchRetryTicks == 0 && raid.campSearchStep > 0) sawRecovery = true;
+            if (raid.campSearchRecovery && raid.campSearchRetryTicks == 0 && raid.campSearchStep > 0) {
+                sawRecovery = true;
+                if (firstRecoverySearchAt < 0) firstRecoverySearchAt = now;
+            }
             if (raid.campPos == null && !raid.campSearchAbandoned) {
                 searchObservedTicks++;
                 require(raid.wave == 0 && raid.totalSpawned == 0 && raid.raiders.isEmpty()
@@ -315,6 +326,7 @@ public final class NativeCampLifecycleQa {
         try {
             var level = event.getServer().overworld(); var raid = raid(level);
             require(level.getGameTime() == stoppedGameTime && raid != null, "Reload did not observe authority before resumed ticks");
+            loadedGameTime = level.getGameTime();
             loadedAuthority = authority(raid);
             require(loadedAuthority.equals(stoppedAuthority), "Saved scouting/cooldown/diagnostics changed during actual close/reopen");
         } catch (Throwable failure) { loadFailure = failure; }
@@ -328,6 +340,32 @@ public final class NativeCampLifecycleQa {
             if (saved.contains(key)) result.put(key, saved.get(key).copy());
         require(result.getBoolean("CampSearchRecovery") && result.getInt("CampSearchRetryTicks") > 0,
                 "Persisted recovery authority is missing its cooldown");
+        return result;
+    }
+
+    /** Typed companion to the exact NBT equality check, so consumers never parse SNBT text. */
+    private static Map<String,Object> typedAuthority(CompoundTag saved) {
+        var result = new LinkedHashMap<String,Object>();
+        result.put("teamKey", saved.getString("Team"));
+        result.put("defensePoint", saved.getString("DefensePoint"));
+        result.put("factionId", saved.getString("FactionId"));
+        result.put("recovery", saved.getBoolean("CampSearchRecovery"));
+        result.put("retryTicks", saved.getInt("CampSearchRetryTicks"));
+        result.put("searchStep", saved.getInt("CampSearchStep"));
+        result.put("searchTicks", saved.getInt("CampSearchTicks"));
+        result.put("searchElapsedTicks", saved.getInt("CampSearchElapsedTicks"));
+        result.put("searchCandidate", saved.contains("CampSearchPos") ? saved.getLong("CampSearchPos") : null);
+        result.put("terraformFallback", saved.getBoolean("CampTerraformed"));
+        result.put("searchAbandoned", saved.getBoolean("CampSearchAbandoned"));
+        result.put("preparationTicks", saved.getInt("PreparationTicks"));
+        result.put("preparationTotalTicks", saved.getInt("PreparationTotal"));
+        result.put("wave", saved.getInt("Wave"));
+        result.put("pendingWaveSpawns", saved.getInt("PendingWaveSpawns"));
+        var diagnostics = saved.getCompound("CampSearchDiagnostics");
+        var counts = new LinkedHashMap<String,Integer>();
+        for (var reason : com.devfarinsky.siegeoverhaul.camp.CampSearchDiagnostics.Reason.values())
+            if (diagnostics.contains(reason.name())) counts.put(reason.name(), diagnostics.getInt(reason.name()));
+        result.put("diagnostics", Map.of("exhausted", diagnostics.getBoolean("Exhausted"), "counts", counts));
         return result;
     }
 
@@ -453,10 +491,10 @@ public final class NativeCampLifecycleQa {
     }
     private static void resetScenario() {
         fixture = null; playerId = null; coreKey = null; stage = 0; islandCenter = null; islandCursor = 0;
-        lastSample = establishedAt = fallbackAt = firstRecoveryAt = islandCompletedAt = firstWaveAt = previousObservedTick = lastIslandTick = -1;
+        lastSample = establishedAt = fallbackAt = firstRecoveryAt = firstRecoverySearchAt = islandCompletedAt = firstWaveAt = previousObservedTick = lastIslandTick = -1;
         searchObservedTicks = cooldownObservedTicks = 0;
         restartRequested = reloaded = scenarioComplete = crewVerified = sawNatural = sawEarthworks = sawRecovery = sawCooldown = false;
-        stoppedAuthority = loadedAuthority = null; crewEvidence = null; PASSES.clear();
+        stoppedAuthority = loadedAuthority = null; stoppedGameTime = loadedGameTime = -1; crewEvidence = null; PASSES.clear();
         observerFailure = stoppingFailure = loadFailure = null;
     }
     private static String sha256(Path file) throws Exception {
@@ -480,7 +518,7 @@ public final class NativeCampLifecycleQa {
                 pixels.writeToFile(evidence.resolve("failure-native-camp-lifecycle.png"));
             } catch (Throwable ignored) {}
         }
-        try { if (evidence != null) Files.writeString(evidence.resolve("result.json"), new GsonBuilder().setPrettyPrinting().create().toJson(REPORT)); }
+        try { if (evidence != null) Files.writeString(evidence.resolve("result.json"), new GsonBuilder().serializeNulls().setPrettyPrinting().create().toJson(REPORT)); }
         catch (Exception problem) { FactionLogger.LOG.error("Could not write native lifecycle evidence", problem); }
         mc.stop();
     }

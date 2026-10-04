@@ -49,7 +49,7 @@ jobs:
           test ! -e build/native-camp-lifecycle-qa/client
           test ! -e build/native-camp-lifecycle-qa/evidence
           python3 -B -m unittest discover -s scripts/tests -p 'test_prepare_native_client_defaults.py'
-          python3 -B -m unittest discover -s scripts/tests -p 'test_native_camp_lifecycle_contract.py'
+          python3 -B -m unittest discover -s scripts/tests -p 'test_native_camp_lifecycle*.py'
           python3 scripts/prepare-native-client-defaults.py --mode camp-lifecycle --smallships-version 2.0.0-b1.4
           mkdir -p build/native-camp-lifecycle-qa/evidence
           cp build/native-camp-lifecycle-qa/client/.native-smallships-defaults.json build/native-camp-lifecycle-qa/evidence/smallships-default-config-provenance.json
