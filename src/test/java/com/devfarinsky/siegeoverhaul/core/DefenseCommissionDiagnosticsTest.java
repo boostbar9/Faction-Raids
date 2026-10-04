@@ -38,11 +38,8 @@ class DefenseCommissionDiagnosticsTest extends MinecraftTestSupport {
             f.guard.when(() -> NativeConstructionGuard.status(f.area)).thenAnswer(call ->
                     f.area.getPersistentData().getString("SiegeConstructionPause"));
             f.area.getPersistentData().putString("SiegeConstructionPause", reason);
-            f.bridge.when(() -> WorkersBridge.discardPlayerArea(f.area)).thenAnswer(call -> {
-                f.area.getPersistentData().remove("SiegeConstructionPause");
-                f.area.discard();
-                return true;
-            });
+            f.beforeDiscard = () -> f.area.getPersistentData().remove("SiegeConstructionPause");
+            verify(f.area, never()).discard();
 
             String message = f.confirmFailure();
             assertTrue(message.contains("(site protection)"));
@@ -103,6 +100,7 @@ class DefenseCommissionDiagnosticsTest extends MinecraftTestSupport {
         final UseOnContext context = mock(UseOnContext.class);
         final ItemStack stack = new ItemStack(Items.PAPER);
         final UUID owner = UUID.randomUUID();
+        Runnable beforeDiscard = () -> {};
         final MockedStatic<WorkersBridge> bridge = mockStatic(WorkersBridge.class);
         final MockedStatic<PaymentSource> payment = mockStatic(PaymentSource.class);
         final MockedStatic<WallBuilderAccess> access = mockStatic(WallBuilderAccess.class);
@@ -129,7 +127,10 @@ class DefenseCommissionDiagnosticsTest extends MinecraftTestSupport {
             bridge.when(() -> WorkersBridge.createProtectedPlayerArea(eq(player), eq(builder), any(), anyInt(), anyInt(), anyInt(), any()))
                     .thenReturn(area);
             bridge.when(() -> WorkersBridge.releasePlayerJob(builder, area)).thenReturn(true);
-            bridge.when(() -> WorkersBridge.discardPlayerArea(area)).thenAnswer(call -> { area.discard(); return true; });
+            // Configure cleanup through a callback: re-stubbing this answer would execute its old side effect.
+            bridge.when(() -> WorkersBridge.discardPlayerArea(area)).thenAnswer(call -> {
+                beforeDiscard.run(); area.discard(); return true;
+            });
             DefensePreview.set(stack, kind, origin, Direction.SOUTH, Level.OVERWORLD.location(), owner, 0, null);
         }
 
