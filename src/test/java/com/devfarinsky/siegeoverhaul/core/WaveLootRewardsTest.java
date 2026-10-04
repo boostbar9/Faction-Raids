@@ -154,11 +154,12 @@ class WaveLootRewardsTest extends MinecraftTestSupport {
     @Test void uncertainPartialDeliveryIsConsumedBeforeSideEffectsAndNeverReplayed() {
         var data = new RaidSavedData(); var state = raid(2);
         var first = player(); var second = player();
+        var firstInventory = first.getInventory();
         doAnswer(call -> {
             assertTrue(state.waveLootRewards.save().getList("Recipients", Tag.TAG_COMPOUND)
                     .getCompound(0).getBoolean("Attempted"));
             throw new IllegalStateException("inventory listener failed after mutation");
-        }).when(first.getInventory()).add(any(ItemStack.class));
+        }).when(firstInventory).add(any(ItemStack.class));
         assertThrows(IllegalStateException.class, () -> award(data, state, first, second));
         var loaded = RaidSavedData.RaidState.load(state.save());
         award(data, loaded, first, second);
@@ -169,10 +170,11 @@ class WaveLootRewardsTest extends MinecraftTestSupport {
     @Test void partialInventoryInsertionDropsOnlyTheMutatedRemainderRegardlessOfBooleanResult() {
         for (boolean result : List.of(false, true)) {
             var player = player();
+            var inventory = player.getInventory();
             doAnswer(call -> {
                 ((ItemStack) call.getArgument(0)).shrink(2);
                 return result;
-            }).when(player.getInventory()).add(any(ItemStack.class));
+            }).when(inventory).add(any(ItemStack.class));
             when(player.drop(any(ItemStack.class), eq(false))).thenReturn(mock(ItemEntity.class));
             ItemStack original = new ItemStack(Items.CHEST, 5);
             assertTrue(WaveLootRewards.deliver(player, original));
@@ -184,7 +186,8 @@ class WaveLootRewardsTest extends MinecraftTestSupport {
 
     @Test void failedOverflowDropIsNotReportedAsSuccessOrRetried() {
         var data = new RaidSavedData(); var state = raid(2); var player = player();
-        doReturn(false).when(player.getInventory()).add(any(ItemStack.class));
+        var inventory = player.getInventory();
+        doReturn(false).when(inventory).add(any(ItemStack.class));
         award(data, state, player);
         var loaded = RaidSavedData.RaidState.load(state.save());
         award(data, loaded, player);
