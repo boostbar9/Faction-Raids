@@ -413,7 +413,7 @@ public final class NativeHudQa {
         });
     }
 
-    private static UUID setUpInspection(net.minecraft.server.level.ServerPlayer owner) {
+    private static UUID setUpInspection(net.minecraft.server.level.ServerPlayer owner) throws ReflectiveOperationException {
         require(owner != null, "Actual integrated-server owner missing");
         var level = owner.serverLevel();
         var origin = owner.blockPosition().offset(4, 0, 4);

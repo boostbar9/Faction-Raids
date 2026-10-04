@@ -263,7 +263,14 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
         Button[] plans = new Button[DefenseBlueprint.Kind.values().length];
         for (int i = 0; i < plans.length; i++) plans[i] = mock(Button.class);
         set(screen, "defensePlans", plans);
-        try (var packets = mockStatic(com.devfarinsky.siegeoverhaul.RaidNetwork.class)) {
+        // Standalone JUnit lacks Forge's transformed NetworkEvent constructor. Substitute
+        // channel registration exactly as CaptureBeaconTest does; keep real navigation and
+        // verify that it never sends any network action.
+        var builder = mock(net.minecraftforge.network.NetworkRegistry.ChannelBuilder.class, RETURNS_SELF);
+        when(builder.simpleChannel()).thenReturn(mock(net.minecraftforge.network.simple.SimpleChannel.class));
+        try (var registration = mockStatic(net.minecraftforge.network.NetworkRegistry.ChannelBuilder.class)) {
+            registration.when(() -> net.minecraftforge.network.NetworkRegistry.ChannelBuilder.named(any())).thenReturn(builder);
+            try (var packets = mockStatic(com.devfarinsky.siegeoverhaul.RaidNetwork.class)) {
             invoke(screen, "selectDefense", DefenseBlueprint.Kind.class, DefenseBlueprint.Kind.WALL);
             assertEquals(1, get(screen, "planPage"));
             invoke(screen, "movePlanPage", int.class, 1);
@@ -275,6 +282,7 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
             invoke(screen, "movePlanPage", int.class, -1);
             assertEquals(DefenseBlueprint.Kind.GATEHOUSE, get(screen, "selectedDefense"));
             packets.verifyNoInteractions();
+            }
         }
     }
 

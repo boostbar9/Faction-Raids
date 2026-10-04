@@ -273,19 +273,47 @@ class ConfigScreenInteractionTest extends MinecraftTestSupport {
         return control;
     }
 
+    @Test void fontFixtureSupportsBothDirectionsUsedByNativeEditBox() {
+        Font font = fixedWidthFont();
+        assertEquals("ab", font.plainSubstrByWidth("abcdef", 12));
+        assertEquals("ab", font.plainSubstrByWidth("abcdef", 12, false));
+        assertEquals("ef", font.plainSubstrByWidth("abcdef", 12, true));
+        assertEquals("f", font.plainSubstrByWidth("abcdef", 7, true));
+        for (boolean backwards : new boolean[]{false, true}) {
+            assertEquals("", font.plainSubstrByWidth("", 12, backwards));
+            assertEquals("", font.plainSubstrByWidth("abcdef", 0, backwards));
+            assertEquals("", font.plainSubstrByWidth("abcdef", -6, backwards));
+            assertEquals("abcdef", font.plainSubstrByWidth("abcdef", 100, backwards));
+        }
+    }
+
+    private static Font fixedWidthFont() {
+        Font font = mock(Font.class);
+        when(font.width(anyString())).thenAnswer(call -> ((String) call.getArgument(0)).length() * 6);
+        when(font.plainSubstrByWidth(anyString(), anyInt())).thenAnswer(call ->
+                fixedWidthSubstring(call.getArgument(0), call.getArgument(1), false));
+        // EditBox.setHighlightPos uses the backwards overload to keep the caret visible.
+        when(font.plainSubstrByWidth(anyString(), anyInt(), anyBoolean())).thenAnswer(call ->
+                fixedWidthSubstring(call.getArgument(0), call.getArgument(1), call.getArgument(2)));
+        return font;
+    }
+
+    private static String fixedWidthSubstring(String value, int available, boolean backwards) {
+        int length = Math.min(value.length(), Math.max(0, available / 6));
+        return backwards ? value.substring(value.length() - length) : value.substring(0, length);
+    }
+
     private static SiegeOverhaulConfigScreen screen(int width, int height, int count) throws Exception {
         var screen = new SiegeOverhaulConfigScreen(null, mock(ForgeConfigSpec.class));
         set(screen, SiegeOverhaulConfigScreen.class, "loaded", true);
         for (int i = 0; i < count; i++) entries(screen).add(new SiegeOverhaulConfigScreen.Entry(
                 "raid.setting" + i, mock(ForgeConfigSpec.ConfigValue.class), false));
-        Font font = mock(Font.class);
-        when(font.width(anyString())).thenAnswer(call -> ((String) call.getArgument(0)).length() * 6);
-        when(font.plainSubstrByWidth(anyString(), anyInt())).thenAnswer(call -> {
-            String value = call.getArgument(0); int available = call.getArgument(1);
-            return value.substring(0, Math.min(value.length(), Math.max(0, available / 6)));
-        });
+        Font font = fixedWidthFont();
+        Minecraft minecraft = mock(Minecraft.class);
+        // Screen.init(Minecraft, ...) obtains its font from the client during native initialization.
+        set(minecraft, Minecraft.class, "font", font);
         set(screen, Screen.class, "font", font);
-        set(screen, Screen.class, "minecraft", mock(Minecraft.class));
+        set(screen, Screen.class, "minecraft", minecraft);
         screen.width = width; screen.height = height;
         screen.init();
         return screen;
