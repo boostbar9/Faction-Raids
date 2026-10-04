@@ -1452,12 +1452,18 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int guidanceY = y + Math.max(portrait + 18, 65);
         int lines = Math.max(0, (y + h - guidanceY - 7) / 10);
         if (lines > 0) {
-            String guidance = "Give residents beds, food and workstations. "
-                    + "Name, profession and appearance are assigned on arrival. "
-                    + "Each living resident pays one emerald per full in-game day. "
-                    + "Taxes pause if stranded or the core is occupied.";
-            drawWrappedText(g, guidance, x + 10, guidanceY, w - 20, lines, CommandPalette.TEXT_MUTED);
+            drawWrappedText(g, civilianGuidance(layout.compact()), x + 10, guidanceY,
+                    w - 20, lines, CommandPalette.TEXT_MUTED);
         }
+    }
+
+    /** Compact copy keeps the care and tax conditions complete instead of cutting a paragraph. */
+    static String civilianGuidance(boolean compact) {
+        if (compact) return "Provide beds, food and workstations. Taxes pause if stranded or the core is occupied.";
+        return "Give residents beds, food and workstations. "
+                + "Name, profession and appearance are assigned on arrival. "
+                + "Each living resident pays one emerald per full in-game day. "
+                + "Taxes pause if stranded or the core is occupied.";
     }
 
     private void drawPerimeter(GuiGraphics g) {

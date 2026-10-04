@@ -286,6 +286,13 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void compactCivilianGuidanceKeepsCompleteCareAndTaxConditions() {
+        assertEquals("Provide beds, food and workstations. Taxes pause if stranded or the core is occupied.",
+                CoreHireScreen.civilianGuidance(true));
+        assertTrue(CoreHireScreen.civilianGuidance(false).contains("assigned on arrival."));
+        assertTrue(CoreHireScreen.civilianGuidance(false).endsWith("core is occupied."));
+    }
+
     @Test void compactArmyRetainsItsRefreshCountdownWithPageNavigation() {
         assertEquals("1/7 · Refresh 2:03 · Ctrl+Tab", CoreHireScreen.footerHint(CoreCommandPage.ARMY, true, 123));
         assertTrue(CoreHireScreen.footerHint(CoreCommandPage.INTEL, true, 123).contains("7/7"));

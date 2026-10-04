@@ -638,6 +638,19 @@ public final class NativeHudQa {
                     view.put("nativePortraits", portraitEvidence());
                     view.put("portraitLogicalSize", CoreHireLayout.fit(mc.screen.width, mc.screen.height).hirePortraitSize());
                 }
+                if (currentPage() == CoreCommandPage.CIVILIANS) {
+                    var layout = (CoreHireLayout) read("layout");
+                    int height = layout.contentBottom() - layout.contentY() - 30;
+                    int portrait = Math.min(layout.compact() ? 48 : 96, Math.max(24, height - 28));
+                    int lineBudget = Math.max(0, (height - Math.max(portrait + 18, 65) - 7) / 10);
+                    var guidanceMethod = CoreHireScreen.class.getDeclaredMethod("civilianGuidance", boolean.class);
+                    guidanceMethod.setAccessible(true);
+                    String guidance = (String) guidanceMethod.invoke(null, layout.compact());
+                    int lineCount = mc.font.split(Component.literal(guidance), layout.width() - 40).size();
+                    require(lineCount <= lineBudget, "Civilian guidance cuts off before its complete final sentence");
+                    view.put("civilianGuidance", guidance);
+                    view.put("civilianGuidanceLines", lineCount); view.put("civilianGuidanceLineBudget", lineBudget);
+                }
                 if (currentPage() == CoreCommandPage.DEFENSES && read("buildingSection").toString().equals("STRUCTURES")) {
                     view.put("selectedPlan", read("selectedDefense").toString());
                     view.put("nativeBlueprintCards", blueprintEvidence());

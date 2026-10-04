@@ -110,6 +110,14 @@ class NativeHudSourceContracts(unittest.TestCase):
                     self.assertEqual(completed.returncode, 0, completed.stderr)
                     self.assertIn('graphicsEnvironmentHeadless=' + result, completed.stdout)
 
+    def test_native_font_checks_complete_civilian_guidance_before_capture(self):
+        source = HARNESS.read_text()
+        self.assertIn('currentPage() == CoreCommandPage.CIVILIANS', source)
+        self.assertIn('getDeclaredMethod("civilianGuidance", boolean.class)', source)
+        self.assertIn('mc.font.split(Component.literal(guidance), layout.width() - 40)', source)
+        self.assertIn('require(lineCount <= lineBudget', source)
+        self.assertIn('view.put("civilianGuidanceLineBudget", lineBudget)', source)
+
     def test_workflow_read_only_and_bounded_online_then_offline(self):
         workflow = (REPO / '.github/workflows/native-hud-qa.yml').read_text()
         for text in ['contents: read', 'persist-credentials: false', 'cache-read-only: true',
