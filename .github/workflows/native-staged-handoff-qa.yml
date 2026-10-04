@@ -54,10 +54,10 @@ jobs:
           git rev-parse HEAD^{tree} > build/native-handoff-qa/evidence/source-tree.txt
           java -version 2> build/native-handoff-qa/evidence/java-version.txt
           cp build/native-handoff-qa/client/.native-smallships-defaults.json build/native-handoff-qa/evidence/
-      - name: Prepare compilation and client assets with a separate thirty-minute cap
+      - name: Prepare compilation, client assets and runtime with a separate thirty-minute cap
         run: |
           set -euo pipefail
-          timeout --signal=KILL 1800s ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=staged-handoff nativeQaClasses prepareRunClient 2>&1 | tee build/native-handoff-qa/evidence/prepare-console.log
+          timeout --signal=KILL 1800s ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=staged-handoff prepareNativeQaClient 2>&1 | tee build/native-handoff-qa/evidence/prepare-console.log
       - name: Run representative lifecycle with a hard ten-minute process cap
         run: |
           set -euo pipefail

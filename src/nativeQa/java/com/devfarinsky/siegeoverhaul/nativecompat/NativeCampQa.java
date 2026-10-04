@@ -47,6 +47,7 @@ public final class NativeCampQa {
     private static final boolean ENABLED = Boolean.getBoolean("siegeoverhaul.nativeQa")
             && "camp-spawn".equals(System.getProperty("siegeoverhaul.nativeQa.mode"));
     private static final long SECOND = 1_000_000_000L;
+    private static final long CAPTURE_TIMEOUT = 30 * SECOND;
     private static final List<String> WORLDS = List.of("siege-native-camp-flat", "siege-native-camp-shallow-water");
     private static final Map<String, Object> REPORT = new LinkedHashMap<>();
     private static final List<Map<String, Object>> SCENARIOS = new ArrayList<>(), SAMPLES = new ArrayList<>();
@@ -56,11 +57,12 @@ public final class NativeCampQa {
     private static Path directory, evidence;
     private static UUID playerId;
     private static String coreKey, capture;
-    private static long started, scenarioStarted, lastSample = -1, establishedAt = -1;
-    private static int scenario, clientPhase, stage, frame, captureAt;
+    private static long started, scenarioStarted, lastSample = -1, establishedAt = -1, captureStarted;
+    private static int scenario, clientPhase, stage, captureReadyFrames, captureAttempts, captureBlankFrames;
     private static boolean finished, hostilePrepared, sawNaturalSearch, sawFallback;
-    private static BlockPos landingScout, captureCenter;
-    private static Map<String, Object> landingEvidence;
+    private static BlockPos landingScout, captureCenter, captureCore;
+    private static Vec3 captureObserver;
+    private static Map<String, Object> landingEvidence, captureDiagnostics;
     private enum Action { NONE, START_COMMAND, CAPTURE, NEXT_WORLD, DONE }
     private NativeCampQa() {}
 
@@ -71,7 +73,15 @@ public final class NativeCampQa {
         try {
             if (started == 0) started = System.nanoTime();
             require(System.nanoTime() - started < 22 * 60 * SECOND, "Camp QA exceeded its overall 22-minute limit");
-            if (capture != null) return;
+            if (capture != null) {
+                require(System.nanoTime() - captureStarted < CAPTURE_TIMEOUT,
+                        "Camp capture did not produce a ready, nonblank framebuffer within 30 seconds: " + captureDiagnostics);
+                // The server future can complete before the client handles its teleport packet.
+                // Aim only from the acknowledged observer position, and maintain that aim while loading.
+                if (mc.player != null && mc.player.position().distanceToSqr(captureObserver) < 0.01)
+                    aim(mc, Vec3.atCenterOf(captureCenter).add(0, 3, 0));
+                return;
+            }
             if (clientPhase == 0) {
                 if (!(mc.screen instanceof TitleScreen)) return;
                 initialize(mc); clientPhase = 1;
@@ -103,13 +113,12 @@ public final class NativeCampQa {
                     require(mc.getConnection() != null, "Actual client command connection unavailable");
                     mc.getConnection().sendCommand("siegeoverhaul start");
                 } else if (action == Action.CAPTURE) {
-                    if (!mc.levelRenderer.isChunkCompiled(captureCenter)) {
-                        pending = CompletableFuture.completedFuture(Action.CAPTURE); return;
-                    }
-                    aim(mc, Vec3.atCenterOf(captureCenter).add(0, 3, 0));
                     mc.options.hideGui = true;
                     capture = scenario == 0 ? "01-established-flat-camp.png" : "02-established-shallow-water-forest-camp.png";
-                    captureAt = frame + 4; return;
+                    captureStarted = System.nanoTime();
+                    captureReadyFrames = captureAttempts = captureBlankFrames = 0;
+                    captureDiagnostics = new LinkedHashMap<>();
+                    return;
                 } else if (action == Action.NEXT_WORLD) {
                     mc.options.hideGui = false;
                     mc.level.disconnect(); mc.clearLevel(); mc.setScreen(new TitleScreen());
@@ -289,10 +298,11 @@ public final class NativeCampQa {
             result.put("recordedOriginalTerrainCounts", originalTerrain);
             if (landingEvidence != null) result.put("controlledHostileTerrain", landingEvidence);
             result.put("constructionScope", "Camp claim, core, strategic blocks and live native crew established; full decorative build-out and waves are not asserted");
-            SCENARIOS.add(result); captureCenter = raid.campPos;
+            SCENARIOS.add(result); captureCenter = raid.campPos.immutable(); captureCore = enemyCore.immutable();
             // Observer movement occurs only after real Survival command/establishment assertions.
             owner.setGameMode(GameType.SPECTATOR);
-            owner.teleportTo(level, raid.campPos.getX() + 30.5, raid.campPos.getY() + 24, raid.campPos.getZ() + 30.5, 135, 30);
+            captureObserver = new Vec3(raid.campPos.getX() + 30.5, raid.campPos.getY() + 24, raid.campPos.getZ() + 30.5);
+            owner.teleportTo(level, captureObserver.x, captureObserver.y, captureObserver.z, 135, 30);
             stage = 3; return Action.CAPTURE;
         }
         if (stage == 3) {
@@ -348,16 +358,74 @@ public final class NativeCampQa {
     @SubscribeEvent
     public static void render(TickEvent.RenderTickEvent event) {
         if (!ENABLED || finished || event.phase != TickEvent.Phase.END) return;
-        frame++;
-        if (capture == null || frame < captureAt) return;
-        try (NativeImage image = Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
-            require(image.getWidth() >= 640 && image.getHeight() >= 360, "Camp framebuffer too small");
-            int first = image.getPixelRGBA(0, 0), changed = 0;
-            for (int y = 0; y < image.getHeight(); y += 16) for (int x = 0; x < image.getWidth(); x += 16)
-                if (image.getPixelRGBA(x, y) != first) changed++;
-            require(changed > 50, "Camp framebuffer appears blank");
-            image.writeToFile(evidence.resolve(capture)); SHOTS.add(capture); capture = null;
-        } catch (Throwable failure) { finish(Minecraft.getInstance(), failure); }
+        if (capture == null) return;
+        Minecraft mc = Minecraft.getInstance();
+        try {
+            boolean worldReady = mc.level != null && mc.player != null && mc.screen == null && mc.getOverlay() == null;
+            boolean observerReady = worldReady && mc.player.isSpectator()
+                    && mc.player.position().distanceToSqr(captureObserver) < 0.01;
+            boolean coreReceived = worldReady && mc.level.hasChunkAt(captureCore)
+                    && mc.level.getBlockState(captureCore).is(CoreBlocks.CORE.get());
+            boolean terrainCompiled = worldReady && captureTerrainCompiled(mc);
+            var camera = mc.gameRenderer.getMainCamera();
+            boolean cameraReady = observerReady && mc.getCameraEntity() == mc.player
+                    && camera.getPosition().distanceToSqr(mc.player.getEyePosition()) < 0.01
+                    && Math.abs(camera.getXRot() - mc.player.getXRot()) < 0.1
+                    && Math.abs(camera.getYRot() - mc.player.getYRot()) < 0.1;
+            captureDiagnostics.put("screenshot", capture);
+            captureDiagnostics.put("elapsedSeconds", (System.nanoTime() - captureStarted) / (double)SECOND);
+            captureDiagnostics.put("worldReady", worldReady); captureDiagnostics.put("observerReady", observerReady);
+            captureDiagnostics.put("coreReceived", coreReceived); captureDiagnostics.put("terrainCompiled", terrainCompiled);
+            captureDiagnostics.put("cameraReady", cameraReady);
+            captureDiagnostics.put("expectedObserver", captureObserver.toString());
+            captureDiagnostics.put("clientPosition", mc.player == null ? "absent" : mc.player.position().toString());
+            captureDiagnostics.put("cameraPosition", camera.getPosition().toString());
+            captureDiagnostics.put("campCore", captureCore.toString());
+            captureDiagnostics.put("framebufferAttempts", captureAttempts); captureDiagnostics.put("blankFrames", captureBlankFrames);
+            require(System.nanoTime() - captureStarted < CAPTURE_TIMEOUT,
+                    "Camp capture did not produce a ready, nonblank framebuffer within 30 seconds: " + captureDiagnostics);
+            if (!(observerReady && coreReceived && terrainCompiled && cameraReady)) {
+                captureReadyFrames = 0;
+                return;
+            }
+            // Four complete frames must follow client teleport, real core delivery and terrain compilation.
+            if (++captureReadyFrames < 4) return;
+            try (NativeImage image = Screenshot.takeScreenshot(mc.getMainRenderTarget())) {
+                captureAttempts++;
+                require(image.getWidth() >= 640 && image.getHeight() >= 360, "Camp framebuffer too small");
+                int first = image.getPixelRGBA(0, 0), changed = 0;
+                for (int y = 0; y < image.getHeight(); y += 16) for (int x = 0; x < image.getWidth(); x += 16)
+                    if (image.getPixelRGBA(x, y) != first) changed++;
+                captureDiagnostics.put("changedPixelSamples", changed);
+                captureDiagnostics.put("framebufferAttempts", captureAttempts);
+                long captureElapsed = System.nanoTime() - captureStarted;
+                captureDiagnostics.put("elapsedSeconds", captureElapsed / (double)SECOND);
+                require(captureElapsed < CAPTURE_TIMEOUT,
+                        "Camp framebuffer readback/sampling exceeded the original 30-second capture deadline: " + captureDiagnostics);
+                if (changed <= 50) {
+                    captureDiagnostics.put("blankFrames", ++captureBlankFrames);
+                    captureReadyFrames = 0;
+                    return; // Re-observe a later real frame; the original deadline is never extended.
+                }
+                require(changed > 50, "Camp framebuffer appears blank");
+                image.writeToFile(evidence.resolve(capture));
+                captureElapsed = System.nanoTime() - captureStarted;
+                captureDiagnostics.put("elapsedSeconds", captureElapsed / (double)SECOND);
+                require(captureElapsed < CAPTURE_TIMEOUT,
+                        "Camp framebuffer write exceeded the original 30-second capture deadline: " + captureDiagnostics);
+                SHOTS.add(capture);
+                SCENARIOS.get(scenario).put("framebufferCapture", new LinkedHashMap<>(captureDiagnostics));
+                capture = null;
+            }
+        } catch (Throwable failure) { finish(mc, failure); }
+    }
+
+    private static boolean captureTerrainCompiled(Minecraft mc) {
+        // Only demand compilation at the actual camp view target and its supporting surface.
+        // Unrelated empty or out-of-frustum sections may legitimately remain uncompiled.
+        BlockPos surface = captureCenter.below();
+        return mc.level.hasChunkAt(surface) && !mc.level.getBlockState(surface).isAir()
+                && mc.levelRenderer.isChunkCompiled(captureCore) && mc.levelRenderer.isChunkCompiled(surface);
     }
 
     private static void initialize(Minecraft mc) throws Exception {
@@ -400,6 +468,7 @@ public final class NativeCampQa {
         REPORT.put("status", failure == null ? "passed" : "failed"); REPORT.put("finishedUtc", Instant.now().toString());
         REPORT.put("scenarios", List.copyOf(SCENARIOS)); REPORT.put("samples", List.copyOf(SAMPLES)); REPORT.put("screenshots", List.copyOf(SHOTS));
         if (failure != null) {
+            if (capture != null) REPORT.put("captureDiagnostics", captureDiagnostics);
             REPORT.put("failure", failure.toString()); FactionLogger.LOG.error("Native camp QA failed at scenario {} stage {}", scenario, stage, failure);
             if (evidence != null && mc.level != null) try (NativeImage pixels = Screenshot.takeScreenshot(mc.getMainRenderTarget())) {
                 pixels.writeToFile(evidence.resolve("failure-native-camp.png")); REPORT.put("failureFramebuffer", "failure-native-camp.png");

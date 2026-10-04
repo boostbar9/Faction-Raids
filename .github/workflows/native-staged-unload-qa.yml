@@ -53,10 +53,10 @@ jobs:
           printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:6\nsimulationDistance:6\nmaxFps:30\nvsync:false\n' > build/native-unload-qa/client/options.txt
           git rev-parse HEAD > build/native-unload-qa/evidence/source-commit.txt
           java -version 2> build/native-unload-qa/evidence/java-version.txt
-      - name: Prepare native classes and client launch without starting Minecraft
+      - name: Prepare native classes, client assets and runtime without starting Minecraft
         run: |
           set -euo pipefail
-          timeout --signal=TERM --kill-after=10s 15m ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=staged-unload nativeQaClasses prepareRunClient 2>&1 | tee build/native-unload-qa/evidence/preparation-console.log
+          timeout --signal=TERM --kill-after=10s 15m ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=staged-unload prepareNativeQaClient 2>&1 | tee build/native-unload-qa/evidence/preparation-console.log
       - name: Run ten-minute configured client unload, resume and cancellation
         run: |
           set -euo pipefail

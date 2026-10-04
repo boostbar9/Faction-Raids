@@ -28,8 +28,11 @@ start this process alongside another native acceptance client on the same host.
 The only allowed game directory is `build/native-unload-qa/client`. An existing
 `saves/siege-native-staged-unload` is rejected. The scenario has a hard 600-second
 wall-clock cap from its first client tick, including creation, departure, loading,
-permission pause, resumed work and cancellation. A separate preparation step allows at most 15 minutes for `nativeQaClasses
-prepareRunClient` without launching Minecraft. The subsequent `--offline runClient`
+permission pause, resumed work and cancellation. A separate preparation step allows at most 15 minutes for `prepareNativeQaClient`
+without launching Minecraft. It depends on `nativeQaClasses prepareRunClient`, then resolves the exact ForgeGradle run task's
+Minecraft/runtime artifact collections and source-set runtime classpaths. This fetches/remaps runtime-only companions such as
+Small Ships and Siege Weapons, which `prepareRunClient` alone does not resolve. The subsequent `--offline runClient`
+uses the same native QA mode and Gradle cache. Its
 process is independently terminated at 10 minutes, with a 10-second TERM-to-KILL grace;
 this includes Gradle launch overhead and can therefore stop before the internal cap.
 A hung client does not receive the preparation budget. Failure to obtain a

@@ -269,6 +269,22 @@ if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)
         }
     }
     tasks.matching { it.name == 'runClient' }.configureEach { dependsOn tasks.named('nativeQaClasses') }
+    tasks.register('prepareNativeQaClient') {
+        group = 'verification'
+        description = 'Compile and resolve the exact native QA client runtime without launching Minecraft.'
+        dependsOn 'nativeQaClasses', 'prepareRunClient'
+        doLast {
+            // ForgeGradle 6.0.54 prepareRunClient only prepares assets/natives.
+            // Its run task resolves separate copied artifact configurations, and
+            // adds source-set runtime classpaths only when it launches the JVM.
+            // Resolve those same collections here so runtime-only companions are
+            // downloaded/remapped within preparation, before offline gameplay.
+            def clientRun = tasks.named('runClient').get()
+            def runtimeFiles = files(clientRun.minecraftArtifacts, clientRun.runtimeClasspathArtifacts,
+                    clientRun.runConfig.get().allSources.collect { it.runtimeClasspath })
+            logger.lifecycle("Prepared ${runtimeFiles.files.size()} native QA client runtime entries without launching Minecraft.")
+        }
+    }
 }
 
 // Opt-in physical dedicated-server GameTests. No nativeQa client classes or QA output in jar.
