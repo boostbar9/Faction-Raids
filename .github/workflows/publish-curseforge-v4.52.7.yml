@@ -1,0 +1,1246 @@
+# One-use exact-artifact publisher; do not merge this workflow into main.
+# All 55 source, PR/main Build/artifact and regression pins stay invalid until reviewed.
+# No checkout, rebuild, release tag, GitHub Release or updates.json mutation.
+name: Publish tested 4.52.7 release to CurseForge
+
+on:
+  push:
+    branches: [publish/curseforge-v4.52.7]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  issues: read
+
+concurrency:
+  group: curseforge-1364352-v4.52.7
+  cancel-in-progress: false
+
+env:
+  COPILOT_REVIEW_ID: '5409763117'
+  COPILOT_REVIEW_BODY_SHA256: 'c78c312ea73fb9b5bdeccb535062539524e7c85a4aff7769d370075ce89e9953'
+  INDEPENDENT_REVIEW_COMMENT_ID: '5987509693'
+  INDEPENDENT_REVIEW_BODY_SHA256: '24abd235937e2481525382feeb251932c0cb57c5149ee96f94b55760dddaa3cb'
+  PULL_REQUEST_NUMBER: '268'
+  REVIEWED_SOURCE_SHA: '5ad06b41ecf550cc574c0c169026f43b58e9506b'
+  MERGED_SOURCE_SHA: '09568e49aa5498ef934e933df3cfaaabb8285da1'
+  SOURCE_TREE_SHA: 'b31842363c093833a3fd50a132c0cbd328f36904'
+  REVIEWED_BUILD_RUN_ID: '37259692657'
+  REVIEWED_JAR_ARTIFACT_ID: '11324505012'
+  REVIEWED_REGRESSION_ARTIFACT_ID: '11324325315'
+  BUILD_RUN_ID: '37260568029'
+  BUILD_RUN_ATTEMPT: '1'
+  JAR_ARTIFACT_ID: '11325015412'
+  REGRESSION_ARTIFACT_ID: '11325005374'
+  ARTIFACT_SHA256: '0ffbb3b68446c0fbe6d183a20171ea338b2e0964b3116f101c629777b560b4ec'
+  REGRESSION_SUITE_SHA256: '7351eae84d410c927b6dd1c19b2b5a0b1dc0992906ced6484e1911eb0a36f303'
+  REGRESSION_TEST_COUNT: '1507'
+  REGRESSION_SUITE_COUNT: '251'
+  REVIEWED_BUILD_RUN_ATTEMPT: '1'
+  HUD_RUN_ID: '37249819909'
+  HUD_RUN_ATTEMPT: '1'
+  HUD_ARTIFACT_ID: '11320801742'
+  HUD_CHECKOUT_SHA: '0bc7715ecc72dbbf2bd01810fc247592a9658d22'
+  HUD_EVIDENCE_SHA256: '4a7675e63a79aedce061c363c61953d6834d52451304ae7ed2f9983f62a6ef3e'
+  BUILDING_RUN_ID: '37259692607'
+  BUILDING_RUN_ATTEMPT: '1'
+  BUILDING_ARTIFACT_ID: '11324620197'
+  BUILDING_CHECKOUT_SHA: '559a6b200f0b46eab504b22d9d2c240774a74193'
+  BUILDING_EVIDENCE_SHA256: '8298bcda3f38b73da52314f55fdd4548fff34a654fc3c7fe7788c278e9f0dce9'
+  SERVER_RUN_ID: '37259692528'
+  SERVER_RUN_ATTEMPT: '1'
+  SERVER_ARTIFACT_ID: '11324505038'
+  SERVER_CHECKOUT_SHA: '559a6b200f0b46eab504b22d9d2c240774a74193'
+  SERVER_EVIDENCE_SHA256: '486bf5ed6f6b6ecc8242d40a96ecc06c69e630fef6b2a8a547d7ac00b24dd37d'
+
+  CAMP_RUN_ID: '37259692531'
+  CAMP_RUN_ATTEMPT: '1'
+  CAMP_ARTIFACT_ID: '11324530433'
+  CAMP_CHECKOUT_SHA: '559a6b200f0b46eab504b22d9d2c240774a74193'
+  CAMP_EVIDENCE_SHA256: 'aefce32b025e95dd150da9bbba9c5a2e13e89f7f9fa190c184219e907f6174c0'
+  LIFECYCLE_RUN_ID: '37249819787'
+  LIFECYCLE_RUN_ATTEMPT: '1'
+  LIFECYCLE_ARTIFACT_ID: '11320914488'
+  LIFECYCLE_CHECKOUT_SHA: '0bc7715ecc72dbbf2bd01810fc247592a9658d22'
+  LIFECYCLE_EVIDENCE_SHA256: '5a144ae5c4b3493f28c1615080aada8342156a105f4f2f8a51d015e8de39a970'
+
+  HANDOFF_RUN_ID: '37249819858'
+  HANDOFF_RUN_ATTEMPT: '1'
+  HANDOFF_ARTIFACT_ID: '11320885967'
+  HANDOFF_CHECKOUT_SHA: '0bc7715ecc72dbbf2bd01810fc247592a9658d22'
+  HANDOFF_EVIDENCE_SHA256: '25dd60335a2ef2840aedf2043954870a11bc06b72fd1c9d588f6f209e7776d52'
+  UNLOAD_RUN_ID: '37249819831'
+  UNLOAD_RUN_ATTEMPT: '1'
+  UNLOAD_ARTIFACT_ID: '11320885883'
+  UNLOAD_CHECKOUT_SHA: '0bc7715ecc72dbbf2bd01810fc247592a9658d22'
+  UNLOAD_EVIDENCE_SHA256: 'e73a54695abd56354515fc3cf9a3f48a5173f607ece8570f6ab636ec0088ed6a'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require complete immutable 4.52.7 pins
+        run: |
+          python3 - <<'CHECK'
+          """Fail locally before any API read unless every immutable 4.52.7 pin is filled."""
+          import os
+          import re
+
+
+          def main():
+              assert os.environ['GITHUB_REPOSITORY'] == 'boostbar9/Faction-Raids'
+              assert os.environ['GITHUB_REF'] == 'refs/heads/publish/curseforge-v4.52.7'
+              assert os.environ['GITHUB_EVENT_NAME'] == 'push'
+              for key in ('REVIEWED_SOURCE_SHA', 'MERGED_SOURCE_SHA', 'SOURCE_TREE_SHA', 'HUD_CHECKOUT_SHA', 'BUILDING_CHECKOUT_SHA', 'SERVER_CHECKOUT_SHA', 'CAMP_CHECKOUT_SHA', 'LIFECYCLE_CHECKOUT_SHA', 'HANDOFF_CHECKOUT_SHA', 'UNLOAD_CHECKOUT_SHA'):
+                  assert re.fullmatch(r'[0-9a-f]{40}', os.environ[key]), 'Unfilled source pin: ' + key
+              for key in ('COPILOT_REVIEW_BODY_SHA256', 'INDEPENDENT_REVIEW_BODY_SHA256', 'ARTIFACT_SHA256', 'REGRESSION_SUITE_SHA256', 'HUD_EVIDENCE_SHA256', 'BUILDING_EVIDENCE_SHA256', 'SERVER_EVIDENCE_SHA256', 'CAMP_EVIDENCE_SHA256', 'LIFECYCLE_EVIDENCE_SHA256', 'HANDOFF_EVIDENCE_SHA256', 'UNLOAD_EVIDENCE_SHA256'):
+                  assert re.fullmatch(r'[0-9a-f]{64}', os.environ[key]), 'Unfilled digest pin: ' + key
+              for key in ('COPILOT_REVIEW_ID', 'INDEPENDENT_REVIEW_COMMENT_ID', 'PULL_REQUEST_NUMBER', 'REVIEWED_BUILD_RUN_ID', 'REVIEWED_JAR_ARTIFACT_ID',
+                          'REVIEWED_REGRESSION_ARTIFACT_ID', 'BUILD_RUN_ID',
+                          'BUILD_RUN_ATTEMPT', 'JAR_ARTIFACT_ID', 'REGRESSION_ARTIFACT_ID',
+                          'REGRESSION_TEST_COUNT', 'REGRESSION_SUITE_COUNT', 'REVIEWED_BUILD_RUN_ATTEMPT',
+                          'HUD_RUN_ID', 'HUD_RUN_ATTEMPT', 'HUD_ARTIFACT_ID',
+                          'BUILDING_RUN_ID', 'BUILDING_RUN_ATTEMPT', 'BUILDING_ARTIFACT_ID',
+                          'SERVER_RUN_ID', 'SERVER_RUN_ATTEMPT', 'SERVER_ARTIFACT_ID',
+                          'CAMP_RUN_ID', 'CAMP_RUN_ATTEMPT', 'CAMP_ARTIFACT_ID',
+                          'LIFECYCLE_RUN_ID', 'LIFECYCLE_RUN_ATTEMPT', 'LIFECYCLE_ARTIFACT_ID',
+                          'HANDOFF_RUN_ID', 'HANDOFF_RUN_ATTEMPT', 'HANDOFF_ARTIFACT_ID',
+                          'UNLOAD_RUN_ID', 'UNLOAD_RUN_ATTEMPT', 'UNLOAD_ARTIFACT_ID'):
+                  assert re.fullmatch(r'[1-9][0-9]*', os.environ[key]), 'Unfilled or invalid pin: ' + key
+              assert os.environ['BUILD_RUN_ID'] != os.environ['REVIEWED_BUILD_RUN_ID'], 'PR Build is not a merged-main release Build'
+              artifact_ids = [os.environ[key] for key in (
+                  'REVIEWED_JAR_ARTIFACT_ID', 'REVIEWED_REGRESSION_ARTIFACT_ID',
+                  'JAR_ARTIFACT_ID', 'REGRESSION_ARTIFACT_ID')]
+              assert len(set(artifact_ids)) == 4, 'PR/main JAR/XML artifact IDs must all be distinct'
+              assert len({os.environ[key] for key in ('BUILD_RUN_ID', 'REVIEWED_BUILD_RUN_ID', 'HUD_RUN_ID', 'BUILDING_RUN_ID', 'SERVER_RUN_ID', 'CAMP_RUN_ID', 'LIFECYCLE_RUN_ID', 'HANDOFF_RUN_ID', 'UNLOAD_RUN_ID')}) == 9, 'All nine gate runs must be distinct'
+              assert len(set(artifact_ids + [os.environ[prefix + '_ARTIFACT_ID'] for prefix in ('HUD', 'BUILDING', 'SERVER', 'CAMP', 'LIFECYCLE', 'HANDOFF', 'UNLOAD')])) == 11, 'All eleven artifact IDs must be distinct'
+              assert int(os.environ['REGRESSION_TEST_COUNT']) >= int(os.environ['REGRESSION_SUITE_COUNT'])
+              for key, value in {'HANDOFF_ARTIFACT_ID': '11320885967', 'HANDOFF_CHECKOUT_SHA': '0bc7715ecc72dbbf2bd01810fc247592a9658d22', 'HANDOFF_EVIDENCE_SHA256': '25dd60335a2ef2840aedf2043954870a11bc06b72fd1c9d588f6f209e7776d52', 'HANDOFF_RUN_ATTEMPT': '1', 'HANDOFF_RUN_ID': '37249819858', 'HUD_ARTIFACT_ID': '11320801742', 'HUD_CHECKOUT_SHA': '0bc7715ecc72dbbf2bd01810fc247592a9658d22', 'HUD_EVIDENCE_SHA256': '4a7675e63a79aedce061c363c61953d6834d52451304ae7ed2f9983f62a6ef3e', 'HUD_RUN_ATTEMPT': '1', 'HUD_RUN_ID': '37249819909', 'LIFECYCLE_ARTIFACT_ID': '11320914488', 'LIFECYCLE_CHECKOUT_SHA': '0bc7715ecc72dbbf2bd01810fc247592a9658d22', 'LIFECYCLE_EVIDENCE_SHA256': '5a144ae5c4b3493f28c1615080aada8342156a105f4f2f8a51d015e8de39a970', 'LIFECYCLE_RUN_ATTEMPT': '1', 'LIFECYCLE_RUN_ID': '37249819787', 'UNLOAD_ARTIFACT_ID': '11320885883', 'UNLOAD_CHECKOUT_SHA': '0bc7715ecc72dbbf2bd01810fc247592a9658d22', 'UNLOAD_EVIDENCE_SHA256': 'e73a54695abd56354515fc3cf9a3f48a5173f607ece8570f6ab636ec0088ed6a', 'UNLOAD_RUN_ATTEMPT': '1', 'UNLOAD_RUN_ID': '37249819831'}.items():
+                  assert os.environ[key] == value, 'Historical baseline pin changed: ' + key
+              print('All 4.52.7 immutable pins are filled; live source/artifact checks still required.')
+
+
+          if __name__ == '__main__':
+              main()
+          CHECK
+
+      - name: Prevent duplicate release uploads
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          """One-use upload guard. GitHub reads only; no CurseForge credentials."""
+          import json
+          import os
+          import urllib.parse
+          import urllib.request
+
+
+          def get(path):
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+
+
+          def pages(path, key, params=None):
+              seen = 0
+              total = None
+              for page in range(1, 11):
+                  query = urllib.parse.urlencode(dict(params or {}, per_page=100, page=page))
+                  response = get(path + '?' + query)
+                  if (not isinstance(response, dict) or not isinstance(response.get(key), list)
+                          or type(response.get('total_count')) is not int):
+                      raise RuntimeError('Missing or malformed history metadata; inspect before publishing.')
+                  if total is None:
+                      total = response['total_count']
+                  elif total != response['total_count']:
+                      raise RuntimeError('History changed during inspection; inspect before publishing.')
+                  items = response[key]
+                  seen += len(items)
+                  yield from items
+                  if len(items) < 100:
+                      if seen != total:
+                          raise RuntimeError('Incomplete history returned; inspect before publishing.')
+                      return
+              raise RuntimeError('History exceeded the bounded scan; inspect before publishing.')
+
+
+          def classify(step):
+              """Success means accepted; skipped/definitely unstarted means no attempt."""
+              if step.get('conclusion') == 'success':
+                  return 'accepted'
+              if step.get('conclusion') == 'skipped':
+                  return 'not_started'
+              if (step.get('status') in ('queued', 'pending')
+                      and not step.get('started_at') and not step.get('completed_at')
+                      and step.get('conclusion') is None):
+                  return 'not_started'
+              # Failed/canceled/timed-out, in-progress, or incomplete/unknown metadata
+              # cannot prove that CurseForge did not accept a request.
+              return 'ambiguous'
+
+
+          def definitely_unstarted(item):
+              return (item.get('conclusion') == 'skipped'
+                      or (item.get('status') in ('queued', 'pending')
+                          and not item.get('started_at') and not item.get('run_started_at')
+                          and not item.get('completed_at') and item.get('conclusion') is None))
+
+
+          def classify_job(job):
+              if not isinstance(job, dict):
+                  return 'ambiguous'
+              steps = job.get('steps')
+              if not isinstance(steps, list) or any(not isinstance(step, dict) for step in steps):
+                  return 'not_started' if definitely_unstarted(job) else 'ambiguous'
+              uploads = [step for step in steps if step.get('name') == 'Publish to CurseForge']
+              if len(uploads) != 1:
+                  return 'not_started' if not uploads and definitely_unstarted(job) else 'ambiguous'
+              return classify(uploads[0])
+
+
+          def main():
+              current = int(os.environ['GITHUB_RUN_ID'])
+              current_attempt = int(os.environ.get('GITHUB_RUN_ATTEMPT', '1'))
+              accepted = []
+              ambiguous = []
+              runs = list(pages('actions/workflows/publish-curseforge-v4.52.7.yml/runs', 'workflow_runs', {
+                  'branch': 'publish/curseforge-v4.52.7', 'event': 'push'}))
+              # The running attempt may not yet appear in list results. Always inspect
+              # its prior attempts explicitly, and every attempt of earlier runs.
+              inspect = {(current, attempt): None for attempt in range(1, current_attempt)}
+              for run in runs:
+                  if (not isinstance(run, dict) or type(run.get('id')) is not int
+                          or type(run.get('run_attempt')) is not int or run['run_attempt'] < 1):
+                      raise RuntimeError('Incomplete run identity/attempt history; inspect before publishing.')
+                  if run['id'] == current:
+                      continue
+                  if run.get('path', '').split('@', 1)[0] != '.github/workflows/publish-curseforge-v4.52.7.yml':
+                      raise RuntimeError('Unexpected or missing publisher workflow identity; inspect before publishing.')
+                  inspect.update({(run['id'], attempt): run
+                                  for attempt in range(1, run['run_attempt'] + 1)})
+              for run_id, attempt in sorted(inspect):
+                  jobs = list(pages(f'actions/runs/{run_id}/attempts/{attempt}/jobs', 'jobs'))
+                  run_metadata = inspect[(run_id, attempt)]
+                  if not jobs and not (run_metadata and attempt == run_metadata['run_attempt']
+                                       and definitely_unstarted(run_metadata)):
+                      ambiguous.append({'run': run_id, 'attempt': attempt, 'reason': 'No job history returned'})
+                  for job in jobs:
+                      state = classify_job(job)
+                      evidence = {'run': run_id, 'attempt': attempt,
+                                  'job': job.get('id') if isinstance(job, dict) else None,
+                                  'state': state}
+                      if state == 'accepted':
+                          accepted.append(evidence)
+                      elif state == 'ambiguous':
+                          ambiguous.append(evidence)
+              if accepted:
+                  publish = False
+                  print('Prior successful upload found; skipping duplicate:', json.dumps(accepted))
+                  print('Inspect its receipt and CurseForge public status separately.')
+              elif ambiguous:
+                  raise RuntimeError('An earlier upload may have been accepted. Inspect its logs, '
+                                     'receipt and existing CurseForge files before any retry; '
+                                     'there is no override flag. Evidence: ' + json.dumps(ambiguous))
+              else:
+                  publish = True
+                  print('No prior successful or ambiguous upload attempt; publishing once.')
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                  output.write('publish=' + str(publish).lower() + '\n')
+
+
+          if __name__ == '__main__':
+              main()
+          CHECK
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Verify successful tested build and identical merged tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'CHECK'
+          """Bind the exact merged Build, PR, current main and source tree."""
+          import base64
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import urllib.request
+
+
+          SOURCE_CONTRACT = {'development_base_tree': '7aefaac03b2116d4a077337647ca61f378326fb5', 'reviewed_delta': ['.github/workflows/native-building-qa.yml', 'CHANGELOG.md', 'CONTRIBUTING.md', 'build.gradle', 'docs/native-sizeable-foliage-qa.md', 'docs/release-4.52.6.md', 'docs/sizeable-foliage-compatibility.md', 'docs/update-notifications.md', 'gradle.properties', 'scripts/tests/test_native_sizeable_foliage_qa.py', 'scripts/verify-native-sizeable-foliage.py', 'src/main/java/com/devfarinsky/siegeoverhaul/camp/CampVegetation.java', 'src/main/java/com/devfarinsky/siegeoverhaul/core/TerritoryFortification.java', 'src/main/java/com/devfarinsky/siegeoverhaul/core/WallSurface.java', 'src/main/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeConstructionGuard.java', 'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeBuildingGameplay.java', 'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeBuildingQa.java', 'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeSizeableFoliageContracts.java', 'src/test/java/com/devfarinsky/siegeoverhaul/camp/CampVegetationTest.java', 'src/test/java/com/devfarinsky/siegeoverhaul/core/TerritoryFortificationTest.java', 'updates.json'], 'sha256': {'.github/workflows/build.yml': 'b50fde085420f7412dec9e18e2d12755a616ceff2bc523cd4f5fa53c24a8c37e', '.github/workflows/native-building-qa.yml': '7a1e535a50352acbc2580d6b980fda84473625dd2826fa26919d9e46e97082e8', '.github/workflows/native-building-server-qa.yml': 'f90a54710538f5a90a61b422929eb6945233146bf0db34fb045b3e1ffe6a67ea', '.github/workflows/native-camp-qa.yml': '08268d03ec2dfa54eaba6d58a5380fbad527c02320c39ad9e59ad097fdbc9b62', 'CHANGELOG.md': 'b2a65a7149a64fc5eb803c8113c51b4c3533898ea4d013a1ae6ff56fdc54a4ad', 'CONTRIBUTING.md': '2b14384825b729681791cf4f84b42cb2e70f8ea61cce880e43e54d42910096fc', 'build.gradle': 'b3a6536dc336a2368d151057f7501fafe8d8f80000f12b8e20b72a1e324998af', 'docs/native-sizeable-foliage-qa.md': '31896504417089d0819de234252a86eb28f45eab3505c4e8dc34a0475bd30c9c', 'docs/release-4.52.6.md': '51edbb740967771593832653a7fa43dc09d905fa8c76f7677c37ab5b795323d3', 'docs/sizeable-foliage-compatibility.md': '31e6e4b754b488b11d31e1d7600d273e1cca00b10388c74147b95448c9141a91', 'docs/update-notifications.md': 'cc933df854e03991cd8569dd972762fd989ffeb61742e827f85b9f7435dc850e', 'gradle.properties': 'e7204390e9d7b68e3e20b59e930045715ef33c8008656f2db54fe4c38097f2fb', 'scripts/tests/test_native_sizeable_foliage_qa.py': 'cc24b65638353feb0403192149a5669c967925a63c0f07e1eb99026622248a6e', 'scripts/verify-native-economy.py': '0b1f83483bf1c6cd121617410b7dfa7150d355ad176b8484cc1ecbfaa19f3c71', 'scripts/verify-native-sizeable-foliage.py': '522d9471bb81a1cbe404dab009d90467bd596eabe3270dc9c11ba9266a88ee8f', 'src/main/java/com/devfarinsky/siegeoverhaul/RaidNetwork.java': '664cea83404334b15595337bd67ba54e90225185e0e832e2a236417d13a2aee1', 'src/main/java/com/devfarinsky/siegeoverhaul/camp/CampVegetation.java': 'bd6c2bc88c7ff050f441da279dca8752faf6ce6c06380114621b360204bb15c5', 'src/main/java/com/devfarinsky/siegeoverhaul/core/TerritoryFortification.java': '581b0f8fa45f49775284954d91d184983244855062cbadfb965302b1acfe178f', 'src/main/java/com/devfarinsky/siegeoverhaul/core/WallSurface.java': 'f9221eb99f1be8a8422b9085f892f204de91e61ed35ea8e5876d4fb83402a418', 'src/main/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeConstructionGuard.java': '8d46c4200bd149cd2295377ee9e7b6f03d6beb2a97adf876a7643971e801462b', 'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeBuildingGameplay.java': '799f97b2bc99dcb1a1e1fe134435d40c7c7fcd31623e962805ab20c77e968b03', 'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeBuildingQa.java': '85aa8a439a0a8aaab95e393e418f525400922b3381dfe58bb0835801fa16daf1', 'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeSizeableFoliageContracts.java': '9ab7449bd46ed752586b3a3fcaf32b970b5e2d43d927fb81c91d672bc5f90cea', 'src/test/java/com/devfarinsky/siegeoverhaul/camp/CampVegetationTest.java': '427dc3346fbf22353de6e2f354482db91fc37210fda38a4bd90441266af1225d', 'src/test/java/com/devfarinsky/siegeoverhaul/core/TerritoryFortificationTest.java': '7ff746a82f8e53a7af1d3533742c9390adba8de0f9191c7d7d793c4003fb08c8', 'updates.json': '10b8e9ef259d965a25093271309f625691f135e68336acf5a41cdf0221e9c5ad'}}
+
+          def get(path):
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+
+
+          def review_threads(pr_number):
+              query = 'query($number:Int!){repository(owner:"boostbar9",name:"Faction-Raids"){pullRequest(number:$number){reviewThreads(first:100){pageInfo{hasNextPage} nodes{id isResolved isOutdated comments(first:1){nodes{author{login} body}}}}}}}'
+              request = urllib.request.Request('https://api.github.com/graphql',
+                  data=json.dumps({'query': query, 'variables': {'number': pr_number}}).encode(),
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'Content-Type': 'application/json'}, method='POST')
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  result = json.load(response)
+              assert not result.get('errors'), 'Review-thread query failed'
+              threads = result['data']['repository']['pullRequest']['reviewThreads']
+              assert threads['pageInfo']['hasNextPage'] is False, 'Review threads truncated'
+              assert isinstance(threads['nodes'], list)
+              return threads['nodes']
+
+
+          def verify_reviewed_run(prefix, name, path, artifacts, expected_sha=None, expected_pr=None):
+              expected_sha = expected_sha or os.environ['REVIEWED_SOURCE_SHA']
+              expected_pr = expected_pr or int(os.environ['PULL_REQUEST_NUMBER'])
+              run_id = os.environ[prefix + '_RUN_ID']
+              run = get('actions/runs/' + run_id)
+              assert run['id'] == int(run_id)
+              assert run['run_attempt'] == int(os.environ[prefix + '_RUN_ATTEMPT']), 'Reviewed gate attempt changed: ' + prefix
+              assert run['status'] == 'completed' and run['conclusion'] == 'success', prefix
+              assert run['event'] in ('pull_request', 'workflow_dispatch'), prefix
+              assert run['head_sha'] == expected_sha, 'Wrong final PR head: ' + prefix
+              assert run['name'] == name and run['path'] == path, prefix
+              assert run['repository']['full_name'] == run['head_repository']['full_name'] == 'boostbar9/Faction-Raids', prefix
+              assert get('actions/workflows/' + str(run['workflow_id']))['path'] == path, prefix
+              if run['event'] == 'pull_request':
+                  associations = run['pull_requests']
+                  assert isinstance(associations, list), 'Malformed run PR associations: ' + prefix
+                  if not associations:
+                      # GitHub may return an empty run association list after merge. Resolve
+                      # the already exact-pinned head through its authoritative PR endpoint;
+                      # do not accept a missing, truncated, foreign or mismatched association.
+                      associations = get('commits/' + expected_sha + '/pulls?per_page=100')
+                      assert isinstance(associations, list) and len(associations) < 100, 'Missing or truncated commit PR associations: ' + prefix
+                      matches = [pr for pr in associations if pr['number'] == expected_pr]
+                      assert len(matches) == 1, 'Missing or ambiguous exact commit PR association: ' + prefix
+                      associated = matches[0]
+                      assert associated['head']['sha'] == expected_sha, prefix
+                      assert associated['base']['ref'] == 'main', prefix
+                      assert associated['head']['repo']['full_name'] == associated['base']['repo']['full_name'] == 'boostbar9/Faction-Raids', prefix
+                  else:
+                      assert any(pr['number'] == expected_pr and pr['head']['sha'] == expected_sha
+                                 for pr in associations), 'Missing exact PR association: ' + prefix
+              response = get('actions/runs/' + run_id + '/artifacts?per_page=100')
+              assert response['total_count'] == len(response['artifacts']), 'Truncated gate artifacts: ' + prefix
+              selected = {}
+              for artifact_name, artifact_id in artifacts.items():
+                  matches = [item for item in response['artifacts'] if item['name'] == artifact_name]
+                  assert len(matches) == 1, artifact_name
+                  item = matches[0]
+                  assert item['id'] == artifact_id and not item['expired'] and item['size_in_bytes'] > 0, artifact_name
+                  assert item['workflow_run']['id'] == int(run_id), artifact_name
+                  assert item['workflow_run']['head_sha'] == expected_sha, artifact_name
+                  selected[artifact_name] = artifact_id
+              return {'run_id': int(run_id), 'run_attempt': run['run_attempt'], 'artifacts': selected}
+
+
+          def main():
+              assert re.fullmatch(r'[1-9][0-9]*', os.environ['PULL_REQUEST_NUMBER']), 'Unfilled PR identity'
+              reviewed_sha = os.environ['REVIEWED_SOURCE_SHA']
+              merged_sha = os.environ['MERGED_SOURCE_SHA']
+              source_tree = os.environ['SOURCE_TREE_SHA']
+              build_run = os.environ['BUILD_RUN_ID']
+              for value in (reviewed_sha, merged_sha, source_tree):
+                  assert re.fullmatch(r'[0-9a-f]{40}', value), 'Unfilled or invalid source pin'
+              for key in ('BUILD_RUN_ID', 'BUILD_RUN_ATTEMPT', 'JAR_ARTIFACT_ID', 'REGRESSION_ARTIFACT_ID'):
+                  assert re.fullmatch(r'[1-9][0-9]*', os.environ[key]), 'Unfilled or invalid pin: ' + key
+              assert re.fullmatch(r'[0-9a-f]{64}', os.environ['ARTIFACT_SHA256']), 'Unfilled JAR digest'
+              assert os.environ['GITHUB_REPOSITORY'] == 'boostbar9/Faction-Raids'
+              run = get('actions/runs/' + build_run)
+              assert run['id'] == int(build_run)
+              assert run['run_attempt'] == int(os.environ['BUILD_RUN_ATTEMPT']), 'Build attempt changed; reconcile'
+              assert run['status'] == 'completed' and run['conclusion'] == 'success'
+              assert run['event'] == 'push' and run['head_branch'] == 'main'
+              assert run['head_sha'] == merged_sha
+              assert run['name'] == 'Build' and run['path'] == '.github/workflows/build.yml'
+              assert run['repository']['full_name'] == 'boostbar9/Faction-Raids'
+              assert run['head_repository']['full_name'] == 'boostbar9/Faction-Raids'
+              workflow = get('actions/workflows/' + str(run['workflow_id']))
+              assert workflow['path'] == '.github/workflows/build.yml'
+              pr = get('pulls/' + os.environ['PULL_REQUEST_NUMBER'])
+              assert pr['merged'] and pr['merge_commit_sha'] == merged_sha
+              assert pr['head']['sha'] == reviewed_sha
+              assert pr['base']['ref'] == 'main'
+              assert pr['base']['repo']['full_name'] == 'boostbar9/Faction-Raids'
+              assert pr['head']['repo']['full_name'] == 'boostbar9/Faction-Raids'
+              main_sha = get('branches/main')['commit']['sha']
+              assert main_sha == merged_sha, 'Main advanced; reconcile explicitly before upload'
+              for sha in (reviewed_sha, merged_sha, run['head_sha'], main_sha):
+                  assert get('git/commits/' + sha)['tree']['sha'] == source_tree
+              tree = get('git/trees/' + source_tree + '?recursive=1')
+              assert tree['sha'] == source_tree and not tree['truncated']
+              paths = [entry['path'] for entry in tree['tree'] if entry['type'] == 'blob']
+              # Fresh Build/Building/Server/Camp gates bind final head. Other gates remain explicitly historical.
+              reviewed_build = verify_reviewed_run('REVIEWED_BUILD', 'Build', '.github/workflows/build.yml', {
+                  'Faction-Raids-Forge-1.20.1': int(os.environ['REVIEWED_JAR_ARTIFACT_ID']),
+                  'regression-test-results': int(os.environ['REVIEWED_REGRESSION_ARTIFACT_ID']),
+              })
+              native_gates = {}
+              for prefix, name, workflow_path, artifact_prefix in (
+                  ('HUD', 'Native HUD QA', '.github/workflows/native-hud-qa.yml', 'native-hud-qa'),
+                  ('BUILDING', 'Native Building QA', '.github/workflows/native-building-qa.yml', 'native-building-qa'),
+                  ('SERVER', 'Native Building Server QA', '.github/workflows/native-building-server-qa.yml', 'native-building-server-qa'),
+                  ('CAMP', 'Native Camp Spawn QA', '.github/workflows/native-camp-qa.yml', 'native-camp-qa'),
+                  ('LIFECYCLE', 'Native Camp Lifecycle QA', '.github/workflows/native-camp-lifecycle-qa.yml', 'native-camp-lifecycle-qa'),
+                  ('HANDOFF', 'Native Hollow Representative Stage Handoff QA', '.github/workflows/native-staged-handoff-qa.yml', 'native-handoff-qa'),
+                  ('UNLOAD', 'Native Staged Unload QA (Chunk Loading Off)', '.github/workflows/native-staged-unload-qa.yml', 'native-staged-unload-qa'),
+              ):
+                  artifact_name = artifact_prefix + '-' + os.environ[prefix + '_RUN_ID'] + '-' + os.environ[prefix + '_RUN_ATTEMPT']
+                  inherited = prefix in ('HUD', 'LIFECYCLE', 'HANDOFF', 'UNLOAD')
+                  expected_native_source = '547dafd3e898282df67f1134f41cf9a6a57e3a0a' if inherited else reviewed_sha
+                  expected_native_tree = 'a3e44c7478612b7f8b4de9112c664005a4bda78e' if inherited else source_tree
+                  native_gates[prefix.lower()] = verify_reviewed_run(prefix, name, workflow_path, {
+                      artifact_name: int(os.environ[prefix + '_ARTIFACT_ID']),
+                  }, expected_native_source, 266 if inherited else int(os.environ['PULL_REQUEST_NUMBER']))
+                  checkout = os.environ[prefix + '_CHECKOUT_SHA']
+                  assert get('git/commits/' + checkout)['tree']['sha'] == expected_native_tree, 'Native checkout tree differs: ' + prefix
+                  native_gates[prefix.lower()]['inherited_baseline'] = inherited
+                  native_gates[prefix.lower()]['tested_source'] = expected_native_source
+                  native_gates[prefix.lower()]['checkout_sha'] = checkout
+                  native_gates[prefix.lower()]['evidence_sha256'] = os.environ[prefix + '_EVIDENCE_SHA256']
+              # Whole-tree inheritance is allowed only through this exact reviewed delta.
+              # Historical evidence is never represented as final-head native playtesting.
+              baseline_tree = get('git/trees/a3e44c7478612b7f8b4de9112c664005a4bda78e?recursive=1')
+              assert baseline_tree['sha'] == 'a3e44c7478612b7f8b4de9112c664005a4bda78e' and not baseline_tree['truncated']
+              baseline_entries = {e['path']: e for e in baseline_tree['tree'] if e['type'] == 'blob'}
+              entries_by_path = {e['path']: e for e in tree['tree'] if e['type'] == 'blob'}
+              contract = SOURCE_CONTRACT
+              # Tree entry URL fields differ by traversal; compare immutable blob identity/mode only.
+              signature = lambda e: None if e is None else (e['mode'], e['type'], e['sha'])
+              changed = {p for p in set(baseline_entries) | set(entries_by_path)
+                         if signature(baseline_entries.get(p)) != signature(entries_by_path.get(p))}
+              assert changed == set(contract['reviewed_delta']), 'Source delta differs from reviewed narrow compatibility scope'
+              for path, expected in contract['sha256'].items():
+                  blob = get('git/blobs/' + entries_by_path[path]['sha'])
+                  assert blob['encoding'] == 'base64', path
+                  raw = base64.b64decode(blob['content'], validate=False)
+                  assert hashlib.sha256(raw).hexdigest() == expected, 'Source/receipt contract changed; regenerate and review publisher: ' + path
+              assert get('git/commits/f3cc9baa32d5975cb51ed797668bab97b1485f87')['tree']['sha'] == contract['development_base_tree']
+              # Final-head Copilot review and owner-recorded independent review are immutable pins.
+              reviews = get('pulls/' + os.environ['PULL_REQUEST_NUMBER'] + '/reviews?per_page=100')
+              assert isinstance(reviews, list) and len(reviews) < 100, 'Missing/truncated review history'
+              selected = [r for r in reviews if r['id'] == int(os.environ['COPILOT_REVIEW_ID'])]
+              assert len(selected) == 1
+              review = selected[0]
+              assert review['commit_id'] == reviewed_sha and review['state'] in ('COMMENTED', 'APPROVED')
+              assert review['user']['login'] == 'copilot-pull-request-reviewer[bot]'
+              assert hashlib.sha256(review['body'].encode()).hexdigest() == os.environ['COPILOT_REVIEW_BODY_SHA256']
+              assert not any(r['state'] == 'CHANGES_REQUESTED' and r['commit_id'] == reviewed_sha for r in reviews)
+              threads = review_threads(int(os.environ['PULL_REQUEST_NUMBER']))
+              assert all(t['isResolved'] is True for t in threads), 'Unresolved PR review threads block publication'
+              independent = get('issues/comments/' + os.environ['INDEPENDENT_REVIEW_COMMENT_ID'])
+              assert independent['user']['login'] == 'boostbar9'
+              assert independent['issue_url'].endswith('/issues/' + os.environ['PULL_REQUEST_NUMBER'])
+              assert reviewed_sha in independent['body'] and 'no blocking findings' in independent['body'].lower()
+              assert hashlib.sha256(independent['body'].encode()).hexdigest() == os.environ['INDEPENDENT_REVIEW_BODY_SHA256']
+
+              source_roots = sorted(path[len('src/main/java/'):-len('.java')]
+                                    for path in paths
+                                    if path.startswith('src/main/java/') and path.endswith('.java'))
+              assert source_roots and len(source_roots) == len(set(source_roots))
+              excluded_roots = sorted(path.split('/java/', 1)[1][:-len('.java')]
+                                      for path in paths
+                                      if path.startswith(('src/test/java/', 'src/nativeQa/java/', 'src/nativeServerQa/java/'))
+                                      and path.endswith('.java'))
+              assert not set(source_roots).intersection(excluded_roots)
+              artifacts = get('actions/runs/' + build_run + '/artifacts?per_page=100')
+              assert artifacts['total_count'] == len(artifacts['artifacts']), 'Artifact list truncated'
+              selected = {}
+              expected_artifacts = {
+                  'Faction-Raids-Forge-1.20.1': int(os.environ['JAR_ARTIFACT_ID']),
+                  'regression-test-results': int(os.environ['REGRESSION_ARTIFACT_ID']),
+              }
+              for name, expected_id in expected_artifacts.items():
+                  matches = [item for item in artifacts['artifacts'] if item['name'] == name]
+                  assert len(matches) == 1, name
+                  item = matches[0]
+                  assert item['id'] == expected_id, 'Artifact identity changed: ' + name
+                  assert not item['expired'] and item['size_in_bytes'] > 0
+                  assert item['workflow_run']['id'] == int(build_run)
+                  assert item['workflow_run']['head_sha'] == merged_sha
+                  assert item['workflow_run']['head_branch'] == 'main'
+                  selected[name] = item['id']
+              manifest = {
+                  'pull_request': int(os.environ['PULL_REQUEST_NUMBER']), 'reviewed_source': reviewed_sha, 'merged_source': merged_sha,
+                  'source_tree': source_tree, 'build_run': int(build_run),
+                  'build_attempt': run['run_attempt'], 'artifacts': selected,
+                  'production_class_roots': source_roots, 'excluded_class_roots': excluded_roots,
+                  'reviewed_build': reviewed_build, 'native_gates': native_gates,
+                  'reviewed_delta': sorted(changed), 'baseline_release': '4.52.6',
+                  'copilot_review_id': review['id'], 'independent_review_comment_id': independent['id'],
+              }
+              Path('verified-source.json').write_text(json.dumps(manifest, sort_keys=True, indent=2) + '\n')
+              print('Verified exact pinned PR, successful merged-main Build, unchanged current main and source tree.')
+              print('Artifact IDs:', json.dumps(selected, sort_keys=True))
+
+
+          if __name__ == '__main__':
+              main()
+          CHECK
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download exact tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.JAR_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: dist
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download regression results
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.REGRESSION_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: regression
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Verify tested bytes, metadata, dependencies, and regressions
+        run: |
+          python3 - <<'CHECK'
+          """Verify exact JAR bytes and the complete recorded regression suite set."""
+          from pathlib import Path
+          import hashlib
+          import json
+          import os
+          import tomllib
+          import xml.etree.ElementTree as ET
+          import zipfile
+
+
+          def main():
+              jar = Path('dist/siegeoverhaul-4.52.7.jar')
+              assert sorted(Path('dist').rglob('*.jar')) == [jar], 'Exactly one intended production JAR required'
+              digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+              assert digest == os.environ['ARTIFACT_SHA256'], 'JAR does not match independently verified merged-main artifact'
+              source = json.loads(Path('verified-source.json').read_text())
+              production = set(source['production_class_roots'])
+              excluded = set(source['excluded_class_roots'])
+              with zipfile.ZipFile(jar) as archive:
+                  assert archive.testzip() is None
+                  names = archive.namelist()
+                  entries = set(names)
+                  assert len(names) == len(entries), 'Duplicate ZIP entries'
+                  assert not any(name.lower().endswith('.jar') for name in entries), 'Nested JAR'
+                  classes = [name for name in entries if name.endswith('.class')]
+                  assert classes
+                  for entry in classes:
+                      root = entry[:-len('.class')].split('$', 1)[0]
+                      assert root in production and root not in excluded, 'Non-production/QA/test/vendor class: ' + entry
+                      data = archive.read(entry)
+                      assert data[:4] == b'\xca\xfe\xba\xbe' and int.from_bytes(data[6:8], 'big') == 61, entry
+                  for entry in (
+                      'com/devfarinsky/siegeoverhaul/camp/CampVegetation.class',
+                      'com/devfarinsky/siegeoverhaul/core/TerritoryFortification.class',
+                      'com/devfarinsky/siegeoverhaul/core/WallSurface.class',
+                      'com/devfarinsky/siegeoverhaul/RaidEvents.class',
+                      'com/devfarinsky/siegeoverhaul/RaidNetwork.class',
+                      'com/devfarinsky/siegeoverhaul/RaidSavedData.class',
+                      'com/devfarinsky/siegeoverhaul/core/DefenseBlueprint.class',
+                      'com/devfarinsky/siegeoverhaul/core/DefensePreview.class',
+                      'com/devfarinsky/siegeoverhaul/core/TerritoryBuffs.class',
+                      'com/devfarinsky/siegeoverhaul/core/WaveLootRewards.class',
+                      'com/devfarinsky/siegeoverhaul/core/DefenseStructures.class',
+                      'com/devfarinsky/siegeoverhaul/core/BuilderGroundRecovery.class',
+                      'com/devfarinsky/siegeoverhaul/core/PerimeterConstruction.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/NativeConstructionGuard.class',
+                      'com/devfarinsky/siegeoverhaul/client/CoreHireScreen.class',
+                      'com/devfarinsky/siegeoverhaul/client/ProtectedConstructionScreen.class',
+                      'com/devfarinsky/siegeoverhaul/client/SiegeCommandScreen.class',
+                      'com/devfarinsky/siegeoverhaul/client/SiegeOverhaulConfigScreen.class',
+                      'com/devfarinsky/siegeoverhaul/client/ConfigScreenLayout.class',
+                      'com/devfarinsky/siegeoverhaul/client/SiegeCommandLayout.class',
+                      'com/devfarinsky/siegeoverhaul/client/PlanReviewHud.class',
+                      'com/devfarinsky/siegeoverhaul/core/PerimeterPreview.class',
+                      'com/devfarinsky/siegeoverhaul/core/WallBuilderAccess.class',
+                      'com/devfarinsky/siegeoverhaul/camp/CampTerrain.class',
+                      'com/devfarinsky/siegeoverhaul/camp/CampGround.class',
+                      'com/devfarinsky/siegeoverhaul/camp/CampScouting.class',
+                      'com/devfarinsky/siegeoverhaul/camp/CampLoading.class',
+                      'com/devfarinsky/siegeoverhaul/camp/NativeCampConstruction.class',
+                      'com/devfarinsky/siegeoverhaul/client/WorkersProjectionVisibility.class',
+                      'com/devfarinsky/siegeoverhaul/client/ProjectionCulling.class',
+                      'com/devfarinsky/siegeoverhaul/compat/WorkersProjectionView.class',
+                      'com/devfarinsky/siegeoverhaul/compat/WorkersBridge.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/ProtectedBuilderHandLifecycle.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/ProtectedBuilderHandMirror.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/ProtectedInventoryCleanup.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/NativePerimeterProjects.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/ProtectedBuildArea.class',
+                      'com/devfarinsky/siegeoverhaul/nativecompat/ConstructionProjectLeases.class',
+                  ):
+                      assert entry in entries, entry
+                  assert b'foundation' in archive.read('com/devfarinsky/siegeoverhaul/camp/CampTerrain.class')
+                  assert b'readyForGroundRecovery' in archive.read('com/devfarinsky/siegeoverhaul/compat/WorkersBridge.class')
+                  assert b'initialPlacementProblem' in archive.read('com/devfarinsky/siegeoverhaul/nativecompat/NativeConstructionGuard.class')
+                  assert b'playerBuilderArrival' in archive.read('com/devfarinsky/siegeoverhaul/compat/WorkersBridge.class')
+                  assert b'sizeable_foliage' in archive.read('com/devfarinsky/siegeoverhaul/camp/CampVegetation.class')
+                  assert b'very_short_grass' in archive.read('com/devfarinsky/siegeoverhaul/camp/CampVegetation.class')
+                  assert b'1.2.1' in archive.read('com/devfarinsky/siegeoverhaul/camp/CampVegetation.class')
+                  assert b'optionalPlantProblem' in archive.read('com/devfarinsky/siegeoverhaul/core/WallSurface.class')
+                  assert b'\x01\x00\x0220' in archive.read('com/devfarinsky/siegeoverhaul/RaidNetwork.class'), 'Protocol 20 constant missing'
+                  data = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+              assert data['modLoader'] == 'javafml' and data['loaderVersion'] == '[47,)'
+              assert len(data['mods']) == 1
+              mod = data['mods'][0]
+              assert mod['modId'] == 'siegeoverhaul' and mod['version'] == '4.52.7'
+              assert mod['displayTest'] == 'MATCH_VERSION'
+              raw_dependencies = data['dependencies']['siegeoverhaul']
+              dependencies = {entry['modId']: entry for entry in raw_dependencies}
+              expected = {
+                  'forge': (True, '[47,)', 'NONE'),
+                  'minecraft': (True, '[1.20.1,1.21)', 'NONE'),
+                  'recruits': (True, '[1.15.2,)', 'AFTER'),
+                  'workers': (True, '[2.0.3,)', 'AFTER'),
+                  'smallships': (True, '[0,)', 'AFTER'),
+                  'siegeweapons': (True, '[0,)', 'AFTER'),
+                  'ftbchunks': (False, '[0,)', 'AFTER'),
+                  'openpartiesandclaims': (False, '[0,)', 'AFTER'),
+                  'corpse': (False, '[0,)', 'AFTER'),
+                  'magistuarmory': (False, '[0,)', 'AFTER'),
+                  'musketmod': (False, '[0,)', 'AFTER'),
+                  'curios': (False, '[5.14.1,6)', 'AFTER'),
+              }
+              assert len(dependencies) == len(raw_dependencies) and set(dependencies) == set(expected)
+              for mod_id, (mandatory, version_range, ordering) in expected.items():
+                  dep = dependencies[mod_id]
+                  assert dep['mandatory'] is mandatory and dep['side'] == 'BOTH', mod_id
+                  assert dep['versionRange'] == version_range and dep['ordering'] == ordering, mod_id
+              totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0)
+              reports = list(Path('regression').rglob('TEST-*.xml'))
+              expected_suite_count = int(os.environ['REGRESSION_SUITE_COUNT'])
+              expected_test_count = int(os.environ['REGRESSION_TEST_COUNT'])
+              assert expected_suite_count > 0 and expected_test_count >= expected_suite_count
+              assert len(reports) == expected_suite_count, len(reports)
+              suite_counts = {}
+              for report in reports:
+                  result = ET.parse(report).getroot()
+                  assert result.tag == 'testsuite', report
+                  name = result.get('name')
+                  assert name and name not in suite_counts, 'Duplicate or missing suite name: ' + str(name)
+                  assert report.name == 'TEST-' + name + '.xml', report
+                  suite_counts[name] = int(result.get('tests'))
+                  testcases = result.findall('testcase')
+                  assert len(testcases) == suite_counts[name], name
+                  assert all(case.find(child) is None for case in testcases for child in ('failure', 'error', 'skipped')), name
+                  for key in totals:
+                      value = int(result.get(key))
+                      assert value >= 0, (name, key)
+                      totals[key] += value
+              assert totals == {'tests': expected_test_count, 'failures': 0, 'errors': 0, 'skipped': 0}, totals
+              assert len(suite_counts) == expected_suite_count
+              # Independently pinned canonical name/count manifest binds every suite and count.
+              suite_digest = hashlib.sha256(json.dumps(suite_counts, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+              assert suite_digest == os.environ['REGRESSION_SUITE_SHA256'], suite_digest
+              # Require release-relevant coverage as well as the full pinned manifest. Counts
+              # are deliberately supplied only by the final independently checked manifest.
+              required_suites = (
+                  'com.devfarinsky.siegeoverhaul.camp.CampVegetationTest',
+                  'com.devfarinsky.siegeoverhaul.core.TerritoryFortificationTest',
+                  'com.devfarinsky.siegeoverhaul.RaidCampBarrelRewardsTest',
+                  'com.devfarinsky.siegeoverhaul.RaidNetworkCompatibilityTest',
+                  'com.devfarinsky.siegeoverhaul.core.DefensePreviewTest',
+                  'com.devfarinsky.siegeoverhaul.core.DefenseStructuresTest',
+                  'com.devfarinsky.siegeoverhaul.core.BuilderGroundRecoveryTest',
+                  'com.devfarinsky.siegeoverhaul.core.PerimeterConstructionTest',
+                  'com.devfarinsky.siegeoverhaul.compat.WorkersBridgeTest',
+                  'com.devfarinsky.siegeoverhaul.core.EconomyDefaultsTest',
+                  'com.devfarinsky.siegeoverhaul.core.TerritoryBuffAvailabilityTest',
+                  'com.devfarinsky.siegeoverhaul.core.WaveLootRewardsTest',
+                  'com.devfarinsky.siegeoverhaul.items.DefensePlanItemTest',
+                  'com.devfarinsky.siegeoverhaul.camp.CampScoutingTest',
+                  'com.devfarinsky.siegeoverhaul.RaidCampSiteSelectionTest',
+                  'com.devfarinsky.siegeoverhaul.camp.CampTerrainEdgeTest',
+                  'com.devfarinsky.siegeoverhaul.camp.CampLoadingTest',
+                  'com.devfarinsky.siegeoverhaul.camp.CampSearchDiagnosticsTest',
+                  'com.devfarinsky.siegeoverhaul.camp.NativeCampConstructionTest',
+                  'com.devfarinsky.siegeoverhaul.client.BuildingPlanButtonTest',
+                  'com.devfarinsky.siegeoverhaul.client.ConfigScreenInteractionTest',
+                  'com.devfarinsky.siegeoverhaul.client.ConfigScreenLayoutTest',
+                  'com.devfarinsky.siegeoverhaul.client.CoreButtonStyleTest',
+                  'com.devfarinsky.siegeoverhaul.client.CoreHudInteractionTest',
+                  'com.devfarinsky.siegeoverhaul.client.PlanReviewHudTest',
+                  'com.devfarinsky.siegeoverhaul.client.SiegeCommandInteractionTest',
+                  'com.devfarinsky.siegeoverhaul.client.SiegeCommandLayoutTest',
+                  'com.devfarinsky.siegeoverhaul.core.BuilderFeedbackTest',
+                  'com.devfarinsky.siegeoverhaul.core.CoreBuildingLayoutTest',
+                  'com.devfarinsky.siegeoverhaul.core.CoreHireLayoutTest',
+                  'com.devfarinsky.siegeoverhaul.core.EndlessSiegeTest',
+                  'com.devfarinsky.siegeoverhaul.core.SiegeYardTest',
+                  'com.devfarinsky.siegeoverhaul.raid.RaidFeedbackTest',
+                  'com.devfarinsky.siegeoverhaul.core.DefenseCommissionDiagnosticsTest',
+                  'com.devfarinsky.siegeoverhaul.core.PerimeterPreviewTest',
+                  'com.devfarinsky.siegeoverhaul.core.WallBuilderAccessTest',
+                  'com.devfarinsky.siegeoverhaul.core.ConstructionPacketTest',
+                  'com.devfarinsky.siegeoverhaul.camp.CampTerrainTest',
+                  'com.devfarinsky.siegeoverhaul.nativecompat.PerimeterDestroyedBuilderCleanupTest',
+                  'com.devfarinsky.siegeoverhaul.nativecompat.PerimeterRetirementLifecycleTest',
+                  'com.devfarinsky.siegeoverhaul.core.PerimeterStageJournalTest',
+              )
+              for name in required_suites:
+                  assert suite_counts.get(name, 0) > 0, name
+              Path('verified-suite-counts.json').write_text(json.dumps(suite_counts, sort_keys=True, indent=2) + '\n')
+              Path('verified-sha256.txt').write_text(digest)
+              Path('verified-regressions.json').write_text(json.dumps({
+                  **totals, 'suites': len(suite_counts), 'suite_manifest_sha256': suite_digest}, sort_keys=True) + '\n')
+              print('Verified', jar.name, digest, totals, len(suite_counts), 'unique suites')
+
+
+          if __name__ == '__main__':
+              main()
+          CHECK
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download reviewed PR JAR
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.REVIEWED_JAR_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.REVIEWED_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: reviewed-pr/dist
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download reviewed PR regression results
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.REVIEWED_REGRESSION_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.REVIEWED_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: reviewed-pr/regression
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Verify exact PR to main payload and all testcase identities
+        run: |
+          python3 - <<'CHECK'
+          """Local-only reobfuscation evidence check; never executes or rebuilds a JAR.
+
+          The class parser is inherited unchanged from the 4.52.3 publisher, originally
+          copied from the independent PR261 artifact review.
+          Use against exact downloaded merged-main bytes during the independent final gate.
+          This is an evidence check, not a reproducible-build attestation or gameplay test.
+          """
+          import argparse
+          import hashlib
+          import json
+          from pathlib import Path
+          import re
+          import struct
+          import zipfile
+
+
+          def class_info(b):
+              assert b[:4] == b"\xca\xfe\xba\xbe"
+              minor, major, size = struct.unpack_from(">HHH", b, 4)
+              cp = [None]
+              pos = 10
+              while len(cp) < size:
+                  tag = b[pos]
+                  pos += 1
+                  if tag == 1:
+                      length = struct.unpack_from(">H", b, pos)[0]
+                      pos += 2
+                      value = b[pos:pos + length].decode("utf-8", "replace")
+                      pos += length
+                  elif tag in (3, 4):
+                      value = b[pos:pos + 4]
+                      pos += 4
+                  elif tag in (5, 6):
+                      value = b[pos:pos + 8]
+                      pos += 8
+                  elif tag in (7, 8, 16, 19, 20):
+                      value = struct.unpack_from(">H", b, pos)[0]
+                      pos += 2
+                  elif tag in (9, 10, 11, 12, 17, 18):
+                      value = struct.unpack_from(">HH", b, pos)
+                      pos += 4
+                  elif tag == 15:
+                      value = struct.unpack_from(">BH", b, pos)
+                      pos += 3
+                  else:
+                      raise AssertionError(f"Unknown class constant tag {tag}")
+                  cp.append((tag, value))
+                  if tag in (5, 6):
+                      cp.append(None)
+              refs = []
+              for entry in cp:
+                  if entry and entry[0] in (9, 10, 11):
+                      klass, nt = entry[1]
+                      owner = cp[cp[klass][1]][1]
+                      name, desc = cp[nt][1]
+                      refs.append({"kind": "field" if entry[0] == 9 else "method", "owner": owner, "name": cp[name][1], "descriptor": cp[desc][1]})
+              flags, this_class, superclass, interface_count = struct.unpack_from(">HHHH", b, pos)
+              assert cp[this_class][0] == 7
+              return {"minor": minor, "major": major, "thisClass": cp[cp[this_class][1]][1], "references": refs}
+
+          def verify(path, expected_sha256):
+              assert re.fullmatch(r'[0-9a-f]{64}', expected_sha256), 'Expected SHA-256 is required'
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              assert digest == expected_sha256, 'JAR hash does not match the independently pinned artifact'
+              screens = ('CoreHireScreen', 'ProtectedConstructionScreen',
+                         'SiegeCommandScreen', 'SiegeOverhaulConfigScreen')
+              evidence = {}
+              with zipfile.ZipFile(path) as archive:
+                  assert archive.testzip() is None
+                  assert len(archive.namelist()) == len(set(archive.namelist()))
+                  for screen in screens:
+                      name = 'com/devfarinsky/siegeoverhaul/client/' + screen + '.class'
+                      info = class_info(archive.read(name))
+                      assert info['major'] == 61 and info['minor'] == 0, name
+                      assert info['thisClass'] + '.class' == name, name
+                      refs = [r for r in info['references'] if r['owner'].startswith('net/minecraft/')
+                              and re.fullmatch(r'[mf]_\d+_', r['name'])]
+                      assert refs, 'No SRG-remapped Minecraft member references: ' + screen
+                      evidence[screen] = refs
+              return {'status': 'srg-remapped-screen-reference-check-passed',
+                      'sha256': digest, 'screens': evidence,
+                      'limit': 'Necessary reobfuscation evidence only; requires exact Build/source/artifact provenance and complete JAR verification.'}
+
+
+          """Compare complete PR/main JAR payloads and regression case identities honestly.
+
+          The build explicitly embeds Implementation-Timestamp. Exact byte differences are
+          recorded; only that manifest value and ZIP metadata may differ. XML execution
+          metrics/runner identities/stdout/stderr are separately retained as diagnostics,
+          never mistaken for changed or omitted testcase outcomes.
+          """
+          import hashlib
+          import json
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          import zipfile
+
+
+          def sha(raw):return hashlib.sha256(raw).hexdigest()
+
+
+          def compare_jars(pr_path,main_path):
+              with zipfile.ZipFile(pr_path) as p,zipfile.ZipFile(main_path) as m:
+                  assert p.testzip() is None and m.testzip() is None
+                  pn=p.namelist();mn=m.namelist();assert len(pn)==len(set(pn)) and len(mn)==len(set(mn))
+                  assert set(pn)==set(mn),'PR/main JAR entry sets differ'
+                  changed=[];metadata=[];classes=0
+                  for name in sorted(pn):
+                      pb=p.read(name);mb=m.read(name)
+                      if name.endswith('.class'):classes+=1
+                      if pb!=mb:
+                          assert name=='META-INF/MANIFEST.MF','PR/main payload differs: '+name
+                          pl=pb.decode().splitlines();ml=mb.decode().splitlines()
+                          strip=lambda lines:[line for line in lines if not line.startswith('Implementation-Timestamp: ')]
+                          assert strip(pl)==strip(ml),'Manifest differs beyond declared build timestamp'
+                          pt=[line.split(': ',1)[1] for line in pl if line.startswith('Implementation-Timestamp: ')]
+                          mt=[line.split(': ',1)[1] for line in ml if line.startswith('Implementation-Timestamp: ')]
+                          assert len(pt)==len(mt)==1
+                          changed.append({'entry':name,'pr_sha256':sha(pb),'main_sha256':sha(mb),'reason':'Source build.gradle deliberately embeds Implementation-Timestamp','pr_timestamp':pt[0],'main_timestamp':mt[0]})
+                      pi=p.getinfo(name);mi=m.getinfo(name)
+                      fields=['date_time','compress_type','create_system','external_attr','extra','comment']
+                      differs=[key for key in fields if getattr(pi,key)!=getattr(mi,key)]
+                      if differs:metadata.append({'entry':name,'changed_zip_metadata_fields':differs})
+                  return {'pr_jar_sha256':sha(Path(pr_path).read_bytes()),'main_jar_sha256':sha(Path(main_path).read_bytes()),'entry_count':len(pn),'class_count':classes,'all_class_bytes_identical':True,'payload_differences':changed,'zip_metadata_differences':metadata,'identical_entry_order':pn==mn}
+
+
+          def canonical_xml(path):
+              root=ET.parse(path).getroot();assert root.tag=='testsuite'
+              assert set(root.attrib)<={'name','tests','skipped','failures','errors','timestamp','hostname','time'}
+              attrs={key:value for key,value in root.attrib.items() if key not in {'timestamp','hostname','time'}}
+              assert all(attrs[k]=='0' for k in ['skipped','failures','errors'])
+              cases=[];properties=[];diagnostics=[]
+              for child in root:
+                  if child.tag=='testcase':
+                      assert set(child.attrib)<={'name','classname','time'} and len(child)==0,'Unexpected testcase output/failure/shape'
+                      cases.append({key:value for key,value in child.attrib.items() if key!='time'})
+                  elif child.tag=='properties':
+                      assert not child.attrib
+                      properties.extend([{'tag':entry.tag,'attributes':entry.attrib,'text':entry.text} for entry in child])
+                  else:
+                      assert child.tag in {'system-out','system-err'} and not child.attrib and len(child)==0
+                      diagnostics.append({'tag':child.tag,'sha256':sha((child.text or '').encode()),'characters':len(child.text or '')})
+              assert len(cases)==int(attrs['tests'])
+              identities=[(case.get('classname'),case.get('name')) for case in cases]
+              # Parameterized JUnit methods can share display labels (e.g. [1] COMMON).
+              # Keep every occurrence in the sorted list so equality preserves multiplicity.
+              return {'attributes':attrs,'properties':properties,'testcases':sorted(cases,key=lambda x:(x.get('classname',''),x.get('name','')))},diagnostics
+
+
+          def compare_xml(pr_root,main_root):
+              def reports(root):
+                  values={}
+                  for path in Path(root).rglob('TEST-*.xml'):
+                      assert path.name not in values,'Duplicate report filename';values[path.name]=path
+                  return values
+              p=reports(pr_root);m=reports(main_root);assert p.keys()==m.keys(),'PR/main XML file sets differ'
+              changed=[];counts={};case_digest={};diagnostic_changes=[];repeated_labels={}
+              for name in sorted(p):
+                  pc,pd=canonical_xml(p[name]);mc,md=canonical_xml(m[name]);assert pc==mc,'PR/main testcase/structure/outcome differs: '+name
+                  if p[name].read_bytes()!=m[name].read_bytes():changed.append(name)
+                  if pd!=md:diagnostic_changes.append({'file':name,'pr':pd,'main':md})
+                  from collections import Counter
+                  labels=Counter((case.get('classname'),case.get('name')) for case in pc['testcases'])
+                  repeated=[{'classname':key[0],'display_name':key[1],'multiplicity':value} for key,value in labels.items() if value>1]
+                  if repeated:repeated_labels[name]=repeated
+                  counts[pc['attributes']['name']]=int(pc['attributes']['tests'])
+                  case_digest[name]=sha(json.dumps(pc,sort_keys=True,separators=(',',':')).encode())
+              return {'tests':sum(counts.values()),'suites':len(counts),'suite_counts':counts,'canonical_suite_sha256':sha(json.dumps(counts,sort_keys=True,separators=(',',':')).encode()),'canonical_case_manifest_sha256':sha(json.dumps(case_digest,sort_keys=True,separators=(',',':')).encode()),'all_case_identities_and_passed_outcomes_identical':True,'duplicate_display_labels_with_identical_multiplicity':repeated_labels,'byte_different_reports':changed,'diagnostic_changes':diagnostic_changes,'ignored_metadata_fields':['testsuite.timestamp','testsuite.hostname','testsuite.time','testcase.time'],'diagnostic_limit':'Full system-out/system-err retained and hashed, but not required byte-identical across independent runner invocations.'}
+
+
+          import os
+          assert sorted(Path('reviewed-pr/dist').rglob('*.jar')) == [Path('reviewed-pr/dist/siegeoverhaul-4.52.7.jar')]
+          result = {
+              'jars': compare_jars(Path('reviewed-pr/dist/siegeoverhaul-4.52.7.jar'), Path('dist/siegeoverhaul-4.52.7.jar')),
+              'regression': compare_xml(Path('reviewed-pr/regression'), Path('regression')),
+              'reobfuscation': verify(Path('dist/siegeoverhaul-4.52.7.jar'), os.environ['ARTIFACT_SHA256']),
+          }
+          assert result['regression']['tests'] == int(os.environ['REGRESSION_TEST_COUNT'])
+          assert result['regression']['suites'] == int(os.environ['REGRESSION_SUITE_COUNT'])
+          assert result['regression']['canonical_suite_sha256'] == os.environ['REGRESSION_SUITE_SHA256']
+          Path('verified-pr-main.json').write_text(json.dumps(result, indent=2, sort_keys=True)+'\n')
+          print('Reviewed PR and merged-main complete production payload and all passing testcase identities agree.')
+          CHECK
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download pinned historical 4.52.6 HUD evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.HUD_ARTIFACT_ID }}
+          run-id: ${{ env.HUD_RUN_ID }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: native-hud
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download final-head Building and economy evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.BUILDING_ARTIFACT_ID }}
+          run-id: ${{ env.BUILDING_RUN_ID }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: native-building
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download final-head dedicated-server evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.SERVER_ARTIFACT_ID }}
+          run-id: ${{ env.SERVER_RUN_ID }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: native-server
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download final-head camp-spawn evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.CAMP_ARTIFACT_ID }}
+          run-id: ${{ env.CAMP_RUN_ID }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: native-camp
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download pinned historical 4.52.6 camp-lifecycle evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.LIFECYCLE_ARTIFACT_ID }}
+          run-id: ${{ env.LIFECYCLE_RUN_ID }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: native-camp-lifecycle
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download pinned historical 4.52.6 hollow representative stage-handoff evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.HANDOFF_ARTIFACT_ID }}
+          run-id: ${{ env.HANDOFF_RUN_ID }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: native-handoff
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download pinned historical 4.52.6 staged-unload evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.UNLOAD_ARTIFACT_ID }}
+          run-id: ${{ env.UNLOAD_RUN_ID }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: native-unload
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Validate exact reviewed native receipts and framebuffers
+        run: |
+          python3 - <<'CHECK'
+          """Bind the full native evidence bytes and replay exact bounded receipt contracts.
+
+          All validator sources below are embedded local copies, never fetched or executed
+          from an artifact. Remote source identity is checked separately before download.
+          """
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+
+
+          def evidence_manifest(root):
+              assert root.is_dir() and not root.is_symlink(), str(root)
+              entries = []
+              for path in sorted(root.rglob('*')):
+                  assert not path.is_symlink(), 'Evidence symlink: ' + str(path)
+                  if path.is_dir():
+                      continue
+                  assert path.is_file(), 'Unexpected evidence entry: ' + str(path)
+                  raw = path.read_bytes()
+                  entries.append({'path': path.relative_to(root).as_posix(), 'size': len(raw),
+                                  'sha256': hashlib.sha256(raw).hexdigest()})
+              assert entries, 'Empty native evidence'
+              digest = hashlib.sha256(json.dumps(entries, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+              return digest, entries
+
+
+          def validator(text, name):
+              namespace = {'__name__': 'embedded_' + name}
+              exec(compile(text, '<reviewed-' + name + '-validator>', 'exec'), namespace)
+              return namespace['verify']
+
+          HUD_SOURCE = '#!/usr/bin/env python3\n"""Fail closed on incomplete actual HUD framebuffer/interaction receipts (stdlib only)."""\nimport json\nfrom pathlib import Path\nimport struct\nimport sys\n\n\nPAGES = [\'army\', \'loot\', \'treasury\', \'territory\', \'building\', \'civilians\', \'intel\']\nPLANS = [\'barricade\', \'watchtower\', \'gatehouse\', \'wall\', \'corner\', \'stairs\']\nMATRICES = [\'compact-scale2\', \'compact-scale3\', \'roomy-scale2\', \'roomy-scale1\']\nSTATES = [\'army-unavailable\', \'treasury-empty\', \'construction-loading\', \'construction-empty\',\n          \'civilians-capacity\', \'loot-confirmation\', \'intel-keyboard-e\', \'intel-no-results\',\n          \'intel-scrolled\', \'intel-keyboard-focus\', \'codex-core\', \'codex-how-to-play\',\n          \'codex-journal\', \'settings\', \'settings-no-results\', \'settings-scrolled\', \'hero-visuals\', \'native-inspection\']\n\n\ndef expected_screenshots():\n    names = []\n    for prefix in MATRICES:\n        names.extend(f\'{prefix}-{page}.png\' for page in PAGES)\n        names.extend(f\'{prefix}-{section}.png\' for section in [\n            \'building-structures\', \'building-construction\', \'intel-enemy-lore\', \'intel-how-to-play\'])\n        names.extend(f\'{prefix}-plan-{plan}.png\' for plan in PLANS)\n    for prefix in MATRICES[:2]:\n        names.extend(f\'{prefix}-{state}.png\' for state in STATES)\n    names.extend([\'roomy-scale1-native-inspection.png\', \'resized-intel-preserved.png\'])\n    return set(names)\n\n\ndef verify(root):\n    data = json.loads((root / \'result.json\').read_text())\n    assert data[\'mode\'] == \'hud\' and data[\'status\'] == \'passed\', data.get(\'failure\', data)\n    assert data[\'completedSteps\'] == data[\'plannedSteps\'] and data[\'plannedSteps\'] > 100\n    assert len(data[\'assertions\']) >= 25, data[\'assertions\']\n    versions = {\'minecraft\': \'1.20.1\', \'forge\': \'47.4.16\', \'workers\': \'2.0.3\',\n                \'recruits\': \'1.15.2\', \'smallships\': \'2.0.0-b1.4\', \'siegeweapons\': \'0.2.5\'}\n    for mod, version in versions.items():\n        assert data[\'loadedModVersions\'][mod] == version, mod\n    for mod in [\'workers\', \'recruits\', \'smallships\', \'siegeweapons\']:\n        artifact = data[\'loadedCompanionArtifacts\'][mod]\n        assert len(artifact[\'sha256\']) == 64 and \'remapped\' in artifact[\'kind\'], mod\n    assert data[\'notCovered\'] and \'client-menu\' in data[\'coverage\']\n    expected = expected_screenshots()\n    assert len(data[\'screenshots\']) == len(expected) and set(data[\'screenshots\']) == expected, (\n        \'Missing\', sorted(expected - set(data[\'screenshots\'])), \'Extra\', sorted(set(data[\'screenshots\']) - expected))\n    views = {view[\'screenshot\']: view for view in data[\'views\']}\n    assert len(views) == len(expected) and set(views) == expected\n    for name in sorted(expected):\n        raw = (root / name).read_bytes()\n        assert raw.startswith(b\'\\x89PNG\\r\\n\\x1a\\n\') and raw[12:16] == b\'IHDR\' and len(raw) > 4096, name\n        width, height = struct.unpack(\'>II\', raw[16:24])\n        view = views[name]\n        viewport = view[\'viewport\']\n        size = (1440, 960) if name.startswith(\'roomy-\') else (960, 720)\n        scale = 1 if name.startswith(\'roomy-scale1\') else 3 if \'scale3\' in name or name.startswith(\'resized-\') else 2\n        assert (width, height) == size == (viewport[\'framebufferWidth\'], viewport[\'framebufferHeight\']), name\n        assert (viewport[\'guiWidth\'], viewport[\'guiHeight\']) == (width // scale, height // scale), name\n        assert viewport[\'requestedGuiScale\'] == scale and view[\'nonblankSamples\'] > 50, name\n        assert view[\'fixture\'] and view[\'widgets\'], name\n        for widget in view[\'widgets\']:\n            assert 0 <= widget[\'x\'] < viewport[\'guiWidth\'] and 0 <= widget[\'y\'] < viewport[\'guiHeight\'], (name, widget)\n            assert widget[\'width\'] > 0 and widget[\'height\'] > 0, (name, widget)\n            assert widget[\'x\'] + widget[\'width\'] <= viewport[\'guiWidth\'] + .1, (name, widget)\n            assert widget[\'y\'] + widget[\'height\'] <= viewport[\'guiHeight\'] + .1, (name, widget)\n            assert not widget[\'focused\'] or widget[\'active\'], (name, widget)\n        for i, a in enumerate(view[\'widgets\']):\n            for b in view[\'widgets\'][i + 1:]:\n                assert (a[\'x\'] >= b[\'x\'] + b[\'width\'] or b[\'x\'] >= a[\'x\'] + a[\'width\']\n                        or a[\'y\'] >= b[\'y\'] + b[\'height\'] or b[\'y\'] >= a[\'y\'] + a[\'height\']), (name, a, b)\n        if name in {f\'{prefix}-army.png\' for prefix in MATRICES}:\n            assert len(view[\'nativePortraits\']) == 4, name\n            assert all(value.startswith(\'com.talhanation.\') for value in view[\'nativePortraits\']), name\n        if name.endswith(\'-territory.png\'):\n            assert view[\'territoryAvailability\'] == {\'ownershipMask\': 5, \'active\': 1, \'retained\': 1, \'unavailableButtons\': 2}, name\n            unavailable = [widget for widget in view[\'widgets\'] if widget[\'label\'] == \'Unavailable\']\n            assert len(unavailable) == 2 and all(not widget[\'active\'] for widget in unavailable), name\n        if \'-plan-\' in name:\n            assert view[\'selectedPlan\'].lower() == name.removesuffix(\'.png\').split(\'-plan-\')[1], name\n            cards = view[\'nativeBlueprintCards\']\n            assert any(card[\'plan\'] == view[\'selectedPlan\'] for card in cards), name\n            assert all(card[\'sourceBlueprintMatches\'] and card[\'blockModels\'] > 0 and card[\'caption\'] for card in cards), name\n        if \'native-inspection\' in name:\n            assert view[\'nativeStructurePreviewCount\'] == 1, name\n    required = [\'Native OS E key\', \'Native Ctrl+Tab\', \'Native Ctrl+Shift+Tab\', \'Native Escape\',\n                \'Actual 1440x960 to 960x720\', \'Hired, unavailable, insufficient\', \'without a purchase\',\n                \'Codex Journal\', \'focus across sync\', \'Settings empty-filter\']\n    for phrase in required:\n        assert any(phrase in assertion for assertion in data[\'assertions\']), phrase\n    source = (root / \'source-commit.txt\').read_text().strip()\n    assert len(source) == 40 and all(char in \'0123456789abcdef\' for char in source), source\n    print(f\'Verified {len(expected)} actual HUD framebuffers and bounded interaction receipts. Visual review remains required.\')\n    return data\n\n\nif __name__ == \'__main__\':\n    verify(Path(sys.argv[1] if len(sys.argv) > 1 else \'build/native-hud-qa/evidence\'))\n'
+
+          ECONOMY_SOURCE = '#!/usr/bin/env python3\n"""Fail-closed checks for the bounded real-server economy receipt in Native Building QA."""\nimport json\nfrom pathlib import Path\nimport sys\nimport uuid\n\n\ndef verify(data):\n    gameplay = data[\'gameplay\']\n    assert data[\'status\'] == gameplay[\'status\'] == \'passed\', data\n    assert gameplay[\'manualTreasuryDebit\'] == 8 and gameplay[\'manualPaidTreasury\'] == 992, gameplay\n    assert gameplay[\'perimeterTreasuryDebit\'] == 64, gameplay\n    assert gameplay[\'completedManualRestart\'][\'treasury\'] == 992, gameplay\n    economy = gameplay[\'economy\']\n    assert economy[\'status\'] == \'passed\', economy\n    assert \'Controlled cleared-wave states\' in economy[\'scope\'], economy\n    assert \'production processRaid\' in economy[\'scope\'] and \'No raid combat was fought.\' in economy[\'scope\'], economy\n    territory = economy[\'territory\']\n    assert territory[\'unownedRejected\'] == territory[\'ownedRejected\'] == [0, 1], territory\n    assert territory[\'unavailableTreasuryDebit\'] == 0 and territory[\'personalInventoryUnchanged\'] is True, territory\n    assert territory[\'fixtureFunding\'] == 1500 and territory[\'workingPrices\'] == [900, 600], territory\n    assert territory[\'savedOwnershipMask\'] == 15 and territory[\'activeCount\'] == territory[\'retainedCount\'] == 2, territory\n    practice = economy[\'practice\']\n    assert practice == {\'wave\': 5, \'handlerPasses\': 2, \'boxes\': 0, \'treasuryDebitOrCredit\': 0}, practice\n    checkpoint = economy[\'checkpoint\']\n    assert checkpoint[\'wave\'] == 5 and checkpoint[\'boxes\'] == 1, checkpoint\n    assert checkpoint[\'beforeAnyBallot\'] is True and checkpoint[\'waitReplayNoDuplicate\'] is True, checkpoint\n    assert type(checkpoint[\'rolledTier\']) is int and 0 <= checkpoint[\'rolledTier\'] <= 3, checkpoint\n    assert type(checkpoint[\'treasuryReward\']) is int and checkpoint[\'treasuryReward\'] >= 0, checkpoint\n    assert checkpoint[\'treasury\'] == 992 + checkpoint[\'treasuryReward\'], checkpoint\n    reload = economy[\'diskReload\']\n    assert reload[\'ownershipMask\'] == 15 and reload[\'activeCount\'] == reload[\'retainedCount\'] == 2, reload\n    for field in [\'newSavedDataAndRaidInstances\', \'exactPlayerInventory\', \'exactCurrentWaveReceipt\', \'replayNoDuplicate\']:\n        assert reload[field] is True, (field, reload)\n    full = economy[\'fullInventory\']\n    assert full[\'wave\'] == 6 and full[\'filledMainSlots\'] == 36, full\n    assert full[\'droppedBoxes\'] == 1 and full[\'inventoryBoxes\'] == 0 and full[\'replayNoDuplicate\'] is True, full\n    assert type(full[\'rolledTier\']) is int and 0 <= full[\'rolledTier\'] <= 3, full\n    assert full[\'item\'] == \'siegeoverhaul:loot_box_\' + [\'common\', \'uncommon\', \'rare\', \'epic\'][full[\'rolledTier\']], full\n    assert str(uuid.UUID(full[\'dropEntity\'])) == full[\'dropEntity\'], full\n    return economy\n\n\nif __name__ == \'__main__\':\n    verify(json.loads(Path(sys.argv[1]).read_text()))\n    print(\'Native economy receipt passed: controlled cleared-wave server cases, not a fought raid.\')\n'
+
+          BUILDING_SOURCE = '"""Offline replay of native-building-qa.yml receipt contract; original runtime-only filesystem assertions remain required in the source workflow."""\n\ndef verify(root):\n    import json, struct\n    from pathlib import Path\n    data = json.loads((root / \'result.json\').read_text())\n    audit = json.loads((root / \'native-bytecode-audit.json\').read_text())\n    assert audit[\'status\'] == \'passed\' and audit[\'noVendorJarsUploaded\'], audit\n    assert sum(len(v[\'classes\']) for v in audit[\'artifacts\'].values()) == 18, audit\n    assert data[\'status\'] == \'passed\', data\n    viewport = data[\'viewportSetup\']\n    assert viewport[\'framebufferWidth\'] == viewport[\'windowWidth\'] == 960, viewport\n    assert viewport[\'framebufferHeight\'] == viewport[\'windowHeight\'] == 720, viewport\n    for name in [\'nativeInspectionScale3\', \'buildingScale3\']:\n        compact = data[\'guiScaleEvidence\'][name]\n        assert compact[\'framebufferWidth\'] == 960 and compact[\'framebufferHeight\'] == 720, compact\n        assert compact[\'requestedGuiScale\'] == 3 and compact[\'guiWidth\'] == 320 and compact[\'guiHeight\'] == 240, compact\n    assert data[\'gameplay\'][\'status\'] == \'passed\', data.get(\'gameplay\')\n    gameplay = data[\'gameplay\']\n    review = gameplay[\'admissionReviews\']\n    assert isinstance(review, dict), review\n    assert all(review[key] is True for key in [\'perimeterNeighborRejected\', \'perimeterPairedClearanceRejected\',\n        \'manualPairedClearanceRejected\', \'exactInventoryAndTreasury\', \'noProjectOrWorkerReceiptChange\',\n        \'fixtureTerrainRestored\']), review\n    assert gameplay[\'completedManualBlocks\'] == 83 and data[\'perimeterTemplateBlocks\'] == 572, data\n    assert gameplay[\'manualHollowGeometry\'] == {\'targets\': 83, \'cobblestone\': 58, \'oakPlanks\': 25,\n        \'cavityCells\': 27, \'cavityReservedAtAcceptance\': True, \'airPlacementTargets\': 0}, gameplay\n    assert gameplay[\'cavityObstructionPaused\'] and gameplay[\'cavityObstructionRestartVerified\'], gameplay\n    assert gameplay[\'nativeDeckOverCavityVerified\'] and gameplay[\'finalCavityAirCells\'] == 27, gameplay\n    assert gameplay[\'unchangedCavityFootingColumns\'] == 9, gameplay\n    completed = gameplay[\'completedManualRestart\']\n    assert completed[\'verified\'] and completed[\'preAiExactInventoryValues\'] and completed[\'preAiEqualSplitMirror\'], completed\n    assert completed[\'singleValuePreservingRebind\'] and completed[\'constructionDetached\'] and completed[\'reservationRetired\'], completed\n    assert completed[\'placedBlocks\'] == 83 and completed[\'cavityAirCells\'] == 27, completed\n    projection = data[\'gameplay\'][\'perimeterProjection\']\n    assert projection[\'alwaysShownThreshold\'] == 1024 and projection[\'activeTargets\'] > 0, projection\n    assert projection[\'defaultAlwaysShown\'] == (projection[\'activeTargets\'] <= 1024), projection\n    assert projection[\'wholeTargets\'] >= projection[\'activeTargets\'], projection\n    assert data[\'gameplay\'][\'authenticatedProjectionHide\'] and data[\'gameplay\'][\'authenticatedProjectionShow\'], data\n    canceled = data[\'gameplay\'][\'canceledWholePerimeter\']\n    assert canceled[\'globalTargets\'] == projection[\'wholeTargets\'] and canceled[\'stageCount\'] >= 1 and canceled[\'treasury\'] == 1936, canceled\n    expected = [\n        \'01-marker-focused.png\', \'02-native-inspection-scale2.png\',\n        \'03-native-inspection-scale3.png\', \'04-projection-unfocused.png\',\n        \'05-projection-focus-only.png\', \'06-projection-marker-behind-camera.png\',\n        \'07-marker-occluded.png\', \'08-marker-after-world-reload.png\',\n        \'09-building-auto-perimeter.png\', \'10-building-place-structure.png\',\n        \'11-building-construction.png\', \'12-building-construction-compact.png\',\n        \'13-native-perimeter-template.png\',\n        \'14-production-free-perimeter-review.png\', \'15-production-paid-native-marker.png\',\n        \'16-live-core-building-auto.png\', \'17-live-core-construction.png\',\n        \'18-completed-manual-wall-and-builder.png\',\n    ]\n    assert data[\'screenshots\'] == expected, data[\'screenshots\']\n    for name in expected:\n        content = (root / name).read_bytes()\n        assert content.startswith(b\'\\x89PNG\\r\\n\\x1a\\n\') and len(content) > 4096, name\n        assert struct.unpack(\'>II\', content[16:24]) == (960, 720), name\n    for mod in [\'workers\', \'recruits\', \'smallships\', \'siegeweapons\']:\n        assert mod in data[\'loadedModVersions\'], mod\n        artifact = data[\'loadedCompanionArtifacts\'][mod]\n        assert len(artifact[\'sha256\']) == 64, artifact\n    assert data[\'loadedModVersions\'][\'minecraft\'] == \'1.20.1\', data\n    assert data[\'loadedModVersions\'][\'forge\'] == \'47.4.16\', data\n    print(\'Actual native-client fixture passed. See screenshots for visual review and result.json for exclusions.\')\n    return data\n'
+
+          SERVER_SOURCE = '"""Offline replay of native-building-server-qa.yml receipt contract; original runtime-only filesystem assertions remain required in the source workflow."""\n\ndef verify(root):\n    import json\n    from pathlib import Path\n    data = json.loads((root / \'result.json\').read_text())\n    assert data[\'status\'] == \'passed\', data\n    assert data[\'testsExecuted\'] == 1, data\n    assert data[\'physicalDistribution\'] == \'DEDICATED_SERVER\', data\n    assert data[\'logicalSide\'] == \'SERVER\', data\n    assert data[\'serverClass\'] == \'net.minecraft.gametest.framework.GameTestServer\', data\n    assert data[\'connectedPlayers\'] == 0, data\n    assert data[\'fixtureActor\'] == \'net.minecraftforge.common.util.FakePlayer; no authenticated network client\', data\n    assert \'real multiplayer connection/authentication remains unverified\' in data[\'limitation\'], data\n    expected = [\n        \'physical-dedicated-classloading\',\n        \'real-native-factories-and-queues\',\n        \'sealed-native-packets-and-move-overloads\',\n        \'native-nbt-roundtrip-and-defensive-copies\',\n        \'unloaded-blueprint-remains-unloaded\',\n        \'clearance-and-world-saveddata-disk-roundtrip\',\n        \'fakeplayer-direct-handler-authorization-and-cancel\',\n        \'offline-native-inventory-authority-and-loss-recovery\',\n    ]\n    assert data[\'checks\'] == expected, data\n    console = (root / \'server-console.log\').read_text()\n    assert console.count(\'SIEGE_NATIVE_SERVER_QA_COMPLETED tests=1 checks=8\') == 1, console[-5000:]\n    authority = data[\'inventoryAuthority\']\n    assert authority[\'ownerConnected\'] is False, authority\n    assert authority[\'profileCacheSource\'] == \'Explicit isolated GameProfileCache dependency; GameTest server cache remains absent\', authority\n    assert \'cached UUID identity\' in authority[\'productionEntryWithoutProfileCache\'], authority\n    assert authority[\'profileRepositoryLookups\'] == 0, authority\n    assert authority[\'coreAnchorDiskRoundTrip\'] == \'passed\', authority\n    assert authority[\'scoreboardDiskRoundTrip\'] == \'passed\', authority\n    assert authority[\'nativeRosterMembersBeforeDisk\'] == 1, authority\n    assert authority[\'nativeRosterMembersAfterDisk\'] == 0, authority\n    for allowed in [\'offline-native-owner-valid\', \'native-manager-disk-reload-valid\', \'membership-restored\',\n                    \'native-roster-name-restored\', \'native-roster-uuid-restored\', \'identity-conflicts-restored\',\n                    \'scoreboard-restored\', \'worker-owner-restored\', \'source-claim-restored\',\n                    \'original-core-restored\', \'valid-context-restored\']:\n        assert authority[\'outcomes\'][allowed] == \'allowed\', (allowed, authority)\n    for denied in [\'removed-native-member\', \'stale-native-roster-name\', \'conflicting-native-roster-uuid\',\n                   \'stale-cached-profile-name\', \'scoreboard-transferred\', \'worker-owner-transferred\',\n                   \'foreign-source-claim\', \'unloaded-source-denied\', \'original-core-lost\', \'original-anchor-lost\']:\n        assert authority[\'outcomes\'][denied].startswith(\'Paused:\'), (denied, authority)\n    for mod in [\'workers\', \'recruits\', \'smallships\', \'siegeweapons\']:\n        assert mod in data[\'loadedModVersions\'], mod\n        assert len(data[\'loadedCompanionArtifacts\'][mod][\'sha256\']) == 64, mod\n    for mod, version in {\'minecraft\': \'1.20.1\', \'forge\': \'47.4.16\', \'workers\': \'2.0.3\', \'recruits\': \'1.15.2\'}.items():\n        assert data[\'loadedModVersions\'][mod] == version, data\n    print(\'Required Forge GameTest passed on the physical dedicated distribution. Real multiplayer remains unverified.\')\n    return data\n'
+
+          CAMP_SOURCE = '"""Exact offline replay of the native-camp-qa.yml receipt contract."""\n\ndef verify(root):\n    import json\n    from pathlib import Path\n    data = json.loads((root / \'result.json\').read_text())\n    assert data[\'mode\'] == \'camp-spawn\' and data[\'status\'] == \'passed\', data\n    audit = json.loads((root / \'native-bytecode-audit.json\').read_text())\n    assert audit[\'status\'] == \'passed\' and audit[\'noVendorJarsUploaded\'], audit\n    assert sum(len(v[\'classes\']) for v in audit[\'artifacts\'].values()) == 18, audit\n    versions = data[\'loadedModVersions\']\n    for mod, version in {\'minecraft\': \'1.20.1\', \'forge\': \'47.4.16\', \'workers\': \'2.0.3\',\n                         \'recruits\': \'1.15.2\', \'smallships\': \'2.0.0-b1.4\', \'siegeweapons\': \'0.2.5\'}.items():\n        assert versions[mod] == version, versions\n    for mod in [\'workers\', \'recruits\', \'smallships\', \'siegeweapons\']:\n        assert len(data[\'loadedCompanionArtifacts\'][mod][\'sha256\']) == 64, mod\n    scenarios = data[\'scenarios\']\n    assert len(scenarios) == 3, scenarios\n    assert [case[\'scenario\'] for case in scenarios] == [\'natural-flat\', \'controlled-shallow-water-forest\', \'controlled-rocky-water-forest\']\n    for index, case in enumerate(scenarios):\n        assert case[\'status\'] == \'passed\' and case[\'nativeClaimChunks\'] == 25, case\n        capture = case[\'framebufferCapture\']\n        assert all(capture[key] for key in [\'worldReady\', \'observerReady\', \'coreReceived\', \'terrainCompiled\', \'cameraReady\']), capture\n        assert 0 <= capture[\'elapsedSeconds\'] < 30 and capture[\'changedPixelSamples\'] > 50, capture\n        assert capture[\'framebufferAttempts\'] > capture[\'blankFrames\'], capture\n        assert case[\'terraformFallback\'] == bool(index) and case[\'crewStarted\'], case\n        assert case[\'enemyCore\'] and case[\'claimId\'] != \'null\', case\n        assert case[\'workers\'] and case[\'guards\'], case\n        assert len(case[\'guards\']) == case[\'registeredGuardRoleCount\'], case\n        assert case[\'ordinaryTicksSinceEstablishment\'] >= 60, case\n        assert case[\'unregisteredGuardRoles\'] == [\'assassin\'], case\n        recovered = [guard for guard in case[\'guards\'] if guard[\'type\'] == \'recruits:scout\' and guard[\'scoutSpawnTailRecovered\']]\n        assert len(recovered) == 2 and len(case[\'guards\']) == 5, case\n        for unit in case[\'workers\'] + case[\'guards\']:\n            assert not unit[\'noAi\'] and unit[\'faction\'] == case[\'expectedEnemyFaction\'], unit\n        assert case[\'nativeJobOwnershipVerified\'] and case[\'nativeJobOwner\'] != case[\'guardOwner\'], case\n        assert case[\'nativeWorkAreaAccessVerified\'] and case[\'nativeBuilderStorageEnabled\'], case\n        for worker in case[\'workers\']:\n            assert worker[\'owner\'] == case[\'nativeJobOwner\'] and worker[\'owned\'] and not worker[\'listening\'], worker\n        for guard in case[\'guards\']:\n            assert guard[\'owner\'] == case[\'guardOwner\'] == \'fac10000-4a1d-4e75-8a1d-000000000001\', guard\n        assert all(case[\'nativeJobAreas\'][key] == case[\'nativeJobOwner\']\n                   for key in [\'buildOwner\', \'storageOwner\', \'supplyOwner\']), case\n        assert all(unit[\'type\'].startswith(\'recruits:\') for unit in case[\'guards\']), case\n        assert case[\'protectedCellCount\'] >= 6144 and case[\'protectedChests\'] >= 2, case\n        assert case[\'entry\'].startswith(\'Actual non-op client /siegeoverhaul start\'), case\n    hostile = scenarios[1][\'controlledHostileTerrain\']\n    assert hostile[\'waterDepth\'] == 3 and hostile[\'dryLandingWidth\'] == 3 and hostile[\'fixtureWrites\'] < 300\n    assert scenarios[1][\'hostileTerrainPrepared\'], scenarios[1]\n    assert all(scenarios[1][\'recordedOriginalTerrainCounts\'][block] > 0\n               for block in [\'minecraft:water\', \'minecraft:oak_log\', \'minecraft:oak_leaves\']), scenarios[1]\n    rocky = scenarios[2]\n    assert rocky[\'controlledHostileTerrain\'][\'rockyRise\'] and rocky[\'controlledHostileTerrain\'][\'fixtureWrites\'] < 300, rocky\n    assert rocky[\'raisedCampPlane\'] and rocky[\'unchangedRockSupportVerified\'], rocky\n    assert rocky[\'campPlaneAboveOriginalSurface\'] == 1 and rocky[\'protectedCellCount\'] >= 6147, rocky\n    assert all(rocky[\'recordedOriginalTerrainCounts\'][block] > 0\n               for block in [\'minecraft:water\', \'minecraft:oak_log\', \'minecraft:oak_leaves\']), rocky\n    expected = [\'01-established-flat-camp.png\', \'02-established-shallow-water-forest-camp.png\', \'03-established-rocky-water-forest-camp.png\']\n    assert data[\'screenshots\'] == expected, data[\'screenshots\']\n    for name in expected:\n        content = (root / name).read_bytes()\n        assert content.startswith(b\'\\x89PNG\\r\\n\\x1a\\n\') and len(content) > 4096, name\n    print(\'All three actual camp-establishment scenarios passed. Review raw framebuffers and bounded fixture coverage.\')\n    return data\n\n# Publisher-only strict shape overlay. Source verifier above remains unchanged.\nverify_source_receipt = verify\n\n"""Publisher-only complete typed Camp Spawn receipt check; source verifier stays unchanged."""\nfrom collections import Counter\nimport hashlib\nimport json\nimport math\nimport re\nimport uuid\n\nCAMP_SHOTS=[\'01-established-flat-camp.png\',\'02-established-shallow-water-forest-camp.png\',\'03-established-rocky-water-forest-camp.png\']\nCAMP_SCENARIOS=[\'natural-flat\',\'controlled-shallow-water-forest\',\'controlled-rocky-water-forest\']\nCAMP_ROLES=[\'bowman\',\'scout\',\'crossbowman\',\'bowman\',\'scout\',\'assassin\']\nCAMP_AUDIT_CLASSES={\n \'recruits\': [\'com.talhanation.recruits.\'+v for v in [\'entities.ai.RecruitUpkeepPosGoal\',\'entities.ai.RecruitUpkeepEntityGoal\',\'entities.AbstractRecruitEntity\',\'entities.AbstractInventoryEntity\',\'inventory.RecruitSimpleContainer\',\'world.RecruitsClaimManager\',\'world.RecruitsClaim\',\'entities.ScoutEntity\',\'entities.BowmanEntity\',\'entities.ai.navigation.RecruitPathNavigation\',\'pathfinding.AsyncGroundPathNavigation\',\'init.ModEntityTypes\']],\n \'workers\':[\'com.talhanation.workers.\'+v for v in [\'entities.ai.GetNeededItemsFromStorage\',\'entities.ai.DepositItemsToStorage\',\'entities.ai.RecruitStorageUpkeepGoal\',\'entities.ai.AbstractChestGoal\',\'entities.ai.BuilderWorkGoal\',\'entities.AbstractWorkerEntity\']]}\n\n\ndef camp_load(path):\n    def pairs(items):\n        value={}\n        for key,child in items:\n            assert key not in value, (\'duplicate JSON field\',key)\n            value[key]=child\n        return value\n    def reject(value):raise AssertionError(\'Non-finite JSON value: \'+value)\n    assert path.is_file() and not path.is_symlink(), (\'Missing/unsafe receipt\',str(path))\n    data=json.loads(path.read_text(),object_pairs_hook=pairs,parse_constant=reject)\n    def finite(value):\n        if type(value) is float:assert math.isfinite(value)\n        elif type(value) is dict:\n            for child in value.values():finite(child)\n        elif type(value) is list:\n            for child in value:finite(child)\n    finite(data)\n    return data\n\n\ndef camp_boolean(value,expected=None):\n    assert type(value) is bool and (expected is None or value is expected), (\'Expected actual boolean\',value,expected)\n\n\ndef camp_integer(value,minimum=0,maximum=2**63-1):\n    assert type(value) is int and minimum<=value<=maximum, (\'Expected bounded integer\',value)\n    return value\n\n\ndef camp_number(value,minimum=0,maximum=float(\'inf\')):\n    assert type(value) in (int,float) and math.isfinite(value) and minimum<=value<maximum, (\'Invalid finite number\',value)\n\n\ndef camp_string(value,empty=False):\n    assert type(value) is str and (empty or value.strip()) and value!=\'null\', (\'Invalid text\',value)\n    return value\n\n\ndef camp_uuid(value):\n    assert type(value) is str and str(uuid.UUID(value))==value, (\'Invalid UUID\',value)\n    return value\n\n\ndef camp_digest(value):\n    assert type(value) is str and re.fullmatch(r\'[0-9a-f]{64}\',value), (\'Invalid digest\',value)\n    return value\n\n\ndef camp_pos(value,short=False):\n    pattern=r\'(-?\\d+), (-?\\d+), (-?\\d+)\' if short else r\'BlockPos\\{x=(-?\\d+), y=(-?\\d+), z=(-?\\d+)\\}\'\n    match=re.fullmatch(pattern,camp_string(value));assert match, (\'Invalid block position\',value)\n    return tuple(int(v) for v in match.groups())\n\n\ndef camp_vec(value):\n    value=camp_string(value);assert value.startswith(\'(\') and value.endswith(\')\'),value\n    parts=value[1:-1].split(\', \');assert len(parts)==3\n    values=tuple(float(v) for v in parts);assert all(math.isfinite(v) for v in values)\n    return values\n\n\ndef verify_shape(root):\n    assert root.is_dir() and not root.is_symlink()\n    data=camp_load(root/\'result.json\')\n    assert data[\'mode\']==\'camp-spawn\' and data[\'status\']==\'passed\'\n    assert data[\'screenshots\']==CAMP_SHOTS and type(data[\'screenshots\']) is list\n    assert type(data[\'scenarios\']) is list and len(data[\'scenarios\'])==3\n    for index,case in enumerate(data[\'scenarios\']):\n        assert case[\'scenario\']==CAMP_SCENARIOS[index] and case[\'status\']==\'passed\'\n        assert camp_integer(case[\'stage\'])==2;camp_integer(case[\'gameTime\'])\n        assert camp_string(case[\'nativeClaimAvailability\'],empty=True)==\'\'\n        camp_pos(case[\'campPosition\']);camp_uuid(case[\'claimId\'])\n        camp_integer(case[\'searchStep\'],0,200);camp_integer(case[\'searchElapsedTicks\'],0,4800)\n        assert type(case[\'searchCandidate\']) is str\n        if case[\'searchCandidate\']!=\'null\':camp_pos(case[\'searchCandidate\'])\n        camp_boolean(case[\'terraformFallback\'],index>0);camp_boolean(case[\'hostileTerrainPrepared\'],index>0)\n        camp_boolean(case[\'searchAbandoned\'],False)\n        for key in [\'crewStarted\',\'nativeJobOwnershipVerified\',\'nativeWorkAreaAccessVerified\',\'nativeBuilderStorageEnabled\']:camp_boolean(case[key],True)\n        for key in [\'nativeClaimChunks\',\'registeredGuardRoleCount\',\'ordinaryTicksSinceEstablishment\',\'protectedCellCount\',\'protectedChests\']:camp_integer(case[key])\n        assert case[\'nativeClaimChunks\']==25 and case[\'registeredGuardRoleCount\']==5\n        camp_number(case[\'elapsedSeconds\']);camp_string(case[\'entry\']);camp_string(case[\'constructionScope\']);camp_string(case[\'constructionPause\'],empty=True)\n        core=camp_pos(case[\'enemyCore\'],short=True)\n        native_owner=camp_uuid(case[\'nativeJobOwner\']);guard_owner=camp_uuid(case[\'guardOwner\'])\n        assert guard_owner==\'fac10000-4a1d-4e75-8a1d-000000000001\' and native_owner!=guard_owner\n        areas=case[\'nativeJobAreas\'];assert type(areas) is dict and set(areas)=={\'build\',\'storage\',\'buildOwner\',\'storageOwner\',\'supplyOwner\'}\n        assert camp_uuid(areas[\'build\'])!=camp_uuid(areas[\'storage\'])\n        for key in [\'buildOwner\',\'storageOwner\',\'supplyOwner\']:assert camp_uuid(areas[key])==native_owner\n        assert case[\'requestedGuardRoles\']==CAMP_ROLES and case[\'unregisteredGuardRoles\']==[\'assassin\']\n        assert type(case[\'workers\']) is list and case[\'workers\'] and type(case[\'guards\']) is list and len(case[\'guards\'])==5\n        faction=camp_string(case[\'expectedEnemyFaction\']);assert faction==\'siegeoverhaul_wilds_marauders\'\n        unique=set();team_tags=set()\n        for kind,owner in [(\'workers\',native_owner),(\'guards\',guard_owner)]:\n            for unit in case[kind]:\n                ident=camp_uuid(unit[\'uuid\']);assert ident not in unique,\'Duplicate native entity UUID\';unique.add(ident)\n                assert camp_uuid(unit[\'owner\'])==owner and camp_string(unit[\'faction\'])==faction\n                camp_boolean(unit[\'noAi\'],False);camp_boolean(unit[\'alive\'],True);camp_boolean(unit[\'scoutSpawnTailRecovered\'])\n                camp_vec(unit[\'position\']);camp_string(unit[\'workerTeamTag\'],empty=True);camp_string(unit[\'guardTeamTag\'],empty=True)\n                camp_boolean(unit[\'owned\']);camp_boolean(unit[\'listening\'])\n                if kind==\'workers\':\n                    assert unit[\'type\']==\'workers:builder\';camp_boolean(unit[\'owned\'],True);camp_boolean(unit[\'listening\'],False)\n                    camp_boolean(unit[\'scoutSpawnTailRecovered\'],False);team_tags.add(camp_string(unit[\'workerTeamTag\']))\n                else:\n                    assert unit[\'type\'] in {\'recruits:bowman\',\'recruits:scout\',\'recruits:crossbowman\'}\n                    camp_boolean(unit[\'scoutSpawnTailRecovered\'],unit[\'type\']==\'recruits:scout\');team_tags.add(camp_string(unit[\'guardTeamTag\']))\n            mirror=case[\'workerEntities\' if kind==\'workers\' else \'guardEntities\']\n            assert type(mirror) is list and len(mirror)==len(case[kind])\n            assert {camp_uuid(v[\'uuid\']):v for v in mirror}=={v[\'uuid\']:v for v in case[kind]},\'Native entity mirror differs\'\n        assert len(team_tags)==1 and next(iter(team_tags)).startswith(\'team:\')\n        assert Counter(v[\'type\'] for v in case[\'guards\'])==Counter({\'recruits:bowman\':2,\'recruits:scout\':2,\'recruits:crossbowman\':1})\n        terrain=case[\'recordedOriginalTerrainCounts\']\n        assert type(terrain) is dict and set(terrain)=={\'minecraft:water\',\'minecraft:oak_log\',\'minecraft:oak_leaves\'}\n        for count in terrain.values():camp_integer(count,1 if index>0 else 0)\n        if index!=2:\n            assert not {\'raisedCampPlane\',\'unchangedRockSupportVerified\',\'campPlaneAboveOriginalSurface\'}.intersection(case)\n        if index==0:\n            assert \'controlledHostileTerrain\' not in case\n        if index==2:\n            camp_boolean(case[\'raisedCampPlane\'],True);camp_boolean(case[\'unchangedRockSupportVerified\'],True)\n            assert camp_integer(case[\'campPlaneAboveOriginalSurface\'])==1\n        if index>0:\n            hostile=case[\'controlledHostileTerrain\']\n            camp_boolean(hostile[\'rockyRise\'],index==2)\n            for key in [\'waterDepth\',\'dryLandingWidth\',\'fixtureWrites\']:camp_integer(hostile[key])\n            assert hostile[\'waterDepth\']==hostile[\'dryLandingWidth\']==3 and 0<hostile[\'fixtureWrites\']<300\n            camp_integer(hostile[\'surface\'],-2**31,2**31-1);camp_string(hostile[\'terrain\'])\n            for key in [\'scout\',\'intendedFallbackCenter\',\'unclaimedProtectedChest\']:camp_pos(hostile[key],short=True)\n            if index==2:camp_pos(hostile[\'unchangedRockSupport\'],short=True)\n        capture=case[\'framebufferCapture\']\n        assert capture[\'screenshot\']==CAMP_SHOTS[index] and type(capture[\'screenshot\']) is str\n        for key in [\'worldReady\',\'observerReady\',\'coreReceived\',\'terrainCompiled\',\'cameraReady\']:camp_boolean(capture[key],True)\n        for key in [\'changedPixelSamples\',\'framebufferAttempts\',\'blankFrames\']:camp_integer(capture[key])\n        camp_number(capture[\'elapsedSeconds\'],0,30)\n        expected=camp_vec(capture[\'expectedObserver\']);actual=camp_vec(capture[\'clientPosition\']);camp_vec(capture[\'cameraPosition\'])\n        assert sum((a-b)**2 for a,b in zip(expected,actual))<.01\n        assert camp_pos(capture[\'campCore\'])==core\n        path=root/CAMP_SHOTS[index]\n        assert path.is_file() and not path.is_symlink() and path.resolve().parent==root.resolve()\n    for mod in [\'workers\',\'recruits\',\'smallships\',\'siegeweapons\']:\n        artifact=data[\'loadedCompanionArtifacts\'][mod]\n        camp_digest(artifact[\'sha256\']);camp_string(artifact[\'fileName\']);assert \'remapped\' in camp_string(artifact[\'kind\'])\n    audit=camp_load(root/\'native-bytecode-audit.json\')\n    assert audit[\'status\']==\'passed\';camp_boolean(audit[\'noVendorJarsUploaded\'],True);camp_string(audit[\'scope\'])\n    assert type(audit[\'artifacts\']) is dict and set(audit[\'artifacts\'])==set(CAMP_AUDIT_CLASSES)\n    for mod,expected_classes in CAMP_AUDIT_CLASSES.items():\n        artifact=audit[\'artifacts\'][mod];loaded=data[\'loadedCompanionArtifacts\'][mod]\n        assert camp_digest(artifact[\'sha256\'])==loaded[\'sha256\'] and artifact[\'fileName\']==loaded[\'fileName\']\n        classes=artifact[\'classes\'];assert type(classes) is list and len(classes)==len(expected_classes)\n        assert [entry[\'class\'] for entry in classes]==expected_classes\n        for entry in classes:\n            filename=entry[\'class\'].rsplit(\'.\',1)[1]+\'.javap.txt\';assert entry[\'file\']==filename\n            path=root/\'native-bytecode\'/filename;assert path.is_file() and not path.is_symlink()\n            assert path.resolve().parent==(root/\'native-bytecode\').resolve()\n            assert hashlib.sha256(path.read_bytes()).hexdigest()==camp_digest(entry[\'sha256\'])\n    return data\n\n\ndef verify(root):\n    verify_shape(root)\n    return verify_source_receipt(root)\n'
+
+          CAMP_LIFECYCLE_SOURCE = '#!/usr/bin/env python3\n"""Strict receipt contract for the actual opt-in integrated-client lifecycle run.\n\nThis is reusable unchanged as scripts/verify-native-camp-lifecycle-evidence.py.\nIt validates recorded evidence; actual pixels and source assertions need review.\n"""\nimport json\nimport math\nfrom pathlib import Path\nimport re\nimport struct\nimport sys\nimport uuid\n\nSHOTS = [\'01-bounded-campless-fallback.png\', \'02-recovered-native-camp.png\']\nSCENARIOS = [\'no-safe-land-reload-fallback\', \'recovery-only-island\']\nGUARD_OWNER = \'fac10000-4a1d-4e75-8a1d-000000000001\'\nREASONS = {\'CLAIM_SETUP\', \'CLAIM_SAFETY\', \'UNLOADED\', \'SURFACE\', \'NAVAL_SPACE\', \'RELIEF\',\n           \'FLUID\', \'PROTECTED_BLOCKS\', \'BUDGET\', \'NO_LAND_EXIT\', \'CLAIM_CREATE\', \'TERRAIN_APPLY\'}\n\n\ndef integer(value, minimum=0, maximum=2**63-1):\n    assert type(value) is int and minimum <= value <= maximum, (\'invalid integer\', value)\n    return value\n\n\ndef boolean(value, expected=None):\n    assert type(value) is bool and (expected is None or value is expected), (\'invalid boolean\', value, expected)\n    return value\n\n\ndef text(value):\n    assert type(value) is str and value.strip() and value != \'null\', (\'invalid text\', value)\n    return value\n\n\ndef identifier(value):\n    assert type(value) is str and str(uuid.UUID(value)) == value, (\'invalid UUID\', value)\n    return value\n\n\ndef pairs(items):\n    result = {}\n    for key, value in items:\n        assert key not in result, (\'duplicate JSON key\', key)\n        result[key] = value\n    return result\n\n\ndef reject_constant(value):\n    raise AssertionError(\'Non-finite JSON constant: \' + value)\n\n\ndef load(path):\n    assert path.is_file() and not path.is_symlink(), (\'missing/unsafe receipt\', str(path))\n    data = json.loads(path.read_text(), object_pairs_hook=pairs, parse_constant=reject_constant)\n    def finite(value):\n        if type(value) is float:\n            assert math.isfinite(value), \'Non-finite JSON number\'\n        elif type(value) is dict:\n            for child in value.values(): finite(child)\n        elif type(value) is list:\n            for child in value: finite(child)\n    finite(data)\n    return data\n\n\ndef compound(value):\n    """Read top-level SNBT fields without flattening quoted/nested compounds.\n\n    Only the known primitive and compound fields emitted by RaidState authority\n    are interpreted below. Duplicate fields and unbalanced structures fail.\n    """\n    text(value)\n    assert value.startswith(\'{\') and value.endswith(\'}\'), \'Expected SNBT compound\'\n    body = value[1:-1]; fields = []; stack = []; quoted = None; escaped = False; start = 0\n    for i, char in enumerate(body):\n        if quoted:\n            if escaped: escaped = False\n            elif char == \'\\\\\': escaped = True\n            elif char == quoted: quoted = None\n        elif char in (\'"\', "\'"): quoted = char\n        elif char in \'{[\': stack.append(char)\n        elif char in \'}]\':\n            assert stack and stack.pop() == {\'}\':\'{\', \']\':\'[\'}[char], \'Unbalanced SNBT\'\n        elif char == \',\' and not stack:\n            fields.append(body[start:i]); start = i + 1\n    assert not stack and quoted is None and not escaped, \'Unbalanced SNBT\'\n    if body: fields.append(body[start:])\n    result = {}\n    for field in fields:\n        key, sep, raw = field.partition(\':\');key=key.strip();raw=raw.strip()\n        assert sep and re.fullmatch(r\'[A-Za-z][A-Za-z0-9_]*\', key) and raw and key not in result, \'Malformed or duplicate SNBT field\'\n        result[key] = raw\n    return result\n\n\ndef snbt_int(value, suffix=\'\'):\n    assert type(value) is str and re.fullmatch(r\'-?(?:0|[1-9][0-9]*)\' + suffix, value), (\'Invalid SNBT integer\', value)\n    return int(value[:-len(suffix)] if suffix else value)\n\n\ndef snbt_string(value):\n    if value.startswith(\'"\'):\n        parsed = json.loads(value)\n        assert type(parsed) is str\n        return parsed\n    # Minecraft\'s simple strings need no quoting; quoted forms use either quote.\n    if value.startswith("\'"):\n        assert value.endswith("\'")\n        out = \'\'; escaped = False\n        for char in value[1:-1]:\n            if escaped:\n                assert char in ("\'", \'\\\\\'), \'Invalid SNBT escape\'\n                out += char; escaped = False\n            elif char == \'\\\\\': escaped = True\n            else: out += char\n        assert not escaped\n        return out\n    assert re.fullmatch(r\'[A-Za-z0-9._+\\-]+\', value), \'Invalid SNBT string\'\n    return value\n\n\ndef diagnostics(value, exhausted):\n    assert type(value) is dict and set(value) == {\'exhausted\', \'counts\'}, \'Invalid typed diagnostics\'\n    boolean(value[\'exhausted\'], exhausted)\n    counts=value[\'counts\'];assert type(counts) is dict and set(counts) <= REASONS\n    for count in counts.values(): integer(count, 1, 10000)\n    return value\n\n\ndef authority(value):\n    keys={\'teamKey\',\'defensePoint\',\'factionId\',\'recovery\',\'retryTicks\',\'searchStep\',\'searchTicks\',\'searchElapsedTicks\',\n          \'searchCandidate\',\'terraformFallback\',\'searchAbandoned\',\'preparationTicks\',\'preparationTotalTicks\',\n          \'wave\',\'pendingWaveSpawns\',\'diagnostics\'}\n    assert type(value) is dict and set(value)==keys, \'Incomplete typed saved search authority\'\n    for key in [\'teamKey\',\'defensePoint\',\'factionId\']:text(value[key])\n    boolean(value[\'recovery\'],True);boolean(value[\'terraformFallback\'],True);boolean(value[\'searchAbandoned\'],False)\n    integer(value[\'retryTicks\'],1,1200)\n    for key in [\'searchStep\',\'searchTicks\',\'searchElapsedTicks\',\'wave\',\'pendingWaveSpawns\']:\n        assert integer(value[key])==0, (\'Reload must occur during pre-search cooldown\',key)\n    assert value[\'searchCandidate\'] is None, \'Cooldown must not select a candidate\'\n    assert integer(value[\'preparationTicks\'])==integer(value[\'preparationTotalTicks\'])==3600\n    diagnostics(value[\'diagnostics\'],False)\n    return value\n\n\ndef reconcile_authority_snbt(raw, value):\n    fields=compound(raw)\n    string_keys={\'Team\':\'teamKey\',\'DefensePoint\':\'defensePoint\',\'FactionId\':\'factionId\'}\n    bool_keys={\'CampSearchRecovery\':\'recovery\',\'CampTerraformed\':\'terraformFallback\',\'CampSearchAbandoned\':\'searchAbandoned\'}\n    int_keys={\'CampSearchRetryTicks\':\'retryTicks\',\'CampSearchStep\':\'searchStep\',\'CampSearchTicks\':\'searchTicks\',\n              \'CampSearchElapsedTicks\':\'searchElapsedTicks\',\'PreparationTicks\':\'preparationTicks\',\n              \'PreparationTotal\':\'preparationTotalTicks\',\'Wave\':\'wave\',\'PendingWaveSpawns\':\'pendingWaveSpawns\'}\n    assert set(fields)==set(string_keys)|set(bool_keys)|set(int_keys)|{\'CampSearchDiagnostics\'}, \'Unexpected/missing authority SNBT field\'\n    for key,field in string_keys.items():assert snbt_string(fields[key])==value[field],key\n    for key,field in bool_keys.items():assert snbt_int(fields[key],\'b\')==int(value[field]),key\n    for key,field in int_keys.items():assert snbt_int(fields[key])==value[field],key\n    recorded=compound(fields[\'CampSearchDiagnostics\']);counts=value[\'diagnostics\'][\'counts\']\n    assert set(recorded)==set(counts)|{\'Exhausted\'}\n    assert snbt_int(recorded[\'Exhausted\'],\'b\')==int(value[\'diagnostics\'][\'exhausted\'])\n    for key,count in counts.items():assert snbt_int(recorded[key])==count,key\n\n\ndef verify(root):\n    root=Path(root)\n    assert root.is_dir() and not root.is_symlink(), \'Unsafe evidence root\'\n    data=load(root/\'result.json\')\n    assert type(data) is dict and data[\'mode\']==\'camp-lifecycle\' and data[\'status\']==\'passed\'\n    config=data[\'fixtureConfiguration\']\n    assert type(config) is dict and set(config)=={\'siegePreparationMinutes\',\'waterDepth\',\'scoutingTimersChanged\',\'recoveryTimersChanged\',\'raidFieldsWritten\'}\n    assert integer(config[\'siegePreparationMinutes\'])==3 and integer(config[\'waterDepth\'])==24\n    for key in [\'scoutingTimersChanged\',\'recoveryTimersChanged\',\'raidFieldsWritten\']:boolean(config[key],False)\n    versions=data[\'loadedModVersions\']\n    for mod,version in {\'minecraft\':\'1.20.1\',\'forge\':\'47.4.16\',\'workers\':\'2.0.3\',\'recruits\':\'1.15.2\',\'smallships\':\'2.0.0-b1.4\',\'siegeweapons\':\'0.2.5\'}.items():\n        assert versions[mod]==version,mod\n    for mod in [\'workers\',\'recruits\',\'smallships\',\'siegeweapons\']:\n        artifact=data[\'loadedCompanionArtifacts\'][mod]\n        assert type(artifact[\'sha256\']) is str and re.fullmatch(r\'[0-9a-f]{64}\',artifact[\'sha256\']),mod\n    assert data[\'screenshots\']==SHOTS and type(data[\'screenshots\']) is list\n    cases=data[\'scenarios\'];assert type(cases) is list and len(cases)==2\n    assert [case[\'scenario\'] for case in cases]==SCENARIOS\n    for index,case in enumerate(cases):\n        assert case[\'status\']==\'passed\' and text(case[\'entry\']).startswith(\'Actual non-op client /siegeoverhaul start\')\n        for key in [\'sawNaturalSearch\',\'sawEarthworksSearch\',\'sawRecoveryCooldown\',\'sawWiderRecovery\',\'restorationExcludedProtectedCells\']:\n            boolean(case[key],True)\n        integer(case[\'searchTicksWithoutWaveOrAttackers\'],101)\n        cooldown=integer(case[\'cooldownTicksWithoutWaveOrAttackers\'],1200)\n        assert type(case[\'passes\']) is dict and set(case[\'passes\'])=={\'natural\',\'earthworks\',\'recovery\'}\n        for budget in case[\'passes\'].values():\n            assert type(budget) is dict and set(budget)=={\'maxCandidates\',\'maxElapsedTicks\'}\n            integer(budget[\'maxCandidates\'],1,200);integer(budget[\'maxElapsedTicks\'],1,4800)\n        integer(case[\'protectedCellCount\'],6144);integer(case[\'protectedChests\'],2)\n        integer(case[\'wave\'],1);integer(case[\'totalSpawned\'],1)\n        recovery_at=integer(case[\'recoveryCooldownAtGameTime\'])\n        search_at=integer(case[\'firstRecoverySearchAtGameTime\'])\n        wave_at=integer(case[\'firstWaveAtGameTime\'])\n        assert search_at-recovery_at>=1200 and cooldown<=search_at-recovery_at, \'Wider search began before full observed cooldown\'\n        assert wave_at>search_at, \'First wave preceded wider search\'\n        boolean(case[\'campSearchAbandoned\'],index==0)\n        boolean(case[\'realWorldReload\'],index==0);boolean(case[\'savedSearchAuthorityVerified\'],index==0)\n        shot=case[\'framebuffer\'];assert type(shot) is dict\n        assert type(shot[\'file\']) is str and shot[\'file\']==SHOTS[index], \'Scenario must use its exact unique framebuffer basename\'\n        integer(shot[\'readyFrames\'],8);integer(shot[\'attempts\'],1);integer(shot[\'changedPixelSamples\'],51)\n        elapsed=shot[\'elapsedSeconds\'];assert type(elapsed) in (int,float) and math.isfinite(elapsed) and 0<=elapsed<30\n        path=root/SHOTS[index]\n        assert path.is_file() and not path.is_symlink() and path.resolve().parent==root.resolve(), \'Unsafe/missing framebuffer\'\n        content=path.read_bytes()\n        assert content.startswith(b\'\\x89PNG\\r\\n\\x1a\\n\') and len(content)>4096 and content[12:16]==b\'IHDR\'\n        width,height=struct.unpack(\'>II\',content[16:24])\n        assert 0<width<=8192 and 0<height<=8192, \'Invalid framebuffer dimensions\'\n        state=case[\'finalState\'];assert type(state) is dict\n        assert integer(state[\'scenario\'],0,1)==index and integer(state[\'gameTime\'])>=wave_at\n        boolean(state[\'searchRecovery\'],True);boolean(state[\'terraformFallback\'],True)\n        boolean(state[\'searchAbandoned\'],index==0);boolean(state[\'crewStarted\'],index==1)\n        assert integer(state[\'retryTicks\'])==0\n        integer(state[\'searchStep\'],0,200);integer(state[\'searchElapsedTicks\'],0,4800)\n        assert type(state[\'searchCandidate\']) is str\n        assert integer(state[\'wave\'],1)==case[\'wave\'] and integer(state[\'totalSpawned\'],1)==case[\'totalSpawned\']\n        integer(state[\'raiders\']);integer(state[\'pendingWaveSpawns\'])\n        assert integer(state[\'preparationTotalTicks\'])==3600\n        integer(state[\'preparationTicks\'],0,0 if index==0 else 1200)\n        assert type(state[\'campPosition\']) is str and ((state[\'campPosition\']==\'null\') if index==0 else bool(re.fullmatch(r\'BlockPos\\{x=-?\\d+, y=-?\\d+, z=-?\\d+\\}\',state[\'campPosition\'])))\n        assert text(state[\'diagnostics\'])==text(case[\'campSearchDiagnostics\'])\n        final_diagnostics=compound(state[\'diagnostics\'])\n        assert snbt_int(final_diagnostics[\'Exhausted\'],\'b\')==int(index==0)\n    impossible,recovery=cases\n    assert integer(impossible[\'establishedAtGameTime\'],-1)==-1\n    assert integer(impossible[\'fallbackAtGameTime\'])>=impossible[\'firstRecoverySearchAtGameTime\']\n    assert impossible[\'firstWaveAtGameTime\']-impossible[\'fallbackAtGameTime\']>=3600\n    saved=authority(impossible[\'savedSearchAuthority\']);loaded=authority(impossible[\'loadedSearchAuthority\'])\n    assert saved==loaded, \'Saved and loaded search authority differ\'\n    reconcile_authority_snbt(impossible[\'reloadedAuthority\'],loaded)\n    saved_at=integer(impossible[\'savedSearchAuthorityGameTime\'])\n    loaded_at=integer(impossible[\'loadedSearchAuthorityGameTime\'])\n    assert saved_at==loaded_at and impossible[\'recoveryCooldownAtGameTime\']<=saved_at<impossible[\'firstRecoverySearchAtGameTime\'], \'Reload game time changed or escaped cooldown\'\n    assert integer(recovery[\'fallbackAtGameTime\'],-1)==-1\n    assert recovery[\'firstRecoverySearchAtGameTime\']<=integer(recovery[\'establishedAtGameTime\'])<recovery[\'firstWaveAtGameTime\']\n    island=recovery[\'recoveryIsland\'];assert type(island) is dict\n    assert integer(island[\'width\'])==57 and integer(island[\'soilDepth\'])==24 and integer(island[\'fixtureWrites\'])==57*57*24+4\n    boolean(island[\'originalCandidatesCannotFitCore\'],True)\n    assert integer(island[\'recoveryCooldownAtGameTime\'])==recovery[\'recoveryCooldownAtGameTime\'], \'Duplicated cooldown times disagree\'\n    assert integer(island[\'completedAtGameTime\'])<island[\'recoveryCooldownAtGameTime\']\n    camp=recovery[\'nativeCamp\'];assert type(camp) is dict\n    assert integer(camp[\'nativeClaimChunks\'])==25\n    identifier(camp[\'claimId\']);identifier(camp[\'nativeJobOwner\']);assert camp[\'nativeJobOwner\']!=GUARD_OWNER\n    assert re.fullmatch(r\'-?\\d+, -?\\d+, -?\\d+\',text(camp[\'enemyCore\'])), \'Missing actual enemy-core coordinates\'\n    boolean(camp[\'preservedEdgesRescue\'],True);boolean(camp[\'warGateReadyAtCrewCheck\'])\n    assert integer(camp[\'ordinaryTicksSinceEstablishment\'],60)<=recovery[\'firstWaveAtGameTime\']-recovery[\'establishedAtGameTime\']\n    faction=text(camp[\'expectedEnemyFaction\'])\n    assert type(camp[\'workers\']) is list and camp[\'workers\'] and type(camp[\'guards\']) is list and len(camp[\'guards\'])==5\n    identities=set()\n    for kind in [\'workers\',\'guards\']:\n        for unit in camp[kind]:\n            ident=identifier(unit[\'uuid\']);assert ident not in identities, \'Duplicate native entity identity\';identities.add(ident)\n            boolean(unit[\'noAi\'],False);assert text(unit[\'faction\'])==faction\n            owner=identifier(unit[\'owner\']);assert owner==(camp[\'nativeJobOwner\'] if kind==\'workers\' else GUARD_OWNER)\n            if kind==\'workers\':assert unit[\'type\']==\'workers:builder\'\n            else:assert type(unit[\'type\']) is str and re.fullmatch(r\'recruits:[a-z_]+\',unit[\'type\'])\n    audit=load(root/\'native-bytecode-audit.json\')\n    assert audit[\'status\']==\'passed\';boolean(audit[\'noVendorJarsUploaded\'],True)\n    assert type(audit[\'artifacts\']) is dict and audit[\'artifacts\']\n    assert all(type(value[\'classes\']) is list for value in audit[\'artifacts\'].values())\n    assert sum(len(value[\'classes\']) for value in audit[\'artifacts\'].values())==18\n    return data\n\n\nif __name__==\'__main__\':\n    if len(sys.argv)!=2:raise SystemExit(\'usage: verify-native-camp-lifecycle-evidence.py EVIDENCE_DIRECTORY\')\n    verify(Path(sys.argv[1]))\n    print(\'Strict bounded recovery/reload/native-camp and first-wave receipts verified. Recovery first-wave muster does not imply completed preparation or combat. Review framebuffers separately.\')\n'
+
+          HANDOFF_SOURCE = '"""Offline receipt replay only. Never evidence of a newly executed Minecraft run.\nEvery original workflow/parser assertion is preserved; strict guards add fail-closed typing and bounded reads.\nSource receipt authentication and PR/main commit/run binding remain publisher responsibilities.\n"""\n\nSOURCE_BINDINGS = {\'.github/workflows/native-staged-handoff-qa.yml\': \'993368ea7947de0d62c42b5c162afdc87058f62b7b5ada64ba430bd9134d2873\', \'docs/native-staged-handoff-qa.md\': \'65f74efc5b458ef3ebc249d4978669f274052697228d4fa440c8ce6b3767d210\', \'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeStagedHandoffQa.java\': \'c41c1c00140ae500dc2c5ffba56af10325fa16ebd20b7aacb8b04377a00ac73f\', \'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeStagedHandoffFixture.java\': \'e0b975d07a7b24b585d66b94bf2040259f97eaec4d67ff52a7d5d65d107c10ad\', \'build.gradle\': \'3cb2bc9a5e1273c2e59b8c37c0fc741b286a8bccc60ad7a93196ec7ea106a6eb\', \'gradle.properties\': \'50ada1bd10a7847f6c9bc925162f5278c71caaa8b298f009992fdc640c2c0d1e\', \'scripts/prepare-native-client-defaults.py\': \'40121620a03c2f7fdbd743c1f76d15b01ac44ba9a12f16b3e9bea68acbf99be1\', \'src/main/java/com/devfarinsky/siegeoverhaul/core/ConstructionReport.java\': \'00819ca5f279898ba73e4a84444f83afe5837a86a4bad7e8a067031fc62e656e\', \'scripts/audit-native-inventory-bytecode.py\': \'3d5da9136b618c03e03b26062aa581e68f837d66a843dfcbb15c3e537e33d83e\', \'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeQaTreasury.java\': \'7e9040cc735d4cb4277a9fc4b932b4c5631203f7efb3faab43ea3ed2edbe2372\', \'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeQaTreasuryContracts.java\': \'8db4f13d97c5c384fae6e5c08574a956a5b64b5c03c7fd5eca47223c7fa3849e\', \'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeHollowWallOracle.java\': \'161dc2a13c1fab6cee31f27b9d2e1adbf011ecefb2c681bcb5ff9f8adffd11d9\', \'scripts/verify-native-staged-handoff.py\': \'9740d493ad00e9853e38ac5cd716828eeaf3e5696d425713d968b316f3ded545\'}\n\nSOURCE_PARSER_SHA256 = \'9740d493ad00e9853e38ac5cd716828eeaf3e5696d425713d968b316f3ded545\'\n\nAUDIT_TARGETS = {\'recruits\': (\'recruits-523860-8339846_mapped_official_1.20.1.jar\', [\'com.talhanation.recruits.entities.ai.RecruitUpkeepPosGoal\', \'com.talhanation.recruits.entities.ai.RecruitUpkeepEntityGoal\', \'com.talhanation.recruits.entities.AbstractRecruitEntity\', \'com.talhanation.recruits.entities.AbstractInventoryEntity\', \'com.talhanation.recruits.inventory.RecruitSimpleContainer\', \'com.talhanation.recruits.world.RecruitsClaimManager\', \'com.talhanation.recruits.world.RecruitsClaim\', \'com.talhanation.recruits.entities.ScoutEntity\', \'com.talhanation.recruits.entities.BowmanEntity\', \'com.talhanation.recruits.entities.ai.navigation.RecruitPathNavigation\', \'com.talhanation.recruits.pathfinding.AsyncGroundPathNavigation\', \'com.talhanation.recruits.init.ModEntityTypes\']), \'workers\': (\'workers-567450-8351157_mapped_official_1.20.1.jar\', [\'com.talhanation.workers.entities.ai.GetNeededItemsFromStorage\', \'com.talhanation.workers.entities.ai.DepositItemsToStorage\', \'com.talhanation.workers.entities.ai.RecruitStorageUpkeepGoal\', \'com.talhanation.workers.entities.ai.AbstractChestGoal\', \'com.talhanation.workers.entities.ai.BuilderWorkGoal\', \'com.talhanation.workers.entities.AbstractWorkerEntity\'])}\n\nimport hashlib\nimport json\nimport math\nimport os\nfrom pathlib import Path\nimport re\nimport stat\nimport uuid\n\n\ndef _require(condition, label):\n    if not condition:\n        raise AssertionError(label)\n\n\ndef _safe_root(root):\n    _require(isinstance(root, Path), \'verify(root) requires pathlib.Path\')\n    root = root.absolute()\n    _require(\'..\' not in root.parts, \'evidence root cannot contain parent traversal\')\n    for component in (root, *root.parents):\n        _require(not component.is_symlink(), \'symlink evidence root or ancestor\')\n    _require(root.is_dir(), \'evidence root is not a directory\')\n    return root\n\n\ndef _read(root, name, limit=32 * 1024 * 1024):\n    # Fixed leaf names only. Opening by directory descriptor + O_NOFOLLOW prevents\n    # a receipt or screenshot symlink from escaping the evidence directory.\n    _require(type(name) is str and name not in (\'\', \'.\', \'..\')\n             and \'/\' not in name and \'\\\\\' not in name, \'unsafe evidence filename\')\n    directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)\n    try:\n        descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)\n        try:\n            metadata = os.fstat(descriptor)\n            _require(stat.S_ISREG(metadata.st_mode), \'evidence must be a regular file: \' + name)\n            _require(0 < metadata.st_size <= limit, \'evidence file size out of bounds: \' + name)\n            with os.fdopen(descriptor, \'rb\', closefd=False) as stream:\n                content = stream.read(limit + 1)\n            _require(len(content) == metadata.st_size <= limit, \'evidence changed while being read: \' + name)\n            return content\n        finally:\n            os.close(descriptor)\n    finally:\n        os.close(directory)\n\n\ndef _object_pairs(pairs):\n    value = {}\n    for key, item in pairs:\n        _require(key not in value, \'duplicate JSON key: \' + key)\n        value[key] = item\n    return value\n\n\ndef _bad_constant(value):\n    raise AssertionError(\'non-finite JSON number: \' + value)\n\n\ndef _json(root, name):\n    value = json.loads(_read(root, name).decode(\'utf-8\'),\n                       object_pairs_hook=_object_pairs, parse_constant=_bad_constant)\n    _require(type(value) is dict, name + \' must contain a JSON object\')\n    # json.loads can parse finite-looking overflow such as 1e999 into infinity.\n    def finite(item):\n        if type(item) is float:\n            _require(math.isfinite(item), \'non-finite JSON number\')\n        elif type(item) is dict:\n            for child in item.values():\n                finite(child)\n        elif type(item) is list:\n            for child in item:\n                finite(child)\n    finite(value)\n    return value\n\n\ndef _typed(value, kind, label):\n    if kind == \'number\':\n        _require(type(value) in (int, float) and math.isfinite(value), label + \' must be a finite number\')\n    else:\n        _require(type(value) is kind, label + \' has incorrect type\')\n    if kind is str:\n        _require(bool(value.strip()), label + \' cannot be blank\')\n    return value\n\n\ndef _fields(value, **fields):\n    _typed(value, dict, \'receipt object\')\n    for key, kind in fields.items():\n        _require(key in value, \'missing field: \' + key)\n        _typed(value[key], kind, key)\n\n\ndef _ints(value, names, minimum=0):\n    for name in names.split():\n        _fields(value, **{name: int})\n        _require(value[name] >= minimum, name + \' is below its allowed minimum\')\n\n\ndef _bools(value, names):\n    _fields(value, **{name: bool for name in names.split()})\n\n\ndef _strings(value, names):\n    _fields(value, **{name: str for name in names.split()})\n\n\ndef _sha(value, label):\n    _require(type(value) is str and re.fullmatch(\'[0-9a-f]{64}\', value) is not None,\n             label + \' must be a lowercase SHA-256\')\n\n\ndef _uuid(value, label):\n    _typed(value, str, label)\n    try:\n        parsed = uuid.UUID(value)\n    except ValueError:\n        raise AssertionError(label + \' must be a canonical UUID\') from None\n    _require(str(parsed) == value, label + \' must be a canonical UUID\')\n\n\ndef _list(value, kind, label, nonempty=True):\n    _typed(value, list, label)\n    _require(not nonempty or bool(value), label + \' cannot be empty\')\n    for entry in value:\n        _typed(entry, kind, label + \' entry\')\n\n\ndef _stages(data, total):\n    _fields(data, stageLayout=list, reviewedStageCount=int)\n    stages = data[\'stageLayout\']\n    _list(stages, dict, \'stageLayout\')\n    _require(len(stages) == data[\'reviewedStageCount\'], \'stage count does not match receipt\')\n    areas = set()\n    for index, stage in enumerate(stages):\n        _ints(stage, \'index targets\')\n        _strings(stage, \'area digest\')\n        _uuid(stage[\'area\'], \'stage area\')\n        _sha(stage[\'digest\'], \'stage digest\')\n        _require(stage[\'index\'] == index and stage[\'targets\'] > 0, \'invalid stage index or target count\')\n        _require(stage[\'area\'] not in areas, \'duplicate stage area\')\n        areas.add(stage[\'area\'])\n    _require(sum(stage[\'targets\'] for stage in stages) == total, \'stage target total mismatch\')\n\n\ndef _common(data, audit, root):\n    _strings(data, \'mode status\')\n    _fields(data, elapsedSeconds=\'number\', loadedModVersions=dict, loadedCompanionArtifacts=dict, screenshots=list)\n    _list(data[\'screenshots\'], str, \'screenshots\')\n    _strings(data[\'loadedModVersions\'], \'minecraft forge workers recruits smallships siegeweapons\')\n    for mod in (\'workers\', \'recruits\', \'smallships\', \'siegeweapons\'):\n        artifact = data[\'loadedCompanionArtifacts\'][mod]\n        _strings(artifact, \'sha256\')\n        _sha(artifact[\'sha256\'], mod + \' artifact hash\')\n    _fields(audit, status=str, noVendorJarsUploaded=bool, artifacts=dict)\n    _require(set(audit[\'artifacts\']) == set(AUDIT_TARGETS), \'bytecode audit must contain workers and recruits only\')\n    for mod, target in AUDIT_TARGETS.items():\n        artifact = audit[\'artifacts\'][mod]\n        _fields(artifact, fileName=str, sha256=str, classes=list)\n        _sha(artifact[\'sha256\'], mod + \' audit hash\')\n        _require(artifact[\'sha256\'] == data[\'loadedCompanionArtifacts\'][mod][\'sha256\'], \'loaded/audited artifact hash mismatch\')\n        _require(artifact[\'fileName\'] == target[0], \'unexpected audited filename\')\n        _require(data[\'loadedCompanionArtifacts\'][mod].get(\'fileName\') == target[0], \'loaded/audited filename mismatch\')\n        _list(artifact[\'classes\'], dict, mod + \' audited classes\')\n        _require([entry.get(\'class\') for entry in artifact[\'classes\']] == target[1], \'wrong or duplicate audited class roster\')\n        for entry in artifact[\'classes\']:\n            _strings(entry, \'class file sha256\')\n            _sha(entry[\'sha256\'], \'class disassembly hash\')\n            _require(entry[\'file\'] == entry[\'class\'].rsplit(\'.\', 1)[-1] + \'.javap.txt\', \'unexpected disassembly filename\')\n            folder = _safe_root(root / \'native-bytecode\')\n            content = _read(folder, entry[\'file\'])\n            _require(hashlib.sha256(content).hexdigest() == entry[\'sha256\'], \'disassembly content hash mismatch\')\n            _require(entry[\'class\'].encode() in content, \'disassembly does not name expected class\')\n\n\ndef _bank(data):\n    _fields(data, treasuryAccounting=dict)\n    bank = data[\'treasuryAccounting\']\n    _ints(bank, \'startingFunds commissionDebit initialPaidBalance expectedFinalBalance interestCredits taxCredits\')\n    _require(bank[\'initialPaidBalance\'] == bank[\'startingFunds\'] - bank[\'commissionDebit\'], \'initial Treasury balance does not match single debit\')\n    _fields(bank, singleNegativeLedgerDelta=int)\n\n\ndef _preflight(data, audit, root):\n    _common(data, audit, root)\n    _strings(data, \'geometryProfile geometrySourceCommit commissionPath manifestHash reviewFingerprint originalMarker cancellationAuthority cancellationAuthorityNbt keyboardInputScope\')\n    for name in (\'manifestHash\', \'reviewFingerprint\'):\n        _sha(data[name], name)\n    _bools(data, \'hollowCavityAirPreserved walkwayHeadroomAirPreserved nativeStageHollowReservationVerified-0 nativeStageHollowReservationVerified-1 syntheticPartition wholePlanCompleted firstSectionCompletionObserved midStageRestartVerified canceledRestartVerified betweenStageRestartVerified keyboardEscapePreservedProject\')\n    _ints(data, \'qaSectionTargetCap totalLimitSeconds constructionLimitSeconds territoryChunkCount treasuryDebit firstSectionTargetCount nextSectionNativePlaced retainedPlacedBlocks keyboardEscapeObservationTicks\')\n    _fields(data, constructionSeconds=\'number\', hollowOracle=dict, materialCounts=dict,\n            partialRestartClosedLifecycle=dict, restarts=list, nativeStageJoins=list,\n            cancellationCleanup=dict, keyboardInteractions=list, finalDiagnostics=dict,\n            nativeClaimRecords=list, treasuryObserverContracts=list)\n    _ints(data[\'hollowOracle\'], \'columns skinColumns cavityColumns targetCount cavityAirCount headroomAirCount reservedCellCount\')\n    _ints(data[\'materialCounts\'], \'minecraft:cobblestone minecraft:oak_planks\')\n    _list(data[\'nativeClaimRecords\'], str, \'nativeClaimRecords\')\n    for value in data[\'nativeClaimRecords\']:\n        _uuid(value, \'native claim\')\n    _list(data[\'treasuryObserverContracts\'], str, \'treasuryObserverContracts\')\n    _stages(data, 572)\n    closed = data[\'partialRestartClosedLifecycle\']\n    _ints(closed, \'consecutiveServerTicks minimumTicks\')\n    _bools(closed, \'cleanupJournalEmpty storageRunningProblemAbsent activeHandUse\')\n    _list(data[\'restarts\'], dict, \'restarts\')\n    for restart in data[\'restarts\']:\n        _strings(restart, \'kind projectState ledgerGeneration\')\n        _require(restart[\'kind\'] in (\'mid-stage\', \'between-stages\', \'canceled\'), \'unexpected restart kind\')\n        _uuid(restart[\'ledgerGeneration\'], \'ledger generation\')\n        _ints(restart, \'placed pending activeStage\')\n        for suffix in (\'before-shutdown\', \'final-stop\', \'after-reopen\'):\n            _strings(data, \'authority-\' + restart[\'kind\'] + \'-\' + suffix)\n    _strings(data, \'authority-commission authority-native-handoff authority-canceled-before-reopen\')\n    _list(data[\'nativeStageJoins\'], dict, \'nativeStageJoins\')\n    for entry in data[\'nativeStageJoins\']:\n        _strings(entry, \'area marker\')\n        _uuid(entry[\'area\'], \'joined native area\')\n        _bools(entry, \'loadedFromDisk\')\n    _bools(data[\'cancellationCleanup\'], \'markersGone builderDetached reservationsGone\')\n    _list(data[\'keyboardInteractions\'], dict, \'keyboardInteractions\')\n    _require(len(data[\'keyboardInteractions\']) == 6, \'wrong keyboard interaction count\')\n    for index, entry in enumerate(data[\'keyboardInteractions\']):\n        _strings(entry, \'control\')\n        if index == 3:\n            _strings(entry, \'key\')\n            _bools(entry, \'returnedWithoutCancelRequest\')\n        else:\n            _strings(entry, \'keys\')\n            _bools(entry, \'focusMoved\')\n            _ints(entry, \'tabHandlers\')\n    _bank(data)\n    _ints(data[\'treasuryAccounting\'], \'initialPaidBalance\')\n    _ints(data[\'finalDiagnostics\'], \'treasury placed placedCobble chestCobble builderCobble looseCobble placedOak chestOak builderOak looseOak\')\n\n\ndef verify(root):\n    if not __debug__:\n        raise RuntimeError(\'Receipt validators refuse optimized Python because source assertions must remain active\')\n    root = _safe_root(root)\n    data = _json(root, \'result.json\')\n    audit = _json(root, \'native-bytecode-audit.json\')\n    _preflight(data, audit, root)\n    assert audit[\'status\'] == \'passed\' and audit[\'noVendorJarsUploaded\'], audit\n    assert sum((len(value[\'classes\']) for value in audit[\'artifacts\'].values())) == 18, audit\n    assert data[\'mode\'] == \'staged-handoff\' and data[\'status\'] == \'passed\', data\n    assert data[\'geometryProfile\'] == \'hollow-five-wide-one-claim\', data\n    assert data[\'geometrySourceCommit\'] == \'acbc66025e09152db75ab419b34fad81a3dd290e\', data\n    assert data[\'hollowOracle\'] == {\'columns\': 220, \'skinColumns\': 88, \'cavityColumns\': 132, \'targetCount\': 572, \'cavityAirCount\': 396, \'headroomAirCount\': 352, \'reservedCellCount\': 1320}, data\n    assert data[\'hollowCavityAirPreserved\'] and data[\'walkwayHeadroomAirPreserved\'], data\n    assert data[\'nativeStageHollowReservationVerified-0\'] and data[\'nativeStageHollowReservationVerified-1\'], data\n    assert data[\'syntheticPartition\'] is True and data[\'qaSectionTargetCap\'] == 96, data\n    assert \'direct server commission\' in data[\'commissionPath\'], data\n    assert data[\'wholePlanCompleted\'] is False, data\n    assert data[\'totalLimitSeconds\'] == 600 and data[\'constructionLimitSeconds\'] == 540, data\n    assert 0 < data[\'elapsedSeconds\'] < 600, data\n    assert 0 < data[\'constructionSeconds\'] <= 540, data\n    assert data[\'territoryChunkCount\'] == 1 and len(data[\'nativeClaimRecords\']) == 1, data\n    assert data[\'materialCounts\'] == {\'minecraft:cobblestone\': 352, \'minecraft:oak_planks\': 220}, data\n    assert data[\'treasuryDebit\'] == 64 and len(data[\'manifestHash\']) == len(data[\'reviewFingerprint\']) == 64, data\n    stages = data[\'stageLayout\']\n    assert len(stages) == data[\'reviewedStageCount\'] > 2 and sum((part[\'targets\'] for part in stages)) == 572, stages\n    assert all((0 < part[\'targets\'] <= 96 and len(part[\'digest\']) == 64 for part in stages)), stages\n    assert [part[\'index\'] for part in stages] == list(range(len(stages))), stages\n    assert len({part[\'area\'] for part in stages}) == len(stages), stages\n    assert data[\'firstSectionCompletionObserved\'] is True and data[\'firstSectionTargetCount\'] == stages[0][\'targets\'], data\n    assert 0 < data[\'nextSectionNativePlaced\'] < stages[1][\'targets\'], data\n    assert stages[0][\'targets\'] + data[\'nextSectionNativePlaced\'] <= data[\'retainedPlacedBlocks\'] < 572, data\n    assert data[\'midStageRestartVerified\'] is True and data[\'canceledRestartVerified\'] is True, data\n    closed = data[\'partialRestartClosedLifecycle\']\n    assert closed[\'consecutiveServerTicks\'] >= closed[\'minimumTicks\'] == 40, closed\n    assert closed[\'cleanupJournalEmpty\'] and closed[\'storageRunningProblemAbsent\'] and (not closed[\'activeHandUse\']), closed\n    restarts = data[\'restarts\']\n    expected_kinds = [\'mid-stage\', \'between-stages\', \'canceled\'] if data[\'betweenStageRestartVerified\'] else [\'mid-stage\', \'canceled\']\n    assert [restart[\'kind\'] for restart in restarts] == expected_kinds, restarts\n    assert restarts[0][\'projectState\'] == \'RUNNING\' and restarts[0][\'activeStage\'] == 0, restarts\n    assert 0 < restarts[0][\'placed\'] < stages[0][\'targets\'], restarts\n    assert restarts[-1][\'projectState\'] == \'CANCELED\' and restarts[-1][\'activeStage\'] == 1, restarts\n    if data[\'betweenStageRestartVerified\']:\n        assert restarts[1][\'projectState\'] == \'WAITING_FOR_NEXT_STAGE\' and restarts[1][\'activeStage\'] == 1, restarts\n        assert restarts[1][\'placed\'] == stages[0][\'targets\'], restarts\n    for restart in restarts:\n        assert 0 < restart[\'placed\'] < 572 and restart[\'placed\'] + restart[\'pending\'] == 572, restart\n        assert len(restart[\'ledgerGeneration\']) == 36, restart\n        for suffix in [\'before-shutdown\', \'final-stop\', \'after-reopen\']:\n            assert data[\'authority-\' + restart[\'kind\'] + \'-\' + suffix], restart\n    assert data[\'authority-commission\'] and data[\'authority-native-handoff\'] and data[\'authority-canceled-before-reopen\'], data\n    joins = data[\'nativeStageJoins\']\n    assert {entry[\'area\'] for entry in joins} == {stages[0][\'area\'], stages[1][\'area\']}, joins\n    assert all((entry[\'marker\'] == data[\'originalMarker\'] for entry in joins)), joins\n    assert sum((not entry[\'loadedFromDisk\'] for entry in joins)) == 2, joins\n    assert any((entry[\'loadedFromDisk\'] and entry[\'area\'] == stages[0][\'area\'] for entry in joins)), joins\n    assert data[\'cancellationAuthority\'] == \'CANCELED compact terminal receipt\' and data[\'cancellationAuthorityNbt\'], data\n    assert data[\'cancellationCleanup\'] == {\'markersGone\': True, \'builderDetached\': True, \'reservationsGone\': True}, data\n    assert data[\'keyboardEscapeObservationTicks\'] >= 20, data\n    assert data[\'keyboardEscapePreservedProject\'] is True and \'no physical OS input\' in data[\'keyboardInputScope\'], data\n    keyboard = data[\'keyboardInteractions\']\n    assert [entry[\'control\'] for entry in keyboard] == [\'Building\', \'Construction\', \'Cancel entire perimeter\', \'Cancel confirmation\', \'Cancel entire perimeter\', \'Yes\'], keyboard\n    assert keyboard[3][\'key\'] == \'Escape\' and keyboard[3][\'returnedWithoutCancelRequest\'] is True, keyboard\n    for entry in keyboard[:3] + keyboard[4:]:\n        assert entry[\'keys\'] == \'Tab/Enter\' and entry[\'focusMoved\'] is True and (1 <= entry[\'tabHandlers\'] <= 128), entry\n    expected_shots = [\'01-direct-server-commission.png\', \'02-authenticated-core-cancel.png\', \'03-confirm-whole-project-cancel.png\', \'04-canceled-after-reopen.png\']\n    assert data[\'screenshots\'] == expected_shots, data\n    for name in expected_shots:\n        content = _read(root, name)\n        assert content.startswith(b\'\\x89PNG\\r\\n\\x1a\\n\') and len(content) > 4096, name\n    versions = data[\'loadedModVersions\']\n    assert versions[\'workers\'] == \'2.0.3\' and versions[\'recruits\'] == \'1.15.2\', versions\n    assert versions[\'minecraft\'] == \'1.20.1\' and versions[\'forge\'] == \'47.4.16\', versions\n    assert versions[\'smallships\'] == \'2.0.0-b1.4\', versions\n    for mod in [\'workers\', \'recruits\', \'smallships\', \'siegeweapons\']:\n        assert len(data[\'loadedCompanionArtifacts\'][mod][\'sha256\']) == 64, mod\n    final, bank = (data[\'finalDiagnostics\'], data[\'treasuryAccounting\'])\n    assert bank[\'startingFunds\'] == 2000 and bank[\'commissionDebit\'] == 64 and (bank[\'initialPaidBalance\'] == 1936), bank\n    assert bank[\'singleNegativeLedgerDelta\'] == -64, bank\n    assert bank[\'expectedFinalBalance\'] == 1936 + bank[\'interestCredits\'] + bank[\'taxCredits\'], bank\n    assert final[\'treasury\'] == bank[\'expectedFinalBalance\'] and final[\'placed\'] == data[\'retainedPlacedBlocks\'], final\n    assert len(data[\'treasuryObserverContracts\']) == 10, data\n    assert final[\'placedCobble\'] + final[\'chestCobble\'] + final[\'builderCobble\'] + final[\'looseCobble\'] == 352, final\n    assert final[\'placedOak\'] + final[\'chestOak\'] + final[\'builderOak\'] + final[\'looseOak\'] == 220, final\n    return data\n'
+
+          UNLOAD_SOURCE = '"""Offline receipt replay only. Never evidence of a newly executed Minecraft run.\nEvery original workflow/parser assertion is preserved; strict guards add fail-closed typing and bounded reads.\nSource receipt authentication and PR/main commit/run binding remain publisher responsibilities.\n"""\n\nSOURCE_BINDINGS = {\'.github/workflows/native-staged-unload-qa.yml\': \'f7c5a7650ff6405b9f938b07d882f4032c371e0aafa41775d0554429c044f67f\', \'docs/native-staged-unload-qa.md\': \'e9b29a2e588c8b0c55939f9580c9fc8ce70e7990f89b85249e1554483d8b0428\', \'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeStagedUnloadQa.java\': \'aaf93ae8f1b719fb54f66bac005b465bf4e64cc4a070158bd1c1eb4eee1d22d9\', \'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeStagedUnloadFixture.java\': \'4fb2fb7fcd250a3a9695ac1740fbbf6740fc392e55862cb581b01e5ee3e708ce\', \'build.gradle\': \'3cb2bc9a5e1273c2e59b8c37c0fc741b286a8bccc60ad7a93196ec7ea106a6eb\', \'gradle.properties\': \'50ada1bd10a7847f6c9bc925162f5278c71caaa8b298f009992fdc640c2c0d1e\', \'scripts/prepare-native-client-defaults.py\': \'40121620a03c2f7fdbd743c1f76d15b01ac44ba9a12f16b3e9bea68acbf99be1\', \'src/main/java/com/devfarinsky/siegeoverhaul/core/ConstructionReport.java\': \'00819ca5f279898ba73e4a84444f83afe5837a86a4bad7e8a067031fc62e656e\', \'scripts/audit-native-inventory-bytecode.py\': \'3d5da9136b618c03e03b26062aa581e68f837d66a843dfcbb15c3e537e33d83e\', \'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeQaTreasury.java\': \'7e9040cc735d4cb4277a9fc4b932b4c5631203f7efb3faab43ea3ed2edbe2372\', \'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeQaTreasuryContracts.java\': \'8db4f13d97c5c384fae6e5c08574a956a5b64b5c03c7fd5eca47223c7fa3849e\', \'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeHollowWallOracle.java\': \'161dc2a13c1fab6cee31f27b9d2e1adbf011ecefb2c681bcb5ff9f8adffd11d9\'}\n\nSOURCE_PARSER_SHA256 = \'7f73522974e77be3e72aabb55d6c86c091346ae59322f5ba36e0e0806e97248d\'\n\nAUDIT_TARGETS = {\'recruits\': (\'recruits-523860-8339846_mapped_official_1.20.1.jar\', [\'com.talhanation.recruits.entities.ai.RecruitUpkeepPosGoal\', \'com.talhanation.recruits.entities.ai.RecruitUpkeepEntityGoal\', \'com.talhanation.recruits.entities.AbstractRecruitEntity\', \'com.talhanation.recruits.entities.AbstractInventoryEntity\', \'com.talhanation.recruits.inventory.RecruitSimpleContainer\', \'com.talhanation.recruits.world.RecruitsClaimManager\', \'com.talhanation.recruits.world.RecruitsClaim\', \'com.talhanation.recruits.entities.ScoutEntity\', \'com.talhanation.recruits.entities.BowmanEntity\', \'com.talhanation.recruits.entities.ai.navigation.RecruitPathNavigation\', \'com.talhanation.recruits.pathfinding.AsyncGroundPathNavigation\', \'com.talhanation.recruits.init.ModEntityTypes\']), \'workers\': (\'workers-567450-8351157_mapped_official_1.20.1.jar\', [\'com.talhanation.workers.entities.ai.GetNeededItemsFromStorage\', \'com.talhanation.workers.entities.ai.DepositItemsToStorage\', \'com.talhanation.workers.entities.ai.RecruitStorageUpkeepGoal\', \'com.talhanation.workers.entities.ai.AbstractChestGoal\', \'com.talhanation.workers.entities.ai.BuilderWorkGoal\', \'com.talhanation.workers.entities.AbstractWorkerEntity\'])}\n\nimport hashlib\nimport json\nimport math\nimport os\nfrom pathlib import Path\nimport re\nimport stat\nimport uuid\n\n\ndef _require(condition, label):\n    if not condition:\n        raise AssertionError(label)\n\n\ndef _safe_root(root):\n    _require(isinstance(root, Path), \'verify(root) requires pathlib.Path\')\n    root = root.absolute()\n    _require(\'..\' not in root.parts, \'evidence root cannot contain parent traversal\')\n    for component in (root, *root.parents):\n        _require(not component.is_symlink(), \'symlink evidence root or ancestor\')\n    _require(root.is_dir(), \'evidence root is not a directory\')\n    return root\n\n\ndef _read(root, name, limit=32 * 1024 * 1024):\n    # Fixed leaf names only. Opening by directory descriptor + O_NOFOLLOW prevents\n    # a receipt or screenshot symlink from escaping the evidence directory.\n    _require(type(name) is str and name not in (\'\', \'.\', \'..\')\n             and \'/\' not in name and \'\\\\\' not in name, \'unsafe evidence filename\')\n    directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)\n    try:\n        descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)\n        try:\n            metadata = os.fstat(descriptor)\n            _require(stat.S_ISREG(metadata.st_mode), \'evidence must be a regular file: \' + name)\n            _require(0 < metadata.st_size <= limit, \'evidence file size out of bounds: \' + name)\n            with os.fdopen(descriptor, \'rb\', closefd=False) as stream:\n                content = stream.read(limit + 1)\n            _require(len(content) == metadata.st_size <= limit, \'evidence changed while being read: \' + name)\n            return content\n        finally:\n            os.close(descriptor)\n    finally:\n        os.close(directory)\n\n\ndef _object_pairs(pairs):\n    value = {}\n    for key, item in pairs:\n        _require(key not in value, \'duplicate JSON key: \' + key)\n        value[key] = item\n    return value\n\n\ndef _bad_constant(value):\n    raise AssertionError(\'non-finite JSON number: \' + value)\n\n\ndef _json(root, name):\n    value = json.loads(_read(root, name).decode(\'utf-8\'),\n                       object_pairs_hook=_object_pairs, parse_constant=_bad_constant)\n    _require(type(value) is dict, name + \' must contain a JSON object\')\n    # json.loads can parse finite-looking overflow such as 1e999 into infinity.\n    def finite(item):\n        if type(item) is float:\n            _require(math.isfinite(item), \'non-finite JSON number\')\n        elif type(item) is dict:\n            for child in item.values():\n                finite(child)\n        elif type(item) is list:\n            for child in item:\n                finite(child)\n    finite(value)\n    return value\n\n\ndef _typed(value, kind, label):\n    if kind == \'number\':\n        _require(type(value) in (int, float) and math.isfinite(value), label + \' must be a finite number\')\n    else:\n        _require(type(value) is kind, label + \' has incorrect type\')\n    if kind is str:\n        _require(bool(value.strip()), label + \' cannot be blank\')\n    return value\n\n\ndef _fields(value, **fields):\n    _typed(value, dict, \'receipt object\')\n    for key, kind in fields.items():\n        _require(key in value, \'missing field: \' + key)\n        _typed(value[key], kind, key)\n\n\ndef _ints(value, names, minimum=0):\n    for name in names.split():\n        _fields(value, **{name: int})\n        _require(value[name] >= minimum, name + \' is below its allowed minimum\')\n\n\ndef _bools(value, names):\n    _fields(value, **{name: bool for name in names.split()})\n\n\ndef _strings(value, names):\n    _fields(value, **{name: str for name in names.split()})\n\n\ndef _sha(value, label):\n    _require(type(value) is str and re.fullmatch(\'[0-9a-f]{64}\', value) is not None,\n             label + \' must be a lowercase SHA-256\')\n\n\ndef _uuid(value, label):\n    _typed(value, str, label)\n    try:\n        parsed = uuid.UUID(value)\n    except ValueError:\n        raise AssertionError(label + \' must be a canonical UUID\') from None\n    _require(str(parsed) == value, label + \' must be a canonical UUID\')\n\n\ndef _list(value, kind, label, nonempty=True):\n    _typed(value, list, label)\n    _require(not nonempty or bool(value), label + \' cannot be empty\')\n    for entry in value:\n        _typed(entry, kind, label + \' entry\')\n\n\ndef _stages(data, total):\n    _fields(data, stageLayout=list, reviewedStageCount=int)\n    stages = data[\'stageLayout\']\n    _list(stages, dict, \'stageLayout\')\n    _require(len(stages) == data[\'reviewedStageCount\'], \'stage count does not match receipt\')\n    areas = set()\n    for index, stage in enumerate(stages):\n        _ints(stage, \'index targets\')\n        _strings(stage, \'area digest\')\n        _uuid(stage[\'area\'], \'stage area\')\n        _sha(stage[\'digest\'], \'stage digest\')\n        _require(stage[\'index\'] == index and stage[\'targets\'] > 0, \'invalid stage index or target count\')\n        _require(stage[\'area\'] not in areas, \'duplicate stage area\')\n        areas.add(stage[\'area\'])\n    _require(sum(stage[\'targets\'] for stage in stages) == total, \'stage target total mismatch\')\n\n\ndef _common(data, audit, root):\n    _strings(data, \'mode status\')\n    _fields(data, elapsedSeconds=\'number\', loadedModVersions=dict, loadedCompanionArtifacts=dict, screenshots=list)\n    _list(data[\'screenshots\'], str, \'screenshots\')\n    _strings(data[\'loadedModVersions\'], \'minecraft forge workers recruits smallships siegeweapons\')\n    for mod in (\'workers\', \'recruits\', \'smallships\', \'siegeweapons\'):\n        artifact = data[\'loadedCompanionArtifacts\'][mod]\n        _strings(artifact, \'sha256\')\n        _sha(artifact[\'sha256\'], mod + \' artifact hash\')\n    _fields(audit, status=str, noVendorJarsUploaded=bool, artifacts=dict)\n    _require(set(audit[\'artifacts\']) == set(AUDIT_TARGETS), \'bytecode audit must contain workers and recruits only\')\n    for mod, target in AUDIT_TARGETS.items():\n        artifact = audit[\'artifacts\'][mod]\n        _fields(artifact, fileName=str, sha256=str, classes=list)\n        _sha(artifact[\'sha256\'], mod + \' audit hash\')\n        _require(artifact[\'sha256\'] == data[\'loadedCompanionArtifacts\'][mod][\'sha256\'], \'loaded/audited artifact hash mismatch\')\n        _require(artifact[\'fileName\'] == target[0], \'unexpected audited filename\')\n        _require(data[\'loadedCompanionArtifacts\'][mod].get(\'fileName\') == target[0], \'loaded/audited filename mismatch\')\n        _list(artifact[\'classes\'], dict, mod + \' audited classes\')\n        _require([entry.get(\'class\') for entry in artifact[\'classes\']] == target[1], \'wrong or duplicate audited class roster\')\n        for entry in artifact[\'classes\']:\n            _strings(entry, \'class file sha256\')\n            _sha(entry[\'sha256\'], \'class disassembly hash\')\n            _require(entry[\'file\'] == entry[\'class\'].rsplit(\'.\', 1)[-1] + \'.javap.txt\', \'unexpected disassembly filename\')\n            folder = _safe_root(root / \'native-bytecode\')\n            content = _read(folder, entry[\'file\'])\n            _require(hashlib.sha256(content).hexdigest() == entry[\'sha256\'], \'disassembly content hash mismatch\')\n            _require(entry[\'class\'].encode() in content, \'disassembly does not name expected class\')\n\n\ndef _bank(data):\n    _fields(data, treasuryAccounting=dict)\n    bank = data[\'treasuryAccounting\']\n    _ints(bank, \'startingFunds commissionDebit initialPaidBalance expectedFinalBalance interestCredits taxCredits\')\n    _require(bank[\'initialPaidBalance\'] == bank[\'startingFunds\'] - bank[\'commissionDebit\'], \'initial Treasury balance does not match single debit\')\n    _fields(bank, singleNegativeLedgerDelta=int)\n\n\ndef _preflight(data, audit, root):\n    _common(data, audit, root)\n    _strings(data, \'scenarioConfiguration fixtureServerConfigSha256 outcome returnedCleanupJournal cancelAuthorityNbt\')\n    _sha(data[\'fixtureServerConfigSha256\'], \'fixture server configuration hash\')\n    _bools(data, \'recruitsChunkLoading fullCompletionClaimed nativeInventoryReloadVerified returnedConservationVerified nativePlacementResumed cancelPacketAuthenticated safeCleanupVerified\')\n    _ints(data, \'totalLimitSeconds controllerSettlingRevisions unloadedBeforeSettlingTicks confirmedUnloadTick placementsDuringDepartureBeforeConfirmedUnload returnedPlaced resumedPlaced finalPlaced\')\n    _fields(data, closedLifecycle=dict, returnedProgressReceipt=dict, unloadedPause=dict,\n            builderTrackingEndInventory=dict, unloadFinalization=dict,\n            builderUnloadInventory=dict, builderLoadInventory=dict, latestConservation=dict)\n    gate = data[\'closedLifecycle\']\n    _ints(gate, \'consecutiveServerTicks minimumTicks carriedCobble nativePlaced\')\n    _bools(gate, \'neededItemsEmpty storageRunningProblemAbsent cleanupJournalEmpty activeHandUse\')\n    _strings(gate, \'nativeGoalState\')\n    progress = data[\'returnedProgressReceipt\']\n    _ints(progress, \'returnedCompleted departureCompleted cleared\')\n    _bools(progress, \'immutableRecipeVerified everyCompletedCellMatchesExactTarget\')\n    pause = data[\'unloadedPause\']\n    _ints(pause, \'ticks activeStage completedStageReceipts\')\n    _fields(pause, serverReportPercent=int)\n    _strings(pause, \'controllerBlocker serverReportActivity\')\n    _bools(pause, \'all49ChunksUnavailable builderUnavailable markerUnavailable remoteMenuRendered\')\n    finalization = data[\'unloadFinalization\']\n    _ints(finalization, \'waitTicks limitTicks confirmedUnloadTick trackingEndTick\')\n    _strings(finalization, \'actualRemovalReason\')\n    _bools(finalization, \'trackingEndInventoryMatched serializationInvocationObservedNotFsync\')\n    for key in (\'builderTrackingEndInventory\', \'builderUnloadInventory\', \'builderLoadInventory\'):\n        inventory = data[key]\n        _ints(inventory, \'gameTime\')\n        _strings(inventory, \'main off cleanup reason\')\n        _fields(inventory, cargo=list)\n        _list(inventory[\'cargo\'], str, key + \'.cargo\')\n    _stages(data, 3900)\n    totals = data[\'latestConservation\']\n    _require(set(totals) == {\'minecraft:cobblestone\', \'minecraft:oak_planks\'}, \'exact two-material conservation coverage is required\')\n    for counts in totals.values():\n        _ints(counts, \'supplied built chests builder owner loose\')\n    _bank(data)\n\n\ndef verify(root):\n    if not __debug__:\n        raise RuntimeError(\'Receipt validators refuse optimized Python because source assertions must remain active\')\n    root = _safe_root(root)\n    data = _json(root, \'result.json\')\n    audit = _json(root, \'native-bytecode-audit.json\')\n    _preflight(data, audit, root)\n    assert audit[\'status\'] == \'passed\' and audit[\'noVendorJarsUploaded\'], audit\n    assert data[\'mode\'] == \'staged-unload\' and data[\'status\'] == \'passed\', data\n    assert data[\'recruitsChunkLoading\'] is False and \'RecruitsChunkLoading=false\' in data[\'scenarioConfiguration\'], data\n    assert len(data[\'fixtureServerConfigSha256\']) == 64, data\n    assert data[\'outcome\'] == \'unloaded pause/resume/cancel\' and (not data[\'fullCompletionClaimed\']), data\n    assert 0 < data[\'elapsedSeconds\'] <= data[\'totalLimitSeconds\'] == 600, data\n    gate = data[\'closedLifecycle\']\n    assert gate[\'consecutiveServerTicks\'] >= gate[\'minimumTicks\'] == 40, gate\n    assert gate[\'carriedCobble\'] >= 32 and gate[\'nativePlaced\'] > 0, gate\n    assert gate[\'neededItemsEmpty\'] and gate[\'storageRunningProblemAbsent\'] and gate[\'cleanupJournalEmpty\'], gate\n    assert not gate[\'activeHandUse\'] and gate[\'nativeGoalState\'] == \'PLACE_BLOCKS\', gate\n    assert data[\'controllerSettlingRevisions\'] in [0, 1] and 0 <= data[\'unloadedBeforeSettlingTicks\'] < 40, data\n    progress = data[\'returnedProgressReceipt\']\n    assert progress[\'returnedCompleted\'] >= progress[\'departureCompleted\'] > 0 and progress[\'cleared\'] == 0, progress\n    assert progress[\'immutableRecipeVerified\'] and progress[\'everyCompletedCellMatchesExactTarget\'], progress\n    pause = data[\'unloadedPause\']\n    assert pause[\'ticks\'] >= 100 and pause[\'all49ChunksUnavailable\'], pause\n    assert pause[\'builderUnavailable\'] and pause[\'markerUnavailable\'] and (not pause[\'remoteMenuRendered\']), pause\n    assert pause[\'activeStage\'] == 0 and pause[\'completedStageReceipts\'] == 0, pause\n    assert \'load the original owned builder\' in pause[\'controllerBlocker\'], pause\n    assert pause[\'serverReportActivity\'] == pause[\'controllerBlocker\'] and pause[\'serverReportPercent\'] < 0, pause\n    tracking = data[\'builderTrackingEndInventory\']\n    finalization = data[\'unloadFinalization\']\n    assert 0 <= finalization[\'waitTicks\'] <= finalization[\'limitTicks\'] == 200, finalization\n    assert finalization[\'confirmedUnloadTick\'] - finalization[\'trackingEndTick\'] == finalization[\'waitTicks\'], finalization\n    assert finalization[\'confirmedUnloadTick\'] == data[\'confirmedUnloadTick\'], finalization\n    assert finalization[\'actualRemovalReason\'] == \'UNLOADED_TO_CHUNK\' and finalization[\'trackingEndInventoryMatched\'], finalization\n    assert finalization[\'serializationInvocationObservedNotFsync\'], finalization\n    removed, loaded = (data[\'builderUnloadInventory\'], data[\'builderLoadInventory\'])\n    assert tracking[\'gameTime\'] == finalization[\'trackingEndTick\'] and removed[\'gameTime\'] == finalization[\'confirmedUnloadTick\'], finalization\n    for key in [\'cargo\', \'main\', \'off\', \'cleanup\']:\n        assert tracking[key] == removed[key], key\n    assert removed[\'reason\'] == \'UNLOADED_TO_CHUNK\' and loaded[\'reason\'] == \'loadedFromDisk\', (removed, loaded)\n    for key in [\'cargo\', \'main\', \'off\']:\n        assert removed[key] == loaded[key], key\n    assert loaded[\'cleanup\'] == \'{}\' and data[\'returnedCleanupJournal\'] == \'{}\', data\n    assert data[\'nativeInventoryReloadVerified\'] and data[\'returnedConservationVerified\'], data\n    assert data[\'placementsDuringDepartureBeforeConfirmedUnload\'] >= 0, data\n    assert 0 < data[\'returnedPlaced\'] < data[\'resumedPlaced\'] <= data[\'finalPlaced\'] < 3900, data\n    assert data[\'nativePlacementResumed\'] and data[\'cancelPacketAuthenticated\'] and data[\'safeCleanupVerified\'], data\n    assert data[\'cancelAuthorityNbt\'] and data[\'reviewedStageCount\'] >= 1, data\n    assert sum((stage[\'targets\'] for stage in data[\'stageLayout\'])) == 3900, data\n    for material, totals in data[\'latestConservation\'].items():\n        expected = 2400 if material == \'minecraft:cobblestone\' else 1500\n        assert totals[\'supplied\'] == expected, totals\n        assert sum((totals[k] for k in [\'built\', \'chests\', \'builder\', \'owner\', \'loose\'])) == expected, totals\n    bank = data[\'treasuryAccounting\']\n    assert bank[\'startingFunds\'] == 2000 and bank[\'commissionDebit\'] == 64 and (bank[\'singleNegativeLedgerDelta\'] == -64), bank\n    assert bank[\'expectedFinalBalance\'] == 1936 + bank[\'interestCredits\'] + bank[\'taxCredits\'], bank\n    versions = data[\'loadedModVersions\']\n    assert versions[\'workers\'] == \'2.0.3\' and versions[\'recruits\'] == \'1.15.2\', versions\n    assert versions[\'minecraft\'] == \'1.20.1\' and versions[\'forge\'] == \'47.4.16\', versions\n    for mod in [\'workers\', \'recruits\', \'smallships\', \'siegeweapons\']:\n        assert len(data[\'loadedCompanionArtifacts\'][mod][\'sha256\']) == 64, mod\n    assert data[\'screenshots\'] == [\'01-returned-permission-pause.png\'], data\n    image = _read(root, data[\'screenshots\'][0])\n    assert image.startswith(b\'\\x89PNG\\r\\n\\x1a\\n\') and len(image) > 4096\n    return data\n'
+
+
+          SIZEABLE_SOURCE = '#!/usr/bin/env python3\n"""Validate actual addon evidence; synthetic parser tests do not establish gameplay."""\nimport hashlib\nimport json\nimport os\nfrom pathlib import Path\nimport sys\n\nMOD = \'sizeable_foliage\'\nVERSION = \'m2kFJSUs\'\nCLASS = \'com.craisinlord.sizeablefoliage.content.block.VeryShortGrassBlock\'\nORIGINAL_SHA512 = \'2edb316ea862cd0e7c9e748a2ccc05c363590f6e05a67eeee765ba559345104637e3134abc049f164b95123797ed7beea679ddc4322fb1ab1fb26a4962f45b92\'\nORIGINAL_SHA256 = \'19224fa993d92e605855261dc846d95239f05c3d4a74f1d199d025c918566e0a\'\nEXCLUDED = [MOD + \':\' + name for name in [\'very_tall_grass\', \'very_large_fern\', \'big_bush\', \'big_bush_part\',\n    \'big_sweet_berry_bush\', \'big_sweet_berry_bush_part\', \'fern_wall\', \'torchflower_bush\']]\nEXCLUDED += [\'minecraft:\' + name for name in [\'wheat\', \'oak_sapling\', \'chest\', \'water\', \'stone_bricks\']]\nPLANT_PROOFS = [\'supportOutsideMutationPlan\', \'survivedFreePreview\', \'survivedUnpaidConfirmation\',\n    \'paidAcceptanceRecorded\', \'nativeClearedReceipt\', \'receiptsSurvivedReload\',\n    \'nativePlacedExpectedBlock\', \'supportPreserved\', \'exactMaterialConservation\']\n\n\ndef verify(data):\n    gameplay = data[\'gameplay\']\n    assert data[\'status\'] == gameplay[\'status\'] == \'passed\', data\n    runtime = data[\'sizeableFoliageRuntime\']\n    assert runtime[\'modId\'] == MOD and runtime[\'version\'] == \'1.2.1\', runtime\n    assert runtime[\'officialVersionId\'] == VERSION and runtime[\'runtimeClass\'] == CLASS, runtime\n    assert runtime[\'noDeclaredRemovalOrMultipartOverrides\'] is True, runtime\n    assert len(runtime[\'sha256\']) == 64 and all(c in \'0123456789abcdef\' for c in runtime[\'sha256\']), runtime\n    assert runtime[\'fileName\'].endswith(\'.jar\'), runtime\n    assert \'remapped runtime JAR\' in runtime[\'artifactScope\'], runtime\n    forbidden = {\'onRemove\', \'playerDestroy\', \'playerWillDestroy\', \'neighborChanged\', \'onPlace\',\n                 \'updateShape\', \'createBlockStateDefinition\'}\n    assert not forbidden.intersection(runtime[\'declaredMethods\']), runtime\n    review = gameplay[\'sizeableFoliageReviews\']\n    for key in [\'shortGrassTargetAndClearanceAccepted\', \'runtimeStateSafetyVerified\',\n                \'plantsPreservedDuringReview\', \'exactWorkerInventoryAndReceipts\', \'fixtureTerrainRestored\']:\n        assert review[key] is True, (key, review)\n    assert review[\'treasuryDebit\'] == 0, review\n    assert \'production prepare only\' in review[\'scope\'], review\n    assert set(review[\'rejections\']) == set(EXCLUDED), review\n    for key, problem in review[\'rejections\'].items():\n        assert key in problem and review[\'targetCell\'] in problem, (key, problem)\n    plant = gameplay[\'singleCellPlant\']\n    assert plant[\'plant\'] == MOD + \':very_short_grass\', plant\n    for key in PLANT_PROOFS:\n        assert plant[key] is True, (key, plant)\n    assert gameplay[\'completedManualBlocks\'] == 83 and gameplay[\'manualTreasuryDebit\'] == 8, gameplay\n    assert gameplay[\'manualPaidTreasury\'] == 992 and gameplay[\'completedManualRestart\'][\'treasury\'] == 992, gameplay\n    assert \'18-completed-manual-wall-and-builder.png\' in data[\'screenshots\'], data\n    return {\'status\': \'passed\', \'runtime\': runtime, \'reviews\': review, \'plant\': plant,\n            \'scope\': \'Actual-addon bounded native wall fixture; no complete territory or dedicated multiplayer claim\'}\n\n\ndef audit_original(cache):\n    directory = cache / \'modules-2/files-2.1/maven.modrinth/sizeable-foliage\' / VERSION\n    candidates = sorted(directory.glob(\'*/*.jar\'))\n    assert candidates, \'Original pinned Modrinth artifact is absent from the resolved Gradle module cache\'\n    for path in candidates:\n        content = path.read_bytes()\n        assert hashlib.sha512(content).hexdigest() == ORIGINAL_SHA512, f\'Original official artifact checksum changed: {path.name}\'\n        assert hashlib.sha256(content).hexdigest() == ORIGINAL_SHA256, path.name\n    return {\'source\': \'https://modrinth.com/mod/sizeable-foliage/version/\' + VERSION,\n            \'coordinate\': \'maven.modrinth:sizeable-foliage:\' + VERSION,\n            \'sha512\': ORIGINAL_SHA512, \'sha256\': ORIGINAL_SHA256,\n            \'filesVerified\': len(candidates), \'vendorJarsUploaded\': False}\n\n\nif __name__ == \'__main__\':\n    result_path = Path(sys.argv[1])\n    result = verify(json.loads(result_path.read_text()))\n    result[\'originalRelease\'] = audit_original(Path(os.environ[\'GRADLE_USER_HOME\']) / \'caches\')\n    (result_path.parent / \'sizeable-foliage-evidence.json\').write_text(json.dumps(result, indent=2) + \'\\n\')\n    print(\'Pinned actual Sizeable Foliage native acceptance, clearing, reload and wall placement passed.\')\n'
+
+          def main():
+              summary = {'protocol': 20, 'native_gates': {}}
+              for prefix, directory in [('HUD', 'native-hud'), ('BUILDING', 'native-building'), ('SERVER', 'native-server'), ('CAMP', 'native-camp'), ('LIFECYCLE', 'native-camp-lifecycle'), ('HANDOFF', 'native-handoff'), ('UNLOAD', 'native-unload')]:
+                  root = Path(directory)
+                  expected = os.environ[prefix + '_EVIDENCE_SHA256']
+                  assert re.fullmatch(r'[0-9a-f]{64}', expected), 'Unfilled native evidence pin: ' + prefix
+                  digest, manifest = evidence_manifest(root)
+                  assert digest == expected, 'Native evidence bytes differ from reviewed artifact: ' + prefix
+                  checkout = (root / 'source-commit.txt').read_text().strip()
+                  assert checkout == os.environ[prefix + '_CHECKOUT_SHA'], 'Native checkout differs: ' + prefix
+                  data = json.loads((root / 'result.json').read_text())
+                  if prefix == 'HUD':
+                      validator(HUD_SOURCE, 'hud')(root)
+                  elif prefix == 'BUILDING':
+                      validator(BUILDING_SOURCE, 'building')(root)
+                      validator(ECONOMY_SOURCE, 'economy')(data)
+                      addon = validator(SIZEABLE_SOURCE, 'sizeable')(data)
+                      receipt = json.loads((root / 'sizeable-foliage-evidence.json').read_text())
+                      original = receipt.pop('originalRelease')
+                      assert receipt == addon, 'Addon validator receipt differs'
+                      assert original == {
+                          'source': 'https://modrinth.com/mod/sizeable-foliage/version/m2kFJSUs',
+                          'coordinate': 'maven.modrinth:sizeable-foliage:m2kFJSUs',
+                          'sha512': '2edb316ea862cd0e7c9e748a2ccc05c363590f6e05a67eeee765ba559345104637e3134abc049f164b95123797ed7beea679ddc4322fb1ab1fb26a4962f45b92',
+                          'sha256': '19224fa993d92e605855261dc846d95239f05c3d4a74f1d199d025c918566e0a',
+                          'filesVerified': original['filesVerified'], 'vendorJarsUploaded': False,
+                      }
+                      assert type(original['filesVerified']) is int and original['filesVerified'] > 0
+                  elif prefix == 'SERVER':
+                      validator(SERVER_SOURCE, 'server')(root)
+                  elif prefix == 'CAMP':
+                      validator(CAMP_SOURCE, 'camp')(root)
+                  elif prefix == 'LIFECYCLE':
+                      validator(CAMP_LIFECYCLE_SOURCE, 'camp-lifecycle')(root)
+                  elif prefix == 'HANDOFF':
+                      validator(HANDOFF_SOURCE, 'handoff')(root)
+                  else:
+                      validator(UNLOAD_SOURCE, 'unload')(root)
+                  summary['native_gates'][prefix.lower()] = {
+                      'run_id': int(os.environ[prefix + '_RUN_ID']),
+                      'run_attempt': int(os.environ[prefix + '_RUN_ATTEMPT']),
+                      'artifact_id': int(os.environ[prefix + '_ARTIFACT_ID']),
+                      'checkout_sha': checkout, 'evidence_sha256': digest,
+                      'files': manifest, 'inherited_baseline': prefix in ('HUD', 'LIFECYCLE', 'HANDOFF', 'UNLOAD'),
+                  }
+              summary['coverage_limits'] = [
+                  'Historical HUD/lifecycle/handoff/unload evidence is from 4.52.6, not fresh 4.52.7 gameplay; exact reviewed source delta is separately enforced.',
+                  'Actual Sizeable Foliage 1.2.1 is verified only in the bounded Building client fixture; dedicated addon multiplayer is not claimed.',
+                  'HUD is actual client-menu framebuffer/input evidence; it does not prove server payments.',
+                  'Economy uses controlled cleared-wave states through production processRaid; no raid combat was fought.',
+                  'Building remains bounded representative native construction, not full-territory completion.',
+                  'Dedicated Forge GameTest uses FakePlayer with zero authenticated clients; real multiplayer remains unverified.',
+                  'Saved reward receipts cover conservative replay/save-load idempotence, not crash-atomic cross-file transactions.',
+                  'Camp spawn covers three controlled integrated-server scenes, not arbitrary terrain or full camp construction.',
+                  'Camp lifecycle covers two controlled deep-water worlds, real reload/cooldown and first waves with supported three-minute preparation, not default timing or full combat.',
+                  'Hollow stage handoff uses a short test-only partition with genuine native placements; it does not prove full-territory completion.',
+                  'Staged unload covers a bounded chunk-loading-off unload/resume/cancellation fixture, not indefinite offline progress.',
+              ]
+              Path('verified-native-evidence.json').write_text(json.dumps(summary, sort_keys=True, indent=2) + '\n')
+              print('Validated exact reviewed HUD, Building/economy, dedicated-side, camp-spawn, camp-lifecycle, hollow handoff and staged-unload evidence. Coverage limits retained.')
+
+
+          if __name__ == '__main__':
+              main()
+          CHECK
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          curseforge-retry-attempts: 1
+          files: dist/siegeoverhaul-4.52.7.jar
+          name: The Siege Overhaul v4.52.7 - Sizeable Foliage short grass compatibility
+          version: v4.52.7
+          version-type: release
+          changelog: |
+            Very short grass from Sizeable Foliage 1.2.1 no longer blocks protected building plans. Builders can clear it as work progresses, while larger plants, crops, containers and water stay protected. Other addon versions will ask you to clear the grass manually.
+
+            Update Siege Overhaul on both your client and server, and back up your world before updating.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            ftb-chunks-forge(optional)
+            open-parties-and-claims(optional)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+            curios(optional)
+            epic-knights-addon(optional)
+          fail-mode: fail
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Record accepted upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'RECEIPT'
+          """Record accepted upload; public moderation/download checks remain separate."""
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          from urllib.parse import urlsplit
+
+
+          def main():
+              digest = hashlib.sha256(Path('dist/siegeoverhaul-4.52.7.jar').read_bytes()).hexdigest()
+              assert digest == Path('verified-sha256.txt').read_text() == os.environ['ARTIFACT_SHA256']
+              source = json.loads(Path('verified-source.json').read_text())
+              regressions = json.loads(Path('verified-regressions.json').read_text())
+              assert source['reviewed_source'] == os.environ['REVIEWED_SOURCE_SHA']
+              assert source['merged_source'] == os.environ['MERGED_SOURCE_SHA']
+              assert source['source_tree'] == os.environ['SOURCE_TREE_SHA']
+              assert source['build_run'] == int(os.environ['BUILD_RUN_ID'])
+              assert source['build_attempt'] == int(os.environ['BUILD_RUN_ATTEMPT'])
+              assert source['artifacts'] == {
+                  'Faction-Raids-Forge-1.20.1': int(os.environ['JAR_ARTIFACT_ID']),
+                  'regression-test-results': int(os.environ['REGRESSION_ARTIFACT_ID']),
+              }
+              assert source['pull_request'] == int(os.environ['PULL_REQUEST_NUMBER'])
+              assert regressions == {
+                  'tests': int(os.environ['REGRESSION_TEST_COUNT']),
+                  'suites': int(os.environ['REGRESSION_SUITE_COUNT']),
+                  'failures': 0, 'errors': 0, 'skipped': 0,
+                  'suite_manifest_sha256': os.environ['REGRESSION_SUITE_SHA256'],
+              }
+              assert source['reviewed_build'] == {
+                  'run_id': int(os.environ['REVIEWED_BUILD_RUN_ID']),
+                  'run_attempt': int(os.environ['REVIEWED_BUILD_RUN_ATTEMPT']),
+                  'artifacts': {'Faction-Raids-Forge-1.20.1': int(os.environ['REVIEWED_JAR_ARTIFACT_ID']),
+                                'regression-test-results': int(os.environ['REVIEWED_REGRESSION_ARTIFACT_ID'])},
+              }
+              suite_counts = json.loads(Path('verified-suite-counts.json').read_text())
+              assert len(suite_counts) == int(os.environ['REGRESSION_SUITE_COUNT'])
+              assert sum(suite_counts.values()) == int(os.environ['REGRESSION_TEST_COUNT'])
+              assert hashlib.sha256(json.dumps(suite_counts, sort_keys=True, separators=(',', ':')).encode()).hexdigest() == os.environ['REGRESSION_SUITE_SHA256']
+              native = json.loads(Path('verified-native-evidence.json').read_text())
+              assert native['protocol'] == 20
+              assert set(native['native_gates']) == {'hud', 'building', 'server', 'camp', 'lifecycle', 'handoff', 'unload'}
+              for prefix in ('HUD', 'BUILDING', 'SERVER', 'CAMP', 'LIFECYCLE', 'HANDOFF', 'UNLOAD'):
+                  gate = native['native_gates'][prefix.lower()]
+                  for field in ('run_id', 'run_attempt', 'artifact_id'):
+                      assert gate[field] == int(os.environ[prefix + '_' + field.upper()])
+                  assert gate['checkout_sha'] == os.environ[prefix + '_CHECKOUT_SHA']
+                  assert gate['evidence_sha256'] == os.environ[prefix + '_EVIDENCE_SHA256']
+              assert len(native['coverage_limits']) == 11
+              file_id = os.environ['RELEASE_FILE_ID']
+              url = os.environ['RELEASE_URL']
+              assert re.fullmatch(r'[1-9][0-9]*', file_id), 'Missing or invalid accepted CurseForge file ID'
+              location = urlsplit(url)
+              assert location.scheme == 'https' and location.hostname in ('www.curseforge.com', 'curseforge.com')
+              assert location.path.rstrip('/') == '/minecraft/mc-mods/siege-overhaul/files/' + file_id, 'Project/file ID/URL mismatch'
+              assert not location.query and not location.fragment, 'Unexpected receipt URL suffix'
+              assert not location.username and not location.password
+              result = {
+                  'version': '4.52.7', 'version_type': 'release', 'curseforge_project': 1364352,
+                  'file_id': file_id, 'url': url,
+                  'status': 'accepted_upload', 'public_availability': 'not_yet_verified',
+                  'pull_request': int(os.environ['PULL_REQUEST_NUMBER']), 'reviewed_source': source['reviewed_source'],
+                  'tested_source': source['merged_source'], 'merged_source': source['merged_source'],
+                  'source_tree': source['source_tree'], 'build_run': source['build_run'],
+                  'build_attempt': source['build_attempt'], 'artifacts': source['artifacts'],
+                  **regressions, 'sha256': digest,
+                  'protocol': 20, 'native_evidence': native,
+                  'baseline_release': '4.52.6', 'reviewed_delta': source['reviewed_delta'],
+                  'copilot_review_id': source['copilot_review_id'],
+                  'independent_review_comment_id': source['independent_review_comment_id'],
+                  'pr_main_reconciliation': json.loads(Path('verified-pr-main.json').read_text()),
+                  'reviewed_build': source['reviewed_build'], 'suite_counts': suite_counts,
+                  'publisher_run': int(os.environ['GITHUB_RUN_ID']),
+                  'publisher_attempt': int(os.environ.get('GITHUB_RUN_ATTEMPT', '1')),
+              }
+              Path('curseforge-4.52.7-receipt.json').write_text(json.dumps(result, sort_keys=True, indent=2) + '\n')
+              print(json.dumps(result, sort_keys=True))
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+                  summary.write('Accepted upload (moderation/public availability separate): '
+                                + json.dumps(result, sort_keys=True) + '\n')
+
+
+          if __name__ == '__main__':
+              main()
+          RECEIPT
+
+      - if: always() && steps.guard.outputs.publish == 'true'
+        name: Preserve publication verification receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: curseforge-4.52.7-receipts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            verified-*.json
+            verified-sha256.txt
+            curseforge-4.52.7-receipt.json
+          if-no-files-found: error
+          retention-days: 90
