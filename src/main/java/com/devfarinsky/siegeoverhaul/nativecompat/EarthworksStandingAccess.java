@@ -20,7 +20,7 @@ final class EarthworksStandingAccess {
         BlockPos standing=worker.blockPosition();
         AABB actual=worker.getBoundingBox();
         if(!worker.onGround()||worker.isPassenger()||worker.isLeashed()||worker.isInWaterOrBubble()||worker.isInLava()
-                ||!loaded(level,actual)||!loaded(level,standing.below())||!level.noCollision(worker,actual)
+                ||!loaded(level,actual)||!loaded(level,standing.below())||!clearSafePrism(level,actual)||!level.noCollision(worker,actual)
                 ||actual.intersects(new AABB(target))||standing.below().equals(target)
                 ||!level.getBlockState(standing.below()).isFaceSturdy(level,standing.below(),Direction.UP))
             return "Paused: actual current worker body or footing is not safe for grading";
@@ -41,7 +41,7 @@ final class EarthworksStandingAccess {
             AABB from=worker.getBoundingBox(),to=body(worker,escape);
             // Same-Y adjacent full sweep proves a connected exit, not a disconnected nearby candidate.
             AABB sweep=from.minmax(to);
-            if(sweep.intersects(new AABB(target))||!loaded(level,sweep)||!level.noCollision(worker,sweep))continue;
+            if(sweep.intersects(new AABB(target))||!loaded(level,sweep)||!clearSafePrism(level,sweep)||!level.noCollision(worker,sweep))continue;
             return null;
         }
         return "Paused: no loaded claimed post-mutation escape is proved";
@@ -49,8 +49,30 @@ final class EarthworksStandingAccess {
     private static boolean safe(ServerLevel level,BuilderEntity worker,BlockPos feet,BlockPos target){
         AABB body=body(worker,feet);
         if(feet.below().equals(target)||body.intersects(new AABB(target))||!loaded(level,body)||!loaded(level,feet.below()))return false;
-        return level.getBlockState(feet.below()).isFaceSturdy(level,feet.below(),Direction.UP)
+        return clearSafePrism(level,body)&&level.getBlockState(feet.below()).isFaceSturdy(level,feet.below(),Direction.UP)
                 && level.getFluidState(feet).isEmpty()&&level.getFluidState(feet.above()).isEmpty()&&level.noCollision(worker,body);
+    }
+    static boolean safeFloor(net.minecraft.world.level.block.state.BlockState state) {
+        // Fixed full vanilla support shapes only; damaging, falling, callback-bearing and unaudited modded floors are outside this first adapter.
+        return state.is(net.minecraft.world.level.block.Blocks.DIRT)||state.is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK)
+                ||state.is(net.minecraft.world.level.block.Blocks.STONE)||state.is(net.minecraft.world.level.block.Blocks.COBBLESTONE)
+                ||state.is(net.minecraft.world.level.block.Blocks.STONE_BRICKS)||state.is(net.minecraft.world.level.block.Blocks.OAK_PLANKS)
+                ||state.is(net.minecraft.world.level.block.Blocks.BEDROCK);
+    }
+    static boolean clearSafePrism(ServerLevel level,AABB box) {
+        if(!loaded(level,box))return false;
+        int minX=(int)Math.floor(box.minX),maxX=(int)Math.floor(Math.nextDown(box.maxX));
+        int minZ=(int)Math.floor(box.minZ),maxZ=(int)Math.floor(Math.nextDown(box.maxZ));
+        int feet=(int)Math.floor(box.minY),top=(int)Math.ceil(box.maxY)-1;
+        for(int x=minX;x<=maxX;x++)for(int z=minZ;z<=maxZ;z++){
+            BlockPos floor=new BlockPos(x,feet-1,z);var state=level.getBlockState(floor);
+            if(!safeFloor(state)||!state.isFaceSturdy(level,floor,Direction.UP)||!level.getFluidState(floor).isEmpty()||level.getBlockEntity(floor)!=null)return false;
+            for(int y=feet;y<=top;y++){
+                var pos=new BlockPos(x,y,z);
+                if(!level.getBlockState(pos).isAir()||!level.getFluidState(pos).isEmpty()||level.getBlockEntity(pos)!=null)return false;
+            }
+        }
+        return true;
     }
     private static AABB body(BuilderEntity worker,BlockPos feet){
         return worker.getBoundingBox().move(feet.getX()+.5-worker.getX(),feet.getY()-worker.getY(),feet.getZ()+.5-worker.getZ());

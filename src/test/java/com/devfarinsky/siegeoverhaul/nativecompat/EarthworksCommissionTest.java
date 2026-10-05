@@ -47,6 +47,12 @@ class EarthworksCommissionTest extends MinecraftTestSupport {
         assertNotNull(EarthworksStandingAccess.problem(level,worker,area,job));
         verifyNoInteractions(level);
     }
+    @Test void missingObservedFillFootingRefusesWithoutSamplingUnreviewedWorldCell() {
+        var all=NativeEarthworksAdapterTest.manifest();var fill=all.steps().get(1);
+        var observations=new ArrayList<>(all.observations().values());observations.removeIf(c->c.pos()==BlockPos.of(fill.pos()).below().asLong());
+        var manifest=new PerimeterEarthworksManifest(all.header(),observations,all.steps().subList(0,2));var level=mock(ServerLevel.class);
+        assertNotNull(WorkersEarthworksPort.fillSupportProblem(level,manifest,fill));verifyNoInteractions(level);
+    }
     private static EarthworksJobLedger.Job job(){return job(new EarthworksJobLedger());}
     private static EarthworksJobLedger.Job job(EarthworksJobLedger ledger){
         var all=NativeEarthworksAdapterTest.manifest();var manifest=new PerimeterEarthworksManifest(all.header(),new ArrayList<>(all.observations().values()),all.steps().subList(0,2));

@@ -118,6 +118,13 @@ final class EarthworksCommission {
         }
         String policy=NativeConstructionPolicy.problem(level,builder,area,owner.getUUID(),"team:"+review.manifest.header().faction(),review.core,writes);
         if(policy!=null)throw new IllegalStateException(policy);
+        var step=review.manifest.steps().get(0);
+        String support=WorkersEarthworksPort.fillSupportProblem(level,review.manifest,step);if(support!=null)throw new IllegalStateException(support);
+        if(!level.getEntities((net.minecraft.world.entity.Entity)null,new net.minecraft.world.phys.AABB(BlockPos.of(step.pos())),NativeConstructionGuard::blocksPlacement).isEmpty())
+            throw new IllegalStateException("An entity occupies the exact fill target; no payment taken");
+        writes.add(review.marker);writes.add(review.marker.below());writes.add(review.marker.above());
+        String markerPolicy=NativeConstructionPolicy.problem(level,builder,area,owner.getUUID(),"team:"+review.manifest.header().faction(),review.core,writes);
+        if(markerPolicy!=null)throw new IllegalStateException(markerPolicy);
         String standing=EarthworksStandingAccess.problem(level,builder,area,job);if(standing!=null)throw new IllegalStateException(standing);
         String neighborhood=NativeConstructionGuard.neighborhoodProblem(level,BlockPos.of(review.manifest.steps().get(0).pos()));if(neighborhood!=null)throw new IllegalStateException(neighborhood);
         if(level.captureBlockSnapshots||level.restoringBlockSnapshots)throw new IllegalStateException("Another world transaction owns this region");

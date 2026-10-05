@@ -137,6 +137,9 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
         if (!level.getEntities((Entity)null, new AABB(target), entity -> entity != area && NativeConstructionGuard.blocksPlacement(entity)).isEmpty())
             return "An entity occupies the exact work cell";
         String access = authority.standingAndEscapeProblem(manifest, journal, worker); if (access != null) return access;
+        if (step.kind() == PerimeterEarthworksManifest.Kind.FILL) {
+            String support = fillSupportProblem(level, manifest, step); if (support != null) return support;
+        }
         if (step.kind() != PerimeterEarthworksManifest.Kind.CUT) {
             var parsed = BuildBlockParse.parseBlock(step.after().getBlock());
             if (parsed == null || !exactFullBlockMaterial(step.after(), parsed.getItem(), parsed.wasParsed()))
@@ -158,6 +161,13 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
             return "An earlier native mining target has unresolved partial progress";
         if (journal.pending() != null) boundIntent = journal.pending().hash();
         return null;
+    }
+    static String fillSupportProblem(ServerLevel level, PerimeterEarthworksManifest manifest, PerimeterEarthworksManifest.Step step) {
+        BlockPos below=BlockPos.of(step.pos()).below();
+        if(step.kind()!=PerimeterEarthworksManifest.Kind.FILL || !manifest.observations().containsKey(below.asLong()) || !level.hasChunkAt(below))
+            return "A fill needs exact observed loaded footing";
+        return level.getBlockEntity(below)==null && level.getFluidState(below).isEmpty()
+                &&level.getBlockState(below).isFaceSturdy(level,below,Direction.UP)?null:"A fill has no safe supported footing";
     }
     private boolean safeLoaded(BlockPos pos) {
         return pos.getY() >= level.getMinBuildHeight() && pos.getY() < level.getMaxBuildHeight()

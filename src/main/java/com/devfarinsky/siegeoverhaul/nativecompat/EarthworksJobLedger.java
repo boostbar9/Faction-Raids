@@ -58,6 +58,7 @@ final class EarthworksJobLedger extends SavedData {
                     || manifest.observations().size() > NativeEarthworksAdapter.MAX_OBSERVATIONS
                     || manifest.steps().stream().anyMatch(s -> s.kind() == PerimeterEarthworksManifest.Kind.BUILD))
                 throw new IllegalArgumentException("Initial native slice accepts bounded local CUT/FILL only");
+            requireLocalEnvelope(manifest);
             // Recompute the aggregate from immutable inputs. An externally constructed Assembly is never authority.
             aggregate = PerimeterEarthworksAssembly.assemble(PerimeterEarthworksAssembly.Scope.from(manifest.header()),
                     List.of(manifest), List.of(), List.of(), 0).digest();
@@ -119,6 +120,18 @@ final class EarthworksJobLedger extends SavedData {
             }
             return out;
         }
+    }
+
+    /** Pure pre-sampling bounds: distant read-only cells cannot widen a tiny native mutation envelope. */
+    static void requireLocalEnvelope(PerimeterEarthworksManifest manifest) {
+        long minX=Long.MAX_VALUE,minY=Long.MAX_VALUE,minZ=Long.MAX_VALUE,maxX=Long.MIN_VALUE,maxY=Long.MIN_VALUE,maxZ=Long.MIN_VALUE;
+        for(var step:manifest.steps()) {var pos=BlockPos.of(step.pos());
+            minX=Math.min(minX,pos.getX());maxX=Math.max(maxX,pos.getX());minY=Math.min(minY,pos.getY());maxY=Math.max(maxY,pos.getY());minZ=Math.min(minZ,pos.getZ());maxZ=Math.max(maxZ,pos.getZ());}
+        if(manifest.steps().isEmpty()||maxX-minX>=32||maxY-minY>=32||maxZ-minZ>=32
+                ||(maxX-minX+1)*(maxY-minY+1)*(maxZ-minZ+1)>32_768)throw new IllegalArgumentException("Local native work envelope exceeds its bound");
+        for(long cell:manifest.observations().keySet()){var pos=BlockPos.of(cell);
+            if(pos.getX()<minX-2||pos.getX()>maxX+2||pos.getY()<minY-2||pos.getY()>maxY+2||pos.getZ()<minZ-2||pos.getZ()>maxZ+2)
+                throw new IllegalArgumentException("Observation extends outside the reviewed local dependency envelope");}
     }
 
     static EarthworksJobLedger load(CompoundTag tag) {

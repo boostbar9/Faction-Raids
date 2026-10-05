@@ -132,6 +132,12 @@ class EarthworksJobLedgerTest extends MinecraftTestSupport {
             assertNotNull(NativeEarthworksJobs.inventoryProblem(worker,Set.of()));
         }
     }
+    @Test void distantObservationCannotWidenAnOtherwiseTinyLocalJob() {
+        var all=NativeEarthworksAdapterTest.manifest();var observations=new ArrayList<>(all.observations().values());
+        observations.add(new PerimeterEarthworksManifest.Observation(new BlockPos(1000,64,0).asLong(),net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),PerimeterEarthworksManifest.Role.DEPENDENCY,0));
+        var manifest=new PerimeterEarthworksManifest(all.header(),observations,all.steps().subList(0,2));
+        assertThrows(IllegalArgumentException.class,()->EarthworksJobLedger.requireLocalEnvelope(manifest));
+    }
     private static EarthworksJobLedger.Job prepare(EarthworksJobLedger ledger) {
         var source = NativeEarthworksAdapterTest.manifest();
         var manifest = new PerimeterEarthworksManifest(source.header(), new ArrayList<>(source.observations().values()), source.steps().subList(0, 2));
