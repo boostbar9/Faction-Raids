@@ -62,6 +62,24 @@ class PerimeterGateProjectTest extends MinecraftTestSupport {
         assertThrows(UnsupportedOperationException.class, () -> loaded.observations().clear());
     }
 
+    @Test void v2RejectsCrossComponentStagesBeforePaymentWhileV1RemainsUnchanged() {
+        Set<ChunkPos> territory = Set.of(new ChunkPos(0, 0), new ChunkPos(2, 0));
+        assertThrows(IllegalArgumentException.class, () -> PerimeterGateProjectFixture.project(territory, false));
+        var pure = PerimeterGateProjectFixture.project(territory, true);
+        var restored = PerimeterProject.load(pure.save());
+        Set<Integer> components = new HashSet<>();
+        for (int i = 0; i < restored.stages().size(); i++) components.add(restored.gateStageComponent(i));
+        assertEquals(Set.of(0, 1), components); assertEquals(pure.save(), restored.save());
+        var legacyPlan = PerimeterStageLayoutTest.flat(territory);
+        var mixed = PerimeterStageLayout.partition(legacyPlan, stage -> null);
+        Map<Long, BlockState> before = new HashMap<>(), clear = new HashMap<>();
+        legacyPlan.blocks().keySet().forEach(cell -> before.put(cell, Blocks.AIR.defaultBlockState()));
+        legacyPlan.clearance().forEach(cell -> clear.put(cell, Blocks.AIR.defaultBlockState()));
+        var legacy = PerimeterProject.prepare(pure.header(), legacyPlan, mixed, before, clear);
+        assertEquals(1, legacy.stages().size()); assertTrue(legacy.executionSupported());
+        assertEquals(legacy.save(), PerimeterProject.load(legacy.save()).save());
+    }
+
     @Test void versionKeysCannotUpgradeDowngradeOrOmitTheExactContract() {
         assertThrows(IllegalArgumentException.class, () -> PerimeterProject.load(null));
         var v2 = PerimeterGateProjectFixture.project();

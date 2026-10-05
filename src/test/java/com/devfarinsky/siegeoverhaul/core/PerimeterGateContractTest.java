@@ -126,6 +126,29 @@ class PerimeterGateContractTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void derivedComponentObservationsAreExactImmutableBoundedAndAbsentFromTheSaveFormat() {
+        var territory = Set.of(new ChunkPos(0, 0), new ChunkPos(2, 0));
+        var original = flat(territory); var selected = selection(territory, original);
+        var contract = PerimeterGateContract.create(territory, original, selected, observations(original, selected));
+        var saved = contract.save(); var restored = PerimeterGateContract.load(saved.copy());
+        Set<Long> union = new HashSet<>();
+        for (int component = 0; component < 2; component++) {
+            Map<Long, BlockState> subset = contract.componentObservations(component);
+            assertEquals(312, subset.size());
+            assertTrue(subset.size() <= PerimeterGateContract.MAX_COMPONENT_OBSERVATIONS);
+            assertEquals(subset, restored.componentObservations(component));
+            subset.forEach((cell, state) -> assertEquals(contract.observations().get(cell), state));
+            union.addAll(subset.keySet());
+            assertThrows(UnsupportedOperationException.class, subset::clear);
+        }
+        assertEquals(contract.observations().keySet(), union);
+        assertThrows(IllegalArgumentException.class, () -> contract.componentObservations(-1));
+        assertThrows(IllegalArgumentException.class, () -> contract.componentObservations(2));
+        assertEquals(Set.of("Version", "Wall", "Digest", "Gates", "Palette", "Observations"), saved.getAllKeys());
+        assertEquals(saved, contract.save()); assertEquals(saved, restored.save());
+        assertEquals(contract.digest(), restored.digest());
+    }
+
     @Test void publicLayoutRecordsCannotForgeMissingDuplicateOrExtraGateCells() {
         var original = flat(ONE); var selected = selection(ONE, original); var before = observations(original, selected);
         var missing = new HashSet<>(selected.approachClearance()); missing.remove(missing.iterator().next());

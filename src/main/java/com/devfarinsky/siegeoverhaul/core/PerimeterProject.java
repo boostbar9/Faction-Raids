@@ -63,6 +63,7 @@ public final class PerimeterProject {
 
     private final Header header;
     private final PerimeterGateContract gateContract;
+    private final List<Integer> gateStageComponents;
     private final PerimeterBlueprint.Plan plan;
     private final PerimeterStageLayout.Layout layout;
     private final Map<Long, BlockState> targets, before, clearanceBefore;
@@ -92,6 +93,7 @@ public final class PerimeterProject {
         if (blocker == null || blocker.length() > 256) throw invalid("Invalid project blocker");
         this.blocker = blocker;
         validatePlan();
+        this.gateStageComponents = gateContract == null ? List.of() : PerimeterGateStages.components(this.plan, this.layout);
         this.manifestHash = calculateHash();
         List<Stage> frozen = new ArrayList<>();
         for (PerimeterStageLayout.Stage part : layout.stages()) {
@@ -148,6 +150,10 @@ public final class PerimeterProject {
     public Map<Long, BlockState> observations() { return gateContract == null ? Map.of() : gateContract.observations(); }
     /** A persisted v2 contract is not live authorization. Remove this barrier only with complete gate runtime checks. */
     public boolean executionSupported() { return gateContract == null; }
+    public int gateStageComponent(int stage) {
+        if (gateContract == null || stage < 0 || stage >= gateStageComponents.size()) throw invalid("No gate component for this stage");
+        return gateStageComponents.get(stage);
+    }
     public PerimeterBlueprint.Plan plan() { return plan; }
     public PerimeterStageLayout.Layout layout() { return layout; }
     public Map<Long, BlockState> targets() { return targets; }
@@ -244,7 +250,7 @@ public final class PerimeterProject {
     /** Progress copies share only deeply frozen geometry; they never rebuild or rehash it. */
     private PerimeterProject(PerimeterProject original, State state, State recoveryState, int activeStage,
                              List<StageReceipt> receipts, PaymentReceipt payment, String blocker) {
-        this.gateContract = original.gateContract;
+        this.gateContract = original.gateContract; this.gateStageComponents = original.gateStageComponents;
         this.header = original.header; this.plan = original.plan; this.layout = original.layout;
         this.targets = original.targets; this.before = original.before; this.clearanceBefore = original.clearanceBefore;
         this.stages = original.stages; this.reservation = original.reservation; this.manifestHash = original.manifestHash;

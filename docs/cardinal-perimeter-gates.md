@@ -118,6 +118,31 @@ authorization and reservation checks. Resolve outside-claim permission as a read
 observation, not construction authority. Changes, unloads or same-state ledger edits pause the
 project and require the appropriate fresh review; they never trigger clearing or grading.
 
+### Bounded live-check preparation
+
+`PerimeterGateStages` partitions new gate-aware work into component-pure native stages. Explicit
+v2 project preparation/reload rejects mixed-component membership; legacy v1 partitioning remains
+unchanged. This bounds an active component to four exact gate envelopes, at most 348 observation
+cells before deduplication. Component membership is derived from the frozen stage columns, never
+trusted from an entity selector. The per-component observation index is immutable and is not a
+cache of current world states.
+
+The read-only `PerimeterGateAccess` helper checks literal vanilla air and known stable full-block
+soil/stone/wall-material footing. Falling or neighbor-dependent floors, openable blocks, modded
+shapes, plants, fluids and block entities are rejected. Collision shapes are queried with an empty
+block getter only for the fixed whitelist, so no unobserved neighbor lookup can authorize access.
+Every live state and block-entity read follows loaded/height/border/current-permission checks.
+No chunks are loaded and no blocks are changed. Planned native dirt may supply a passage floor;
+outside/inside approaches require an existing safe floor.
+
+There are still no live callers at this checkpoint. When wiring them, use whole-project checks
+at initial acceptance and final completion, and direct active-component checks before native
+authorization/handoff. Never reuse an old world-state result. Future-component changes missed by
+the player edit ledger must be detected before that component activates and at final completion.
+The existing ledger alone is not an exhaustive invalidation source for fluids, pistons or other
+scheduled/world changes; do not use it to justify a stale observation cache. Keep the current
+execution/payment barriers until these call sites and native tests are complete.
+
 The full gate passage must be genuinely traversable under the new contract. The existing
 native clearance helper preserves some single-cell plants; do not mistake that for literal
 empty headroom or silently broaden its mutation predicate. A pre-existing wall skin at a new

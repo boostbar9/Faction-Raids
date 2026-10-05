@@ -14,7 +14,9 @@ import java.util.UUID;
 public final class PerimeterGateProjectFixture {
     private PerimeterGateProjectFixture() {}
     public static PerimeterProject project() {
-        Set<ChunkPos> territory = Set.of(new ChunkPos(0, 0));
+        return project(Set.of(new ChunkPos(0, 0)), true);
+    }
+    static PerimeterProject project(Set<ChunkPos> territory, boolean componentPure) {
         var original = PerimeterBlueprint.create(territory, (x, z) -> PerimeterBlueprint.Surface.ready(64),
                 PerimeterBlueprint.Palette.COBBLESTONE);
         var gates = PerimeterGateLayout.create(territory, original, (feet, role) -> null);
@@ -25,7 +27,9 @@ public final class PerimeterGateProjectFixture {
                 .forEach(p -> observations.put(p.below().asLong(), Blocks.DIRT.defaultBlockState()));
         var contract = PerimeterGateContract.create(territory, original, gates, observations);
         var plan = contract.applyOpenings(original);
-        var layout = PerimeterStageLayout.partition(plan, stage -> stage.targets().size() <= 300 ? null : "Fixture capacity");
+        var layout = componentPure
+                ? PerimeterGateStages.partition(plan, stage -> stage.targets().size() <= 300 ? null : "Fixture capacity")
+                : PerimeterStageLayout.partition(plan, stage -> null);
         var header = PerimeterProject.Header.newCommission(UUID.randomUUID(), 1, UUID.randomUUID(), UUID.randomUUID(),
                 "team:gates", new BlockPos(8, 64, 8), "gates", 1, "a".repeat(64), territory);
         Map<Long, BlockState> before = new HashMap<>(), clearance = new HashMap<>();

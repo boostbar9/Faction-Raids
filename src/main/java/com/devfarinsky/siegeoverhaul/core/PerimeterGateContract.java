@@ -32,6 +32,8 @@ import java.util.TreeMap;
 public final class PerimeterGateContract {
     public static final int FORMAT_VERSION = 1;
     public static final int MAX_GATES = 1024, MAX_OBSERVATIONS = PerimeterStageLayout.MAX_RESERVED;
+    /** Four gates, each with 54 approach-air, 18 approach-floor and at most 15 natural passage-floor cells. */
+    public static final int MAX_COMPONENT_OBSERVATIONS = 348;
     private static final int WORLD_LIMIT = 30_000_000;
     private static final List<Direction> CARDINALS = List.of(Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST);
     private static final Comparator<Gate> GATE_ORDER = Comparator.comparingInt(Gate::componentId)
@@ -52,6 +54,7 @@ public final class PerimeterGateContract {
 
     private final List<Gate> gates;
     private final Map<Long, BlockState> observations;
+    private final Map<Integer, Map<Long, BlockState>> componentObservations;
     private final Set<Long> air, floor;
     private final Geometry geometry;
     private final String originalWallDigest, digest;
@@ -87,12 +90,30 @@ public final class PerimeterGateContract {
             copy.put(entry.getKey(), entry.getValue());
         });
         this.observations = Collections.unmodifiableMap(copy);
+        Map<Integer, Map<Long, BlockState>> byComponent = new LinkedHashMap<>();
+        for (int component = 0; component < this.gates.size() / 4; component++) {
+            Geometry part = geometry(this.gates.subList(component * 4, component * 4 + 4));
+            Set<Long> cellsInComponent = new HashSet<>(part.air());
+            cellsInComponent.addAll(part.approachFloor());
+            part.passageFloor().stream().filter(this.floor::contains).forEach(cellsInComponent::add);
+            if (cellsInComponent.size() > MAX_COMPONENT_OBSERVATIONS) throw invalid("Excessive component observations");
+            Map<Long, BlockState> states = new LinkedHashMap<>();
+            cellsInComponent.stream().sorted().forEach(cell -> states.put(cell, this.observations.get(cell)));
+            byComponent.put(component, Collections.unmodifiableMap(states));
+        }
+        this.componentObservations = Collections.unmodifiableMap(byComponent);
         this.originalWallDigest = originalWallDigest;
         this.digest = calculateDigest();
     }
 
     public List<Gate> gates() { return gates; }
     public Map<Long, BlockState> observations() { return observations; }
+    /** Immutable derived subset, never persisted separately or used instead of initial/final full checks. */
+    public Map<Long, BlockState> componentObservations(int componentId) {
+        Map<Long, BlockState> result = componentObservations.get(componentId);
+        if (result == null) throw invalid("Unknown gate component");
+        return result;
+    }
     public Set<Long> airObservations() { return air; }
     public Set<Long> floorObservations() { return floor; }
     public String digest() { return digest; }
