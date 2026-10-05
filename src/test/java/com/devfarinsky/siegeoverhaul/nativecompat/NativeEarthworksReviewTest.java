@@ -150,6 +150,15 @@ class NativeEarthworksReviewTest extends MinecraftTestSupport {
         verify(nativeGoal, never()).stop();
     }
 
+    @Test void initialFullBlockAdapterRefusesRecipeBaseItemsAndChangedEffectiveStates() {
+        assertTrue(WorkersEarthworksPort.exactFullBlockMaterial(Blocks.COBBLESTONE.defaultBlockState(), Items.COBBLESTONE, false));
+        assertTrue(WorkersEarthworksPort.exactFullBlockMaterial(Blocks.DIRT.defaultBlockState(), Items.DIRT, true));
+        assertFalse(WorkersEarthworksPort.exactFullBlockMaterial(Blocks.STONE_BRICKS.defaultBlockState(), Items.STONE, false));
+        assertFalse(WorkersEarthworksPort.exactFullBlockMaterial(Blocks.OAK_PLANKS.defaultBlockState(), Items.OAK_LOG, true));
+        assertFalse(WorkersEarthworksPort.exactFullBlockMaterial(Blocks.COBBLESTONE.defaultBlockState(), null, false));
+        assertFalse(WorkersEarthworksPort.exactFullBlockMaterial(Blocks.OAK_SLAB.defaultBlockState(), Items.OAK_SLAB, false));
+    }
+
     private static String canonical(Tag tag) { return WorkersEarthworksPort.canonical(tag); }
     private static ListTag emptyList(byte elementType) throws Exception {
         byte[] bytes = {10, 0, 0, 9, 0, 1, 'x', elementType, 0, 0, 0, 0, 0};

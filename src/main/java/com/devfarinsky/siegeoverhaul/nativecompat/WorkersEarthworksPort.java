@@ -7,6 +7,7 @@ import com.devfarinsky.siegeoverhaul.core.PerimeterProjectLink;
 import com.talhanation.workers.entities.BuilderEntity;
 import com.talhanation.workers.entities.ai.BuilderWorkGoal;
 import com.talhanation.workers.entities.workarea.BuildArea;
+import com.talhanation.workers.world.BuildBlockParse;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
@@ -19,6 +20,8 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ShovelItem;
 import net.minecraft.world.level.block.Blocks;
@@ -134,6 +137,9 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
             return "An entity occupies the exact work cell";
         String access = authority.standingAndEscapeProblem(manifest, journal, worker); if (access != null) return access;
         if (step.kind() != PerimeterEarthworksManifest.Kind.CUT) {
+            var parsed = BuildBlockParse.parseBlock(step.after().getBlock(), level);
+            if (parsed == null || !exactFullBlockMaterial(step.after(), parsed.getItem(), parsed.placeAsBase()))
+                return "The live native recipe requires a different item/state contract and a fresh bound quote";
             if (!step.after().equals(area.getStateFromPos(target)) || area.findPairedMultiBlockState(target) != null || !preparationMatchesActive(step))
                 return "Native placement differs from the exact full-block target";
         }
@@ -221,6 +227,11 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
             // Non-null exact target bypasses the native multi-target reordering/LOS-pruning selector, not mining progress.
             nativeGoal.mineBlocks(new Stack<>()); boundTool = stock(worker.getMainHandItem());
         } else nativeGoal.placeBlocks(new Stack<>());
+    }
+    static boolean exactFullBlockMaterial(net.minecraft.world.level.block.state.BlockState target, Item consumed, boolean placeAsBase) {
+        if (!(target.is(Blocks.DIRT) || target.is(Blocks.COBBLESTONE) || target.is(Blocks.STONE_BRICKS) || target.is(Blocks.OAK_PLANKS))) return false;
+        var placed = placeAsBase && consumed instanceof BlockItem block ? block.getBlock().defaultBlockState() : target;
+        return consumed == target.getBlock().asItem() && target.equals(placed);
     }
     static void requireNoExperience(java.util.List<? extends ExperienceOrb> orbs) {
         if (!orbs.isEmpty()) throw new IllegalStateException("Nearby experience needs a separately audited full-orb accounting adapter");

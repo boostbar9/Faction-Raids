@@ -25,7 +25,7 @@ class PerimeterEarthworksAssemblyTest extends MinecraftTestSupport {
         assertEquals(1, result.cuts()); assertEquals(1, result.placements()); assertEquals(64, result.scope().price());
         assertEquals(Blocks.AIR.defaultBlockState(), result.expectedWallBefore().get(cell));
         assertEquals(Blocks.DIRT.defaultBlockState(), result.originals().get(cell).state());
-        assertEquals(Map.of("minecraft:cobblestone", 1), result.materialCounts());
+        assertEquals(Map.of("minecraft:cobblestone", 1), result.targetBlockCounts());
         assertTrue(result.gradingWrites().contains(cell)); assertTrue(result.wallWrites().contains(cell));
         assertThrows(UnsupportedOperationException.class, () -> result.wallTargets().clear());
         assertThrows(UnsupportedOperationException.class, () -> result.originals().clear());
@@ -37,7 +37,7 @@ class PerimeterEarthworksAssemblyTest extends MinecraftTestSupport {
                 List.of(new Step(0, Kind.FILL, cell, air, dirt, null)));
         var result = assemble(List.of(region), List.of(new PerimeterEarthworksAssembly.WallCell(cell, air, dirt, 0)), List.of(), 1);
         assertEquals(1, result.placements()); assertEquals(1, result.fills()); assertTrue(result.wallWrites().isEmpty());
-        assertEquals(Map.of("minecraft:dirt", 1), result.materialCounts()); assertEquals(dirt, result.expectedWallBefore().get(cell));
+        assertEquals(Map.of("minecraft:dirt", 1), result.targetBlockCounts()); assertEquals(dirt, result.expectedWallBefore().get(cell));
         assertThrows(IllegalArgumentException.class, () -> assemble(List.of(region),
                 List.of(new PerimeterEarthworksAssembly.WallCell(cell, air, Blocks.COBBLESTONE.defaultBlockState(), 0)), List.of(), 1));
     }
@@ -47,7 +47,7 @@ class PerimeterEarthworksAssemblyTest extends MinecraftTestSupport {
         var first = assemble(List.of(low, high), List.of(), List.of(), 0);
         var second = assemble(List.of(high, low), List.of(), List.of(), 0);
         assertEquals(first.digest(), second.digest()); assertEquals(2, first.cuts()); assertEquals(64, first.scope().price());
-        assertTrue(first.materialCounts().isEmpty(), "Mining drops do not become reserved construction stock");
+        assertTrue(first.targetBlockCounts().isEmpty(), "Mining drops do not become reserved construction stock");
         assertEquals(2, first.nativeStages());
     }
 
@@ -118,6 +118,30 @@ class PerimeterEarthworksAssemblyTest extends MinecraftTestSupport {
                 List.of(new Observation(pos(30_000_000, 64), Blocks.AIR.defaultBlockState(), Role.GATE_CLEARANCE, 0)), 0));
         assertThrows(IllegalArgumentException.class, () -> assemble(List.of(first), List.of(),
                 List.of(new Observation(pos(20, 64), Blocks.AIR.defaultBlockState(), Role.WORK, 0)), 0));
+    }
+
+    @Test void ungradedSolidsContainersAndPlantsCannotHideAnUnmodeledNativeRemoval() {
+        for (var block : List.of(Blocks.DIRT, Blocks.STONE, Blocks.CHEST, Blocks.GRASS)) {
+            var cell = new PerimeterEarthworksAssembly.WallCell(pos(0, 64), block.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState(), 0);
+            assertThrows(IllegalArgumentException.class, () -> assemble(List.of(), List.of(cell), List.of(), 1), block.toString());
+        }
+        var cell = new PerimeterEarthworksAssembly.WallCell(pos(0, 64), Blocks.AIR.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState(), 0);
+        assertThrows(IllegalArgumentException.class, () -> assemble(List.of(), List.of(cell), List.of(), 0));
+    }
+
+    @Test void wallActivationRequiresRealExactStageMembershipRatherThanAClaimedCount() {
+        var plan = PerimeterStageLayoutTest.flat(java.util.Set.of(new net.minecraft.world.level.ChunkPos(0, 0)));
+        var layout = PerimeterStageLayout.partition(plan, ignored -> null); // Partition contract fixture; not native serializer proof.
+        var wall = new ArrayList<PerimeterEarthworksAssembly.WallCell>();
+        plan.blocks().forEach((pos, id) -> wall.add(new PerimeterEarthworksAssembly.WallCell(pos, Blocks.AIR.defaultBlockState(),
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(new net.minecraft.resources.ResourceLocation(id)).defaultBlockState(), 0)));
+        var clear = plan.clearance().stream().map(pos -> new Observation(pos, Blocks.AIR.defaultBlockState(), Role.PROTECTED_OCCUPANCY, 0)).toList();
+        var assembly = assemble(List.of(), wall, clear, layout.stages().size());
+        assertDoesNotThrow(() -> PerimeterEarthworksAssembly.requireWallLayout(assembly, plan, layout));
+        assertThrows(IllegalArgumentException.class, () -> PerimeterEarthworksAssembly.requireWallLayout(assembly, null, null));
+        var foreignPlan = PerimeterStageLayoutTest.flat(java.util.Set.of(new net.minecraft.world.level.ChunkPos(1, 0)));
+        var foreign = PerimeterStageLayout.partition(foreignPlan, ignored -> null);
+        assertThrows(IllegalArgumentException.class, () -> PerimeterEarthworksAssembly.requireWallLayout(assembly, foreignPlan, foreign));
     }
 
     private static PerimeterEarthworksAssembly.Assembly assemble(List<PerimeterEarthworksManifest> regions,

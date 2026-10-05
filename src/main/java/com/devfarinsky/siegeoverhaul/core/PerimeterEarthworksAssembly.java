@@ -49,12 +49,12 @@ public final class PerimeterEarthworksAssembly {
     public record Assembly(Scope scope, List<String> regionHashes, Map<Long, Original> originals,
                            Map<Long, BlockState> wallTargets, Map<Long, BlockState> expectedWallBefore,
                            Set<Long> gradingWrites, Set<Long> wallWrites, Set<Long> permanentReadOnly,
-                           Map<String, Integer> materialCounts, int cuts, int fills, int placements,
-                           int nativeStages, String digest) {
+                           Map<String, Integer> targetBlockCounts, int cuts, int fills, int placements,
+                           int nativeStages, int wallNativeStages, String digest) {
         public Assembly {
             regionHashes = List.copyOf(regionHashes); originals = freeze(originals); wallTargets = freeze(wallTargets);
             expectedWallBefore = freeze(expectedWallBefore); gradingWrites = Set.copyOf(gradingWrites); wallWrites = Set.copyOf(wallWrites);
-            permanentReadOnly = Set.copyOf(permanentReadOnly); materialCounts = Collections.unmodifiableMap(new TreeMap<>(materialCounts));
+            permanentReadOnly = Set.copyOf(permanentReadOnly); targetBlockCounts = Collections.unmodifiableMap(new TreeMap<>(targetBlockCounts));
         }
     }
     private PerimeterEarthworksAssembly() {}
@@ -119,6 +119,7 @@ public final class PerimeterEarthworksAssembly {
             if (placementCells.contains(cell.pos()) && !expected.equals(cell.target()))
                 throw invalid("A wall cannot overwrite a different paid local-placement target");
             if (!expected.equals(cell.target())) {
+                if (!expected.isAir()) throw invalid("A wall original needs an explicit removal/clearance contract before placement");
                 if (permanent.contains(cell.pos())) throw invalid("Wall placement would mutate a read-only gate/occupancy observation");
                 wallWrites.add(cell.pos()); placements++; materials.merge(PerimeterProject.stateKey(cell.target()), 1, Integer::sum);
             }
@@ -126,10 +127,27 @@ public final class PerimeterEarthworksAssembly {
             if (placements > PerimeterEarthworksManifest.MAX_PLACEMENTS || placementCells.size() > PerimeterStageLayout.MAX_TARGETS)
                 throw invalid("Grading plus wall geometry exceeds the whole-project placement/serialization budget");
         }
+        if (!wallWrites.isEmpty() && wallNativeStages == 0) throw invalid("Actual wall writes require a derived native stage layout");
         Collections.sort(hashes);
-        String digest = digest(scope, hashes, originals, targets, beforeBuild, permanent, materials, cuts, fills, placements, stages);
+        String digest = digest(scope, hashes, originals, targets, beforeBuild, permanent, materials, cuts, fills, placements, stages, wallNativeStages);
         return new Assembly(scope, hashes, originals, targets, beforeBuild, writeOwner.keySet(), wallWrites, permanent,
-                materials, cuts, fills, placements, stages, digest);
+                materials, cuts, fills, placements, stages, wallNativeStages, digest);
+    }
+    /** Mandatory full-block wall activation gate: a caller-supplied count is not stage-membership evidence. */
+    public static void requireWallLayout(Assembly assembly, PerimeterBlueprint.Plan plan, PerimeterStageLayout.Layout layout) {
+        Objects.requireNonNull(assembly);
+        if (assembly.wallNativeStages() == 0 && assembly.wallWrites().isEmpty()) {
+            if (plan != null || layout != null) throw invalid("Unexpected native work for an already fulfilled wall phase");
+            return;
+        }
+        if (plan == null || layout == null || !plan.valid() || layout.stages().size() != assembly.wallNativeStages())
+            throw invalid("The actual native wall layout or derived stage count is missing");
+        PerimeterStageLayout.validate(plan, layout);
+        Map<Long, String> targets = new HashMap<>();
+        assembly.wallTargets().forEach((pos, state) -> targets.put(pos, net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString()));
+        if (!targets.equals(plan.blocks()) || !assembly.originals().keySet().containsAll(plan.clearance()))
+            throw invalid("Native stage geometry or clearance escaped the assembled project");
+        // Actual serializer capacity, live state/claim checks and access are still separate admission gates.
     }
     private static void merge(Scope scope, Map<Long, Original> cells, long packed, Original value) {
         BlockPos pos = BlockPos.of(packed);
@@ -145,10 +163,10 @@ public final class PerimeterEarthworksAssembly {
     }
     private static String digest(Scope scope, List<String> regions, Map<Long, Original> originals,
             Map<Long, BlockState> targets, Map<Long, BlockState> before, Set<Long> readOnly, Map<String, Integer> materials,
-            int cuts, int fills, int placements, int stages) {
+            int cuts, int fills, int placements, int stages, int wallNativeStages) {
         Hash hash = new Hash(); hash.part("earthworks-assembly-v1").part(scope.project()).part(scope.generation()).part(scope.owner())
                 .part(scope.builder()).part(scope.dimension()).part(scope.faction()).part(scope.claimsDigest()).part(scope.minY()).part(scope.maxY())
-                .part(scope.feeVersion()).part(scope.price()).part(cuts).part(fills).part(placements).part(stages).part(regions.size());
+                .part(scope.feeVersion()).part(scope.price()).part(cuts).part(fills).part(placements).part(stages).part(wallNativeStages).part(regions.size());
         regions.forEach(hash::part); hash.part(originals.size());
         new TreeMap<>(originals).forEach((pos, cell) -> hash.part(pos).part(PerimeterProject.stateKey(cell.state())).part(cell.editRevision()));
         hash.part(targets.size()); new TreeMap<>(targets).forEach((pos, state) -> hash.part(pos).part(PerimeterProject.stateKey(state))
