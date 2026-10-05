@@ -128,10 +128,13 @@ class NativeHudSourceContracts(unittest.TestCase):
                      'civilianSelectedLoaded', 'resident sync preserves selection']:
             self.assertIn(text, source)
 
-    def test_loot_keyboard_tooltips_have_a_viewport_bounds_gate(self):
+    def test_sealed_loot_rejects_a_possible_item_browser(self):
         source = HARNESS.read_text()
-        self.assertIn('Native loot tooltip clips the viewport', source)
-        self.assertIn('Keyboard-selected loot item must show its complete native tooltip', source)
+        self.assertIn('Loot HUD still exposes a possible-item browser', source)
+        self.assertIn('Loot contents remain sealed until the owned box is opened', source)
+        self.assertIn('sealedLootPresentation', source)
+        self.assertIn('Sealed Loot-page presentation did not complete before capture', source)
+        self.assertNotIn('lootTooltipBounds', source)
 
     def test_workflow_read_only_and_bounded_online_then_offline(self):
         workflow = (REPO / '.github/workflows/native-hud-qa.yml').read_text()
@@ -154,7 +157,7 @@ class NativeHudSourceContracts(unittest.TestCase):
 
     def test_exact_named_matrix_has_all_pages_plans_states_and_native_inspection(self):
         expected = verify.expected_screenshots()
-        self.assertEqual(len(expected), 130 + len(verify.CAPTURE_PREFIXES) * len(verify.CAPTURE_STATES))
+        self.assertEqual(len(expected), 118 + len(verify.CAPTURE_PREFIXES) * len(verify.CAPTURE_STATES))
         for prefix in verify.MATRICES:
             for page in verify.PAGES:
                 self.assertIn(f'{prefix}-{page}.png', expected)
@@ -209,6 +212,9 @@ class NativeHudReceiptVerifier(unittest.TestCase):
                     'status': 'EMPTY' if state == 'idle' else 'TIED' if state in {'tied', 'waiting'} else 'ADVANCING',
                     'hud': {'x': 8, 'y': 79 if state == 'bossbars' else 8, 'width': 134 if state == 'bossbars' else 300, 'height': 58, 'lines': 4}}
             if name.endswith('-army.png'): view['nativePortraits'] = ['com.talhanation.synthetic.Test'] * 4
+            if name.endswith('-loot.png'):
+                view['sealedLootPresentation'] = {
+                    'rendered': True, 'nonEmptyRewardStacks': 0, 'possibleItemControls': 0}
             if name.endswith('-territory.png'):
                 view['territoryAvailability'] = {'ownershipMask': 5, 'active': 1, 'retained': 1, 'unavailableButtons': 2}
                 view['widgets'].extend([{'label': 'Unavailable', 'x': x, 'y': 1, 'width': 10, 'height': 10,
@@ -217,8 +223,6 @@ class NativeHudReceiptVerifier(unittest.TestCase):
                 view['selectedPlan'] = name.removesuffix('.png').split('-plan-')[1].upper()
                 view['nativeBlueprintCards'] = [{'plan': view['selectedPlan'], 'sourceBlueprintMatches': True,
                                                 'blockModels': 15, 'caption': 'Synthetic plan'}]
-            if name.endswith('-loot-gallery-last.png'):
-                view['lootTooltipBounds'] = {'x': 20, 'y': 20, 'width': 200, 'height': 170, 'scale': 1}
             if 'native-inspection' in name: view['nativeStructurePreviewCount'] = 1
             self.data['views'].append(view)
             (self.root / name).write_bytes(self.pngs[size])

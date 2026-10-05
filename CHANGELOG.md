@@ -1,3 +1,10 @@
+## 4.52.10 — Keep Olympian loot sealed
+
+- Remove the possible-item browser and reward models from the Loot tab. Each chest now keeps its exact equipment pool mysterious until the purchased box is opened.
+- Give the chest purchase controls the full card width and replace the preview showcase with a compact Fates-themed rarity and price reminder.
+- Preserve the existing 16/48/96 emerald prices, rarity floors, random rolls, reveal animation, creative catalog and saved items. No loot probabilities or rewards changed.
+- Add unit and native-client regression contracts that reject a restored possible-item browser at compact and roomy GUI scales.
+
 ## 4.52.9 — Builders reach their work before building
 
 - Make commissioned builders approach the next planned block before native placement or mining can start. This fixes a native tick-order gap where a newly selected distant target could be worked on before its movement check.

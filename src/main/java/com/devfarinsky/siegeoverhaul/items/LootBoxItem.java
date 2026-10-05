@@ -124,7 +124,7 @@ public final class LootBoxItem extends Item {
     }
 
     /** One armory piece, provisions, a usable relic, then distinct supplies (3-7 total stacks). */
-    public static List<ItemStack> roll(RandomSource rng, Tier tier) {
+    static List<ItemStack> roll(RandomSource rng, Tier tier) {
         int stacks = 3 + tier.ordinal() + rng.nextInt(2);
         List<ItemStack> out = new ArrayList<>(stacks);
         int[] armory = OlympianLoot.availableArmory(tier);
@@ -147,14 +147,6 @@ public final class LootBoxItem extends Item {
             out.add(OlympianLoot.supplies(tier, choice, equipment));
         }
         return out;
-    }
-
-    /** Fresh read-only examples from the exact eligible equipment pool used by roll().
-     * Does not advance an RNG or inspect any player's sealed reward. */
-    public static List<ItemStack> armoryPreviews(Tier tier) {
-        java.util.Objects.requireNonNull(tier, "tier");
-        return java.util.Arrays.stream(OlympianLoot.availableArmory(tier))
-                .mapToObj(choice -> OlympianLoot.armory(tier, choice)).toList();
     }
 
     // ---- Wave-driven rolling ------------------------------------------------

@@ -74,10 +74,10 @@ world, account or authentication file is uploaded.
   paging, selection across read-only sync and the complete focusable Care tooltip.
   Compact loading and empty reports are captured separately. These are client
   display fixtures, not proof of server villagers, native AI or tax collection.
-- Possible-loot gallery at all four viewports: native enchanted/trimmed epic and
-  rare ItemStacks, bounded keyboard paging through later items, Royal tier-floor
-  controls and Back without a purchase. Gallery examples never inspect a sealed
-  reward. Review native tooltips, models and text clipping in the captures.
+- Sealed-loot contract at all four viewports: every chest remains purchasable,
+  while no possible-item browser, item name or reward model is exposed before
+  opening the owned box. Rarity promises and the existing 16/48/96 prices remain
+  visible; the second, paid click is never performed by this fixture.
 - Intel search focus via its visible hitbox, real OS E typing without closing the
   inventory, no-result and Clear states, wheel scrolling, per-section scroll
   memory, native OS Ctrl+Tab/Ctrl+Shift+Tab, Escape, header Close, repeated reopening,
