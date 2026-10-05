@@ -646,7 +646,7 @@ public final class NativeHudQa {
                 .filter(label -> label.equals("Items") || label.startsWith("Possible ")).count();
     }
 
-    private static Map<String, Object> sealedLootEvidence() {
+    private static Map<String, Object> sealedLootEvidence() throws ReflectiveOperationException {
         boolean rendered = (Boolean) read("lootMysteryRendered");
         int rewardStacks = ((ItemStack) read("revealed")).isEmpty() ? 0 : 1;
         long controls = possibleItemControls();
