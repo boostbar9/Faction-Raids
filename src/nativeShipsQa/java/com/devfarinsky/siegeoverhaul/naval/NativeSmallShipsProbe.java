@@ -354,9 +354,37 @@ public final class NativeSmallShipsProbe {
         double moved = ship.position().distanceTo(navigationStart);
         int sail = ((Number) call(ship, "getSailState")).intValue();
         double reach = captain.smallShipsController.reach;
-        navigationSamples.add(Map.of("ticks", level.getGameTime() - navigationStarted, "squaredCaptainDistance", distance,
+        Map<String, Object> sample = new LinkedHashMap<>();
+        sample.putAll(Map.of("ticks", level.getGameTime() - navigationStarted, "squaredCaptainDistance", distance,
                 "nativeReachSquared", reach, "vesselDistanceMoved", moved, "sailState", sail, "yaw", ship.getYRot(),
                 "speed", call(ship, "getSpeed"), "isCaptainDriver", new SmallShips(ship, captain).isCaptainDriver()));
+        sample.put("captainTicks", captain.tickCount); sample.put("shipTicks", ship.tickCount);
+        sample.put("sailTarget", String.valueOf(captain.getSailPos())); sample.put("followState", captain.getFollowState());
+        sample.put("shipInWater", ship.isInWater()); sample.put("captainNoAi", captain.isNoAi());
+        sample.put("captainY", captain.getY()); sample.put("shipY", ship.getY()); sample.put("waterSurfaceBlockY", origin.getY());
+        sample.put("attackTargetInRange", captain.attackController.isTargetInRange());
+        var scanner = captain.smallShipsController.waterObstacleScanner;
+        sample.put("scannerPresent", scanner != null);
+        if (scanner != null) sample.put("nativeObstacleCounts", Map.of("left", scanner.getObstaclesLeft(),
+                "right", scanner.getObstaclesRight(), "front", scanner.getObstaclesFront(10)));
+        // Read-only observation of the exact pinned controller, never a planner override.
+        var pathField = captain.smallShipsController.getClass().getDeclaredField("path");
+        require(pathField.trySetAccessible(), "Cannot inspect pinned native path diagnostics");
+        Object path = pathField.get(captain.smallShipsController);
+        sample.put("pathPresent", path != null);
+        if (path != null) {
+            sample.put("pathClass", path.getClass().getName());
+            try { sample.put("pathProcessed", call(path, "isProcessed")); }
+            catch (NoSuchMethodException ignored) { sample.put("pathProcessed", "synchronous"); }
+        }
+        var nodeField = captain.smallShipsController.getClass().getDeclaredField("currentNode");
+        require(nodeField.trySetAccessible(), "Cannot inspect pinned native node diagnostics");
+        Object node = nodeField.get(captain.smallShipsController);
+        sample.put("currentNode", String.valueOf(node));
+        if (path instanceof net.minecraft.world.level.pathfinder.Path nativePath)
+            sample.put("nativePath", Map.of("nodes", nativePath.getNodeCount(), "canReach", nativePath.canReach(),
+                    "target", nativePath.getTarget().toString()));
+        navigationSamples.add(sample);
         if (moved >= 5 && reach > 0 && distance < reach && sail == 0) {
             navigationArrived = true;
             adapterChecks.put("nativeWaypointArrival", Map.of("ticks", level.getGameTime() - navigationStarted,
