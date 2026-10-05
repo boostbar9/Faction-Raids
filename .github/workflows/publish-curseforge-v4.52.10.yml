@@ -1,0 +1,361 @@
+# One-use exact-artifact publisher. Keep this workflow off main.
+name: Publish tested 4.52.10 release to CurseForge
+
+on:
+  push:
+    branches: [publish/curseforge-v4.52.10]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  issues: read
+
+concurrency:
+  group: curseforge-1364352-v4.52.10
+  cancel-in-progress: false
+
+env:
+  VERSION: '4.52.10'
+  PULL_REQUEST_NUMBER: '279'
+  REVIEW_COMMENT_ID: '5998352910'
+  REVIEWED_SOURCE_SHA: '83e52110011fae94cfdf3416543eca6da246d246'
+  MERGED_SOURCE_SHA: '3673098d4a15e2c2061f38b3cb866c398c3338b4'
+  SOURCE_TREE_SHA: '6318d380546882e75962fdd8ced7eb46ba8e5863'
+  REVIEWED_BUILD_RUN_ID: '37336874786'
+  REVIEWED_JAR_ARTIFACT_ID: '11356328555'
+  REVIEWED_REGRESSION_ARTIFACT_ID: '11356791676'
+  BUILD_RUN_ID: '37338128299'
+  JAR_ARTIFACT_ID: '11357027437'
+  REGRESSION_ARTIFACT_ID: '11356987567'
+  HUD_RUN_ID: '37336874501'
+  HUD_ARTIFACT_ID: '11356044317'
+  HUD_CHECKOUT_SHA: 'b704f38221e609353dd4b23acf6bc31f467f804f'
+  ARTIFACT_SHA256: 'b8bec83d2646ae374f9593ba5ce7ea3f9fa1d70833ed234a67c64719ae658343'
+  REGRESSION_TEST_COUNT: '1557'
+  REGRESSION_SUITE_COUNT: '258'
+  REGRESSION_SUITE_SHA256: '55c320fdc3c296e57fcf9877e9983763f49acc4d2762bda99fddc44beea8a607'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prevent duplicate or ambiguous uploads
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.parse, urllib.request
+
+          BASE = 'https://api.github.com/repos/boostbar9/Faction-Raids/'
+          HEADERS = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                     'Accept': 'application/vnd.github+json'}
+
+          def get(path):
+              with urllib.request.urlopen(urllib.request.Request(BASE + path, headers=HEADERS), timeout=30) as response:
+                  return json.load(response)
+
+          current = int(os.environ['GITHUB_RUN_ID'])
+          current_attempt = int(os.environ.get('GITHUB_RUN_ATTEMPT', '1'))
+          inspect = [(current, attempt) for attempt in range(1, current_attempt)]
+          query = urllib.parse.urlencode({'branch': 'publish/curseforge-v4.52.10', 'event': 'push', 'per_page': 100})
+          history = get('actions/workflows/publish-curseforge-v4.52.10.yml/runs?' + query)
+          assert history['total_count'] == len(history['workflow_runs']), 'Publisher history is truncated'
+          for run in history['workflow_runs']:
+              if run['id'] != current:
+                  inspect.extend((run['id'], attempt) for attempt in range(1, run['run_attempt'] + 1))
+          for run_id, attempt in inspect:
+              jobs = get(f'actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100')
+              assert jobs['total_count'] == len(jobs['jobs']), 'Publisher job history is truncated'
+              uploads = [step for job in jobs['jobs'] for step in job.get('steps', [])
+                         if step.get('name') == 'Publish to CurseForge']
+              if not uploads:
+                  raise RuntimeError(f'Prior publisher attempt {run_id}/{attempt} has ambiguous upload history')
+              for step in uploads:
+                  if step.get('conclusion') != 'skipped':
+                      raise RuntimeError(f'Prior upload may have reached CurseForge: {run_id}/{attempt} {step}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('publish=true\n')
+          print('No prior upload attempt exists for 4.52.10.')
+          PY
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Check out exact merged source without credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.MERGED_SOURCE_SHA }}
+          persist-credentials: false
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Verify immutable source, reviews, runs and artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, urllib.request
+
+          BASE = 'https://api.github.com/repos/boostbar9/Faction-Raids/'
+          HEADERS = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                     'Accept': 'application/vnd.github+json'}
+
+          def get(path):
+              with urllib.request.urlopen(urllib.request.Request(BASE + path, headers=HEADERS), timeout=30) as response:
+                  return json.load(response)
+
+          reviewed, merged, tree = (os.environ[k] for k in
+              ('REVIEWED_SOURCE_SHA', 'MERGED_SOURCE_SHA', 'SOURCE_TREE_SHA'))
+          assert get('branches/main')['commit']['sha'] == merged, 'Main advanced after release build'
+          pr = get('pulls/' + os.environ['PULL_REQUEST_NUMBER'])
+          assert pr['merged'] and pr['merge_commit_sha'] == merged and pr['head']['sha'] == reviewed
+          for sha in (reviewed, merged, os.environ['HUD_CHECKOUT_SHA']):
+              assert get('git/commits/' + sha)['tree']['sha'] == tree, sha
+          threads_query = '''query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){pageInfo{hasNextPage}nodes{isResolved}}}}}'''
+          request = urllib.request.Request('https://api.github.com/graphql',
+              data=json.dumps({'query': threads_query, 'variables': {'owner': 'boostbar9', 'repo': 'Faction-Raids',
+                  'number': int(os.environ['PULL_REQUEST_NUMBER'])}}).encode(), headers={**HEADERS, 'Content-Type': 'application/json'})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              threads = json.load(response)['data']['repository']['pullRequest']['reviewThreads']
+          assert not threads['pageInfo']['hasNextPage'] and all(node['isResolved'] for node in threads['nodes'])
+          comment = get('issues/comments/' + os.environ['REVIEW_COMMENT_ID'])
+          assert comment['user']['login'] == 'boostbar9' and reviewed in comment['body']
+          assert 'no blocking findings' in comment['body'].lower()
+
+          expected_runs = {
+              os.environ['REVIEWED_BUILD_RUN_ID']: ('Build', '.github/workflows/build.yml', reviewed, 'pull_request'),
+              os.environ['BUILD_RUN_ID']: ('Build', '.github/workflows/build.yml', merged, 'push'),
+              os.environ['HUD_RUN_ID']: ('Native HUD QA', '.github/workflows/native-hud-qa.yml', reviewed, 'pull_request'),
+          }
+          artifacts = {
+              os.environ['REVIEWED_BUILD_RUN_ID']: {
+                  'Faction-Raids-Forge-1.20.1': int(os.environ['REVIEWED_JAR_ARTIFACT_ID']),
+                  'regression-test-results': int(os.environ['REVIEWED_REGRESSION_ARTIFACT_ID'])},
+              os.environ['BUILD_RUN_ID']: {
+                  'Faction-Raids-Forge-1.20.1': int(os.environ['JAR_ARTIFACT_ID']),
+                  'regression-test-results': int(os.environ['REGRESSION_ARTIFACT_ID'])},
+              os.environ['HUD_RUN_ID']: {
+                  'native-hud-qa-' + os.environ['HUD_RUN_ID'] + '-1': int(os.environ['HUD_ARTIFACT_ID'])},
+          }
+          receipt = {'runs': {}, 'artifacts': {}}
+          for run_id, (name, path, source, event) in expected_runs.items():
+              run = get('actions/runs/' + run_id)
+              assert (run['name'], run['path'], run['head_sha'], run['event'], run['run_attempt']) == (name, path, source, event, 1)
+              assert run['status'] == 'completed' and run['conclusion'] == 'success'
+              listing = get('actions/runs/' + run_id + '/artifacts?per_page=100')
+              assert listing['total_count'] == len(listing['artifacts'])
+              for artifact_name, artifact_id in artifacts[run_id].items():
+                  found = [item for item in listing['artifacts'] if item['name'] == artifact_name]
+                  assert len(found) == 1 and found[0]['id'] == artifact_id and not found[0]['expired']
+              receipt['runs'][run_id] = {'name': name, 'source': source, 'event': event}
+              receipt['artifacts'][run_id] = artifacts[run_id]
+          receipt.update({'reviewed_source': reviewed, 'merged_source': merged, 'source_tree': tree,
+                          'pull_request': int(os.environ['PULL_REQUEST_NUMBER']),
+                          'review_comment': int(os.environ['REVIEW_COMMENT_ID'])})
+          open('verified-source.json', 'w').write(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
+          print('Verified final review state, exact main and all successful pinned runs/artifacts.')
+          PY
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download exact merged-main tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.JAR_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: dist
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download merged-main regression results
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.REGRESSION_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: regression
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download reviewed PR build evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.REVIEWED_JAR_ARTIFACT_ID }},${{ env.REVIEWED_REGRESSION_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.REVIEWED_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: reviewed
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download native HUD evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.HUD_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.HUD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: hud
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Verify tested bytes, dependencies, regressions and sealed HUD
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os, tomllib, xml.etree.ElementTree as ET, zipfile
+
+          def suites(root):
+              counts = {}; totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0)
+              for report in Path(root).rglob('TEST-*.xml'):
+                  suite = ET.parse(report).getroot(); name = suite.get('name')
+                  assert suite.tag == 'testsuite' and name and name not in counts
+                  counts[name] = int(suite.get('tests'))
+                  cases = suite.findall('testcase'); assert len(cases) == counts[name]
+                  assert all(case.find(child) is None for case in cases for child in ('failure', 'error', 'skipped'))
+                  for key in totals: totals[key] += int(suite.get(key))
+              return counts, totals
+
+          jar = Path('dist/siegeoverhaul-4.52.10.jar')
+          assert sorted(Path('dist').glob('*.jar')) == [jar]
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == os.environ['ARTIFACT_SHA256']
+          with zipfile.ZipFile(jar) as archive:
+              assert archive.testzip() is None and len(archive.namelist()) == len(set(archive.namelist()))
+              names = set(archive.namelist())
+              assert 'com/devfarinsky/siegeoverhaul/client/CoreHireScreen.class' in names
+              assert 'com/devfarinsky/siegeoverhaul/items/LootBoxItem.class' in names
+              assert 'com/devfarinsky/siegeoverhaul/client/CoreLootGalleryLayout.class' not in names
+              assert 'com/devfarinsky/siegeoverhaul/client/LootPreviewButton.class' not in names
+              assert not any('/nativecompat/NativeHudQa' in name or '/test/' in name for name in names)
+              metadata = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+          assert metadata['mods'][0]['modId'] == 'siegeoverhaul'
+          assert metadata['mods'][0]['version'] == os.environ['VERSION']
+          assert metadata['mods'][0]['displayTest'] == 'MATCH_VERSION'
+          dependencies = {dep['modId']: dep for dep in metadata['dependencies']['siegeoverhaul']}
+          expected = {
+              'forge': (True, '[47,)', 'NONE'), 'minecraft': (True, '[1.20.1,1.21)', 'NONE'),
+              'recruits': (True, '[1.15.2,)', 'AFTER'), 'workers': (True, '[2.0.3,)', 'AFTER'),
+              'smallships': (True, '[0,)', 'AFTER'), 'siegeweapons': (True, '[0,)', 'AFTER'),
+              'ftbchunks': (False, '[0,)', 'AFTER'), 'openpartiesandclaims': (False, '[0,)', 'AFTER'),
+              'corpse': (False, '[0,)', 'AFTER'), 'magistuarmory': (False, '[0,)', 'AFTER'),
+              'musketmod': (False, '[0,)', 'AFTER'), 'curios': (False, '[5.14.1,6)', 'AFTER')}
+          assert set(dependencies) == set(expected)
+          for mod, contract in expected.items():
+              dep = dependencies[mod]
+              assert (dep['mandatory'], dep['versionRange'], dep['ordering']) == contract and dep['side'] == 'BOTH'
+
+          counts, totals = suites('regression')
+          reviewed_counts, reviewed_totals = suites('reviewed')
+          assert counts == reviewed_counts and totals == reviewed_totals
+          assert totals == {'tests': int(os.environ['REGRESSION_TEST_COUNT']), 'failures': 0, 'errors': 0, 'skipped': 0}
+          assert len(counts) == int(os.environ['REGRESSION_SUITE_COUNT'])
+          suite_digest = hashlib.sha256(json.dumps(counts, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+          assert suite_digest == os.environ['REGRESSION_SUITE_SHA256']
+
+          reviewed_jar = Path('reviewed/siegeoverhaul-4.52.10.jar')
+          with zipfile.ZipFile(jar) as main_zip, zipfile.ZipFile(reviewed_jar) as reviewed_zip:
+              assert set(main_zip.namelist()) == set(reviewed_zip.namelist())
+              for name in main_zip.namelist():
+                  if name != 'META-INF/MANIFEST.MF': assert main_zip.read(name) == reviewed_zip.read(name), name
+
+          hud = json.loads(Path('hud/result.json').read_text())
+          assert hud['mode'] == 'hud' and hud['status'] == 'passed'
+          assert hud['completedSteps'] == hud['plannedSteps'] and len(hud['screenshots']) == 142
+          assert Path('hud/source-commit.txt').read_text().strip() == os.environ['HUD_CHECKOUT_SHA']
+          views = {view['screenshot']: view for view in hud['views']}
+          for prefix in ('compact-scale2', 'compact-scale3', 'roomy-scale2', 'roomy-scale1'):
+              name = prefix + '-loot.png'; view = views[name]
+              assert view['sealedLootPresentation'] == {'rendered': True, 'nonEmptyRewardStacks': 0, 'possibleItemControls': 0}
+              raw = Path('hud', name).read_bytes(); assert raw.startswith(b'\x89PNG\r\n\x1a\n') and len(raw) > 4096
+          evidence = {'sha256': digest, **totals, 'suites': len(counts),
+                      'suite_manifest_sha256': suite_digest, 'hud_run': int(os.environ['HUD_RUN_ID']),
+                      'hud_frames': len(hud['screenshots'])}
+          Path('verified-release.json').write_text(json.dumps(evidence, sort_keys=True, indent=2) + '\n')
+          print('Verified exact JAR, dependency contract,', totals['tests'], 'tests and sealed HUD evidence.')
+          PY
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Recheck main and exact JAR immediately before upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, urllib.request
+          headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'}
+          with urllib.request.urlopen(urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/branches/main', headers=headers), timeout=30) as response:
+              assert json.load(response)['commit']['sha'] == os.environ['MERGED_SOURCE_SHA'], 'Main advanced before upload'
+          assert hashlib.sha256(open('dist/siegeoverhaul-4.52.10.jar', 'rb').read()).hexdigest() == os.environ['ARTIFACT_SHA256']
+          print('Main and tested bytes are unchanged immediately before upload.')
+          PY
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          curseforge-retry-attempts: 1
+          files: dist/siegeoverhaul-4.52.10.jar
+          name: The Siege Overhaul v4.52.10 - The Fates Keep Their Counsel
+          version: v4.52.10
+          version-type: release
+          changelog: |
+            Unopened loot boxes now keep their exact Olympian rewards hidden until the box is opened. The Command Center no longer lists possible item names or displays reward models in advance.
+
+            Common, Noble and Royal chests retain their established 16, 48 and 96 emerald prices, rarity promises, reward pools and reveal sequence. Saves, network protocol 22 and dependency requirements are unchanged.
+
+            Install 4.52.10 on the server and all clients.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            ftb-chunks-forge(optional)
+            open-parties-and-claims(optional)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+            curios(optional)
+            epic-knights-addon(optional)
+          fail-mode: fail
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Record accepted upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.parse import urlsplit
+          import json, os, re
+          source = json.loads(Path('verified-source.json').read_text())
+          release = json.loads(Path('verified-release.json').read_text())
+          file_id, url = os.environ['RELEASE_FILE_ID'], os.environ['RELEASE_URL']
+          assert re.fullmatch(r'[1-9][0-9]*', file_id)
+          parsed = urlsplit(url)
+          assert parsed.scheme == 'https' and parsed.hostname in ('curseforge.com', 'www.curseforge.com')
+          assert parsed.path.rstrip('/') == '/minecraft/mc-mods/siege-overhaul/files/' + file_id
+          receipt = {**release, **source, 'version': os.environ['VERSION'], 'project': 1364352,
+                     'file_id': file_id, 'url': url, 'status': 'accepted_upload',
+                     'public_availability': 'not_yet_verified', 'publisher_run': int(os.environ['GITHUB_RUN_ID']),
+                     'publisher_attempt': int(os.environ.get('GITHUB_RUN_ATTEMPT', '1'))}
+          Path('curseforge-4.52.10-receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
+          print(json.dumps(receipt, sort_keys=True))
+          PY
+
+      - if: always() && steps.guard.outputs.publish == 'true'
+        name: Preserve publication verification receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: curseforge-4.52.10-receipts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            verified-source.json
+            verified-release.json
+            curseforge-4.52.10-receipt.json
+          if-no-files-found: error
+          retention-days: 90
