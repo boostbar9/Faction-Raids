@@ -7,7 +7,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
@@ -26,7 +25,7 @@ public final class NativeEarthworksAdapter {
     public static final int MAX_STEPS = 256, MAX_OBSERVATIONS = 2_048, MAX_STACK_KEYS = 128, MAX_DROPS = 128;
     public static final String DIRT_ADAPTER = "siegeoverhaul:workers_2_0_3_single_dirt";
     public static final String DIRT_VERSION = "minecraft-1.20.1-workers-2.0.3-v1";
-    public static final String DIRT_SOURCE = hash("workers:29d26e1df6475fc8d043dc5d455f67b2fd1e9982:single-dirt-v1");
+    public static final String DIRT_SOURCE = "f39da5ea44120a6d1e1cfec8e9900c3a39a620138b1cb7ce9a937875eba45a4d";
     public enum Result { WAITING, BLOCKED, MINING, STEP_OBSERVED, RECONCILE_REQUIRED, STAGE_BOUNDARY, TERMINAL }
     public record Cell(BlockState state, long editRevision) {
         public Cell { Objects.requireNonNull(state); if (editRevision < 0) throw invalid("Unknown edit revision"); }
@@ -99,6 +98,7 @@ public final class NativeEarthworksAdapter {
         this.manifest = Objects.requireNonNull(manifest); this.store = Objects.requireNonNull(store); this.port = Objects.requireNonNull(port);
         if (manifest.steps().size() > MAX_STEPS || manifest.observations().size() > MAX_OBSERVATIONS)
             throw invalid("Local native work region exceeds the adapter bound");
+        if (!nativePreparationOrder(manifest.steps())) throw invalid("Native supply preparation cannot serve the exact placement order");
         for (var step : manifest.steps()) {
             if (step.kind() == PerimeterEarthworksManifest.Kind.CUT && (!step.before().equals(Blocks.DIRT.defaultBlockState())
                     || !step.removal().adapter().equals(DIRT_ADAPTER) || !step.removal().version().equals(DIRT_VERSION)
@@ -111,6 +111,21 @@ public final class NativeEarthworksAdapter {
                     throw invalid("Every bounded neighbor dependency must be in the reviewed observations");
             }
         }
+    }
+    /** Native PREPARE may otherwise find unrelated placeable stock and never request the active material. */
+    static boolean nativePreparationOrder(java.util.List<PerimeterEarthworksManifest.Step> steps) {
+        for (int i = 0; i < steps.size(); i++) {
+            var active = steps.get(i); if (active.kind() == PerimeterEarthworksManifest.Kind.CUT) continue;
+            int min = Integer.MAX_VALUE;
+            for (int j = i; j < steps.size(); j++) if (steps.get(j).kind() != PerimeterEarthworksManifest.Kind.CUT)
+                min = Math.min(min, BlockPos.of(steps.get(j).pos()).getY());
+            for (int j = i; j < steps.size(); j++) {
+                var pending = steps.get(j);
+                if (pending.kind() != PerimeterEarthworksManifest.Kind.CUT && BlockPos.of(pending.pos()).getY() == min
+                        && pending.after().getBlock().asItem() != active.after().getBlock().asItem()) return false;
+            }
+        }
+        return true;
     }
     public String blocker() { return blocker; }
 
@@ -189,13 +204,14 @@ public final class NativeEarthworksAdapter {
                 outcome.before().cells().get(step.pos()).state(), outcome.after().cells().get(step.pos()).state(),
                 outcome.before().cells().get(step.pos()).editRevision(), outcome.after().cells().get(step.pos()).editRevision(),
                 step.kind() == PerimeterEarthworksManifest.Kind.CUT ? 0 : 1,
-                hash("native-earthworks-outcome-v1", outcome.ticket().intentHash(), outcome.ticket().sequence(),
+                hash("native-earthworks-outcome-v2", outcome.ticket().intentHash(), outcome.ticket().sequence(),
                         frameHash(outcome.before()), frameHash(outcome.after())))) : journal;
         if (!store.finish(outcome.ticket(), journal.check(), next)) return blocked(Result.RECONCILE_REQUIRED, "Observed result was not finalized in the retained store");
         blocker = ""; return completed ? Result.STEP_OBSERVED : Result.MINING;
     }
 
     private void requireExpected(PerimeterEarthworksJournal journal, Frame frame) {
+        if (!frame.experience().isEmpty()) throw invalid("Existing experience requires a full merged-orb accounting adapter");
         Map<Long, Cell> expected = new HashMap<>();
         manifest.observations().values().forEach(cell -> expected.put(cell.pos(), new Cell(cell.original(), cell.editRevision())));
         for (int i = 0; i < journal.nextStep(); i++) {
@@ -249,7 +265,7 @@ public final class NativeEarthworksAdapter {
     }
     private Result blocked(Result result, String reason) { blocker = reason; return result; }
     static String frameHash(Frame frame) {
-        var values = new java.util.ArrayList<Object>(); values.add("native-earthworks-frame-v1"); values.add("cells"); values.add(frame.cells().size());
+        var values = new java.util.ArrayList<Object>(); values.add("native-earthworks-frame-v2"); values.add("cells"); values.add(frame.cells().size());
         new TreeMap<>(frame.cells()).forEach((pos, cell) -> {
             values.add(pos); values.add(net.minecraft.nbt.NbtUtils.writeBlockState(cell.state()).toString()); values.add(cell.editRevision());
         });
@@ -267,7 +283,11 @@ public final class NativeEarthworksAdapter {
     private static String hash(Object... values) {
         try {
             MessageDigest hash = MessageDigest.getInstance("SHA-256");
-            for (Object value : values) { byte[] bytes = value.toString().getBytes(StandardCharsets.UTF_8); hash.update(ByteBuffer.allocate(4).putInt(bytes.length).array()); hash.update(bytes); }
+            for (Object value : values) {
+                // Lossless Java UTF-16 code units: UTF-8 replacement would collapse distinct lone surrogates.
+                String text = value.toString(); hash.update(ByteBuffer.allocate(4).putInt(text.length()).array());
+                for (int i = 0; i < text.length(); i++) { char c = text.charAt(i); hash.update((byte)(c >>> 8)); hash.update((byte)c); }
+            }
             return HexFormat.of().formatHex(hash.digest());
         } catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
     }

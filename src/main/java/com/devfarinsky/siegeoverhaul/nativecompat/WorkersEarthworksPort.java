@@ -9,6 +9,7 @@ import com.talhanation.workers.entities.ai.BuilderWorkGoal;
 import com.talhanation.workers.entities.workarea.BuildArea;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -42,6 +43,8 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
         long editRevision(BlockPos pos);
         /** New-manifest storage/hand authority must be integrated; old job receipts cannot be borrowed. */
         String nativeInventoryProblem(PerimeterEarthworksManifest manifest, PerimeterEarthworksJournal journal, BuilderEntity worker);
+        /** Must audit the dirt loot/datapack, global modifier and drop-event configuration; vanilla identity alone is insufficient. */
+        String nativeDropConfigurationProblem(PerimeterEarthworksManifest manifest, PerimeterEarthworksJournal journal);
         /** Unknown origin always needs specific authorization for these exact originals, not a natural tag. */
         boolean exactRemovalReviewed(String manifestHash, long pos, long observedEditRevision);
         /** Already loaded, claimed route to the actual standing body and connected post-mutation escape. */
@@ -88,6 +91,7 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
     }
     @Override public String admissionProblem(PerimeterEarthworksManifest manifest, PerimeterEarthworksJournal journal) {
         String identity = leaseProblem(manifest, journal); if (identity != null) return identity;
+        if (level.captureBlockSnapshots || level.restoringBlockSnapshots) return "Another snapshot/rollback transaction owns world mutations";
         if (worker.currentBuildArea != area || area.getFreeArea() || !area.stackToFree.isEmpty()
                 || !area.stackToPlaceMultiBlock.isEmpty()) return "Unexpected native area or clearing/multipart queue";
         Set<BlockPos> mutations = new HashSet<>();
@@ -101,6 +105,10 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
                 "team:" + manifest.header().faction(), core, mutations);
         if (claims != null) return claims;
         var step = manifest.steps().get(journal.nextStep()); BlockPos target = BlockPos.of(step.pos());
+        if (step.kind() == PerimeterEarthworksManifest.Kind.CUT) {
+            String drops = authority.nativeDropConfigurationProblem(manifest, journal); if (drops != null) return drops;
+            if (!reviewedDirtToolDispatch(step.before())) return "Live dirt mining tags no longer dispatch the reviewed shovel";
+        }
         if (step.kind() == PerimeterEarthworksManifest.Kind.CUT && !level.getGameRules().getBoolean(GameRules.RULE_DOBLOCKDROPS))
             return "Native dirt-drop accounting requires block drops to be enabled";
         if (step.kind() == PerimeterEarthworksManifest.Kind.CUT && !authority.exactRemovalReviewed(manifest.hash(), step.pos(),
@@ -126,7 +134,7 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
             return "An entity occupies the exact work cell";
         String access = authority.standingAndEscapeProblem(manifest, journal, worker); if (access != null) return access;
         if (step.kind() != PerimeterEarthworksManifest.Kind.CUT) {
-            if (!step.after().equals(area.getStateFromPos(target)) || area.findPairedMultiBlockState(target) != null)
+            if (!step.after().equals(area.getStateFromPos(target)) || area.findPairedMultiBlockState(target) != null || !preparationMatchesActive(step))
                 return "Native placement differs from the exact full-block target";
         }
         if (area.stackToPlace.size() > NativeEarthworksAdapter.MAX_STEPS) return "Native pending material queue exceeds this local region";
@@ -167,6 +175,7 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
             for (int i = 6; i < worker.getInventory().getContainerSize(); i++) if (matching == worker.getInventory().getItem(i)) return true;
             return false;
         }
+        if (!preparationMatchesActive(step)) throw new IllegalStateException("Native preparation would not request the active step material");
         // Genuine native preparation creates the existing trusted material request predicates. This branch cannot place.
         nativeGoal.blockPos = null; nativeGoal.setState(BuilderWorkGoal.State.PREPARE_PLACE_BLOCKS); nativeGoal.tick();
         return false;
@@ -180,12 +189,11 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
         var inventory = worker.getInventory();
         if (inventory.getContainerSize() < 6 || inventory.getContainerSize() > 128 || inventory.getItem(5) != worker.getMainHandItem())
             throw new IllegalStateException("Native hand/inventory identity is unverified");
-        Map<ItemStack, Boolean> identities = new IdentityHashMap<>(); Map<NativeEarthworksAdapter.Stock, Integer> stock = new HashMap<>();
+        IdentityHashMap<ItemStack, Boolean> identities = new IdentityHashMap<>(); Map<NativeEarthworksAdapter.Stock, Integer> stock = new HashMap<>();
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack item = inventory.getItem(i); if (item == null) throw new IllegalStateException("Missing native inventory stack");
             if (item.isEmpty()) continue;
-            if (identities.put(item, true) != null || item.getCount() < 1 || item.getCount() > item.getMaxStackSize())
-                throw new IllegalStateException("Aliased or overstacked native inventory");
+            claimStackIdentity(identities, item);
             stock.merge(stock(item), item.getCount(), Integer::sum);
         }
         AABB dropBox = new AABB(BlockPos.of(step.pos())).inflate(2);
@@ -197,13 +205,13 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
         if (entities.size() > NativeEarthworksAdapter.MAX_DROPS) throw new IllegalStateException("Too many nearby ground items");
         for (ItemEntity entity : entities) {
             ItemStack item = entity.getItem(); if (item.isEmpty()) continue;
+            claimStackIdentity(identities, item);
             if (drops.put(entity.getUUID(), new NativeEarthworksAdapter.Drop(stock(item), item.getCount())) != null)
                 throw new IllegalStateException("Duplicate ground entity identity");
         }
         Map<UUID, Integer> experience = new HashMap<>();
         var orbs = level.getEntitiesOfClass(ExperienceOrb.class, dropBox);
-        if (orbs.size() > NativeEarthworksAdapter.MAX_DROPS) throw new IllegalStateException("Too many ground experience entities");
-        for (ExperienceOrb orb : orbs) experience.put(orb.getUUID(), orb.getValue());
+        requireNoExperience(orbs); // Value/UUID alone omits the merged-orb pickup count; this first adapter allows no nearby XP.
         return new NativeEarthworksAdapter.Frame(cells, stock, drops, experience);
     }
     @Override public void invokeExact(PerimeterEarthworksManifest.Step step) {
@@ -213,6 +221,22 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
             // Non-null exact target bypasses the native multi-target reordering/LOS-pruning selector, not mining progress.
             nativeGoal.mineBlocks(new Stack<>()); boundTool = stock(worker.getMainHandItem());
         } else nativeGoal.placeBlocks(new Stack<>());
+    }
+    static void requireNoExperience(java.util.List<? extends ExperienceOrb> orbs) {
+        if (!orbs.isEmpty()) throw new IllegalStateException("Nearby experience needs a separately audited full-orb accounting adapter");
+    }
+    static void claimStackIdentity(IdentityHashMap<ItemStack, Boolean> seen, ItemStack item) {
+        if (item == null || item.isEmpty() || seen.put(item, true) != null || item.getCount() < 1 || item.getCount() > item.getMaxStackSize())
+            throw new IllegalStateException("Aliased or overstacked native inventory/ground stack");
+    }
+    static boolean reviewedDirtToolDispatch(net.minecraft.world.level.block.state.BlockState state) {
+        return state.is(Blocks.DIRT) && state.is(BlockTags.MINEABLE_WITH_SHOVEL);
+    }
+    private boolean preparationMatchesActive(PerimeterEarthworksManifest.Step step) {
+        if (area.stackToPlace.isEmpty()) return false;
+        int min = area.stackToPlace.stream().mapToInt(block -> block.getPos().getY()).min().orElseThrow();
+        return area.stackToPlace.stream().filter(block -> block.getPos().getY() == min)
+                .allMatch(block -> block.getState().getBlock().asItem() == step.after().getBlock().asItem());
     }
     private ItemStack selectedShovel() {
         ItemStack selected = worker.getMainHandItem(); if (selected.getItem() instanceof ShovelItem) return selected;
@@ -242,13 +266,26 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
         return new NativeEarthworksAdapter.Stock(BuiltInRegistries.ITEM.getKey(item.getItem()).toString(),
                 data.isEmpty() ? "" : canonical(data), item.getDamageValue());
     }
-    private static String canonical(Tag tag) {
+    /** Type/length framing is injective, including delimiters, nesting and unusual UTF-16 strings. */
+    static String canonical(Tag tag) {
+        String payload;
         if (tag instanceof CompoundTag compound) {
-            StringBuilder value = new StringBuilder("{");
-            compound.getAllKeys().stream().sorted().forEach(key -> value.append(key.length()).append(':').append(key).append('=').append(canonical(compound.get(key))).append(';'));
-            return value.append('}').toString();
+            StringBuilder value = new StringBuilder().append(compound.size()).append(';');
+            compound.getAllKeys().stream().sorted().forEach(key -> value.append(stringFrame(key)).append(canonical(compound.get(key))));
+            payload = value.toString();
+        } else if (tag instanceof ListTag list) {
+            StringBuilder value = new StringBuilder().append(list.getElementType()).append(';').append(list.size()).append(';');
+            for (Tag item : list) value.append(canonical(item)); payload = value.toString();
+        } else if (tag instanceof net.minecraft.nbt.StringTag string) payload = stringFrame(string.getAsString());
+        else payload = tag.getAsString(); // Numeric and primitive-array SNBT is ASCII; the tag ID distinguishes types.
+        return tag.getId() + ":" + payload.length() + ":" + payload;
+    }
+    private static String stringFrame(String text) {
+        StringBuilder value = new StringBuilder().append(text.length()).append(':');
+        for (int i = 0; i < text.length(); i++) {
+            int c = text.charAt(i);
+            for (int shift = 12; shift >= 0; shift -= 4) value.append(Character.forDigit((c >>> shift) & 15, 16));
         }
-        if (tag instanceof ListTag list) { StringBuilder value = new StringBuilder("["); for (Tag item : list) value.append(canonical(item)).append(';'); return value.append(']').toString(); }
-        return tag.getId() + ":" + tag.getAsString();
+        return value.toString();
     }
 }

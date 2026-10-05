@@ -130,6 +130,8 @@ class NativeEarthworksAdapterTest extends MinecraftTestSupport {
     }
 
     @Test void missingSuppliesOrUnacknowledgedFenceNeverInvokeNativeWork() {
+        var existingXp = new Fixture(); existingXp.port.frame = new Frame(existingXp.port.frame.cells(), existingXp.port.frame.stock(), Map.of(), Map.of(UUID.randomUUID(), 1));
+        assertEquals(Result.RECONCILE_REQUIRED, existingXp.adapter.tick()); assertEquals(0, existingXp.port.calls);
         var f = new Fixture(); f.port.supplies = false;
         assertEquals(Result.WAITING, f.adapter.tick()); assertEquals(0, f.port.calls);
         f.port.supplies = true; f.store.failFence = true;
@@ -210,7 +212,7 @@ class NativeEarthworksAdapterTest extends MinecraftTestSupport {
             frame = new Frame(cells, stock, drops, xp);
         }
     }
-    private static PerimeterEarthworksManifest manifest() {
+    static PerimeterEarthworksManifest manifest() {
         var header = new Header(UUID.randomUUID(), 1, UUID.randomUUID(), UUID.randomUUID(), "minecraft:overworld", "test",
                 "a".repeat(64), "b".repeat(64), "local-reviewed-earthworks-v1", 0, 64, -64, 320, 1, 64);
         Map<Long, Observation> observations = new HashMap<>();
