@@ -9,13 +9,19 @@ import java.util.function.Predicate;
 public final class CampScouting {
     static final int MAX_CANDIDATES = 200;
     static final int MAX_PASS_TICKS = 20 * 60 * 4;
+    static final int RECOVERY_COOLDOWN_TICKS = 20 * 60;
     private CampScouting() {}
 
-    public enum Result { SEARCHING, TERRAFORM, ABANDONED }
+    public enum Result { SEARCHING, TERRAFORM, RECOVERING, WAITING, ABANDONED }
 
     public static Result advance(ServerLevel level, RaidSavedData.RaidState state,
                                  boolean allowTerraform, int preparationTicks) {
         if (state.campSearchAbandoned) return Result.ABANDONED;
+        if (state.campSearchRetryTicks > 0) {
+            state.campSearchRetryTicks = Math.max(0, state.campSearchRetryTicks - 20);
+            // A cooldown consumes no site, chunk ticket or per-pass search time.
+            return Result.WAITING;
+        }
         state.campSearchElapsedTicks = (int) Math.min(MAX_PASS_TICKS,
                 (long) state.campSearchElapsedTicks + 20);
         // The final candidate may still be loading. Do not discard it just because
@@ -34,11 +40,19 @@ public final class CampScouting {
         }
         state.campSearchPos = null;
         state.campSearchTicks = 0;
-        if (allowTerraform && !state.campTerraformed) {
+        if (allowTerraform && !state.campTerraformed && !state.campSearchRecovery) {
             state.campTerraformed = true;
             state.campSearchStep = 0;
             state.campSearchElapsedTicks = 0;
             return Result.TERRAFORM;
+        }
+        if (!state.campSearchRecovery) {
+            state.campSearchRecovery = true;
+            state.campSearchRetryTicks = RECOVERY_COOLDOWN_TICKS;
+            state.campSearchStep = 0;
+            state.campSearchElapsedTicks = 0;
+            state.campTerraformed = allowTerraform;
+            return Result.RECOVERING;
         }
         state.campSearchAbandoned = true;
         state.campSearchDiagnostics.finish();
@@ -51,9 +65,12 @@ public final class CampScouting {
 
     public static void selectCandidate(RaidSavedData.RaidState state, BlockPos core,
                                        Predicate<BlockPos> canClaim) {
-        if (state.campSearchPos != null || state.campSearchAbandoned) return;
+        if (state.campSearchPos != null || state.campSearchAbandoned || state.campSearchRetryTicks > 0) return;
         for (int skipped = 0; skipped < 8 && state.campSearchStep < MAX_CANDIDATES; skipped++) {
-            BlockPos candidate = CampLoading.candidate(core, state.approachAngle, state.campSearchStep++);
+            int attempt = state.campSearchStep++;
+            BlockPos candidate = state.campSearchRecovery
+                    ? CampLoading.recoveryCandidate(core, state.approachAngle, attempt)
+                    : CampLoading.candidate(core, state.approachAngle, attempt);
             if (canClaim.test(candidate)) {
                 state.campSearchPos = candidate;
                 break;
@@ -73,9 +90,12 @@ public final class CampScouting {
     public static String searchStatus(RaidSavedData.RaidState state, String unavailableReason) {
         if (unavailableReason != null && !unavailableReason.isBlank())
             return "Camp search unavailable: " + unavailableReason;
+        if (state.campSearchRetryTicks > 0)
+            return "Nearby camp search exhausted; wider scouting in " + (state.campSearchRetryTicks + 19) / 20 + "s";
         String progress = state.campSearchStep + "/" + MAX_CANDIDATES + " sites checked";
-        return state.campSearchPos == null ? "Searching for camp land: " + progress
-                : "Waiting for camp terrain: " + progress;
+        String range = state.campSearchRecovery ? "farther camp " : "camp ";
+        return state.campSearchPos == null ? "Searching for " + range + "land: " + progress
+                : "Waiting for " + range + "terrain: " + progress;
     }
 
     public static String noCampStatus(RaidSavedData.RaidState state) {

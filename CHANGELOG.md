@@ -1,3 +1,11 @@
+## 4.52.5 — Give camp scouts safer ways to recover
+
+- Try the existing safe soil-grading plan during the initial camp search, instead of discarding workable mounds with an older, stricter surface check.
+- Let the rough-ground fallback preserve existing steep ground outside the camp when a flat camp, a walkable inner margin and a three-wide exit can still be made safely. Unrelated outer slopes no longer need to be flattened; protected blocks, claims, water limits and finite earthworks budgets remain enforced.
+- If nearby natural and earthworks searches fail, scouts regroup for one minute and make one bounded wider search, roughly 608–992 blocks from the defending core. Search progress and regrouping time survive world reloads, and preparation stays paused until a camp is found or all searches finish.
+- Keep attacks without a fortified camp as the final fallback. Scouts explain when they are regrouping, searching farther away or giving up; existing active camp-less raids are not restarted.
+- Adds targeted terrain, persistence and real native lifecycle checks. Deep oceans, protected land or other unsafe terrain can still prevent a camp; this does not promise a site in every world.
+
 ## 4.52.4 — Clearer emerald costs and earned rewards
 
 - Update the server and every client together. Network protocol 20 rejects older clients so the displayed prices and upgrade availability match the server. Saved worlds and accepted construction jobs remain compatible.

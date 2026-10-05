@@ -489,6 +489,10 @@ public final class RaidSavedData extends SavedData {
         public int campSearchTicks;
         /** Active scouting time in this pass; persists so reloads cannot restart the deadline. */
         public int campSearchElapsedTicks;
+        /** One bounded wider survey after the initial natural/earthworks passes. */
+        public boolean campSearchRecovery;
+        /** Active-time cooldown before wider scouting; offline pauses and reloads preserve it. */
+        public int campSearchRetryTicks;
         public final com.devfarinsky.siegeoverhaul.camp.CampSearchDiagnostics campSearchDiagnostics =
                 new com.devfarinsky.siegeoverhaul.camp.CampSearchDiagnostics();
         public boolean campCrewStarted;
@@ -729,6 +733,8 @@ public final class RaidSavedData extends SavedData {
             tag.putInt("CampSearchStep",campSearchStep);
             tag.putInt("CampSearchTicks",campSearchTicks);
             tag.putInt("CampSearchElapsedTicks",campSearchElapsedTicks);
+            tag.putBoolean("CampSearchRecovery",campSearchRecovery);
+            tag.putInt("CampSearchRetryTicks",campSearchRetryTicks);
             tag.put("CampSearchDiagnostics", campSearchDiagnostics.save());
             tag.putBoolean("CampCrewStarted",campCrewStarted);
             tag.putInt("BreachTicks", breachTicks);
@@ -902,6 +908,9 @@ public final class RaidSavedData extends SavedData {
             state.campSearchStep=Math.max(0,tag.getInt("CampSearchStep"));
             state.campSearchTicks=Math.max(0,tag.getInt("CampSearchTicks"));
             state.campSearchElapsedTicks=Math.max(0,tag.getInt("CampSearchElapsedTicks"));
+            state.campSearchRecovery=tag.getBoolean("CampSearchRecovery");
+            state.campSearchRetryTicks=state.campSearchRecovery
+                    ? Math.max(0,Math.min(1200,tag.getInt("CampSearchRetryTicks"))) : 0;
             state.campSearchDiagnostics.load(tag.getCompound("CampSearchDiagnostics"));
             state.campCrewStarted=tag.contains("CampCrewStarted")?tag.getBoolean("CampCrewStarted"):tag.contains("CampPosition");
             state.breachTicks = tag.getInt("BreachTicks");

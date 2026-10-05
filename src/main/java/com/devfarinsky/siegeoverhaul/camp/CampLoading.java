@@ -26,6 +26,20 @@ public final class CampLoading {
         ChunkPos chunk=new ChunkPos(new BlockPos(x,core.getY(),z));
         return new BlockPos(chunk.getMiddleBlockX(),core.getY(),chunk.getMiddleBlockZ());
     }
+    /**
+     * A single wider rescue survey, interleaving radii so a slow load cannot spend
+     * its whole deadline on the nearest ring again. Same chunk-centered footprint,
+     * same claim/border checks, and no larger simultaneous ticket neighborhood.
+     */
+    public static BlockPos recoveryCandidate(BlockPos core, double angle, int attempt) {
+        int bounded = Math.floorMod(attempt, 200);
+        int distance = 608 + (bounded % 7) * 64;
+        double facing = angle + Math.PI / 24 + (bounded / 7) * Math.PI * 2 / 29;
+        int x = core.getX() + (int) Math.round(Math.cos(facing) * distance);
+        int z = core.getZ() + (int) Math.round(Math.sin(facing) * distance);
+        ChunkPos chunk = new ChunkPos(new BlockPos(x, core.getY(), z));
+        return new BlockPos(chunk.getMiddleBlockX(), core.getY(), chunk.getMiddleBlockZ());
+    }
     /** Balanced local search that keeps even the fallback radius-16 survey inside the loaded 3x3 chunks. */
     public static BlockPos localCandidate(BlockPos scout, int attempt, boolean expanded) {
         int width = expanded ? 5 : 3;
