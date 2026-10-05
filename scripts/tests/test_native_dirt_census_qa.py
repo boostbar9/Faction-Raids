@@ -146,6 +146,15 @@ class CensusVerifierTest(unittest.TestCase):
         self.mutate_census(lambda c: next(m for m in c['runtime']['modules'] if m['name'] == 'siegeoverhaul').update(contentSha256='a' * 64)); self.reject()
     def test_required_module_layer_cannot_disappear(self):
         self.mutate_census(lambda c: c['runtime']['modules'].__setitem__(slice(None), [m for m in c['runtime']['modules'] if m['layer'] != 'PLUGIN'])); self.reject()
+    def test_present_empty_service_layer_is_valid(self):
+        self.mutate_census(lambda c: c['runtime']['modules'].__setitem__(slice(None), [m for m in c['runtime']['modules'] if m['layer'] != 'SERVICE']))
+        VERIFY.validate(self.result, self.fill)
+    def test_empty_service_still_requires_its_exact_graph_node(self):
+        self.mutate_census(lambda c: c['runtime']['modules'].__setitem__(slice(None), [m for m in c['runtime']['modules'] if m['layer'] != 'SERVICE']))
+        self.mutate_census(lambda c: c['runtime']['layers'].__setitem__(slice(None), [l for l in c['runtime']['layers'] if l['name'] != 'SERVICE'])); self.reject()
+    def test_empty_service_still_requires_its_exact_parent(self):
+        self.mutate_census(lambda c: c['runtime']['modules'].__setitem__(slice(None), [m for m in c['runtime']['modules'] if m['layer'] != 'SERVICE']))
+        self.mutate_census(lambda c: next(l for l in c['runtime']['layers'] if l['name'] == 'SERVICE').update(parents=['JVM_BOOT'])); self.reject()
     def test_jvm_boot_ancestor_cannot_disappear(self):
         self.mutate_census(lambda c: c['runtime']['modules'].__setitem__(slice(None), [m for m in c['runtime']['modules'] if m['layer'] != 'JVM_BOOT'])); self.reject()
     def test_ancestor_module_is_not_relabelled_as_launcher_boot(self):

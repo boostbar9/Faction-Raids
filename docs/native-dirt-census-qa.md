@@ -96,8 +96,10 @@ shadowing coverage.
 These are child-to-ordered-parent edges, not dependency declarations. All six
 identities must be distinct and actual parent/configuration edges must match.
 Unknown labels, extra/intermediate layers, missing edges, changed order and
-same-name replacement layers refuse. The empty sentinel contributes no modules.
-All non-JRT modules in all five populated layers are hashed under the unchanged
+same-name replacement layers refuse. The empty sentinel contributes no modules. SERVICE may also have zero direct
+modules while remaining a required graph node with its exact BOOT parent; the
+verifier does not infer layer absence from an empty direct module collection.
+All non-JRT modules in all five non-sentinel layers are hashed under the unchanged
 256-module/1-GiB bounds. Relevant classes still require their exact bound Module,
 ModuleReference and ClassLoader. No unnamed-class or loader mismatch bypass is
 introduced, and no module graph is activated or modified by observation.

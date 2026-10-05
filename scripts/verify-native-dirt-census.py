@@ -144,7 +144,8 @@ def catalog(value, fill):
         require(providers == sorted(providers), 'Unstable provider ordering')
         module_keys.append((row['layer'], row['name']))
     require(module_keys == sorted(set(module_keys)), 'Duplicate/unordered module catalog')
-    require({key[0] for key in module_keys} == {'BOOT', 'SERVICE', 'PLUGIN', 'GAME', 'JVM_BOOT'}, 'Missing actual launcher layer')
+    # Layer existence/parent identity is proven by the exact graph above. SERVICE can be present and empty.
+    require({'BOOT', 'PLUGIN', 'GAME', 'JVM_BOOT'} <= {key[0] for key in module_keys}, 'Missing required populated launcher layer')
     require(('JVM_BOOT', 'cpw.mods.securejarhandler') in module_keys, 'Actual SecureJar JVM ancestor absent')
     names = {key[1] for key in module_keys}
     services = value['services']; require(type(services) is list and 1 <= len(services) <= 256, 'Missing/unbounded launcher services')
