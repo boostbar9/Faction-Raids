@@ -98,6 +98,8 @@ jobs:
           assert data['loadedModVersions']['recruits'] == '1.15.2', data
           assert data['observedNativeTicks'] >= 20, data
           assert data['forcedVanillaFallbackActualFactory'], data
+          assert data['nativeCheckedLanding']['landedRaiders'] == 1 and data['nativeCheckedLanding']['protectedCaptainStillAboard'], data
+          assert data['nativeCheckedLanding']['shipRetained'] and data['nativeCheckedLanding']['safeActualLandingPosition'], data
           assert len(data['hullsAndBoardingOrders']) == 4, data
           for item in data['hullsAndBoardingOrders']:
               assert item['nativeEntityNbtCrewRoundTrip'] and item['noNavalOwnershipTagAdded'], item

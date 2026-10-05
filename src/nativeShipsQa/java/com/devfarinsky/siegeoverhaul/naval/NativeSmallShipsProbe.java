@@ -234,6 +234,7 @@ public final class NativeSmallShipsProbe {
             item.put("unrelatedNativeCaptainBlocksConvoySteering", true);
             observations.add(item);
         }
+        verifyNativeLanding();
         Entity fallback = NavalFleet.spawn(level, origin, true).orElseThrow(() -> new IllegalStateException("Forced vanilla fallback did not spawn in clear water"));
         require(fallback.getType() == EntityType.BOAT && !NavalFleet.isSmallShipsVessel(fallback), "Forced fallback created a companion vessel");
         fallback.discard();
@@ -242,6 +243,45 @@ public final class NativeSmallShipsProbe {
         report.put("hullsAndBoardingOrders", observations);
         report.put("status", "probe-completed");
         write();
+    }
+
+    private void verifyNativeLanding() throws Exception {
+        List<BlockPos> island = new ArrayList<>();
+        List<Entity> actors = new ArrayList<>();
+        try {
+            for (int x = -1; x <= 1; x++) for (int z = -1; z <= 1; z++) {
+                BlockPos block = origin.offset(x, 0, z); island.add(block);
+                require(level.getBlockState(block).is(Blocks.WATER), "Landing fixture would replace unexpected terrain");
+                level.setBlock(block, Blocks.STONE.defaultBlockState(), 3);
+            }
+            BlockPos shipPos = origin.offset(6, 0, 0);
+            Boat ship = (Boat) create("smallships:cog", shipPos); actors.add(ship);
+            Mob raider = (Mob) create("recruits:recruit", shipPos); actors.add(raider);
+            CaptainEntity captain = (CaptainEntity) create("recruits:captain", shipPos); actors.add(captain);
+            raider.setNoAi(true); captain.setNoAi(true);
+            String team = "team:native-checked-landing";
+            raider.getPersistentData().putString(ModConstants.Tags.RAID_TEAM, team);
+            require(NavalFleet.board(ship, captain) && NavalFleet.board(ship, raider), "Native landing actors could not board");
+            Object helmBefore = finalRelease ? call(ship, "getSeatOf", new Class<?>[]{Entity.class}, captain) : null;
+            List<Mob> crew = NavalConvoy.raidCrew(ship, team);
+            require(crew.equals(List.of(raider)), "Landing selected an unrelated native captain");
+            int landed = NavalConvoy.disembark(level, ship, crew, origin.above(), origin.offset(4, 1, 0));
+            require(landed == 1 && !raider.isPassenger() && captain.getVehicle() == ship && !ship.isRemoved(),
+                    "Checked native landing failed or displaced protected captain/ship");
+            require(NavalConvoy.safeLanding(level, raider, raider.blockPosition(), List.of()), "Actual native landing was not safe");
+            if (finalRelease) {
+                require(call(ship, "getSeatOf", new Class<?>[]{Entity.class}, raider) == null, "Dismounted raider kept a native seat");
+                Object helmAfter = call(ship, "getSeatOf", new Class<?>[]{Entity.class}, captain);
+                require(helmBefore != null && helmAfter != null && call(helmBefore, "id").equals(call(helmAfter, "id")),
+                        "Protected native helm assignment changed during landing");
+            }
+            report.put("nativeCheckedLanding", Map.of("landedRaiders", landed, "protectedCaptainStillAboard", true,
+                    "shipRetained", true, "safeActualLandingPosition", true,
+                    "scope", "Initialized small stone landing; direct production checked-landing helper with real native crew, not physical beach-route navigation"));
+        } finally {
+            actors.forEach(Entity::discard);
+            for (BlockPos block : island) level.setBlock(block, Blocks.WATER.defaultBlockState(), 3);
+        }
     }
 
     void beginPrototype() throws Exception {
