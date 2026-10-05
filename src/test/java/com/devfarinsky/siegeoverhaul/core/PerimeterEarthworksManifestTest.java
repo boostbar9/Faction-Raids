@@ -36,7 +36,7 @@ class PerimeterEarthworksManifestTest extends MinecraftTestSupport {
         assertEquals(manifest.steps(), loaded.steps()); assertEquals(manifest.hash(), loaded.hash());
         assertEquals(manifest.stageDigests(), loaded.stageDigests()); assertEquals(manifest.save(), loaded.save());
         assertEquals(3, loaded.stageDigests().size()); assertEquals(1, loaded.cutCount()); assertEquals(1, loaded.fillCount());
-        assertEquals(5, loaded.observations().get(pos(-7, 63, -7)).original().getValue(BlockStateProperties.SNOW_LAYERS));
+        assertEquals(5, loaded.observations().get(pos(-7, 63, -7)).original().getValue(BlockStateProperties.LAYERS));
         assertThrows(UnsupportedOperationException.class, () -> loaded.observations().clear());
         assertThrows(UnsupportedOperationException.class, () -> loaded.steps().clear());
         assertThrows(UnsupportedOperationException.class, () -> loaded.materialCounts().clear());
@@ -81,7 +81,7 @@ class PerimeterEarthworksManifestTest extends MinecraftTestSupport {
                 new Removal(Origin.UNKNOWN, Family.STONE, "fixture:single_cell", "2", "a".repeat(64))));
         assertNotEquals(original.hash(), new PerimeterEarthworksManifest(header(), observations(), altered).hash());
         var properties = new ArrayList<>(observations()); properties.replaceAll(cell -> cell.role() == Role.GATE_FLOOR
-                ? new Observation(cell.pos(), cell.original().setValue(BlockStateProperties.SNOW_LAYERS, 6), cell.role(), 0) : cell);
+                ? new Observation(cell.pos(), cell.original().setValue(BlockStateProperties.LAYERS, 6), cell.role(), 0) : cell);
         assertNotEquals(original.hash(), new PerimeterEarthworksManifest(header(), properties, steps()).hash());
     }
 
@@ -208,7 +208,7 @@ class PerimeterEarthworksManifestTest extends MinecraftTestSupport {
     private static List<Observation> observations() {
         return List.of(new Observation(CUT, STONE, Role.WORK, 0), new Observation(FILL, AIR, Role.WORK, 0),
                 new Observation(GATE, AIR, Role.GATE_CLEARANCE, 0), new Observation(pos(-7, 63, -7),
-                Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.SNOW_LAYERS, 5), Role.GATE_FLOOR, 0));
+                Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 5), Role.GATE_FLOOR, 0));
     }
     private static List<Step> steps() {
         return List.of(new Step(0, Kind.CUT, CUT, STONE, AIR, removal()), new Step(1, Kind.FILL, FILL, AIR, DIRT, null),
