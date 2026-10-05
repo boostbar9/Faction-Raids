@@ -11,6 +11,10 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.material.Fluids;
+import org.mockito.Answers;
+import org.mockito.MockSettings;
+import org.mockito.stubbing.Answer;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -82,9 +86,25 @@ class PerimeterGateAccessTest extends MinecraftTestSupport {
                     && BlockPos.of(cell).getZ() == APPROACH.getZ()), "No shape dependency may read a neighbor");
         }
         var site = new Site();
-        Block moddedFullCube = new Block(net.minecraft.world.level.block.state.BlockBehaviour.Properties.of());
-        site.states.put(APPROACH.below().asLong(), moddedFullCube.defaultBlockState());
-        assertNotNull(site.column(APPROACH, PerimeterGateLayout.Region.OUTSIDE_APPROACH));
+        // Forge's registry is frozen. Model an unknown block without invoking Block's constructor or registering it.
+        Block moddedFullCube = mock(Block.class);
+        BlockState unknown = mock(BlockState.class);
+        when(unknown.getBlock()).thenReturn(moddedFullCube);
+        when(unknown.hasBlockEntity()).thenReturn(false);
+        when(unknown.getFluidState()).thenReturn(Fluids.EMPTY.defaultFluidState());
+        when(unknown.is(any(Block.class))).thenReturn(false);
+        doThrow(new AssertionError("An unaudited shape must be refused before querying collision"))
+                .when(unknown).isCollisionShapeFullBlock(any(), any());
+        doThrow(new AssertionError("An unaudited shape must not query collision or neighbors"))
+                .when(unknown).getCollisionShape(any(), any());
+        site.states.put(APPROACH.below().asLong(), unknown);
+        String refusal = site.column(APPROACH, PerimeterGateLayout.Region.OUTSIDE_APPROACH);
+        assertNotNull(refusal);
+        assertTrue(refusal.contains("existing stable, full-block"), refusal);
+        assertTrue(refusal.contains(APPROACH.below().toShortString()), refusal);
+        verify(unknown, never()).isCollisionShapeFullBlock(any(), any());
+        verify(unknown, never()).getCollisionShape(any(), any());
+        site.noMutation();
     }
 
     @Test void naturalStableFullSoilStoneAndExistingWallMaterialsAreAccepted() {
@@ -286,7 +306,7 @@ class PerimeterGateAccessTest extends MinecraftTestSupport {
     @Test void nearManifestLimitFortyComponentEnvelopeStillReadsOnlyTheActiveComponent() {
         Set<ChunkPos> territory = new HashSet<>();
         for (int x = 0; x < 8; x++) for (int z = 0; z < 5; z++) territory.add(new ChunkPos(2 * x, 2 * z));
-        var site = new Site(territory, false); var snapshot = site.snapshot();
+        var site = new Site(territory, false, true); var snapshot = site.snapshot();
         assertTrue(snapshot.ready(), snapshot.problem()); var contract = snapshot.contract();
         assertEquals(160, contract.gates().size());
         assertEquals(40 * 312, contract.observations().size());
@@ -306,9 +326,19 @@ class PerimeterGateAccessTest extends MinecraftTestSupport {
         site.noMutation();
     }
 
+    @Test void boundedScaleHarnessFailsFastForMutationAndChunkLoadingWithoutRecordedHistory() {
+        var site = new Site(ONE, false, true);
+        assertThrows(AssertionError.class, () -> site.level.setBlock(APPROACH, Blocks.STONE.defaultBlockState(), 3, 512));
+        assertThrows(AssertionError.class, () -> site.level.getChunkAt(APPROACH));
+        assertEquals(2, site.forbiddenCalls);
+        assertTrue(mockingDetails(site.level).getInvocations().isEmpty());
+    }
+
     private static final class Site {
-        final ServerLevel level = mock(ServerLevel.class);
-        final ServerPlayer player = mock(ServerPlayer.class);
+        final ServerLevel level;
+        final ServerPlayer player;
+        final boolean boundedHistory;
+        int forbiddenCalls;
         final Map<Long, BlockState> states = new HashMap<>();
         final List<Long> reads = new ArrayList<>();
         final Set<Long> denied = new HashSet<>();
@@ -317,7 +347,18 @@ class PerimeterGateAccessTest extends MinecraftTestSupport {
         final PerimeterBlueprint.Plan wall;
         final PerimeterGateLayout.Layout layout;
         Site() { this(ONE, false); }
-        Site(Set<ChunkPos> territory, boolean raised) {
+        Site(Set<ChunkPos> territory, boolean raised) { this(territory, raised, false); }
+        Site(Set<ChunkPos> territory, boolean raised, boolean boundedHistory) {
+            this.boundedHistory = boundedHistory;
+            MockSettings worldSettings = withSettings(), playerSettings = withSettings();
+            if (boundedHistory) {
+                // Keep the exact scale/read checks without retaining hundreds of thousands of Mockito stack records.
+                // Any unexpected world/player API fails immediately, including every mutation/loading overload.
+                worldSettings.stubOnly().defaultAnswer(readsOnly(Set.of("getMinBuildHeight", "getMaxBuildHeight",
+                        "getWorldBorder", "hasChunkAt", "mayInteract", "getBlockState", "getBlockEntity")));
+                playerSettings.stubOnly().defaultAnswer(readsOnly(Set.of("serverLevel", "isAlive", "isSpectator", "mayBuild")));
+            }
+            level = mock(ServerLevel.class, worldSettings); player = mock(ServerPlayer.class, playerSettings);
             this.territory = territory;
             wall = PerimeterBlueprint.create(territory, (x, z) -> PerimeterBlueprint.Surface.ready(raised && x < 8 ? 62 : 64),
                     PerimeterBlueprint.Palette.COBBLESTONE);
@@ -341,7 +382,23 @@ class PerimeterGateAccessTest extends MinecraftTestSupport {
         String component(PerimeterGateContract contract, int component) {
             return PerimeterGateAccess.componentObservationProblem(level, player, contract, component, permitted);
         }
+        private Answer<Object> readsOnly(Set<String> methods) {
+            return call -> {
+                String method = call.getMethod().getName();
+                if (!methods.contains(method) && !Set.of("toString", "hashCode", "equals").contains(method)) {
+                    forbiddenCalls++;
+                    throw new AssertionError("Unexpected API in read-only scale fixture: " + method);
+                }
+                return Answers.RETURNS_DEFAULTS.answer(call);
+            };
+        }
         void noMutation() {
+            if (boundedHistory) {
+                assertEquals(0, forbiddenCalls, "Every unauthorized API is fail-fast, even without invocation history");
+                assertTrue(mockingDetails(level).getInvocations().isEmpty());
+                assertTrue(mockingDetails(player).getInvocations().isEmpty());
+                return;
+            }
             verify(level, never()).setBlock(any(), any(), anyInt(), anyInt());
             verify(level, never()).destroyBlock(any(), anyBoolean(), any());
             verify(level, never()).getChunkAt(any());
