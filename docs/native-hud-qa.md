@@ -69,6 +69,15 @@ world, account or authentication file is uploaded.
   buttons remain disabled and are excluded from the active count at every scale;
   first-click local loot confirmation and its navigation
   cancellation. The second, paid loot click is never performed.
+- Civilian roster at every viewport: labeled loaded native farmer/librarian
+  appearances, explicitly unavailable residents without invented models, keyboard
+  paging, selection across read-only sync and the complete focusable Care tooltip.
+  Compact loading and empty reports are captured separately. These are client
+  display fixtures, not proof of server villagers, native AI or tax collection.
+- Possible-loot gallery at all four viewports: native enchanted/trimmed epic and
+  rare ItemStacks, bounded keyboard paging through later items, Royal tier-floor
+  controls and Back without a purchase. Gallery examples never inspect a sealed
+  reward. Review native tooltips, models and text clipping in the captures.
 - Intel search focus via its visible hitbox, real OS E typing without closing the
   inventory, no-result and Clear states, wheel scrolling, per-section scroll
   memory, native OS Ctrl+Tab/Ctrl+Shift+Tab, Escape, header Close, repeated reopening,
@@ -91,14 +100,28 @@ hitboxes, hidden/disabled keyboard focus, blank/missing images, missing native
 portraits, missing native inspection preview or incomplete steps fail the gate.
 The verifier requires the exact named image matrix and corresponding receipts.
 
+## Seeded capture boundary extension
+
+The unshipped `NativeCaptureBoundaryQa` adds 24 real in-world frames at compact
+scale 3 and roomy scale 1: idle approach, inside, wall, wrong height, eligible low
+ceiling, custom server geometry, creative exclusion, four native boss bars, tied counts, stale status,
+expiry and an actual Nether transition. A fresh seeded plaza uses the actual core,
+collision terrain, player, S2C snapshot path and production renderer. Its counts
+and percentages are labeled samples; it creates no raid, claim or battle victory.
+Read-only diagnostics check exact radius, bounded segments, vertical projection,
+server/local participation, freshness and complete native-font HUD layout above
+the aiming reticle. Review depth/terrain visibility in the PNGs separately.
+See [capture acceptance](capture-boundary-qa.md) for the separate live-count gate.
+
 ## What the result means
 
 Core menu and Codex data are deliberately labeled **QA SAMPLE**. They are display
 fixtures, not claims about real server offers, Treasury, factions, native jobs,
 commission receipts or synchronized production reports. Read-only construction
 subscriptions and Codex sync retain their normal handlers; their empty isolated
-server state is not presented as the sample's source. No mutable gameplay guard
-is bypassed and no completed structure blocks are written.
+server state is not presented as the sample's source. No mutable gameplay guard is bypassed by menu/inspection checks. The separate
+seeded capture display fixture writes only its labeled disposable terrain and
+core, with no commissioned structure, capture outcome or payment.
 
 Mouse navigation is dispatched through the actual screen/widget hitboxes; it is
 not an OS mouse-routing test. E, Ctrl+Tab, Ctrl+Shift+Tab and Escape use Java's

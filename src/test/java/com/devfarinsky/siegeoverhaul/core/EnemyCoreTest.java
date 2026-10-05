@@ -135,4 +135,37 @@ class EnemyCoreTest extends MinecraftTestSupport {
             assertTrue(data.isDirty());
         }
     }
+    @Test void cosmeticSnapshotsFollowActualIdleAdvancingTiedAndBlockedCaptureStates() {
+        var level = mock(ServerLevel.class); var data = new RaidSavedData();
+        var raid = new RaidSavedData.RaidState("team:test", "siege_core", 0); raid.campClaimId = UUID.randomUUID();
+        var anchor = new RaidSavedData.Anchor("team:test", "Test", UUID.randomUUID(), Set.of(), false, false, Map.of(), 0);
+        BlockPos pos = new BlockPos(32, 65, 48); raid.campaign.putLong("EnemyCore", pos.asLong());
+        String owner = RaiderFactions.id(raid.factionId);
+        int maximum = RaidConfig.CORE_RECAPTURE_SECONDS.get() * 20;
+        when(level.getGameTime()).thenReturn(21L);
+        try (var enemy = mockStatic(EnemyCore.class, CALLS_REAL_METHODS);
+             var counts = mockStatic(CoreOccupation.class); var claims = mockStatic(RecruitsClaimsBridge.class);
+             var beacon = mockStatic(CaptureBeacon.class)) {
+            enemy.when(() -> EnemyCore.ensure(level, raid)).thenReturn(true);
+            claims.when(() -> RecruitsClaimsBridge.getClaimAt(level, pos)).thenReturn(Optional.of(
+                    new RecruitsClaimsBridge.ClaimSnapshot(raid.campClaimId, "Camp", owner, new ChunkPos(pos), Set.of(), false, 100, 100)));
+            counts.when(() -> CoreOccupation.counts(level, pos, raid.teamKey, anchor.members(), owner)).thenReturn(new int[]{0, 0});
+            assertFalse(EnemyCore.tick(level, data, raid, anchor));
+            beacon.verify(() -> CaptureBeacon.send(level, raid.teamKey, pos, 0, maximum, 0, 0));
+            counts.when(() -> CoreOccupation.counts(level, pos, raid.teamKey, anchor.members(), owner)).thenReturn(new int[]{1, 2});
+            assertFalse(EnemyCore.tick(level, data, raid, anchor));
+            beacon.verify(() -> CaptureBeacon.send(level, raid.teamKey, pos, 20, maximum, 2, 1));
+            counts.when(() -> CoreOccupation.counts(level, pos, raid.teamKey, anchor.members(), owner)).thenReturn(new int[]{2, 2});
+            assertFalse(EnemyCore.tick(level, data, raid, anchor));
+            beacon.verify(() -> CaptureBeacon.send(level, raid.teamKey, pos, 20, maximum, 2, 2));
+            counts.when(() -> CoreOccupation.counts(level, pos, raid.teamKey, anchor.members(), owner)).thenReturn(new int[]{3, 2});
+            assertFalse(EnemyCore.tick(level, data, raid, anchor));
+            beacon.verify(() -> CaptureBeacon.send(level, raid.teamKey, pos, 0, maximum, 2, 3));
+            claims.when(() -> RecruitsClaimsBridge.getClaimAt(level, pos)).thenReturn(Optional.empty());
+            assertFalse(EnemyCore.tick(level, data, raid, anchor));
+            beacon.verify(() -> CaptureBeacon.clear(level, raid.teamKey, pos));
+            beacon.verifyNoMoreInteractions();
+        }
+    }
+
 }

@@ -537,4 +537,95 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void budgetLimitedNativePathCanWalkCloserWithoutBeingTreatedAsWorkArrival() throws Exception {
+        for (boolean delayed : new boolean[]{false, true}) {
+            reset(nav); terrain();
+            var target = new BlockPos(80, 64, 0);
+            var endpoint = new BlockPos(26, 64, 0);
+            Path partial = nativeLimitedProbe();
+            assertFalse(partial.canReach());
+            assertTrue(partial.getNodeCount() > 1);
+            assertEquals(new Node(26, 64, 0), partial.getEndNode());
+            Path probe = partial;
+            if (delayed) {
+                var pending = mock(DelayedPath.class); probe = pending;
+                when(pending.getNodeCount()).thenReturn(partial.getNodeCount());
+                when(pending.getEndNode()).thenReturn(partial.getEndNode());
+            }
+            when(nav.createPath(anySet(), eq(0))).thenReturn(probe);
+            when(nav.moveTo(26, 64, 0, .8)).thenReturn(true);
+            var goal = new WallBuilderAccess(worker, new NativeGoal());
+            when(level.getGameTime()).thenReturn(0L); goal.route(level, target, 40);
+            if (delayed) {
+                verify(nav, never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+                when(((DelayedPath) probe).isProcessed()).thenReturn(true);
+                when(level.getGameTime()).thenReturn(10L); goal.route(level, target, 40);
+            }
+            verify(nav).moveTo(endpoint.getX(), endpoint.getY(), endpoint.getZ(), .8);
+            verify(nav, never()).moveTo(any(Path.class), anyDouble());
+            var movement = mock(Path.class);
+            when(movement.canReach()).thenReturn(true); when(movement.getEndNode()).thenReturn(partial.getEndNode());
+            when(nav.getPath()).thenReturn(movement);
+            clearInvocations(nav);
+            when(level.getGameTime()).thenReturn(20L); goal.route(level, target, 40);
+            verify(nav, never()).stop(); verify(nav, never()).createPath(anySet(), anyInt());
+            verify(worker, never()).teleportTo(anyDouble(), anyDouble(), anyDouble());
+        }
+    }
+
+    private Path nativeLimitedProbe() throws Exception {
+        var evaluator = mock(NodeEvaluator.class);
+        doAnswer(i -> {
+            Node[] neighbors = i.getArgument(0); Node node = i.getArgument(1);
+            neighbors[0] = new Node(node.x + 1, 64, 0); return 1;
+        }).when(evaluator).getNeighbors(any(Node[].class), any(Node.class));
+        var type = com.talhanation.workers.entities.ai.navigation.WorkersAsyncPathfinder.class;
+        var method = type.getDeclaredMethod("processPath", NodeEvaluator.class, Node.class, java.util.List.class,
+                float.class, int.class, float.class, int.class);
+        method.setAccessible(true);
+        return (Path) method.invoke(new com.talhanation.workers.entities.ai.navigation.WorkersAsyncPathfinder(evaluator, 1),
+                evaluator, new Node(20, 64, 0), java.util.List.of(java.util.Map.entry(new Target(80, 64, 0),
+                        new BlockPos(80, 64, 0))), 32f, 0, 1f, 1);
+    }
+
+    @Test void partialApproachRejectsUnsafeUnloadedReservedAndNonprogressingEndpoints() throws Exception {
+        for (int scenario = 0; scenario < 6; scenario++) {
+            reset(nav); terrain();
+            var goal = new WallBuilderAccess(worker, new NativeGoal());
+            BlockPos endpoint = scenario == 0 ? new BlockPos(19, 64, 0) : new BlockPos(26, 64, 0);
+            var partial = mock(Path.class);
+            when(partial.getNodeCount()).thenReturn(2);
+            when(partial.getEndNode()).thenReturn(new Node(endpoint.getX(), endpoint.getY(), endpoint.getZ()));
+            when(nav.createPath(anySet(), eq(0))).thenReturn(partial);
+            switch (scenario) {
+                case 1 -> when(level.hasChunkAt(endpoint)).thenReturn(false);
+                case 2 -> doReturn(Blocks.MAGMA_BLOCK.defaultBlockState()).when(level).getBlockState(endpoint.below());
+                case 3 -> {
+                    var field = WallBuilderAccess.class.getDeclaredField("reservedColumns"); field.setAccessible(true);
+                    field.set(goal, java.util.Set.of(endpoint.atY(0).asLong()));
+                }
+                case 4 -> when(level.noCollision(eq(worker), any(AABB.class))).thenReturn(false);
+                case 5 -> when(partial.getNodeCount()).thenReturn(1);
+            }
+            goal.route(level, new BlockPos(80, 64, 0), 40);
+            verify(nav, never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+        }
+    }
+
+    @Test void changedTargetAndRecoveryNeverInstallAFormerPartialApproach() throws Exception {
+        for (boolean recovery : new boolean[]{false, true}) {
+            reset(nav); terrain();
+            var goal = new WallBuilderAccess(worker, new NativeGoal());
+            var partial = mock(DelayedPath.class);
+            when(partial.getNodeCount()).thenReturn(2); when(partial.getEndNode()).thenReturn(new Node(26, 64, 0));
+            when(nav.createPath(anySet(), eq(0))).thenReturn(partial);
+            goal.route(level, new BlockPos(80, 64, 0), 40, recovery);
+            when(partial.isProcessed()).thenReturn(true);
+            when(level.getGameTime()).thenReturn(10L);
+            if (!recovery) when(nav.createPath(anySet(), eq(0))).thenReturn(null);
+            goal.route(level, new BlockPos(recovery ? 80 : 0, 64, 0), 40, recovery);
+            verify(nav, never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+        }
+    }
+
 }

@@ -3,6 +3,7 @@ package com.devfarinsky.siegeoverhaul.client;
 import com.devfarinsky.siegeoverhaul.*;
 import com.devfarinsky.siegeoverhaul.core.*;
 import com.devfarinsky.siegeoverhaul.siege.SiegeIntegration;
+import com.devfarinsky.siegeoverhaul.items.LootBoxItem;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -58,6 +59,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private static final CoreCommandPage[] PAGES = CoreCommandPage.values();
     private CoreHireLayout layout;
     private CoreCommandPage tab = CoreCommandPage.ARMY;
+    private final CivilianReportSubscription civilianSubscription = new CivilianReportSubscription();
+    private CivilianResidentButton[] civilianRows = new CivilianResidentButton[0];
+    private Button civilianPrevious, civilianNext, civilianCare;
+    private java.util.UUID selectedCivilian;
+    private int civilianPage;
     private final Button[] pageButtons = new Button[PAGES.length];
     private final Button[] intelSections = new Button[3];
     private Button previousPage, nextPage, treasuryShortcut, civilianRecruit;
@@ -104,6 +110,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private final BuildingPlanThumbnail[] perimeterExamples = new BuildingPlanThumbnail[TerritoryFortification.MATERIALS.length];
     private final Button[] boxes = new Button[3];
     private final Button[] buffs = new Button[3];
+    private final Button[] lootPreviews = new Button[3];
+    private final Button[] lootTiers = new Button[4];
+    private LootPreviewButton[] lootItems = new LootPreviewButton[0];
+    private Button lootBack, lootPrevious, lootNext;
+    private boolean showingLootGallery;
+    private int previewBox, previewTier = 3, lootPage;
+    private CoreTooltipLayout lootTooltipBounds;
+    private final Map<LootBoxItem.Tier, List<ItemStack>> lootPools = new java.util.EnumMap<>(LootBoxItem.Tier.class);
     private final Button[] bank = new Button[4];
     private Button feedbackButton;
 
@@ -184,8 +198,26 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         clearIntelSearch = addRenderableWidget(new CoreButton(Component.literal("Clear"),
                 b -> intelSearch.setValue(""), layout.x() + layout.width() - 57,
                 layout.contentY() + 23, 46, 18, false, () -> false));
-        civilianRecruit = addRenderableWidget(new CoreButton(Component.literal("House a civilian · 16e"),
-                b -> action(86),layout.x()+12,layout.contentBottom()-24,layout.width()-24,20,false,()->false));
+        civilianRecruit = addRenderableWidget(new CoreButton(Component.literal("Recruit civilian · 16e"),
+                b -> action(86),layout.x()+10,layout.contentBottom()-20,layout.width()-20,20,false,()->false));
+        var civilians = civilianLayout();
+        civilianRows = new CivilianResidentButton[civilians.rows()];
+        for (int i = 0; i < civilianRows.length; i++) {
+            final int index = i;
+            civilianRows[i] = addRenderableWidget(new CivilianResidentButton(civilians.x(), civilians.rowY(i),
+                    civilians.listWidth(), civilians.rowHeight(), b -> {
+                        if (civilianRows[index].resident() != null) {
+                            selectedCivilian = civilianRows[index].resident().id(); updateControlState();
+                        }
+                    }, () -> civilianRows[index].resident() != null && civilianRows[index].resident().id().equals(selectedCivilian)));
+        }
+        civilianPrevious = addRenderableWidget(new CoreButton(Component.literal("< Previous"), b -> moveCivilianPage(-1),
+                civilians.x(), civilians.navigationY(), 78, 18, false, () -> false));
+        civilianNext = addRenderableWidget(new CoreButton(Component.literal("Next >"), b -> moveCivilianPage(1),
+                civilians.x() + civilians.width() - 78, civilians.navigationY(), 78, 18, false, () -> false));
+        civilianCare = addRenderableWidget(new CoreButton(Component.literal("Care & taxes"), b -> {},
+                civilians.x() + 82, civilians.navigationY(), civilians.width() - 164, 18, false, () -> false)
+                .hint(civilianGuidance(false)));
         updateNavigation();
 
         // Close (X) button in the header for players who can't reach Escape
@@ -347,14 +379,32 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 feedbackW, 14,
                 false, () -> false));
 
+        var gallery = lootGalleryLayout();
+        lootBack = addRenderableWidget(new CoreButton(Component.literal("< Chests"), b -> closeLootGallery(),
+                gallery.x(), gallery.y(), 70, 18, false, () -> false));
+        for (int i = 0; i < lootTiers.length; i++) {
+            final int tier = i;
+            int tierW = (gallery.width() - 9) / 4;
+            lootTiers[i] = addRenderableWidget(new CoreButton(Component.literal(CoreLoot.rarity(i)),
+                    b -> { previewTier = tier; lootPage = 0; updateControlState(); },
+                    gallery.x() + i * (tierW + 3), gallery.tierY(), tierW, 18, true, () -> previewTier == tier));
+        }
+        lootItems = new LootPreviewButton[gallery.pageSize()];
+        for (int i = 0; i < lootItems.length; i++) lootItems[i] = addRenderableWidget(new LootPreviewButton(
+                gallery.cardX(i), gallery.cardY(i), gallery.cardWidth(), gallery.cardHeight()));
+        lootPrevious = addRenderableWidget(new CoreButton(Component.literal("< Previous"), b -> moveLootPage(-1),
+                gallery.x(), gallery.actionY(), 82, 18, false, () -> false));
+        lootNext = addRenderableWidget(new CoreButton(Component.literal("Next >"), b -> moveLootPage(1),
+                gallery.x() + gallery.width() - 82, gallery.actionY(), 82, 18, false, () -> false));
+
         // Loot boxes and blessing keys.
         for (int i = 0; i < 3; i++) {
             final int index = i;
             int keyY = layout.marketY(i) + layout.marketHeight() - (layout.compact() ? 17 : 21);
-            int keyXInset = layout.compact() ? 23 : 7;
+            int keyXInset = 7;
             int keyHeight = layout.compact() ? 14 : 17;
             boxes[i] = addRenderableWidget(new CoreButton(
-                    Component.literal("Open"),
+                    Component.literal("Buy"),
                     b -> {
                         if (confirmBox != index) { confirmBox = index; return; }
                         if (waitingTicks > 0 || revealTicks > 0) return;
@@ -363,8 +413,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                         confirmBox = -1;
                     },
                     layout.cardX(0) + keyXInset, keyY,
-                    layout.cardWidth() - keyXInset - 6, keyHeight,
+                    layout.cardWidth() - keyXInset - 52, keyHeight,
                     false, () -> confirmBox == index));
+            lootPreviews[i] = addRenderableWidget(new CoreButton(Component.literal("Items"),
+                    b -> openLootGallery(index), layout.cardX(0) + layout.cardWidth() - 48,
+                    keyY, 42, keyHeight, false, () -> false).hint("Browse possible rewards. This does not purchase or reveal a box."));
             buffs[i] = addRenderableWidget(new CoreButton(
                     Component.literal("Bless"),
                     b -> action(30 + index),
@@ -374,18 +427,80 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
         updateControlState();
         updateBuildingReport();
+        updateCivilianReport(tab == CoreCommandPage.CIVILIANS);
     }
 
     private void selectPage(CoreCommandPage page) {
         if (tab == page) return;
         tab = page;
         updateBuildingReport();
+        updateCivilianReport(tab == CoreCommandPage.CIVILIANS);
         confirmBox = -1;
+        showingLootGallery = false;
         intelDragging = false;
         setFocused(null); // Never leave keyboard focus on a now-hidden purchase action.
         updateNavigation();
         updateControlState();
         setFocused(pageButtons[tab.ordinal()]);
+    }
+
+    private void updateCivilianReport(boolean visible) {
+        civilianSubscription.update(visible, (request, watch) -> {
+            menu.expectCivilianReport(request, watch);
+            // A removed screen can outlive its player/world during disconnect.
+            // Clear local identity first; never try to send through a closed connection.
+            if (civilianConnectionReady(minecraft)) RaidNetwork.watchCivilians(menu.containerId, request, watch);
+        });
+    }
+
+    static boolean civilianConnectionReady(net.minecraft.client.Minecraft client) {
+        return client != null && client.player != null && client.getConnection() != null;
+    }
+
+    private CoreCivilianLayout civilianLayout() { return new CoreCivilianLayout(layout); }
+    private List<CivilianReport.Resident> residents() {
+        return menu.civilianReport() == null ? List.of() : menu.civilianReport().residents();
+    }
+    private CivilianReport.Resident selectedResident() {
+        return residents().stream().filter(row -> row.id().equals(selectedCivilian)).findFirst().orElse(null);
+    }
+    private void moveCivilianPage(int direction) {
+        var rows = residents();
+        int page = Math.max(0, Math.min(civilianLayout().pages(rows.size()) - 1, civilianPage + direction));
+        if (!rows.isEmpty()) selectedCivilian = rows.get(page * civilianLayout().rows()).id();
+        civilianPage = page;
+        updateControlState();
+        if (civilianRows.length > 0 && civilianRows[0].visible) setFocused(civilianRows[0]);
+    }
+
+    private CoreLootGalleryLayout lootGalleryLayout() { return new CoreLootGalleryLayout(layout); }
+
+    private List<ItemStack> lootPreviewPool() {
+        var tier = LootBoxItem.Tier.values()[previewTier];
+        return lootPools.computeIfAbsent(tier, LootBoxItem::armoryPreviews);
+    }
+
+    private void openLootGallery(int box) {
+        previewBox = box;
+        previewTier = Math.max(CoreLoot.floorTier(box), previewTier);
+        lootPage = 0;
+        confirmBox = -1;
+        showingLootGallery = true;
+        updateControlState();
+        setFocused(lootTiers[previewTier]);
+    }
+
+    private void closeLootGallery() {
+        showingLootGallery = false;
+        confirmBox = -1;
+        updateControlState();
+        setFocused(lootPreviews[previewBox]);
+    }
+
+    private void moveLootPage(int direction) {
+        lootPage = Math.max(0, Math.min(lootGalleryLayout().pages(lootPreviewPool().size()) - 1, lootPage + direction));
+        updateControlState();
+        if (lootItems.length > 0) setFocused(lootItems[0]);
     }
 
     private CoreBuildingLayout buildingLayout() { return new CoreBuildingLayout(layout); }
@@ -500,6 +615,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             int next = keyboardScroll(intelOffset, intelMaxOffset, Math.max(12, intelBodyH - 12), key);
             if (next >= 0) { intelOffset = next; intelDragging = false; return true; }
         }
+        if (tab == CoreCommandPage.LOOT && showingLootGallery && layout != null) {
+            int next = keyboardScroll(lootPage, lootGalleryLayout().pages(lootPreviewPool().size()) - 1, 1, key);
+            if (next >= 0) { moveLootPage(next - lootPage); return true; }
+        }
+        if (tab == CoreCommandPage.CIVILIANS && layout != null) {
+            int next = keyboardScroll(civilianPage, civilianLayout().pages(residents().size()) - 1, 1, key);
+            if (next >= 0) { moveCivilianPage(next - civilianPage); return true; }
+        }
         if (tab == CoreCommandPage.TREASURY && layout != null) {
             int rows = Math.max(1, (bankRosterHeight() - 26) / 12);
             int next = keyboardScroll(rosterOffset, Math.max(0, menu.members().size() - rows), rows, key);
@@ -583,9 +706,23 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         civilianRecruit.visible = tab == CoreCommandPage.CIVILIANS;
         civilianRecruit.active = canAfford(CoreCivilians.PRICE) && menu.civilians() < CivilianLedger.LIMIT;
         civilianRecruit.setMessage(Component.literal(menu.civilians() >= CivilianLedger.LIMIT
-                ? "Housing full · " + CivilianLedger.LIMIT + " residents"
-                : canAfford(CoreCivilians.PRICE) ? "House a civilian · " + CoreCivilians.PRICE + "e"
+                ? "Resident limit · " + CivilianLedger.LIMIT
+                : canAfford(CoreCivilians.PRICE) ? "Recruit civilian · " + CoreCivilians.PRICE + "e"
                 : "Need " + Math.max(0L, CoreCivilians.PRICE - availableFunds()) + "e in Treasury"));
+        var residents = residents();
+        int selectedIndex = -1;
+        for (int i = 0; i < residents.size(); i++) if (residents.get(i).id().equals(selectedCivilian)) selectedIndex = i;
+        if (selectedIndex < 0 && !residents.isEmpty()) { selectedIndex = 0; selectedCivilian = residents.get(0).id(); }
+        civilianPage = selectedIndex < 0 ? 0 : selectedIndex / civilianLayout().rows();
+        civilianPrevious.visible = civilianNext.visible = civilianCare.visible = tab == CoreCommandPage.CIVILIANS;
+        civilianPrevious.active = civilianPage > 0;
+        civilianNext.active = civilianPage + 1 < civilianLayout().pages(residents.size());
+        civilianCare.setMessage(Component.literal("Care · " + (civilianPage + 1) + "/" + civilianLayout().pages(residents.size())));
+        for (int i = 0; i < civilianRows.length; i++) {
+            int row = civilianPage * civilianRows.length + i;
+            civilianRows[i].visible = tab == CoreCommandPage.CIVILIANS && row < residents.size();
+            if (civilianRows[i].visible) civilianRows[i].show(residents.get(row));
+        }
         ((CoreButton) treasuryShortcut).setDetail(String.format(Locale.ROOT, "%,d", menu.bank()));
         for (int i = 0; i < 4; i++) {
             hire[i].visible = tab == CoreCommandPage.ARMY;
@@ -663,14 +800,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                                     : "Need  ·  " + missing + "e"));
         }
         for (int i = 0; i < 3; i++) {
-            boxes[i].visible = buffs[i].visible = tab == CoreCommandPage.LOOT;
+            boxes[i].visible = buffs[i].visible = lootPreviews[i].visible = tab == CoreCommandPage.LOOT && !showingLootGallery;
             boxes[i].active = waitingTicks == 0 && revealTicks == 0
                     && canAfford(CoreLoot.price(i));
             boxes[i].setMessage(Component.literal(
                     waitingTicks > 0 ? "Waiting..."
                             : revealTicks > 0 ? "Unsealing..."
                             : !canAfford(CoreLoot.price(i)) ? "Need " + Math.max(0L, CoreLoot.price(i) - availableFunds()) + "e"
-                            : (confirmBox == i ? "Confirm  ·  " : "Open  ·  ")
+                            : (confirmBox == i ? "Confirm · " : "Buy · ")
                                     + CoreLoot.price(i) + "e"));
 
             boolean active = minecraft != null && minecraft.player != null
@@ -681,6 +818,24 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                             ? "Need " + Math.max(0L, CoreBuffs.PRICES[i] - availableFunds()) + "e"
                             : "Bless  ·  " + CoreBuffs.PRICES[i] + "e"));
         }
+        boolean galleryVisible = tab == CoreCommandPage.LOOT && showingLootGallery;
+        lootBack.visible = lootPrevious.visible = lootNext.visible = galleryVisible;
+        for (int i = 0; i < lootTiers.length; i++) {
+            lootTiers[i].visible = galleryVisible;
+            lootTiers[i].active = i >= CoreLoot.floorTier(previewBox);
+        }
+        if (galleryVisible) {
+            var pool = lootPreviewPool();
+            int pages = lootGalleryLayout().pages(pool.size());
+            lootPage = Math.max(0, Math.min(lootPage, pages - 1));
+            lootPrevious.active = lootPage > 0;
+            lootNext.active = lootPage + 1 < pages;
+            for (int i = 0; i < lootItems.length; i++) {
+                int item = lootPage * lootItems.length + i;
+                lootItems[i].visible = item < pool.size();
+                if (lootItems[i].visible) lootItems[i].show(pool.get(item), LootBoxItem.Tier.values()[previewTier]);
+            }
+        } else for (var item : lootItems) item.visible = false;
         ensureVisibleFocus();
     }
 
@@ -690,6 +845,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     private void drawTooltips(GuiGraphics g, int mx, int my,
                               int tooltipX, int tooltipY) {
+        lootTooltipBounds = null;
         if (treasuryShortcut.isMouseOver(mx, my)) {
             tooltip(g, String.format(Locale.ROOT, "Faction Treasury: %,d emeralds. Purchases use this balance. Click to deposit or withdraw.", menu.bank()), tooltipX, tooltipY);
             return;
@@ -762,6 +918,17 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             tooltip(g, "Open the Siege Overhaul CurseForge comments page to share feedback or report a problem.",
                     tooltipX, tooltipY);
         }
+        if (tab == CoreCommandPage.LOOT && showingLootGallery) {
+            LootPreviewButton focused = null;
+            for (var item : lootItems) if (item.visible) {
+                if (item.isMouseOver(mx, my)) { lootTooltipBounds = CoreItemTooltip.draw(g, font, item.preview(), width, height, tooltipX, tooltipY); return; }
+                if (item.isFocused()) focused = item;
+            }
+            if (focused != null) lootTooltipBounds = CoreItemTooltip.draw(g, font, focused.preview(), width, height,
+                    Math.round((focused.getX() + focused.getWidth()) * layout.scale()),
+                    Math.round((focused.getY() + focused.getHeight() / 2f) * layout.scale()));
+            return;
+        }
         if (tab == CoreCommandPage.LOOT) {
             for (int i = 0; i < 3; i++) {
                 if (over(mx, my, layout.cardX(0), layout.marketY(i),
@@ -769,7 +936,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     String t = revealBox == i && revealTicks == 0 && !revealed.isEmpty()
                             ? CoreLoot.rarity(revealedTier) + "  |  " + revealed.getCount()
                                     + "x " + revealed.getHoverName().getString()
-                            : "One mystery reward  |  " + CoreLoot.odds();
+                            : "Sealed box rarity: " + CoreLoot.odds(i) + ". Items shows possible equipment; your reward stays hidden until you open the box in your inventory.";
                     tooltip(g, t, tooltipX, tooltipY);
                 }
                 if (over(mx, my, layout.cardX(1), layout.marketY(i),
@@ -806,15 +973,28 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 }
             }
         }
-        if (tab == CoreCommandPage.CIVILIANS && over(mx, my, layout.x() + 10,
-                layout.contentY(), layout.width() - 20, layout.contentBottom() - layout.contentY())) {
-            String reason = menu.civilians() >= CivilianLedger.LIMIT ? "Your faction has reached its resident limit. "
-                    : !canAfford(CoreCivilians.PRICE) ? "Deposit " + emeralds(CoreCivilians.PRICE - availableFunds())
-                            + " in the Treasury to house another resident. " : "";
-            tooltip(g, reason + "Housing costs " + CoreCivilians.PRICE + " Treasury emeralds. Give residents beds, food and workstations. "
-                    + "Each living resident pays one emerald per full in-game day. Taxes pause when stranded or while the core is occupied.",
-                    tooltipX, tooltipY);
-            return;
+        if (tab == CoreCommandPage.CIVILIANS) {
+            for (var row : civilianRows) if (row.visible && (row.isMouseOver(mx, my) || row.isFocused())) {
+                var resident = row.resident();
+                String detail = resident.label() + " · " + CivilianResidentButton.profession(resident) + ". " + resident.status() + ". ";
+                if (resident.loaded()) detail += (resident.bed() ? "Bed remembered. " : "No bed remembered. ")
+                        + (resident.workstation() ? "Workstation remembered. " : "No workstation remembered. ")
+                        + "These are native brain memories, not a housing or workstation availability check. ";
+                else detail += "This report does not load chunks. Unavailable does not confirm death; tax clocks follow the saved ledger. ";
+                CoreItemTooltip.drawText(g, font, List.of(Component.literal(detail)), width, height,
+                        Math.round((row.getX() + row.getWidth()) * layout.scale()),
+                        Math.round((row.getY() + row.getHeight() / 2f) * layout.scale())); return;
+            }
+            if (civilianCare.isMouseOver(mx, my) || civilianCare.isFocused()) {
+                CoreItemTooltip.drawText(g, font, List.of(Component.literal(civilianGuidance(false))), width, height,
+                        Math.round((civilianCare.getX() + civilianCare.getWidth() / 2f) * layout.scale()),
+                        Math.round(civilianCare.getY() * layout.scale())); return;
+            }
+            if (civilianRecruit.isMouseOver(mx, my)) {
+                tooltip(g, "Recruit a native villager for " + CoreCivilians.PRICE
+                        + " Treasury emeralds. Beds, food and workstations must be provided separately. Capacity is a resident limit, not a bed count.",
+                        tooltipX, tooltipY); return;
+            }
         }
         if (tab == CoreCommandPage.DEFENSES) drawBuildingTooltips(g, mx, my, tooltipX, tooltipY);
         if (tab == CoreCommandPage.TERRITORY) {
@@ -942,11 +1122,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         if (tab == CoreCommandPage.ARMY) {
             for (int i = 0; i < 4; i++) drawHire(g, i, mx, my);
         } else if (tab == CoreCommandPage.LOOT) {
+            if (showingLootGallery) drawLootGallery(g);
+            else {
             for (int i = 0; i < 3; i++) {
                 drawLoot(g, i, mx, my);
                 drawBuff(g, i, mx, my);
             }
             drawLootReserve(g);
+            }
         } else if (tab == CoreCommandPage.TREASURY) {
             drawFaction(g);
         } else if (tab == CoreCommandPage.TERRITORY) {
@@ -1436,34 +1619,52 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
     }
 
-    /** Real resident preview, essential figures and bounded guidance share one readable surface. */
+    /** Actual server-observed residents, with explicit loading and unavailable states. */
     private void drawCivilians(GuiGraphics g, int mouseX, int mouseY) {
-        int x = layout.x() + 10, y = layout.contentY(), w = layout.width() - 20;
-        int h = layout.contentBottom() - y - 30;
-        CommandFrame.surface(g, x, y, w, h);
-        int portrait = Math.min(layout.compact() ? 48 : 96, Math.max(24, h - 28));
-        CivilianPortrait.draw(g, x + 8, y + 8, portrait, mouseX, mouseY);
-        int infoX = x + portrait + 18, infoW = w - portrait - 28;
-        text(g, menu.civilians() + " / " + CivilianLedger.LIMIT + " residents", infoX, y + 8, infoW, CommandPalette.TEXT);
-        text(g, "Housing: " + CoreCivilians.PRICE + "e from Treasury", infoX, y + 21, infoW, CommandPalette.ACCENT_GOLD);
-        text(g, "Up to " + menu.civilians() + "e per in-game day", infoX, y + 34, infoW, CommandPalette.TEXT_MUTED);
-        text(g, "Taxes collected: " + String.format(Locale.ROOT, "%,d", menu.totalCivilianTaxes()) + "e",
-                infoX, y + 47, infoW, CommandPalette.ACCENT_EMERALD);
-        int guidanceY = y + Math.max(portrait + 18, 65);
-        int lines = Math.max(0, (y + h - guidanceY - 7) / 10);
-        if (lines > 0) {
-            drawWrappedText(g, civilianGuidance(layout.compact()), x + 10, guidanceY,
-                    w - 20, lines, CommandPalette.TEXT_MUTED);
+        var c = civilianLayout();
+        var report = menu.civilianReport();
+        String counts = menu.civilians() + " / " + CivilianLedger.LIMIT + " residents";
+        if (report != null) counts += " · " + report.loaded() + " loaded · " + (report.residents().size() - report.loaded()) + " unavailable";
+        text(g, counts, c.x() + 3, c.y() + 2, c.width() - 6, CommandPalette.TEXT);
+        text(g, "Taxes collected " + emeralds(menu.totalCivilianTaxes()) + (report == null ? ""
+                : report.taxEligible() ? " · Core tax-eligible" : " · Core taxes paused"),
+                c.x() + 3, c.y() + 14, c.width() - 6, CommandPalette.ACCENT_EMERALD);
+        if (report == null || report.residents().isEmpty()) {
+            CommandFrame.surface(g, c.x(), c.bodyY(), c.width(), c.bodyHeight());
+            text(g, report == null ? "Loading resident details..." : "No faction residents recorded", c.x() + 10, c.bodyY() + 10,
+                    c.width() - 20, CommandPalette.TEXT);
+            drawWrappedText(g, "Recruit a civilian below. Provide beds, food and workstations separately.",
+                    c.x() + 10, c.bodyY() + 25, c.width() - 20, Math.max(1, (c.bodyHeight() - 30) / 10), CommandPalette.TEXT_MUTED);
+            return;
         }
+        if (!c.split()) return; // Compact native model/details are rendered in the single selected row.
+        int x = c.detailX(), y = c.bodyY(), w = c.detailWidth(), h = c.bodyHeight();
+        CommandFrame.surface(g, x, y, w, h);
+        var resident = selectedResident();
+        if (resident == null) return;
+        int portrait = resident.loaded() ? Math.min(96, h - 20) : 0;
+        if (resident.loaded()) CivilianPortrait.draw(g, x + 8, y + 8, portrait, mouseX, mouseY, resident);
+        int textX = x + (resident.loaded() ? portrait + 18 : 10), textW = x + w - textX - 8;
+        text(g, resident.label(), textX, y + 8, textW, CommandPalette.TEXT);
+        text(g, CivilianResidentButton.profession(resident), textX, y + 22, textW, CommandPalette.TEXT_MUTED);
+        text(g, resident.status(), textX, y + 38, textW, resident.paused() ? CommandPalette.ACCENT_GOLD : CommandPalette.TEXT_MUTED);
+        if (resident.loaded()) {
+            text(g, resident.bed() ? "Bed remembered" : "No bed remembered", textX, y + 54, textW, CommandPalette.TEXT_MUTED);
+            text(g, resident.workstation() ? "Workstation remembered" : "No workstation remembered", textX, y + 68, textW, CommandPalette.TEXT_MUTED);
+        }
+        int careY = y + Math.max(88, portrait + 20);
+        drawWrappedText(g, "Food stocks and housing capacity are not tracked. " + civilianGuidance(true),
+                x + 10, careY, w - 20, Math.max(0, (y + h - careY - 8) / 10), CommandPalette.TEXT_MUTED);
     }
 
-    /** Compact copy keeps the care and tax conditions complete instead of cutting a paragraph. */
+    /** Complete details remain accessible with keyboard focus on the Care control at every scale. */
     static String civilianGuidance(boolean compact) {
         if (compact) return "Provide beds, food and workstations. Taxes pause if stranded or the core is occupied.";
-        return "Give residents beds, food and workstations. "
-                + "Name, profession and appearance are assigned on arrival. "
-                + "Each living resident pays one emerald per full in-game day. "
-                + "Taxes pause if stranded or the core is occupied.";
+        return "Provide beds, food and matching workstations separately. Native villagers keep their trades and breeding. "
+                + "Each registered living resident pays one emerald per full in-game day. "
+                + "Taxes pause if stranded, or the core is missing, unclaimed or occupied. "
+                + "Unloaded residents retain their saved tax clocks; unloaded is not dead. "
+                + "Food stocks and housing capacity are not tracked. Bed and workstation labels are native brain memories, not availability checks.";
     }
 
     private void drawPerimeter(GuiGraphics g) {
@@ -1825,7 +2026,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         boolean done = revealBox == i && revealTicks == 0 && !revealed.isEmpty();
 
         if (layout.compact()) {
-            if (done) g.renderItem(revealed, x + 4, y + h - 19);
             text(g, done ? revealed.getHoverName().getString() : CoreLoot.NAMES[i],
                     x + 8, y + 5, w - 16,
                     done ? CommandPalette.tier(revealedTier) : CommandPalette.TEXT);
@@ -1844,7 +2044,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
 
         String lootState = opening ? "OPENING"
-                : done ? CoreLoot.rarity(revealedTier).toUpperCase(Locale.ROOT)
+                : done ? "RECEIVED"
                 : "SEALED";
         int stateColor = opening ? CommandPalette.ACCENT_ARCANE
                 : done ? CommandPalette.tier(revealedTier)
@@ -1852,11 +2052,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         int badgeWidth = drawBadge(g, lootState, x + w - 6, y + 5, stateColor);
         text(g, CoreLoot.NAMES[i], textLeft, y + 6,
                 Math.max(1, x + w - textLeft - badgeWidth - 10), CommandPalette.TEXT);
-        String subtitle = opening ? "Unsealing the seal..."
+        String subtitle = opening ? "Receiving sealed box..."
                 : done ? revealed.getHoverName().getString()
                 : CoreLoot.floorTier(i) > 0
                         ? CoreLoot.rarity(CoreLoot.floorTier(i)) + " floor  |  Epic ceiling"
-                        : "Sealed Loot Box  |  " + CoreLoot.odds();
+                        : "Sealed box  |  " + CoreLoot.odds(i);
         text(g, subtitle, textLeft, y + 17, x + w - textLeft - 6,
                 opening ? CommandPalette.ACCENT_ARCANE
                         : done ? CommandPalette.tier(revealedTier)
@@ -1873,41 +2073,34 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
     }
 
-    /** Free band under the market becomes a readable reliquary protocol. */
+    private void drawLootGallery(GuiGraphics g) {
+        var gallery = lootGalleryLayout();
+        text(g, "POSSIBLE REWARDS · " + CoreLoot.NAMES[previewBox], gallery.x() + 76, gallery.y() + 5,
+                gallery.width() - 76, CommandPalette.ACCENT_ARCANE);
+        String count = (lootPage + 1) + " / " + gallery.pages(lootPreviewPool().size());
+        text(g, count, gallery.x() + 88, gallery.actionY() + 5, gallery.width() - 176, CommandPalette.TEXT_MUTED);
+    }
+
+    /** Native examples in the roomy free band; the full gallery works at every scale. */
     private void drawLootReserve(GuiGraphics g) {
         int h = layout.marketFreeHeight();
         if (h < 16) return;
-        int x = layout.x() + 10;
-        int w = layout.width() - 20;
-        int y = layout.marketFreeTop();
+        int x = layout.x() + 10, w = layout.width() - 20, y = layout.marketFreeTop();
         CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_STEEL);
-        int badgeWidth = 0;
-        if (!layout.compact() && w >= 260) {
-            badgeWidth = drawBadge(g, "REWARDS HIDDEN", x + w - 7, y + 5,
-                    CommandPalette.ACCENT_ARCANE);
+        text(g, "OLYMPIAN ARMORY · POSSIBLE REWARDS", x + 9, y + 5, w - 18, CommandPalette.ACCENT_STEEL);
+        if (h < 60) return;
+        var pool = lootPools.computeIfAbsent(LootBoxItem.Tier.EPIC, LootBoxItem::armoryPreviews);
+        int[] picks = {0, 3, 4, 6}; // Stable eligible epic examples, not rolled outcomes.
+        int cellW = (w - 18) / picks.length;
+        for (int i = 0; i < picks.length; i++) {
+            var item = pool.get(picks[i]);
+            int left = x + 9 + i * cellW;
+            ItemIcons.draw(g, item, left, y + 22, 24);
+            text(g, item.getHoverName().getString(), left + 28, y + 24, cellW - 32, CommandPalette.TEXT);
+            text(g, "Epic · possible", left + 28, y + 37, cellW - 32, CommandPalette.tier(3));
         }
-        text(g, "OLYMPIAN ARMORY", x + 9, y + 7,
-                Math.max(1, w - badgeWidth - 24), CommandPalette.ACCENT_STEEL);
-        if (h >= 30) {
-            text(g, "Every box holds enchanted Olympian equipment and supplies. Open it to discover your prize.",
-                    x + 9, y + 19, w - 18, CommandPalette.TEXT_MUTED);
-        }
-        if (h >= 54) {
-            CommandFrame.divider(g, x + 9, y + 35, w - 18);
-            text(g, "FIELD", x + 9, y + 42, w / 3 - 12, CommandPalette.TEXT);
-            text(g, "VETERAN", x + w / 3, y + 42, w / 3 - 12, CommandPalette.ACCENT_EMERALD);
-            text(g, "ROYAL", x + (w * 2) / 3, y + 42, w / 3 - 12, CommandPalette.ACCENT_GOLD);
-        }
-        if (h >= 62) {
-            text(g, "Any rarity", x + 9, y + 53, w / 3 - 12, CommandPalette.TEXT_DIM);
-            text(g, "Uncommon floor", x + w / 3, y + 53, w / 3 - 12, CommandPalette.TEXT_DIM);
-            text(g, "Rare floor", x + (w * 2) / 3, y + 53, w / 3 - 12, CommandPalette.TEXT_DIM);
-        }
-        if (h >= 90) {
-            CommandFrame.divider(g, x + 9, y + 72, w - 18);
-            text(g, "Paid from the faction Treasury  ·  Equipment, provisions and distinct supplies",
-                    x + 9, y + 79, w - 18, CommandPalette.TEXT_DIM);
-        }
+        if (h >= 76) text(g, "Use Items to browse each chest. Your sealed reward stays hidden until opened.",
+                x + 9, y + 59, w - 18, CommandPalette.TEXT_MUTED);
     }
 
     private void drawBuff(GuiGraphics g, int i, int mouseX, int mouseY) {
@@ -2103,6 +2296,16 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             movePage(delta > 0 ? -1 : 1);
             return true;
         }
+        if (tab == CoreCommandPage.LOOT && showingLootGallery && delta != 0 && CoreTabStrip.contains(x, y,
+                lootGalleryLayout().x(), lootGalleryLayout().gridY(), lootGalleryLayout().width(),
+                lootGalleryLayout().actionY() - lootGalleryLayout().gridY())) {
+            moveLootPage(delta > 0 ? -1 : 1);
+            return true;
+        }
+        if (tab == CoreCommandPage.CIVILIANS && delta != 0 && CoreTabStrip.contains(x, y,
+                civilianLayout().x(), civilianLayout().bodyY(), civilianLayout().width(), civilianLayout().bodyHeight())) {
+            moveCivilianPage(delta > 0 ? -1 : 1); return true;
+        }
         if (tab == CoreCommandPage.TREASURY && CoreTabStrip.contains(x, y,
                 layout.x() + 10, bankRosterY(), layout.width() - 20, bankRosterHeight())) {
             int count = menu.members().size();
@@ -2190,6 +2393,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     @Override
     public void onClose() {
         buildingReport.update(false, this::action);
+        updateCivilianReport(false);
         EntityPortrait.clear();
         CivilianPortrait.clear();
         super.onClose();
@@ -2198,6 +2402,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     @Override
     public void removed() {
         buildingReport.update(false, this::action);
+        updateCivilianReport(false);
         super.removed();
     }
 

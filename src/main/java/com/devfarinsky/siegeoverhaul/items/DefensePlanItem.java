@@ -85,13 +85,17 @@ public final class DefensePlanItem extends Item {
         if (!(entity instanceof ServerPlayer player) || level.getGameTime() % 20 != 0
                 || (!selected && player.getOffhandItem() != stack)) return;
         var selection = selection(stack, player);
-        if (selection == null) { DefensePreview.clear(stack); return; }
+        // Leaving the site/dimension, a temporarily different owner, or an outdated
+        // quote hides this review; it must not erase the saved placement intent.
+        // Explicit use still checks price/geometry and commissions against fresh terrain.
+        if (selection == null) return;
         DefensePreview.updateProblem(stack, DefenseStructures.prepare(player, selection.origin(), selection.facing(), kind).problem());
     }
     @Override public void appendHoverText(ItemStack stack, Level level, List<Component> tooltip, TooltipFlag flag) {
         tooltip.add(Component.literal(kind.description).withStyle(ChatFormatting.GRAY));
         if (kind.modular()) tooltip.add(Component.literal("Snaps to a 5 x 5 grid. Join open ends at the same ground height.").withStyle(ChatFormatting.AQUA));
         tooltip.add(Component.literal(kind.dimensions()).withStyle(ChatFormatting.GOLD));
+        tooltip.add(Component.literal("Saved until used or cancelled. The site and price are checked again.").withStyle(ChatFormatting.AQUA));
         tooltip.add(Component.literal("Use ground to preview; use the same anchor again to confirm.").withStyle(ChatFormatting.GRAY));
         tooltip.add(Component.literal(kind.modular() ? "Sneak-use rotates. Use in air cancels. Grid anchor is the tile center." : "Sneak-use rotates. Use in air cancels. Builds away from the anchor.").withStyle(ChatFormatting.GRAY));
         tooltip.add(Component.literal("Requires your idle builder within 16 blocks and Workers storage.").withStyle(ChatFormatting.GRAY));

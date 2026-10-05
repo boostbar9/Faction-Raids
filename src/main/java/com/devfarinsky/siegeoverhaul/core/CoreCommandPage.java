@@ -7,7 +7,7 @@ public enum CoreCommandPage {
     TREASURY("Treasury", "Faction Treasury", "Deposit emeralds, manage shared funds and view recent activity"),
     TERRITORY("Territory", "Territory upgrades", "Buy permanent upgrades for your faction"),
     DEFENSES("Building", "Building", "Plan a perimeter, place a structure and follow your builders"),
-    CIVILIANS("Civilians", "Civilians", "House residents, unlock trades and collect daily taxes"),
+    CIVILIANS("Civilians", "Civilians", "Manage residents, review native care details and track collected taxes"),
     INTEL("Intel", "Intel", "Find units, enemy lore and practical defense advice");
 
     private final String label, title, description;

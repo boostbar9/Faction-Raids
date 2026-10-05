@@ -42,6 +42,17 @@ public final class CoreLoot {
 
     public static String odds() { return "Common 50% | Uncommon 30% | Rare 15% | Epic 5%"; }
 
+    /** The price floors combine lower tier probabilities; never advertise impossible rolls. */
+    public static String odds(int box) {
+        if (price(box) < 0) throw new IllegalArgumentException("Invalid loot box");
+        int[] counts = new int[4];
+        for (int roll = 0; roll < 100; roll++) counts[tierForBox(box, roll)]++;
+        var labels = new java.util.ArrayList<String>();
+        for (int tier = 0; tier < counts.length; tier++)
+            if (counts[tier] > 0) labels.add(rarity(tier) + " " + counts[tier] + "%");
+        return String.join(" | ", labels);
+    }
+
     public static String rarity(int tier) {
         return switch (tier) { case 0 -> "Common"; case 1 -> "Uncommon"; case 2 -> "Rare"; default -> "Epic"; };
     }
