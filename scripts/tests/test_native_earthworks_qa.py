@@ -261,6 +261,16 @@ class RuntimeSourceContractTest(unittest.TestCase):
         self.assertIn('BuildBlockParse.parseBlock(Blocks.DIRT)', qa)
         self.assertIn('BlockPos.betweenClosed(target.offset(-2, -2, -2), target.offset(2, 2, 2))', fixture)
 
+    def test_setup_diagnostics_distinguish_grounding_and_treasury_without_changing_them(self):
+        qa = (ROOT / 'src/nativeEarthworksQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeEarthworksQa.java').read_text()
+        for field in ['actualOnGround', 'noAi', 'noGravity', 'velocity', 'bodyBounds', 'followState', 'nativeGoals',
+                      'bodyBlocks', 'bodyNoCollision', 'sturdyUp', 'hasSettlementTimestamp', 'settlementGameTime',
+                      'elapsedSetupTicks', 'expectedPreFundingBalance']:
+            self.assertIn('"' + field + '"', qa)
+        self.assertNotIn('setOnGround', qa)
+        self.assertNotIn('setNoGravity', qa)
+        self.assertEqual(qa.count('setNoAi(false)'), 1)
+
     def test_read_only_workflow_and_real_runtime_gate(self):
         workflow = (ROOT / '.github/workflows/native-earthworks-qa.yml').read_text()
         self.assertIn('contents: read', workflow)

@@ -149,7 +149,9 @@ public final class NativeEarthworksQa {
         long now = level.getGameTime();
         if (fixture == null) { fixture = setup(level, owner); setupTick = now; return 0; }
         if (manifest == null) {
-            require(now - setupTick < 200, "Ordinary startup/grounding/treasury setup did not settle");
+            require(now - setupTick < 200, "Ordinary startup/grounding/treasury setup did not settle: grounded="
+                    + fixture.builder().onGround() + ", noAi=" + fixture.builder().isNoAi()
+                    + ", treasuryClock=" + core(level).contains("BankInterestAt", Tag.TAG_LONG));
             if (now - setupTick < 30 || !fixture.builder().onGround() || !core(level).contains("BankInterestAt", Tag.TAG_LONG)) return 0;
             freezeUnrelatedStartup(level, fixture.builder());
             require(FactionBank.balance(core(level)) == 0, "Unexpected unfunded treasury balance");
@@ -342,10 +344,42 @@ public final class NativeEarthworksQa {
         if (fixture != null) {
             result.put("sample", sample(level).evidence()); result.put("builderData", fixture.builder().getPersistentData().toString());
             result.put("nativeRequests", fixture.builder().neededItems.size());
+            var worker = fixture.builder(); var body = worker.getBoundingBox();
+            result.put("actualOnGround", worker.onGround()); result.put("noAi", worker.isNoAi());
+            result.put("noGravity", worker.isNoGravity()); result.put("velocity", vector(worker.getDeltaMovement()));
+            result.put("bodyBounds", List.of(body.minX, body.minY, body.minZ, body.maxX, body.maxY, body.maxZ));
+            result.put("followState", worker.getFollowState());
+            result.put("nativeGoals", worker.goalSelector.getAvailableGoals().stream().map(goal -> Map.of(
+                    "class", goal.getGoal().getClass().getName(), "priority", goal.getPriority(), "running", goal.isRunning())).toList());
+            var bodyCells = new ArrayList<Map<String, Object>>(); boolean bodyLoaded = true;
+            for (BlockPos pos : BlockPos.betweenClosed((int)Math.floor(body.minX), (int)Math.floor(body.minY), (int)Math.floor(body.minZ),
+                    (int)Math.floor(Math.nextDown(body.maxX)), (int)Math.ceil(body.maxY) - 1, (int)Math.floor(Math.nextDown(body.maxZ)))) {
+                boolean loaded = level.hasChunkAt(pos); bodyLoaded &= loaded;
+                bodyCells.add(Map.of("pos", List.of(pos.getX(), pos.getY(), pos.getZ()), "loaded", loaded,
+                        "state", loaded ? level.getBlockState(pos).toString() : "unloaded"));
+            }
+            result.put("bodyBlocks", bodyCells);
+            result.put("bodyNoCollision", bodyLoaded ? level.noCollision(worker, body) : "not-read-unloaded");
+            BlockPos floor = worker.blockPosition().below(); boolean floorLoaded = level.hasChunkAt(floor);
+            result.put("floor", Map.of("pos", List.of(floor.getX(), floor.getY(), floor.getZ()), "loaded", floorLoaded,
+                    "state", floorLoaded ? level.getBlockState(floor).toString() : "unloaded",
+                    "sturdyUp", floorLoaded && level.getBlockState(floor).isFaceSturdy(level, floor, net.minecraft.core.Direction.UP)));
+            var owner = level.getServer().getPlayerList().getPlayer(ownerId);
+            if (owner != null) result.put("owner", Map.of("position", vector(owner.position()), "onGround", owner.onGround(),
+                    "velocity", vector(owner.getDeltaMovement()), "noGravity", owner.isNoGravity(), "mayBuild", owner.mayBuild()));
+            var bank = core(level); var treasury = new LinkedHashMap<String, Object>();
+            treasury.put("balance", FactionBank.balance(bank)); treasury.put("hasSettlementTimestamp", bank.contains("BankInterestAt", Tag.TAG_LONG));
+            treasury.put("settlementGameTime", bank.getLong("BankInterestAt")); treasury.put("interestRemainder", bank.getLong("BankInterestRemainder"));
+            treasury.put("civilianTaxesTotal", bank.getLong("CivilianTaxesTotal")); treasury.put("currentGameTime", level.getGameTime());
+            treasury.put("setupGameTime", setupTick); treasury.put("elapsedSetupTicks", level.getGameTime() - setupTick);
+            treasury.put("minimumSetupTicks", 30); treasury.put("maximumSetupTicks", 200); treasury.put("expectedPreFundingBalance", 0);
+            treasury.put("expectedClockPredicate", "Real BankInterestAt long exists after ordinary RaidEvents settlement");
+            result.put("treasurySetup", treasury);
             if (manifest != null && job(level) != null && job(level).runtimeGoal != null) result.put("workBlocker", job(level).runtimeGoal.status());
         }
         return result;
     }
+    private static List<Double> vector(Vec3 position) { return List.of(position.x, position.y, position.z); }
     private static EarthworksJobLedger.Job job(ServerLevel level) { return EarthworksJobLedger.get(level).job(manifest.header().project()); }
     private static CompoundTag core(ServerLevel level) {
         var core = RaidSavedData.get(level.getServer()).siegeCores.get("team:" + FACTION); require(core != null, "Authoritative core missing"); return core;
