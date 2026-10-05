@@ -63,6 +63,7 @@ abstract class ProtectedInventoryGoal extends Goal {
     final Goal delegate;
     final Session session;
     private boolean started, protectedLifecycle, stopFailed;
+    private Object earthworksIdentity;
     protected List<Container> writes = List.of();
 
     ProtectedInventoryGoal(BuilderEntity worker, Goal delegate, Session session) {
@@ -102,7 +103,7 @@ abstract class ProtectedInventoryGoal extends Goal {
     }
     private boolean check(boolean start) {
         try {
-            String context=NativeConstructionGuard.storageProblem(worker, java.util.Set.of());
+            String context=EarthworksInventoryAccess.problem(worker, java.util.Set.of());
             if(context==null)context=start?beforeStart():beforeTick();
             if(context!=null){NativeConstructionGuard.pauseStorage(worker,context);return false;}
             return true;
@@ -113,15 +114,19 @@ abstract class ProtectedInventoryGoal extends Goal {
     @Override public boolean canUse() {
         if(!session.ready(this)||!session.admitted(this))return false;
         if(!delegate.canUse())return false;
-        return !NativeConstructionGuard.hasProtectedReceipt(worker)||check(true);
+        return !EarthworksInventoryAccess.guarded(worker)||check(true);
     }
     @Override public boolean canContinueToUse() { return started && delegate.canContinueToUse(); }
     @Override public boolean isInterruptable() { return delegate.isInterruptable(); }
     @Override public boolean requiresUpdateEveryTick() { return delegate.requiresUpdateEveryTick(); }
     @Override public void start() {
         if(started || !session.ready(this)||!session.admitted(this))return;
-        if(NativeConstructionGuard.hasProtectedReceipt(worker)&&!check(true))return;
-        protectedLifecycle=NativeConstructionGuard.hasProtectedReceipt(worker);
+        if(EarthworksInventoryAccess.guarded(worker)&&!check(true))return;
+        Object identity;
+        try { identity=EarthworksInventoryAccess.identity(worker); }
+        catch(RuntimeException|LinkageError unavailable) { return; }
+        protectedLifecycle=EarthworksInventoryAccess.guarded(worker);
+        earthworksIdentity=identity;
         started=true;
         if(protectedLifecycle)session.claim(this);
         if(!protectedLifecycle){delegate.start();return;}
@@ -149,23 +154,27 @@ abstract class ProtectedInventoryGoal extends Goal {
             if(problem!=null){NativeConstructionGuard.pauseStorage(worker,problem);return false;}
             callbackFence();delegate.stop();stopped();
             ProtectedInventoryCleanup.complete(worker.getPersistentData(),kind());
-            protectedLifecycle=false;session.release(this);return true;
+            protectedLifecycle=false;earthworksIdentity=null;session.release(this);return true;
         }
         catch(RuntimeException|LinkageError unavailable) {
             failedCallback(); // A partly completed payment/timer callback must never be replayed blindly.
             NativeConstructionGuard.pauseStorage(worker,"Paused: native inventory cleanup needs review");return false;
         }
     }
+    private boolean sameEarthworksIdentity() {
+        try { return java.util.Objects.equals(earthworksIdentity, EarthworksInventoryAccess.identity(worker)); }
+        catch(RuntimeException|LinkageError unavailable) { return false; }
+    }
     @Override public void tick() {
         if(!started)return;
         // Cancellation can remove the receipt before GoalSelector calls stop.
         // A lifecycle admitted under protection must finish through guarded
         // cleanup, never turn into a legacy transfer halfway through its work.
-        if(protectedLifecycle && !NativeConstructionGuard.hasProtectedReceipt(worker)) {
+        if(protectedLifecycle && (!EarthworksInventoryAccess.guarded(worker) || !sameEarthworksIdentity())) {
             stop();return;
         }
         if(!session.ready(this)||!session.admitted(this))return; // Shared across all adapters: no late old stop can finalize a new transfer.
-        if(!NativeConstructionGuard.hasProtectedReceipt(worker)){delegate.tick();return;}
+        if(!EarthworksInventoryAccess.guarded(worker)){delegate.tick();return;}
         writes=List.of();
         if(!check(false))return;
         try {

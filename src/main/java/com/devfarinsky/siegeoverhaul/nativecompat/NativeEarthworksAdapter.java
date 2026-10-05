@@ -280,6 +280,8 @@ public final class NativeEarthworksAdapter {
     }
     private static String stockKey(Stock value) { return hash(value.item(), value.metadata(), value.damage()); }
     private static boolean digest(String value) { return value != null && value.matches("[0-9a-f]{64}"); }
+    static String evidenceHash(Object... values) { return hash(values); }
+
     private static String hash(Object... values) {
         try {
             MessageDigest hash = MessageDigest.getInstance("SHA-256");

@@ -40,6 +40,7 @@ final class ProtectedTransferCapacity {
     }
 
     static String requestsProblem(BuilderEntity worker) {
+        if (EarthworksInventoryAccess.selected(worker)) return EarthworksSupplyDemand.requestsProblem(worker);
         if (worker.neededItems == null || worker.neededItems.size() > MAX_REQUESTS)
             return "Paused: native supply request list is unsupported";
         var seen = new IdentityHashMap<NeededItem, Boolean>();
