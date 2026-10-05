@@ -93,6 +93,7 @@ final class NativeBuildingGameplay {
     private static String coreHudFaction;
     private static List<ConstructionReport.Job> coreHudExpectedJobs;
     private static BlockPos plantCell;
+    private static final Map<String, Object> PLANT_EVIDENCE = new LinkedHashMap<>();
     private static BlockPos sameStateEditCell;
     private static Map<Long, BlockState> perimeterBeforeEdit;
     private static boolean recordedNativeRequestMetadata;
@@ -304,6 +305,8 @@ final class NativeBuildingGameplay {
                 builder(level).setNoAi(true); // Transaction-only perimeter; wall AI below is enabled.
                 FactionBank.credit(core(owner), 2000); RaidSavedData.get(owner.server).setDirty();
                 RESULT.put("admissionReviews", NativeBuilderAdmissionContracts.verify(level, owner, fixture, idleBuilder));
+                if (NativeSizeableFoliageContracts.enabled())
+                    RESULT.put("sizeableFoliageReviews", NativeSizeableFoliageContracts.verifyReviews(level, owner, fixture, idleBuilder));
                 check("Real free manual/perimeter review identifies neighboring and paired-plant blockers without changing Treasury, worker receipts or inventory");
                 require(PerimeterConstruction.review(owner, fixture.corePos(), 1), "Real perimeter review rejected");
                 require(balance(owner) == 2000 && protectedAreas(level) == 0, "Free perimeter review changed money/jobs");
@@ -475,10 +478,11 @@ final class NativeBuildingGameplay {
                         "Plant fixture or its support is outside the intended native mutation contract");
                 // One pre-acceptance fixture seed only. The real native worker must remove it later.
                 level.setBlock(plantCell.below(), Blocks.GRASS_BLOCK.defaultBlockState(), 3);
-                level.setBlock(plantCell, Blocks.DANDELION.defaultBlockState(), 3);
+                level.setBlock(plantCell, NativeSizeableFoliageContracts.plantState(), 3);
                 assertLivePlant(level);
-                RESULT.put("singleCellPlant", Map.of("cell", plantCell.toShortString(), "plant", "minecraft:dandelion",
+                PLANT_EVIDENCE.putAll(Map.of("cell", plantCell.toShortString(), "plant", NativeSizeableFoliageContracts.plantId(),
                         "support", plantCell.below().toShortString(), "supportOutsideMutationPlan", true));
+                RESULT.put("singleCellPlant", PLANT_EVIDENCE);
                 FactionBank.debit(core(owner), 1936); RaidSavedData.get(owner.server).setDirty();
                 require(DefenseStructures.givePlan(owner, DefenseBlueprint.Kind.WALL.ordinal()), "Free manual plan delivery failed");
                 select(owner, ModItems.defensePlan(DefenseBlueprint.Kind.WALL).get());
@@ -495,6 +499,7 @@ final class NativeBuildingGameplay {
                         "Free manual preview changed Treasury, plan or job count");
                 require(DefensePreview.read(owner.getMainHandItem(), DefenseBlueprint.Kind.WALL, level.dimension().location(), owner.getUUID(), now) != null,
                         "Actual plan use did not create an owner-bound preview");
+                PLANT_EVIDENCE.put("survivedFreePreview", true);
                 advance(now, 7, 20); return Action.USE_BLOCK;
             }
             case 7 -> {
@@ -502,6 +507,7 @@ final class NativeBuildingGameplay {
                 require(balance(owner) == 0 && protectedAreas(level) == 0 && owner.getMainHandItem().getItem() instanceof DefensePlanItem,
                         "Insufficient Treasury failure spent money, consumed plan or leaked a job");
                 require(!ConstructionEditLedger.get(level).reserves(plannedPositions()), "Failed commission leaked reservation");
+                PLANT_EVIDENCE.put("survivedUnpaidConfirmation", true);
                 check("Actual free manual preview and insufficient-Treasury confirmation preserve funds, plan and reservations");
                 FactionBank.credit(core(owner), 1000); RaidSavedData.get(owner.server).setDirty();
                 builder(level).setNoAi(false);
@@ -539,8 +545,9 @@ final class NativeBuildingGameplay {
                         "Manual job was not paid/activated or plan remains");
                 require(!builder(level).isNoAi(), "Native builder AI is disabled");
                 require(hasAcceptedPlant(level) && !NativeConstructionGuard.reserves(level, List.of(plantCell.below())),
-                        "Paid native acceptance did not record the live dandelion or reserved its support for mutation");
-                check("Persistent single-cell dandelion survives free/unpaid review and is recorded intact in the real paid acceptance snapshot");
+                        "Paid native acceptance did not record the live single-cell plant or reserved its support for mutation");
+                PLANT_EVIDENCE.put("paidAcceptanceRecorded", true);
+                check("Persistent single-cell plant survives free/unpaid review and is recorded intact in the real paid acceptance snapshot");
                 NativeHollowWallOracle.assertManualCavitiesAir(level, fixture.wallAnchor());
                 CompoundTag paidRecipe = area(level).getPersistentData().getCompound("SiegeProtectedConstructionV1");
                 var acceptedWall = AcceptedConstructionPlan.load(paidRecipe);
@@ -571,9 +578,10 @@ final class NativeBuildingGameplay {
                 if (count <= 0 || now - lastChange < 100 || builder(level).neededItems.isEmpty()) return Action.NONE;
                 require(count < fixture.expectedPlan().blocks().size(), "Finite initial stock unexpectedly completed wall");
                 stockSnapshot(level, "first-material-stall");
-                require(hasClearedPlant(level) && !level.getBlockState(plantCell).is(Blocks.DANDELION),
+                require(hasClearedPlant(level) && !level.getBlockState(plantCell).equals(NativeSizeableFoliageContracts.plantState()),
                         "Actual native clearing did not remove and record the accepted single-cell plant");
-                check("Actual native break path clears the accepted dandelion and writes its cleared-cell receipt");
+                PLANT_EVIDENCE.put("nativeClearedReceipt", true);
+                check("Actual native break path clears the accepted single-cell plant and writes its cleared-cell receipt");
                 conservation(level);
                 check("Actual native builder places from finite chest stock, then stalls with material request");
                 RESULT.put("initialStockPlacedBlocks", count);
@@ -692,6 +700,7 @@ final class NativeBuildingGameplay {
                                 && ConstructionEditLedger.get(level).sameGeneration(ledgerGeneration)
                                 && NativeConstructionGuard.hasReservation(level, jobId), "Restart lost paid job or durable reservation");
                 require(hasAcceptedPlant(level) && hasClearedPlant(level), "Native plant before/cleared receipts did not survive real reload");
+                PLANT_EVIDENCE.put("receiptsSurvivedReload", true);
                 check("Single-cell native plant clearance and original acceptance receipts survive real world reload");
                 check("Mid-job real world restart preserves exact cells, paid state and durable ledger identity");
                 require(level.getBlockState(cavityCell).is(Blocks.STONE)
@@ -721,7 +730,10 @@ final class NativeBuildingGameplay {
                 require(level.getBlockState(plantCell.below()).is(Blocks.GRASS_BLOCK)
                                 || level.getBlockState(plantCell.below()).is(Blocks.DIRT),
                         "Native worker excavated the plant support outside its mutation plan");
-                check("Native clearing replaces only the accepted dandelion with planned cobblestone, preserving its support and exact material totals");
+                PLANT_EVIDENCE.put("nativePlacedExpectedBlock", true);
+                PLANT_EVIDENCE.put("supportPreserved", true);
+                PLANT_EVIDENCE.put("exactMaterialConservation", true);
+                check("Native clearing replaces only the accepted single-cell plant with planned cobblestone, preserving its support and exact material totals");
                 check("Restoring original raw fixture clearance resumes protected native work without another charge");
                 NativeHollowWallOracle.assertManualCavitiesAir(level, fixture.wallAnchor());
                 for (int x = -1; x <= 1; x++) for (int z = -1; z <= 1; z++) {
@@ -818,7 +830,7 @@ final class NativeBuildingGameplay {
     }
     private static void assertLivePlant(ServerLevel level) {
         BlockState plant = level.getBlockState(plantCell);
-        require(plant.is(Blocks.DANDELION) && plant.canSurvive(level, plantCell)
+        require(plant.equals(NativeSizeableFoliageContracts.plantState()) && plant.canSurvive(level, plantCell)
                         && level.getBlockState(plantCell.below()).is(Blocks.GRASS_BLOCK),
                 "Seeded single-cell plant did not persist with valid grass-block support until acceptance");
     }
@@ -827,7 +839,7 @@ final class NativeBuildingGameplay {
         for (var entry : receipt.getList("Before", Tag.TAG_COMPOUND)) {
             CompoundTag cell = (CompoundTag) entry;
             if (cell.getLong("Pos") == plantCell.asLong())
-                return cell.getCompound("State").equals(NbtUtils.writeBlockState(Blocks.DANDELION.defaultBlockState()));
+                return cell.getCompound("State").equals(NbtUtils.writeBlockState(NativeSizeableFoliageContracts.plantState()));
         }
         return false;
     }

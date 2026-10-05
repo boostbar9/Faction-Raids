@@ -435,6 +435,7 @@ public final class NativeBuildingQa {
         REPORT.put("hudFixture", "Actual CoreHireScreen/client CoreHireMenu with clearly labeled sample report rows; no real core/claim or purchase, no server-authoritative report claim");
         REPORT.put("loadedModVersions", mods);
         REPORT.put("loadedCompanionArtifacts", artifacts);
+        if (NativeSizeableFoliageContracts.enabled()) REPORT.put("sizeableFoliageRuntime", NativeSizeableFoliageContracts.runtime());
         REPORT.put("nativeApiClasses", List.of(WorkerAreaRenderer.class.getName(),
                 com.talhanation.workers.entities.workarea.BuildArea.class.getName(),
                 com.talhanation.workers.entities.BuilderEntity.class.getName(), ClientEvent.class.getName()));
