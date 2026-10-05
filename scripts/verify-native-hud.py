@@ -103,7 +103,8 @@ def verify(root):
             assert all(value.startswith('com.talhanation.') for value in view['nativePortraits']), name
         if name in {f'{prefix}-loot.png' for prefix in MATRICES}:
             assert view['sealedLootPresentation'] == {
-                'rendered': True, 'nonEmptyRewardStacks': 0, 'possibleItemControls': 0}, name
+                'rendered': True, 'sealedChestCards': 3,
+                'nonEmptyRewardStacks': 0, 'possibleItemControls': 0}, name
         if name.endswith('-territory.png'):
             assert view['territoryAvailability'] == {'ownershipMask': 5, 'active': 1, 'retained': 1, 'unavailableButtons': 2}, name
             unavailable = [widget for widget in view['widgets'] if widget['label'] == 'Unavailable']

@@ -133,7 +133,8 @@ class NativeHudSourceContracts(unittest.TestCase):
         self.assertIn('Loot HUD still exposes a possible-item browser', source)
         self.assertIn('Loot contents remain sealed until the owned box is opened', source)
         self.assertIn('sealedLootPresentation', source)
-        self.assertIn('Sealed Loot-page presentation did not complete before capture', source)
+        self.assertIn('sealedLootCardsRendered', source)
+        self.assertIn('All three sealed Loot cards did not complete before capture', source)
         self.assertNotIn('lootTooltipBounds', source)
 
     def test_workflow_read_only_and_bounded_online_then_offline(self):
@@ -214,7 +215,8 @@ class NativeHudReceiptVerifier(unittest.TestCase):
             if name.endswith('-army.png'): view['nativePortraits'] = ['com.talhanation.synthetic.Test'] * 4
             if name.endswith('-loot.png'):
                 view['sealedLootPresentation'] = {
-                    'rendered': True, 'nonEmptyRewardStacks': 0, 'possibleItemControls': 0}
+                    'rendered': True, 'sealedChestCards': 3,
+                    'nonEmptyRewardStacks': 0, 'possibleItemControls': 0}
             if name.endswith('-territory.png'):
                 view['territoryAvailability'] = {'ownershipMask': 5, 'active': 1, 'retained': 1, 'unavailableButtons': 2}
                 view['widgets'].extend([{'label': 'Unavailable', 'x': x, 'y': 1, 'width': 10, 'height': 10,

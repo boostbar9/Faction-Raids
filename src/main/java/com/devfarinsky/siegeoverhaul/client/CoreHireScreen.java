@@ -89,8 +89,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private int intelDragStartOffset;
     private ItemStack revealed = ItemStack.EMPTY;
     private int revealedTier;
-    /** Set only by the sealed Loot-page renderer; native QA reads it after a real framebuffer render. */
-    private boolean lootMysteryRendered;
+    /** Number of sealed chest cards completed during the current framebuffer render. */
+    private int sealedLootCardsRendered;
 
     private final Button[] hire = new Button[4];
     private final Button[] siegeYard = new Button[2];
@@ -997,7 +997,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     @Override
     protected void renderBg(GuiGraphics g, float partial, int mx, int my) {
-        lootMysteryRendered = false;
+        sealedLootCardsRendered = 0;
         int x = layout.x(), y = layout.y(), w = layout.width(), h = layout.height();
 
         // Quiet dark surfaces keep the world visible around a single thin frame.
@@ -1935,6 +1935,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             text(g, done ? revealed.getHoverName().getString() : CoreLoot.NAMES[i],
                     x + 8, y + 5, w - 16,
                     done ? CommandPalette.tier(revealedTier) : CommandPalette.TEXT);
+            if (!opening && !done) sealedLootCardsRendered++;
             if (opening) CommandFrame.progress(g, x + 8, y + 17, w - 16, 3,
                     1f - revealTicks / (float) CoreLoot.OPEN_TICKS, CommandPalette.ACCENT_ARCANE);
             return;
@@ -1967,6 +1968,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 opening ? CommandPalette.ACCENT_ARCANE
                         : done ? CommandPalette.tier(revealedTier)
                         : CommandPalette.TEXT_MUTED);
+        if (!opening && !done) sealedLootCardsRendered++;
 
         // Price / progress line sits directly under the subtitle; the Open
         // button occupies the bottom band of the (now shorter) card.
@@ -1981,7 +1983,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     /** Preserve the mystery without leaving the roomy free band visually empty. */
     private void drawLootReserve(GuiGraphics g) {
-        lootMysteryRendered = true;
         int h = layout.marketFreeHeight();
         if (h < 16) return;
         int x = layout.x() + 10, w = layout.width() - 20, y = layout.marketFreeTop();
