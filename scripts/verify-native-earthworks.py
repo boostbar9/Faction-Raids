@@ -90,6 +90,12 @@ def validate(result):
                 'Worker progression differs from exact ordinary server ticks')
 
     bound(final)
+    warmup = result.get('groundingWarmup', {})
+    require(warmup.get('actualOnGround') is True and warmup.get('unassigned') is True and warmup.get('targetAir') is True,
+            'Ordinary unassigned grounding evidence missing')
+    warmup_ticks = integer(warmup.get('ordinaryTicks'), 'grounding ordinaryTicks', 1)
+    require(integer(warmup.get('settledGameTime'), 'settledGameTime') - integer(warmup.get('startGameTime'), 'grounding startGameTime')
+            == warmup_ticks and warmup['settledGameTime'] <= start, 'Grounding warmup did not precede measured accepted work')
     require(result.get('nativeDispatchSequence') == 1 and result.get('nativeTransferTicks') == 1, 'Native callback/transfer repeated or absent')
     require(0 < integer(result.get('requestObservations'), 'requestObservations') <= ticks, 'Native demand observation count exceeds actual ticks')
     require(integer(result.get('repeatedAccepts'), 'repeatedAccepts') >= 2, 'Paid retry not exercised')
