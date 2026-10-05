@@ -108,11 +108,11 @@ class BuilderArrivalDispatchTest extends MinecraftTestSupport {
     @Test void auditedCollisionFreeSingleCellPlantsPermitStandingWithoutBeingCleared() throws Exception {
         for (var plant : new net.minecraft.world.level.block.Block[]{Blocks.GRASS, Blocks.FERN, Blocks.DANDELION}) {
             var f = new Fixture(); f.at(new Vec3(77.5, 64, .5));
-            when(f.level.getBlockState(any())).thenAnswer(call -> {
+            doAnswer(call -> {
                 BlockPos pos = call.getArgument(0);
                 return pos.getY() < 64 ? Blocks.STONE.defaultBlockState()
                         : pos.getY() == 64 && !pos.equals(f.target) ? plant.defaultBlockState() : Blocks.AIR.defaultBlockState();
-            });
+            }).when(f.level).getBlockState(any());
             var wrapper = new WallBuilderAccess(f.builder, f.nativeGoal);
             try (var guard = mockStatic(NativeConstructionGuard.class, CALLS_REAL_METHODS)) {
                 guard.when(() -> NativeConstructionGuard.beforeNativeTick(f.builder, f.nativeGoal)).thenReturn(true);
@@ -129,11 +129,11 @@ class BuilderArrivalDispatchTest extends MinecraftTestSupport {
         for (var obstacle : new net.minecraft.world.level.block.Block[]{Blocks.WITHER_ROSE, Blocks.TALL_GRASS,
                 Blocks.WATER, Blocks.FIRE, Blocks.POWDER_SNOW}) {
             var f = new Fixture(); f.at(new Vec3(77.5, 64, .5));
-            when(f.level.getBlockState(any())).thenAnswer(call -> {
+            doAnswer(call -> {
                 BlockPos pos = call.getArgument(0);
                 return pos.getY() < 64 ? Blocks.STONE.defaultBlockState()
                         : pos.getY() == 64 ? obstacle.defaultBlockState() : Blocks.AIR.defaultBlockState();
-            });
+            }).when(f.level).getBlockState(any());
             var wrapper = new WallBuilderAccess(f.builder, f.nativeGoal);
             try (var guard = mockStatic(NativeConstructionGuard.class, CALLS_REAL_METHODS)) {
                 guard.when(() -> NativeConstructionGuard.beforeNativeTick(f.builder, f.nativeGoal)).thenReturn(true);

@@ -22,8 +22,8 @@ class SizeableFoliageEvidenceTests(unittest.TestCase):
                 'manualPaidTreasury': 992, 'completedManualRestart': {'treasury': 992},
                 'sizeableFoliageReviews': {'targetCell': '128, 65, 0', 'clearanceCell': '130, 65, 8',
                     'shortGrassTargetAndClearanceAccepted': True, 'runtimeStateSafetyVerified': True,
-                    'plantsPreservedDuringReview': True, 'exactWorkerInventoryAndReceipts': True,
-                    'fixtureTerrainRestored': True, 'treasuryDebit': 0, 'scope': 'production prepare only',
+                    'plantsPreservedDuringReview': True, 'shortGrassStandingSiteAccepted': True, 'exactWorkerInventoryAndReceipts': True,
+                    'fixtureTerrainRestored': True, 'treasuryDebit': 0, 'scope': 'production prepare and standing-site checks only',
                     'rejections': {name: f'Rejected 128, 65, 0 ({name})' for name in verify.EXCLUDED}},
                 'singleCellPlant': {'plant': 'sizeable_foliage:very_short_grass',
                     **{name: True for name in verify.PLANT_PROOFS}}}}
@@ -37,6 +37,13 @@ class SizeableFoliageEvidenceTests(unittest.TestCase):
                 data = copy.deepcopy(self.data)
                 data['gameplay']['singleCellPlant'][name] = False
                 with self.assertRaises(AssertionError): verify.verify(data)
+
+    def test_missing_or_false_standing_proof_fails(self):
+        for missing in [False, True]:
+            data = copy.deepcopy(self.data)
+            if missing: del data['gameplay']['sizeableFoliageReviews']['shortGrassStandingSiteAccepted']
+            else: data['gameplay']['sizeableFoliageReviews']['shortGrassStandingSiteAccepted'] = False
+            with self.assertRaises((AssertionError, KeyError)): verify.verify(data)
 
     def test_wrong_runtime_or_missing_native_rejections_fail(self):
         for key, value in [('version', '1.2.2'), ('officialVersionId', 'changed'),
