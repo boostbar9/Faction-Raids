@@ -3,7 +3,6 @@ package com.devfarinsky.siegeoverhaul.client;
 import com.devfarinsky.siegeoverhaul.*;
 import com.devfarinsky.siegeoverhaul.core.*;
 import com.devfarinsky.siegeoverhaul.siege.SiegeIntegration;
-import com.devfarinsky.siegeoverhaul.items.LootBoxItem;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -110,14 +109,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private final BuildingPlanThumbnail[] perimeterExamples = new BuildingPlanThumbnail[TerritoryFortification.MATERIALS.length];
     private final Button[] boxes = new Button[3];
     private final Button[] buffs = new Button[3];
-    private final Button[] lootPreviews = new Button[3];
-    private final Button[] lootTiers = new Button[4];
-    private LootPreviewButton[] lootItems = new LootPreviewButton[0];
-    private Button lootBack, lootPrevious, lootNext;
-    private boolean showingLootGallery;
-    private int previewBox, previewTier = 3, lootPage;
-    private CoreTooltipLayout lootTooltipBounds;
-    private final Map<LootBoxItem.Tier, List<ItemStack>> lootPools = new java.util.EnumMap<>(LootBoxItem.Tier.class);
     private final Button[] bank = new Button[4];
     private Button feedbackButton;
 
@@ -379,24 +370,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 feedbackW, 14,
                 false, () -> false));
 
-        var gallery = lootGalleryLayout();
-        lootBack = addRenderableWidget(new CoreButton(Component.literal("< Chests"), b -> closeLootGallery(),
-                gallery.x(), gallery.y(), 70, 18, false, () -> false));
-        for (int i = 0; i < lootTiers.length; i++) {
-            final int tier = i;
-            int tierW = (gallery.width() - 9) / 4;
-            lootTiers[i] = addRenderableWidget(new CoreButton(Component.literal(CoreLoot.rarity(i)),
-                    b -> { previewTier = tier; lootPage = 0; updateControlState(); },
-                    gallery.x() + i * (tierW + 3), gallery.tierY(), tierW, 18, true, () -> previewTier == tier));
-        }
-        lootItems = new LootPreviewButton[gallery.pageSize()];
-        for (int i = 0; i < lootItems.length; i++) lootItems[i] = addRenderableWidget(new LootPreviewButton(
-                gallery.cardX(i), gallery.cardY(i), gallery.cardWidth(), gallery.cardHeight()));
-        lootPrevious = addRenderableWidget(new CoreButton(Component.literal("< Previous"), b -> moveLootPage(-1),
-                gallery.x(), gallery.actionY(), 82, 18, false, () -> false));
-        lootNext = addRenderableWidget(new CoreButton(Component.literal("Next >"), b -> moveLootPage(1),
-                gallery.x() + gallery.width() - 82, gallery.actionY(), 82, 18, false, () -> false));
-
         // Loot boxes and blessing keys.
         for (int i = 0; i < 3; i++) {
             final int index = i;
@@ -413,11 +386,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                         confirmBox = -1;
                     },
                     layout.cardX(0) + keyXInset, keyY,
-                    layout.cardWidth() - keyXInset - 52, keyHeight,
+                    layout.cardWidth() - keyXInset - 6, keyHeight,
                     false, () -> confirmBox == index));
-            lootPreviews[i] = addRenderableWidget(new CoreButton(Component.literal("Items"),
-                    b -> openLootGallery(index), layout.cardX(0) + layout.cardWidth() - 48,
-                    keyY, 42, keyHeight, false, () -> false).hint("Browse possible rewards. This does not purchase or reveal a box."));
             buffs[i] = addRenderableWidget(new CoreButton(
                     Component.literal("Bless"),
                     b -> action(30 + index),
@@ -436,7 +406,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         updateBuildingReport();
         updateCivilianReport(tab == CoreCommandPage.CIVILIANS);
         confirmBox = -1;
-        showingLootGallery = false;
         intelDragging = false;
         setFocused(null); // Never leave keyboard focus on a now-hidden purchase action.
         updateNavigation();
@@ -471,36 +440,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         civilianPage = page;
         updateControlState();
         if (civilianRows.length > 0 && civilianRows[0].visible) setFocused(civilianRows[0]);
-    }
-
-    private CoreLootGalleryLayout lootGalleryLayout() { return new CoreLootGalleryLayout(layout); }
-
-    private List<ItemStack> lootPreviewPool() {
-        var tier = LootBoxItem.Tier.values()[previewTier];
-        return lootPools.computeIfAbsent(tier, LootBoxItem::armoryPreviews);
-    }
-
-    private void openLootGallery(int box) {
-        previewBox = box;
-        previewTier = Math.max(CoreLoot.floorTier(box), previewTier);
-        lootPage = 0;
-        confirmBox = -1;
-        showingLootGallery = true;
-        updateControlState();
-        setFocused(lootTiers[previewTier]);
-    }
-
-    private void closeLootGallery() {
-        showingLootGallery = false;
-        confirmBox = -1;
-        updateControlState();
-        setFocused(lootPreviews[previewBox]);
-    }
-
-    private void moveLootPage(int direction) {
-        lootPage = Math.max(0, Math.min(lootGalleryLayout().pages(lootPreviewPool().size()) - 1, lootPage + direction));
-        updateControlState();
-        if (lootItems.length > 0) setFocused(lootItems[0]);
     }
 
     private CoreBuildingLayout buildingLayout() { return new CoreBuildingLayout(layout); }
@@ -614,10 +553,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         if (tab == CoreCommandPage.INTEL && (intelSearch == null || !intelSearch.isFocused())) {
             int next = keyboardScroll(intelOffset, intelMaxOffset, Math.max(12, intelBodyH - 12), key);
             if (next >= 0) { intelOffset = next; intelDragging = false; return true; }
-        }
-        if (tab == CoreCommandPage.LOOT && showingLootGallery && layout != null) {
-            int next = keyboardScroll(lootPage, lootGalleryLayout().pages(lootPreviewPool().size()) - 1, 1, key);
-            if (next >= 0) { moveLootPage(next - lootPage); return true; }
         }
         if (tab == CoreCommandPage.CIVILIANS && layout != null) {
             int next = keyboardScroll(civilianPage, civilianLayout().pages(residents().size()) - 1, 1, key);
@@ -800,7 +735,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                                     : "Need  ·  " + missing + "e"));
         }
         for (int i = 0; i < 3; i++) {
-            boxes[i].visible = buffs[i].visible = lootPreviews[i].visible = tab == CoreCommandPage.LOOT && !showingLootGallery;
+            boxes[i].visible = buffs[i].visible = tab == CoreCommandPage.LOOT;
             boxes[i].active = waitingTicks == 0 && revealTicks == 0
                     && canAfford(CoreLoot.price(i));
             boxes[i].setMessage(Component.literal(
@@ -818,24 +753,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                             ? "Need " + Math.max(0L, CoreBuffs.PRICES[i] - availableFunds()) + "e"
                             : "Bless  ·  " + CoreBuffs.PRICES[i] + "e"));
         }
-        boolean galleryVisible = tab == CoreCommandPage.LOOT && showingLootGallery;
-        lootBack.visible = lootPrevious.visible = lootNext.visible = galleryVisible;
-        for (int i = 0; i < lootTiers.length; i++) {
-            lootTiers[i].visible = galleryVisible;
-            lootTiers[i].active = i >= CoreLoot.floorTier(previewBox);
-        }
-        if (galleryVisible) {
-            var pool = lootPreviewPool();
-            int pages = lootGalleryLayout().pages(pool.size());
-            lootPage = Math.max(0, Math.min(lootPage, pages - 1));
-            lootPrevious.active = lootPage > 0;
-            lootNext.active = lootPage + 1 < pages;
-            for (int i = 0; i < lootItems.length; i++) {
-                int item = lootPage * lootItems.length + i;
-                lootItems[i].visible = item < pool.size();
-                if (lootItems[i].visible) lootItems[i].show(pool.get(item), LootBoxItem.Tier.values()[previewTier]);
-            }
-        } else for (var item : lootItems) item.visible = false;
         ensureVisibleFocus();
     }
 
@@ -845,7 +762,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     private void drawTooltips(GuiGraphics g, int mx, int my,
                               int tooltipX, int tooltipY) {
-        lootTooltipBounds = null;
         if (treasuryShortcut.isMouseOver(mx, my)) {
             tooltip(g, String.format(Locale.ROOT, "Faction Treasury: %,d emeralds. Purchases use this balance. Click to deposit or withdraw.", menu.bank()), tooltipX, tooltipY);
             return;
@@ -918,17 +834,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             tooltip(g, "Open the Siege Overhaul CurseForge comments page to share feedback or report a problem.",
                     tooltipX, tooltipY);
         }
-        if (tab == CoreCommandPage.LOOT && showingLootGallery) {
-            LootPreviewButton focused = null;
-            for (var item : lootItems) if (item.visible) {
-                if (item.isMouseOver(mx, my)) { lootTooltipBounds = CoreItemTooltip.draw(g, font, item.preview(), width, height, tooltipX, tooltipY); return; }
-                if (item.isFocused()) focused = item;
-            }
-            if (focused != null) lootTooltipBounds = CoreItemTooltip.draw(g, font, focused.preview(), width, height,
-                    Math.round((focused.getX() + focused.getWidth()) * layout.scale()),
-                    Math.round((focused.getY() + focused.getHeight() / 2f) * layout.scale()));
-            return;
-        }
         if (tab == CoreCommandPage.LOOT) {
             for (int i = 0; i < 3; i++) {
                 if (over(mx, my, layout.cardX(0), layout.marketY(i),
@@ -936,7 +841,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     String t = revealBox == i && revealTicks == 0 && !revealed.isEmpty()
                             ? CoreLoot.rarity(revealedTier) + "  |  " + revealed.getCount()
                                     + "x " + revealed.getHoverName().getString()
-                            : "Sealed box rarity: " + CoreLoot.odds(i) + ". Items shows possible equipment; your reward stays hidden until you open the box in your inventory.";
+                            : "Sealed box rarity: " + CoreLoot.odds(i)
+                                    + ". Its contents remain unknown until you open the box in your inventory.";
                     tooltip(g, t, tooltipX, tooltipY);
                 }
                 if (over(mx, my, layout.cardX(1), layout.marketY(i),
@@ -1122,14 +1028,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         if (tab == CoreCommandPage.ARMY) {
             for (int i = 0; i < 4; i++) drawHire(g, i, mx, my);
         } else if (tab == CoreCommandPage.LOOT) {
-            if (showingLootGallery) drawLootGallery(g);
-            else {
             for (int i = 0; i < 3; i++) {
                 drawLoot(g, i, mx, my);
                 drawBuff(g, i, mx, my);
             }
             drawLootReserve(g);
-            }
         } else if (tab == CoreCommandPage.TREASURY) {
             drawFaction(g);
         } else if (tab == CoreCommandPage.TERRITORY) {
@@ -2073,34 +1976,17 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
     }
 
-    private void drawLootGallery(GuiGraphics g) {
-        var gallery = lootGalleryLayout();
-        text(g, "POSSIBLE REWARDS · " + CoreLoot.NAMES[previewBox], gallery.x() + 76, gallery.y() + 5,
-                gallery.width() - 76, CommandPalette.ACCENT_ARCANE);
-        String count = (lootPage + 1) + " / " + gallery.pages(lootPreviewPool().size());
-        text(g, count, gallery.x() + 88, gallery.actionY() + 5, gallery.width() - 176, CommandPalette.TEXT_MUTED);
-    }
-
-    /** Native examples in the roomy free band; the full gallery works at every scale. */
+    /** Preserve the mystery without leaving the roomy free band visually empty. */
     private void drawLootReserve(GuiGraphics g) {
         int h = layout.marketFreeHeight();
         if (h < 16) return;
         int x = layout.x() + 10, w = layout.width() - 20, y = layout.marketFreeTop();
         CommandFrame.card(g, x, y, w, h, CommandPalette.ACCENT_STEEL);
-        text(g, "OLYMPIAN ARMORY · POSSIBLE REWARDS", x + 9, y + 5, w - 18, CommandPalette.ACCENT_STEEL);
-        if (h < 60) return;
-        var pool = lootPools.computeIfAbsent(LootBoxItem.Tier.EPIC, LootBoxItem::armoryPreviews);
-        int[] picks = {0, 3, 4, 6}; // Stable eligible epic examples, not rolled outcomes.
-        int cellW = (w - 18) / picks.length;
-        for (int i = 0; i < picks.length; i++) {
-            var item = pool.get(picks[i]);
-            int left = x + 9 + i * cellW;
-            ItemIcons.draw(g, item, left, y + 22, 24);
-            text(g, item.getHoverName().getString(), left + 28, y + 24, cellW - 32, CommandPalette.TEXT);
-            text(g, "Epic · possible", left + 28, y + 37, cellW - 32, CommandPalette.tier(3));
-        }
-        if (h >= 76) text(g, "Use Items to browse each chest. Your sealed reward stays hidden until opened.",
-                x + 9, y + 59, w - 18, CommandPalette.TEXT_MUTED);
+        text(g, "THE FATES KEEP THEIR COUNSEL", x + 9, y + 5, w - 18, CommandPalette.ACCENT_STEEL);
+        if (h >= 40) text(g, "Choose a chest by its rarity promise; the exact relic is revealed only after purchase.",
+                x + 9, y + 23, w - 18, CommandPalette.TEXT);
+        if (h >= 58) text(g, "Common 16e  ·  Noble 48e  ·  Royal 96e", x + 9, y + 41,
+                w - 18, CommandPalette.ACCENT_GOLD);
     }
 
     private void drawBuff(GuiGraphics g, int i, int mouseX, int mouseY) {
@@ -2294,12 +2180,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         if (CoreTabStrip.contains(x, y, layout.x() + 10, layout.tabY(),
                 layout.width() - 20, CoreHireLayout.TAB_HEIGHT) && delta != 0) {
             movePage(delta > 0 ? -1 : 1);
-            return true;
-        }
-        if (tab == CoreCommandPage.LOOT && showingLootGallery && delta != 0 && CoreTabStrip.contains(x, y,
-                lootGalleryLayout().x(), lootGalleryLayout().gridY(), lootGalleryLayout().width(),
-                lootGalleryLayout().actionY() - lootGalleryLayout().gridY())) {
-            moveLootPage(delta > 0 ? -1 : 1);
             return true;
         }
         if (tab == CoreCommandPage.CIVILIANS && delta != 0 && CoreTabStrip.contains(x, y,

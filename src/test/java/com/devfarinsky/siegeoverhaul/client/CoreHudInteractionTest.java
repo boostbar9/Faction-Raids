@@ -6,6 +6,8 @@ import net.minecraft.client.gui.components.Button;
 import org.junit.jupiter.api.Test;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
+import java.util.Arrays;
+import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -25,6 +27,18 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
         var call = CoreHireScreen.class.getDeclaredMethod(method, type);
         call.setAccessible(true);
         call.invoke(screen, value);
+    }
+    @Test void sealedLootHudHasNoPossibleItemBrowserOrPreviewCache() {
+        Set<String> removedFields = Set.of("lootPreviews", "lootTiers", "lootItems", "showingLootGallery",
+                "previewBox", "previewTier", "lootPage", "lootPools");
+        Set<String> fields = Arrays.stream(CoreHireScreen.class.getDeclaredFields())
+                .map(java.lang.reflect.Field::getName).collect(java.util.stream.Collectors.toSet());
+        assertTrue(java.util.Collections.disjoint(removedFields, fields), fields.toString());
+        Set<String> removedMethods = Set.of("openLootGallery", "closeLootGallery", "moveLootPage",
+                "lootPreviewPool", "drawLootGallery");
+        Set<String> methods = Arrays.stream(CoreHireScreen.class.getDeclaredMethods())
+                .map(java.lang.reflect.Method::getName).collect(java.util.stream.Collectors.toSet());
+        assertTrue(java.util.Collections.disjoint(removedMethods, methods), methods.toString());
     }
     @Test void territorySummaryNeverCountsUnavailableOwnershipAsActive() throws Exception {
         var menu = mock(CoreHireMenu.class);

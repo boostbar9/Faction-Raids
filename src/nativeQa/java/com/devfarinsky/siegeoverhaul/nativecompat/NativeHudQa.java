@@ -208,35 +208,19 @@ public final class NativeHudQa {
             add(prefix + " " + page.label(), () -> { selectPage(page); });
             add(prefix + " capture " + page.label(), () -> capture(prefix + "-" + slug(page.label())));
             if (page == CoreCommandPage.LOOT) {
-                add(prefix + " possible epic rewards", () -> {
-                    click(((Button[]) read("lootPreviews"))[0]);
-                    require((Boolean) read("showingLootGallery"), "Items did not open the read-only gallery");
-                    require((Integer) read("confirmBox") == -1, "Gallery retained paid confirmation");
-                    require(!((Button[]) read("boxes"))[0].visible, "Purchase controls overlap gallery");
-                });
-                add(prefix + " epic gallery capture", () -> capture(prefix + "-loot-gallery-epic"));
-                add(prefix + " gallery end key", () -> {
-                    require(mc().screen.keyPressed(GLFW.GLFW_KEY_END, 0, 0), "Gallery End was not consumed");
-                    require((Integer) read("lootPage") > 0, "Gallery did not reveal later possible items");
+                add(prefix + " sealed reward contract", () -> {
+                    Button[] boxes = (Button[]) read("boxes");
+                    require(java.util.Arrays.stream(boxes).allMatch(button -> button.visible),
+                            "Mystery chest purchase controls are not all visible");
+                    require(mc().screen.children().stream()
+                                    .filter(child -> child instanceof AbstractWidget)
+                                    .map(child -> ((AbstractWidget) child).getMessage().getString())
+                                    .noneMatch(label -> label.equals("Items") || label.startsWith("Possible ")),
+                            "Loot HUD still exposes a possible-item browser");
+                    require((Integer) read("confirmBox") == -1,
+                            "Sealed reward check changed purchase confirmation");
                     assertFocusVisible();
-                });
-                add(prefix + " gallery last page capture", () -> capture(prefix + "-loot-gallery-last"));
-                add(prefix + " Royal eligible tiers", () -> {
-                    click((Button) read("lootBack")); click(((Button[]) read("lootPreviews"))[2]);
-                    Button[] tiers = (Button[]) read("lootTiers");
-                    require(!tiers[0].active && !tiers[1].active && tiers[2].active && tiers[3].active,
-                            "Royal gallery exposes impossible lower tiers");
-                    click(tiers[2]);
-                    require((Integer) read("previewTier") == 2 && (Integer) read("lootPage") == 0,
-                            "Rarity navigation failed to reset gallery page");
-                });
-                add(prefix + " rare gallery capture", () -> capture(prefix + "-loot-gallery-rare"));
-                add(prefix + " return from gallery", () -> {
-                    click((Button) read("lootBack"));
-                    require(!(Boolean) read("showingLootGallery") && (Integer) read("confirmBox") == -1,
-                            "Back did not clear gallery safely");
-                    assertFocusVisible();
-                    check("Possible loot gallery uses eligible native ItemStacks, keyboard paging and returns without a purchase at " + prefix);
+                    check("Loot contents remain sealed until the owned box is opened at " + prefix);
                 });
             }
             if (page == CoreCommandPage.CIVILIANS) {
@@ -728,23 +712,6 @@ public final class NativeHudQa {
                 if (currentPage() == CoreCommandPage.ARMY && menu().role(0) >= 0) {
                     view.put("nativePortraits", portraitEvidence());
                     view.put("portraitLogicalSize", CoreHireLayout.fit(mc.screen.width, mc.screen.height).hirePortraitSize());
-                }
-                if (currentPage() == CoreCommandPage.LOOT && (Boolean) read("showingLootGallery")) {
-                    Object bounds = read("lootTooltipBounds");
-                    if (bounds != null) {
-                        var coordinates = new LinkedHashMap<String, Float>();
-                        for (String fieldName : List.of("x", "y", "width", "height", "scale")) {
-                            var accessor = bounds.getClass().getDeclaredMethod(fieldName); accessor.setAccessible(true);
-                            coordinates.put(fieldName, (Float) accessor.invoke(bounds));
-                        }
-                        require(coordinates.get("x") >= 4 && coordinates.get("y") >= 4
-                                        && coordinates.get("x") + coordinates.get("width") <= mc.screen.width - 4
-                                        && coordinates.get("y") + coordinates.get("height") <= mc.screen.height - 4,
-                                "Native loot tooltip clips the viewport");
-                        view.put("lootTooltipBounds", coordinates);
-                    }
-                    if (capture.endsWith("-loot-gallery-last.png")) require(bounds != null,
-                            "Keyboard-selected loot item must show its complete native tooltip");
                 }
                 if (currentPage() == CoreCommandPage.TERRITORY) {
                     Button[] upgrades = (Button[]) read("territoryBuffs");
