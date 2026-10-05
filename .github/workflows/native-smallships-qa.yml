@@ -1,0 +1,107 @@
+name: Native Small Ships Compatibility Probe
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize]
+    paths:
+      - 'src/**/naval/**'
+      - 'gradle/native-smallships-qa.gradle'
+      - '.github/workflows/native-smallships-qa.yml'
+      - 'scripts/audit-native-ships-bytecode.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-smallships-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-ship-server:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        release: [final, legacy]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+      - name: Initialize fresh evidence
+        env:
+          RELEASE: ${{ matrix.release }}
+        run: |
+          set -euo pipefail
+          test ! -e "build/native-ships-${RELEASE}-qa/server"
+          test ! -e "build/native-ships-${RELEASE}-qa/evidence"
+          mkdir -p "build/native-ships-${RELEASE}-qa/evidence"
+          git rev-parse HEAD > "build/native-ships-${RELEASE}-qa/evidence/source-commit.txt"
+          java -version 2> "build/native-ships-${RELEASE}-qa/evidence/java-version.txt"
+          python3 scripts/generate-native-server-template.py --check
+      - name: Run real Forge server with the exact companion release
+        env:
+          RELEASE: ${{ matrix.release }}
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=60s 20m ./gradlew --no-daemon --console=plain --max-workers=2 \
+            -Pforge_version=47.4.10 -PnativeShipsQa=true -PnativeShipsRelease="$RELEASE" runGameTestServer \
+            2>&1 | tee "build/native-ships-${RELEASE}-qa/evidence/server-console.log"
+      - name: Verify probe evidence without claiming compatibility
+        env:
+          RELEASE: ${{ matrix.release }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          release = os.environ['RELEASE']
+          root = Path(f'build/native-ships-{release}-qa/evidence')
+          data = json.loads((root / 'result.json').read_text())
+          assert data['status'] == 'probe-completed', data
+          assert data['compatibility'] == 'unverified', data
+          assert data['physicalDistribution'] == 'DEDICATED_SERVER' and data['logicalSide'] == 'SERVER', data
+          assert data['loadedModVersions']['forge'] == '47.4.10', data
+          assert data['loadedModVersions']['smallships'] == ('2.0.0' if release == 'final' else '2.0.0-b1.4'), data
+          assert data['loadedModVersions']['recruits'] == '1.15.2', data
+          assert data['observedNativeTicks'] >= 20, data
+          assert len(data['hullsAndBoardingOrders']) == 4, data
+          for item in data['hullsAndBoardingOrders']:
+              assert item['nativeEntityNbtCrewRoundTrip'] and item['noNavalOwnershipTagAdded'], item
+              if release == 'final':
+                  assert item['captainSeatType'] == 'DRIVER' and item['nativeDockyardBoardingRefused'], item
+          assert (root / 'server-console.log').read_text().count('SIEGE_NATIVE_SHIPS_PROBE_COMPLETED compatibility=unverified') == 1
+          print('Exact-binary probe completed; this deliberately does not certify release compatibility.')
+          PY
+      - name: Read exact native bytecode and original artifact hashes
+        if: always()
+        env:
+          RELEASE: ${{ matrix.release }}
+        run: python3 scripts/audit-native-ships-bytecode.py "build/native-ships-${RELEASE}-qa/evidence"
+      - name: Collect logs without vendor JARs or worlds
+        if: always()
+        env:
+          RELEASE: ${{ matrix.release }}
+        run: |
+          root="build/native-ships-${RELEASE}-qa"
+          mkdir -p "$root/evidence/logs"
+          if [ -d "$root/server/logs" ]; then
+            find "$root/server/logs" -maxdepth 1 -type f -name '*.log' -exec cp {} "$root/evidence/logs/" \;
+          fi
+          if [ -d "$root/server/crash-reports" ]; then cp -R "$root/server/crash-reports" "$root/evidence/"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-smallships-${{ matrix.release }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/native-ships-${{ matrix.release }}-qa/evidence/
+          if-no-files-found: error
+          retention-days: 7

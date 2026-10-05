@@ -344,3 +344,6 @@ if (providers.gradleProperty('nativeServerQa').map { it.toBoolean() }.getOrElse(
         }
     }
 }
+
+// Bounded optional native naval compatibility fixtures; existing QA pins are unchanged.
+apply from: "gradle/native-smallships-qa.gradle"
