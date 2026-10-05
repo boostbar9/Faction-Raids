@@ -72,7 +72,8 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
         var plan = plan(); var level = level();
         BlockPos pending = new BlockPos(15, 64, 8), sand = new BlockPos(-1, 64, 8);
         assertTrue(plan.blocks().containsKey(pending.asLong()));
-        when(level.getBlockState(any())).thenAnswer(call -> {
+        // Replacing the existing terrain answer must not execute it with Mockito's null matcher.
+        doAnswer(call -> {
             BlockPos p = call.getArgument(0);
             if (p.equals(sand)) return Blocks.SAND.defaultBlockState();
             if (p.equals(pending)) return Blocks.AIR.defaultBlockState();
@@ -80,7 +81,7 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
             if (id != null) return net.minecraft.core.registries.BuiltInRegistries.BLOCK
                     .get(new net.minecraft.resources.ResourceLocation(id)).defaultBlockState();
             return p.getY() < 64 ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState();
-        });
+        }).when(level).getBlockState(any());
         assertNull(PerimeterConstruction.siteProblem(level, plan, p -> true));
         verify(level, never()).hasNeighborSignal(new BlockPos(0, 64, 8));
     }
