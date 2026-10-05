@@ -42,6 +42,8 @@ def illustrative_receipt():
             'actualPlayerListMember': True, 'normalProfileCacheMatched': True, 'manifestHash': 'a' * 64},
         'loadedModVersions': {'workers': '2.0.3', 'recruits': '1.15.2'},
         'loadedCompanionArtifacts': {mod: {'fileName': name, 'sha256': 'b' * 64} for mod, name in VERIFY.ARTIFACTS.items()},
+        'groundingWarmup': {'ordinaryTicks': 2, 'startGameTime': 98, 'settledGameTime': 100,
+                            'actualOnGround': True, 'unassigned': True, 'targetAir': True, 'bodyMinY': 65.0},
         'before': before, 'after': row(280, [1, 0, 1, 0], 'DONE', 1), 'ordinaryTicksObserved': 180, 'stabilityTicks': 40,
         'acceptedGameTime': 100, 'observedStartGameTime': 100, 'observedEndGameTime': 280,
         'observedTickCount': 180, 'stableSinceGameTime': 240,
@@ -146,6 +148,18 @@ class EvidenceVerifierTest(unittest.TestCase):
         delivered = row(210, [1, 1, 0, 0], 'CLOSE_CHEST_DONE', 1)
         delivered['requestCount'] = 1
         self.receipt['samples'].insert(2, delivered)
+        with self.assertRaises(ValueError): VERIFY.validate(self.receipt)
+
+    def test_rejects_invented_or_zero_tick_grounding_warmup(self):
+        self.receipt['groundingWarmup']['ordinaryTicks'] = 0
+        with self.assertRaises(ValueError): VERIFY.validate(self.receipt)
+
+    def test_rejects_grounding_after_accepted_work_started(self):
+        self.receipt['groundingWarmup'].update(startGameTime=100, settledGameTime=102)
+        with self.assertRaises(ValueError): VERIFY.validate(self.receipt)
+
+    def test_rejects_warmup_work_or_missing_actual_grounding(self):
+        self.receipt['groundingWarmup']['actualOnGround'] = False
         with self.assertRaises(ValueError): VERIFY.validate(self.receipt)
 
     def test_rejects_failed_run(self):
@@ -256,7 +270,9 @@ class RuntimeSourceContractTest(unittest.TestCase):
         self.assertNotIn('.tick()', qa + fixture)
         self.assertNotIn('setBlock(TARGET, Blocks.DIRT', qa + fixture)
         self.assertNotIn('teleportTo', qa)
-        self.assertEqual(qa.count('setNoAi(false)'), 1)
+        self.assertEqual(qa.count('setNoAi(false)'), 2)
+        self.assertIn('now > groundingStartTick', qa)
+        self.assertNotIn('setOnGround', qa + fixture)
         self.assertIn('wrappers.get(0).delegate == fixture.originalStorageGoal()', qa)
         self.assertIn('BuildBlockParse.parseBlock(Blocks.DIRT)', qa)
         self.assertIn('BlockPos.betweenClosed(target.offset(-2, -2, -2), target.offset(2, 2, 2))', fixture)
@@ -269,7 +285,7 @@ class RuntimeSourceContractTest(unittest.TestCase):
             self.assertIn('"' + field + '"', qa)
         self.assertNotIn('setOnGround', qa)
         self.assertNotIn('setNoGravity', qa)
-        self.assertEqual(qa.count('setNoAi(false)'), 1)
+        self.assertEqual(qa.count('setNoAi(false)'), 2)
 
     def test_read_only_workflow_and_real_runtime_gate(self):
         workflow = (ROOT / '.github/workflows/native-earthworks-qa.yml').read_text()

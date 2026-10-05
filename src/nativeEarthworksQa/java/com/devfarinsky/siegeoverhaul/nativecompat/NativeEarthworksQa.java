@@ -79,7 +79,8 @@ public final class NativeEarthworksQa {
     private static Sample before;
     private static volatile Throwable failure;
     private static volatile boolean measured;
-    private static boolean finished, finishing;
+    private static boolean finished, finishing, groundingReleased;
+    private static long groundingStartTick;
     private static String capture;
     private static int renderFrames, captureFrame;
     private static long captureStarted;
@@ -152,7 +153,21 @@ public final class NativeEarthworksQa {
             require(now - setupTick < 200, "Ordinary startup/grounding/treasury setup did not settle: grounded="
                     + fixture.builder().onGround() + ", noAi=" + fixture.builder().isNoAi()
                     + ", treasuryClock=" + core(level).contains("BankInterestAt", Tag.TAG_LONG));
-            if (now - setupTick < 30 || !fixture.builder().onGround() || !core(level).contains("BankInterestAt", Tag.TAG_LONG)) return 0;
+            if (now - setupTick < 30 || !core(level).contains("BankInterestAt", Tag.TAG_LONG)) return 0;
+            if (!groundingReleased) {
+                // NoAi suppresses genuine floor contact in this fixture. Let the unassigned
+                // native worker settle on ordinary ticks before any grading review exists.
+                fixture.builder().setNoAi(false); groundingReleased = true; groundingStartTick = now; return 0;
+            }
+            if (!fixture.builder().onGround()) return 0;
+            require(now > groundingStartTick && fixture.builder().currentBuildArea == null
+                    && fixture.builder().neededItems.isEmpty() && fixture.builder().getInventory().countItem(Items.DIRT) == 0
+                    && count(chest(level)) == STOCK && level.getBlockState(TARGET).isAir(),
+                    "Unassigned grounding warmup changed work/material state");
+            fixture.builder().setNoAi(true); // Hold the genuinely grounded body during same-thread review/refusal checks only.
+            REPORT.put("groundingWarmup", Map.of("ordinaryTicks", now - groundingStartTick, "startGameTime", groundingStartTick,
+                    "settledGameTime", now, "actualOnGround", fixture.builder().onGround(), "bodyMinY", fixture.builder().getBoundingBox().minY,
+                    "unassigned", true, "targetAir", true));
             freezeUnrelatedStartup(level, fixture.builder());
             require(FactionBank.balance(core(level)) == 0, "Unexpected unfunded treasury balance");
             FactionBank.credit(core(level), 64); RaidSavedData.get(level.getServer()).setDirty();
@@ -403,7 +418,7 @@ public final class NativeEarthworksQa {
         require(!Files.exists(evidence.resolve("result.json")), "Refusing old native evidence");
         REPORT.put("mode", "earthworks-one-fill"); REPORT.put("startedUtc", Instant.now().toString());
         REPORT.put("scope", "Synthetic flat terrain, one native faction claim and finite two-dirt chest. Real integrated non-op player, normal profile cache, internal production review/accept, one ordinary native storage approach/transfer and AIR-to-DIRT callback. Partial STAGE_VERIFIED coverage only.");
-        REPORT.put("syntheticSetup", List.of("Flat stone platform and empty fill cell", "Native command-style faction/claim setup", "One spawned idle native builder", "Two finite dirt items in one native chest", "64-emerald Treasury funding", "Pre-accept changed-support refusal and restoration", "Pre-measurement missing-core retry refusal with exact core restoration", "Freeze unrelated startup NPCs"));
+        REPORT.put("syntheticSetup", List.of("Flat stone platform and empty fill cell", "Native command-style faction/claim setup", "One spawned idle native builder with ordinary unassigned grounding warmup", "Two finite dirt items in one native chest", "64-emerald Treasury funding", "Pre-accept changed-support refusal and restoration", "Pre-measurement missing-core retry refusal with exact core restoration", "Freeze unrelated startup NPCs"));
         REPORT.put("notCovered", List.of("CUT and drop authority", "Multi-step grading", "Autonomous grading approach or ascent", "Retirement or COMPLETE", "Save/restart recovery", "Normal player-facing review menu", "Existing accepted v1 projects", "Distant storage return route", "PR276 stepped perimeter geometry"));
         REPORT.put("ordinaryTicksOnly", true); REPORT.put("seededCompletedTargets", 0); REPORT.put("postStartTeleports", 0);
         REPORT.put("sourceStock", STOCK); REPORT.put("target", List.of(TARGET.getX(), TARGET.getY(), TARGET.getZ()));
