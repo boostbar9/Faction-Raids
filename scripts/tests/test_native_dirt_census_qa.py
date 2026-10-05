@@ -34,7 +34,7 @@ def illustrative_evidence():
     versions = {'minecraft': '1.20.1', 'forge': '47.4.16', 'siegeoverhaul': '4.52.9', 'workers': '2.0.3',
                 'recruits': '1.15.2', 'smallships': '2.0.0-b1.4', 'siegeweapons': '0.2.5'}
     modules = [{'layer': layer, 'name': name, 'version': '1', 'contentSha256': 'b' * 64, 'providers': []}
-               for layer, name in [('BOOT', 'java.base'), ('BOOT', 'cpw.mods.securejarhandler'), ('SERVICE', 'fml'), ('PLUGIN', 'forge')]
+               for layer, name in [('BOOT', 'cpw.mods.modlauncher'), ('JVM_BOOT', 'java.base'), ('JVM_BOOT', 'cpw.mods.securejarhandler'), ('SERVICE', 'fml'), ('PLUGIN', 'forge')]
                + [('GAME', mod) for mod in ('minecraft', 'siegeoverhaul', 'workers', 'recruits')]]
     modules.sort(key=lambda v: (v['layer'], v['name']))
     def origin(name):
@@ -43,7 +43,7 @@ def illustrative_evidence():
     runtime = {'launch': 'development:forgeclientuserdev', 'distribution': 'CLIENT', 'javaRuntime': '17.0.20+12/OpenJDK 64-Bit Server VM',
                'mods': [{'mod': mod, 'version': versions[mod], 'sourceKind': 'development-combined-module' if mod == 'siegeoverhaul' else 'development-file',
                          'sha256': 'b' * 64, 'bytes': 100} for mod in sorted(versions)],
-               'modules': modules, 'services': [{'name': 'fml', 'type': 'TRANSFORMATIONSERVICE', 'file': 'fml.jar'}],
+               'modules': modules, 'layers': [{'name': name, 'parents': parents} for name, parents in sorted({'EMPTY': [], 'JVM_BOOT': ['EMPTY'], 'BOOT': ['JVM_BOOT'], 'SERVICE': ['BOOT'], 'PLUGIN': ['BOOT'], 'GAME': ['PLUGIN', 'SERVICE']}.items())], 'services': [{'name': 'fml', 'type': 'TRANSFORMATIONSERVICE', 'file': 'fml.jar'}],
                'pendingMixins': [], 'transformations': [{'owner': 'net.minecraft.world.level.Level', 'kind': 'PLUGIN', 'contextDigests': ['d' * 64]}],
                'firstParty': {'mod': 'siegeoverhaul', 'module': 'siegeoverhaul', 'trustedClasses': VERIFY.TRUSTED}}
     observed = {'generation': 1, 'gameTime': 280, 'target': (141 << 38) | (9 << 12) | 64,
@@ -146,6 +146,16 @@ class CensusVerifierTest(unittest.TestCase):
         self.mutate_census(lambda c: next(m for m in c['runtime']['modules'] if m['name'] == 'siegeoverhaul').update(contentSha256='a' * 64)); self.reject()
     def test_required_module_layer_cannot_disappear(self):
         self.mutate_census(lambda c: c['runtime']['modules'].__setitem__(slice(None), [m for m in c['runtime']['modules'] if m['layer'] != 'PLUGIN'])); self.reject()
+    def test_jvm_boot_ancestor_cannot_disappear(self):
+        self.mutate_census(lambda c: c['runtime']['modules'].__setitem__(slice(None), [m for m in c['runtime']['modules'] if m['layer'] != 'JVM_BOOT'])); self.reject()
+    def test_ancestor_module_is_not_relabelled_as_launcher_boot(self):
+        self.mutate_census(lambda c: next(m for m in c['runtime']['modules'] if m['name'] == 'cpw.mods.securejarhandler').update(layer='BOOT')); self.reject()
+    def test_exact_ordered_parent_edges_are_required(self):
+        self.mutate_census(lambda c: next(l for l in c['runtime']['layers'] if l['name'] == 'GAME').update(parents=['SERVICE', 'PLUGIN'])); self.reject()
+    def test_unknown_intermediate_layer_is_not_hidden(self):
+        self.mutate_census(lambda c: c['runtime']['layers'].append({'name': 'EXTRA', 'parents': ['JVM_BOOT']})); self.reject()
+    def test_missing_parent_edge_is_not_accepted(self):
+        self.mutate_census(lambda c: next(l for l in c['runtime']['layers'] if l['name'] == 'BOOT').update(parents=[])); self.reject()
     def test_pending_mixin_refuses(self):
         self.mutate_census(lambda c: c['runtime'].update(pendingMixins=['unexpected'])); self.reject()
     def test_no_arbitrary_transformer_labels(self):

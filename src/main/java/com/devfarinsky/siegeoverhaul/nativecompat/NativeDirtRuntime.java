@@ -41,6 +41,15 @@ public final class NativeDirtRuntime {
     public record ModuleProof(String layer, String name, String version, String contentSha256, List<String> providers) {
         public ModuleProof { providers = List.copyOf(providers); }
     }
+    public record LayerProof(String name, List<String> parents) {
+        public LayerProof { parents = List.copyOf(parents); }
+    }
+    record LoadedLayer(String name, ModuleLayer layer, List<String> parents) {
+        LoadedLayer { parents = List.copyOf(parents); }
+    }
+    private static final Map<String, List<String>> LAYER_PARENTS = Map.of(
+            "EMPTY", List.of(), "JVM_BOOT", List.of("EMPTY"), "BOOT", List.of("JVM_BOOT"),
+            "SERVICE", List.of("BOOT"), "PLUGIN", List.of("BOOT"), "GAME", List.of("PLUGIN", "SERVICE"));
     public record Activity(String owner, String kind, List<String> contextDigests) {
         public Activity { contextDigests = List.copyOf(contextDigests); }
     }
@@ -48,10 +57,10 @@ public final class NativeDirtRuntime {
         public FirstParty { trustedClasses = List.copyOf(trustedClasses); }
     }
     public record Catalog(String launch, String distribution, String javaRuntime, List<Artifact> mods,
-                          List<ModuleProof> modules, List<Map<String, String>> services,
+                          List<ModuleProof> modules, List<LayerProof> layers, List<Map<String, String>> services,
                           List<String> pendingMixins, List<Activity> transformations, FirstParty firstParty) {
         public Catalog {
-            mods = List.copyOf(mods); modules = List.copyOf(modules);
+            mods = List.copyOf(mods); modules = List.copyOf(modules); layers = List.copyOf(layers);
             services = services.stream().map(Map::copyOf).toList(); pendingMixins = List.copyOf(pendingMixins);
             transformations = List.copyOf(transformations);
         }
@@ -62,7 +71,7 @@ public final class NativeDirtRuntime {
                     ? new Artifact(a.mod(), a.version(), a.sourceKind(), "trusted-first-party", 0) : a).toList();
             List<ModuleProof> portableModules = modules.stream().map(m -> m.layer().equals("GAME") && m.name().equals(firstParty.module())
                     ? new ModuleProof(m.layer(), m.name(), m.version(), "trusted-first-party", m.providers()) : m).toList();
-            return new Catalog(launch, distribution, javaRuntime, portableMods, portableModules, services,
+            return new Catalog(launch, distribution, javaRuntime, portableMods, portableModules, layers, services,
                     pendingMixins, transformations, firstParty);
         }
     }
@@ -71,6 +80,7 @@ public final class NativeDirtRuntime {
     private final Map<Path, FileStamp> files = new HashMap<>();
     private final Map<ModuleReference, ModuleDigest> modules = new java.util.IdentityHashMap<>();
     private final java.util.IdentityHashMap<ModuleReference, NativeDirtModuleView.View> capturedModuleViews = new java.util.IdentityHashMap<>();
+    private final Map<String, ModuleLayer> boundLayers = new HashMap<>();
     private int capturedMetadataEntries;
     private boolean secureJarApiVerified;
     private enum Stage { NOT_STARTED, LOADER, LAUNCH, MODULE_CATALOG, MODULE_API, MODULE_VIEW, MODULE_CONTENT, MOD_FILES, SERVICES, TRANSFORMS, ANCHOR, COMPLETE }
@@ -112,8 +122,13 @@ public final class NativeDirtRuntime {
         List<ModuleProof> moduleProof = new ArrayList<>();
         Map<String, ModuleReference> gameModules = new HashMap<>();
         stage = Stage.MODULE_CATALOG;
-        for (var layer : IModuleLayerManager.Layer.values()) {
-            var loadedLayer = manager.getLayer(layer).orElseThrow(() -> new Unsupported("Incomplete loaded module layers"));
+        var namedLayers = new HashMap<String, ModuleLayer>();
+        for (var label : IModuleLayerManager.Layer.values())
+            namedLayers.put(label.name(), manager.getLayer(label).orElseThrow(() -> new Unsupported("Incomplete loaded module layers")));
+        var loadedLayers = checkedLayers(namedLayers);
+        bindLayers(loadedLayers);
+        for (var layer : loadedLayers) {
+            var loadedLayer = layer.layer();
             for (Module module : loadedLayer.modules()) {
                 var resolved = loadedLayer.configuration().findModule(module.getName()).orElseThrow(() -> new Unsupported("Loaded Module has no resolved reference"));
                 if (moduleProof.size() >= MAX_MODULES) throw new Unsupported("Loaded module census exceeds its bound");
@@ -121,7 +136,7 @@ public final class NativeDirtRuntime {
                 if (startupBound && (boundModules.get(module) != reference || boundLoaders.get(module) != module.getClassLoader()))
                     throw new Unsupported("A loaded Module/ClassLoader identity changed after startup binding");
                 if (!startupBound) { boundModules.put(module, reference); boundLoaders.put(module, module.getClassLoader()); }
-                if (layer == IModuleLayerManager.Layer.GAME) gameModules.put(reference.descriptor().name(), reference);
+                if (layer.name().equals("GAME")) gameModules.put(reference.descriptor().name(), reference);
                 var descriptor = reference.descriptor();
                 String location = reference.location().orElseThrow(() -> new Unsupported("Module source is unavailable")).getScheme();
                 // The ordinary trusted Java runtime is named/versioned, not re-hashed as game content.
@@ -207,7 +222,43 @@ public final class NativeDirtRuntime {
         stage = Stage.COMPLETE;
         return new Catalog((FMLLoader.isProduction() ? "production:" : "development:") + FMLLoader.launcherHandlerName(), FMLLoader.getDist().name(),
                 System.getProperty("java.runtime.version") + "/" + System.getProperty("java.vm.name"), modProof,
-                moduleProof, services, mixins, transformations, anchor);
+                moduleProof, loadedLayers.stream().map(l -> new LayerProof(l.name(), l.parents())).toList(), services, mixins, transformations, anchor);
+    }
+    /** Exact pinned launcher graph, including its real JVM ancestor. No discovery by matching module names. */
+    static List<LoadedLayer> checkedLayers(Map<String, ModuleLayer> managerLayers) throws Unsupported {
+        if (!managerLayers.keySet().equals(java.util.Set.of("BOOT", "SERVICE", "PLUGIN", "GAME")))
+            throw new Unsupported("Unknown or incomplete launcher layer labels");
+        var named = new HashMap<>(managerLayers);
+        named.put("JVM_BOOT", ModuleLayer.boot()); named.put("EMPTY", ModuleLayer.empty());
+        var identities = new java.util.IdentityHashMap<ModuleLayer, String>();
+        for (var entry : named.entrySet())
+            if (entry.getValue() == null || identities.put(entry.getValue(), entry.getKey()) != null)
+                throw new Unsupported("Launcher layer identities are missing or aliased");
+        var result = new ArrayList<LoadedLayer>();
+        for (String name : named.keySet().stream().sorted().toList()) {
+            ModuleLayer layer = named.get(name);
+            var parents = layer.parents();
+            if (parents.size() > 2) throw new Unsupported("Launcher layer parent bound exceeded");
+            var actual = new ArrayList<String>();
+            for (var parent : parents) {
+                String label = identities.get(parent);
+                if (label == null) throw new Unsupported("Unknown intermediate or additional launcher parent layer");
+                actual.add(label);
+            }
+            if (!actual.equals(LAYER_PARENTS.get(name))) throw new Unsupported("Pinned launcher parent edges or ordering changed");
+            if (!layer.configuration().parents().equals(parents.stream().map(ModuleLayer::configuration).toList()))
+                throw new Unsupported("Layer and resolved configuration parent graph differ");
+            result.add(new LoadedLayer(name, layer, actual));
+        }
+        return List.copyOf(result);
+    }
+    void bindLayers(List<LoadedLayer> layers) throws Unsupported {
+        if (startupBound && boundLayers.size() != layers.size()) throw new Unsupported("Loaded layer count changed after startup binding");
+        for (var layer : layers) {
+            if (startupBound && boundLayers.get(layer.name()) != layer.layer())
+                throw new Unsupported("Loaded layer identity changed after startup binding");
+            if (!startupBound) boundLayers.put(layer.name(), layer.layer());
+        }
     }
     private FirstParty firstParty(IModuleLayerManager manager) throws Exception {
         Module own = NativeDirtPolicy.class.getModule(); ClassLoader loader = NativeDirtPolicy.class.getClassLoader();
@@ -404,7 +455,9 @@ public final class NativeDirtRuntime {
     /** Opaque same-launch input seal comparison; not a mutable-input work-pulse validation or approval. */
     boolean sameCapturedInputs(NativeDirtRuntime other) {
         if (other == null || !files.equals(other.files) || capturedModuleViews.size() != other.capturedModuleViews.size()
-                || modules.size() != other.modules.size()) return false;
+                || modules.size() != other.modules.size() || boundLayers.size() != other.boundLayers.size()) return false;
+        for (var entry : boundLayers.entrySet())
+            if (entry.getValue() != other.boundLayers.get(entry.getKey())) return false;
         // IdentityHashMap.equals also compares values by identity; fresh value records must use structural equality.
         for (var entry : capturedModuleViews.entrySet())
             if (!entry.getValue().equals(other.capturedModuleViews.get(entry.getKey()))) return false;

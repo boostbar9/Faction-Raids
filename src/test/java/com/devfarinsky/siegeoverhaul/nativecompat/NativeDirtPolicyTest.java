@@ -104,7 +104,7 @@ class NativeDirtPolicyTest {
     }
     private static NativeDirtRuntime.Catalog catalog(String mod) {
         return new NativeDirtRuntime.Catalog("fixture", "fixture", "fixture", List.of(new NativeDirtRuntime.Artifact(mod, "1", "fixture", "a".repeat(64), 1)),
-                List.of(), List.of(), List.of(), List.of(), null);
+                List.of(), List.of(), List.of(), List.of(), List.of(), null);
     }
     private static ListenerProof listener(String callback) {
         var origin = new CodeOrigin("fixture", "fixture", "fixture", "d".repeat(64));

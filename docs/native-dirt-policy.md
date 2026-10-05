@@ -353,3 +353,10 @@ QA bindings, but this is trusted-runtime evidence, not malicious mutation
 attestation. The known implementation hashes do not inspect the private provider
 delegate. Mutable-input freshness and packaged runtime acceptance remain
 separate gates before any reusable production profile or CUT activation.
+
+The complete native catalog also binds the exact JVM boot ancestor, independently
+of ModLauncher's BOOT child, with the closed ordered layer graph recorded in the
+QA documentation. Unknown parent layers and replacement identities refuse; every
+non-JRT ancestor module is hashed under the original aggregate bounds. This fixes
+an omitted owner layer without relaxing the relevant Class/Module/reference/loader
+identity gate. Matching labels alone cannot supply a missing identity.

@@ -81,6 +81,27 @@ pins seven implementation class-resource hashes to the official
 It resolves the existing union root from `ModuleReference.location()`; it neither
 mounts a substitute filesystem nor uses `getPrimaryPath()`.
 
+The module catalog includes the real JVM boot ancestor as `JVM_BOOT`, separately
+from ModLauncher's `BOOT` child. BootstrapLauncher 1.1.2 creates MC-BOOTSTRAP
+with the Java boot layer as parent and keeps SecureJar in that ancestor;
+ModLauncher 10.0.9 exposes its own child as BOOT. Direct-layer-only enumeration
+misses the actual SecureJar owner. The exact closed graph is exported and compared:
+`EMPTY -> []`, `JVM_BOOT -> [EMPTY]`, `BOOT -> [JVM_BOOT]`,
+`PLUGIN -> [BOOT]`, `SERVICE -> [BOOT]`, `GAME -> [PLUGIN, SERVICE]`.
+This is the complete parent closure of the four manager layers, not discovery
+of unrelated JVM layer branches. An unrelated layer owning a relevant class
+still refuses through the unchanged identity gate. The focused hierarchy tests
+use empty synthetic layers; they do not claim direct nonempty same-name module
+shadowing coverage.
+These are child-to-ordered-parent edges, not dependency declarations. All six
+identities must be distinct and actual parent/configuration edges must match.
+Unknown labels, extra/intermediate layers, missing edges, changed order and
+same-name replacement layers refuse. The empty sentinel contributes no modules.
+All non-JRT modules in all five populated layers are hashed under the unchanged
+256-module/1-GiB bounds. Relevant classes still require their exact bound Module,
+ModuleReference and ClassLoader. No unnamed-class or loader mismatch bypass is
+introduced, and no module graph is activated or modified by observation.
+
 The pinned union provider forwards a caller filter to backing directory streams
 before filtering, deduplication and eager allocation. The census uses that public
 filter to collect bounded raw candidates, returning false to avoid the eager

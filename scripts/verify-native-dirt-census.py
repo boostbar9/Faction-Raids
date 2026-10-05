@@ -107,7 +107,7 @@ def origin(value, modules):
 
 
 def catalog(value, fill):
-    keys(value, 'launch distribution javaRuntime mods modules services pendingMixins transformations firstParty')
+    keys(value, 'launch distribution javaRuntime mods modules layers services pendingMixins transformations firstParty')
     text(value['launch']); require(value['launch'].startswith('development:'), 'This gate is development-only')
     require(value['distribution'] == 'CLIENT', 'Integrated-client profile required')
     text(value['javaRuntime'], r'17[0-9A-Za-z_.+() /-]{1,250}')
@@ -127,9 +127,14 @@ def catalog(value, fill):
     require(by_mod['siegeoverhaul']['sourceKind'] == 'development-combined-module', 'Entire remapped QA module is not pinned')
     modules = value['modules']; require(type(modules) is list and 1 <= len(modules) <= 256, 'Unbounded module catalog')
     module_keys = []
+    expected_layers = {'EMPTY': [], 'JVM_BOOT': ['EMPTY'], 'BOOT': ['JVM_BOOT'],
+                       'SERVICE': ['BOOT'], 'PLUGIN': ['BOOT'], 'GAME': ['PLUGIN', 'SERVICE']}
+    layers = value['layers']
+    require(type(layers) is list and layers == [{'name': name, 'parents': expected_layers[name]} for name in sorted(expected_layers)],
+            'Pinned complete layer graph or ordered parent edges differ')
     for row in modules:
         keys(row, 'layer name version contentSha256 providers')
-        require(row['layer'] in {'BOOT', 'SERVICE', 'PLUGIN', 'GAME'}, 'Unknown module layer'); text(row['name'])
+        require(row['layer'] in {'BOOT', 'SERVICE', 'PLUGIN', 'GAME', 'JVM_BOOT'}, 'Unknown module layer'); text(row['name'])
         text(row['version'], r'[A-Za-z0-9_.+() /-]{0,256}')
         if row['contentSha256'] == 'trusted-java-runtime':
             require(row['name'].startswith(('java.', 'jdk.')), 'Unhashed game module')
@@ -139,7 +144,8 @@ def catalog(value, fill):
         require(providers == sorted(providers), 'Unstable provider ordering')
         module_keys.append((row['layer'], row['name']))
     require(module_keys == sorted(set(module_keys)), 'Duplicate/unordered module catalog')
-    require({key[0] for key in module_keys} == {'BOOT', 'SERVICE', 'PLUGIN', 'GAME'}, 'Missing actual launcher layer')
+    require({key[0] for key in module_keys} == {'BOOT', 'SERVICE', 'PLUGIN', 'GAME', 'JVM_BOOT'}, 'Missing actual launcher layer')
+    require(('JVM_BOOT', 'cpw.mods.securejarhandler') in module_keys, 'Actual SecureJar JVM ancestor absent')
     names = {key[1] for key in module_keys}
     services = value['services']; require(type(services) is list and 1 <= len(services) <= 256, 'Missing/unbounded launcher services')
     for row in services:

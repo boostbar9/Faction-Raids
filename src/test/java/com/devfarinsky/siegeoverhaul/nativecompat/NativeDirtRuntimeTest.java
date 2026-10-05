@@ -96,14 +96,14 @@ class NativeDirtRuntimeTest {
         var first = new NativeDirtRuntime.Catalog("production", "server", "java17",
                 List.of(new NativeDirtRuntime.Artifact("siegeoverhaul", "1", "packaged-file", "a", 10),
                         new NativeDirtRuntime.Artifact("workers", "2", "packaged-file", "exact-third-party", 20)),
-                List.of(new NativeDirtRuntime.ModuleProof("GAME", "siegeoverhaul", "1", "a", List.of())), List.of(), List.of(), List.of(), own);
+                List.of(new NativeDirtRuntime.ModuleProof("GAME", "siegeoverhaul", "1", "a", List.of())), List.of(), List.of(), List.of(), List.of(), own);
         var changedSelf = new NativeDirtRuntime.Catalog(first.launch(), first.distribution(), first.javaRuntime(),
                 List.of(new NativeDirtRuntime.Artifact("siegeoverhaul", "1", "packaged-file", "b", 50), first.mods().get(1)),
-                List.of(new NativeDirtRuntime.ModuleProof("GAME", "siegeoverhaul", "1", "b", List.of())), List.of(), List.of(), List.of(), own);
+                List.of(new NativeDirtRuntime.ModuleProof("GAME", "siegeoverhaul", "1", "b", List.of())), List.of(), List.of(), List.of(), List.of(), own);
         assertNotEquals(first, changedSelf); assertEquals(first.reviewedShape(), changedSelf.reviewedShape());
         var thirdPartyChanged = new NativeDirtRuntime.Catalog(first.launch(), first.distribution(), first.javaRuntime(),
                 List.of(first.mods().get(0), new NativeDirtRuntime.Artifact("workers", "2", "packaged-file", "other", 20)),
-                first.modules(), List.of(), List.of(), List.of(), own);
+                first.modules(), List.of(), List.of(), List.of(), List.of(), own);
         assertNotEquals(first.reviewedShape(), thirdPartyChanged.reviewedShape());
         var expected = new NativeDirtPolicy.CodeOrigin("known.OwnedClass", "siegeoverhaul", "file:/a", "a");
         var changed = new NativeDirtPolicy.CodeOrigin("known.OwnedClass", "siegeoverhaul", "file:/b", "b");
@@ -202,9 +202,66 @@ class NativeDirtRuntimeTest {
         assertNotEquals(runtime.module(new EqualReference(first)).sha256(), runtime.module(new EqualReference(second)).sha256());
         assertEquals(2, runtime.metrics().modulesHashed());
     }
+    @Test void exactClosedLayerGraphIncludesRealJvmBootAncestorAndOrderedParents() throws Exception {
+        var layers = NativeDirtRuntime.checkedLayers(layerGraph());
+        assertEquals(List.of("BOOT", "EMPTY", "GAME", "JVM_BOOT", "PLUGIN", "SERVICE"), layers.stream().map(NativeDirtRuntime.LoadedLayer::name).toList());
+        assertSame(ModuleLayer.boot(), layers.stream().filter(l -> l.name().equals("JVM_BOOT")).findFirst().orElseThrow().layer());
+        assertEquals(List.of("PLUGIN", "SERVICE"), layers.stream().filter(l -> l.name().equals("GAME")).findFirst().orElseThrow().parents());
+        assertTrue(layers.stream().filter(l -> l.name().equals("JVM_BOOT")).findFirst().orElseThrow().layer().modules().contains(String.class.getModule()));
+        assertThrows(UnsupportedOperationException.class, () -> layers.clear());
+    }
+    @Test void missingOrUnknownLayerLabelsRefuse() {
+        var missing = layerGraph(); missing.remove("PLUGIN");
+        assertThrows(NativeDirtRuntime.Unsupported.class, () -> NativeDirtRuntime.checkedLayers(missing));
+        var added = layerGraph(); added.put("EXTRA", child(ModuleLayer.boot()));
+        assertThrows(NativeDirtRuntime.Unsupported.class, () -> NativeDirtRuntime.checkedLayers(added));
+    }
+    @Test void aliasedLayerLabelsRefuse() {
+        var layers = layerGraph(); layers.put("PLUGIN", layers.get("SERVICE"));
+        assertThrows(NativeDirtRuntime.Unsupported.class, () -> NativeDirtRuntime.checkedLayers(layers));
+    }
+    @Test void unknownIntermediateJvmAncestorRefuses() {
+        var layers = layerGraph(child(ModuleLayer.boot()));
+        assertThrows(NativeDirtRuntime.Unsupported.class, () -> NativeDirtRuntime.checkedLayers(layers));
+    }
+    @Test void changedParentEdgesAndOrderRefuse() {
+        var changed = layerGraph(); changed.put("GAME", child(changed.get("BOOT")));
+        assertThrows(NativeDirtRuntime.Unsupported.class, () -> NativeDirtRuntime.checkedLayers(changed));
+        var reversed = layerGraph(); reversed.put("GAME", child(reversed.get("SERVICE"), reversed.get("PLUGIN")));
+        assertThrows(NativeDirtRuntime.Unsupported.class, () -> NativeDirtRuntime.checkedLayers(reversed));
+    }
+    @Test void extraKnownParentEdgeRefuses() {
+        var layers = layerGraph(); layers.put("GAME", child(layers.get("PLUGIN"), layers.get("SERVICE"), layers.get("BOOT")));
+        assertThrows(NativeDirtRuntime.Unsupported.class, () -> NativeDirtRuntime.checkedLayers(layers));
+    }
+    @Test void exactLayerIdentityIsRecheckedWithoutContentReads() throws Exception {
+        var reader = new NativeDirtRuntime(); var graph = NativeDirtRuntime.checkedLayers(layerGraph());
+        reader.bindLayers(graph); reader.freezeStartupInputs(); reader.bindLayers(graph);
+        assertThrows(NativeDirtRuntime.Unsupported.class, () -> reader.bindLayers(NativeDirtRuntime.checkedLayers(layerGraph())));
+        assertEquals(0, reader.metrics().bytesRead());
+    }
+    @Test void freshSealRetainsLayerReferenceIdentityEvenForSameLogicalGraph() throws Exception {
+        var first = new NativeDirtRuntime(); var second = new NativeDirtRuntime(); var graph = NativeDirtRuntime.checkedLayers(layerGraph());
+        first.bindLayers(graph); second.bindLayers(graph); assertTrue(first.sameCapturedInputs(second));
+        var different = new NativeDirtRuntime(); different.bindLayers(NativeDirtRuntime.checkedLayers(layerGraph()));
+        assertFalse(first.sameCapturedInputs(different));
+    }
+    private static java.util.HashMap<String, ModuleLayer> layerGraph() { return layerGraph(ModuleLayer.boot()); }
+    private static java.util.HashMap<String, ModuleLayer> layerGraph(ModuleLayer ancestor) {
+        var layers = new java.util.HashMap<String, ModuleLayer>();
+        var boot = child(ancestor); var service = child(boot); var plugin = child(boot); var game = child(plugin, service);
+        layers.put("BOOT", boot); layers.put("SERVICE", service); layers.put("PLUGIN", plugin); layers.put("GAME", game);
+        return layers;
+    }
+    private static ModuleLayer child(ModuleLayer... parents) {
+        var parentList = List.of(parents);
+        var configuration = java.lang.module.Configuration.resolve(ModuleFinder.of(), parentList.stream().map(ModuleLayer::configuration).toList(), ModuleFinder.of(), java.util.Set.of());
+        // Empty test layers: no module or class from a test input is activated.
+        return ModuleLayer.defineModulesWithOneLoader(configuration, parentList, NativeDirtRuntimeTest.class.getClassLoader()).layer();
+    }
     private static NativeDirtRuntime.Catalog catalog(List<NativeDirtRuntime.Artifact> mods, List<Map<String, String>> services,
                                                       List<String> mixins, List<NativeDirtRuntime.Activity> activity) {
-        return new NativeDirtRuntime.Catalog("forgeserver", "DEDICATED_SERVER", "fixture", mods, List.of(), services, mixins, activity, null);
+        return new NativeDirtRuntime.Catalog("forgeserver", "DEDICATED_SERVER", "fixture", mods, List.of(), List.of(), services, mixins, activity, null);
     }
     private Path jar(String name, String resource, String contents) throws Exception {
         Path file = dir.resolve(name);
