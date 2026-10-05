@@ -26,7 +26,8 @@ final class PerimeterProjectCodec {
 
     static CompoundTag save(PerimeterProject project) {
         var h = project.header(); CompoundTag out = new CompoundTag();
-        out.putInt("Version", PerimeterProject.FORMAT_VERSION);
+        out.putInt("Version", project.formatVersion());
+        if (project.gateContract() != null) out.put("GateContract", project.gateContract().save());
         out.putUUID("Project", h.projectId()); out.putLong("Generation", h.generation());
         out.putUUID("Owner", h.owner()); out.putUUID("Builder", h.builder());
         out.putString("CoreKey", h.coreKey()); out.putLong("Core", h.originalCore().asLong()); out.putString("Faction", h.faction());
@@ -80,10 +81,19 @@ final class PerimeterProjectCodec {
     }
 
     static PerimeterProject load(CompoundTag tag) {
+        if (tag == null) throw invalid("Incomplete perimeter record");
+        int version = integer(tag, "Version");
+        if (version != PerimeterProject.FORMAT_VERSION && version != PerimeterProject.GATE_FORMAT_VERSION)
+            throw invalid("Unknown perimeter manifest version");
         keys(tag, Set.of("Version", "Project", "Generation", "Owner", "Builder", "CoreKey", "Core", "Faction", "Material",
                 "FeeVersion", "Price", "Review", "Hash", "Territory", "State", "Revision", "Active", "Blocker", "Palette",
-                "Targets", "Clearance", "Columns", "Min", "Max", "Layout", "Stages", "Receipts"), Set.of("RecoveryState", "Payment"));
-        if (integer(tag, "Version") != PerimeterProject.FORMAT_VERSION) throw invalid("Unknown perimeter manifest version");
+                "Targets", "Clearance", "Columns", "Min", "Max", "Layout", "Stages", "Receipts"),
+                version == PerimeterProject.FORMAT_VERSION ? Set.of("RecoveryState", "Payment") : Set.of("RecoveryState", "Payment", "GateContract"));
+        PerimeterGateContract gateContract = null;
+        if (version == PerimeterProject.GATE_FORMAT_VERSION) {
+            require(tag, "GateContract", Tag.TAG_COMPOUND);
+            gateContract = PerimeterGateContract.load(tag.getCompound("GateContract"));
+        }
         String expectedHash = hash(tag, "Hash");
         long[] territory = longs(tag, "Territory", PerimeterTerritory.MAX_CHUNKS, false);
         Set<ChunkPos> chunks = new HashSet<>();
@@ -100,7 +110,7 @@ final class PerimeterProjectCodec {
         }
         ListTag savedTargets = list(tag, "Targets", PerimeterStageLayout.MAX_TARGETS, false);
         ListTag savedClearance = list(tag, "Clearance", PerimeterStageLayout.MAX_RESERVED, true);
-        if ((long) savedTargets.size() + savedClearance.size() > PerimeterStageLayout.MAX_RESERVED) throw invalid("Oversize perimeter reservation");
+        if ((long) savedTargets.size() + savedClearance.size() + (gateContract == null ? 0 : gateContract.observations().size()) > PerimeterStageLayout.MAX_RESERVED) throw invalid("Oversize perimeter reservation");
         Map<Long, BlockState> targets = new LinkedHashMap<>(), before = new LinkedHashMap<>(), clearance = new LinkedHashMap<>();
         Map<Long, String> materials = new LinkedHashMap<>(); Map<String, Integer> counts = new LinkedHashMap<>();
         Set<Integer> usedPalette = new HashSet<>();
@@ -160,7 +170,7 @@ final class PerimeterProjectCodec {
         var state = state(tag, "State");
         var recovery = tag.contains("RecoveryState") ? state(tag, "RecoveryState") : null;
         var project = PerimeterProject.restore(header, plan, layout, targets, before, clearance, state, recovery,
-                integer(tag, "Active"), number(tag, "Revision"), receipts, payment, string(tag, "Blocker", 256), expectedHash);
+                integer(tag, "Active"), number(tag, "Revision"), receipts, payment, string(tag, "Blocker", 256), expectedHash, gateContract);
         Set<UUID> ids = new HashSet<>();
         for (int i = 0; i < savedStages.size(); i++) {
             CompoundTag saved = savedStages.getCompound(i); var actual = project.stages().get(i);

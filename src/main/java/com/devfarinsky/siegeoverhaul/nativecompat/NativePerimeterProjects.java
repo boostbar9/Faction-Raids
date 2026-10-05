@@ -134,6 +134,9 @@ public final class NativePerimeterProjects {
         if(project.state()==PerimeterProject.State.CANCELED || project.state()==PerimeterProject.State.COMPLETE) {
             cleanup(level,core,project,dirty);return;
         }
+        if (!project.executionSupported()) {
+            pause(core,project,PerimeterProject.GATE_EXECUTION_BLOCKER,dirty);return;
+        }
         if(project.state()==PerimeterProject.State.PREPARED_UNPAID) {
             pause(core,project,"Unpaid interrupted commission: cancel it before reviewing another perimeter.",dirty);return;
         }

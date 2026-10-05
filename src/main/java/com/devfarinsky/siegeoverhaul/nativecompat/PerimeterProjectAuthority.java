@@ -77,6 +77,7 @@ final class PerimeterProjectAuthority {
         if (!tracked(area)) return null;
         try {
             Scope scope=read(area.getPersistentData()); PerimeterProject project=project(level,scope);
+            if (!project.executionSupported()) return PerimeterProject.GATE_EXECUTION_BLOCKER;
             var stage=project.active();
             if (stage==null || stage.index()!=scope.stage() || !stage.digest().equals(scope.stageDigest())
                     || !stage.areaId().equals(area.getUUID()) || builder==null
@@ -114,6 +115,7 @@ final class PerimeterProjectAuthority {
                 && project.header().territory().equals(current.chunks());
     }
     static boolean workState(PerimeterProject project, boolean allowUnpaid, boolean allowVerified) {
+        if (project == null || !project.executionSupported()) return false;
         if (project.state()==PerimeterProject.State.RUNNING) return project.payment()!=null;
         if (allowVerified && project.state()==PerimeterProject.State.STAGE_VERIFIED) return project.payment()!=null;
         return allowUnpaid && (project.state()==PerimeterProject.State.PREPARED_UNPAID && project.payment()==null
@@ -125,7 +127,7 @@ final class PerimeterProjectAuthority {
         if (!(area.level() instanceof ServerLevel level)) return false;
         try {
             Scope scope=read(area.getPersistentData()); PerimeterProject project=project(level,scope);
-            if (project.active()==null || project.activeStage()!=scope.stage()
+            if (!project.executionSupported() || project.active()==null || project.activeStage()!=scope.stage()
                     || !project.active().digest().equals(scope.stageDigest()) || !project.active().areaId().equals(area.getUUID())
                     || !NativeConstructionGuard.matchesProjectSnapshot(area,project)
                     || !ConstructionEditLedger.get(level).matchesProjectLease(project)

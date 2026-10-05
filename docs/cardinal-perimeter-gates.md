@@ -2,9 +2,12 @@
 
 ## Status
 
-Stage one is a read-only geometry compiler, `PerimeterGateLayout`, and regression tests.
-It is deliberately **not called by commissioning, previews, recovery, or native construction**.
-It does not change any current, paid, saved, or completed perimeter. No release/version bump
+This checkpoint includes the read-only geometry compiler, `PerimeterGateLayout`, plus opt-in
+version-two project persistence for exact gate observations. The current commissioning/preview
+path still creates version-one projects. There is **no new live gate commissioning path**.
+Version-two records explicitly fail closed before native marker creation, worker authorization,
+advancement, completion receipt issuance and Treasury debit while live gate verification is
+incomplete. It does not change any current paid or completed perimeter. No release/version bump
 belongs to this checkpoint. Gates are not a shipped gameplay feature yet.
 
 The intended Building presentation retains the existing Auto perimeter / Place structure /
@@ -25,6 +28,8 @@ remaining persistence, live validation and native QA stages pass.
   cardinal exit impossible. Fail clearly rather than silently use a hole boundary.
 - Preserve the complete five-wide corner footprints intact. Each
   three-wide gate center is at least four cells along a run from either corner center.
+- These are usable open gate passages, matching the existing manual Gatehouse semantics;
+  no moving door or portcullis is introduced.
 - The opening is three wide, five deep through the wall, and three high immediately below
   the existing oak deck. Omit only 18 new skin targets per gate. All 15 passage columns
   retain their deck targets. The deck, upper parapets, foundation targets and walk are unchanged.
@@ -65,6 +70,14 @@ The current version-one saved format cannot represent an external approach safel
 Do not remove these checks or put approach cells into native construction to make gates fit.
 
 ### Versioned project-level observations
+
+`PerimeterGateContract` now implements the immutable data contract and strict codec described
+below. `PerimeterProject.prepareWithGates` is explicitly opt-in; ordinary `prepare` still creates
+version one. The complete contract, including its original-wall digest, is bound into the v2
+manifest hash. The global project reservation includes the observations and existing ledger
+subset/edited-cell behavior protects them without a native reservation change. The store's
+aggregate budgets include observations before decoding their states. Native execution and new
+payment remain blocked for v2 at this stage.
 
 Keep in-wall passage cells in the normal wall-column clearance; the unchanged deck remains a
 native target in each column. Add **separate immutable project-level read-only observations**
@@ -112,8 +125,9 @@ gate passage must block review instead of being turned into an excavation target
 
 ## Remaining reviewable stages
 
-1. This geometry compiler and synthetic geometry tests, with no production callers.
-2. Versioned immutable gate/observation persistence, hashes, ledger and compatibility tests.
+1. Geometry compiler and synthetic geometry tests, with no live commissioning callers (implemented).
+2. Opt-in versioned immutable gate/observation persistence, hashes, ledger and compatibility
+   tests, with explicit execution/payment barriers (implemented in this checkpoint).
 3. Exact live passage/approach validation, review rendering, commissioning integration and
    explicit gates/cost/material UI, with no terrain mutation expansion.
 4. Focused actual Workers native QA covering passage construction, access, protection,
@@ -132,6 +146,12 @@ component heights, concavity, holes, enclosed islands, disconnected/diagonal cla
 inputs, negative translation, immutable results, callback budgets and all 511 nonempty 3x3
 claim topologies. The clear validator in geometry tests is synthetic, not proof of actual terrain
 or native construction. Existing `PerimeterBlueprint` tests must continue passing unchanged.
+
+Persistence regressions also cover a fixed v1 golden manifest/hash/stage UUID, exact paid/running
+save shape, v2 role round-trip, unchanged native stage membership, mixed-format stores,
+same-state observed-cell edit invalidation after ledger reload, injected lease-cell rejection and
+native marker/payment refusal before any worker interaction or debit. These are contract/model
+tests, not proof of native building or gameplay.
 
 Required before production wiring/release:
 
