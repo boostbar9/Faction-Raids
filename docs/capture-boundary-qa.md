@@ -43,9 +43,12 @@ Run the existing Native HUD QA workflow for the exact source and inspect its
 counts, capture victory, all graphics configurations or production performance.
 No runtime result is claimed until that workflow passes and frames are reviewed.
 
-Record source SHA, settings, actual viewport/framebuffer sizes and screenshots at
-960×720 GUI scales 2/3 and 1440×960 GUI scales 1/2. In a representative walled camp,
-include a low plinth with four pillars, flanking roofs, steps, a slab and a cliff:
+The automated 24-frame capture gate records 960×720 at GUI scale 3 and 1440×960
+at GUI scale 1. Additional manual checks may use 960×720 at scale 2 and 1440×960
+at scale 2; record their source SHA, settings and actual viewport/framebuffer sizes
+separately rather than treating them as automated coverage. In a representative
+walled camp, include a low plinth with four pillars, flanking roofs, steps, a slab
+and a cliff:
 
 - Approach at 0% with no allied contestants: ground boundary and radius appear
   before capture starts; the long beacon need not appear yet.

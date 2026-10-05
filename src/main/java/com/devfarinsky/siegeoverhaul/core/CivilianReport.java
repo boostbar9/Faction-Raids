@@ -19,7 +19,7 @@ public final class CivilianReport {
                 throw new IllegalArgumentException("Unavailable resident cannot claim live details");
         }
         public String label() { return loaded && !name.isBlank() ? name : "Resident " + id.toString().substring(0, 8); }
-        public String status() { return !loaded ? "Not loaded · details unavailable" : paused ? "Stranded · taxes paused" : "Loaded"; }
+        public String status() { return !loaded ? "Details unavailable" : paused ? "Stranded · taxes paused" : "Loaded"; }
         public static Resident unavailable(UUID id, boolean paused) {
             return new Resident(id, "", new ResourceLocation("minecraft", "none"),
                     new ResourceLocation("minecraft", "plains"), 1, false, false, false, false, paused);

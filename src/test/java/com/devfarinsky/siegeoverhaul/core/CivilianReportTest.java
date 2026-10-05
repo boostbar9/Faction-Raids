@@ -62,7 +62,7 @@ class CivilianReportTest extends MinecraftTestSupport {
         var resident = report.residents().get(0);
         assertFalse(resident.loaded()); assertTrue(resident.paused()); assertEquals("", resident.name());
         assertFalse(resident.bed()); assertFalse(resident.workstation());
-        assertEquals("Not loaded · details unavailable", resident.status());
+        assertEquals("Details unavailable", resident.status());
     }
 
     @Test @SuppressWarnings("unchecked") void loadedDetailsComeFromOwnedNativeVillagerOnly() {
@@ -83,7 +83,13 @@ class CivilianReportTest extends MinecraftTestSupport {
         assertEquals(new ResourceLocation("minecraft", "desert"), resident.type());
         assertEquals(3, resident.level()); assertFalse(resident.bed()); assertTrue(resident.workstation());
         tag.putString("SiegeCivilianFaction", "team:other");
-        assertFalse(CoreCivilians.snapshot(ledger, "team:test", ignored -> nativeVillager, true).residents().get(0).loaded());
+        var foreign = CoreCivilians.snapshot(ledger, "team:test", ignored -> nativeVillager, true).residents().get(0);
+        assertFalse(foreign.loaded()); assertEquals("Details unavailable", foreign.status());
+        assertEquals("", foreign.name());
+        tag.putString("SiegeCivilianFaction", "team:test"); when(nativeVillager.isAlive()).thenReturn(false);
+        var removed = CoreCivilians.snapshot(ledger, "team:test", ignored -> nativeVillager, true).residents().get(0);
+        assertFalse(removed.loaded()); assertEquals("Details unavailable", removed.status());
+        assertEquals("", removed.name());
     }
 
     @Test void emptyReportsDoNotCreateResidentsAndCorruptExtraEntriesStayBounded() {

@@ -980,7 +980,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 if (resident.loaded()) detail += (resident.bed() ? "Bed remembered. " : "No bed remembered. ")
                         + (resident.workstation() ? "Workstation remembered. " : "No workstation remembered. ")
                         + "These are native brain memories, not a housing or workstation availability check. ";
-                else detail += "No chunks are loaded to inspect residents. Unloaded is not dead; tax clocks follow the saved ledger. ";
+                else detail += "This report does not load chunks. Unavailable does not confirm death; tax clocks follow the saved ledger. ";
                 CoreItemTooltip.drawText(g, font, List.of(Component.literal(detail)), width, height,
                         Math.round((row.getX() + row.getWidth()) * layout.scale()),
                         Math.round((row.getY() + row.getHeight() / 2f) * layout.scale())); return;
@@ -1624,7 +1624,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         var c = civilianLayout();
         var report = menu.civilianReport();
         String counts = menu.civilians() + " / " + CivilianLedger.LIMIT + " residents";
-        if (report != null) counts += " · " + report.loaded() + " loaded · " + (report.residents().size() - report.loaded()) + " not loaded";
+        if (report != null) counts += " · " + report.loaded() + " loaded · " + (report.residents().size() - report.loaded()) + " unavailable";
         text(g, counts, c.x() + 3, c.y() + 2, c.width() - 6, CommandPalette.TEXT);
         text(g, "Taxes collected " + emeralds(menu.totalCivilianTaxes()) + (report == null ? ""
                 : report.taxEligible() ? " · Core tax-eligible" : " · Core taxes paused"),
