@@ -90,6 +90,7 @@ jobs:
           assert data['loadedModVersions']['smallships'] == ('2.0.0' if release == 'final' else '2.0.0-b1.4'), data
           assert data['loadedModVersions']['recruits'] == '1.15.2', data
           assert data['observedNativeTicks'] >= 20, data
+          assert data['forcedVanillaFallbackActualFactory'], data
           assert len(data['hullsAndBoardingOrders']) == 4, data
           for item in data['hullsAndBoardingOrders']:
               assert item['nativeEntityNbtCrewRoundTrip'] and item['noNavalOwnershipTagAdded'], item
@@ -106,6 +107,8 @@ jobs:
               assert prototype['dockyardTurnRefused'] and prototype['sharedControllingPassengerUnchanged'], prototype
               assert prototype['productionCompatibilityGateUnchanged'], prototype
               assert len(prototype['nativeTurnsWithoutDirectYawWrites']) == 4, prototype
+              assert prototype['nativeWaypointArrival']['vesselDistanceMoved'] >= 5, prototype
+              assert prototype['nativeWaypointArrival']['nativeSailsLowered'], prototype
           print('Exact-binary probe completed; this deliberately does not certify release compatibility.')
           PY
       - name: Read exact native bytecode and original artifact hashes
@@ -128,6 +131,12 @@ jobs:
             find "$root/server/logs" -maxdepth 1 -type f -name '*.log' -exec cp {} "$root/evidence/logs/" \;
           fi
           if [ -d "$root/server/crash-reports" ]; then cp -R "$root/server/crash-reports" "$root/evidence/"; fi
+          # Preserve untouched configs from this fresh QA directory, including failures.
+          # They are evidence of native generation, never player or production configs.
+          if [ -d "$root/server" ]; then
+            mkdir -p "$root/evidence/generated-configs"
+            find "$root/server" -type f -name 'smallships*.toml' -exec cp --parents {} "$root/evidence/generated-configs/" \;
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -213,6 +222,10 @@ jobs:
           mkdir -p "$root/evidence/logs"
           if [ -d "$root/client/logs" ]; then find "$root/client/logs" -maxdepth 1 -type f -name '*.log' -exec cp {} "$root/evidence/logs/" \;; fi
           if [ -d "$root/client/crash-reports" ]; then cp -R "$root/client/crash-reports" "$root/evidence/"; fi
+          if [ -d "$root/client" ]; then
+            mkdir -p "$root/evidence/generated-configs"
+            find "$root/client" -type f -name 'smallships*.toml' -exec cp --parents {} "$root/evidence/generated-configs/" \;
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

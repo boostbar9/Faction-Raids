@@ -124,7 +124,8 @@ class NavalConvoyTest extends MinecraftTestSupport {
     @Test void trackingLegacyOrOwnedShipsDoesNotPermitSteering() {
         Entity ship = mock(Entity.class); CompoundTag tag = new CompoundTag();
         when(ship.getPersistentData()).thenReturn(tag);
-        when(ship.getPassengers()).thenReturn(List.of(raider()));
+        Mob crew = raider();
+        when(ship.getPassengers()).thenReturn(List.of(crew));
         tag.putString(ModConstants.Tags.NAVAL_TEAM, "team:test");
         assertFalse(NavalConvoy.mayControl(ship, "team:test"));
         tag.putBoolean(ModConstants.Tags.NAVAL_DISPOSABLE, true);
@@ -136,14 +137,16 @@ class NavalConvoyTest extends MinecraftTestSupport {
         CompoundTag tag = new CompoundTag(); tag.putBoolean(ModConstants.Tags.NAVAL_DISPOSABLE, true);
         tag.putString(ModConstants.Tags.NAVAL_TEAM, "team:test");
         when(ship.getPersistentData()).thenReturn(tag);
-        when(ship.getPassengers()).thenReturn(List.of(raider(), seat));
+        Mob crew = raider();
+        when(ship.getPassengers()).thenReturn(List.of(crew, seat));
         var player = mock(net.minecraft.world.entity.player.Player.class);
         when(seat.getPassengers()).thenReturn(List.of(player));
         assertFalse(NavalConvoy.mayControl(ship, "team:test"));
         Mob civilian = mock(Mob.class); when(civilian.getPersistentData()).thenReturn(new CompoundTag());
         when(seat.getPassengers()).thenReturn(List.of(civilian));
         assertFalse(NavalConvoy.mayControl(ship, "team:test"));
-        when(seat.getPassengers()).thenReturn(List.of(raider()));
+        Mob nestedCrew = raider();
+        when(seat.getPassengers()).thenReturn(List.of(nestedCrew));
         assertTrue(NavalConvoy.mayControl(ship, "team:test"));
     }
     private static Mob raider() {

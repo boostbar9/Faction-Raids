@@ -41,6 +41,12 @@ public final class NativeSmallShipsProbe {
     private long preparedAt;
     private final Map<java.util.UUID, Float> beforeTurns = new LinkedHashMap<>();
     private final Map<String, Object> adapterChecks = new LinkedHashMap<>();
+    private Case navigating;
+    private BlockPos navigationGoal;
+    private Vec3 navigationStart;
+    private long navigationStarted;
+    private boolean navigationArrived;
+    private final List<Map<String, Object>> navigationSamples = new ArrayList<>();
 
     private record Case(Boat boat, Mob recruit, CaptainEntity captain, boolean captainFirst, int shipTicks, int captainTicks, int recruitTicks) {}
 
@@ -227,6 +233,10 @@ public final class NativeSmallShipsProbe {
             item.put("unrelatedNativeCaptainBlocksConvoySteering", true);
             observations.add(item);
         }
+        Entity fallback = NavalFleet.spawn(level, origin, true).orElseThrow(() -> new IllegalStateException("Forced vanilla fallback did not spawn in clear water"));
+        require(fallback.getType() == EntityType.BOAT && !NavalFleet.isSmallShipsVessel(fallback), "Forced fallback created a companion vessel");
+        fallback.discard();
+        report.put("forcedVanillaFallbackActualFactory", true);
         report.put("observedNativeTicks", level.getGameTime() - preparedAt);
         report.put("hullsAndBoardingOrders", observations);
         report.put("status", "probe-completed");
@@ -312,6 +322,51 @@ public final class NativeSmallShipsProbe {
         adapterChecks.put("sharedControllingPassengerUnchanged", true);
         adapterChecks.put("productionCompatibilityGateUnchanged", !Main.isSmallShipsCompatible);
         adapterChecks.put("scope", "QA-only hooks and direct native wrapper calls. Native ticks own rotation; no waypoint or release compatibility claim.");
+        report.put("status", "probe-completed");
+        write();
+    }
+
+    void beginNativeNavigation() throws Exception {
+        navigating = cases.get(1); // Cog whose ordinary recruit boarded before the helm captain.
+        for (Entity entity : created) if (entity != navigating.boat && entity != navigating.captain && entity != navigating.recruit) entity.discard();
+        navigating.captain.setFollowState(0);
+        navigationGoal = navigating.boat.blockPosition().offset(0, 0, 20);
+        navigationStart = navigating.boat.position();
+        navigationStarted = level.getGameTime();
+        require(navigationGoal.getZ() <= origin.getZ() + 20, "Navigation target left the bounded fixture pool");
+        navigating.captain.setSailPos(navigationGoal);
+        navigating.captain.smallShipsController.calculatePath();
+        report.put("status", "native-navigation-running");
+        adapterChecks.put("nativeNavigationSamples", navigationSamples);
+        adapterChecks.put("nativeNavigationSetup", "Single real crew-first Cog; unmodified native captain controller receives one sail destination. No direct physics calls, velocity writes, teleports or tick acceleration during navigation.");
+        write();
+    }
+
+    void sampleNativeNavigation() throws Exception {
+        if (navigationArrived) return;
+        Boat ship = navigating.boat;
+        CaptainEntity captain = navigating.captain;
+        require(ship.isAlive() && captain.isAlive() && captain.getVehicle() == ship, "Native navigation lost its crew");
+        double distance = captain.distanceToSqr(navigationGoal.getX(), captain.getY(), navigationGoal.getZ());
+        double moved = ship.position().distanceTo(navigationStart);
+        int sail = ((Number) call(ship, "getSailState")).intValue();
+        double reach = captain.smallShipsController.reach;
+        navigationSamples.add(Map.of("ticks", level.getGameTime() - navigationStarted, "squaredCaptainDistance", distance,
+                "nativeReachSquared", reach, "vesselDistanceMoved", moved, "sailState", sail, "yaw", ship.getYRot(),
+                "speed", call(ship, "getSpeed"), "isCaptainDriver", new SmallShips(ship, captain).isCaptainDriver()));
+        if (moved >= 5 && reach > 0 && distance < reach && sail == 0) {
+            navigationArrived = true;
+            adapterChecks.put("nativeWaypointArrival", Map.of("ticks", level.getGameTime() - navigationStarted,
+                    "vesselDistanceMoved", moved, "squaredCaptainDistance", distance, "nativeReachSquared", reach,
+                    "nativeSailsLowered", true, "captainBoardedAfterCrew", true));
+        }
+        write();
+    }
+
+    void finishNativeNavigation() throws Exception {
+        sampleNativeNavigation();
+        require(navigationArrived, "Native captain did not converge and lower sails within 600 real ticks; see navigation samples");
+        require(!Main.isSmallShipsCompatible, "Native waypoint probe changed production compatibility activation");
         report.put("status", "probe-completed");
         write();
     }
