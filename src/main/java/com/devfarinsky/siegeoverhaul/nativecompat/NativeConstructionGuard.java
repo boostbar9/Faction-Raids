@@ -670,6 +670,8 @@ public final class NativeConstructionGuard {
         if (initialCellSafe(current, target) && level.getBlockEntity(pos) == null) return null;
         String block = current == null ? "unreadable block"
                 : net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(current.getBlock()).toString();
+        String compatibility = CampVegetation.optionalPlantProblem(current);
+        if (compatibility != null) return "Paused: " + block + " at " + pos.toShortString() + ". " + compatibility;
         return "Paused: " + block + " at " + pos.toShortString()
                 + " needs manual clearance; existing blocks and paired plants are protected";
     }

@@ -20,6 +20,30 @@ class CampVegetationTest extends MinecraftTestSupport {
     private static final ResourceLocation SHORT_GRASS = new ResourceLocation("sizeable_foliage", "very_short_grass");
     private static final String SHORT_GRASS_CLASS = "com.craisinlord.sizeablefoliage.content.block.VeryShortGrassBlock";
 
+    @Test void optionalVersionFenceRejectsUnreviewedOrUnavailableRuntimeMetadata() {
+        assertTrue(CampVegetation.reviewedOptionalVersion("1.2.1"));
+        for (String version : List.of("", "1.2.0", "1.2.2", "2.0.0", "1.2.1-custom"))
+            assertFalse(CampVegetation.reviewedOptionalVersion(version), version);
+        assertFalse(CampVegetation.reviewedOptionalVersion(null));
+        var mods = mock(net.minecraftforge.fml.ModList.class);
+        var container = mock(net.minecraftforge.fml.ModContainer.class);
+        var info = mock(net.minecraftforge.forgespi.language.IModInfo.class);
+        when(container.getModInfo()).thenReturn(info);
+        when(info.getVersion()).thenReturn(new org.apache.maven.artifact.versioning.DefaultArtifactVersion("1.2.1"));
+        try (var runtime = mockStatic(net.minecraftforge.fml.ModList.class)) {
+            assertEquals("", CampVegetation.loadedSizeableVersion());
+            runtime.when(net.minecraftforge.fml.ModList::get).thenReturn(mods);
+            when(mods.getModContainerById("sizeable_foliage")).thenReturn(java.util.Optional.empty());
+            assertEquals("", CampVegetation.loadedSizeableVersion());
+            doReturn(java.util.Optional.of(container)).when(mods).getModContainerById("sizeable_foliage");
+            assertTrue(CampVegetation.reviewedOptionalVersion(CampVegetation.loadedSizeableVersion()));
+            when(info.getVersion()).thenReturn(new org.apache.maven.artifact.versioning.DefaultArtifactVersion("1.2.2"));
+            assertFalse(CampVegetation.reviewedOptionalVersion(CampVegetation.loadedSizeableVersion()));
+            runtime.when(net.minecraftforge.fml.ModList::get).thenThrow(new IllegalStateException("Unavailable metadata"));
+            assertEquals("", CampVegetation.loadedSizeableVersion());
+        }
+    }
+
     @Test void optionalCompatibilityRequiresTheReviewedRegistryIdAndImplementation() {
         assertTrue(CampVegetation.reviewedOptionalType(SHORT_GRASS, SHORT_GRASS_CLASS));
         for (String path : List.of("very_tall_grass", "very_large_fern", "big_bush", "big_bush_part",

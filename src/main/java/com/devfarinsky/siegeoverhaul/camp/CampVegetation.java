@@ -10,11 +10,13 @@ import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraftforge.fml.ModList;
 import java.util.*;
 
 /** Clear only small vegetation in camp jobs; capture paired plants before neighbor updates. */
 public final class CampVegetation {
     private static final ResourceLocation VERY_SHORT_GRASS = new ResourceLocation("sizeable_foliage", "very_short_grass");
+    private static final String REVIEWED_SIZEABLE_VERSION = "1.2.1";
     private CampVegetation() {}
     public static boolean plant(BlockState state) {
         return state.getBlock() instanceof FlowerBlock || state.getBlock() instanceof TallFlowerBlock
@@ -38,7 +40,26 @@ public final class CampVegetation {
      * See docs/sizeable-foliage-compatibility.md for the upstream source and binary audit.
      */
     static boolean reviewedOptionalPlant(BlockState state, ResourceLocation id) {
-        return reviewedOptionalType(id, state.getBlock().getClass().getName()) && singleCellGrassShape(state);
+        return reviewedOptionalType(id, state.getBlock().getClass().getName())
+                && reviewedOptionalVersion(loadedSizeableVersion()) && singleCellGrassShape(state);
+    }
+
+    static boolean reviewedOptionalVersion(String version) { return REVIEWED_SIZEABLE_VERSION.equals(version); }
+
+    static String loadedSizeableVersion() {
+        try {
+            ModList mods = ModList.get();
+            return mods == null ? "" : mods.getModContainerById("sizeable_foliage")
+                    .map(container -> container.getModInfo().getVersion().toString()).orElse("");
+        } catch (RuntimeException | LinkageError unavailable) { return ""; }
+    }
+
+    /** Explain the optional adapter fence without weakening ordinary obstacle diagnostics. */
+    public static String optionalPlantProblem(BlockState state) {
+        if (state == null || !VERY_SHORT_GRASS.equals(BuiltInRegistries.BLOCK.getKey(state.getBlock()))) return null;
+        return reviewedOptionalVersion(loadedSizeableVersion()) ? null
+                : "Automatic clearing of this grass requires reviewed Sizeable Foliage " + REVIEWED_SIZEABLE_VERSION
+                + ". Clear it manually or use that supported version.";
     }
 
     static boolean reviewedOptionalType(ResourceLocation id, String className) {

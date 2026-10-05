@@ -1,6 +1,6 @@
 ## 4.52.7 — Build through Sizeable Foliage short grass
 
-- Let builders clear Sizeable Foliage’s Very Short Grass from approved wall and perimeter cells, instead of refusing the site as occupied.
+- Let builders clear Sizeable Foliage 1.2.1’s Very Short Grass from approved wall and perimeter cells, instead of refusing the site as occupied. Other addon versions keep manual clearance until their behavior is checked.
 - Keep the free terrain review, manual wall checks and protected native builder on the same single-cell plant rules. Paired plants and dangerous vegetation still need separate clearance.
 - Preserve existing builds, claims, containers, fluids, supplied materials and paid jobs. Sizeable Foliage remains optional; no additional mod is required.
 
@@ -1313,4 +1313,3 @@ No gameplay changes. Pure internal refactor to make future features easier and s
 - Added abandonment-based defeat instead of villager-based defeat.
 - Added hard per-invasion mob caps for integrated-server performance.
 - Added administrator stop command and player test command.
-

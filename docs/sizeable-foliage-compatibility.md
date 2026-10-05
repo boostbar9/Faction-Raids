@@ -8,9 +8,10 @@ A player perimeter review repeatedly stopped at `sizeable_foliage:very_short_gra
 
 - Registry: `sizeable_foliage:very_short_grass`
 - Implementation: `com.craisinlord.sizeablefoliage.content.block.VeryShortGrassBlock`
+- Loaded addon version: exactly `1.2.1`; missing, unreadable or other versions fail closed with a manual-clearance diagnostic
 - Required runtime structure: a `BushBlock`, not a crop, flower or paired plant; no state properties, block entity, fluid or collision; replaceable and instant-break
 
-The class-name check deliberately fails closed if a future addon release replaces the audited implementation. A matching namespace, material tag, `BushBlock` superclass or replaceable flag alone is insufficient. Both the registry/implementation identity and the structural checks must pass.
+The exact version and class-name checks deliberately fail closed for unreviewed addon releases, including releases that retain the class name but change its removal callbacks. A matching namespace, material tag, `BushBlock` superclass or replaceable flag alone is insufficient. The loaded version, registry/implementation identity and structural checks must all pass.
 
 The old wall-surface shortcut also now rejects paired plants and wither roses, matching final native admission rather than offering a surface that the protected handoff would subsequently refuse. Existing camp handling of vanilla paired plants is retained.
 
