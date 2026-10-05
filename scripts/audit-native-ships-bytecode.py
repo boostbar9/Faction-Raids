@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import zipfile
 
 CLASSES = {
     'recruits': ['com.talhanation.recruits.Main',
@@ -48,7 +49,8 @@ def main():
             raise RuntimeError(f'Loaded {mod} binary is unavailable')
         if mod == 'smallships' and data['fixtureRelease'] == 'final':
             classes = classes + ['com.talhanation.smallships.world.entity.ship.abilities.Seatable',
-                                 'com.talhanation.smallships.world.entity.ship.abilities.Sailable']
+                                 'com.talhanation.smallships.world.entity.ship.abilities.Sailable',
+                                 'com.talhanation.smallships.mixin.controlling.BoatMixin']
         entries = []
         for name in classes:
             result = subprocess.run([javap, '-J-Xmx256m', '-c', '-p', '-classpath', str(paths[0]), name],
@@ -64,6 +66,30 @@ def main():
         if not candidates or not any(digest(p) == expected for p in candidates):
             raise RuntimeError(f'Exact official original artifact not verified: {name}')
         report['originals'][name] = expected
+    if data['fixtureRelease'] == 'legacy':
+        name = 'small-ships-450659-5566900.jar'
+        candidates = [p for p in cache.rglob(name) if p.is_file()]
+        if not candidates:
+            raise RuntimeError('Legacy original artifact missing')
+        report['originals'][name] = {'sha256': digest(candidates[0]),
+            'verification': 'Observed official pinned coordinate; independent expected hash not yet pinned'}
+        report['originalVerification'] = 'partial: legacy hash observed, final/Recruits hashes independently pinned'
+    else:
+        report['originalVerification'] = 'pinned final Small Ships and Recruits original hashes match'
+    for name in EXPECTED_ORIGINALS:
+        matches = [p for p in cache.rglob(name) if p.is_file() and digest(p) == EXPECTED_ORIGINALS[name]]
+        if not matches:
+            continue
+        classes = CLASSES['recruits'] if name.startswith('recruits') else CLASSES['smallships']
+        for class_name in classes:
+            result = subprocess.run([javap, '-J-Xmx256m', '-c', '-p', '-classpath', str(matches[0]), class_name],
+                                    check=True, capture_output=True, text=True, timeout=60)
+            (out / ('original-' + class_name.rsplit('.', 1)[-1] + '.javap.txt')).write_text(result.stdout)
+        with zipfile.ZipFile(matches[0]) as jar:
+            for member in jar.namelist():
+                if member.endswith('.json') and 'mixin' in member and 'refmap' not in member:
+                    target = out / ('original-' + name.split('-')[0] + '-' + Path(member).name)
+                    target.write_bytes(jar.read(member))
     (evidence / 'bytecode-audit.json').write_text(json.dumps(report, indent=2) + '\n')
 
 

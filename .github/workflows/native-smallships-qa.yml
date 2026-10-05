@@ -7,6 +7,12 @@ on:
     types: [opened, reopened, synchronize]
     paths:
       - 'src/**/naval/**'
+      - 'build.gradle'
+      - 'gradle.properties'
+      - 'gradle/wrapper/**'
+      - 'gradlew*'
+      - 'src/nativeServerQa/resources/**'
+      - 'scripts/generate-native-server-template.py'
       - 'gradle/native-smallships-qa.gradle'
       - '.github/workflows/native-smallships-qa.yml'
       - 'scripts/audit-native-ships-bytecode.py'
@@ -77,8 +83,10 @@ jobs:
           assert len(data['hullsAndBoardingOrders']) == 4, data
           for item in data['hullsAndBoardingOrders']:
               assert item['nativeEntityNbtCrewRoundTrip'] and item['noNavalOwnershipTagAdded'], item
+              assert all(value >= 19 for value in item['entityTicks'].values()), item
               if release == 'final':
                   assert item['captainSeatType'] == 'DRIVER' and item['nativeDockyardBoardingRefused'], item
+                  assert item['nativeMastIntersectsObstruction'], item
           assert (root / 'server-console.log').read_text().count('SIEGE_NATIVE_SHIPS_PROBE_COMPLETED compatibility=unverified') == 1
           print('Exact-binary probe completed; this deliberately does not certify release compatibility.')
           PY

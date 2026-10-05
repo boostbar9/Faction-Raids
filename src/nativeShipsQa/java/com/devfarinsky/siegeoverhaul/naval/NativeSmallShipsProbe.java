@@ -14,6 +14,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.loading.FMLEnvironment;
@@ -39,7 +40,7 @@ public final class NativeSmallShipsProbe {
     private boolean finalRelease;
     private long preparedAt;
 
-    private record Case(Boat boat, Mob recruit, CaptainEntity captain, boolean captainFirst) {}
+    private record Case(Boat boat, Mob recruit, CaptainEntity captain, boolean captainFirst, int shipTicks, int captainTicks, int recruitTicks) {}
 
     NativeSmallShipsProbe(ServerLevel level, BlockPos origin) { this.level = level; this.origin = origin; }
 
@@ -104,7 +105,7 @@ public final class NativeSmallShipsProbe {
             boolean captainFirst = i % 2 == 0;
             require(NavalFleet.board(boat, captainFirst ? captain : recruit), "First native boarding rejected: " + hull);
             require(NavalFleet.board(boat, captainFirst ? recruit : captain), "Second native boarding rejected: " + hull);
-            cases.add(new Case(boat, recruit, captain, captainFirst));
+            cases.add(new Case(boat, recruit, captain, captainFirst, boat.tickCount, captain.tickCount, recruit.tickCount));
         }
         preparedAt = level.getGameTime();
         write();
@@ -115,10 +116,15 @@ public final class NativeSmallShipsProbe {
         List<Map<String, Object>> observations = new ArrayList<>();
         for (Case sample : cases) {
             Boat ship = sample.boat;
-            require(ship.isAlive() && sample.recruit.isPassenger() && sample.captain.isPassenger(), "Native fixture crew lost");
+            require(ship.isAlive() && sample.recruit.getVehicle() == ship && sample.captain.getVehicle() == ship
+                    && ship.getPassengers().size() == 2, "Native fixture crew lost or moved");
+            require(ship.tickCount - sample.shipTicks >= 19 && sample.captain.tickCount - sample.captainTicks >= 19
+                    && sample.recruit.tickCount - sample.recruitTicks >= 19, "Native actors did not actually tick");
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("hull", ForgeRegistries.ENTITY_TYPES.getKey(ship.getType()).toString());
             item.put("captainFirst", sample.captainFirst);
+            item.put("entityTicks", Map.of("ship", ship.tickCount - sample.shipTicks,
+                    "captain", sample.captain.tickCount - sample.captainTicks, "recruit", sample.recruit.tickCount - sample.recruitTicks));
             item.put("passengerCount", ship.getPassengers().size());
             item.put("nativeRecruitsCaptainDriver", new SmallShips(ship, sample.captain).isCaptainDriver());
             item.put("controllingPassenger", ship.getControllingPassenger() == null ? "none" : ship.getControllingPassenger().getType().toString());
@@ -146,7 +152,17 @@ public final class NativeSmallShipsProbe {
                 rejected.discard();
                 // Demonstrate the stale fixed two-block clearance against a real mast envelope.
                 BlockPos clearanceSite = origin.offset(34, 0, 0);
-                BlockPos mastBlock = clearanceSite.above(8);
+                Object mast = ((List<?>) call(ship, "getParts")).stream().filter(part -> {
+                    try { return Boolean.TRUE.equals(call(part, "mast")); }
+                    catch (Exception failure) { throw new IllegalStateException(failure); }
+                }).findFirst().orElseThrow();
+                AABB mastBounds = (AABB) call(mast, "boxAt", new Class<?>[]{double.class, double.class, double.class, float.class},
+                        clearanceSite.getX() + .5, clearanceSite.getY() + .05, clearanceSite.getZ() + .5, 0F);
+                BlockPos mastBlock = BlockPos.containing((mastBounds.minX + mastBounds.maxX) / 2,
+                        mastBounds.maxY - 1, (mastBounds.minZ + mastBounds.maxZ) / 2);
+                require(mastBlock.getY() > clearanceSite.getY() + 2 && mastBounds.intersects(new AABB(mastBlock)),
+                        "High-obstruction fixture misses actual translated native mast");
+                item.put("nativeMastIntersectsObstruction", true);
                 level.setBlock(mastBlock, Blocks.STONE.defaultBlockState(), 3);
                 item.put("legacyClearanceAcceptsHighObstruction", NavalFleet.isClearWaterFootprint(level, clearanceSite, 3));
                 level.setBlock(mastBlock, Blocks.AIR.defaultBlockState(), 3);
@@ -155,7 +171,10 @@ public final class NativeSmallShipsProbe {
             CompoundTag saved = new CompoundTag();
             require(ship.save(saved), "Native entity snapshot failed");
             Entity restored = EntityType.loadEntityRecursive(saved, level, entity -> entity);
-            require(restored instanceof Boat && restored.getPassengers().size() == ship.getPassengers().size(), "Native NBT crew roundtrip failed");
+            require(restored instanceof Boat && restored.getPassengers().size() == ship.getPassengers().size()
+                    && restored.getPassengers().stream().map(Entity::getUUID).collect(java.util.stream.Collectors.toSet())
+                    .equals(ship.getPassengers().stream().map(Entity::getUUID).collect(java.util.stream.Collectors.toSet())),
+                    "Native NBT crew UUID roundtrip failed");
             if (finalRelease) {
                 Entity restoredCaptain = restored.getPassengers().stream().filter(e -> e.getUUID().equals(sample.captain.getUUID())).findFirst().orElseThrow();
                 Object seat = call(restored, "getSeatOf", new Class<?>[]{Entity.class}, restoredCaptain);
