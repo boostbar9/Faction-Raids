@@ -25,10 +25,11 @@
     "4.52.4": "Lower manual building commissions, clearer unavailable territory upgrades and saved once-only wave rewards. Whole-perimeter commissions stay 64 emeralds. Older unpaid plans need a fresh review. Back up worlds and update the server and all clients together; protocol 20 rejects older clients.",
     "4.52.5": "Safer enemy camp scouting and one bounded wider search after a saved one-minute wait. Preparation stays paused while searching; unsafe terrain can still use camp-less raids. New and still-active searches gain recovery; already-abandoned raids keep their current fallback. Back up worlds and update the server and all clients together.",
     "4.52.7": "Sizeable Foliage 1.2.1 Very Short Grass no longer blocks protected wall and perimeter builds. Larger plants, crops, containers and water remain protected. Back up your world and update the server and all clients together.",
-    "4.52.8": "Saved building plans no longer expire after two minutes. Enemy-core capture boundaries and eligibility are clearer; Loot shows possible native items; Civilians shows a read-only resident roster. Fresh building safety/cost checks remain. Back up your world and update server and all clients together for protocol 22."
+    "4.52.8": "Saved building plans no longer expire after two minutes. Enemy-core capture boundaries and eligibility are clearer; Loot shows possible native items; Civilians shows a read-only resident roster. Fresh building safety/cost checks remain. Back up your world and update server and all clients together for protocol 22.",
+    "4.52.9": "Commissioned builders wait until they reach native horizontal working range on checked safe footing before dispatching block work. Bounded approach points help native pathfinding. Existing vertical reach, claims, supplies and paid jobs are preserved. Back up your world and update the server and all clients together."
   },
   "promos": {
-    "1.20.1-latest": "4.52.8",
-    "1.20.1-recommended": "4.52.8"
+    "1.20.1-latest": "4.52.9",
+    "1.20.1-recommended": "4.52.9"
   }
 }
