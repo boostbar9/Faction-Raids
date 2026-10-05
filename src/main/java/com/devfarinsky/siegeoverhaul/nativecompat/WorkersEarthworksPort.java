@@ -89,6 +89,7 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
         if (area instanceof ProtectedBuildArea || area.getPersistentData().contains("SiegeProtectedConstructionV1") || PerimeterProjectLink.reserved(worker))
             return "Existing accepted construction cannot be converted to the new earthworks adapter";
         String runtime = WorkersConstructionRuntime.problem(); if (runtime != null) return runtime;
+        String materialApi = pinnedMaterialApiProblem(); if (materialApi != null) return materialApi;
         String lease = authority.newLeaseProblem(manifest, journal, worker, area); if (lease != null) return lease;
         return authority.nativeInventoryProblem(manifest, journal, worker);
     }
@@ -137,8 +138,8 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
             return "An entity occupies the exact work cell";
         String access = authority.standingAndEscapeProblem(manifest, journal, worker); if (access != null) return access;
         if (step.kind() != PerimeterEarthworksManifest.Kind.CUT) {
-            var parsed = BuildBlockParse.parseBlock(step.after().getBlock(), level);
-            if (parsed == null || !exactFullBlockMaterial(step.after(), parsed.getItem(), parsed.placeAsBase()))
+            var parsed = BuildBlockParse.parseBlock(step.after().getBlock());
+            if (parsed == null || !exactFullBlockMaterial(step.after(), parsed.getItem(), parsed.wasParsed()))
                 return "The live native recipe requires a different item/state contract and a fresh bound quote";
             if (!step.after().equals(area.getStateFromPos(target)) || area.findPairedMultiBlockState(target) != null || !preparationMatchesActive(step))
                 return "Native placement differs from the exact full-block target";
@@ -227,6 +228,18 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
             // Non-null exact target bypasses the native multi-target reordering/LOS-pruning selector, not mining progress.
             nativeGoal.mineBlocks(new Stack<>()); boundTool = stock(worker.getMainHandItem());
         } else nativeGoal.placeBlocks(new Stack<>());
+    }
+    static String pinnedMaterialApiProblem() {
+        try {
+            Class<?> type = BuildBlockParse.class;
+            if (type.getMethod("parseBlock", net.minecraft.world.level.block.Block.class).getReturnType() != type
+                    || type.getMethod("getItem").getReturnType() != Item.class
+                    || type.getMethod("wasParsed").getReturnType() != boolean.class)
+                return "The pinned native material parser ABI changed";
+            for (var method : type.getMethods()) if (method.getName().equals("parseBlock") && method.getParameterCount() != 1)
+                return "A different native material parser ABI needs its own reviewed contract";
+            return null;
+        } catch (ReflectiveOperationException | LinkageError unavailable) { return "The audited Workers 8351157 material parser is unavailable"; }
     }
     static boolean exactFullBlockMaterial(net.minecraft.world.level.block.state.BlockState target, Item consumed, boolean placeAsBase) {
         if (!(target.is(Blocks.DIRT) || target.is(Blocks.COBBLESTONE) || target.is(Blocks.STONE_BRICKS) || target.is(Blocks.OAK_PLANKS))) return false;

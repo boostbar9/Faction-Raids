@@ -159,6 +159,31 @@ class NativeEarthworksReviewTest extends MinecraftTestSupport {
         assertFalse(WorkersEarthworksPort.exactFullBlockMaterial(Blocks.OAK_SLAB.defaultBlockState(), Items.OAK_SLAB, false));
     }
 
+    @Test void actualPinnedParserAbiAndMaterialProbeMatchTheDisassembledPlacementBranch() throws Exception {
+        assertNull(WorkersEarthworksPort.pinnedMaterialApiProblem());
+        Class<?> type = com.talhanation.workers.world.BuildBlockParse.class;
+        assertThrows(NoSuchMethodException.class, () -> type.getMethod("parseBlock", net.minecraft.world.level.block.Block.class, net.minecraft.world.level.Level.class));
+        List<BlockState> targets = List.of(Blocks.DIRT.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState(),
+                Blocks.STONE_BRICKS.defaultBlockState(), Blocks.OAK_PLANKS.defaultBlockState(), Blocks.OAK_SLAB.defaultBlockState(),
+                Blocks.OAK_SLAB.defaultBlockState().setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE,
+                        net.minecraft.world.level.block.state.properties.SlabType.TOP),
+                Blocks.OAK_SLAB.defaultBlockState().setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE,
+                        net.minecraft.world.level.block.state.properties.SlabType.DOUBLE));
+        for (BlockState target : targets) {
+            var parsed = com.talhanation.workers.world.BuildBlockParse.parseBlock(target.getBlock());
+            var item = parsed.getItem(); assertNotNull(item);
+            var placed = parsed.wasParsed() && item instanceof net.minecraft.world.item.BlockItem block ? block.getBlock().defaultBlockState() : target;
+            System.out.println("EARTHWORKS_PINNED_PARSER target=" + target + " item=" + net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item)
+                    + " wasParsed=" + parsed.wasParsed() + " effective=" + placed + " preserves=" + target.equals(placed));
+            if (target.is(Blocks.DIRT) || target.is(Blocks.COBBLESTONE)) assertTrue(WorkersEarthworksPort.exactFullBlockMaterial(target, item, parsed.wasParsed()));
+            if (target.is(Blocks.OAK_SLAB)) assertFalse(WorkersEarthworksPort.exactFullBlockMaterial(target, item, parsed.wasParsed()), "Initial target contract still refuses slab states");
+        }
+        try (var in = type.getResourceAsStream("BuildBlockParse.class")) {
+            assertNotNull(in); System.out.println("EARTHWORKS_PINNED_PARSER_CLASS_SHA256=" + java.util.HexFormat.of().formatHex(
+                    java.security.MessageDigest.getInstance("SHA-256").digest(in.readAllBytes())));
+        }
+    }
+
     private static String canonical(Tag tag) { return WorkersEarthworksPort.canonical(tag); }
     private static ListTag emptyList(byte elementType) throws Exception {
         byte[] bytes = {10, 0, 0, 9, 0, 1, 'x', elementType, 0, 0, 0, 0, 0};
