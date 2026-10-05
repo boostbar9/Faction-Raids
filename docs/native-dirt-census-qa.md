@@ -38,7 +38,12 @@ reload and never treats player datapack sync as successful completion.
 
 After the original one-FILL checks, the observer captures bounded state, calls
 `bindRuntimeCensus` explicitly off-pulse, captures state again, and performs two fresh
-same-thread `inspect` calls with another state capture after each. Each read
+same-thread `inspect` calls with another state capture after each. A separate new
+census helper then performs a second full off-pulse binding between its own
+before/after world snapshots. It re-reads bytes with separate zero-start counters;
+exact private Census, module-reference identity, effective lookup catalog, content
+digests, and captured backing metadata must match the original binding. This is
+a same-launch frozen-input seal, not a cached bind or mutable-input validation. Each read
 window attempts its post-state exactly once even if the read throws; those
 attempts happen before metadata export. Explicit booleans record which post-states
 were actually captured, and incomplete evidence cannot claim a successful census. The provider's
@@ -66,10 +71,63 @@ height. Mock-world regressions exercise the actual lower and upper out-of-height
 keys. The one-FILL target's native window is at normal build height; this run does
 not claim native out-of-height dynamic-listener acceptance.
 
+## Pinned SecureJar API and frozen inputs
+
+SecureJar 2.1.10's `JarModuleReader.list()` returns null. Null is never accepted
+as an empty module. The fallback requires the exact reference/reader classes and
+pins seven implementation class-resource hashes to the official
+`cpw.mods:securejarhandler:2.1.10` JAR (SHA-256
+`7ec9207f47bc8847a16566b9a3b4ced8d073c49592897eb30ce2aaf643fdfcab`).
+It resolves the existing union root from `ModuleReference.location()`; it neither
+mounts a substitute filesystem nor uses `getPrimaryPath()`.
+
+The pinned union provider forwards a caller filter to backing directory streams
+before filtering, deduplication and eager allocation. The census uses that public
+filter to collect bounded raw candidates, returning false to avoid the eager
+result set. It traverses raw directories, including a directory hidden by a
+non-prefix filter whose descendant remains visible. Actual `reader.find/open`
+selects overlay and multi-release resources. Physical names, logical aliases,
+absent lookups, selected relative paths and selected bytes enter the digest.
+Unusual multi-release version spellings refuse rather than assume standard JAR
+selection: this pinned implementation's lookup semantics differ at the current
+Java version boundary.
+
+Default and JDK ZIP backing paths are inspected using their real NOFOLLOW
+attributes, including ancestors and the archive container. Union NOFOLLOW and
+`toRealPath()` are not used to claim symlink safety. Symlinks, special files,
+unknown/nested providers, ambiguous paths and exceeded bounds refuse. Each scan
+allows at most 65,536 raw entries and logical names, 128 path components,
+4,096 code units per name/path, and 16 Mi code units of accumulated raw names.
+Metadata/topology/lookup snapshots must agree before and after each module read;
+retained runtime input metadata is capped at 262,144 entries. Content limits stay
+32 MiB per entry, 256 MiB per module/artifact and 1 GiB per fresh helper, so the
+independent sealing helper has its own explicitly separate 1 GiB bound.
+
+These checks retain the existing ordinary trusted-launcher, frozen-module,
+frozen-development-output contract. Hashing the known Jar/provider class resources
+does not inspect or independently prove the reference's private provider delegate.
+No malicious custom SecureJar delegate or adversarial metadata-preservation claim
+is made. Cache keys use actual reference identity; cache hits do **not** revalidate
+same-reference mutable directory/container topology. Such freshness remains an
+open gate before a reusable production profile or CUT activation. No rebuild,
+hot replacement or concurrent runtime-input edit is permitted during either QA
+process. Two independent byte-reading seals and their private metadata agreement
+are bounded evidence for this frozen fixture, not cryptographic attestation.
+
+Before world capture, eleven small real-SecureJar self-tests run on fresh QA temp
+inputs in the existing opted-in Forge context. No module or class from those
+inputs is activated. They cover combined roots and an unchanged fresh seal,
+overlay winners and masked backing edits, hidden-directory descendants,
+version-only and boundary MR lookup, unusual versions, pre-allocation bounds,
+backslash ambiguity, entry/root symlinks, removed roots, and ZIP/directory merging.
+Their fixed case/status receipt is required separately by the census verifier.
+They are synthetic filesystem evidence, never part of the world no-effects proof.
+No JUnit module opens or launch/security flags are added for them.
+
 ## Bounded no-effects evidence
 
 The server thread cannot advance its own ordinary tick while this synchronous
-observation runs. All four snapshots retain private exact equality and export
+observation runs. All six snapshots retain private exact equality and export
 only bounded state summaries/digests:
 
 - All 35,937 block states in target plus/minus 16, using nine `getChunkNow` chunks
@@ -91,7 +149,7 @@ Private identity wrappers compare reference identity without calling arbitrary
 listener/entity/item `equals`, `hashCode` or `toString` methods. Per-tag binary
 NBT serialization is capped at 256 KiB before copying. Raw RNG seeds, private NBT,
 listener objects, Observation/Identity internals, JVM arguments and environment
-values are never serialized. The export is limited to three Census DTOs (binding plus two fresh inspections) and
+values are never serialized. The export is limited to four Census DTOs (binding, two fresh inspections, and independent input seal) and
 explicit safe maps, at most 100,000 JSON nodes, depth 16, 4,096 characters per
 string and 2 MB total. Resource pack names are represented only by SHA-256 over a four-byte
 big-endian code-unit count followed by the original Java UTF-16 code units,

@@ -12,7 +12,7 @@ DIRT_HASH = '9222e5df0ffbb258af7ad3c42a563b432d46bdaf398bf505eccd1df89db24d25'
 BASE = 'com.devfarinsky.siegeoverhaul.'
 TRUSTED = sorted([BASE + 'nativecompat.' + x for x in (
     'NativeDirtPolicy', 'NativeDirtCensus', 'NativeDirtRuntime', 'NativeDirtIntrospection',
-    'NativeDirtListeners', 'NativeConstructionEvents', 'NativeConstructionGuard')]
+    'NativeDirtListeners', 'NativeDirtModuleView', 'NativeConstructionEvents', 'NativeConstructionGuard')]
     + [BASE + x for x in ('RaidEvents', 'core.CoreCivilians', 'compat.EnemyHiringProtection', 'compat.SiegeCorpseCleanup')])
 REQUIRED_CODE = set(TRUSTED) | {
     'net.minecraft.world.level.Level', 'net.minecraft.world.level.block.Block', 'net.minecraft.world.item.Item',
@@ -33,7 +33,10 @@ REQUIRED_CODE = set(TRUSTED) | {
     'net.minecraftforge.eventbus.ClassLoaderFactory', 'net.minecraftforge.eventbus.ModLauncherFactory',
     'net.minecraftforge.eventbus.internal.CacheConcurrent',
     'com.talhanation.workers.entities.AbstractWorkerEntity', 'com.talhanation.workers.entities.BuilderEntity',
-    'com.talhanation.workers.entities.ai.BuilderWorkGoal', 'com.talhanation.recruits.entities.AbstractRecruitEntity'}
+    'com.talhanation.workers.entities.ai.BuilderWorkGoal', 'com.talhanation.recruits.entities.AbstractRecruitEntity',
+    'cpw.mods.cl.JarModuleFinder', 'cpw.mods.cl.JarModuleFinder$JarModuleReader', 'cpw.mods.cl.JarModuleFinder$JarModuleReference',
+    'cpw.mods.jarhandling.impl.Jar', 'cpw.mods.jarhandling.impl.Jar$JarModuleDataProvider',
+    'cpw.mods.niofs.union.UnionFileSystem', 'cpw.mods.niofs.union.UnionFileSystemProvider', 'cpw.mods.niofs.union.UnionPath'}
 EVENTS = {'net.minecraftforge.event.LootTableLoadEvent', 'net.minecraftforge.event.entity.EntityJoinLevelEvent',
           'net.minecraftforge.event.entity.EntityEvent$EntityConstructing', 'net.minecraftforge.event.AttachCapabilitiesEvent',
           'net.minecraftforge.event.level.BlockEvent$NeighborNotifyEvent', 'net.minecraftforge.event.VanillaGameEvent'}
@@ -41,6 +44,12 @@ UNCHANGED = {'clock', 'registries', 'blockEntities', 'pendingBlockEntities', 'wo
              'entities', 'nativeQueues', 'scheduledTickCounts', 'ledger', 'workerData'}
 RNG_TYPES = {'net.minecraft.world.level.levelgen.' + x for x in
              ('LegacyRandomSource', 'ThreadSafeLegacyRandomSource', 'XoroshiroRandomSource')}
+
+SELF_TEST_CASES = [
+    'combined-roots-and-fresh-seal', 'overlay-precedence-and-backing-seal', 'hidden-directory-visible-descendant',
+    'multi-release-version-only-and-boundary', 'unsupported-multi-release-spelling', 'raw-entry-budget-before-union-allocation',
+    'literal-backslash-refused', 'backing-file-symlink-refused', 'backing-root-symlink-refused', 'removed-root-refused',
+    'zip-and-directory-combined-view']
 
 
 def require(ok, message):
@@ -194,8 +203,14 @@ def validate(result, fill):
     receipt = fill.get('dirtCensus'); keys(receipt, 'enabled status artifactSha256 failureType failurePhase')
     require(receipt['enabled'] is True and receipt['status'] == 'captured' and receipt['failureType'] == '' and receipt['failurePhase'] == '', 'Optional census capture was refused')
     digest(receipt['artifactSha256'])
-    keys(result, 'schema profileStatus packagedProductionAcceptance miningCallbacksInvoked packIdentityEncoding bindingAttempted postBindStateCaptured postInspectionStatesCaptured noEffectsEvidenceComplete target buildHeight stableSinceGameTime captureGameTime lifecycle binding bindingCensus decision censuses metrics states unchanged status')
+    keys(result, 'schema profileStatus packagedProductionAcceptance miningCallbacksInvoked packIdentityEncoding secureJarSelfTest secureJarSelfTestScope inputSealCensus inputSealMetrics inputSealMatches inputSealScope postInputSealStateCaptured bindingAttempted postBindStateCaptured postInspectionStatesCaptured noEffectsEvidenceComplete target buildHeight stableSinceGameTime captureGameTime lifecycle binding bindingCensus decision censuses metrics states unchanged status')
     require(result['packIdentityEncoding'] == 'sha256-length-framed-utf16-code-units', 'Raw or unknown pack identity encoding')
+    self_test = result['secureJarSelfTest']; keys(self_test, 'status failedCase failureType passedCases')
+    require(self_test['status'] == 'passed' and self_test['failedCase'] == self_test['failureType'] == ''
+            and self_test['passedCases'] == SELF_TEST_CASES, 'Real SecureJar synthetic cases did not all pass')
+    require(result['secureJarSelfTestScope'] == 'synthetic fresh files only; no module activation; separate from world evidence', 'Self-test scope conflated')
+    require(result['inputSealMatches'] is True and result['postInputSealStateCaptured'] is True
+            and result['inputSealScope'] == 'independent-off-pulse-frozen-fixture-input-seals; not mutable-input work validation', 'Missing actual fresh input seal')
     require(result['bindingAttempted'] is True and result['postBindStateCaptured'] is True
             and result['postInspectionStatesCaptured'] == [True, True] and all(type(v) is bool for v in result['postInspectionStatesCaptured'])
             and result['noEffectsEvidenceComplete'] is True, 'Post-state was not actually captured for every read window')
@@ -216,7 +231,8 @@ def validate(result, fill):
     require(result['bindingCensus']['observation'] == result['binding'], 'Binding check differs from its actual Census')
     require(type(result['censuses']) is list and len(result['censuses']) == 2, 'Missing fresh repeated observations')
     for row in result['censuses']: census(row, result, fill)
-    require(result['bindingCensus'] == result['censuses'][0] == result['censuses'][1], 'Same-tick actual binding/fresh census drift')
+    census(result['inputSealCensus'], result, fill)
+    require(result['bindingCensus'] == result['censuses'][0] == result['censuses'][1] == result['inputSealCensus'], 'Same-tick actual binding/fresh census drift')
     metrics = result['metrics']; require(type(metrics) is list and len(metrics) == 4, 'Missing bind/fresh read counters')
     for row in metrics:
         keys(row, 'bytesRead artifactsHashed modulesHashed cachedFileChecks cachedModuleChecks')
@@ -227,7 +243,12 @@ def validate(result, fill):
         require(0 < metrics[1][key] == metrics[2][key] == metrics[3][key], 'Runtime input set changed')
     for key in ('cachedFileChecks', 'cachedModuleChecks'):
         require(metrics[1][key] < metrics[2][key] < metrics[3][key], 'Runtime inputs were not freshly revalidated')
-    states = result['states']; require(type(states) is list and len(states) == 4, 'Missing before/after no-effects states')
+    seal_metrics = result['inputSealMetrics']; require(type(seal_metrics) is list and len(seal_metrics) == 2, 'Missing fresh seal counters')
+    for row in seal_metrics:
+        keys(row, 'bytesRead artifactsHashed modulesHashed cachedFileChecks cachedModuleChecks')
+        for key, value in row.items(): integer(value, 0, 1024**3 if key == 'bytesRead' else 100000)
+    require(all(v == 0 for v in seal_metrics[0].values()) and seal_metrics[1] == metrics[1], 'Input seal reused cache or captured different input bytes')
+    states = result['states']; require(type(states) is list and len(states) == 6, 'Missing before/after no-effects and seal states')
     for row in states:
         keys(row, 'gameTime workerTick registryMapSizes existingBlockEntityCounts pendingBlockEntityCounts worldCellCount worldCellsSha256 targetState rngSha256 rngKinds inventorySha256 inventorySlots entities itemEntities xpEntities xpValue nativeQueueSizes requestCount nativeQueuesSha256 scheduledTickCounts ledgerSha256 workerDataSha256 journalState journalReceipts inFlight')
         require(row['gameTime'] == result['captureGameTime'] and row['workerTick'] == fill['after']['workerTickCount'], 'World advanced during observation')

@@ -34,11 +34,11 @@ def illustrative_evidence():
     versions = {'minecraft': '1.20.1', 'forge': '47.4.16', 'siegeoverhaul': '4.52.9', 'workers': '2.0.3',
                 'recruits': '1.15.2', 'smallships': '2.0.0-b1.4', 'siegeweapons': '0.2.5'}
     modules = [{'layer': layer, 'name': name, 'version': '1', 'contentSha256': 'b' * 64, 'providers': []}
-               for layer, name in [('BOOT', 'java.base'), ('SERVICE', 'fml'), ('PLUGIN', 'forge')]
+               for layer, name in [('BOOT', 'java.base'), ('BOOT', 'cpw.mods.securejarhandler'), ('SERVICE', 'fml'), ('PLUGIN', 'forge')]
                + [('GAME', mod) for mod in ('minecraft', 'siegeoverhaul', 'workers', 'recruits')]]
     modules.sort(key=lambda v: (v['layer'], v['name']))
     def origin(name):
-        module = 'siegeoverhaul' if name in VERIFY.TRUSTED else 'workers' if '.workers.' in name else 'recruits' if '.recruits.' in name else 'forge' if name.startswith('net.minecraftforge') else 'minecraft'
+        module = 'cpw.mods.securejarhandler' if name.startswith('cpw.') else 'siegeoverhaul' if name in VERIFY.TRUSTED else 'workers' if '.workers.' in name else 'recruits' if '.recruits.' in name else 'forge' if name.startswith('net.minecraftforge') else 'minecraft'
         return {'type': name, 'module': module, 'source': 'file:/synthetic/' + module + '.jar', 'classResourceSha256': 'c' * 64}
     runtime = {'launch': 'development:forgeclientuserdev', 'distribution': 'CLIENT', 'javaRuntime': '17.0.20+12/OpenJDK 64-Bit Server VM',
                'mods': [{'mod': mod, 'version': versions[mod], 'sourceKind': 'development-combined-module' if mod == 'siegeoverhaul' else 'development-file',
@@ -66,7 +66,14 @@ def illustrative_evidence():
     for key in ('worldCellsSha256', 'rngSha256', 'inventorySha256', 'nativeQueuesSha256', 'ledgerSha256', 'workerDataSha256'):
         state[key] = 'e' * 64
     return {'schema': 'native-dirt-census-qa-v1', 'profileStatus': 'PROFILE_UNREVIEWED', 'packagedProductionAcceptance': False,
-            'miningCallbacksInvoked': 0, 'packIdentityEncoding': 'sha256-length-framed-utf16-code-units',
+            'miningCallbacksInvoked': 0,
+            'secureJarSelfTest': {'status': 'passed', 'failedCase': '', 'failureType': '', 'passedCases': VERIFY.SELF_TEST_CASES},
+            'secureJarSelfTestScope': 'synthetic fresh files only; no module activation; separate from world evidence',
+            'inputSealCensus': copy.deepcopy(observed), 'inputSealMatches': True, 'postInputSealStateCaptured': True,
+            'inputSealScope': 'independent-off-pulse-frozen-fixture-input-seals; not mutable-input work validation',
+            'inputSealMetrics': [{'bytesRead': 0 if i == 0 else 1000, 'artifactsHashed': 0 if i == 0 else 7, 'modulesHashed': 0 if i == 0 else 6,
+                                 'cachedFileChecks': i * 7, 'cachedModuleChecks': i * 6} for i in range(2)],
+            'packIdentityEncoding': 'sha256-length-framed-utf16-code-units',
             'bindingAttempted': True, 'postBindStateCaptured': True, 'postInspectionStatesCaptured': [True, True],
             'noEffectsEvidenceComplete': True, 'target': [141, 64, 9], 'buildHeight': [-64, 320], 'stableSinceGameTime': 240,
             'captureGameTime': 280, 'lifecycle': {'signal': 'ServerStartedEvent', 'successfulCompletion': True,
@@ -75,7 +82,7 @@ def illustrative_evidence():
             'censuses': [copy.deepcopy(observed), copy.deepcopy(observed)],
             'metrics': [{'bytesRead': 0 if i == 0 else 1000, 'artifactsHashed': 0 if i == 0 else 7, 'modulesHashed': 0 if i == 0 else 6,
                          'cachedFileChecks': i * 7, 'cachedModuleChecks': i * 6} for i in range(4)],
-            'states': [copy.deepcopy(state) for _ in range(4)], 'unchanged': dict.fromkeys(VERIFY.UNCHANGED, True),
+            'states': [copy.deepcopy(state) for _ in range(6)], 'unchanged': dict.fromkeys(VERIFY.UNCHANGED, True),
             'status': 'captured'}, fill
 
 
@@ -85,7 +92,7 @@ class CensusVerifierTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, pattern or '.'):
             VERIFY.validate(self.result, self.fill)
     def mutate_census(self, callback):
-        for row in [self.result['bindingCensus'], *self.result['censuses']]: callback(row)
+        for row in [self.result['bindingCensus'], *self.result['censuses'], self.result['inputSealCensus']]: callback(row)
 
     def test_structural_synthetic_example_is_not_native_acceptance(self):
         self.assertIs(VERIFY.validate(self.result, self.fill), self.result)
@@ -158,6 +165,16 @@ class CensusVerifierTest(unittest.TestCase):
         self.mutate_census(lambda c: c.update(identity={'rawAudit': ['secret']})); self.reject()
     def test_unknown_pack_text_refuses(self):
         self.mutate_census(lambda c: c['dirt'].update(pack='secret=value')); self.reject()
+    def test_input_seal_must_re_read_bytes(self):
+        self.result['inputSealMetrics'][1]['bytesRead'] = 0; self.reject()
+    def test_input_seal_must_match_complete_catalog(self):
+        self.result['inputSealCensus']['runtime']['mods'][0]['sha256'] = 'a' * 64; self.reject()
+    def test_input_seal_cannot_assume_post_state(self):
+        self.result['postInputSealStateCaptured'] = False; self.reject()
+    def test_private_backing_input_seal_must_match(self):
+        self.result['inputSealMatches'] = False; self.reject()
+    def test_synthetic_module_cases_are_separate_and_complete(self):
+        self.result['secureJarSelfTest']['passedCases'] = VERIFY.SELF_TEST_CASES[:-1]; self.reject()
     def test_post_bind_state_cannot_be_assumed(self):
         self.result['postBindStateCaptured'] = False; self.reject()
     def test_missing_post_inspection_state_refuses(self):
@@ -457,6 +474,31 @@ class CensusSourceContractTest(unittest.TestCase):
         self.assertNotIn('out.put("bindingCensus", binding.value())', java)
         self.assertIn('NativeDirtCensusBoundary.packIdentity(original.pack())', java)
         self.assertIn('original.builtin(), original.sha256(), original.bytes()', java)
+
+    def test_securejar_fixture_never_activates_its_inputs(self):
+        fixture = (QA / 'NativeDirtModuleViewQa.java').read_text()
+        self.assertIn('Files.createTempDirectory(parent, "securejar-census-selftest-")', fixture)
+        self.assertIn('JarModuleFinder.of(secure).findAll()', fixture)
+        for forbidden in ('defineModules', '.loadClass(', 'Class.forName(', '--add-opens', '--add-exports', 'setAccessible', '.setBlock(', '.tick('):
+            self.assertNotIn(forbidden, fixture)
+        qa = (QA / 'NativeDirtCensusQa.java').read_text()
+        self.assertIn('var sealingReader = new NativeDirtCensus(level, epoch)', qa)
+        self.assertIn('sealingReader.bindRuntimeCensus(TARGET)', qa)
+        self.assertIn('originalBinding.equals(seal.value()) && reader.sameFrozenRuntimeInputs(sealingReader)', qa)
+    def test_null_module_listing_is_not_an_empty_or_primary_root_substitute(self):
+        helper = (ROOT / 'src/main/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeDirtModuleView.java').read_text()
+        self.assertIn('requireReader(reference, reader)', helper)
+        self.assertIn('Files.newDirectoryStream(root, path ->', helper)
+        self.assertIn('scan.walk()', helper)
+        self.assertIn('reader.find(name)', helper)
+        self.assertNotIn('getPrimaryPath()', helper)
+        self.assertNotIn('getBasePaths', helper)
+        self.assertNotIn('setAccessible', helper)
+        runtime = (ROOT / 'src/main/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeDirtRuntime.java').read_text()
+        self.assertIn('new java.util.IdentityHashMap<>()', runtime)
+        self.assertIn('reader.open(entry.name())', runtime)
+        self.assertIn('before.equals(NativeDirtModuleView.read(reference, reader, limit))', runtime)
+        self.assertIn('Identity alone does not validate mutable backing files', runtime)
 
     def test_forge_layer_fixture_is_exact_official_resource(self):
         resource = ROOT / 'src/test/resources/native-dirt/forge-47.4.16-empty-global-loot-modifiers.json'

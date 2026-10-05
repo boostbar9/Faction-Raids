@@ -65,6 +65,13 @@ public final class NativeDirtCensus {
     /** Startup-byte/read counters for bounded native-QA evidence; current world facts are not cached. */
     public NativeDirtRuntime.Metrics runtimeMetrics() { return runtimeReader.metrics(); }
 
+    /** QA-only comparison of independently captured inputs. It neither grants nor persists admission. */
+    boolean sameFrozenRuntimeInputs(NativeDirtCensus other) {
+        return other != null && other != this && level == other.level && epoch == other.epoch
+                && boundGeneration >= 0 && boundGeneration == epoch.generation() && boundGeneration == other.boundGeneration
+                && runtimeReader.sameCapturedInputs(other.runtimeReader);
+    }
+
     /** Call only from the corresponding proven successful reload completion/ServerStarted. */
     public boolean completeReload(long generation) {
         if (!level.getServer().isSameThread()) return false;
@@ -184,6 +191,8 @@ public final class NativeDirtCensus {
                     "com.talhanation.recruits.entities.AbstractRecruitEntity",
                     "net.minecraftforge.eventbus.internal.CacheConcurrent"))
                 implementation.add(origin(Class.forName(name, false, NativeDirtCensus.class.getClassLoader())));
+            for (Class<?> type : NativeDirtModuleView.implementationClasses()) implementation.add(origin(type));
+            implementation.add(origin(cpw.mods.cl.JarModuleFinder.class));
             for (Class<?> type : NativeDirtRuntime.trustedFirstPartyClasses()) {
                 if (implementation.stream().noneMatch(o -> o.type().equals(type.getName()))) implementation.add(origin(type));
             }
@@ -214,7 +223,7 @@ public final class NativeDirtCensus {
                     denied(Reason.RUNTIME_UNPROVEN, unsupported.getMessage()));
         } catch (Exception | LinkageError unavailable) {
             return failed(target, gameTime, dirt, layers, listeners, implementation, chunks, sections, registries, graph, activeModifiers,
-                    denied(Reason.API_UNAVAILABLE, "required read-only dirt introspection, origins or mappings are unavailable"));
+                    denied(Reason.API_UNAVAILABLE, "required read-only dirt introspection, origins or mappings are unavailable at runtime stage " + runtimeReader.stage()));
         }
     }
     private Observation failed(BlockPos target, long time, ResourceProof dirt, List<ResourceProof> layers,

@@ -1,6 +1,6 @@
 # Read-only native dirt policy (unregistered candidate)
 
-This candidate adds five isolated helpers in `nativecompat`. It does **not** change
+This candidate adds six isolated helpers in `nativecompat`. It does **not** change
 `EarthworksExecution`, its blanket CUT refusal, any callback, loot/event/gamerule,
 job/manifest, tool behavior, production registration, QA source set, build, or release.
 No approved runtime profile is shipped. An observed matching census is not approval.
@@ -334,3 +334,22 @@ evaluation. This reporting encoding does not change this provider's admission or
 its native profile comparisons. QA fixed phase codes and actual post-state flags
 separately distinguish read refusal, export failure and incomplete no-effects
 observations; no missing state is assumed unchanged.
+
+## Pinned SecureJar null-list repair and development input seals
+
+The exact SecureJar 2.1.10 reader returns null from `list()`. The bounded public
+`NativeDirtModuleView` helper enumerates its existing merged union root through
+the pinned provider's raw filter callback, then hashes actual reader-selected
+lookup names/mappings and bytes, including combined roots, overlays and
+version-only aliases. Unsupported references/providers/paths refuse. See
+[native census QA](native-dirt-census-qa.md#pinned-securejar-api-and-frozen-inputs)
+for exact provenance, bounds, synthetic native-context regressions and the
+independent byte-reading before/after input seal.
+
+This retains the documented frozen-input contract. Identity-keyed module cache
+hits do not establish same-reference mutable input freshness. Backing topology
+and metadata are compared around each fresh module read and between the two
+QA bindings, but this is trusted-runtime evidence, not malicious mutation
+attestation. The known implementation hashes do not inspect the private provider
+delegate. Mutable-input freshness and packaged runtime acceptance remain
+separate gates before any reusable production profile or CUT activation.

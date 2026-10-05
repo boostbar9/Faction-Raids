@@ -94,8 +94,8 @@ public final class NativeDirtCensusQa {
         return NativeDirtCensusBoundary.capture(() -> captureEvidence(level, owner, worker, job, stableSince, evidence));
     }
 
-    private enum Phase { PREFLIGHT, BEFORE_BIND_STATE, OFF_PULSE_BINDING, AFTER_BIND_STATE, BINDING_EXPORT,
-        FIRST_INSPECTION, AFTER_FIRST_STATE, FIRST_EXPORT, SECOND_INSPECTION, AFTER_SECOND_STATE, SECOND_EXPORT, SUMMARY }
+    private enum Phase { PREFLIGHT, SECUREJAR_SELF_TEST, BEFORE_BIND_STATE, OFF_PULSE_BINDING, AFTER_BIND_STATE, BINDING_EXPORT,
+        FIRST_INSPECTION, AFTER_FIRST_STATE, FIRST_EXPORT, SECOND_INSPECTION, AFTER_SECOND_STATE, SECOND_EXPORT, BEFORE_INPUT_SEAL, INPUT_SEAL, AFTER_INPUT_SEAL, SEAL_EXPORT, SUMMARY }
     private static final class CaptureFailure extends Exception {
         final Phase phase; final String type;
         CaptureFailure(Phase phase, String type) { this.phase = phase; this.type = type; }
@@ -117,7 +117,8 @@ public final class NativeDirtCensusQa {
         var metrics = new ArrayList<NativeDirtRuntime.Metrics>();
         var observations = new ArrayList<NativeDirtPolicy.Census>();
         var postInspections = new ArrayList<Boolean>();
-        boolean bindingAttempted = false, postBindCaptured = false, failed = false;
+        boolean bindingAttempted = false, postBindCaptured = false, postSealCaptured = false, inputSealMatches = false, failed = false;
+        NativeDirtPolicy.Census originalBinding = null;
         NativeDirtPolicy.Check bindingCheck = null;
         Phase phase = Phase.PREFLIGHT;
         try {
@@ -132,6 +133,11 @@ public final class NativeDirtCensusQa {
                     "startedGameTime", startedGameTime, "startedGeneration", startedGeneration, "currentGeneration", epoch.generation()));
             require(completedAtServerStarted && epoch.generation() == startedGeneration,
                     "Initial resource completion missing or a later reload invalidated the census");
+            phase = Phase.SECUREJAR_SELF_TEST;
+            var selfTest = NativeDirtModuleViewQa.run(evidence.getParent());
+            out.put("secureJarSelfTest", selfTest);
+            out.put("secureJarSelfTestScope", "synthetic fresh files only; no module activation; separate from world evidence");
+            if (!selfTest.status().equals("passed")) throw new CaptureFailure(phase, selfTest.failureType());
             phase = Phase.BEFORE_BIND_STATE;
             snapshots.add(snapshot(level, owner, worker, job)); metrics.add(reader.runtimeMetrics());
             phase = Phase.OFF_PULSE_BINDING; bindingAttempted = true;
@@ -140,7 +146,7 @@ public final class NativeDirtCensusQa {
                 snapshots.add(snapshot(level, owner, worker, job)); metrics.add(reader.runtimeMetrics()); return null;
             });
             postBindCaptured = binding.postStateCaptured();
-            if (binding.value() != null) { bindingCheck = binding.value().observation(); out.put("binding", bindingCheck); }
+            if (binding.value() != null) { originalBinding = binding.value(); bindingCheck = binding.value().observation(); out.put("binding", bindingCheck); }
             if (!binding.readFailureType().isEmpty()) throw new CaptureFailure(Phase.OFF_PULSE_BINDING, binding.readFailureType());
             if (!binding.postFailureType().isEmpty()) throw new CaptureFailure(Phase.AFTER_BIND_STATE, binding.postFailureType());
             phase = Phase.BINDING_EXPORT;
@@ -160,6 +166,21 @@ public final class NativeDirtCensusQa {
                 phase = i == 0 ? Phase.FIRST_EXPORT : Phase.SECOND_EXPORT;
                 observations.add(exportCensus(read.value().census()));
             }
+            // Fresh helper: this separately bounded off-pulse seal MUST re-read bytes, never use the work cache.
+            phase = Phase.BEFORE_INPUT_SEAL;
+            snapshots.add(snapshot(level, owner, worker, job));
+            var sealingReader = new NativeDirtCensus(level, epoch);
+            var sealMetrics = new ArrayList<NativeDirtRuntime.Metrics>(); sealMetrics.add(sealingReader.runtimeMetrics());
+            phase = Phase.INPUT_SEAL;
+            var seal = NativeDirtCensusBoundary.readWindow(() -> sealingReader.bindRuntimeCensus(TARGET), () -> {
+                snapshots.add(snapshot(level, owner, worker, job)); sealMetrics.add(sealingReader.runtimeMetrics()); return null;
+            });
+            postSealCaptured = seal.postStateCaptured(); out.put("inputSealMetrics", sealMetrics);
+            if (!seal.readFailureType().isEmpty()) throw new CaptureFailure(Phase.INPUT_SEAL, seal.readFailureType());
+            if (!seal.postFailureType().isEmpty()) throw new CaptureFailure(Phase.AFTER_INPUT_SEAL, seal.postFailureType());
+            phase = Phase.SEAL_EXPORT;
+            out.put("inputSealCensus", exportCensus(seal.value()));
+            inputSealMatches = originalBinding != null && originalBinding.equals(seal.value()) && reader.sameFrozenRuntimeInputs(sealingReader);
             phase = Phase.SUMMARY;
         } catch (Exception | AssertionError | LinkageError unavailable) {
             failed = true;
@@ -169,6 +190,8 @@ public final class NativeDirtCensusQa {
         }
         out.put("bindingAttempted", bindingAttempted); out.put("postBindStateCaptured", postBindCaptured);
         out.put("postInspectionStatesCaptured", postInspections);
+        out.put("postInputSealStateCaptured", postSealCaptured); out.put("inputSealMatches", inputSealMatches);
+        out.put("inputSealScope", "independent-off-pulse-frozen-fixture-input-seals; not mutable-input work validation");
         out.put("censuses", observations); out.put("metrics", metrics);
         out.put("states", snapshots.stream().map(Snapshot::evidence).toList());
         var equal = new LinkedHashMap<String, Boolean>();
@@ -177,9 +200,9 @@ public final class NativeDirtCensusQa {
             equal.put(key, snapshots.stream().allMatch(state -> expected.equals(state.privateState.get(key))));
         }
         out.put("unchanged", equal);
-        boolean completeStates = postBindCaptured && postInspections.equals(List.of(true, true)) && snapshots.size() == 4;
+        boolean completeStates = postBindCaptured && postInspections.equals(List.of(true, true)) && postSealCaptured && snapshots.size() == 6;
         out.put("noEffectsEvidenceComplete", completeStates);
-        out.put("status", !failed && completeStates && bindingCheck != null && bindingCheck.ready()
+        out.put("status", !failed && completeStates && inputSealMatches && bindingCheck != null && bindingCheck.ready()
                 && observations.size() == 2 && observations.stream().allMatch(c -> c.observation().ready())
                 && !equal.isEmpty() && equal.values().stream().allMatch(Boolean::booleanValue) ? "captured" : "refused");
         JsonElement safe = new GsonBuilder().serializeNulls().create().toJsonTree(out);

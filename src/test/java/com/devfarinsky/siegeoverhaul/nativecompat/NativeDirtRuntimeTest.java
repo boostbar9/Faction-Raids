@@ -42,6 +42,18 @@ class NativeDirtRuntimeTest {
         assertNotEquals(first.sha256(), reader.module(ModuleFinder.of(two).findAll().iterator().next()).sha256());
         assertNotEquals(first.sha256(), reader.module(ModuleFinder.of(renamed).findAll().iterator().next()).sha256());
     }
+    @Test void freshInputSealUsesSameReferencesAndEqualValuesAfterIndependentReads() throws Exception {
+        Path artifact = jar("sealed.jar", "fixture.json", "unchanged input");
+        var reference = ModuleFinder.of(artifact).findAll().iterator().next();
+        var first = new NativeDirtRuntime(); var second = new NativeDirtRuntime();
+        first.file(artifact); first.module(reference); second.file(artifact); second.module(reference);
+        assertTrue(first.sameCapturedInputs(second));
+        assertEquals(first.metrics().bytesRead(), second.metrics().bytesRead());
+        assertTrue(second.metrics().bytesRead() > 0);
+        var differentReference = new NativeDirtRuntime(); differentReference.file(artifact);
+        differentReference.module(ModuleFinder.of(artifact).findAll().iterator().next());
+        assertFalse(first.sameCapturedInputs(differentReference));
+    }
     @Test void repeatedWorkTickChecksNeverRehashStartupBytes() throws Exception {
         Path artifact = jar("immutable.jar", "fixture.json", "immutable startup input");
         var reference = ModuleFinder.of(artifact).findAll().iterator().next();
@@ -144,6 +156,51 @@ class NativeDirtRuntimeTest {
         assertNotEquals(baseline, catalog(List.of(), List.of(), List.of("new.mixins.json"), List.of()));
         assertNotEquals(baseline, catalog(List.of(), List.of(), List.of(), List.of(new NativeDirtRuntime.Activity("Block", "PLUGIN", List.of("unknown")))));
         assertThrows(UnsupportedOperationException.class, () -> baseline.mods().clear());
+    }
+    @Test void actualSecureJarApiBytesArePinnedWithoutConstructingItsFileSystems() throws Exception {
+        assertTrue(NativeDirtModuleView.validateApi() > 0);
+        assertEquals(7, NativeDirtModuleView.implementationClasses().size());
+    }
+    @ParameterizedTest @ValueSource(strings = {"../x", "a/../x", "/absolute", "a//b", "a/", "a\\b", "./x", "x\nsecret"})
+    void noncanonicalModuleNamesRefuseBeforeUnionNormalization(String name) {
+        assertThrows(java.io.IOException.class, () -> NativeDirtModuleView.canonical(name));
+    }
+    @Test void moduleNamesAndMultiReleaseAliasesRetainExactSpelling() throws Exception {
+        NativeDirtModuleView.canonical("ordinary/path.json");
+        assertEquals("pkg/Only.class", NativeDirtModuleView.alias("META-INF/versions/11/pkg/Only.class"));
+        assertNull(NativeDirtModuleView.alias("ordinary/path.json"));
+        for (String name : List.of("META-INF/versions/-1/Only.class", "META-INF/versions/01/Only.class",
+                "META-INF/versions/+11/Only.class", "META-INF/versions/bad/Only.class", "META-INF/versions/11"))
+            assertThrows(java.io.IOException.class, () -> NativeDirtModuleView.alias(name));
+    }
+    @Test void nullListFromUnknownReaderIsNeverTreatedAsEmptyModule() throws Exception {
+        var closed = new java.util.concurrent.atomic.AtomicBoolean();
+        var reference = new java.lang.module.ModuleReference(java.lang.module.ModuleDescriptor.newAutomaticModule("example").build(), java.net.URI.create("file:/example")) {
+            @Override public java.lang.module.ModuleReader open() {
+                return new java.lang.module.ModuleReader() {
+                    public java.util.Optional<java.net.URI> find(String name) { return java.util.Optional.empty(); }
+                    public java.util.stream.Stream<String> list() { return null; }
+                    public void close() { closed.set(true); }
+                };
+            }
+        };
+        var runtime = new NativeDirtRuntime();
+        assertThrows(NativeDirtRuntime.Unsupported.class, () -> runtime.module(reference));
+        assertTrue(closed.get()); assertEquals(0, runtime.metrics().bytesRead()); assertEquals(0, runtime.metrics().modulesHashed());
+    }
+    @Test void moduleCacheUsesActualReferenceIdentityNotOverridableEquality() throws Exception {
+        var first = ModuleFinder.of(jar("identityfirst.jar", "input.json", "one")).findAll().iterator().next();
+        var second = ModuleFinder.of(jar("identitysecond.jar", "input.json", "two")).findAll().iterator().next();
+        class EqualReference extends java.lang.module.ModuleReference {
+            final java.lang.module.ModuleReference delegate;
+            EqualReference(java.lang.module.ModuleReference original) { super(original.descriptor(), original.location().orElseThrow()); delegate = original; }
+            public java.lang.module.ModuleReader open() throws java.io.IOException { return delegate.open(); }
+            public boolean equals(Object other) { throw new AssertionError("Reference equality must not be invoked"); }
+            public int hashCode() { throw new AssertionError("Reference hashCode must not be invoked"); }
+        }
+        var runtime = new NativeDirtRuntime();
+        assertNotEquals(runtime.module(new EqualReference(first)).sha256(), runtime.module(new EqualReference(second)).sha256());
+        assertEquals(2, runtime.metrics().modulesHashed());
     }
     private static NativeDirtRuntime.Catalog catalog(List<NativeDirtRuntime.Artifact> mods, List<Map<String, String>> services,
                                                       List<String> mixins, List<NativeDirtRuntime.Activity> activity) {

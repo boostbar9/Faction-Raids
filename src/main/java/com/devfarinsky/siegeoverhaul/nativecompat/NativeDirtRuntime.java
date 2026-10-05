@@ -69,7 +69,13 @@ public final class NativeDirtRuntime {
     record FileStamp(long bytes, long modified, String key, String sha256) {}
     record ModuleDigest(String sha256, long bytes) {}
     private final Map<Path, FileStamp> files = new HashMap<>();
-    private final Map<ModuleReference, ModuleDigest> modules = new HashMap<>();
+    private final Map<ModuleReference, ModuleDigest> modules = new java.util.IdentityHashMap<>();
+    private final java.util.IdentityHashMap<ModuleReference, NativeDirtModuleView.View> capturedModuleViews = new java.util.IdentityHashMap<>();
+    private int capturedMetadataEntries;
+    private boolean secureJarApiVerified;
+    private enum Stage { NOT_STARTED, LOADER, LAUNCH, MODULE_CATALOG, MODULE_API, MODULE_VIEW, MODULE_CONTENT, MOD_FILES, SERVICES, TRANSFORMS, ANCHOR, COMPLETE }
+    private Stage stage = Stage.NOT_STARTED;
+    String stage() { return stage.name(); }
     private long bytesRead, cachedFileChecks, cachedModuleChecks;
     private boolean startupBound;
     private Object boundSiegeFile;
@@ -94,15 +100,18 @@ public final class NativeDirtRuntime {
     }
     void freezeStartupInputs() { startupBound = true; }
     private Catalog collect(List<NativeDirtPolicy.CodeOrigin> relevant, List<Class<?>> actualClasses) throws Exception {
+        stage = Stage.LOADER;
         if (Launcher.INSTANCE == null || ModList.get() == null
                 || !"1.20.1".equals(FMLLoader.versionInfo().mcVersion()) || !"47.4.16".equals(FMLLoader.versionInfo().forgeVersion()))
             throw new Unsupported("Only a reviewed 1.20.1/47.4.16 launch profile is supported");
+        stage = Stage.LAUNCH;
         if (Boolean.getBoolean("mixin.hotSwap") || instrumented(ManagementFactory.getRuntimeMXBean().getInputArguments()))
             throw new Unsupported("Instrumented/agent or mixin hot-swap launch is unsupported");
         var environment = Launcher.INSTANCE.environment();
         var manager = environment.findModuleLayerManager().orElseThrow(() -> new Unsupported("Missing loaded module layers"));
         List<ModuleProof> moduleProof = new ArrayList<>();
         Map<String, ModuleReference> gameModules = new HashMap<>();
+        stage = Stage.MODULE_CATALOG;
         for (var layer : IModuleLayerManager.Layer.values()) {
             var loadedLayer = manager.getLayer(layer).orElseThrow(() -> new Unsupported("Incomplete loaded module layers"));
             for (Module module : loadedLayer.modules()) {
@@ -127,6 +136,7 @@ public final class NativeDirtRuntime {
             }
         }
         moduleProof.sort(Comparator.comparing(ModuleProof::layer).thenComparing(ModuleProof::name));
+        stage = Stage.MOD_FILES;
         List<Artifact> modProof = new ArrayList<>();
         var loaded = ModList.get().getMods();
         if (loaded.isEmpty() || loaded.size() > MAX_MODS) throw new Unsupported("Unsupported loaded mod count");
@@ -153,6 +163,7 @@ public final class NativeDirtRuntime {
         modProof.sort(Comparator.comparing(Artifact::mod));
         for (int i = 1; i < modProof.size(); i++) if (modProof.get(i).mod().equals(modProof.get(i - 1).mod()))
             throw new Unsupported("Duplicate loaded mod identity");
+        stage = Stage.SERVICES;
         List<Map<String, String>> services = new ArrayList<>();
         var entries = environment.getProperty(IEnvironment.Keys.MODLIST.get()).orElseThrow(() -> new Unsupported("Missing active launcher census"));
         if (entries.size() > MAX_SERVICES) throw new Unsupported("Launcher service census exceeds its bound");
@@ -164,6 +175,7 @@ public final class NativeDirtRuntime {
         if (!Mixins.getConfigs().isEmpty() || Mixins.getUnvisitedCount() != 0)
             throw new Unsupported("Pending mixin configurations require fresh completed runtime admission");
         List<String> mixins = List.of();
+        stage = Stage.TRANSFORMS;
         var audit = environment.getProperty(IEnvironment.Keys.AUDITTRAIL.get()).orElseThrow(() -> new Unsupported("Missing transformation audit trail"));
         if (audit.getClass() != TransformerAuditTrail.class) throw new Unsupported("Unknown transformation audit implementation");
         Class<?> activityClass = Class.forName("cpw.mods.modlauncher.TransformerAuditTrail$TransformerActivity", false, audit.getClass().getClassLoader());
@@ -190,9 +202,12 @@ public final class NativeDirtRuntime {
         }
         liveIdentity(actualClasses); // every actual Class must belong to the exact bound Module/reference/loader
         lastRawAudit = List.copyOf(rawAudit);
+        stage = Stage.ANCHOR;
+        FirstParty anchor = firstParty(manager);
+        stage = Stage.COMPLETE;
         return new Catalog((FMLLoader.isProduction() ? "production:" : "development:") + FMLLoader.launcherHandlerName(), FMLLoader.getDist().name(),
                 System.getProperty("java.runtime.version") + "/" + System.getProperty("java.vm.name"), modProof,
-                moduleProof, services, mixins, transformations, firstParty(manager));
+                moduleProof, services, mixins, transformations, anchor);
     }
     private FirstParty firstParty(IModuleLayerManager manager) throws Exception {
         Module own = NativeDirtPolicy.class.getModule(); ClassLoader loader = NativeDirtPolicy.class.getClassLoader();
@@ -215,7 +230,7 @@ public final class NativeDirtRuntime {
     static List<Class<?>> trustedFirstPartyClasses() {
         // Explicit first-party implementation identities. Never a namespace/package-name exemption.
         return List.of(NativeDirtPolicy.class, NativeDirtCensus.class, NativeDirtRuntime.class,
-                NativeDirtIntrospection.class, NativeDirtListeners.class,
+                NativeDirtIntrospection.class, NativeDirtListeners.class, NativeDirtModuleView.class,
                 com.devfarinsky.siegeoverhaul.RaidEvents.class,
                 com.devfarinsky.siegeoverhaul.core.CoreCivilians.class,
                 com.devfarinsky.siegeoverhaul.compat.EnemyHiringProtection.class,
@@ -327,29 +342,79 @@ public final class NativeDirtRuntime {
         var result = new FileStamp(count, attributes.lastModifiedTime().toMillis(), key, HexFormat.of().formatHex(digest.digest()));
         files.put(path, result); return result;
     }
-    ModuleDigest module(ModuleReference reference) throws Exception {
+    ModuleDigest module(ModuleReference reference) throws Exception { return module(reference, MAX_ENTRIES); }
+    /** Lower-only enumeration bound is a QA seam, never a caller-controlled expansion of production limits. */
+    ModuleDigest module(ModuleReference reference, int limit) throws Exception {
+        if (limit < 1 || limit > MAX_ENTRIES) throw new Unsupported("Invalid module entry bound");
+        // This is intentionally a frozen-input cache. Identity alone does not validate mutable backing files.
         ModuleDigest existing = modules.get(reference);
         if (existing != null) { cachedModuleChecks++; return existing; }
         if (startupBound) throw new Unsupported("A new module identity appeared after startup binding");
-        if (modules.size() >= MAX_MODULES) throw new Unsupported("Module count exceeds the read bound");
+        if (modules.size() >= MAX_MODULES) throw new Unsupported("Module count exceeds its bound");
         MessageDigest digest = MessageDigest.getInstance("SHA-256"); long total = 0;
-        try (var reader = reference.open(); var listing = reader.list()) {
-            List<String> names = listing.limit(MAX_ENTRIES + 1L).sorted().toList();
-            if (names.size() > MAX_ENTRIES) throw new Unsupported("Module resource count exceeds the read bound");
-            for (String name : names) {
-                if (name.endsWith("/")) continue;
-                if (name.length() > 4096) throw new Unsupported("Module entry name exceeds the read bound");
-                byte[] key = name.getBytes(StandardCharsets.UTF_8);
-                digest.update(ByteBuffer.allocate(4).putInt(key.length).array()); digest.update(key);
-                MessageDigest entry = MessageDigest.getInstance("SHA-256");
-                try (InputStream stream = reader.open(name).orElseThrow(() -> new Unsupported("Module resource missing"))) {
-                    total += update(entry, stream, MAX_ENTRY_BYTES);
+        stage = Stage.MODULE_API;
+        try (var reader = reference.open()) {
+            var listing = reader.list();
+            if (listing == null) {
+                NativeDirtModuleView.requireReader(reference, reader);
+                if (!secureJarApiVerified) {
+                    bytesRead += NativeDirtModuleView.validateApi();
+                    if (bytesRead > MAX_TOTAL_BYTES) throw new Unsupported("Runtime API provenance exceeded its byte budget");
+                    secureJarApiVerified = true;
                 }
-                if (total > MAX_MODULE_BYTES) throw new Unsupported("Module contents exceed the read bound");
-                digest.update(entry.digest());
+                stage = Stage.MODULE_VIEW;
+                var before = NativeDirtModuleView.read(reference, reader, limit);
+                framed(digest, "securejar-2.1.10-effective-view-v1");
+                stage = Stage.MODULE_CONTENT;
+                for (var entry : before.entries()) {
+                    framed(digest, entry.name()); framed(digest, entry.selected());
+                    if (entry.selected().isEmpty()) continue; // Exact absent alias/filtered lookup is itself bound.
+                    MessageDigest content = MessageDigest.getInstance("SHA-256");
+                    try (InputStream stream = reader.open(entry.name()).orElseThrow(() -> new Unsupported("Effective module resource disappeared"))) {
+                        total += update(content, stream, MAX_ENTRY_BYTES);
+                    }
+                    if (total > MAX_MODULE_BYTES) throw new Unsupported("Module contents exceed the read bound");
+                    digest.update(content.digest());
+                }
+                stage = Stage.MODULE_VIEW;
+                if (!before.equals(NativeDirtModuleView.read(reference, reader, limit)))
+                    throw new Unsupported("Module topology, metadata or effective lookup changed during capture");
+                capturedMetadataEntries += before.entries().size() + before.metadata().size() + before.ancestors().size();
+                if (capturedMetadataEntries > MAX_ENTRIES * 4) throw new Unsupported("Complete runtime input metadata exceeds its bound");
+                capturedModuleViews.put(reference, before);
+            } else try (listing) {
+                List<String> names = listing.limit(limit + 1L).sorted().toList();
+                if (names.size() > limit) throw new Unsupported("Module resource count exceeds the read bound");
+                for (String name : names) {
+                    if (name.endsWith("/")) continue;
+                    NativeDirtModuleView.canonical(name);
+                    framed(digest, name);
+                    MessageDigest content = MessageDigest.getInstance("SHA-256");
+                    stage = Stage.MODULE_CONTENT;
+                    try (InputStream stream = reader.open(name).orElseThrow(() -> new Unsupported("Module resource missing"))) {
+                        total += update(content, stream, MAX_ENTRY_BYTES);
+                    }
+                    if (total > MAX_MODULE_BYTES) throw new Unsupported("Module contents exceed the read bound");
+                    digest.update(content.digest());
+                }
             }
         }
         var result = new ModuleDigest(HexFormat.of().formatHex(digest.digest()), total); modules.put(reference, result); return result;
+    }
+    /** Opaque same-launch input seal comparison; not a mutable-input work-pulse validation or approval. */
+    boolean sameCapturedInputs(NativeDirtRuntime other) {
+        if (other == null || !files.equals(other.files) || capturedModuleViews.size() != other.capturedModuleViews.size()
+                || modules.size() != other.modules.size()) return false;
+        // IdentityHashMap.equals also compares values by identity; fresh value records must use structural equality.
+        for (var entry : capturedModuleViews.entrySet())
+            if (!entry.getValue().equals(other.capturedModuleViews.get(entry.getKey()))) return false;
+        for (var entry : modules.entrySet())
+            if (!entry.getValue().equals(other.modules.get(entry.getKey()))) return false;
+        return true;
+    }
+    private static void framed(MessageDigest digest, String name) {
+        byte[] key = name.getBytes(StandardCharsets.UTF_8);
+        digest.update(ByteBuffer.allocate(4).putInt(key.length).array()); digest.update(key);
     }
     private long update(MessageDigest digest, InputStream stream, long bound) throws Exception {
         long read = 0; byte[] buffer = new byte[8192]; int count;
