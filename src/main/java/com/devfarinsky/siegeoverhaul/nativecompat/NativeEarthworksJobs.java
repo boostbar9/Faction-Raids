@@ -78,6 +78,29 @@ public final class NativeEarthworksJobs {
         try { var job = authenticated(worker, true); return job != null && job.compareSupplyDigest(expected, next); }
         catch (RuntimeException | LinkageError unavailable) { return false; }
     }
+    /** Called before native AI; malformed new selectors cannot reach unguarded native work or storage. */
+    static boolean beforeWorkerTick(BuilderEntity worker) {
+        try {
+            if (!ProtectedStorageAccess.install(worker) || !EarthworksWorkGoal.install(worker, () -> workGoal(worker))) return false;
+            var job = authenticated(worker, true); if (job == null) return false;
+            var data = worker.getPersistentData();
+            var ledger = ConstructionEditLedger.get((ServerLevel)worker.level());
+            if (!ProtectedBuilderHandLifecycle.matches(data, worker.getUUID(), ledger)) return false;
+            if (ProtectedBuilderHandMirror.pending(data) || ProtectedBuilderHandMirror.reviewNeeded(data)) {
+                if (ProtectedBuilderHandMirror.activeUse(worker) || ProtectedBuilderHandMirror.restore(worker) != null) return false;
+            }
+            return true;
+        } catch (RuntimeException | LinkageError unavailable) { return false; }
+    }
+    static net.minecraft.world.entity.ai.goal.Goal workGoal(BuilderEntity worker) {
+        var job = authenticated(worker, true); if (job == null) return null;
+        if (job.runtimeWorker != worker || job.runtimeGoal == null) {
+            var level = (ServerLevel)worker.level(); var area = (EarthworksBuildArea)worker.currentBuildArea;
+            var port = new WorkersEarthworksPort(level, worker, area, job.core, new EarthworksExecution(level, job, worker, area));
+            job.runtimeWorker = worker; job.runtimeGoal = new LocalEarthworksGoal(job.manifest, job, port);
+        }
+        return job.runtimeGoal;
+    }
     static CompoundTag selector(EarthworksJobLedger.Job job) {
         var tag = new CompoundTag(); var h = job.manifest.header(); tag.putInt("Version", 1); tag.putUUID("Project", h.project());
         tag.putLong("Generation", h.generation()); tag.putUUID("Area", job.area); tag.putString("Manifest", job.manifest.hash());
@@ -94,10 +117,10 @@ public final class NativeEarthworksJobs {
         if (job == null || !tag.equals(selector(job)) || !job.manifest.header().builder().equals(worker.getUUID())
                 || !job.manifest.header().owner().equals(WorkersBridge.readWorkerOwner(worker))
                 || !job.manifest.header().dimension().equals(level.dimension().location().toString())
-                || !job.paid() || active && !job.active()) return null;
+                || !job.paid() || !EarthworksCommission.paidMatches(level, job) || active && !job.active()) return null;
         if (active) {
             var area = worker.currentBuildArea;
-            if (area == null || area instanceof ProtectedBuildArea || !area.getUUID().equals(job.area) || area.level() != level || area.isRemoved()
+            if (!(area instanceof EarthworksBuildArea grading) || !grading.matches(job) || !area.getUUID().equals(job.area) || area.level() != level || area.isRemoved()
                     || !Objects.equals(WorkersBridge.readOwner(area), job.manifest.header().owner())) return null;
             var edits = ConstructionEditLedger.get(level);
             if (!edits.sameGeneration(job.read().journal().binding().ledgerGeneration()) || edits.edited(job.area)

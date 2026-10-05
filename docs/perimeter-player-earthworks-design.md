@@ -165,3 +165,32 @@ Assembly `targetBlockCounts` describes deduplicated target placements, not a nat
 ### Actual pinned parser ABI correction
 
 Compilation and released 4.52.9 runtime disassembly proved that Workers file 8351157 does **not** implement the level-aware parser shown in source snapshot `29d26e1`. Its actual `BuilderWorkGoal.placeBlocks` calls `parseBlock(Block)` and checks `wasParsed()` before substituting the consumed BlockItem default state (bytecode offsets 156 and 216–252). The local port therefore uses that explicitly identified ABI, rejects a changed parser API, and retains the item/effective-state equality gate. It is not a guessed older fallback. The newer source snapshot must not be treated as proof of this binary’s recipe behavior. An actual-classpath CI probe records mappings for dirt, cobblestone, stone bricks, oak planks and bottom/top/double oak slabs, plus the parser class-byte hash; slab activation remains refused pending the separate exact-state/item contract.
+
+### First production entry boundary (staged; no menu/packet caller)
+
+`EarthworksCommission.reviewLocal` and `acceptLocal` now form a real server-owned
+entry for one exact dirt FILL at already-proved standing. The review creates only
+unregistered temporary objects. Confirmation rechecks the immutable originals,
+current claim fingerprint, existing reservation generation, real player/owner,
+core and native runtime; reserves the complete bounded observation set; installs
+one owning goal slot and protected inventory wrappers; binds a separate sealed
+`EarthworksBuildArea`; then takes one reviewed Treasury fee. The payment receipt
+is stored in the same authoritative core compound as the changed bank values and
+is compared with the separate job journal. These files are not crash-atomic.
+
+The wrapper retains the exact original normal-work goal/priority and selects the
+new controller only through authenticated new-job identity. Missing or malformed
+identity cannot fall back to ordinary work/storage. Only normal fifth-tick native
+placement is dispatched; genuine finite stock requests use the scoped supply
+adapter. Current standing must be loaded and claimed, with exact first-target
+visibility and an adjacent connected flat escape that the mutation cannot block.
+No native approach route, vertical ascent, cutting, post-job retirement or server
+restart recovery is claimed from this slice. Its internal acceptance rejects CUT,
+BUILD, multiple operations and non-dirt material before payment. The cut/drop
+provider deliberately refuses until a pinned runtime configuration audit exists.
+
+The new entity type and pre-AI selector routing are implementation scaffolding.
+There is still no player UI, network or ordinary commissioning caller. Actual
+integrated-player native QA, independent final source review, receipt retirement
+and controlled reload are required before enabling that caller. FakePlayer API
+fixtures cannot replace the ordinary online-player/current-profile authority.

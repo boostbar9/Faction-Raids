@@ -49,6 +49,8 @@ final class EarthworksJobLedger extends SavedData {
         private String supply = "", audit = "";
         private long sequence, lastDispatch = Long.MIN_VALUE;
         private boolean paid, live = true;
+        com.talhanation.workers.entities.BuilderEntity runtimeWorker;
+        LocalEarthworksGoal runtimeGoal;
 
         private Job(PerimeterEarthworksManifest manifest, PerimeterEarthworksJournal journal, UUID area, BlockPos core) {
             this.manifest = manifest; this.journal = journal; this.area = area; this.core = core.immutable();

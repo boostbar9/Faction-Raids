@@ -164,6 +164,7 @@ final class WorkersEarthworksPort implements NativeEarthworksAdapter.Port {
                 && level.getWorldBorder().isWithinBounds(pos) && level.hasChunkAt(pos);
     }
     @Override public boolean suppliesReady(PerimeterEarthworksManifest.Step step) {
+        if (NativeEarthworksJobs.selected(worker)) return EarthworksInventoryAccess.suppliesReady(worker, step);
         if (step.kind() == PerimeterEarthworksManifest.Kind.CUT) {
             ItemStack selected = selectedShovel();
             // New shovel predicates are not trusted by protected storage yet. Pause rather than broadening that guard.
