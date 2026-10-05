@@ -1,3 +1,9 @@
+## 4.52.7 — Build through Sizeable Foliage short grass
+
+- Let builders clear Sizeable Foliage’s Very Short Grass from approved wall and perimeter cells, instead of refusing the site as occupied.
+- Keep the free terrain review, manual wall checks and protected native builder on the same single-cell plant rules. Paired plants and dangerous vegetation still need separate clearance.
+- Preserve existing builds, claims, containers, fluids, supplied materials and paid jobs. Sizeable Foliage remains optional; no additional mod is required.
+
 ## 4.52.6 — More reliable builder reviews and work breaks
 
 - Stop ground recovery from moving commissioned builders while they are sleeping, getting supplies or using an item. Native Workers work schedules stay in charge, and the stuck timer restarts after a break.

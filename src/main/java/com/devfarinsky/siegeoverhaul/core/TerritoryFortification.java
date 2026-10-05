@@ -386,7 +386,7 @@ public final class TerritoryFortification {
 
     static boolean safeWallReplacement(BlockState state) {
         return !state.hasBlockEntity() && state.getFluidState().isEmpty()
-                && (state.isAir() || com.devfarinsky.siegeoverhaul.camp.CampVegetation.plant(state));
+                && (state.isAir() || com.devfarinsky.siegeoverhaul.camp.CampVegetation.singleCellPlant(state));
     }
 
     /** Foundations use supplied dirt; visible walls retain the chosen material. */

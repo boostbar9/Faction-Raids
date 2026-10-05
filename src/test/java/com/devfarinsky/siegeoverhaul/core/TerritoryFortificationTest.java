@@ -32,7 +32,8 @@ class TerritoryFortificationTest extends MinecraftTestSupport {
     }
     @Test void wallCommissionDoesNotAuthorizeMiningExistingBuildingsOrFluids() {
         for(var block:java.util.List.of(Blocks.STONE_BRICKS,Blocks.OAK_PLANKS,Blocks.GLASS,
-                Blocks.OAK_LOG,Blocks.CHEST,Blocks.WATER,Blocks.LAVA))
+                Blocks.OAK_LOG,Blocks.CHEST,Blocks.WATER,Blocks.LAVA,Blocks.WHEAT,
+                Blocks.WITHER_ROSE,Blocks.TALL_GRASS,Blocks.LARGE_FERN,Blocks.SUNFLOWER))
             org.junit.jupiter.api.Assertions.assertFalse(TerritoryFortification.safeWallReplacement(block.defaultBlockState()));
         org.junit.jupiter.api.Assertions.assertTrue(TerritoryFortification.safeWallReplacement(Blocks.AIR.defaultBlockState()));
         org.junit.jupiter.api.Assertions.assertTrue(TerritoryFortification.safeWallReplacement(Blocks.POPPY.defaultBlockState()));
