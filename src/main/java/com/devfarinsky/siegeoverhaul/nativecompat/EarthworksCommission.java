@@ -53,7 +53,8 @@ final class EarthworksCommission {
         Objects.requireNonNull(review);requireIdentity(owner,builder,review.manifest,review.core);
         var level=owner.serverLevel();var jobs=EarthworksJobLedger.get(level);var existing=jobs.job(review.manifest.header().project());
         if(existing!=null){
-            if(existing.area.equals(review.area)&&existing.manifest.hash().equals(review.manifest.hash())&&existing.paid())return existing.area;
+            if(retryMatches(existing,review.area,review.manifest.hash(),review.binding,review.core)
+                    &&paidMatches(level,existing))return existing.area;
             throw new IllegalStateException("Retained preparation or payment needs recovery review; no repeat debit");
         }
         if(level.getGameTime()>review.expires)throw new IllegalStateException("Review expired; no payment taken");
@@ -65,7 +66,7 @@ final class EarthworksCommission {
         var area=create(owner,temporary,review.marker);revalidate(owner,builder,review,temporary,area);
         var data=RaidSavedData.get(owner.server);String key="team:"+review.manifest.header().faction();var core=data.siegeCores.get(key);
         if(core==null||FactionBank.balance(core)<review.manifest.header().price())throw new IllegalStateException("Faction Treasury lacks the reviewed fee");
-        var paidCore=core.copy();ListTag debits=readDebits(paidCore);
+        var paidCore=core.copy();long bankBefore=FactionBank.balance(core);long[] historyBefore=core.getLongArray("BankLedger").clone();ListTag debits=readDebits(paidCore);
         if(debits.size()>=EarthworksJobLedger.MAX_JOBS)throw new IllegalStateException("Retained grading payment history is full");
         if(core.contains("BankEmeralds")&&!core.contains("BankEmeralds",Tag.TAG_LONG)||core.contains("BankLedger")&&!core.contains("BankLedger",Tag.TAG_LONG_ARRAY)
                 ||core.getLongArray("BankLedger").length>FactionBank.LEDGER_MAX)throw new IllegalStateException("Malformed Treasury history");
@@ -87,8 +88,10 @@ final class EarthworksCommission {
         if(!level.addFreshEntity(area))throw new IllegalStateException("Native marker could not be registered; unpaid job retained");
         builder.currentBuildArea=area;
         // Bank values and the matching payment receipt share one authoritative core compound write. The separate job/entity files still need recovery proof.
-        core.putLong("BankEmeralds",paidCore.getLong("BankEmeralds"));core.putLongArray("BankLedger",paidCore.getLongArray("BankLedger"));
-        core.put(DEBITS,paidCore.get(DEBITS).copy());data.setDirty();job.acknowledgeDebit();TreasuryNotifications.changed(core,-review.manifest.header().price());
+        if(FactionBank.balance(core)!=bankBefore||!Arrays.equals(historyBefore,core.getLongArray("BankLedger"))
+                ||!FactionBank.debit(core,review.manifest.header().price()))throw new IllegalStateException("Treasury changed during admission; unpaid job retained");
+        core.putLongArray("BankLedger",paidCore.getLongArray("BankLedger"));
+        core.put(DEBITS,paidCore.get(DEBITS).copy());data.setDirty();job.acknowledgeDebit();
         return area.getUUID();
     }
     private static EarthworksBuildArea create(ServerPlayer owner,EarthworksJobLedger.Job job,BlockPos marker){
@@ -119,9 +122,18 @@ final class EarthworksCommission {
         String neighborhood=NativeConstructionGuard.neighborhoodProblem(level,BlockPos.of(review.manifest.steps().get(0).pos()));if(neighborhood!=null)throw new IllegalStateException(neighborhood);
         if(level.captureBlockSnapshots||level.restoringBlockSnapshots)throw new IllegalStateException("Another world transaction owns this region");
     }
+    static boolean retryMatches(EarthworksJobLedger.Job job,UUID area,String manifestHash,PerimeterEarthworksJournal.Binding binding,BlockPos core){
+        return job!=null&&job.area.equals(area)&&job.manifest.hash().equals(manifestHash)&&job.read().journal().binding().equals(binding)
+                &&job.core.equals(core)&&job.active()&&job.read().inFlight()==null;
+    }
     static boolean paidMatches(net.minecraft.server.level.ServerLevel level,EarthworksJobLedger.Job job){
         try {
-            var core=RaidSavedData.get(level.getServer()).siegeCores.get("team:"+job.manifest.header().faction());if(core==null)return false;
+            return paidMatches(RaidSavedData.get(level.getServer()).siegeCores.get("team:"+job.manifest.header().faction()),job);
+        }catch(RuntimeException|LinkageError unavailable){return false;}
+    }
+    static boolean paidMatches(CompoundTag core,EarthworksJobLedger.Job job){
+        try {
+            if(core==null)return false;
             for(Tag value:readDebits(core)){
                 var row=(CompoundTag)value;
                 if(row.getUUID("Project").equals(job.manifest.header().project()))return row.getUUID("Area").equals(job.area)

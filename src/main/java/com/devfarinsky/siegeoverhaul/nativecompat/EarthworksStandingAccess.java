@@ -18,6 +18,12 @@ final class EarthworksStandingAccess {
         var journal=job.read().journal();if(journal.nextStep()>=job.manifest.steps().size())return "No local grading step remains";
         var step=job.manifest.steps().get(journal.nextStep());BlockPos target=BlockPos.of(step.pos());
         BlockPos standing=worker.blockPosition();
+        AABB actual=worker.getBoundingBox();
+        if(!worker.onGround()||worker.isPassenger()||worker.isLeashed()||worker.isInWaterOrBubble()||worker.isInLava()
+                ||!loaded(level,actual)||!loaded(level,standing.below())||!level.noCollision(worker,actual)
+                ||actual.intersects(new AABB(target))||standing.below().equals(target)
+                ||!level.getBlockState(standing.below()).isFaceSturdy(level,standing.below(),Direction.UP))
+            return "Paused: actual current worker body or footing is not safe for grading";
         if(!safe(level,worker,standing,target))return "Waiting: native builder needs loaded safe flat footing";
         String claims=NativeConstructionPolicy.problem(level,worker,area,job.manifest.header().owner(),"team:"+job.manifest.header().faction(),
                 job.core,Set.of(standing.below(),standing,standing.above()));if(claims!=null)return claims;
