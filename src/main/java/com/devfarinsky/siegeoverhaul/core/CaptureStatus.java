@@ -41,6 +41,10 @@ public final class CaptureStatus {
         };
     }
 
+    public static String countsText(int allies, int enemies) {
+        return allies + (allies == 1 ? " ally / " : " allies / ") + enemies + (enemies == 1 ? " enemy" : " enemies");
+    }
+
     public static String participationText(Participation local, Participation server, double horizontal, int radius) {
         return switch (local) {
             case OUTSIDE -> "OUTSIDE · Move " + String.format(java.util.Locale.ROOT, "%.1f", Math.max(.1, Math.ceil(Math.max(0, horizontal - radius) * 10) / 10)) + " blocks closer";

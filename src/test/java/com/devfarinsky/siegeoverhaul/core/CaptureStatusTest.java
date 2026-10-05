@@ -46,4 +46,9 @@ class CaptureStatusTest {
         assertTrue(CaptureStatus.participationText(OUTSIDE, COUNTED, 6.000001, 6).contains("0.1 blocks"));
         assertTrue(CaptureGeometry.inside(6, 0, 0, 6, 2), "Distance wording must not change the inclusive boundary");
     }
+    @Test void countedUnitsUseReadableSingularAndPluralLabels() {
+        assertEquals("1 ally / 1 enemy", CaptureStatus.countsText(1, 1));
+        assertEquals("0 allies / 2 enemies", CaptureStatus.countsText(0, 2));
+    }
+
 }
