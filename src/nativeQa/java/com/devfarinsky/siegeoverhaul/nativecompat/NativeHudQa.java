@@ -214,8 +214,8 @@ public final class NativeHudQa {
                             "Mystery chest purchase controls are not all visible");
                     require(possibleItemControls() == 0,
                             "Loot HUD still exposes a possible-item browser");
-                    require((Boolean) read("lootMysteryRendered"),
-                            "Sealed Loot-page presentation was not rendered into the actual framebuffer");
+                    require((Integer) read("sealedLootCardsRendered") == 3,
+                            "All three sealed Loot cards were not rendered into the actual framebuffer");
                     require(((ItemStack) read("revealed")).isEmpty(),
                             "Fresh Loot page retained a reward before purchase");
                     require((Integer) read("confirmBox") == -1,
@@ -647,13 +647,14 @@ public final class NativeHudQa {
     }
 
     private static Map<String, Object> sealedLootEvidence() throws ReflectiveOperationException {
-        boolean rendered = (Boolean) read("lootMysteryRendered");
+        int renderedCards = (Integer) read("sealedLootCardsRendered");
         int rewardStacks = ((ItemStack) read("revealed")).isEmpty() ? 0 : 1;
         long controls = possibleItemControls();
-        require(rendered, "Sealed Loot-page presentation did not complete before capture");
+        require(renderedCards == 3, "All three sealed Loot cards did not complete before capture");
         require(rewardStacks == 0, "Loot capture contains a reward before purchase");
         require(controls == 0, "Loot capture exposes possible-item controls");
-        return Map.of("rendered", true, "nonEmptyRewardStacks", rewardStacks,
+        return Map.of("rendered", true, "sealedChestCards", renderedCards,
+                "nonEmptyRewardStacks", rewardStacks,
                 "possibleItemControls", controls);
     }
 
