@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.devfarinsky.siegeoverhaul.naval.prototype.mixin",
+  "plugin": "com.devfarinsky.siegeoverhaul.naval.prototype.FinalShipsPrototypePlugin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": ["FinalShipInputsMixin", "FinalRecruitsShipsMixin"],
+  "injectors": {"defaultRequire": 1}
+}

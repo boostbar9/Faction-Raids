@@ -39,6 +39,8 @@ public final class NativeSmallShipsProbe {
     private Path evidence;
     private boolean finalRelease;
     private long preparedAt;
+    private final Map<java.util.UUID, Float> beforeTurns = new LinkedHashMap<>();
+    private final Map<String, Object> adapterChecks = new LinkedHashMap<>();
 
     private record Case(Boat boat, Mob recruit, CaptainEntity captain, boolean captainFirst, int shipTicks, int captainTicks, int recruitTicks) {}
 
@@ -51,7 +53,7 @@ public final class NativeSmallShipsProbe {
         finalRelease = release.equals("final");
         Path directory = Path.of(System.getProperty("siegeoverhaul.nativeShipsQa.directory")).toRealPath();
         require(directory.equals(Path.of("").toRealPath()), "Unexpected game directory");
-        require(directory.endsWith(Path.of("build", "native-ships-" + release + "-qa", "server")), "Unsafe fixture path");
+        require(directory.endsWith(Path.of("build", "native-ships-" + release + (Boolean.getBoolean("siegeoverhaul.nativeShipsQa.adapter") ? "-adapter" : "") + "-qa", "server")), "Unsafe fixture path");
         require(!Files.exists(directory.resolve("eula.txt")), "GameTest fixture must not create an EULA acceptance file");
         evidence = directory.resolveSibling("evidence");
         Files.createDirectories(evidence);
@@ -59,6 +61,7 @@ public final class NativeSmallShipsProbe {
         report.put("status", "running");
         report.put("compatibility", "unverified");
         report.put("fixtureRelease", release);
+        report.put("qaOnlyAdapterEnabled", Boolean.getBoolean("siegeoverhaul.nativeShipsQa.adapter"));
         report.put("physicalDistribution", FMLEnvironment.dist.name());
         report.put("logicalSide", level.isClientSide ? "CLIENT" : "SERVER");
         report.put("serverClass", level.getServer().getClass().getName());
@@ -87,7 +90,7 @@ public final class NativeSmallShipsProbe {
         report.put("recruitsSmallShipsCompatible", Main.isSmallShipsCompatible);
         require(Main.isSmallShipsLoaded, "Recruits did not detect installed ships");
         // Wide/deep/tall, explicitly initialized test water. No game-play terrain is edited.
-        for (int x = -24; x <= 40; x++) for (int z = -20; z <= 20; z++) {
+        for (int x = -22; x <= 22; x++) for (int z = -22; z <= 22; z++) {
             BlockPos column = origin.offset(x, 0, z);
             require(level.hasChunkAt(column), "Fixture terrain is not loaded");
             for (int y = -3; y <= 14; y++)
@@ -119,7 +122,9 @@ public final class NativeSmallShipsProbe {
             require(ship.isAlive() && sample.recruit.getVehicle() == ship && sample.captain.getVehicle() == ship
                     && ship.getPassengers().size() == 2, "Native fixture crew lost or moved");
             require(ship.tickCount - sample.shipTicks >= 19 && sample.captain.tickCount - sample.captainTicks >= 19
-                    && sample.recruit.tickCount - sample.recruitTicks >= 19, "Native actors did not actually tick");
+                    && sample.recruit.tickCount - sample.recruitTicks >= 19, "Native actors did not actually tick: " + ship.getType() + " first=" + sample.captainFirst
+                    + " ship=" + (ship.tickCount - sample.shipTicks) + " captain=" + (sample.captain.tickCount - sample.captainTicks)
+                    + " recruit=" + (sample.recruit.tickCount - sample.recruitTicks));
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("hull", ForgeRegistries.ENTITY_TYPES.getKey(ship.getType()).toString());
             item.put("captainFirst", sample.captainFirst);
@@ -151,7 +156,7 @@ public final class NativeSmallShipsProbe {
                 item.put("nativeDockyardBoardingRefused", true);
                 rejected.discard();
                 // Demonstrate the stale fixed two-block clearance against a real mast envelope.
-                BlockPos clearanceSite = origin.offset(34, 0, 0);
+                BlockPos clearanceSite = origin.offset(18, 0, 0);
                 Object mast = ((List<?>) call(ship, "getParts")).stream().filter(part -> {
                     try { return Boolean.TRUE.equals(call(part, "mast")); }
                     catch (Exception failure) { throw new IllegalStateException(failure); }
@@ -186,6 +191,89 @@ public final class NativeSmallShipsProbe {
         }
         report.put("observedNativeTicks", level.getGameTime() - preparedAt);
         report.put("hullsAndBoardingOrders", observations);
+        report.put("status", "probe-completed");
+        write();
+    }
+
+    void beginPrototype() throws Exception {
+        require(finalRelease && Boolean.getBoolean("siegeoverhaul.nativeShipsQa.adapter"), "Prototype must be explicit and final-only");
+        require(!Main.isSmallShipsCompatible, "Prototype must not activate the production compatibility gate");
+        for (Case sample : cases) {
+            require(sample.boat instanceof com.devfarinsky.siegeoverhaul.naval.prototype.FinalShipsTurnCommands.ShipHook,
+                    "Native Ship prototype injection was not applied");
+            SmallShips wrapper = new SmallShips(sample.boat, sample.captain);
+            require(wrapper instanceof com.devfarinsky.siegeoverhaul.naval.prototype.FinalShipsTurnCommands.RecruitsHook,
+                    "Native Recruits prototype injection was not applied");
+            require(wrapper.isCaptainDriver(), "Prototype must recognize actual helm independent of boarding order");
+            require(sample.boat.getControllingPassenger() == null, "Prototype changed shared controlling-passenger attribution");
+            beforeTurns.put(sample.boat.getUUID(), sample.boat.getYRot());
+        }
+        report.put("status", "prototype-running");
+        report.put("qaOnlyAdapter", adapterChecks);
+        write();
+    }
+
+    void issuePrototypeTurns() throws Exception {
+        for (Case sample : cases) {
+            Boat ship = sample.boat;
+            float yaw = ship.getYRot();
+            new SmallShips(ship, sample.captain).rotateShip(sample.captainFirst, !sample.captainFirst);
+            require(ship.getYRot() == yaw, "Adapter performed legacy direct-yaw mutation");
+            require(Boolean.TRUE.equals(call(ship, sample.captainFirst ? "isLeft" : "isRight")), "Native turn getter did not see valid captain command");
+        }
+    }
+
+    void finishPrototypeTurns() throws Exception {
+        List<Map<String, Object>> turns = new ArrayList<>();
+        for (Case sample : cases) {
+            float change = net.minecraft.util.Mth.wrapDegrees(sample.boat.getYRot() - beforeTurns.get(sample.boat.getUUID()));
+            require(sample.captainFirst ? change < -.1F : change > .1F, "Native physics did not perform requested turn: " + change);
+            turns.add(Map.of("hull", sample.boat.getType().toString(), "captainFirst", sample.captainFirst, "nativeYawChange", change));
+        }
+        adapterChecks.put("nativeTurnsWithoutDirectYawWrites", turns);
+        write();
+    }
+
+    void finishPrototypeExpiry() throws Exception {
+        for (Case sample : cases) {
+            Boat ship = sample.boat;
+            require(!Boolean.TRUE.equals(call(ship, "isLeft")) && !Boolean.TRUE.equals(call(ship, "isRight")), "Expired commands kept steering");
+            SmallShips wrapper = new SmallShips(ship, sample.captain);
+            Object helm = call(ship, "getSeatOf", new Class<?>[]{Entity.class}, sample.captain);
+            int helmId = ((Number) call(helm, "id")).intValue();
+            Object bench = null;
+            for (Object seat : (List<?>) call(ship, "getSeats")) {
+                int id = ((Number) call(seat, "id")).intValue();
+                if (!"DRIVER".equals(String.valueOf(call(seat, "type"))) && Boolean.TRUE.equals(call(ship, "isSeatFree", new Class<?>[]{int.class}, id))) {
+                    bench = seat; break;
+                }
+            }
+            require(bench != null, "Fixture has no free non-helm seat");
+            wrapper.rotateShip(false, true);
+            require(Boolean.TRUE.equals(call(ship, "isRight")), "Control receipt missing before transfer");
+            call(ship, "assignSeat", new Class<?>[]{Entity.class, int.class}, sample.captain, ((Number) call(bench, "id")).intValue());
+            require(!wrapper.isCaptainDriver() && !Boolean.TRUE.equals(call(ship, "isRight")), "Passenger captain retained helm authority");
+            float yaw = ship.getYRot();
+            Object sails = call(ship, "getSailState");
+            wrapper.rotateShip(false, true);
+            wrapper.setSailState(4);
+            require(ship.getYRot() == yaw && sails.equals(call(ship, "getSailState")), "Passenger captain changed another station's controls");
+            require(Boolean.TRUE.equals(call(ship, "isSeatFree", new Class<?>[]{int.class}, helmId)), "QA would overwrite an occupied helm");
+            call(ship, "assignSeat", new Class<?>[]{Entity.class, int.class}, sample.captain, helmId);
+            require(wrapper.isCaptainDriver(), "Restored captain did not regain helm identity");
+            call(ship, "setDockyardWork", new Class<?>[]{boolean.class}, true);
+            wrapper.rotateShip(false, true);
+            require(!Boolean.TRUE.equals(call(ship, "isRight")), "Dockyard lock allowed a turn receipt");
+            call(ship, "setDockyardWork", new Class<?>[]{boolean.class}, false);
+            require(sample.recruit.getVehicle() == ship && sample.captain.getVehicle() == ship && ship.getPassengers().size() == 2,
+                    "Prototype displaced native crew");
+        }
+        adapterChecks.put("commandExpiryAndHelmLoss", true);
+        adapterChecks.put("passengerCaptainCannotSteerOrChangeSails", true);
+        adapterChecks.put("dockyardTurnRefused", true);
+        adapterChecks.put("sharedControllingPassengerUnchanged", true);
+        adapterChecks.put("productionCompatibilityGateUnchanged", !Main.isSmallShipsCompatible);
+        adapterChecks.put("scope", "QA-only hooks and direct native wrapper calls. Native ticks own rotation; no waypoint or release compatibility claim.");
         report.put("status", "probe-completed");
         write();
     }

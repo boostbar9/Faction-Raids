@@ -6,8 +6,10 @@ if (providers.gradleProperty('nativeShipsQa').map { it.toBoolean() }.getOrElse(f
     }
     def shipsRelease = providers.gradleProperty('nativeShipsRelease').getOrElse('final')
     if (!(shipsRelease in ['final', 'legacy'])) throw new GradleException('Unsupported Small Ships fixture release')
+    def adapter = providers.gradleProperty('nativeShipsAdapter').map { it.toBoolean() }.getOrElse(false)
+    if (adapter && shipsRelease != 'final') throw new GradleException('Prototype adapter supports only exact final 2.0.0')
     def shipsFile = shipsRelease == 'final' ? '9061578' : '5566900'
-    def runDir = "build/native-ships-${shipsRelease}-qa/server"
+    def runDir = "build/native-ships-${shipsRelease}${adapter ? '-adapter' : ''}-qa/server"
     configurations { nativeShipsQaCompanions }
     dependencies {
         nativeShipsQaCompanions fg.deobf('curse.maven:workers-567450:8351157')
@@ -19,7 +21,7 @@ if (providers.gradleProperty('nativeShipsQa').map { it.toBoolean() }.getOrElse(f
     sourceSets {
         nativeShipsQa {
             java.srcDir 'src/nativeShipsQa/java'
-            resources.srcDir 'src/nativeServerQa/resources'
+            resources.srcDir 'src/nativeShipsQa/resources'
             compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
             runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
         }
@@ -30,6 +32,8 @@ if (providers.gradleProperty('nativeShipsQa').map { it.toBoolean() }.getOrElse(f
         property 'mixin.env.remapRefMap', 'true'
         property 'mixin.env.refMapRemappingFile', project.file('build/createSrgToMcp/output.srg').absolutePath
         property 'siegeoverhaul.nativeShipsQa', 'true'
+        property 'siegeoverhaul.nativeShipsQa.adapter', adapter.toString()
+        if (adapter) args '--mixin', 'siegeoverhaul.smallships-prototype.mixins.json'
         property 'siegeoverhaul.nativeShipsQa.release', shipsRelease
         property 'siegeoverhaul.nativeShipsQa.directory', project.file(runDir).absolutePath
         args '--universe', project.file("${runDir}/worlds").absolutePath,
@@ -42,7 +46,7 @@ if (providers.gradleProperty('nativeShipsQa').map { it.toBoolean() }.getOrElse(f
         doFirst {
             if (project.file("${runDir}/worlds/siege-native-ships-fixture").exists()
                     || project.file("${runDir}/eula.txt").exists()
-                    || project.file("build/native-ships-${shipsRelease}-qa/evidence/result.json").exists()) {
+                    || project.file("${runDir}/../evidence/result.json").exists()) {
                 throw new GradleException('Refusing existing Ships QA world, EULA file, or evidence.')
             }
         }

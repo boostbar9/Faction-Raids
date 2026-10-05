@@ -7,12 +7,12 @@ on:
     types: [opened, reopened, synchronize]
     paths:
       - 'src/**/naval/**'
+      - 'src/nativeShipsQa/resources/**'
       - 'build.gradle'
       - 'gradle.properties'
       - 'gradle/wrapper/**'
       - 'gradlew*'
-      - 'src/nativeServerQa/resources/**'
-      - 'scripts/generate-native-server-template.py'
+      - 'scripts/generate-native-ships-template.py'
       - 'gradle/native-smallships-qa.gradle'
       - '.github/workflows/native-smallships-qa.yml'
       - 'scripts/audit-native-ships-bytecode.py'
@@ -32,7 +32,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        release: [final, legacy]
+        include:
+          - {release: final, adapter: false, fixture: final}
+          - {release: legacy, adapter: false, fixture: legacy}
+          - {release: final, adapter: true, fixture: final-adapter}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,31 +50,37 @@ jobs:
       - name: Initialize fresh evidence
         env:
           RELEASE: ${{ matrix.release }}
+          FIXTURE: ${{ matrix.fixture }}
+          ADAPTER: ${{ matrix.adapter }}
         run: |
           set -euo pipefail
-          test ! -e "build/native-ships-${RELEASE}-qa/server"
-          test ! -e "build/native-ships-${RELEASE}-qa/evidence"
-          mkdir -p "build/native-ships-${RELEASE}-qa/evidence"
-          git rev-parse HEAD > "build/native-ships-${RELEASE}-qa/evidence/source-commit.txt"
-          java -version 2> "build/native-ships-${RELEASE}-qa/evidence/java-version.txt"
-          python3 scripts/generate-native-server-template.py --check
+          test ! -e "build/native-ships-${FIXTURE}-qa/server"
+          test ! -e "build/native-ships-${FIXTURE}-qa/evidence"
+          mkdir -p "build/native-ships-${FIXTURE}-qa/evidence"
+          git rev-parse HEAD > "build/native-ships-${FIXTURE}-qa/evidence/source-commit.txt"
+          java -version 2> "build/native-ships-${FIXTURE}-qa/evidence/java-version.txt"
+          python3 scripts/generate-native-ships-template.py --check
       - name: Run real Forge server with the exact companion release
         env:
           RELEASE: ${{ matrix.release }}
+          FIXTURE: ${{ matrix.fixture }}
+          ADAPTER: ${{ matrix.adapter }}
         run: |
           set -euo pipefail
           timeout --signal=TERM --kill-after=60s 20m ./gradlew --no-daemon --console=plain --max-workers=2 \
-            -Pforge_version=47.4.10 -PnativeShipsQa=true -PnativeShipsRelease="$RELEASE" runGameTestServer \
-            2>&1 | tee "build/native-ships-${RELEASE}-qa/evidence/server-console.log"
+            -Pforge_version=47.4.10 -PnativeShipsQa=true -PnativeShipsRelease="$RELEASE" -PnativeShipsAdapter="$ADAPTER" runGameTestServer \
+            2>&1 | tee "build/native-ships-${FIXTURE}-qa/evidence/server-console.log"
       - name: Verify probe evidence without claiming compatibility
         env:
           RELEASE: ${{ matrix.release }}
+          FIXTURE: ${{ matrix.fixture }}
+          ADAPTER: ${{ matrix.adapter }}
         run: |
           python3 - <<'PY'
           import json, os
           from pathlib import Path
           release = os.environ['RELEASE']
-          root = Path(f'build/native-ships-{release}-qa/evidence')
+          root = Path(f"build/native-ships-{os.environ['FIXTURE']}-qa/evidence")
           data = json.loads((root / 'result.json').read_text())
           assert data['status'] == 'probe-completed', data
           assert data['compatibility'] == 'unverified', data
@@ -88,19 +97,29 @@ jobs:
                   assert item['captainSeatType'] == 'DRIVER' and item['nativeDockyardBoardingRefused'], item
                   assert item['nativeMastIntersectsObstruction'], item
           assert (root / 'server-console.log').read_text().count('SIEGE_NATIVE_SHIPS_PROBE_COMPLETED compatibility=unverified') == 1
+          if os.environ['ADAPTER'] == 'true':
+              prototype = data['qaOnlyAdapter']
+              assert prototype['commandExpiryAndHelmLoss'] and prototype['passengerCaptainCannotSteerOrChangeSails'], prototype
+              assert prototype['dockyardTurnRefused'] and prototype['sharedControllingPassengerUnchanged'], prototype
+              assert prototype['productionCompatibilityGateUnchanged'], prototype
+              assert len(prototype['nativeTurnsWithoutDirectYawWrites']) == 4, prototype
           print('Exact-binary probe completed; this deliberately does not certify release compatibility.')
           PY
       - name: Read exact native bytecode and original artifact hashes
         if: always()
         env:
           RELEASE: ${{ matrix.release }}
-        run: python3 scripts/audit-native-ships-bytecode.py "build/native-ships-${RELEASE}-qa/evidence"
+          FIXTURE: ${{ matrix.fixture }}
+          ADAPTER: ${{ matrix.adapter }}
+        run: python3 scripts/audit-native-ships-bytecode.py "build/native-ships-${FIXTURE}-qa/evidence"
       - name: Collect logs without vendor JARs or worlds
         if: always()
         env:
           RELEASE: ${{ matrix.release }}
+          FIXTURE: ${{ matrix.fixture }}
+          ADAPTER: ${{ matrix.adapter }}
         run: |
-          root="build/native-ships-${RELEASE}-qa"
+          root="build/native-ships-${FIXTURE}-qa"
           mkdir -p "$root/evidence/logs"
           if [ -d "$root/server/logs" ]; then
             find "$root/server/logs" -maxdepth 1 -type f -name '*.log' -exec cp {} "$root/evidence/logs/" \;
@@ -109,7 +128,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: native-smallships-${{ matrix.release }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: build/native-ships-${{ matrix.release }}-qa/evidence/
+          name: native-smallships-${{ matrix.fixture }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/native-ships-${{ matrix.fixture }}-qa/evidence/
           if-no-files-found: error
           retention-days: 7

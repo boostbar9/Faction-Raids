@@ -38,3 +38,9 @@ Production output excludes this source set. CI uploads results, actual runtime v
 5. Verify actual client and server behavior, safe landing, legacy/mod-absence helper fallback, ownership boundaries and real reload recovery before release.
 
 Dockyards, new hulls, ammunition and expanded fleets are outside this first compatibility task. The unrelated ATL 1.1.3 obsolete ChunkMap hook is not repaired or bypassed here. No arbitrary-modpack compatibility claim is made.
+
+## QA-only turn adapter prototype
+
+The final-adapter matrix entry tests an unshipped, exact-version-gated runtime addon. It recognizes the native DRIVER occupant and feeds short-lived left/right requests into native `controlShip`; it never writes yaw, rotation speed, velocity, or the shared controlling-passenger result. Native collision/wind/sail handling remains the physics owner. Receipts expire after the current/previous-tick window and reject helm loss, dockyard work, locks, leash and sinking. Passenger captains cannot use stale wrappers to write sails. The hooks, config and helper classes are confined to `src/nativeShipsQa` and are absent from the production JAR.
+
+This prototype deliberately leaves Recruits' compatibility flag unchanged. Production activation also requires resolving the independent repair/damage mapping path and verifying the actual client, protected ownership, native waypoint convergence, unload/reload and production packaging. A passing prototype contract is not a completed gameplay fix.
