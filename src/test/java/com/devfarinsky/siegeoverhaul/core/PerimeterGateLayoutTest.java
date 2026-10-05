@@ -7,6 +7,7 @@ import net.minecraft.world.level.ChunkPos;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -217,20 +218,54 @@ class PerimeterGateLayoutTest extends MinecraftTestSupport {
                 runs, wall.connections(), wall.materialCounts(), wall.problems());
     }
 
-    @Test void allThreeByThreeClaimTopologiesHaveFourOuterEntrancesPerComponent() {
+    @Test void allThreeByThreeClaimTopologiesEitherHaveFourOuterEntrancesOrExplainImpossibleAccess() {
         for (int mask = 1; mask < 512; mask++) {
             Set<ChunkPos> claim = new HashSet<>();
             for (int bit = 0; bit < 9; bit++) if ((mask & 1 << bit) != 0) claim.add(new ChunkPos(bit % 3 - 1, bit / 3 - 1));
             var wall = flat(claim); var layout = PerimeterGateLayout.create(claim, wall, CLEAR);
-            assertTrue(layout.valid(), "Topology " + mask + ": " + layout.problemSummary());
-            long components = wall.columns().stream().map(PerimeterBlueprint.Column::componentId).distinct().count();
-            assertEquals(4 * components, layout.gates().size());
+            Map<ChunkPos, Integer> components = new HashMap<>();
+            wall.columns().forEach(c -> components.put(new ChunkPos(c.base()), c.componentId()));
+            boolean possible = true;
+            for (int component : new HashSet<>(components.values())) for (Direction direction : Direction.Plane.HORIZONTAL) {
+                boolean reachable = components.entrySet().stream().filter(e -> e.getValue() == component)
+                        .map(e -> new ChunkPos(e.getKey().x + direction.getStepX(), e.getKey().z + direction.getStepZ()))
+                        .anyMatch(p -> reachesOuterBorder(claim, p));
+                possible &= reachable;
+            }
+            assertEquals(possible, layout.valid(), "Topology " + mask + ": " + layout.problemSummary());
+            if (!possible) {
+                assertBlocked(layout, PerimeterGateLayout.ProblemCode.NO_OUTER_ENTRANCE);
+                continue;
+            }
+            assertEquals(4 * new HashSet<>(components.values()).size(), layout.gates().size());
             assertEquals(18 * layout.gates().size(), layout.wallOpenings().size());
             for (var gate : layout.gates()) for (long cell : gate.outsideApproach()) {
                 BlockPos p = BlockPos.of(cell); assertFalse(claim.contains(new ChunkPos(p)));
                 assertFalse(wall.blocks().containsKey(cell));
             }
         }
+    }
+
+    @Test void separateComponentsBoxingInAnEmptyChunkCannotUseThatHoleAsAnExit() {
+        Set<ChunkPos> claim = Set.of(new ChunkPos(0, -1), new ChunkPos(1, 0),
+                new ChunkPos(0, 1), new ChunkPos(-1, 0));
+        assertBlocked(PerimeterGateLayout.create(claim, flat(claim), CLEAR), PerimeterGateLayout.ProblemCode.NO_OUTER_ENTRANCE);
+    }
+
+    /** Independent small-grid oracle: 3x3 fixtures have reached the outside at coordinate +/-2. */
+    private static boolean reachesOuterBorder(Set<ChunkPos> claim, ChunkPos start) {
+        if (claim.contains(start)) return false;
+        Set<ChunkPos> seen = new HashSet<>(); ArrayDeque<ChunkPos> queue = new ArrayDeque<>();
+        seen.add(start); queue.add(start);
+        while (!queue.isEmpty()) {
+            ChunkPos p = queue.removeFirst();
+            if (Math.abs(p.x) >= 2 || Math.abs(p.z) >= 2) return true;
+            for (Direction d : Direction.Plane.HORIZONTAL) {
+                ChunkPos next = new ChunkPos(p.x + d.getStepX(), p.z + d.getStepZ());
+                if (!claim.contains(next) && seen.add(next)) queue.addLast(next);
+            }
+        }
+        return false;
     }
 
     private static PerimeterBlueprint.Plan flat(Set<ChunkPos> chunks) {

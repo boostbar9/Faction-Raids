@@ -21,7 +21,8 @@ remaining persistence, live validation and native QA stages pass.
 - Flood-fill unclaimed chunks from outside the complete bounded territory to distinguish
   outer space from enclosed holes. Shared claim edges and hole edges are never exits.
   A disconnected island enclosed inside another component's hole cannot satisfy the
-  contract; fail clearly rather than silently use a hole boundary.
+  contract. Separate components can also jointly enclose a hole and make one component's
+  cardinal exit impossible. Fail clearly rather than silently use a hole boundary.
 - Preserve the complete five-wide corner footprints intact. Each
   three-wide gate center is at least four cells along a run from either corner center.
 - The opening is three wide, five deep through the wall, and three high immediately below

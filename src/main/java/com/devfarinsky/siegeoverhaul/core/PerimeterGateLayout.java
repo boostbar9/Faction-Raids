@@ -222,7 +222,7 @@ public final class PerimeterGateLayout {
     }
     private static void addProbes(List<Probe> result, Set<Long> cells, int y, Region region) {
         cells.stream().map(BlockPos::of).filter(p -> p.getY() == y)
-                .sorted(Comparator.comparingInt(BlockPos::getX).thenComparingInt(BlockPos::getZ))
+                .sorted(Comparator.comparingInt((BlockPos p) -> p.getX()).thenComparingInt(p -> p.getZ()))
                 .forEach(p -> result.add(new Probe(p, region)));
     }
     private static Comparator<Site> order(Bounds b, Direction direction) {
