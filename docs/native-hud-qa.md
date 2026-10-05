@@ -69,6 +69,11 @@ world, account or authentication file is uploaded.
   buttons remain disabled and are excluded from the active count at every scale;
   first-click local loot confirmation and its navigation
   cancellation. The second, paid loot click is never performed.
+- Civilian roster at every viewport: labeled loaded native farmer/librarian
+  appearances, explicitly unavailable residents without invented models, keyboard
+  paging, selection across read-only sync and the complete focusable Care tooltip.
+  Compact loading and empty reports are captured separately. These are client
+  display fixtures, not proof of server villagers, native AI or tax collection.
 - Possible-loot gallery at all four viewports: native enchanted/trimmed epic and
   rare ItemStacks, bounded keyboard paging through later items, Royal tier-floor
   controls and Back without a purchase. Gallery examples never inspect a sealed

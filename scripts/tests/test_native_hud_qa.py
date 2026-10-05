@@ -110,13 +110,12 @@ class NativeHudSourceContracts(unittest.TestCase):
                     self.assertEqual(completed.returncode, 0, completed.stderr)
                     self.assertIn('graphicsEnvironmentHeadless=' + result, completed.stdout)
 
-    def test_native_font_checks_complete_civilian_guidance_before_capture(self):
+    def test_civilian_native_appearance_and_keyboard_care_are_checked(self):
         source = HARNESS.read_text()
-        self.assertIn('currentPage() == CoreCommandPage.CIVILIANS', source)
-        self.assertIn('getDeclaredMethod("civilianGuidance", boolean.class)', source)
-        self.assertIn('mc.font.split(Component.literal(guidance), layout.width() - 40)', source)
-        self.assertIn('require(lineCount <= lineBudget', source)
-        self.assertIn('view.put("civilianGuidanceLineBudget", lineBudget)', source)
+        for text in ['currentPage() == CoreCommandPage.CIVILIANS', 'civilianCareAccessible',
+                     'getDeclaredField("preview")', 'Native resident preview has the wrong profession',
+                     'civilianSelectedLoaded', 'resident sync preserves selection']:
+            self.assertIn(text, source)
 
     def test_loot_keyboard_tooltips_have_a_viewport_bounds_gate(self):
         source = HARNESS.read_text()
@@ -144,7 +143,7 @@ class NativeHudSourceContracts(unittest.TestCase):
 
     def test_exact_named_matrix_has_all_pages_plans_states_and_native_inspection(self):
         expected = verify.expected_screenshots()
-        self.assertEqual(len(expected), 118)
+        self.assertEqual(len(expected), 130)
         for prefix in verify.MATRICES:
             for page in verify.PAGES:
                 self.assertIn(f'{prefix}-{page}.png', expected)

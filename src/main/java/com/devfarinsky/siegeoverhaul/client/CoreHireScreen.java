@@ -59,6 +59,11 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private static final CoreCommandPage[] PAGES = CoreCommandPage.values();
     private CoreHireLayout layout;
     private CoreCommandPage tab = CoreCommandPage.ARMY;
+    private final CivilianReportSubscription civilianSubscription = new CivilianReportSubscription();
+    private CivilianResidentButton[] civilianRows = new CivilianResidentButton[0];
+    private Button civilianPrevious, civilianNext, civilianCare;
+    private java.util.UUID selectedCivilian;
+    private int civilianPage;
     private final Button[] pageButtons = new Button[PAGES.length];
     private final Button[] intelSections = new Button[3];
     private Button previousPage, nextPage, treasuryShortcut, civilianRecruit;
@@ -193,8 +198,26 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         clearIntelSearch = addRenderableWidget(new CoreButton(Component.literal("Clear"),
                 b -> intelSearch.setValue(""), layout.x() + layout.width() - 57,
                 layout.contentY() + 23, 46, 18, false, () -> false));
-        civilianRecruit = addRenderableWidget(new CoreButton(Component.literal("House a civilian · 16e"),
-                b -> action(86),layout.x()+12,layout.contentBottom()-24,layout.width()-24,20,false,()->false));
+        civilianRecruit = addRenderableWidget(new CoreButton(Component.literal("Recruit civilian · 16e"),
+                b -> action(86),layout.x()+10,layout.contentBottom()-20,layout.width()-20,20,false,()->false));
+        var civilians = civilianLayout();
+        civilianRows = new CivilianResidentButton[civilians.rows()];
+        for (int i = 0; i < civilianRows.length; i++) {
+            final int index = i;
+            civilianRows[i] = addRenderableWidget(new CivilianResidentButton(civilians.x(), civilians.rowY(i),
+                    civilians.listWidth(), civilians.rowHeight(), b -> {
+                        if (civilianRows[index].resident() != null) {
+                            selectedCivilian = civilianRows[index].resident().id(); updateControlState();
+                        }
+                    }, () -> civilianRows[index].resident() != null && civilianRows[index].resident().id().equals(selectedCivilian)));
+        }
+        civilianPrevious = addRenderableWidget(new CoreButton(Component.literal("< Previous"), b -> moveCivilianPage(-1),
+                civilians.x(), civilians.navigationY(), 78, 18, false, () -> false));
+        civilianNext = addRenderableWidget(new CoreButton(Component.literal("Next >"), b -> moveCivilianPage(1),
+                civilians.x() + civilians.width() - 78, civilians.navigationY(), 78, 18, false, () -> false));
+        civilianCare = addRenderableWidget(new CoreButton(Component.literal("Care & taxes"), b -> {},
+                civilians.x() + 82, civilians.navigationY(), civilians.width() - 164, 18, false, () -> false)
+                .hint(civilianGuidance(false)));
         updateNavigation();
 
         // Close (X) button in the header for players who can't reach Escape
@@ -404,12 +427,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
         updateControlState();
         updateBuildingReport();
+        updateCivilianReport(tab == CoreCommandPage.CIVILIANS);
     }
 
     private void selectPage(CoreCommandPage page) {
         if (tab == page) return;
         tab = page;
         updateBuildingReport();
+        updateCivilianReport(tab == CoreCommandPage.CIVILIANS);
         confirmBox = -1;
         showingLootGallery = false;
         intelDragging = false;
@@ -417,6 +442,29 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         updateNavigation();
         updateControlState();
         setFocused(pageButtons[tab.ordinal()]);
+    }
+
+    private void updateCivilianReport(boolean visible) {
+        civilianSubscription.update(visible, (request, watch) -> {
+            menu.expectCivilianReport(request, watch);
+            RaidNetwork.watchCivilians(menu.containerId, request, watch);
+        });
+    }
+
+    private CoreCivilianLayout civilianLayout() { return new CoreCivilianLayout(layout); }
+    private List<CivilianReport.Resident> residents() {
+        return menu.civilianReport() == null ? List.of() : menu.civilianReport().residents();
+    }
+    private CivilianReport.Resident selectedResident() {
+        return residents().stream().filter(row -> row.id().equals(selectedCivilian)).findFirst().orElse(null);
+    }
+    private void moveCivilianPage(int direction) {
+        var rows = residents();
+        int page = Math.max(0, Math.min(civilianLayout().pages(rows.size()) - 1, civilianPage + direction));
+        if (!rows.isEmpty()) selectedCivilian = rows.get(page * civilianLayout().rows()).id();
+        civilianPage = page;
+        updateControlState();
+        if (civilianRows.length > 0 && civilianRows[0].visible) setFocused(civilianRows[0]);
     }
 
     private CoreLootGalleryLayout lootGalleryLayout() { return new CoreLootGalleryLayout(layout); }
@@ -565,6 +613,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             int next = keyboardScroll(lootPage, lootGalleryLayout().pages(lootPreviewPool().size()) - 1, 1, key);
             if (next >= 0) { moveLootPage(next - lootPage); return true; }
         }
+        if (tab == CoreCommandPage.CIVILIANS && layout != null) {
+            int next = keyboardScroll(civilianPage, civilianLayout().pages(residents().size()) - 1, 1, key);
+            if (next >= 0) { moveCivilianPage(next - civilianPage); return true; }
+        }
         if (tab == CoreCommandPage.TREASURY && layout != null) {
             int rows = Math.max(1, (bankRosterHeight() - 26) / 12);
             int next = keyboardScroll(rosterOffset, Math.max(0, menu.members().size() - rows), rows, key);
@@ -648,9 +700,23 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         civilianRecruit.visible = tab == CoreCommandPage.CIVILIANS;
         civilianRecruit.active = canAfford(CoreCivilians.PRICE) && menu.civilians() < CivilianLedger.LIMIT;
         civilianRecruit.setMessage(Component.literal(menu.civilians() >= CivilianLedger.LIMIT
-                ? "Housing full · " + CivilianLedger.LIMIT + " residents"
-                : canAfford(CoreCivilians.PRICE) ? "House a civilian · " + CoreCivilians.PRICE + "e"
+                ? "Resident limit · " + CivilianLedger.LIMIT
+                : canAfford(CoreCivilians.PRICE) ? "Recruit civilian · " + CoreCivilians.PRICE + "e"
                 : "Need " + Math.max(0L, CoreCivilians.PRICE - availableFunds()) + "e in Treasury"));
+        var residents = residents();
+        int selectedIndex = -1;
+        for (int i = 0; i < residents.size(); i++) if (residents.get(i).id().equals(selectedCivilian)) selectedIndex = i;
+        if (selectedIndex < 0 && !residents.isEmpty()) { selectedIndex = 0; selectedCivilian = residents.get(0).id(); }
+        civilianPage = selectedIndex < 0 ? 0 : selectedIndex / civilianLayout().rows();
+        civilianPrevious.visible = civilianNext.visible = civilianCare.visible = tab == CoreCommandPage.CIVILIANS;
+        civilianPrevious.active = civilianPage > 0;
+        civilianNext.active = civilianPage + 1 < civilianLayout().pages(residents.size());
+        civilianCare.setMessage(Component.literal("Care · " + (civilianPage + 1) + "/" + civilianLayout().pages(residents.size())));
+        for (int i = 0; i < civilianRows.length; i++) {
+            int row = civilianPage * civilianRows.length + i;
+            civilianRows[i].visible = tab == CoreCommandPage.CIVILIANS && row < residents.size();
+            if (civilianRows[i].visible) civilianRows[i].show(residents.get(row));
+        }
         ((CoreButton) treasuryShortcut).setDetail(String.format(Locale.ROOT, "%,d", menu.bank()));
         for (int i = 0; i < 4; i++) {
             hire[i].visible = tab == CoreCommandPage.ARMY;
@@ -901,15 +967,28 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 }
             }
         }
-        if (tab == CoreCommandPage.CIVILIANS && over(mx, my, layout.x() + 10,
-                layout.contentY(), layout.width() - 20, layout.contentBottom() - layout.contentY())) {
-            String reason = menu.civilians() >= CivilianLedger.LIMIT ? "Your faction has reached its resident limit. "
-                    : !canAfford(CoreCivilians.PRICE) ? "Deposit " + emeralds(CoreCivilians.PRICE - availableFunds())
-                            + " in the Treasury to house another resident. " : "";
-            tooltip(g, reason + "Housing costs " + CoreCivilians.PRICE + " Treasury emeralds. Give residents beds, food and workstations. "
-                    + "Each living resident pays one emerald per full in-game day. Taxes pause when stranded or while the core is occupied.",
-                    tooltipX, tooltipY);
-            return;
+        if (tab == CoreCommandPage.CIVILIANS) {
+            for (var row : civilianRows) if (row.visible && (row.isMouseOver(mx, my) || row.isFocused())) {
+                var resident = row.resident();
+                String detail = resident.label() + " · " + CivilianResidentButton.profession(resident) + ". " + resident.status() + ". ";
+                if (resident.loaded()) detail += (resident.bed() ? "Bed remembered. " : "No bed remembered. ")
+                        + (resident.workstation() ? "Workstation remembered. " : "No workstation remembered. ")
+                        + "These are native brain memories, not a housing or workstation availability check. ";
+                else detail += "No chunks are loaded to inspect residents. Unloaded is not dead; tax clocks follow the saved ledger. ";
+                CoreItemTooltip.drawText(g, font, List.of(Component.literal(detail)), width, height,
+                        Math.round((row.getX() + row.getWidth()) * layout.scale()),
+                        Math.round((row.getY() + row.getHeight() / 2f) * layout.scale())); return;
+            }
+            if (civilianCare.isMouseOver(mx, my) || civilianCare.isFocused()) {
+                CoreItemTooltip.drawText(g, font, List.of(Component.literal(civilianGuidance(false))), width, height,
+                        Math.round((civilianCare.getX() + civilianCare.getWidth() / 2f) * layout.scale()),
+                        Math.round(civilianCare.getY() * layout.scale())); return;
+            }
+            if (civilianRecruit.isMouseOver(mx, my)) {
+                tooltip(g, "Recruit a native villager for " + CoreCivilians.PRICE
+                        + " Treasury emeralds. Beds, food and workstations must be provided separately. Capacity is a resident limit, not a bed count.",
+                        tooltipX, tooltipY); return;
+            }
         }
         if (tab == CoreCommandPage.DEFENSES) drawBuildingTooltips(g, mx, my, tooltipX, tooltipY);
         if (tab == CoreCommandPage.TERRITORY) {
@@ -1534,34 +1613,52 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         }
     }
 
-    /** Real resident preview, essential figures and bounded guidance share one readable surface. */
+    /** Actual server-observed residents, with explicit loading and unavailable states. */
     private void drawCivilians(GuiGraphics g, int mouseX, int mouseY) {
-        int x = layout.x() + 10, y = layout.contentY(), w = layout.width() - 20;
-        int h = layout.contentBottom() - y - 30;
-        CommandFrame.surface(g, x, y, w, h);
-        int portrait = Math.min(layout.compact() ? 48 : 96, Math.max(24, h - 28));
-        CivilianPortrait.draw(g, x + 8, y + 8, portrait, mouseX, mouseY);
-        int infoX = x + portrait + 18, infoW = w - portrait - 28;
-        text(g, menu.civilians() + " / " + CivilianLedger.LIMIT + " residents", infoX, y + 8, infoW, CommandPalette.TEXT);
-        text(g, "Housing: " + CoreCivilians.PRICE + "e from Treasury", infoX, y + 21, infoW, CommandPalette.ACCENT_GOLD);
-        text(g, "Up to " + menu.civilians() + "e per in-game day", infoX, y + 34, infoW, CommandPalette.TEXT_MUTED);
-        text(g, "Taxes collected: " + String.format(Locale.ROOT, "%,d", menu.totalCivilianTaxes()) + "e",
-                infoX, y + 47, infoW, CommandPalette.ACCENT_EMERALD);
-        int guidanceY = y + Math.max(portrait + 18, 65);
-        int lines = Math.max(0, (y + h - guidanceY - 7) / 10);
-        if (lines > 0) {
-            drawWrappedText(g, civilianGuidance(layout.compact()), x + 10, guidanceY,
-                    w - 20, lines, CommandPalette.TEXT_MUTED);
+        var c = civilianLayout();
+        var report = menu.civilianReport();
+        String counts = menu.civilians() + " / " + CivilianLedger.LIMIT + " residents";
+        if (report != null) counts += " · " + report.loaded() + " loaded · " + (report.residents().size() - report.loaded()) + " not loaded";
+        text(g, counts, c.x() + 3, c.y() + 2, c.width() - 6, CommandPalette.TEXT);
+        text(g, "Taxes collected " + emeralds(menu.totalCivilianTaxes()) + (report == null ? ""
+                : report.taxEligible() ? " · Core tax-eligible" : " · Core taxes paused"),
+                c.x() + 3, c.y() + 14, c.width() - 6, CommandPalette.ACCENT_EMERALD);
+        if (report == null || report.residents().isEmpty()) {
+            CommandFrame.surface(g, c.x(), c.bodyY(), c.width(), c.bodyHeight());
+            text(g, report == null ? "Loading resident details..." : "No faction residents recorded", c.x() + 10, c.bodyY() + 10,
+                    c.width() - 20, CommandPalette.TEXT);
+            drawWrappedText(g, "Recruit a civilian below. Provide beds, food and workstations separately.",
+                    c.x() + 10, c.bodyY() + 25, c.width() - 20, Math.max(1, (c.bodyHeight() - 30) / 10), CommandPalette.TEXT_MUTED);
+            return;
         }
+        if (!c.split()) return; // Compact native model/details are rendered in the single selected row.
+        int x = c.detailX(), y = c.bodyY(), w = c.detailWidth(), h = c.bodyHeight();
+        CommandFrame.surface(g, x, y, w, h);
+        var resident = selectedResident();
+        if (resident == null) return;
+        int portrait = resident.loaded() ? Math.min(96, h - 20) : 0;
+        if (resident.loaded()) CivilianPortrait.draw(g, x + 8, y + 8, portrait, mouseX, mouseY, resident);
+        int textX = x + (resident.loaded() ? portrait + 18 : 10), textW = x + w - textX - 8;
+        text(g, resident.label(), textX, y + 8, textW, CommandPalette.TEXT);
+        text(g, CivilianResidentButton.profession(resident), textX, y + 22, textW, CommandPalette.TEXT_MUTED);
+        text(g, resident.status(), textX, y + 38, textW, resident.paused() ? CommandPalette.ACCENT_GOLD : CommandPalette.TEXT_MUTED);
+        if (resident.loaded()) {
+            text(g, resident.bed() ? "Bed remembered" : "No bed remembered", textX, y + 54, textW, CommandPalette.TEXT_MUTED);
+            text(g, resident.workstation() ? "Workstation remembered" : "No workstation remembered", textX, y + 68, textW, CommandPalette.TEXT_MUTED);
+        }
+        int careY = y + Math.max(88, portrait + 20);
+        drawWrappedText(g, "Food stocks and housing capacity are not tracked. " + civilianGuidance(true),
+                x + 10, careY, w - 20, Math.max(0, (y + h - careY - 8) / 10), CommandPalette.TEXT_MUTED);
     }
 
-    /** Compact copy keeps the care and tax conditions complete instead of cutting a paragraph. */
+    /** Complete details remain accessible with keyboard focus on the Care control at every scale. */
     static String civilianGuidance(boolean compact) {
         if (compact) return "Provide beds, food and workstations. Taxes pause if stranded or the core is occupied.";
-        return "Give residents beds, food and workstations. "
-                + "Name, profession and appearance are assigned on arrival. "
-                + "Each living resident pays one emerald per full in-game day. "
-                + "Taxes pause if stranded or the core is occupied.";
+        return "Provide beds, food and matching workstations separately. Native villagers keep their trades and breeding. "
+                + "Each registered living resident pays one emerald per full in-game day. "
+                + "Taxes pause if stranded, or the core is missing, unclaimed or occupied. "
+                + "Unloaded residents retain their saved tax clocks; unloaded is not dead. "
+                + "Food stocks and housing capacity are not tracked. Bed and workstation labels are native brain memories, not availability checks.";
     }
 
     private void drawPerimeter(GuiGraphics g) {
@@ -2199,6 +2296,10 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             moveLootPage(delta > 0 ? -1 : 1);
             return true;
         }
+        if (tab == CoreCommandPage.CIVILIANS && delta != 0 && CoreTabStrip.contains(x, y,
+                civilianLayout().x(), civilianLayout().bodyY(), civilianLayout().width(), civilianLayout().bodyHeight())) {
+            moveCivilianPage(delta > 0 ? -1 : 1); return true;
+        }
         if (tab == CoreCommandPage.TREASURY && CoreTabStrip.contains(x, y,
                 layout.x() + 10, bankRosterY(), layout.width() - 20, bankRosterHeight())) {
             int count = menu.members().size();
@@ -2286,6 +2387,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     @Override
     public void onClose() {
         buildingReport.update(false, this::action);
+        updateCivilianReport(false);
         EntityPortrait.clear();
         CivilianPortrait.clear();
         super.onClose();
@@ -2294,6 +2396,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     @Override
     public void removed() {
         buildingReport.update(false, this::action);
+        updateCivilianReport(false);
         super.removed();
     }
 

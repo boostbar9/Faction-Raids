@@ -300,8 +300,8 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
     @Test void compactCivilianGuidanceKeepsCompleteCareAndTaxConditions() {
         assertEquals("Provide beds, food and workstations. Taxes pause if stranded or the core is occupied.",
                 CoreHireScreen.civilianGuidance(true));
-        assertTrue(CoreHireScreen.civilianGuidance(false).contains("assigned on arrival."));
-        assertTrue(CoreHireScreen.civilianGuidance(false).endsWith("core is occupied."));
+        assertTrue(CoreHireScreen.civilianGuidance(false).contains("not tracked"));
+        assertTrue(CoreHireScreen.civilianGuidance(false).contains("unloaded is not dead"));
     }
 
     @Test void compactArmyRetainsItsRefreshCountdownWithPageNavigation() {

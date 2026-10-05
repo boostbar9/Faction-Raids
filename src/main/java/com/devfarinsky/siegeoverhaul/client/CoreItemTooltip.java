@@ -10,8 +10,12 @@ import net.minecraft.world.item.ItemStack;
 final class CoreItemTooltip {
     private CoreItemTooltip() {}
     static CoreTooltipLayout draw(GuiGraphics g, Font font, ItemStack item, int width, int height, int x, int y) {
+        return drawText(g, font, Screen.getTooltipFromItem(Minecraft.getInstance(), item), width, height, x, y);
+    }
+    static CoreTooltipLayout drawText(GuiGraphics g, Font font, java.util.List<net.minecraft.network.chat.Component> text,
+                                     int width, int height, int x, int y) {
         var lines = new java.util.ArrayList<net.minecraft.util.FormattedCharSequence>();
-        for (var line : Screen.getTooltipFromItem(Minecraft.getInstance(), item))
+        for (var line : text)
             lines.addAll(font.split(line, Math.max(24, Math.min(360, width - 20))));
         int contentWidth = lines.stream().mapToInt(font::width).max().orElse(1);
         // Native text tooltip components are ten pixels high; two extra pixels cover the title gap.

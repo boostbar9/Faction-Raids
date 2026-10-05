@@ -10,7 +10,7 @@ PAGES = ['army', 'loot', 'treasury', 'territory', 'building', 'civilians', 'inte
 PLANS = ['barricade', 'watchtower', 'gatehouse', 'wall', 'corner', 'stairs']
 MATRICES = ['compact-scale2', 'compact-scale3', 'roomy-scale2', 'roomy-scale1']
 STATES = ['army-unavailable', 'treasury-empty', 'construction-loading', 'construction-empty',
-          'civilians-capacity', 'loot-confirmation', 'intel-keyboard-e', 'intel-no-results',
+          'civilians-capacity', 'civilians-loading', 'civilians-empty', 'loot-confirmation', 'intel-keyboard-e', 'intel-no-results',
           'intel-scrolled', 'intel-keyboard-focus', 'codex-core', 'codex-how-to-play',
           'codex-journal', 'settings', 'settings-no-results', 'settings-scrolled', 'hero-visuals', 'native-inspection']
 
@@ -21,7 +21,7 @@ def expected_screenshots():
         names.extend(f'{prefix}-{page}.png' for page in PAGES)
         names.extend(f'{prefix}-{section}.png' for section in [
             'building-structures', 'building-construction', 'intel-enemy-lore', 'intel-how-to-play',
-            'loot-gallery-epic', 'loot-gallery-last', 'loot-gallery-rare'])
+            'loot-gallery-epic', 'loot-gallery-last', 'loot-gallery-rare', 'civilians-unloaded', 'civilians-care'])
         names.extend(f'{prefix}-plan-{plan}.png' for plan in PLANS)
     for prefix in MATRICES[:2]:
         names.extend(f'{prefix}-{state}.png' for state in STATES)
