@@ -76,6 +76,62 @@ class EarthworksJobLedgerTest extends MinecraftTestSupport {
         data.remove("SiegeEarthworksSupplyV1"); data.putString(NativeEarthworksJobs.KEY, "malformed");
         assertTrue(NativeEarthworksJobs.selected(worker));
     }
+    @Test void missingSelectorWithUnreadableWorldLedgerNeverEnablesLegacyStorage() {
+        var worker = mock(com.talhanation.workers.entities.BuilderEntity.class);
+        var data = new CompoundTag(); when(worker.getPersistentData()).thenReturn(data);
+        var level = mock(net.minecraft.server.level.ServerLevel.class); when(worker.level()).thenReturn(level);
+        when(level.getDataStorage()).thenThrow(new IllegalStateException("unreadable ledger"));
+        assertTrue(NativeEarthworksJobs.selected(worker)); assertTrue(EarthworksInventoryAccess.guarded(worker));
+        var delegate = mock(net.minecraft.world.entity.ai.goal.Goal.class);
+        when(delegate.getFlags()).thenReturn(java.util.EnumSet.of(net.minecraft.world.entity.ai.goal.Goal.Flag.MOVE));
+        var goal = new ProtectedInventoryGoal(worker, delegate, new ProtectedInventoryGoal.Session(worker)) {
+            @Override ProtectedStorageAccess.Kind kind() { return ProtectedStorageAccess.Kind.NEEDED; }
+            @Override String beforeStart() { return null; }
+            @Override String beforeTick() { return null; }
+            @Override String cleanup() { return null; }
+        };
+        goal.start(); goal.tick(); verify(delegate, never()).start(); verify(delegate, never()).tick();
+    }
+    @Test void duplicateAreaIsRejectedBeforeChangingEitherAuthorityOrSave() {
+        var ledger = new EarthworksJobLedger(); var first = prepare(ledger); var before = ledger.save(new CompoundTag());
+        var second = NativeEarthworksAdapterTest.manifest();
+        var next = new PerimeterEarthworksManifest(second.header(), new ArrayList<>(second.observations().values()), second.steps().subList(0,2));
+        assertThrows(IllegalStateException.class, () -> ledger.prepare(next,
+                new PerimeterEarthworksJournal.Binding(UUID.randomUUID(), "a".repeat(64), "b".repeat(64)), first.area, BlockPos.ZERO));
+        assertEquals(before, ledger.save(new CompoundTag()));
+        assertFalse(EarthworksJobLedger.load(before).uncertain());
+        assertEquals(before, EarthworksJobLedger.load(before).save(new CompoundTag()));
+    }
+    @Test void invalidReadableWorldLedgerKeepsMissingSelectorGuarded() {
+        var worker = mock(com.talhanation.workers.entities.BuilderEntity.class);
+        when(worker.getPersistentData()).thenReturn(new CompoundTag());
+        var level = mock(net.minecraft.server.level.ServerLevel.class); when(worker.level()).thenReturn(level);
+        var invalid = EarthworksJobLedger.load(new CompoundTag()); assertTrue(invalid.uncertain());
+        try (var authority = mockStatic(EarthworksJobLedger.class)) {
+            authority.when(() -> EarthworksJobLedger.get(level)).thenReturn(invalid);
+            assertTrue(NativeEarthworksJobs.selected(worker)); assertTrue(EarthworksInventoryAccess.guarded(worker));
+            var delegate = mock(net.minecraft.world.entity.ai.goal.Goal.class);
+            when(delegate.getFlags()).thenReturn(java.util.EnumSet.of(net.minecraft.world.entity.ai.goal.Goal.Flag.MOVE));
+            var goal = new ProtectedInventoryGoal(worker, delegate, new ProtectedInventoryGoal.Session(worker)) {
+                @Override ProtectedStorageAccess.Kind kind() { return ProtectedStorageAccess.Kind.NEEDED; }
+                @Override String beforeStart() { return null; }
+                @Override String beforeTick() { return null; }
+                @Override String cleanup() { return null; }
+            };
+            goal.start(); goal.tick(); verify(delegate, never()).start(); verify(delegate, never()).tick();
+        }
+    }
+    @Test void newSupplyRefusesUnsupportedOrUnavailableNativeRuntimeBeforeLeaseOrTransfer() {
+        var worker = mock(com.talhanation.workers.entities.BuilderEntity.class);
+        var data = new CompoundTag(); data.putString(NativeEarthworksJobs.KEY,"untrusted");
+        when(worker.getPersistentData()).thenReturn(data);when(worker.level()).thenReturn(mock(net.minecraft.server.level.ServerLevel.class));
+        try (var runtime=mockStatic(WorkersConstructionRuntime.class)) {
+            runtime.when(WorkersConstructionRuntime::problem).thenReturn("Unsupported native companion version");
+            assertEquals("Unsupported native companion version", NativeEarthworksJobs.inventoryProblem(worker,Set.of()));
+            runtime.when(WorkersConstructionRuntime::problem).thenThrow(new LinkageError("runtime unavailable"));
+            assertNotNull(NativeEarthworksJobs.inventoryProblem(worker,Set.of()));
+        }
+    }
     private static EarthworksJobLedger.Job prepare(EarthworksJobLedger ledger) {
         var source = NativeEarthworksAdapterTest.manifest();
         var manifest = new PerimeterEarthworksManifest(source.header(), new ArrayList<>(source.observations().values()), source.steps().subList(0, 2));

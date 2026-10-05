@@ -31,7 +31,8 @@ final class EarthworksJobLedger extends SavedData {
     /** Internal preparation only. Paid authority is established by the controller after the real debit. */
     Job prepare(PerimeterEarthworksManifest manifest, PerimeterEarthworksJournal.Binding binding, UUID area, BlockPos core) {
         if (invalid || jobs.size() >= MAX_JOBS || area == null || area.equals(new UUID(0, 0)) || core == null
-                || jobs.containsKey(manifest.header().project()) || worker(manifest.header().builder()) != null)
+                || jobs.containsKey(manifest.header().project()) || worker(manifest.header().builder()) != null
+                || jobs.values().stream().anyMatch(job -> job.area.equals(area)))
             throw new IllegalStateException("Earthworks ledger identity/capacity conflict");
         Job job = new Job(manifest, PerimeterEarthworksJournal.begin(manifest, binding), area, core);
         jobs.put(manifest.header().project(), job); setDirty(); return job;

@@ -27,8 +27,10 @@ public final class NativeEarthworksJobs {
         if (worker == null || worker.getPersistentData() == null) return false;
         if (worker.getPersistentData().contains(KEY) || worker.getPersistentData().contains("SiegeEarthworksSupplyV1")) return true; // Includes malformed selectors and terminal recovery evidence.
         try {
-            return worker.level() instanceof ServerLevel level && EarthworksJobLedger.get(level).worker(worker.getUUID()) != null;
-        } catch (RuntimeException | LinkageError unavailable) { return false; }
+            if (!(worker.level() instanceof ServerLevel level)) return false;
+            var ledger = EarthworksJobLedger.get(level);
+            return ledger.uncertain() || ledger.worker(worker.getUUID()) != null;
+        } catch (RuntimeException | LinkageError unavailable) { return true; }
     }
     public static InventoryLease inventoryLease(BuilderEntity worker) {
         try {
@@ -42,9 +44,10 @@ public final class NativeEarthworksJobs {
     }
     public static String inventoryProblem(Mob worker, Set<BlockPos> sources) {
         try {
-            if (!(worker instanceof BuilderEntity builder) || !(worker.level() instanceof ServerLevel level)
-                    || inventoryLease(builder) == null) return "Paused: the new earthworks inventory lease cannot be authenticated";
+            if (!(worker instanceof BuilderEntity builder) || !(worker.level() instanceof ServerLevel level)) return "Paused: the new earthworks inventory lease cannot be authenticated";
+            String runtime = WorkersConstructionRuntime.problem(); if (runtime != null) return runtime;
             var lease = inventoryLease(builder);
+            if (lease == null) return "Paused: the new earthworks inventory lease cannot be authenticated";
             String hand = handLifecycleProblem(worker); if (hand != null) return hand;
             return NativeInventoryAuthority.problem(level, worker, lease.owner(), "team:" + lease.faction(), lease.core(), sources);
         } catch (RuntimeException | LinkageError unavailable) { return "Paused: earthworks inventory authority is unavailable"; }
