@@ -7,6 +7,7 @@ on:
     types: [opened, reopened, synchronize]
     paths:
       - 'src/**/naval/**'
+      - 'src/nativeShipsClientQa/**'
       - 'src/nativeShipsQa/resources/**'
       - 'build.gradle'
       - 'gradle.properties'
@@ -130,5 +131,90 @@ jobs:
         with:
           name: native-smallships-${{ matrix.fixture }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: build/native-ships-${{ matrix.fixture }}-qa/evidence/
+          if-no-files-found: error
+          retention-days: 7
+
+  native-ship-client:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      LIBGL_ALWAYS_SOFTWARE: 'true'
+      GALLIUM_DRIVER: llvmpipe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+      - name: Install display and software OpenGL from Ubuntu
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y xvfb xauth mesa-utils libgl1-mesa-dri libglx-mesa0 libopenal1
+      - name: Initialize fresh final-release client
+        run: |
+          set -euo pipefail
+          test ! -e build/native-ships-final-client-qa
+          mkdir -p build/native-ships-final-client-qa/client build/native-ships-final-client-qa/evidence
+          # Final 2.0.0 generates its own unchanged native defaults. Never reuse the beta config helper.
+          printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:4\nsimulationDistance:5\nmaxFps:30\nvsync:false\n' > build/native-ships-final-client-qa/client/options.txt
+          git rev-parse HEAD > build/native-ships-final-client-qa/evidence/source-commit.txt
+          java -version 2> build/native-ships-final-client-qa/evidence/java-version.txt
+      - name: Run actual final-release client and integrated-server reload
+        run: |
+          set -euo pipefail
+          xvfb-run -a -s '-screen 0 1280x720x24' bash -c '
+            set -euo pipefail
+            glxinfo -B | tee build/native-ships-final-client-qa/evidence/opengl.txt
+            timeout --signal=TERM --kill-after=60s 20m ./gradlew --no-daemon --console=plain --max-workers=2 \
+              -Pforge_version=47.4.10 -PnativeShipsQa=true -PnativeShipsRelease=final -PnativeShipsClientQa=true runClient \
+              2>&1 | tee build/native-ships-final-client-qa/evidence/client-console.log
+          '
+      - name: Verify actual client synchronization, reload, and framebuffer evidence
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, struct
+          from pathlib import Path
+          root = Path('build/native-ships-final-client-qa/evidence')
+          data = json.loads((root / 'client-result.json').read_text())
+          native = json.loads((root / 'result.json').read_text())
+          assert data['status'] == 'passed' and data['actualIntegratedServerDiskReload'], data
+          assert native['status'] == 'probe-completed' and native['physicalDistribution'] == 'CLIENT', native
+          assert native['loadedModVersions']['smallships'] == '2.0.0', native
+          assert native['loadedModVersions']['forge'] == '47.4.10', native
+          assert native['qaOnlyAdapterEnabled'] is False and native['compatibility'] == 'unverified', native
+          assert len(data['beforeReload']) == len(data['afterReload']) == 4, data
+          assert {s['ship'] for s in data['beforeReload']} == {s['ship'] for s in data['afterReload']}, data
+          for name in ['01-native-ships-before-reload.png', '02-native-ships-after-reload.png']:
+              raw = (root / name).read_bytes()
+              assert raw[:8] == b'\x89PNG\r\n\x1a\n' and len(raw) > 10000, name
+              width, height = struct.unpack('>II', raw[16:24])
+              assert width >= 960 and height >= 540, (name, width, height)
+          configs = Path('build/native-ships-final-client-qa/client/config')
+          hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in configs.glob('smallships*.toml')}
+          assert hashes, 'Native Small Ships defaults were not generated'
+          (root / 'generated-native-config-hashes.json').write_text(json.dumps({'origin': 'Fresh final 2.0.0 native generation; no beta seeds or gameplay edits', 'sha256': hashes}, indent=2))
+          assert (root / 'client-console.log').read_text().count('SIEGE_NATIVE_SHIPS_CLIENT_COMPLETED') == 1
+          PY
+      - name: Audit exact loaded client companion artifacts
+        if: always()
+        run: python3 scripts/audit-native-ships-bytecode.py build/native-ships-final-client-qa/evidence
+      - name: Collect client logs without worlds or vendor binaries
+        if: always()
+        run: |
+          root=build/native-ships-final-client-qa
+          mkdir -p "$root/evidence/logs"
+          if [ -d "$root/client/logs" ]; then find "$root/client/logs" -maxdepth 1 -type f -name '*.log' -exec cp {} "$root/evidence/logs/" \;; fi
+          if [ -d "$root/client/crash-reports" ]; then cp -R "$root/client/crash-reports" "$root/evidence/"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-smallships-client-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/native-ships-final-client-qa/evidence/
           if-no-files-found: error
           retention-days: 7

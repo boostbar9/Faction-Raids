@@ -8,8 +8,10 @@ if (providers.gradleProperty('nativeShipsQa').map { it.toBoolean() }.getOrElse(f
     if (!(shipsRelease in ['final', 'legacy'])) throw new GradleException('Unsupported Small Ships fixture release')
     def adapter = providers.gradleProperty('nativeShipsAdapter').map { it.toBoolean() }.getOrElse(false)
     if (adapter && shipsRelease != 'final') throw new GradleException('Prototype adapter supports only exact final 2.0.0')
+    def clientFixture = providers.gradleProperty('nativeShipsClientQa').map { it.toBoolean() }.getOrElse(false)
+    if (clientFixture && (shipsRelease != 'final' || adapter)) throw new GradleException('Client fixture currently uses unchanged final release only')
     def shipsFile = shipsRelease == 'final' ? '9061578' : '5566900'
-    def runDir = "build/native-ships-${shipsRelease}${adapter ? '-adapter' : ''}-qa/server"
+    def runDir = clientFixture ? "build/native-ships-final-client-qa/client" : "build/native-ships-${shipsRelease}${adapter ? '-adapter' : ''}-qa/server"
     configurations { nativeShipsQaCompanions }
     dependencies {
         nativeShipsQaCompanions fg.deobf('curse.maven:workers-567450:8351157')
@@ -20,8 +22,8 @@ if (providers.gradleProperty('nativeShipsQa').map { it.toBoolean() }.getOrElse(f
     configurations.runtimeOnly.extendsFrom(configurations.nativeShipsQaCompanions)
     sourceSets {
         nativeShipsQa {
-            java.srcDir 'src/nativeShipsQa/java'
-            resources.srcDir 'src/nativeShipsQa/resources'
+            java.setSrcDirs(['src/nativeShipsQa/java'])
+            resources.setSrcDirs(['src/nativeShipsQa/resources'])
             compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
             runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
         }
@@ -50,5 +52,28 @@ if (providers.gradleProperty('nativeShipsQa').map { it.toBoolean() }.getOrElse(f
                 throw new GradleException('Refusing existing Ships QA world, EULA file, or evidence.')
             }
         }
+    }
+
+    if (clientFixture) {
+        sourceSets {
+            nativeShipsClientQa {
+                java.setSrcDirs(['src/nativeShipsClientQa/java'])
+                compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath + sourceSets.nativeShipsQa.output
+                runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath + sourceSets.nativeShipsQa.output
+            }
+        }
+        minecraft.runs.client {
+            workingDirectory project.file(runDir)
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', project.file('build/createSrgToMcp/output.srg').absolutePath
+            property 'siegeoverhaul.nativeShipsQa', 'true'
+            property 'siegeoverhaul.nativeShipsClientQa', 'true'
+            property 'siegeoverhaul.nativeShipsQa.release', 'final'
+            property 'siegeoverhaul.nativeShipsQa.directory', project.file(runDir).absolutePath
+            args '--width', '1280', '--height', '720'
+            jvmArgs '-Xms512m', '-Xmx3G'
+            mods { "${mod_id}" { source sourceSets.nativeShipsQa; source sourceSets.nativeShipsClientQa } }
+        }
+        tasks.matching { it.name == 'runClient' }.configureEach { dependsOn tasks.named('nativeShipsClientQaClasses') }
     }
 }

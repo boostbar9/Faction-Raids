@@ -44,6 +44,9 @@ public final class NativeSmallShipsProbe {
 
     private record Case(Boat boat, Mob recruit, CaptainEntity captain, boolean captainFirst, int shipTicks, int captainTicks, int recruitTicks) {}
 
+    record CrewReceipt(java.util.UUID ship, java.util.UUID captain, java.util.UUID recruit) {}
+    List<CrewReceipt> receipts() { return cases.stream().map(c -> new CrewReceipt(c.boat.getUUID(), c.captain.getUUID(), c.recruit.getUUID())).toList(); }
+
     NativeSmallShipsProbe(ServerLevel level, BlockPos origin) { this.level = level; this.origin = origin; }
 
     void prepare() throws Exception {
@@ -53,7 +56,9 @@ public final class NativeSmallShipsProbe {
         finalRelease = release.equals("final");
         Path directory = Path.of(System.getProperty("siegeoverhaul.nativeShipsQa.directory")).toRealPath();
         require(directory.equals(Path.of("").toRealPath()), "Unexpected game directory");
-        require(directory.endsWith(Path.of("build", "native-ships-" + release + (Boolean.getBoolean("siegeoverhaul.nativeShipsQa.adapter") ? "-adapter" : "") + "-qa", "server")), "Unsafe fixture path");
+        boolean clientFixture = Boolean.getBoolean("siegeoverhaul.nativeShipsClientQa");
+        String fixtureSuffix = clientFixture ? "-client" : Boolean.getBoolean("siegeoverhaul.nativeShipsQa.adapter") ? "-adapter" : "";
+        require(directory.endsWith(Path.of("build", "native-ships-" + release + fixtureSuffix + "-qa", clientFixture ? "client" : "server")), "Unsafe fixture path");
         require(!Files.exists(directory.resolve("eula.txt")), "GameTest fixture must not create an EULA acceptance file");
         evidence = directory.resolveSibling("evidence");
         Files.createDirectories(evidence);
@@ -105,6 +110,7 @@ public final class NativeSmallShipsProbe {
             Mob recruit = (Mob) create("recruits:recruit", pos);
             CaptainEntity captain = (CaptainEntity) create("recruits:captain", pos);
             recruit.setNoAi(true); captain.setNoAi(true);
+            recruit.setPersistenceRequired(); captain.setPersistenceRequired();
             boolean captainFirst = i % 2 == 0;
             require(NavalFleet.board(boat, captainFirst ? captain : recruit), "First native boarding rejected: " + hull);
             require(NavalFleet.board(boat, captainFirst ? recruit : captain), "Second native boarding rejected: " + hull);
