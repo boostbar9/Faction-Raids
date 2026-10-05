@@ -21,25 +21,20 @@ public final class NativeSmallShipsGameTests {
         try {
             NativeSmallShipsProbe probe = new NativeSmallShipsProbe(helper.getLevel(), helper.absolutePos(new BlockPos(24, 5, 24)));
             probe.prepare();
-            helper.runAfterDelay(20, () -> {
-                try {
-                    probe.inspect();
-                    if (Boolean.getBoolean("siegeoverhaul.nativeShipsQa.adapter")) {
-                        probe.beginPrototype();
-                        for (int tick = 1; tick <= 20; tick++) helper.runAfterDelay(tick, () -> checked(probe, probe::issuePrototypeTurns));
-                        helper.runAfterDelay(21, () -> checked(probe, probe::finishPrototypeTurns));
-                        helper.runAfterDelay(24, () -> checked(probe, () -> {
-                            probe.finishPrototypeExpiry(); probe.beginNativeNavigation();
-                            for (int tick = 20; tick <= 600; tick += 20)
-                                helper.runAfterDelay(tick, () -> checked(probe, probe::sampleNativeNavigation));
-                            helper.runAfterDelay(601, () -> checked(probe, () -> { probe.finishNativeNavigation(); complete(helper); }));
-                        }));
-                    } else complete(helper);
-                } catch (Exception failure) {
-                    probe.fail(failure);
-                    throw new IllegalStateException("Native Ships probe failed", failure);
-                }
-            });
+            boolean adapter = Boolean.getBoolean("siegeoverhaul.nativeShipsQa.adapter");
+            // Register the complete schedule before ticking. Never mutate the GameTest
+            // scheduler while it is dispatching another callback.
+            helper.runAfterDelay(80, () -> checked(probe, () -> {
+                probe.inspect();
+                if (adapter) probe.beginPrototype(); else complete(helper);
+            }));
+            if (adapter) {
+                for (int tick = 81; tick <= 100; tick++) helper.runAfterDelay(tick, () -> checked(probe, probe::issuePrototypeTurns));
+                helper.runAfterDelay(101, () -> checked(probe, probe::finishPrototypeTurns));
+                helper.runAfterDelay(104, () -> checked(probe, () -> { probe.finishPrototypeExpiry(); probe.beginNativeNavigation(); }));
+                for (int tick = 124; tick <= 704; tick += 20) helper.runAfterDelay(tick, () -> checked(probe, probe::sampleNativeNavigation));
+                helper.runAfterDelay(705, () -> checked(probe, () -> { probe.finishNativeNavigation(); complete(helper); }));
+            }
         } catch (Exception failure) {
             throw new IllegalStateException("Native Ships probe setup failed", failure);
         }

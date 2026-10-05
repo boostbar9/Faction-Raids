@@ -46,6 +46,7 @@ public final class NativeSmallShipsProbe {
     private Vec3 navigationStart;
     private long navigationStarted;
     private boolean navigationArrived;
+    private boolean expiryChecked;
     private final List<Map<String, Object>> navigationSamples = new ArrayList<>();
 
     private record Case(Boat boat, Mob recruit, CaptainEntity captain, boolean captainFirst, int shipTicks, int captainTicks, int recruitTicks) {}
@@ -283,6 +284,8 @@ public final class NativeSmallShipsProbe {
     }
 
     void finishPrototypeExpiry() throws Exception {
+        require(!expiryChecked, "Prototype expiry phase executed more than once");
+        expiryChecked = true;
         for (Case sample : cases) {
             Boat ship = sample.boat;
             require(!Boolean.TRUE.equals(call(ship, "isLeft")) && !Boolean.TRUE.equals(call(ship, "isRight")), "Expired commands kept steering");
@@ -384,12 +387,14 @@ public final class NativeSmallShipsProbe {
 
     private static Object call(Object target, String name) throws Exception { return call(target, name, new Class<?>[0]); }
     private static Object call(Object target, String name, Class<?>[] signature, Object... args) throws Exception {
+        require(target != null, "Missing native target for reflective call " + name);
         return target.getClass().getMethod(name, signature).invoke(target, args);
     }
     private static void require(boolean condition, String message) { if (!condition) throw new IllegalStateException(message); }
     private void write() throws Exception { Files.writeString(evidence.resolve("result.json"), new GsonBuilder().setPrettyPrinting().create().toJson(report) + "\n"); }
     void fail(Throwable failure) {
         report.put("status", "failed"); report.put("failure", failure.toString());
+        failure.printStackTrace();
         try { write(); } catch (Exception ignored) { /* Required GameTest still fails. */ }
     }
 }

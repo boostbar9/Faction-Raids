@@ -17,6 +17,9 @@ on:
       - 'gradle/native-smallships-qa.gradle'
       - '.github/workflows/native-smallships-qa.yml'
       - 'scripts/audit-native-ships-bytecode.py'
+      - 'scripts/prepare-native-ships-defaults.py'
+      - 'scripts/tests/test_prepare_native_ships_defaults.py'
+      - 'scripts/fixtures/smallships-2.0.0/**'
 
 permissions:
   contents: read
@@ -58,8 +61,13 @@ jobs:
           test ! -e "build/native-ships-${FIXTURE}-qa/server"
           test ! -e "build/native-ships-${FIXTURE}-qa/evidence"
           mkdir -p "build/native-ships-${FIXTURE}-qa/evidence"
+          if [ "$RELEASE" = final ]; then
+            python3 scripts/prepare-native-ships-defaults.py --fixture "$FIXTURE"
+            cp "build/native-ships-${FIXTURE}-qa/server/.native-smallships-defaults.json" "build/native-ships-${FIXTURE}-qa/evidence/defaults-provenance.json"
+          fi
           git rev-parse HEAD > "build/native-ships-${FIXTURE}-qa/evidence/source-commit.txt"
           java -version 2> "build/native-ships-${FIXTURE}-qa/evidence/java-version.txt"
+          python3 -B -m unittest discover -s scripts/tests -p 'test_prepare_native_ships_defaults.py'
           python3 scripts/generate-native-ships-template.py --check
       - name: Run real Forge server with the exact companion release
         env:
@@ -171,8 +179,10 @@ jobs:
         run: |
           set -euo pipefail
           test ! -e build/native-ships-final-client-qa
-          mkdir -p build/native-ships-final-client-qa/client build/native-ships-final-client-qa/evidence
-          # Final 2.0.0 generates its own unchanged native defaults. Never reuse the beta config helper.
+          python3 scripts/prepare-native-ships-defaults.py --fixture final-client
+          mkdir -p build/native-ships-final-client-qa/evidence
+          cp build/native-ships-final-client-qa/client/.native-smallships-defaults.json build/native-ships-final-client-qa/evidence/defaults-provenance.json
+          # Exact untouched final 2.0.0 defaults avoid its first-start config race. No beta seed.
           printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:4\nsimulationDistance:5\nmaxFps:30\nvsync:false\n' > build/native-ships-final-client-qa/client/options.txt
           git rev-parse HEAD > build/native-ships-final-client-qa/evidence/source-commit.txt
           java -version 2> build/native-ships-final-client-qa/evidence/java-version.txt
@@ -209,7 +219,7 @@ jobs:
           configs = Path('build/native-ships-final-client-qa/client/config')
           hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in configs.glob('smallships*.toml')}
           assert hashes, 'Native Small Ships defaults were not generated'
-          (root / 'generated-native-config-hashes.json').write_text(json.dumps({'origin': 'Fresh final 2.0.0 native generation; no beta seeds or gameplay edits', 'sha256': hashes}, indent=2))
+          (root / 'generated-native-config-hashes.json').write_text(json.dumps({'origin': 'Exact captured final 2.0.0 defaults; native world config generation; no beta seeds or gameplay edits', 'sha256': hashes}, indent=2))
           assert (root / 'client-console.log').read_text().count('SIEGE_NATIVE_SHIPS_CLIENT_COMPLETED') == 1
           PY
       - name: Audit exact loaded client companion artifacts
