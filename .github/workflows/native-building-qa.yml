@@ -94,6 +94,10 @@ jobs:
               assert compact['requestedGuiScale'] == 3 and compact['guiWidth'] == 320 and compact['guiHeight'] == 240, compact
           assert data['gameplay']['status'] == 'passed', data.get('gameplay')
           gameplay = data['gameplay']
+          review = gameplay['admissionReviews']
+          assert all(review[key] is True for key in ['perimeterNeighborRejected', 'perimeterPairedClearanceRejected',
+              'manualPairedClearanceRejected', 'exactInventoryAndTreasury', 'noProjectOrWorkerReceiptChange',
+              'fixtureTerrainRestored']), review
           assert gameplay['completedManualBlocks'] == 83 and data['perimeterTemplateBlocks'] == 572, data
           assert gameplay['manualHollowGeometry'] == {'targets': 83, 'cobblestone': 58, 'oakPlanks': 25,
               'cavityCells': 27, 'cavityReservedAtAcceptance': True, 'airPlacementTargets': 0}, gameplay

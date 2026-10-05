@@ -303,6 +303,8 @@ final class NativeBuildingGameplay {
                 mainHandBeforeFirstCommission = stackDescription(idleBuilder.getMainHandItem());
                 builder(level).setNoAi(true); // Transaction-only perimeter; wall AI below is enabled.
                 FactionBank.credit(core(owner), 2000); RaidSavedData.get(owner.server).setDirty();
+                RESULT.put("admissionReviews", NativeBuilderAdmissionContracts.verify(level, owner, fixture, idleBuilder));
+                check("Real free manual/perimeter review identifies neighboring and paired-plant blockers without changing Treasury, worker receipts or inventory");
                 require(PerimeterConstruction.review(owner, fixture.corePos(), 1), "Real perimeter review rejected");
                 require(balance(owner) == 2000 && protectedAreas(level) == 0, "Free perimeter review changed money/jobs");
                 select(owner, ModItems.PERIMETER_PLAN.get());

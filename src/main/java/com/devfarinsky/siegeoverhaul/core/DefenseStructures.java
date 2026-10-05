@@ -108,9 +108,12 @@ public final class DefenseStructures {
                     || !support.isFaceSturdy(level, ground, Direction.UP))
                 return "Choose dry, solid, level ground under the whole structure. Flatten the site first.";
             for (int y = base.getY(); y <= plan.max().getY(); y++) {
-                var state = level.getBlockState(new BlockPos(base.getX(), y, base.getZ()));
-                if (HirePlacement.dangerous(state) || !TerritoryFortification.safeWallReplacement(state))
-                    return "Clear the whole structure's footprint and headroom first; existing blocks and fluids are protected.";
+                BlockPos cell = base.atY(y);
+                if (!permitted.test(cell)) return "The whole structure's footprint and headroom must allow building.";
+                var state = level.getBlockState(cell);
+                String problem = com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.initialPlacementProblem(
+                        level, cell, state, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+                if (problem != null) return problem;
             }
         }
         for (long cell : plan.blocks().keySet()) {

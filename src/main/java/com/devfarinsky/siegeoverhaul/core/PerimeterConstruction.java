@@ -181,7 +181,7 @@ public final class PerimeterConstruction {
             if (!level.hasChunkAt(bottom) || !level.getWorldBorder().isWithinBounds(bottom))
                 return "The whole perimeter must be loaded and inside the world border.";
         }
-        boolean remaining = false;
+        List<BlockPos> remaining = new ArrayList<>();
         for (var column : plan.columns()) {
             BlockPos bottom = column.foundationBase(); BlockPos ground = bottom.below();
             var support = level.getBlockState(ground);
@@ -194,14 +194,19 @@ public final class PerimeterConstruction {
                 String currentId = String.valueOf(ForgeRegistries.BLOCKS.getKey(current.getBlock()));
                 boolean already = target != null && target.equals(currentId) && !current.hasBlockEntity()
                         && current.getFluidState().isEmpty();
-                if (!already && (HirePlacement.dangerous(current) || !TerritoryFortification.safeWallReplacement(current)))
-                    return "Protected obstruction at " + p.toShortString() + ". Existing buildings, inventories and fluids will not be cleared.";
-                if (target != null && !already) remaining = true;
+                // Review exactly the same plant/clearance rule as the sealed native area.
+                // In particular, a paired plant cannot be silently accepted as empty headroom.
+                String cellProblem = NativeConstructionGuard.initialPlacementProblem(level, p, current,
+                        already ? current : Blocks.AIR.defaultBlockState());
+                if (cellProblem != null) return cellProblem;
+                if (target != null && !already) remaining.add(p.immutable());
                 if (target != null && !level.getEntities((Entity) null, new AABB(p), Entity::isAlive).isEmpty())
                     return "Move players, creatures and vehicles out of the planned wall cells.";
             }
         }
-        if (!remaining) return "This perimeter is already built. Nothing to commission.";
+        if (remaining.isEmpty()) return "This perimeter is already built. Nothing to commission.";
+        String neighborhood = NativeConstructionGuard.placementNeighborhoodProblem(level, remaining);
+        if (neighborhood != null) return neighborhood;
         String reservation = ConstructionReservations.problem(level, reservedCells(plan));
         if (reservation != null) return reservation;
         return null;

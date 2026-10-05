@@ -1,5 +1,6 @@
 package com.devfarinsky.siegeoverhaul.core;
 
+import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -17,10 +18,12 @@ public final class BuilderGroundRecovery {
 
     public static void reset(Mob builder) { builder.getPersistentData().remove(STATE); }
 
-    /** Called every 40 ticks after job, owner and native working-state validation. */
+    /** Called every 40 ticks after job/owner validation; native interruptions reset the observation window. */
     public static void tick(ServerLevel level, Mob builder) {
         if (!builder.isAlive() || builder.isNoAi() || builder.isPassenger() || builder.isLeashed()
-                || builder.getTarget() != null) { reset(builder); return; }
+                || builder.getTarget() != null || !WorkersBridge.readyForGroundRecovery(builder)) {
+            reset(builder); return;
+        }
         var root = builder.getPersistentData();
         var state = root.getCompound(STATE);
         Vec3 now = builder.position();

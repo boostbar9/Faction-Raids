@@ -571,6 +571,26 @@ public final class WorkersBridge {
         } catch (ReflectiveOperationException | RuntimeException ex) { return false; }
     }
 
+    /**
+     * Ground recovery needs native construction scheduling, not just a saved job and state 6.
+     * Workers also uses state 6 while going home, sleeping and visiting storage.
+     * The caller separately verifies the exact live commissioned job and ownership.
+     */
+    public static boolean readyForGroundRecovery(Mob worker) {
+        return worker != null && !worker.isSleeping() && !worker.isUsingItem()
+                && readyForGroundRecoveryApi(worker);
+    }
+
+    /** Mirrors BuilderWorkGoal.canUse's schedule without invoking its area-cleanup side effect. */
+    static boolean readyForGroundRecoveryApi(Object worker) {
+        if (worker == null) return false;
+        try {
+            return Boolean.TRUE.equals(worker.getClass().getMethod("shouldWork").invoke(worker))
+                    && Boolean.FALSE.equals(worker.getClass().getMethod("needsToSleep").invoke(worker))
+                    && Boolean.FALSE.equals(worker.getClass().getMethod("needsToGetToChest").invoke(worker));
+        } catch (ReflectiveOperationException | RuntimeException unavailable) { return false; }
+    }
+
     /** Package-visible seam for testing the optional API without a Workers entity class. */
     static boolean isFleeingApi(Object worker) {
         if (worker == null) return false;
