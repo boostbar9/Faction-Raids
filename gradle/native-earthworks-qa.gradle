@@ -23,6 +23,7 @@ if (providers.gradleProperty('nativeEarthworksQa').map { it.toBoolean() }.getOrE
         property 'mixin.env.remapRefMap', 'true'
         property 'mixin.env.refMapRemappingFile', project.file('build/createSrgToMcp/output.srg').absolutePath
         property 'siegeoverhaul.nativeEarthworksQa', 'true'
+        property 'siegeoverhaul.nativeDirtCensusQa', providers.gradleProperty('nativeDirtCensusQa').map { it.toBoolean().toString() }.getOrElse('false')
         property 'siegeoverhaul.nativeEarthworksQa.directory', project.file('build/native-earthworks-qa/client').absolutePath
         args '--width', '1280', '--height', '720'
         jvmArgs '-Xms512m', '-Xmx3G'

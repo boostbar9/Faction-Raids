@@ -160,6 +160,17 @@ final class EarthworksSupplyDemand {
             throw invalid("Supply snapshot was not retained");
     }
 
+    /** Validate retained evidence only. A canceled scope never creates a request or grants transfer permission. */
+    static boolean canceledEvidenceMatches(BuilderEntity worker,EarthworksJobLedger.Job job) {
+        try {
+            Active active=read(worker);if(active==null)return worker.neededItems!=null&&worker.neededItems.isEmpty();
+            var header=job.manifest.header();var scope=active.scope;
+            return !IN_FLIGHT.contains(active.state) && scope.project.equals(header.project())&&scope.generation==header.generation()
+                    &&scope.area.equals(job.area)&&scope.manifest.equals(job.manifest.hash())
+                    &&scope.binding.equals(job.read().journal().check().bindingHash())&&scope.step<=job.read().journal().nextStep();
+        }catch(RuntimeException|LinkageError unavailable){return false;}
+    }
+
     static String requestsProblem(BuilderEntity worker) {
         try {
             var lease = NativeEarthworksJobs.inventoryLease(worker);

@@ -85,6 +85,9 @@ public final class NativeEarthworksJobs {
     /** Called before native AI; malformed new selectors cannot reach unguarded native work or storage. */
     static boolean beforeWorkerTick(BuilderEntity worker) {
         try {
+            var retained=authenticated(worker,false);
+            if(retained!=null && retained.read().journal().state()==com.devfarinsky.siegeoverhaul.core.PerimeterEarthworksJournal.State.CANCELED)
+                return EarthworksCanceledCleanup.beforeWorkerTick(worker,retained);
             if (!ProtectedStorageAccess.install(worker) || !EarthworksWorkGoal.install(worker, () -> workGoal(worker))) return false;
             var job = authenticated(worker, true); if (job == null) return false;
             var data = worker.getPersistentData();
@@ -122,14 +125,18 @@ public final class NativeEarthworksJobs {
                 || !job.manifest.header().owner().equals(WorkersBridge.readWorkerOwner(worker))
                 || !job.manifest.header().dimension().equals(level.dimension().location().toString())
                 || !job.paid() || !EarthworksCommission.paidMatches(level, job) || active && !job.active()) return null;
-        if (active) {
-            var area = worker.currentBuildArea;
-            if (!(area instanceof EarthworksBuildArea grading) || !grading.matches(job) || !area.getUUID().equals(job.area) || area.level() != level || area.isRemoved()
-                    || !Objects.equals(WorkersBridge.readOwner(area), job.manifest.header().owner())) return null;
-            var edits = ConstructionEditLedger.get(level);
-            if (!edits.sameGeneration(job.read().journal().binding().ledgerGeneration()) || edits.edited(job.area)
-                    || !edits.matches(job.area, job.manifest.observations().keySet().stream().map(BlockPos::of).collect(Collectors.toSet()))) return null;
-        }
+        if (active && !matchesArea(worker,job)) return null;
         return job;
     }
+    /** Retained area/reservation proof, independent of permission to start a new work or inventory callback. */
+    static boolean matchesArea(BuilderEntity worker,EarthworksJobLedger.Job job) {
+        if(!(worker.level() instanceof ServerLevel level))return false;
+        var area=worker.currentBuildArea;
+        if(!(area instanceof EarthworksBuildArea grading)||!grading.matches(job)||!area.getUUID().equals(job.area)||area.level()!=level||area.isRemoved()
+                ||!Objects.equals(WorkersBridge.readOwner(area),job.manifest.header().owner()))return false;
+        var edits=ConstructionEditLedger.get(level);
+        return edits.sameGeneration(job.read().journal().binding().ledgerGeneration())&&!edits.edited(job.area)
+                &&edits.matches(job.area,job.manifest.observations().keySet().stream().map(BlockPos::of).collect(Collectors.toSet()));
+    }
+
 }

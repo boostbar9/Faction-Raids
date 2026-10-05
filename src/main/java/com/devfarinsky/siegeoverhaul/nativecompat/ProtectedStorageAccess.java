@@ -134,6 +134,28 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
                     && !ProtectedInventoryCleanup.outstanding(worker.getPersistentData());
         } catch(RuntimeException | LinkageError unavailable) { return false; }
     }
+    /** No fresh wrapper can replace retained cancellation evidence; all native inventory families stay guarded. */
+    static boolean retainedEarthworksWrappers(BuilderEntity worker,EarthworksJobLedger.Job job) {
+        if(worker.goalSelector==null)return false;
+        var goals=worker.goalSelector.getAvailableGoals();if(goals.size()>128)return false;
+        var found=java.util.EnumSet.noneOf(Kind.class);
+        Set<ProtectedInventoryGoal> adapters=java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        Set<Session> sessions=java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for(var wrapped:goals){
+            Goal goal=wrapped.getGoal();if(!family(goal))continue;
+            if(!(goal instanceof ProtectedInventoryGoal adapter)||adapter.worker!=worker||adapter.session.worker!=worker
+                    ||adapter.legacyLifecycleActive()||!adapter.retainedEarthworksMatches(job)
+                    ||!delegateOwnedBy(adapter.delegate,worker)||kind(adapter.delegate)!=kind(adapter)||!found.add(kind(adapter)))return false;
+            adapters.add(adapter);sessions.add(adapter.session);
+        }
+        if(sessions.size()!=1)return false; // Exactly the shared session admitted by install(), including upkeep exclusion.
+        for(Session session:sessions){
+            if(session.orphanedCleanup()||session.pending.size()>128||!session.retainedMembers(adapters))return false;
+            for(var pending:session.pending)if(pending==null||!adapters.contains(pending)||pending.session!=session)return false;
+        }
+        return found.size()==Kind.values().length;
+    }
+
     private static boolean delegateOwnedBy(Goal goal,BuilderEntity worker) {
         if(goal instanceof AbstractChestGoal chest)return chest.worker==worker;
         if(goal instanceof RecruitUpkeepPosGoal upkeep)return upkeep.recruit==worker;

@@ -33,6 +33,21 @@ abstract class ProtectedInventoryGoal extends Goal {
                 return false;
             } catch(RuntimeException | LinkageError unavailable) { return true; }
         }
+        /** Exact live ownership graph before a canceled scope is permitted to drain it. */
+        boolean retainedMembers(java.util.Set<ProtectedInventoryGoal> adapters) {
+            if(draining)return false;
+            ProtectedInventoryGoal expectedUpkeep=null;
+            for(var entry:owners.entrySet()){
+                var owner=entry.getValue();
+                if(owner==null||!adapters.contains(owner)||owner.session!=this||owner.kind()!=entry.getKey()
+                        ||!owner.protectedLifecycle||owner.stopFailed)return false;
+                if(owner.upkeep()){if(expectedUpkeep!=null)return false;expectedUpkeep=owner;}
+            }
+            if(upkeepOwner!=expectedUpkeep)return false;
+            for(var goal:pending)if(goal==null||!adapters.contains(goal)||goal.session!=this||!owns(goal)
+                    ||goal.started||!goal.protectedLifecycle||goal.cleanupComplete()||goal.stopFailed)return false;
+            return true;
+        }
         boolean cleanupComplete() {
             return !draining && pending.isEmpty() && owners.isEmpty() && upkeepOwner==null
                     && !ProtectedInventoryCleanup.outstanding(worker.getPersistentData());
@@ -96,6 +111,16 @@ abstract class ProtectedInventoryGoal extends Goal {
     /** Cleanup-only inspection; callers cannot rewrite or discard the lifecycle. */
     final boolean legacyLifecycleActive() { return started && !protectedLifecycle; }
     final boolean cleanupComplete() { return !started && !protectedLifecycle && !stopFailed; }
+
+    /** Original admitted session identity remains required after transfer authority is canceled. */
+    final boolean retainedEarthworksMatches(EarthworksJobLedger.Job job) {
+        if(!protectedLifecycle)return cleanupComplete();
+        if(stopFailed || !(earthworksIdentity instanceof EarthworksSupplyDemand.Scope scope))return false;
+        var header=job.manifest.header();
+        return scope.project().equals(header.project())&&scope.generation()==header.generation()&&scope.area().equals(job.area)
+                &&scope.manifest().equals(job.manifest.hash())&&scope.binding().equals(job.read().journal().check().bindingHash())
+                &&scope.step()<=job.read().journal().nextStep()&&session.owns(this);
+    }
 
     private String safeCleanup() {
         try { return cleanup(); }

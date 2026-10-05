@@ -340,6 +340,8 @@ public final class NativeEarthworksQa {
         REPORT.put("nativeAccountingReceipt", journal.receipts().get(0).nativeAccountingReceipt());
         REPORT.put("treasury", Map.of("funding", 64, "debit", 64, "debitCount", 1,
                 "finalBalance", FactionBank.balance(core(level)), "observedTaxes", core(level).getLong("CivilianTaxesTotal") - initialTaxes));
+        var censusReceipt = NativeDirtCensusQa.capture(level, owner, worker, job(level), stableSince, evidence);
+        if (censusReceipt != null) REPORT.put("dirtCensus", censusReceipt);
     }
 
     private static Sample sample(ServerLevel level) {

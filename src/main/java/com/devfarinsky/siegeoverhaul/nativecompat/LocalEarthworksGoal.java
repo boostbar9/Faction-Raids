@@ -56,5 +56,6 @@ final class LocalEarthworksGoal extends Goal {
         } catch (RuntimeException | LinkageError unavailable) { fail("Earthworks route/store is unavailable; work was not dispatched"); }
     }
     private void fail(String reason) { failed = true; started = false; lifecycleProblem = reason; }
+    boolean cleanupKnown(){return !failed;}
     String status() { return lifecycleProblem.isEmpty() ? adapter.blocker() : lifecycleProblem; }
 }

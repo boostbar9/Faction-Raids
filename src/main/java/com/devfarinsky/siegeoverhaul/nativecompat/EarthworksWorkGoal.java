@@ -32,6 +32,18 @@ final class EarthworksWorkGoal extends Goal {
         var replacement=new EarthworksWorkGoal(worker,old.getGoal(),grading);
         worker.goalSelector.removeGoal(old.getGoal()); worker.goalSelector.addGoal(old.getPriority(),replacement); return true;
     }
+    /** Stop only this retained new-job delegate; never call an unrelated original/legacy stop. */
+    static boolean quiesce(BuilderEntity worker,LocalEarthworksGoal expected) {
+        if(worker.goalSelector==null)return false;
+        var goals=new ArrayList<>(worker.goalSelector.getAvailableGoals());if(goals.size()>128)return false;
+        var wrappers=goals.stream().filter(g->g.getGoal() instanceof EarthworksWorkGoal).toList();
+        if(wrappers.size()!=1 || goals.stream().anyMatch(g->g.getGoal().getClass()==BuilderWorkGoal.class || g.getGoal() instanceof WallBuilderAccess))return false;
+        var wrapped=wrappers.get(0);var access=(EarthworksWorkGoal)wrapped.getGoal();
+        if(access.worker!=worker||access.failed||access.running!=null&&access.running!=expected
+                ||expected!=null&&!expected.cleanupKnown())return false;
+        if(wrapped.isRunning())wrapped.stop();else access.stop();
+        return access.running==null&&!access.failed&&(expected==null||expected.cleanupKnown());
+    }
     private Goal selected(){return NativeEarthworksJobs.selected(worker)?grading.get():original;}
     @Override public boolean canUse(){if(failed)return false;try{Goal next=selected();return next!=null && next.canUse();}catch(RuntimeException|LinkageError unavailable){failed=true;return false;}}
     @Override public boolean canContinueToUse(){if(failed||running==null)return false;try{return running==selected() && running.canContinueToUse();}catch(RuntimeException|LinkageError unavailable){failed=true;return false;}}
