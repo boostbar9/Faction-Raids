@@ -159,7 +159,7 @@ final class NativeStagedPerimeterFixture {
         for (Mob mob : level.getEntitiesOfClass(Mob.class, new AABB(CORE).inflate(16))) {
             // Only unrelated starter NPCs are parked inside the claim, above the native build/travel envelope.
             BlockPos park = auxiliaryParking(i);
-            require(TERRITORY.contains(new ChunkPos(park)) && park.getY() > BOUNDS.maxY - 8
+            require(TERRITORY.contains(new ChunkPos(park)) && park.getY() > BOUNDS.maxY + 4
                             && !park.equals(CORE) && !CHESTS.contains(park),
                     "Auxiliary parking must stay inside the claim but above fixture work cells");
             mob.moveTo(park.getX() + 0.5, park.getY(), park.getZ() + 0.5, 0, 0);
@@ -238,7 +238,7 @@ final class NativeStagedPerimeterFixture {
     }
 
     private static BlockPos auxiliaryParking(int index) {
-        return new BlockPos(160 + index % 5 * 2, FLAT_SURFACE_Y + 12, 40 + index / 5 * 2);
+        return new BlockPos(160 + index % 5 * 2, FLAT_SURFACE_Y + 24, 40 + index / 5 * 2);
     }
 
     private static List<BlockPos> loweredBand() {

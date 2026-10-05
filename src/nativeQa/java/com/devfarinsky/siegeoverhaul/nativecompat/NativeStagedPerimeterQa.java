@@ -99,8 +99,9 @@ public final class NativeStagedPerimeterQa {
     private static UUID playerId, projectId, jobId;
     private static String coreKey, reloadKind, hudFaction;
     private static long started, constructionStarted, lastProgress, lastSampleTick = -1, placedBefore = -1, stageTick;
+    private static long lastCoreOpenAttemptTick;
     private static long captureRequested, pauseStarted, pausedNanos;
-    private static int clientPhase, stage, renderFrames, captureFrame, menuId, menuUiStage;
+    private static int clientPhase, stage, renderFrames, captureFrame, menuId, menuUiStage, coreOpenAttempts;
     private static boolean finished, finishing, midRestart, betweenRestart, restartRequested;
     private static Throwable failure, stoppingFailure, loadFailure;
     private static String capture;
@@ -173,10 +174,12 @@ public final class NativeStagedPerimeterQa {
                 Action action = pending.join(); pending = null;
                 switch (action) {
                     case OPEN_CORE -> {
-                        aim(mc, Vec3.atCenterOf(NativeStagedPerimeterFixture.CORE));
-                        mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND,
-                                new BlockHitResult(Vec3.atCenterOf(NativeStagedPerimeterFixture.CORE).add(0, .5, 0), Direction.UP,
-                                        NativeStagedPerimeterFixture.CORE, false));
+                        if (!(mc.screen instanceof CoreHireScreen)) {
+                            aim(mc, Vec3.atCenterOf(NativeStagedPerimeterFixture.CORE));
+                            mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND,
+                                    new BlockHitResult(Vec3.atCenterOf(NativeStagedPerimeterFixture.CORE).add(0, .5, 0), Direction.UP,
+                                            NativeStagedPerimeterFixture.CORE, false));
+                        }
                     }
                     case LIVE_MENU -> { if (!reviewThroughMenu(mc)) { pending = CompletableFuture.completedFuture(action); return; } }
                     case CAPTURE_PLAN -> {
@@ -250,10 +253,18 @@ public final class NativeStagedPerimeterQa {
                 REPORT.put("parkedUnrelatedStarterNpcIds", fixture.parkedAuxiliaries());
                 REPORT.put("reviewedStageCount", reviewedLayout.stages().size());
                 check("Fresh non-op Survival owner, public native faction/25-chunk claim, actual core and four finite native chests; production stepped/gated targets initially empty");
+                coreOpenAttempts = 1; lastCoreOpenAttemptTick = now; REPORT.put("coreOpenAttempts", coreOpenAttempts);
                 advance(now, 1); return Action.OPEN_CORE;
             }
             case 1 -> {
-                if (!(owner.containerMenu instanceof CoreHireMenu menu)) return Action.NONE;
+                if (!(owner.containerMenu instanceof CoreHireMenu menu)) {
+                    if (now - lastCoreOpenAttemptTick >= 40) {
+                        lastCoreOpenAttemptTick = now;
+                        coreOpenAttempts++; REPORT.put("coreOpenAttempts", coreOpenAttempts);
+                        return Action.OPEN_CORE;
+                    }
+                    return Action.NONE;
+                }
                 require(menu.stillValid(owner) && menu.bank() == 2000 && owner.getTeam() != null
                         && owner.getTeam().getName().equals(NativeStagedPerimeterFixture.FACTION), "Real core menu owner/Treasury mismatch");
                 menuId = menu.containerId;
