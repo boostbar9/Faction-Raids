@@ -19,7 +19,7 @@ progress, pre-capture snapshots, personalized server exclusions, malformed packe
 ranges, bounded sampling/cache, clear tombstones, expiry, disconnect/dimension
 replacement, collision floors/slabs, missing intermediate chunks and roof/cliff
 projection. These tests do not prove native rendering or live Recruits counts.
-Protocol 21 requires both client and server to update together.
+Protocol 22 requires both client and server to update together.
 
 ## Opt-in native visual gate (seeded capture extension to Native HUD QA)
 
