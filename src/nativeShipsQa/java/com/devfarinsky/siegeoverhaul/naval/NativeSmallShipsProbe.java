@@ -105,10 +105,19 @@ public final class NativeSmallShipsProbe {
         for (int x = -22; x <= 22; x++) for (int z = -22; z <= 22; z++) {
             BlockPos column = origin.offset(x, 0, z);
             require(level.hasChunkAt(column), "Fixture terrain is not loaded");
-            for (int y = -3; y <= 14; y++)
+            // GameTest places templates near minY, below the flat world's normal
+            // surface. Clear this bounded fixture column through that real surface
+            // so heightmap-based landing sees our water/island rather than a roof
+            // of untouched terrain many blocks above the initialized scene.
+            int top = Math.max(column.getY() + 14, level.getHeight(
+                    net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    column.getX(), column.getZ()) + 2);
+            require(top - column.getY() <= 192 && top < level.getMaxBuildHeight(), "Unexpected fixture terrain height");
+            for (int y = -3; y <= top - column.getY(); y++)
                 level.setBlock(column.above(y), y == -3 ? Blocks.STONE.defaultBlockState()
                         : y <= 0 ? Blocks.WATER.defaultBlockState() : Blocks.AIR.defaultBlockState(), 3);
         }
+        report.put("fixtureTerrain", "Bounded initialized water pit with columns cleared through original flat-world surface; synthetic terrain, not natural shoreline generation");
         level.setDayTime(6000);
         for (int i = 0; i < 4; i++) {
             String hull = i < 2 ? "cog" : "brigg";
