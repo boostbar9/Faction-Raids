@@ -42,5 +42,8 @@ class CaptureStatusTest {
         assertTrue(CaptureStatus.participationText(BLOCKED, COUNTED, 5, 6).contains("Blocked"));
         assertTrue(CaptureStatus.participationText(COUNTED, COUNTED, 5, 6).contains("You count"));
         assertTrue(CaptureStatus.participationText(OUTSIDE, COUNTED, 7.25, 6).contains("1.3 blocks"));
+        assertTrue(CaptureStatus.participationText(OUTSIDE, COUNTED, 6.01, 6).contains("0.1 blocks"));
+        assertTrue(CaptureStatus.participationText(OUTSIDE, COUNTED, 6.000001, 6).contains("0.1 blocks"));
+        assertTrue(CaptureGeometry.inside(6, 0, 0, 6, 2), "Distance wording must not change the inclusive boundary");
     }
 }

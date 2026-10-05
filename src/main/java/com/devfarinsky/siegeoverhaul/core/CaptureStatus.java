@@ -43,7 +43,7 @@ public final class CaptureStatus {
 
     public static String participationText(Participation local, Participation server, double horizontal, int radius) {
         return switch (local) {
-            case OUTSIDE -> "OUTSIDE · Move " + String.format(java.util.Locale.ROOT, "%.1f", Math.max(0, horizontal - radius)) + " blocks closer";
+            case OUTSIDE -> "OUTSIDE · Move " + String.format(java.util.Locale.ROOT, "%.1f", Math.max(.1, Math.ceil(Math.max(0, horizontal - radius) * 10) / 10)) + " blocks closer";
             case HEIGHT -> "WRONG HEIGHT · Reach the core's floor";
             case BLOCKED -> "INSIDE · Blocked by a wall or roof";
             case INELIGIBLE -> "NOT COUNTED · You are not eligible to capture";
