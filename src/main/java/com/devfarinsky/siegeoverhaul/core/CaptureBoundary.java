@@ -1,7 +1,6 @@
 package com.devfarinsky.siegeoverhaul.core;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.phys.Vec3;
@@ -53,8 +52,8 @@ public final class CaptureBoundary {
                 if (height >= bottom && height <= top && (!Double.isFinite(best) || height > best)) best = height;
             }
             if (Double.isFinite(best)) return best;
-            // A solid column crossing the allowed height is not a walkable ring floor.
-            if (shape.max(Direction.Axis.Y) + y > top) return Double.NaN;
+            // An out-of-height ceiling is not a floor, but may cover a valid room.
+            // Keep scanning; normal depth testing hides the interior stroke from above.
         }
         return Double.NaN;
     }

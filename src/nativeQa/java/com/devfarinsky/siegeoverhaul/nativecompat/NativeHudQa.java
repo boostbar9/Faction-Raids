@@ -59,7 +59,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Opt-in, unshipped real Minecraft HUD acceptance. Values are explicitly labeled
- * client-menu samples, never evidence of server claims, payments or construction.
+ * client-menu samples and seeded capture terrain, never evidence of server claims, payments or construction.
  * No paid action, free-plan/review request or native gameplay guard is bypassed.
  */
 @Mod.EventBusSubscriber(modid = SiegeOverhaul.MOD_ID, value = Dist.CLIENT)
@@ -142,6 +142,7 @@ public final class NativeHudQa {
                 });
                 phase = 3; readyAt = ticks + 40; return;
             }
+            if (!NativeCaptureBoundaryQa.ready()) return;
             require(mc.player != null && mc.level != null, "Fresh HUD fixture player/world disappeared");
             if (phase == 3) {
                 if (!inspectionSetup.isDone()) return;
@@ -197,6 +198,8 @@ public final class NativeHudQa {
             click("X"); require(mc().screen == null, "Repeated header close failed");
             check("Header close and repeated fresh reopen return cleanly to the game");
         });
+        for (var captureStep : NativeCaptureBoundaryQa.steps())
+            add(captureStep.name(), captureStep.action()::run);
     }
 
     private static void coreMatrix(String prefix) {
@@ -607,6 +610,12 @@ public final class NativeHudQa {
         GLFW.glfwSetCursorPos(mc().getWindow().getWindow(), 2, 2);
     }
 
+    static void captureWorld(String name, String label) {
+        require(mc().screen == null, "Capture terrain must use the actual in-world renderer");
+        fixture = label; capture = name + ".png"; captureFrame = frame + 3; captureStarted = System.nanoTime();
+        focusWindow(); mc().mouseHandler.releaseMouse();
+    }
+
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void render(TickEvent.RenderTickEvent event) {
         if (!ENABLED || finished || event.phase != TickEvent.Phase.END) return;
@@ -622,7 +631,12 @@ public final class NativeHudQa {
             require(changed > 50, "Actual framebuffer appears blank");
             Map<String, Object> view = new LinkedHashMap<>();
             view.put("screenshot", capture); view.put("fixture", fixture); view.put("viewport", viewport(mc));
-            view.put("screenClass", mc.screen.getClass().getName()); view.put("widgets", geometry());
+            if (mc.screen == null) {
+                view.put("screenClass", "native-world"); view.put("widgets", List.of());
+                view.put("captureBoundary", NativeCaptureBoundaryQa.evidence());
+            } else {
+                view.put("screenClass", mc.screen.getClass().getName()); view.put("widgets", geometry());
+            }
             if (mc.screen instanceof ProtectedConstructionScreen) {
                 long nativePreviews = mc.screen.children().stream().filter(child -> child instanceof com.talhanation.workers.client.gui.structureRenderer.StructurePreviewWidget).count();
                 require(nativePreviews == 1, "Actual native inspection preview is missing");
@@ -678,7 +692,7 @@ public final class NativeHudQa {
     private static void initialize(Minecraft mc) throws Exception {
         // A startup failure must still identify its mode and fixture scope.
         REPORT.put("mode", "hud"); REPORT.put("startedUtc", Instant.now().toString());
-        REPORT.put("coverage", "Actual Minecraft frames, fonts, sprites and production screen widgets in a fresh isolated world. Labeled client-menu and dashboard samples only; not server-generated transactions or reports.");
+        REPORT.put("coverage", "Actual Minecraft frames, fonts, sprites and production screen widgets in a fresh isolated world. Labeled client-menu/dashboard samples and seeded capture S2C/terrain fixtures; not live raids, server transactions or battle outcomes.");
         REPORT.put("notCovered", List.of("Paid actions or server authorization/payment/reward state", "Real faction claims, construction or native worker AI",
                 "Dedicated-server connection", "Resource-pack, shader, localization, screen-reader and physical GPU matrix",
                 "OS mouse routing: navigation uses actual Screen.mouseClicked hitboxes; keyboard uses native OS input"));
@@ -747,6 +761,7 @@ public final class NativeHudQa {
         check("Actual display-backed Robot initialized before world creation; native keyboard assertions remain required");
     }
 
+    static void requestCaptureViewport(int width, int height, int scale) { requestViewport(width, height, scale); }
     private static void requestViewport(int width, int height, int scale) {
         requestedWidth = width; requestedHeight = height; requestedScale = scale;
         GLFW.glfwRestoreWindow(mc().getWindow().getWindow()); mc().getWindow().setWindowed(width, height);

@@ -56,9 +56,10 @@ class CaptureBoundaryTest extends MinecraftTestSupport {
     @Test void roofsOutsideVerticalToleranceDoNotReceiveAFalseGroundRing() {
         var level = flatWorld();
         when(level.getBlockState(new BlockPos(6, 66, 0))).thenReturn(Blocks.STONE.defaultBlockState());
-        assertTrue(Double.isNaN(CaptureBoundary.surface(level, CORE, 2, 6.5, .5)));
+        assertEquals(64, CaptureBoundary.surface(level, CORE, 2, 6.5, .5),
+                "A ceiling above the feet tolerance must not hide the eligible floor underneath");
         // A floor beneath the allowed cylinder is equally invalid.
-        when(level.getBlockState(any())).thenReturn(Blocks.AIR.defaultBlockState());
+        doReturn(Blocks.AIR.defaultBlockState()).when(level).getBlockState(any());
         assertTrue(Double.isNaN(CaptureBoundary.surface(level, CORE, 2, 6.5, .5)));
     }
     @Test void sightPreflightChecksIntermediateColumnsAndNeverLoadsThem() {

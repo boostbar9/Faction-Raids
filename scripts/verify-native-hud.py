@@ -14,6 +14,10 @@ STATES = ['army-unavailable', 'treasury-empty', 'construction-loading', 'constru
           'intel-scrolled', 'intel-keyboard-focus', 'codex-core', 'codex-how-to-play',
           'codex-journal', 'settings', 'settings-no-results', 'settings-scrolled', 'hero-visuals', 'native-inspection']
 
+CAPTURE_PREFIXES = ['compact-scale3', 'roomy-scale1']
+CAPTURE_STATES = ['idle', 'inside', 'wall', 'height', 'low-ceiling', 'custom', 'creative', 'tied',
+                  'waiting', 'expired', 'dimension-cleared']
+
 
 def expected_screenshots():
     names = []
@@ -25,6 +29,7 @@ def expected_screenshots():
     for prefix in MATRICES[:2]:
         names.extend(f'{prefix}-{state}.png' for state in STATES)
     names.extend(['roomy-scale1-native-inspection.png', 'resized-intel-preserved.png'])
+    names.extend(f'{prefix}-capture-{state}.png' for prefix in CAPTURE_PREFIXES for state in CAPTURE_STATES)
     return set(names)
 
 
@@ -57,7 +62,27 @@ def verify(root):
         assert (width, height) == size == (viewport['framebufferWidth'], viewport['framebufferHeight']), name
         assert (viewport['guiWidth'], viewport['guiHeight']) == (width // scale, height // scale), name
         assert viewport['requestedGuiScale'] == scale and view['nonblankSamples'] > 50, name
-        assert view['fixture'] and view['widgets'], name
+        capture = '-capture-' in name
+        assert view['fixture'] and (view['widgets'] or capture), name
+        if capture:
+            assert view['screenClass'] == 'native-world' and not view['widgets'], name
+            boundary = view['captureBoundary']
+            state = name.removesuffix('.png').split('-capture-')[1]
+            assert boundary['scenario'] == state and boundary['seeded'] and not boundary['liveRaid'], name
+            if state in {'expired', 'dimension-cleared'}:
+                assert boundary['cleared'] and boundary['segments'] == 0 and boundary['activeSnapshots'] == 0, name
+                if state == 'dimension-cleared': assert boundary['dimension'] == 'minecraft:the_nether', name
+            else:
+                assert boundary['geometryMatches'] and boundary['reticleClear'] and 0 < boundary['segments'] <= 128, name
+                expected_status = {'idle': 'OUTSIDE', 'wall': 'BLOCKED', 'height': 'HEIGHT', 'creative': 'CREATIVE'}.get(state, 'COUNTED')
+                assert boundary['local'] == expected_status == boundary['server'], name
+                assert boundary['fresh'] == ('UNAVAILABLE' if state == 'waiting' else expected_status), name
+                assert (boundary['radius'], boundary['vertical'], boundary['requireSight']) == ((9, 4, False) if state == 'custom' else (6, 2, True)), name
+                assert boundary['percent'] == (0 if state == 'idle' else 50 if state in {'tied', 'waiting'} else 42), name
+                assert boundary['status'] == ('EMPTY' if state == 'idle' else 'TIED' if state in {'tied', 'waiting'} else 'ADVANCING'), name
+                hud = boundary['hud']
+                assert hud['y'] + hud['height'] <= viewport['guiHeight'] // 2 - 18, name
+                assert hud['x'] >= 0 and hud['x'] + hud['width'] <= viewport['guiWidth'], name
         for widget in view['widgets']:
             assert 0 <= widget['x'] < viewport['guiWidth'] and 0 <= widget['y'] < viewport['guiHeight'], (name, widget)
             assert widget['width'] > 0 and widget['height'] > 0, (name, widget)

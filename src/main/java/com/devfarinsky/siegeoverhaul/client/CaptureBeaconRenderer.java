@@ -150,22 +150,31 @@ public final class CaptureBeaconRenderer {
         int width = Math.min(350, viewportWidth - 16);
         if (width < 100 || viewportHeight < 160) return;
         var text = new ArrayList<FormattedCharSequence>();
-        List<String> rows = List.of(
-                "ENEMY CORE · " + nearest.radius() + "-block radius",
-                CaptureStatus.participationText(local, server, distance, nearest.radius()),
-                CaptureStatus.contestText(nearest.percent(), nearest.allies(), nearest.enemies()) + " · " + nearest.percent() + "%",
-                nearest.allies() + " allies / " + nearest.enemies() + " enemies counted by server",
-                "Feet within ±" + nearest.vertical() + " vertically · " + (nearest.requireSight() ? "Clear sight required" : "Sight not required"));
+        List<String> rows = hudRows(nearest, local, server, distance, viewportWidth);
         for (String row : rows) text.addAll(mc.font.split(Component.literal(row), width - 14));
-        int height = text.size() * 10 + 18;
-        int x = (viewportWidth - width) / 2, y = Math.max(8, viewportHeight - height - 64);
+        var box = CaptureHudLayout.bounds(viewportWidth, viewportHeight, text.size());
+        int height = box.height(), x = box.x(), y = box.y();
         var graphics = event.getGuiGraphics();
         CommandFrame.surface(graphics, x, y, width, height);
         graphics.fill(x + 1, y + 1, x + 3, y + height - 1, color);
-        for (int i = 0; i < text.size(); i++) graphics.drawString(mc.font, text.get(i), x + 7, y + 5 + i * 10,
+        for (int i = 0; i < box.lines(); i++) graphics.drawString(mc.font, text.get(i), x + 7, y + 5 + i * 10,
                 i == 0 ? CommandPalette.ACCENT_GOLD : i == 1 ? color : CommandPalette.TEXT_MUTED, false);
         int barY = y + height - 8;
         graphics.fill(x + 7, barY, x + width - 7, barY + 3, CommandPalette.PANEL_INSET);
         graphics.fill(x + 7, barY, x + 7 + (width - 14) * nearest.percent() / 100, barY + 3, color);
     }
+    private static List<String> hudRows(RaidNetwork.CaptureBeam packet, CaptureStatus.Participation local,
+                                        CaptureStatus.Participation server, double distance, int width) {
+        if (width <= 400) return List.of(
+                "ENEMY CORE · radius " + packet.radius() + " · ±" + packet.vertical() + " high",
+                CaptureStatus.participationText(local, server, distance, packet.radius()),
+                CaptureStatus.contestText(packet.percent(), packet.allies(), packet.enemies()) + " · " + packet.percent() + "%",
+                packet.allies() + " allies / " + packet.enemies() + " enemies · " + (packet.requireSight() ? "Clear sight" : "No sight check"));
+        return List.of("ENEMY CORE · " + packet.radius() + "-block radius",
+                CaptureStatus.participationText(local, server, distance, packet.radius()),
+                CaptureStatus.contestText(packet.percent(), packet.allies(), packet.enemies()) + " · " + packet.percent() + "%",
+                packet.allies() + " allies / " + packet.enemies() + " enemies counted by server",
+                "Feet within ±" + packet.vertical() + " vertically · " + (packet.requireSight() ? "Clear sight required" : "Sight not required"));
+    }
+
 }

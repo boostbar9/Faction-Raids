@@ -21,13 +21,24 @@ replacement, collision floors/slabs, missing intermediate chunks and roof/cliff
 projection. These tests do not prove native rendering or live Recruits counts.
 Protocol 21 requires both client and server to update together.
 
-## Required native visual gate (not supplied by the menu-only HUD gate)
+## Opt-in native visual gate (seeded capture extension to Native HUD QA)
 
 Use an isolated fresh Forge 1.20.1 / 47.4.16 client/server fixture with the pinned
 Recruits, Workers, Small Ships and Siege Weapons companions in CONTRIBUTING.md.
 Do not alter a player's installation/world or use live payment/claim operations.
-Any injected snapshot/fixture must be labeled synthetic in evidence. Capture the
-actual production CaptureBeaconRenderer, not a replacement drawing or mockup.
+The unshipped `NativeCaptureBoundaryQa` extends Native HUD QA with 22 named
+in-world captures at compact GUI scale 3 and roomy GUI scale 1. It seeds a small
+plaza, pillars, a cliff, steps and low ceiling only in the fresh isolated fixture;
+no raid or claim is created. The real server sender/S2C handler, native player
+position/mode, actual core and production renderer are exercised with explicitly
+seeded ally/enemy/progress counts. Every frame is visibly labeled. The verifier
+rejects geometry/status/freshness mismatches, stale dimension markers, reticle
+obstruction and truncated required status using actual native-font measurements.
+
+Run the existing Native HUD QA workflow for the exact source and inspect its
+`*-capture-*.png` artifacts plus receipts. This fixture does not prove live battle
+counts, capture victory, all graphics configurations or production performance.
+No runtime result is claimed until that workflow passes and frames are reviewed.
 
 Record source SHA, settings, actual viewport/framebuffer sizes and screenshots at
 960×720 GUI scales 2/3 and 1440×960 GUI scales 1/2. In a representative walled camp,

@@ -91,14 +91,28 @@ hitboxes, hidden/disabled keyboard focus, blank/missing images, missing native
 portraits, missing native inspection preview or incomplete steps fail the gate.
 The verifier requires the exact named image matrix and corresponding receipts.
 
+## Seeded capture boundary extension
+
+The unshipped `NativeCaptureBoundaryQa` adds 22 real in-world frames at compact
+scale 3 and roomy scale 1: idle approach, inside, wall, wrong height, eligible low
+ceiling, custom server geometry, creative exclusion, tied counts, stale status,
+expiry and an actual Nether transition. A fresh seeded plaza uses the actual core,
+collision terrain, player, S2C snapshot path and production renderer. Its counts
+and percentages are labeled samples; it creates no raid, claim or battle victory.
+Read-only diagnostics check exact radius, bounded segments, vertical projection,
+server/local participation, freshness and complete native-font HUD layout above
+the aiming reticle. Review depth/terrain visibility in the PNGs separately.
+See [capture acceptance](capture-boundary-qa.md) for the separate live-count gate.
+
 ## What the result means
 
 Core menu and Codex data are deliberately labeled **QA SAMPLE**. They are display
 fixtures, not claims about real server offers, Treasury, factions, native jobs,
 commission receipts or synchronized production reports. Read-only construction
 subscriptions and Codex sync retain their normal handlers; their empty isolated
-server state is not presented as the sample's source. No mutable gameplay guard
-is bypassed and no completed structure blocks are written.
+server state is not presented as the sample's source. No mutable gameplay guard is bypassed by menu/inspection checks. The separate
+seeded capture display fixture writes only its labeled disposable terrain and
+core, with no commissioned structure, capture outcome or payment.
 
 Mouse navigation is dispatched through the actual screen/widget hitboxes; it is
 not an OS mouse-routing test. E, Ctrl+Tab, Ctrl+Shift+Tab and Escape use Java's

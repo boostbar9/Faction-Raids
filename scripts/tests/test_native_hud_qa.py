@@ -58,6 +58,17 @@ class NativeHudSourceContracts(unittest.TestCase):
         self.assertIn('click("No")', source)
         self.assertNotIn('click("Yes")', source)
 
+    def test_capture_fixture_is_seeded_bounded_and_uses_actual_network_renderer(self):
+        source = (HARNESS.parent / 'NativeCaptureBoundaryQa.java').read_text()
+        for required in ['"hud".equals(System.getProperty("siegeoverhaul.nativeQa.mode"))',
+                         'CaptureBeacon.send(', 'CoreBlocks.CORE.get()', 'CaptureBeaconRenderer.class.getDeclaredField',
+                         'field.get(null)', 'CaptureHudLayout.bounds', 'owner.teleportTo(owner.server.getLevel(Level.NETHER)',
+                         '25_000_000_000L', 'QA SEEDED CAPTURE', 'level.hasChunkAt(floor)']:
+            self.assertIn(required, source)
+        self.assertNotRegex(source, r'\bfield\.set(?:Int|Long|Boolean|Float|Double)?\(')
+        for forbidden in ['CoreClaimTransfer.transfer(', 'CoreOccupation.capture(', 'PaymentSource.consume(', 'EnemyCore.tick(']:
+            self.assertNotIn(forbidden, source)
+
     def test_headless_hint_is_changed_only_after_isolation_and_before_awt_initialization(self):
         source = HARNESS.read_text()
         start = source.index('private static void initialize(Minecraft mc)')
@@ -139,7 +150,7 @@ class NativeHudSourceContracts(unittest.TestCase):
 
     def test_exact_named_matrix_has_all_pages_plans_states_and_native_inspection(self):
         expected = verify.expected_screenshots()
-        self.assertEqual(len(expected), 106)
+        self.assertEqual(len(expected), 106 + len(verify.CAPTURE_PREFIXES) * len(verify.CAPTURE_STATES))
         for prefix in verify.MATRICES:
             for page in verify.PAGES:
                 self.assertIn(f'{prefix}-{page}.png', expected)
@@ -178,6 +189,20 @@ class NativeHudReceiptVerifier(unittest.TestCase):
                     'viewport': {'framebufferWidth': size[0], 'framebufferHeight': size[1], 'guiWidth': size[0] // scale,
                                  'guiHeight': size[1] // scale, 'requestedGuiScale': scale},
                     'widgets': [{'label': 'Synthetic button', 'x': 1, 'y': 1, 'width': 10, 'height': 10, 'active': True, 'focused': True}]}
+            if '-capture-' in name:
+                state = name.removesuffix('.png').split('-capture-')[1]
+                expected = {'idle': 'OUTSIDE', 'wall': 'BLOCKED', 'height': 'HEIGHT', 'creative': 'CREATIVE'}.get(state, 'COUNTED')
+                cleared = state in {'expired', 'dimension-cleared'}
+                view['screenClass'] = 'native-world'; view['widgets'] = []
+                view['captureBoundary'] = {'scenario': state, 'seeded': True, 'liveRaid': False,
+                    'dimension': 'minecraft:the_nether' if state == 'dimension-cleared' else 'minecraft:overworld',
+                    'segments': 0 if cleared else 100, 'activeSnapshots': 0 if cleared else 1, 'cleared': cleared,
+                    'geometryMatches': True, 'reticleClear': True, 'local': expected, 'server': expected,
+                    'fresh': 'UNAVAILABLE' if state == 'waiting' else expected,
+                    'radius': 9 if state == 'custom' else 6, 'vertical': 4 if state == 'custom' else 2,
+                    'requireSight': state != 'custom', 'percent': 0 if state == 'idle' else 50 if state in {'tied', 'waiting'} else 42,
+                    'status': 'EMPTY' if state == 'idle' else 'TIED' if state in {'tied', 'waiting'} else 'ADVANCING',
+                    'hud': {'x': 8, 'y': 8, 'width': 300, 'height': 58, 'lines': 4}}
             if name.endswith('-army.png'): view['nativePortraits'] = ['com.talhanation.synthetic.Test'] * 4
             if name.endswith('-territory.png'):
                 view['territoryAvailability'] = {'ownershipMask': 5, 'active': 1, 'retained': 1, 'unavailableButtons': 2}
@@ -249,6 +274,27 @@ class NativeHudReceiptVerifier(unittest.TestCase):
     def test_missing_native_preview_fails(self):
         native = next(view for view in self.data['views'] if 'native-inspection' in view['screenshot'])
         native['nativeStructurePreviewCount'] = 0
+        with self.assertRaises(AssertionError): self.run_verifier()
+
+    def test_capture_rejects_false_viewer_eligibility_and_wrong_server_geometry(self):
+        view = next(v for v in self.data['views'] if v['screenshot'].endswith('-capture-wall.png'))
+        view['captureBoundary']['local'] = 'COUNTED'
+        with self.assertRaises(AssertionError): self.run_verifier()
+        view['captureBoundary']['local'] = 'BLOCKED'; view['captureBoundary']['radius'] = 10
+        with self.assertRaises(AssertionError): self.run_verifier()
+
+    def test_capture_rejects_reticle_overlap_and_uncleared_dimension(self):
+        view = next(v for v in self.data['views'] if v['screenshot'].endswith('-capture-inside.png'))
+        view['captureBoundary']['hud']['y'] = 10000
+        with self.assertRaises(AssertionError): self.run_verifier()
+        view['captureBoundary']['hud']['y'] = 8
+        cleared = next(v for v in self.data['views'] if v['screenshot'].endswith('-capture-dimension-cleared.png'))
+        cleared['captureBoundary']['activeSnapshots'] = 1
+        with self.assertRaises(AssertionError): self.run_verifier()
+
+    def test_capture_rejects_stale_green_status(self):
+        view = next(v for v in self.data['views'] if v['screenshot'].endswith('-capture-waiting.png'))
+        view['captureBoundary']['fresh'] = 'COUNTED'
         with self.assertRaises(AssertionError): self.run_verifier()
 
     def test_png_viewport_mismatch_fails(self):
