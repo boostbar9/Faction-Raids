@@ -102,6 +102,9 @@ final class NativeStagedPerimeterFixture {
                     Map.copyOf(nonPlan), parkedAuxiliaries);
         }
         Map<String, Object> stepEvidence() { return NativeStagedPerimeterFixture.stepEvidence(plan); }
+        Map<String, Object> completedStepStandingEvidence(ServerLevel level, BuilderEntity builder) {
+            return NativeStagedPerimeterFixture.completedStepStandingEvidence(plan, level, builder);
+        }
     }
 
     private NativeStagedPerimeterFixture() {}
@@ -154,8 +157,11 @@ final class NativeStagedPerimeterFixture {
         List<String> parked = new ArrayList<>();
         int i = 0;
         for (Mob mob : level.getEntitiesOfClass(Mob.class, new AABB(CORE).inflate(16))) {
-            // Only unrelated starter NPCs are parked, safely inside the open courtyard.
-            mob.moveTo(145.5 + i % 5 * 2, 65, 30.5 + i / 5 * 2, 0, 0);
+            // Only unrelated starter NPCs are parked, far outside the native build/travel envelope.
+            BlockPos park = auxiliaryParking(i);
+            require(!TERRITORY.contains(new ChunkPos(park)) && !park.equals(CORE) && !CHESTS.contains(park),
+                    "Auxiliary parking must stay outside the claim and fixture work cells");
+            mob.moveTo(park.getX() + 0.5, park.getY(), park.getZ() + 0.5, 0, 0);
             mob.getNavigation().stop(); mob.setNoAi(true); parked.add(mob.getUUID().toString()); i++;
         }
 
@@ -227,6 +233,10 @@ final class NativeStagedPerimeterFixture {
                 .thenComparingInt(pos -> pos.getY()).thenComparingInt(pos -> pos.getZ()));
         cuts.addAll(TERRAIN_LOWERED_BAND); cuts.addAll(TERRAIN_FILL_DIPS);
         return List.copyOf(cuts);
+    }
+
+    private static BlockPos auxiliaryParking(int index) {
+        return new BlockPos(116 + index % 5 * 2, FLAT_SURFACE_Y, 88 + index / 5 * 2);
     }
 
     private static List<BlockPos> loweredBand() {
@@ -302,6 +312,58 @@ final class NativeStagedPerimeterFixture {
                 "transitions", List.copyOf(transitions),
                 "loweredBandAtExpectedBase", true,
                 "transitionClearanceVerified", true);
+    }
+
+    private static Map<String, Object> completedStepStandingEvidence(PerimeterBlueprint.Plan plan, ServerLevel level,
+                                                                     BuilderEntity builder) {
+        require(plan != null && plan.valid() && level != null && builder != null, "Completed step evidence requires a valid world and builder");
+        Map<Long, PerimeterBlueprint.Column> columns = new LinkedHashMap<>();
+        plan.columns().forEach(column -> columns.put(xz(column.base()).asLong(), column));
+        for (var column : plan.columns()) {
+            if (!walkLane(column)) continue;
+            for (Direction direction : List.of(Direction.EAST, Direction.SOUTH)) {
+                PerimeterBlueprint.Column other = columns.get(xz(column.base().relative(direction)).asLong());
+                if (other == null || !walkLane(other) || Math.abs(other.base().getY() - column.base().getY()) != 1)
+                    continue;
+                PerimeterBlueprint.Column lower = column.base().getY() < other.base().getY() ? column : other;
+                PerimeterBlueprint.Column higher = lower == column ? other : column;
+                BlockPos lowerDeck = lower.base().above(3), higherDeck = higher.base().above(3);
+                BlockPos lowerFeet = lower.base().above(4), higherFeet = higher.base().above(4);
+                require(level.getBlockState(lowerDeck).is(Blocks.OAK_PLANKS)
+                                && level.getBlockState(higherDeck).is(Blocks.OAK_PLANKS),
+                        "Completed non-level walk seam is missing oak deck blocks");
+                require(air(level, lowerFeet) && air(level, lowerFeet.above()) && air(level, lowerFeet.above(2))
+                                && air(level, higherFeet) && air(level, higherFeet.above()),
+                        "Completed non-level walk seam lacks body/jump clearance");
+                require(noCollisionAt(level, builder, lowerFeet) && noCollisionAt(level, builder, higherFeet),
+                        "Native builder shape cannot stand on both completed non-level seam decks");
+                Map<String, Object> evidence = new LinkedHashMap<>();
+                evidence.put("verified", true);
+                evidence.put("lowerDeck", lowerDeck.toShortString());
+                evidence.put("higherDeck", higherDeck.toShortString());
+                evidence.put("lowerFeet", lowerFeet.toShortString());
+                evidence.put("higherFeet", higherFeet.toShortString());
+                evidence.put("lowerFeetY", lowerFeet.getY());
+                evidence.put("higherFeetY", higherFeet.getY());
+                evidence.put("jumpClearanceY", lower.base().above(6).getY());
+                evidence.put("direction", direction.getName());
+                evidence.put("lowerCollisionFree", true);
+                evidence.put("higherCollisionFree", true);
+                return Map.copyOf(evidence);
+            }
+        }
+        throw new AssertionError("No completed non-level walk seam with standing evidence was found");
+    }
+
+    private static boolean walkLane(PerimeterBlueprint.Column column) {
+        return column.inwardDistance() >= 2 && column.inwardDistance() <= 4;
+    }
+
+    private static boolean air(ServerLevel level, BlockPos pos) { return level.getBlockState(pos).isAir(); }
+
+    private static boolean noCollisionAt(ServerLevel level, BuilderEntity builder, BlockPos feet) {
+        AABB box = builder.getBoundingBox().move(Vec3.atBottomCenterOf(feet).subtract(builder.position()));
+        return level.noCollision(builder, box);
     }
 
     private static BlockPos xz(BlockPos pos) { return new BlockPos(pos.getX(), 0, pos.getZ()); }

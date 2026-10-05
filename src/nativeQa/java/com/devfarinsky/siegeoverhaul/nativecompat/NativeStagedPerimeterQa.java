@@ -338,6 +338,7 @@ public final class NativeStagedPerimeterQa {
                 REPORT.put("finalDiagnostics", diagnostics(level, owner, true)); REPORT.put("completedBlocks", placed(level));
                 REPORT.put("treasuryDebit", 64); REPORT.put("materialCounts", fixture.plan().materialCounts());
                 REPORT.put("builderFeetYLevelsObserved", List.copyOf(BUILDER_FEET_Y));
+                REPORT.put("completedStepStandingEvidence", fixture.completedStepStandingEvidence(level, builder(level)));
                 REPORT.put("betweenStageRestartApplicable", reviewedLayout.stages().size() > 1);
                 REPORT.put("nativeCompletionObserved", true); REPORT.put("midStageRestartVerified", midRestart); REPORT.put("betweenStageRestartVerified", betweenRestart);
                 REPORT.put("territoryChunkCount", 25); REPORT.put("nativeClaimRecords", fixture.claimIds().stream().map(UUID::toString).toList());
@@ -601,9 +602,7 @@ public final class NativeStagedPerimeterQa {
         verifyCurrentTerritory(level, NativeStagedPerimeterFixture.TERRITORY);
         for (var entry : fixture.nonPlanCells().entrySet()) require(level.getBlockState(entry.getKey()).equals(entry.getValue()),
                 "Native job modified a non-plan cell: " + entry.getKey());
-        require(BUILDER_FEET_Y.contains(NativeStagedPerimeterFixture.FLAT_SURFACE_Y)
-                        && BUILDER_FEET_Y.contains(NativeStagedPerimeterFixture.LOWERED_SURFACE_Y),
-                "Native builder did not traverse both flat and lowered foot levels: " + BUILDER_FEET_Y);
+        fixture.completedStepStandingEvidence(level, builder(level));
         conservation(level, owner);
     }
 
