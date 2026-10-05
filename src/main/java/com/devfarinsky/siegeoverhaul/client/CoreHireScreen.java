@@ -447,8 +447,14 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private void updateCivilianReport(boolean visible) {
         civilianSubscription.update(visible, (request, watch) -> {
             menu.expectCivilianReport(request, watch);
-            RaidNetwork.watchCivilians(menu.containerId, request, watch);
+            // A removed screen can outlive its player/world during disconnect.
+            // Clear local identity first; never try to send through a closed connection.
+            if (civilianConnectionReady(minecraft)) RaidNetwork.watchCivilians(menu.containerId, request, watch);
         });
+    }
+
+    static boolean civilianConnectionReady(net.minecraft.client.Minecraft client) {
+        return client != null && client.player != null && client.getConnection() != null;
     }
 
     private CoreCivilianLayout civilianLayout() { return new CoreCivilianLayout(layout); }
