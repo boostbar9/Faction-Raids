@@ -25,7 +25,7 @@ class EarthworksStandingAccessTest extends MinecraftTestSupport {
     @Test void magmaFloorAndCollisionlessFireFeetAreRefused(){
         var level=level();when(level.getBlockState(any())).thenAnswer(call->{BlockPos pos=call.getArgument(0);return pos.getY()==63?Blocks.MAGMA_BLOCK.defaultBlockState():Blocks.AIR.defaultBlockState();});
         assertFalse(EarthworksStandingAccess.clearSafePrism(level,START));
-        var safe=floor(level);when(level.getBlockState(any())).thenAnswer(call->{BlockPos pos=call.getArgument(0);return pos.getY()==63?safe:pos.getY()==64?Blocks.FIRE.defaultBlockState():Blocks.AIR.defaultBlockState();});
+        var safe=floor(level);doAnswer(call->{BlockPos pos=call.getArgument(0);return pos.getY()==63?safe:pos.getY()==64?Blocks.FIRE.defaultBlockState():Blocks.AIR.defaultBlockState();}).when(level).getBlockState(any());
         assertFalse(EarthworksStandingAccess.clearSafePrism(level,START));
     }
     @Test void safeStartCannotBorrowAHazardousEscapeLane(){
