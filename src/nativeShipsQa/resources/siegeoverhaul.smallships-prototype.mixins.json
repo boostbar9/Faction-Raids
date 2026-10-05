@@ -7,7 +7,8 @@
   "mixins": [
     "FinalShipInputsMixin",
     "FinalRecruitsShipsMixin",
-    "FinalCaptainWaterlineMixin"
+    "FinalCaptainWaterlineMixin",
+    "FinalCaptainPathCompletionMixin"
   ],
   "injectors": {
     "defaultRequire": 1

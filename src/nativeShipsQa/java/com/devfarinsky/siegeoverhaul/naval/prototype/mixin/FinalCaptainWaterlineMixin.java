@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public abstract class FinalCaptainWaterlineMixin {
     @Redirect(method = "getStart", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Mob;getY()D", remap = false), require = 1, remap = false)
     private double siegeQa$startAtVesselWaterline(Mob mob) {
-        if (mob instanceof CaptainEntity captain && mob.getVehicle() instanceof Boat ship
+        if (!mob.level().isClientSide && mob instanceof CaptainEntity captain && mob.getVehicle() instanceof Boat ship
                 && ship instanceof FinalShipsTurnCommands.ShipHook
                 && ship.isInWater() && FinalShipsTurnCommands.helmsman(ship) == captain) return ship.getY();
         return mob.getY();
