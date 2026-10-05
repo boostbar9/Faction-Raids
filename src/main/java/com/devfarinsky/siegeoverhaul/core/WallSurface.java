@@ -101,6 +101,9 @@ final class WallSurface {
                 return Ground.blocked("Perimeter footing is not a safe solid surface at " + describe(below, support) + ". No payment taken.");
             BlockPos feet=column.atY(y);
             var occupied = level.getBlockState(feet);
+            String compatibility = com.devfarinsky.siegeoverhaul.camp.CampVegetation.optionalPlantProblem(occupied);
+            if (compatibility != null) return Ground.blocked("Perimeter build space is occupied at "
+                    + describe(feet, occupied) + ". " + compatibility + " No payment taken.");
             return TerritoryFortification.safeWallReplacement(occupied) ? Ground.ready(feet)
                     : Ground.blocked("Perimeter build space is occupied at " + describe(feet, occupied)
                     + ". Existing blocks are protected; no payment taken.");

@@ -18,7 +18,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.DoublePlantBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
@@ -671,6 +670,8 @@ public final class NativeConstructionGuard {
         if (initialCellSafe(current, target) && level.getBlockEntity(pos) == null) return null;
         String block = current == null ? "unreadable block"
                 : net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(current.getBlock()).toString();
+        String compatibility = CampVegetation.optionalPlantProblem(current);
+        if (compatibility != null) return "Paused: " + block + " at " + pos.toShortString() + ". " + compatibility;
         return "Paused: " + block + " at " + pos.toShortString()
                 + " needs manual clearance; existing blocks and paired plants are protected";
     }
@@ -678,9 +679,7 @@ public final class NativeConstructionGuard {
     private static boolean clearablePlant(BlockState state) {
         // Paired plants can destroy another cell through neighbor updates. No such
         // indirect clearing is authorized by a one-cell construction snapshot.
-        return CampVegetation.plant(state) && !(state.getBlock() instanceof DoublePlantBlock)
-                && !state.is(Blocks.WITHER_ROSE)
-                && "minecraft".equals(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock()).getNamespace());
+        return CampVegetation.singleCellPlant(state);
     }
 
     static boolean currentCellSafe(BlockState initial, BlockState target, BlockState current,
@@ -758,8 +757,8 @@ public final class NativeConstructionGuard {
     static boolean stableNeighbor(BlockState state) {
         if (state == null || state.hasBlockEntity() || !state.getFluidState().isEmpty()) return false;
         if (state.isAir()) return true;
-        // Closed vanilla allowlist. No material tag or generic modded block is
-        // accepted as proof that neighbor updates are harmless.
+        // Closed vanilla allowlist plus the reviewed one-cell plant adapter.
+        // A material tag or arbitrary modded block does not prove harmless updates.
         return state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE) || state.is(Blocks.STONE_BRICKS)
                 || state.is(Blocks.OAK_PLANKS) || state.is(Blocks.DIRT) || state.is(Blocks.COARSE_DIRT)
                 || state.is(Blocks.ROOTED_DIRT) || state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.PODZOL)

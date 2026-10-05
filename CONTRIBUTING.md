@@ -28,6 +28,10 @@ Gameplay acceptance should be focused and representative by default. Test the af
 
 A short test-only stage partition or geometry may exercise genuine native placement and stage handoff, but label that setup explicitly. Do not create completed blocks, accelerate native AI, bypass authority or claim full-territory completion from a partial run. Record the exact runtime path, observed coverage and remaining limits. Safety and payment/persistence checks remain release requirements.
 
+For optional Sizeable Foliage vegetation compatibility, use the separately opted-in
+[actual-addon native QA](docs/native-sizeable-foliage-qa.md). The ordinary baseline
+does not load that addon, and the production JAR never depends on it.
+
 For HUD changes, use the opt-in [Native HUD QA](docs/native-hud-qa.md) workflow. It captures the actual client at compact and roomy GUI scales, exercises keyboard/mouse navigation, and checks native unit and blueprint previews. Its labeled client-menu fixtures are visual/input evidence, not proof of server payments, claims or construction. Keep the full regression Build and any affected gameplay safety gates separate.
 
 Interactive testing needs a separate Minecraft 1.20.1 Forge instance with this JAR and all four required companion mods on server and client. Build-time reflection does not install those mods into the development run directory. runClient/runServer are configured in Gradle but are not a complete companion-mod setup by themselves. Never claim playtesting from a successful compilation or mocked test.

@@ -228,6 +228,11 @@ tasks.named('test', Test).configure {
 // Opt-in native framebuffer/fixture QA. This source set is never part of jar.
 if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)) {
     def nativeQaMode = providers.gradleProperty('nativeQaMode').getOrElse('baseline')
+    def sizeableFoliageQa = providers.gradleProperty('nativeQaSizeableFoliage').map { it.toBoolean() }.getOrElse(false)
+    if (sizeableFoliageQa && nativeQaMode != 'baseline') throw new GradleException('Sizeable Foliage QA requires baseline nativeQaMode')
+    if (sizeableFoliageQa) {
+        repositories { maven { url = 'https://api.modrinth.com/maven'; content { includeGroup 'maven.modrinth' } } }
+    }
     if (!(nativeQaMode in ['baseline', 'perimeter-completion', 'territory-perimeter', 'camp-spawn', 'camp-lifecycle', 'staged-perimeter', 'staged-unload', 'staged-handoff', 'hud'])) throw new GradleException('Unsupported nativeQaMode')
     def nativeQaDirectory = [baseline: 'build/native-qa/client',
                              'perimeter-completion': 'build/native-perimeter-qa/client',
@@ -244,6 +249,8 @@ if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)
         nativeQaCompanions fg.deobf('curse.maven:recruits-523860:8339846')
         nativeQaCompanions fg.deobf('curse.maven:small-ships-450659:5566900')
         nativeQaCompanions fg.deobf('curse.maven:siegeweapons-1259343:7906096')
+        // Immutable official Forge 1.20.1 version ID. QA only; never a shipped dependency.
+        if (sizeableFoliageQa) nativeQaCompanions fg.deobf('maven.modrinth:sizeable-foliage:m2kFJSUs')
     }
     // Only this opted-in invocation gets companions on the development runtime.
     configurations.runtimeOnly.extendsFrom(configurations.nativeQaCompanions)
@@ -263,6 +270,7 @@ if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)
         property 'mixin.env.refMapRemappingFile', project.file('build/createSrgToMcp/output.srg').absolutePath
         property 'siegeoverhaul.nativeQa', 'true'
         property 'siegeoverhaul.nativeQa.mode', nativeQaMode
+        property 'siegeoverhaul.nativeQa.sizeableFoliage', sizeableFoliageQa.toString()
         property 'siegeoverhaul.nativeQa.directory', project.file(nativeQaDirectory).absolutePath
         args '--width', '1280', '--height', '720'
         jvmArgs '-Xms512m', '-Xmx3G'
