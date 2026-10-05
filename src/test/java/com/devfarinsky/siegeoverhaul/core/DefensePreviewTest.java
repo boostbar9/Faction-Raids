@@ -28,14 +28,25 @@ class DefensePreviewTest extends MinecraftTestSupport {
         assertNull(DefensePreview.read(preview(), DefenseBlueprint.Kind.WATCHTOWER, Level.OVERWORLD.location(), UUID.randomUUID(), 110));
         assertNull(DefensePreview.read(preview(), DefenseBlueprint.Kind.WATCHTOWER, Level.NETHER.location(), owner, 110));
     }
-    @Test void expiredOrFutureDatedSelectionsCannotConfirm() {
+    @Test void savedSelectionDoesNotExpireButFutureAndNegativeDatesCannotConfirm() {
         assertNull(DefensePreview.read(preview(), DefenseBlueprint.Kind.WATCHTOWER, Level.OVERWORLD.location(), owner, 99));
-        assertNull(DefensePreview.read(preview(), DefenseBlueprint.Kind.WATCHTOWER, Level.OVERWORLD.location(), owner, 2501));
+        for (long now : new long[]{2501, 24000, 24_000_000, Long.MAX_VALUE}) {
+            var stack = ItemStack.of(preview().save(new net.minecraft.nbt.CompoundTag()));
+            var selection = DefensePreview.read(stack, DefenseBlueprint.Kind.WATCHTOWER, Level.OVERWORLD.location(), owner, now);
+            assertNotNull(selection); assertEquals(origin, selection.origin());
+            assertTrue(selection.canConfirm(origin, now));
+        }
+        var malformed = preview();
+        malformed.getTag().getCompound(DefensePreview.TAG).putLong("Created", Long.MIN_VALUE);
+        assertNull(DefensePreview.read(malformed, DefenseBlueprint.Kind.WATCHTOWER, Level.OVERWORLD.location(), owner, 99));
+        malformed.getTag().getCompound(DefensePreview.TAG).putString("Created", "100");
+        assertNull(DefensePreview.read(malformed, DefenseBlueprint.Kind.WATCHTOWER, Level.OVERWORLD.location(), owner, 120));
     }
     @Test void confirmationRequiresTheSameAnchorAndASeparateDeliberateUse() {
         var selection = DefensePreview.read(preview(), DefenseBlueprint.Kind.WATCHTOWER, Level.OVERWORLD.location(), owner, 105);
         assertFalse(selection.canConfirm(origin, 105));
         assertFalse(selection.canConfirm(origin.east(), 120));
+        assertFalse(selection.canConfirm(origin, 99));
         assertTrue(selection.canConfirm(origin, 110));
     }
     @Test void rotationResetsConfirmationDelayAndCancellationPreservesOtherItemData() {

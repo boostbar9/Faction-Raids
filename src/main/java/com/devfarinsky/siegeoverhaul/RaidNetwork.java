@@ -17,9 +17,9 @@ import java.util.function.Supplier;
 public final class RaidNetwork {
     // v4 introduced in 2.12.0: added threat breakdown, defense explainer,
     // discovered units/factions, and War Journal rows to DashboardSync.
-    // Bump for wire changes or client-visible purchase contracts. Protocol 20 also
-    // prevents older clients from showing obsolete manual prices or active unavailable upgrades.
-    private static final String PROTOCOL = "20";
+    // Protocol 22 includes bounded civilian reports and live capture-boundary details.
+    // Older clients cannot safely decode these server-authoritative snapshots.
+    private static final String PROTOCOL = "22";
     static boolean acceptsProtocol(String version) { return PROTOCOL.equals(version); }
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(SiegeOverhaul.MOD_ID, "main"))
@@ -108,18 +108,77 @@ public final class RaidNetwork {
                             sender, packet.areaId(), packet.action());
                     context.setPacketHandled(true);
                 }).add();
+        CHANNEL.messageBuilder(CivilianDetails.class, messageId++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(CivilianDetails::encode).decoder(CivilianDetails::decode)
+                .consumerMainThread((packet, supplier) -> {
+                    DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
+                        var player = net.minecraft.client.Minecraft.getInstance().player;
+                        if (player != null && player.containerMenu instanceof com.devfarinsky.siegeoverhaul.core.CoreHireMenu menu
+                                && menu.containerId == packet.menuId()) menu.civilianReport(packet.request(), packet.snapshot());
+                    });
+                    supplier.get().setPacketHandled(true);
+                }).add();
+        CHANNEL.messageBuilder(CivilianWatch.class, messageId++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(CivilianWatch::encode).decoder(CivilianWatch::decode)
+                .consumerMainThread((packet, supplier) -> {
+                    var context = supplier.get(); var player = context.getSender();
+                    if (player != null && player.containerMenu instanceof com.devfarinsky.siegeoverhaul.core.CoreHireMenu menu
+                            && menu.containerId == packet.menuId()) menu.watchCivilians(player, packet.request(), packet.watch());
+                    context.setPacketHandled(true);
+                }).add();
     }
 
-    public record CaptureBeam(ResourceLocation dimension,net.minecraft.core.BlockPos pos,int percent,long time) {
+    public record CivilianWatch(int menuId, long request, boolean watch) {
+        public CivilianWatch {
+            if (menuId < 1 || menuId > 100 || request <= 0) throw new IllegalArgumentException("Invalid civilian request");
+        }
+        public void encode(FriendlyByteBuf buffer) { buffer.writeVarInt(menuId); buffer.writeLong(request); buffer.writeBoolean(watch); }
+        public static CivilianWatch decode(FriendlyByteBuf buffer) {
+            int menuId = buffer.readVarInt(); long request = buffer.readLong(); int watch = buffer.readUnsignedByte();
+            if (watch > 1 || buffer.isReadable()) throw new IllegalArgumentException("Invalid civilian request flags");
+            return new CivilianWatch(menuId, request, watch == 1);
+        }
+    }
+    public static void watchCivilians(int menuId, long request, boolean watch) {
+        CHANNEL.sendToServer(new CivilianWatch(menuId, request, watch));
+    }
+
+    public record CivilianDetails(int menuId, long request, com.devfarinsky.siegeoverhaul.core.CivilianReport.Snapshot snapshot) {
+        public CivilianDetails {
+            if (menuId < 1 || menuId > 100 || request <= 0 || snapshot == null) throw new IllegalArgumentException("Invalid civilian menu");
+        }
+        public void encode(FriendlyByteBuf buffer) { buffer.writeVarInt(menuId); buffer.writeLong(request); snapshot.write(buffer); }
+        public static CivilianDetails decode(FriendlyByteBuf buffer) {
+            return new CivilianDetails(buffer.readVarInt(), buffer.readLong(), com.devfarinsky.siegeoverhaul.core.CivilianReport.Snapshot.read(buffer));
+        }
+    }
+    public static void civilianDetails(ServerPlayer player, int menuId, long request, com.devfarinsky.siegeoverhaul.core.CivilianReport.Snapshot snapshot) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new CivilianDetails(menuId, request, snapshot));
+    }
+
+    public record CaptureBeam(ResourceLocation dimension, net.minecraft.core.BlockPos pos, int percent, long time,
+                              int radius, int vertical, boolean requireSight, int allies, int enemies,
+                              com.devfarinsky.siegeoverhaul.core.CaptureStatus.Participation participation) {
         public CaptureBeam {
-            if(dimension==null || pos==null || percent< -1 || percent>100) throw new IllegalArgumentException("Invalid capture beam");
-            pos=pos.immutable();
+            if (dimension == null || pos == null || percent < -1 || percent > 100 || time < 0
+                    || radius < 2 || radius > 32 || vertical < 1 || vertical > 16
+                    || allies < 0 || enemies < 0 || participation == null)
+                throw new IllegalArgumentException("Invalid capture snapshot");
+            pos = pos.immutable();
         }
         public void encode(FriendlyByteBuf b) {
-            b.writeResourceLocation(dimension);b.writeBlockPos(pos);b.writeByte(percent);b.writeLong(time);
+            b.writeResourceLocation(dimension); b.writeBlockPos(pos); b.writeByte(percent); b.writeLong(time);
+            b.writeByte(radius); b.writeByte(vertical); b.writeBoolean(requireSight);
+            b.writeVarInt(allies); b.writeVarInt(enemies); b.writeByte(participation.ordinal());
         }
         public static CaptureBeam decode(FriendlyByteBuf b) {
-            return new CaptureBeam(b.readResourceLocation(),b.readBlockPos(),b.readByte(),b.readLong());
+            var dimension = b.readResourceLocation(); var pos = b.readBlockPos();
+            int percent = b.readByte(); long time = b.readLong();
+            int radius = b.readUnsignedByte(), vertical = b.readUnsignedByte(); boolean sight = b.readBoolean();
+            int allies = b.readVarInt(), enemies = b.readVarInt(), state = b.readUnsignedByte();
+            var states = com.devfarinsky.siegeoverhaul.core.CaptureStatus.Participation.values();
+            if (state >= states.length) throw new IllegalArgumentException("Invalid capture participation");
+            return new CaptureBeam(dimension, pos, percent, time, radius, vertical, sight, allies, enemies, states[state]);
         }
     }
     public static void sendCaptureBeam(ServerPlayer player,CaptureBeam packet) {

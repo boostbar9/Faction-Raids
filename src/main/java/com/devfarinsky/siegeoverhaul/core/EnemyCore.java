@@ -168,12 +168,16 @@ public final class EnemyCore {
         return block == null ? null : block.defaultBlockState();
     }
     public static boolean tick(ServerLevel level, RaidSavedData data, RaidSavedData.RaidState raid, RaidSavedData.Anchor anchor) {
-        if (!EndlessSiege.active(raid) || raid.coreCaptured || !ensure(level, raid)) return false;
+        if (!EndlessSiege.active(raid) || raid.coreCaptured || !ensure(level, raid)) {
+            CaptureBeacon.clear(level, raid.teamKey, position(raid));
+            return false;
+        }
         BlockPos pos = position(raid);
         var claim = RecruitsClaimsBridge.getClaimAt(level, pos).orElse(null);
         if (claim == null || !claim.claimId().equals(raid.campClaimId)
                 || !(RaiderFactions.id(raid.factionId).equals(claim.ownerFactionStringId())
                     || RecruitsBridge.RAIDERS_FACTION_ID.equals(claim.ownerFactionStringId()))) {
+            CaptureBeacon.clear(level, raid.teamKey, pos);
             if (raid.campaign.getInt("EnemyCaptureTicks") != 0) {
                 raid.campaign.putInt("EnemyCaptureTicks", 0);
                 data.setDirty();
@@ -189,7 +193,7 @@ public final class EnemyCore {
         int progress = CoreControl.advance(before, maximum, counts[1], counts[0]);
         raid.campaign.putInt("EnemyCaptureTicks", progress);
         if (progress != before) data.setDirty();
-        CaptureBeacon.send(level,raid.teamKey,pos,progress,maximum,counts[1]);
+        CaptureBeacon.send(level,raid.teamKey,pos,progress,maximum,counts[1],counts[0]);
         if (progress > 0 && level.getGameTime() % 100 == 0) for (var player : level.players())
             if (raid.teamKey.equals(SiegeCore.key(player))) player.displayClientMessage(Component.literal(
                     "Enemy core capture: " + progress * 100 / maximum + "% | " + counts[1] + " allies / " + counts[0] + " enemies"), true);

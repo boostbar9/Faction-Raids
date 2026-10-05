@@ -191,16 +191,57 @@ public final class CoreCivilians {
         String key=v.getPersistentData().getString(OWNER);if(key.isEmpty())return;
         var data=RaidSavedData.get(level.getServer());CivilianLedger.remove(ledger(data,key),v.getUUID());data.setDirty();
     }
+    /** The same eligibility predicate used by tax settlement; no loads or ledger writes. */
+    static boolean taxEligible(ServerLevel level, CompoundTag core, String key) {
+        if (core == null || !core.contains("Position") || core.getBoolean("CoreRemoved") || core.getBoolean("Occupied")) return false;
+        BlockPos pos = BlockPos.of(core.getLong("Position"));
+        return SiegeCore.claimed(level, pos, key)
+                && (!level.hasChunkAt(pos) || level.getBlockState(pos).is(CoreBlocks.CORE.get()));
+    }
+
+    public static CivilianReport.Snapshot snapshot(ServerPlayer player) {
+        var data = RaidSavedData.get(player.server);
+        String key = SiegeCore.key(player);
+        var ledger = data.civilianFactions.get(key);
+        var level = player.server.overworld();
+        return snapshot(ledger == null ? new CompoundTag() : ledger, key, level::getEntity,
+                taxEligible(level, data.siegeCores.get(key), key));
+    }
+
+    /** At most 64 UUID lookups, never a chunk scan or chunk load. Kept separate for authority regressions. */
+    static CivilianReport.Snapshot snapshot(CompoundTag ledger, String key,
+            java.util.function.Function<java.util.UUID, net.minecraft.world.entity.Entity> lookup, boolean eligible) {
+        var rows = new java.util.ArrayList<CivilianReport.Resident>();
+        var entries = ledger.getCompound("Residents");
+        for (String entry : entries.getAllKeys().stream().sorted().limit(CivilianLedger.LIMIT).toList()) {
+            java.util.UUID id;
+            try { id = java.util.UUID.fromString(entry); } catch (IllegalArgumentException invalid) { continue; }
+            boolean paused = ledger.getCompound("Paused").getBoolean(entry);
+            var entity = lookup.apply(id);
+            if (!(entity instanceof Villager villager) || !villager.isAlive()
+                    || !key.equals(villager.getPersistentData().getString(OWNER))) {
+                rows.add(CivilianReport.Resident.unavailable(id, paused)); continue;
+            }
+            var detail = villager.getVillagerData();
+            String name = villager.getPersistentData().getString(NAME).replaceAll("[\\p{Cntrl}]", "");
+            if (name.length() > CivilianReport.NAME_LIMIT) name = name.substring(0, CivilianReport.NAME_LIMIT);
+            rows.add(new CivilianReport.Resident(id, name,
+                    net.minecraft.core.registries.BuiltInRegistries.VILLAGER_PROFESSION.getKey(detail.getProfession()),
+                    net.minecraft.core.registries.BuiltInRegistries.VILLAGER_TYPE.getKey(detail.getType()),
+                    detail.getLevel(), true, villager.isBaby(),
+                    villager.getBrain().getMemory(MemoryModuleType.HOME).isPresent(),
+                    villager.getBrain().getMemory(MemoryModuleType.JOB_SITE).isPresent(), paused));
+        }
+        return new CivilianReport.Snapshot(rows, eligible);
+    }
+
     @SubscribeEvent public static void serverTick(TickEvent.ServerTickEvent event) {
         if(event.phase!=TickEvent.Phase.END)return;
         var server=event.getServer();long now=server.overworld().getGameTime();if(now%1200!=0)return;
         var data=RaidSavedData.get(server);
         for(var entry:data.civilianFactions.entrySet()) {
             var core=data.siegeCores.get(entry.getKey());if(core==null){CivilianLedger.settle(entry.getValue(),new CompoundTag(),now,false);continue;}
-            BlockPos pos=BlockPos.of(core.getLong("Position"));
-            boolean eligible=core.contains("Position") && !core.getBoolean("CoreRemoved") && !core.getBoolean("Occupied")
-                    && SiegeCore.claimed(server.overworld(),pos,entry.getKey())
-                    && (!server.overworld().hasChunkAt(pos) || server.overworld().getBlockState(pos).is(CoreBlocks.CORE.get()));
+            boolean eligible=taxEligible(server.overworld(),core,entry.getKey());
             CivilianLedger.settle(entry.getValue(),core,now,eligible);
         }
         if(!data.civilianFactions.isEmpty())data.setDirty();

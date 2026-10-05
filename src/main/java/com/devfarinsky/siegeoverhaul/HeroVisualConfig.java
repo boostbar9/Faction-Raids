@@ -14,7 +14,7 @@ public final class HeroVisualConfig {
         DISTANCE=b.comment("Maximum distance for hero casting effects in blocks.").defineInRange("Effect distance",48,8,96);
         VOLUME=b.comment("Local volume multiplier for hero ability cues.").defineInRange("Ability volume",0.7,0,1);
         b.pop();b.push("Siege objectives");
-        CAPTURE_BEAMS=b.comment("Show a colored beacon above enemy cores during capture. Color follows capture percentage.").define("Capture beacon",true);
+        CAPTURE_BEAMS=b.comment("Show enemy core capture boundaries, nearby capture status and progress-colored beacons.").define("Capture beacon",true);
         b.pop();SPEC=b.build();
     }
     private HeroVisualConfig() {}

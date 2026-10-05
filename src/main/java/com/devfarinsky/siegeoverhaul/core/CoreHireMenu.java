@@ -29,6 +29,21 @@ public final class CoreHireMenu extends AbstractContainerMenu {
     public void construction(java.util.List<ConstructionReport.Job> jobs) {
         construction = java.util.List.copyOf(jobs); constructionLoaded = true;
     }
+    private boolean watchingCivilians;
+    private long civiliansAt = Long.MIN_VALUE;
+    private long civilianRequest;
+    private CivilianReport.Snapshot civilianReport;
+    public CivilianReport.Snapshot civilianReport() { return civilianReport; }
+    /** Client display fixture entrypoint; network responses use the request-checked overload. */
+    public void civilianReport(CivilianReport.Snapshot snapshot) { civilianReport = snapshot; }
+    public void expectCivilianReport(long request, boolean watch) {
+        if (owner != null || request <= 0) return;
+        civilianRequest = request; watchingCivilians = watch; civilianReport = null;
+    }
+    public boolean civilianReport(long request, CivilianReport.Snapshot snapshot) {
+        if (owner != null || !watchingCivilians || request != civilianRequest) return false;
+        civilianReport = snapshot; return true;
+    }
     private long lastActionAt = -1;
     private String sentRoster = "";
     private String factionName = "Faction";
@@ -200,6 +215,12 @@ public final class CoreHireMenu extends AbstractContainerMenu {
         if(!changed)return false;
         owner.inventoryMenu.broadcastChanges();refresh();broadcastChanges();return true;
     }
+    public void watchCivilians(ServerPlayer player, long request, boolean watch) {
+        if (owner == null || player != owner || owner.containerMenu != this || !stillValid(player) || request <= civilianRequest) return;
+        civilianRequest = request;
+        // Keep the last scan time across stop/start. Toggling cannot bypass the 40-tick budget.
+        watchingCivilians = watch;
+    }
     void watchConstruction(boolean watch) {
         if (watch && !watchingConstruction) constructionAt = Long.MIN_VALUE;
         watchingConstruction = watch;
@@ -212,6 +233,13 @@ public final class CoreHireMenu extends AbstractContainerMenu {
             if (constructionAt == Long.MIN_VALUE || now < constructionAt || now - constructionAt >= 40) {
                 constructionAt = now;
                 com.devfarinsky.siegeoverhaul.RaidNetwork.constructionDetails(owner, containerId, ConstructionReport.snapshot(owner));
+            }
+        }
+        if (owner != null && watchingCivilians && stillValid(owner)) {
+            long now = owner.server.overworld().getGameTime();
+            if (civiliansAt == Long.MIN_VALUE || now < civiliansAt || now - civiliansAt >= 40) {
+                civiliansAt = now;
+                com.devfarinsky.siegeoverhaul.RaidNetwork.civilianDetails(owner, containerId, civilianRequest, CoreCivilians.snapshot(owner));
             }
         }
         super.broadcastChanges();

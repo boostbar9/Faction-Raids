@@ -1,3 +1,11 @@
+## 4.52.8 — Saved plans, capture boundaries and richer hub pages
+
+- Keep unpaid building-plan selections until you use or cancel them. Returning to a saved site no longer loses its preview after two minutes; current terrain, permissions, builders and costs are still checked before payment.
+- Show the enemy core's capture boundary before you enter it, with progress, counted allies/enemies and clear range, height or sight-blocking feedback. Capture radius, timing and balance are unchanged.
+- Browse real possible Olympian equipment from each chest's eligible loot pool, with native item previews, rarity tabs and complete tooltips. Sealed rewards stay hidden until opened, and chest odds now describe their existing rarity floors accurately.
+- Review civilian names, professions, native portraits, remembered beds/workstations and tax status in a paged roster. Unloaded residents are clearly marked; the 16-emerald action recruits a resident, with housing still built separately.
+- Update the server and every client together for network protocol 22. Existing worlds, accepted building jobs, claims, materials, Treasury balances and loot rolls remain compatible.
+
 ## 4.52.7 — Build through Sizeable Foliage short grass
 
 - Let builders clear Sizeable Foliage 1.2.1’s Very Short Grass from approved wall and perimeter cells, instead of refusing the site as occupied. Other addon versions keep manual clearance until their behavior is checked.

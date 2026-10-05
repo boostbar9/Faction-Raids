@@ -8,14 +8,14 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import java.util.UUID;
 
-/** Owner-bound, expiring placement intent. Vanilla inventory sync carries it to the client. */
+/** Persistent owner-bound placement intent. A saved plan is never permission to skip fresh server checks. */
 public final class DefensePreview {
     public static final String TAG = "SiegeDefensePreview";
-    public static final int LIFETIME = 2400, CONFIRM_DELAY = 10, RANGE = 16;
+    public static final int CONFIRM_DELAY = 10, RANGE = 16;
     public record Selection(BlockPos origin, Direction facing, long created, String problem) {
         public boolean ready() { return problem.isEmpty(); }
         public boolean canConfirm(BlockPos clickedOrigin, long now) {
-            return origin.equals(clickedOrigin) && now - created >= CONFIRM_DELAY;
+            return origin.equals(clickedOrigin) && now >= created && now - created >= CONFIRM_DELAY;
         }
     }
     private DefensePreview() {}
@@ -41,9 +41,10 @@ public final class DefensePreview {
         // Never replace their old reviewed shape in place and leave its confirmation delay satisfied.
         if (tag.contains("Geometry") ? !tag.contains("Geometry", Tag.TAG_STRING)
                 || !geometry(kind).equals(tag.getString("Geometry")) : kind.previewGeometryVersion() != 1) return null;
-        long age = now - tag.getLong("Created"); int facing = tag.getInt("Facing");
+        long created = tag.getLong("Created"); int facing = tag.getInt("Facing");
         if (!tag.contains("Origin") || !tag.hasUUID("Owner") || !tag.getUUID("Owner").equals(owner)
-                || !dimension.toString().equals(tag.getString("Dimension")) || age < 0 || age > LIFETIME
+                || !tag.contains("Created", Tag.TAG_LONG) || created < 0 || now < created
+                || !dimension.toString().equals(tag.getString("Dimension"))
                 || facing < 0 || facing > 3) return null;
         return new Selection(BlockPos.of(tag.getLong("Origin")), Direction.from2DDataValue(facing),
                 tag.getLong("Created"), bounded(tag.getString("Problem")));
