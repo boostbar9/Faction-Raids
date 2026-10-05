@@ -20,6 +20,7 @@ on:
       - 'scripts/prepare-native-ships-defaults.py'
       - 'scripts/tests/test_prepare_native_ships_defaults.py'
       - 'scripts/fixtures/smallships-2.0.0/**'
+      - 'scripts/fixtures/smallships-2.0.0-b1.4/**'
 
 permissions:
   contents: read
@@ -61,10 +62,8 @@ jobs:
           test ! -e "build/native-ships-${FIXTURE}-qa/server"
           test ! -e "build/native-ships-${FIXTURE}-qa/evidence"
           mkdir -p "build/native-ships-${FIXTURE}-qa/evidence"
-          if [ "$RELEASE" = final ]; then
-            python3 scripts/prepare-native-ships-defaults.py --fixture "$FIXTURE"
-            cp "build/native-ships-${FIXTURE}-qa/server/.native-smallships-defaults.json" "build/native-ships-${FIXTURE}-qa/evidence/defaults-provenance.json"
-          fi
+          python3 scripts/prepare-native-ships-defaults.py --fixture "$FIXTURE"
+          cp "build/native-ships-${FIXTURE}-qa/server/.native-smallships-defaults.json" "build/native-ships-${FIXTURE}-qa/evidence/defaults-provenance.json"
           git rev-parse HEAD > "build/native-ships-${FIXTURE}-qa/evidence/source-commit.txt"
           java -version 2> "build/native-ships-${FIXTURE}-qa/evidence/java-version.txt"
           python3 -B -m unittest discover -s scripts/tests -p 'test_prepare_native_ships_defaults.py'
@@ -117,6 +116,8 @@ jobs:
               assert len(prototype['nativeTurnsWithoutDirectYawWrites']) == 4, prototype
               assert prototype['nativeWaypointArrival']['vesselDistanceMoved'] >= 5, prototype
               assert prototype['nativeWaypointArrival']['nativeSailsLowered'], prototype
+              assert prototype['nativeWaypointSettled']['speed'] < 0.02, prototype
+              assert prototype['nativeWaypointSettled']['turnCommandsExpired'], prototype
           print('Exact-binary probe completed; this deliberately does not certify release compatibility.')
           PY
       - name: Read exact native bytecode and original artifact hashes

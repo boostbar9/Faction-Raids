@@ -18,6 +18,7 @@ class NativeShipDefaultsTest(unittest.TestCase):
         (self.root / 'gradle').mkdir()
         shutil.copy(SOURCE.parent / 'gradle/native-smallships-qa.gradle', self.root / 'gradle')
         shutil.copytree(SOURCE / 'fixtures/smallships-2.0.0', self.root / 'scripts/fixtures/smallships-2.0.0')
+        shutil.copytree(SOURCE / 'fixtures/smallships-2.0.0-b1.4', self.root / 'scripts/fixtures/smallships-2.0.0-b1.4')
 
     def test_server_defaults_only_create_fresh_qa_files(self):
         directory = MODULE.prepare(self.root, 'final')
@@ -46,7 +47,14 @@ class NativeShipDefaultsTest(unittest.TestCase):
             MODULE.prepare(self.root, 'final')
         self.assertFalse(list(target.iterdir()))
         with self.assertRaises(ValueError):
-            MODULE.prepare(self.root, 'legacy')
+            MODULE.prepare(self.root, 'unreviewed')
+
+    def test_legacy_server_uses_only_its_own_reviewed_common_defaults(self):
+        directory = MODULE.prepare(self.root, 'legacy')
+        expected = self.root / 'scripts/fixtures/smallships-2.0.0-b1.4/smallships-common.toml'
+        self.assertEqual(expected.read_bytes(), (directory / 'config/smallships-common.toml').read_bytes())
+        self.assertFalse((directory / 'defaultconfigs').exists())
+        self.assertFalse((directory / 'config/smallships-client.toml').exists())
 
     def test_changed_artifact_pin_is_rejected(self):
         (self.root / 'gradle/native-smallships-qa.gradle').write_text('different artifact')

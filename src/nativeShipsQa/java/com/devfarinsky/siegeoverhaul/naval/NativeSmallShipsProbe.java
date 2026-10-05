@@ -397,6 +397,15 @@ public final class NativeSmallShipsProbe {
     void finishNativeNavigation() throws Exception {
         sampleNativeNavigation();
         require(navigationArrived, "Native captain did not converge and lower sails within 600 real ticks; see navigation samples");
+        Boat ship = navigating.boat; CaptainEntity captain = navigating.captain;
+        double speed = Math.abs(((Number) call(ship, "getSpeed")).doubleValue());
+        double distance = captain.distanceToSqr(navigationGoal.getX(), captain.getY(), navigationGoal.getZ());
+        boolean expired = !Boolean.TRUE.equals(call(ship, "isLeft")) && !Boolean.TRUE.equals(call(ship, "isRight"));
+        require(ship.isAlive() && captain.isAlive() && captain.getVehicle() == ship && speed < .02 && expired,
+                "Native arrival did not remain alive and settle without stale steering");
+        require(distance < captain.smallShipsController.reach, "Native ship drifted out of arrival range");
+        adapterChecks.put("nativeWaypointSettled", Map.of("ticks", level.getGameTime() - navigationStarted,
+                "speed", speed, "squaredCaptainDistance", distance, "turnCommandsExpired", expired));
         require(!Main.isSmallShipsCompatible, "Native waypoint probe changed production compatibility activation");
         report.put("status", "probe-completed");
         write();
