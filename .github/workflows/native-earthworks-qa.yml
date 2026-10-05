@@ -1,0 +1,109 @@
+name: Native One-FILL Earthworks QA
+
+# Independent flat first slice. No PR276 geometry, CUT, synthetic completion, or accelerated native AI.
+on:
+  workflow_dispatch:
+    inputs:
+      dirt_census:
+        description: 'Collect read-only dirt census after the genuine stable one-FILL result (no CUT/profile approval)'
+        type: boolean
+        required: false
+        default: false
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, labeled]
+permissions:
+  contents: read
+concurrency:
+  group: native-earthworks-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  native-earthworks-client:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       (contains(github.event.pull_request.labels.*.name, 'native-earthworks-qa') ||
+        contains(github.event.pull_request.labels.*.name, 'native-dirt-census-qa')))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      LIBGL_ALWAYS_SOFTWARE: 'true'
+      GALLIUM_DRIVER: llvmpipe
+      NATIVE_DIRT_CENSUS: >-
+        ${{ (github.event_name == 'workflow_dispatch' && inputs.dirt_census) ||
+            (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
+             contains(github.event.pull_request.labels.*.name, 'native-dirt-census-qa')) }}
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+      - name: Install virtual display and software OpenGL
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y xvfb xauth mesa-utils libgl1-mesa-dri libglx-mesa0 libopenal1
+      - name: Verify tooling contracts
+        run: python3 -m unittest discover -s scripts/tests -p 'test_native_earthworks_qa.py' -v
+      - name: Verify separate census tooling contracts
+        run: python3 -m unittest discover -s scripts/tests -p 'test_native_dirt_census_qa.py' -v
+      - name: Prepare exact defaults in fresh isolated client directory
+        run: |
+          set -euo pipefail
+          test ! -e build/native-earthworks-qa/client
+          python3 scripts/prepare-native-earthworks-client.py
+          mkdir -p build/native-earthworks-qa/evidence
+          printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:6\nsimulationDistance:6\nmaxFps:30\nvsync:false\n' > build/native-earthworks-qa/client/options.txt
+          git rev-parse HEAD > build/native-earthworks-qa/evidence/source-commit.txt
+          git rev-parse HEAD^{tree} > build/native-earthworks-qa/evidence/source-tree.txt
+          printf '{"runId":"%s","runAttempt":"%s"}\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > build/native-earthworks-qa/evidence/ci-run.json
+          java -version 2> build/native-earthworks-qa/evidence/java-version.txt
+          cp build/native-earthworks-qa/client/.native-smallships-defaults.json build/native-earthworks-qa/evidence/
+      - name: Compile and prepare exact native runtime
+        run: |
+          set -euo pipefail
+          timeout --signal=KILL 1800s ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeEarthworksQa=true -PnativeDirtCensusQa="$NATIVE_DIRT_CENSUS" prepareNativeEarthworksQaClient 2>&1 | tee build/native-earthworks-qa/evidence/prepare-console.log
+      - name: Run actual integrated-player one-FILL fixture with a hard six-minute process cap
+        run: |
+          set -euo pipefail
+          test ! -e build/native-earthworks-qa/client/saves/siege-native-earthworks-one-fill
+          test ! -e build/native-earthworks-qa/evidence/result.json
+          timeout --signal=KILL 360s xvfb-run -a -s '-screen 0 1280x720x24' bash -c '
+            set -euo pipefail
+            glxinfo -B | tee build/native-earthworks-qa/evidence/opengl.txt
+            ./gradlew --no-daemon --offline --console=plain --max-workers=2 -PnativeEarthworksQa=true -PnativeDirtCensusQa="$NATIVE_DIRT_CENSUS" runClient
+          ' 2>&1 | tee build/native-earthworks-qa/evidence/client-console.log
+      - name: Audit exact loaded native bytecode including unary material parser
+        if: always()
+        run: python3 scripts/audit-native-earthworks-bytecode.py build/native-earthworks-qa/evidence
+      - name: Verify finite actual source-to-worker-to-world evidence
+        run: python3 scripts/verify-native-earthworks.py build/native-earthworks-qa/evidence
+      - name: Verify optional read-only dirt census separately
+        if: env.NATIVE_DIRT_CENSUS == 'true'
+        run: python3 scripts/verify-native-dirt-census.py build/native-earthworks-qa/evidence
+      - name: Collect diagnostics without worlds or companion JARs
+        if: always()
+        run: |
+          mkdir -p build/native-earthworks-qa/evidence/logs
+          if [ -d build/native-earthworks-qa/client/logs ]; then
+            find build/native-earthworks-qa/client/logs -maxdepth 1 -type f -name '*.log' -exec cp {} build/native-earthworks-qa/evidence/logs/ \;
+          fi
+          if [ -d build/native-earthworks-qa/client/crash-reports ]; then
+            cp -R build/native-earthworks-qa/client/crash-reports build/native-earthworks-qa/evidence/
+          fi
+      - name: Upload first-slice evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-earthworks-qa-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/native-earthworks-qa/evidence/
+          if-no-files-found: error
+          retention-days: 7

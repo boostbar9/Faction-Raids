@@ -235,6 +235,8 @@ public final class NativeConstructionGuard {
      */
     public static boolean beforeWorkerTick(Mob builder) {
         if (!WorkersBridge.isBuilder(builder) || !(builder.level() instanceof ServerLevel level)) return true;
+        if (builder instanceof com.talhanation.workers.entities.BuilderEntity nativeBuilder && NativeEarthworksJobs.selected(builder))
+            return NativeEarthworksJobs.beforeWorkerTick(nativeBuilder);
         var data = builder.getPersistentData();
         var ledger = ConstructionEditLedger.get(level.getServer().overworld());
         boolean projectWorker = projectAssociation(builder, ledger);
