@@ -216,12 +216,18 @@ public final class NativeStagedUnloadQa {
                         "Production quote did not bind four cardinal gates");
                 require(fixture.plan().materialCounts().getOrDefault("minecraft:dirt", 0) > 0,
                         "Production quote did not include fixture dirt-fill targets");
+                Map<String, Object> step = fixture.stepEvidence();
                 require(PerimeterConstruction.review(owner, NativeStagedUnloadFixture.CORE, 1), "Production free review failed");
                 require(FactionBank.balance(core(level)) == 2000 && PerimeterProjectStore.all(core(level)).isEmpty()
                         && placed(level) == 0, "Free review commissioned or changed the site");
                 selectPlan(owner);
                 REPORT.put("targetCount", targetCount()); REPORT.put("materialCounts", fixture.plan().materialCounts());
                 REPORT.put("fillTargets", fixture.plan().materialCounts().getOrDefault("minecraft:dirt", 0));
+                REPORT.put("terrainStepEvidence", step); REPORT.put("nonLevelTransitionCount", step.get("nonLevelTransitionCount"));
+                REPORT.put("deckBaseLevels", step.get("baseLevels"));
+                REPORT.put("transitionClearanceVerified", step.get("transitionClearanceVerified"));
+                REPORT.put("loweredSurfaceY", NativeStagedUnloadFixture.LOWERED_SURFACE_Y);
+                REPORT.put("flatSurfaceY", NativeStagedUnloadFixture.FLAT_SURFACE_Y);
                 REPORT.put("gateCount", quote.quote().gateContract().gates().size());
                 REPORT.put("gateCenters", quote.quote().gateContract().gates().stream()
                         .map(g -> g.facing().getName() + ":" + g.outerCenter().toShortString()).toList());

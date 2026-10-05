@@ -82,6 +82,12 @@ jobs:
           materials = data['materialCounts']
           assert data['completedBlocks'] == target_count and data['treasuryDebit'] == 64, data
           assert sum(materials.values()) == target_count and materials['minecraft:dirt'] == data['fillTargets'] > 0, data
+          assert data['nonLevelTransitionCount'] > 0 and data['transitionClearanceVerified'], data
+          assert data['loweredSurfaceY'] in data['deckBaseLevels'] and data['flatSurfaceY'] in data['deckBaseLevels'], data
+          assert data['loweredSurfaceY'] in data['builderFeetYLevelsObserved'] and data['flatSurfaceY'] in data['builderFeetYLevelsObserved'], data
+          step = data['terrainStepEvidence']
+          assert step['loweredBandAtExpectedBase'] and step['transitionClearanceVerified'], step
+          assert step['nonLevelTransitionCount'] == data['nonLevelTransitionCount'] and len(step['transitions']) > 0, step
           assert data['gateCount'] == 4 and len(data['gateCenters']) == 4, data
           assert data['nativeCompletionObserved'] and data['completedCaptureTerrainCompiled'], data
           assert data['completionAuthority'] in ['COMPLETE full durable project', 'COMPLETE compact terminal receipt'], data

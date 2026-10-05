@@ -3,6 +3,8 @@ package com.devfarinsky.siegeoverhaul.nativecompat;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import com.devfarinsky.siegeoverhaul.core.CoreBlocks;
 import com.devfarinsky.siegeoverhaul.core.PerimeterBlueprint;
+import com.devfarinsky.siegeoverhaul.core.PerimeterSteppedProfile;
+import com.devfarinsky.siegeoverhaul.core.PerimeterSteppedTopology;
 import com.devfarinsky.siegeoverhaul.core.SiegeCore;
 import com.devfarinsky.siegeoverhaul.items.ModItems;
 import com.talhanation.recruits.ClaimEvents;
@@ -51,8 +53,9 @@ final class NativeStagedPerimeterFixture {
     static final BlockPos CORE = new BlockPos(166, 65, 39);
     static final List<BlockPos> CHESTS = List.of(new BlockPos(163, 65, 35), new BlockPos(171, 65, 35),
             new BlockPos(163, 65, 43), new BlockPos(171, 65, 43));
-    static final List<BlockPos> TERRAIN_DIPS = List.of(new BlockPos(134, 64, 2),
-            new BlockPos(135, 64, 2), new BlockPos(201, 64, 77));
+    static final int FLAT_SURFACE_Y = 65, LOWERED_SURFACE_Y = 64;
+    static final List<BlockPos> TERRAIN_LOWERED_BAND = loweredBand();
+    static final List<BlockPos> TERRAIN_FILL_DIPS = fillDips();
     static final int COBBLE = 3000, OAK = 2000, DIRT = 256;
     static final AABB BOUNDS = new AABB(112, 63, -16, 224, 82, 96);
 
@@ -86,6 +89,9 @@ final class NativeStagedPerimeterFixture {
             }
             require(!reviewed.blocks().containsKey(CORE.asLong()) && CHESTS.stream().noneMatch(p -> reviewed.blocks().containsKey(p.asLong())),
                     "Core/chest overlaps stepped perimeter");
+            Map<String, Object> step = NativeStagedPerimeterFixture.stepEvidence(reviewed);
+            require(Boolean.TRUE.equals(step.get("loweredBandAtExpectedBase")), "Production plan filled the lowered band instead of stepping down");
+            require(Boolean.TRUE.equals(step.get("transitionClearanceVerified")), "Production plan lacks required one-block transition clearance");
             Map<BlockPos, BlockState> nonPlan = new LinkedHashMap<>();
             for (int x = 124; x <= 211; x++) for (int z = -4; z <= 83; z++)
                 for (int y = 63; y <= 72; y++) {
@@ -95,6 +101,7 @@ final class NativeStagedPerimeterFixture {
             return new Fixture(builderId, storageIds, claimIds, reviewed, buildGoal, storageGoal,
                     Map.copyOf(nonPlan), parkedAuxiliaries);
         }
+        Map<String, Object> stepEvidence() { return NativeStagedPerimeterFixture.stepEvidence(plan); }
     }
 
     private NativeStagedPerimeterFixture() {}
@@ -114,12 +121,12 @@ final class NativeStagedPerimeterFixture {
         for (int x = 7; x <= 13; x++) for (int z = -1; z <= 5; z++) level.getChunk(x, z);
         require(level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, 167, 40) == 65,
                 "Generated fixture footing is not at the declared height");
-        for (BlockPos dip : TERRAIN_DIPS) {
+        for (BlockPos dip : terrainCuts()) {
             require(level.getBlockState(dip).is(Blocks.STONE) && level.getBlockState(dip.above()).isAir(),
-                    "Fixture dip does not start as one-block natural stone");
+                    "Fixture lowered terrain does not start as one-block natural stone: " + dip);
             level.setBlock(dip, Blocks.AIR.defaultBlockState(), 3);
             require(level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                    dip.getX(), dip.getZ()) == dip.getY(), "Fixture dip was not exposed as one-block lower ground");
+                    dip.getX(), dip.getZ()) == dip.getY(), "Fixture lowered terrain was not exposed as one-block lower ground: " + dip);
         }
         level.setDayTime(6000);
         owner.teleportTo(level, 167.5, 65, 37.5, 0, 20);
@@ -214,6 +221,90 @@ final class NativeStagedPerimeterFixture {
         return new Fixture(builder.getUUID(), List.copyOf(storageIds), List.of(claim.getUUID()), null, buildGoal, storageGoal,
                 Map.of(), List.copyOf(parked));
     }
+
+    private static List<BlockPos> terrainCuts() {
+        var cuts = new java.util.TreeSet<BlockPos>(java.util.Comparator.comparingInt((BlockPos pos) -> pos.getX())
+                .thenComparingInt(pos -> pos.getY()).thenComparingInt(pos -> pos.getZ()));
+        cuts.addAll(TERRAIN_LOWERED_BAND); cuts.addAll(TERRAIN_FILL_DIPS);
+        return List.copyOf(cuts);
+    }
+
+    private static List<BlockPos> loweredBand() {
+        var topology = PerimeterSteppedTopology.create(topologyClaim());
+        require(topology.valid(), topology.problem());
+        for (var loop : topology.loops()) if (loop.outer()) {
+            var bands = loop.bands();
+            for (int i = 0; i < bands.size(); i++) {
+                var band = bands.get(i);
+                var previous = bands.get((i + bands.size() - 1) % bands.size());
+                var next = bands.get((i + 1) % bands.size());
+                if (band.kind() == PerimeterSteppedProfile.Kind.STRAIGHT
+                        && previous.kind() == PerimeterSteppedProfile.Kind.STRAIGHT
+                        && next.kind() == PerimeterSteppedProfile.Kind.STRAIGHT)
+                    return band.cells().stream().sorted()
+                            .map(cell -> new BlockPos(cell.x(), LOWERED_SURFACE_Y, cell.z())).toList();
+            }
+        }
+        throw new AssertionError("Fixture claim lacks a complete straight band that can step between straight seams");
+    }
+
+    private static List<BlockPos> fillDips() {
+        Set<Long> lowered = TERRAIN_LOWERED_BAND.stream().map(pos -> xz(pos).asLong()).collect(java.util.stream.Collectors.toSet());
+        var topology = PerimeterSteppedTopology.create(topologyClaim());
+        for (var loop : topology.loops()) if (loop.outer()) for (var band : loop.bands())
+            if (band.kind() == PerimeterSteppedProfile.Kind.STRAIGHT) {
+                var cells = band.cells().stream().sorted()
+                        .filter(cell -> !lowered.contains(new BlockPos(cell.x(), 0, cell.z()).asLong()))
+                        .limit(3).map(cell -> new BlockPos(cell.x(), LOWERED_SURFACE_Y, cell.z())).toList();
+                if (cells.size() == 3) return cells;
+            }
+        throw new AssertionError("Fixture claim lacks separate fill-dip cells");
+    }
+
+    private static Set<PerimeterSteppedTopology.Chunk> topologyClaim() {
+        var claim = new java.util.TreeSet<PerimeterSteppedTopology.Chunk>();
+        TERRITORY.forEach(chunk -> claim.add(new PerimeterSteppedTopology.Chunk(chunk.x, chunk.z)));
+        return Set.copyOf(claim);
+    }
+
+    private static Map<String, Object> stepEvidence(PerimeterBlueprint.Plan plan) {
+        require(plan != null && plan.valid(), "Step evidence requires a valid plan");
+        Map<Long, PerimeterBlueprint.Column> columns = new LinkedHashMap<>();
+        plan.columns().forEach(column -> columns.put(xz(column.base()).asLong(), column));
+        var baseLevels = new java.util.TreeSet<Integer>();
+        plan.columns().forEach(column -> baseLevels.add(column.base().getY()));
+        int loweredAtExpectedBase = 0;
+        for (BlockPos lowered : TERRAIN_LOWERED_BAND) {
+            PerimeterBlueprint.Column column = columns.get(xz(lowered).asLong());
+            require(column != null, "Lowered fixture band was not part of the production plan: " + lowered);
+            if (column.base().getY() == LOWERED_SURFACE_Y) loweredAtExpectedBase++;
+        }
+        var transitions = new java.util.TreeSet<String>();
+        int transitionClearance = 0;
+        for (var column : plan.columns()) for (Direction direction : List.of(Direction.EAST, Direction.SOUTH)) {
+            PerimeterBlueprint.Column other = columns.get(xz(column.base().relative(direction)).asLong());
+            if (other == null || Math.abs(other.base().getY() - column.base().getY()) != 1) continue;
+            int y = Math.min(column.base().getY(), other.base().getY()) + 6;
+            BlockPos a = column.base().atY(y), b = other.base().atY(y);
+            require(plan.clearance().contains(a.asLong()) && plan.clearance().contains(b.asLong()),
+                    "Non-level transition lacks persistent movement clearance: " + a + " / " + b);
+            transitionClearance++;
+            transitions.add(column.base().toShortString() + "<->" + other.base().toShortString() + " jumpY=" + y);
+        }
+        require(loweredAtExpectedBase == TERRAIN_LOWERED_BAND.size(), "Not every lowered band column retained the expected base");
+        require(baseLevels.contains(FLAT_SURFACE_Y) && baseLevels.contains(LOWERED_SURFACE_Y),
+                "Fixture plan did not retain distinct flat and lowered deck bases");
+        require(transitionClearance > 0, "Fixture plan has no non-level transition");
+        return Map.of("loweredBandCells", TERRAIN_LOWERED_BAND.size(),
+                "fillDipCells", TERRAIN_FILL_DIPS.size(),
+                "baseLevels", List.copyOf(baseLevels),
+                "nonLevelTransitionCount", transitionClearance,
+                "transitions", List.copyOf(transitions),
+                "loweredBandAtExpectedBase", true,
+                "transitionClearanceVerified", true);
+    }
+
+    private static BlockPos xz(BlockPos pos) { return new BlockPos(pos.getX(), 0, pos.getZ()); }
 
     private static void require(boolean condition, String message) { if (!condition) throw new AssertionError(message); }
 }

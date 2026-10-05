@@ -117,6 +117,11 @@ jobs:
           target_count = data['targetCount']
           materials = data['materialCounts']
           assert sum(materials.values()) == target_count and materials['minecraft:dirt'] == data['fillTargets'] > 0, data
+          assert data['nonLevelTransitionCount'] > 0 and data['transitionClearanceVerified'], data
+          assert data['loweredSurfaceY'] in data['deckBaseLevels'] and data['flatSurfaceY'] in data['deckBaseLevels'], data
+          step = data['terrainStepEvidence']
+          assert step['loweredBandAtExpectedBase'] and step['transitionClearanceVerified'], step
+          assert step['nonLevelTransitionCount'] == data['nonLevelTransitionCount'] and len(step['transitions']) > 0, step
           assert data['gateCount'] == 4 and len(data['gateCenters']) == 4, data
           assert 0 < data['returnedPlaced'] < data['resumedPlaced'] <= data['finalPlaced'] < target_count, data
           assert data['nativePlacementResumed'] and data['cancelPacketAuthenticated'] and data['safeCleanupVerified'], data

@@ -77,6 +77,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -89,6 +90,7 @@ public final class NativeStagedPerimeterQa {
     private static final Map<String, Object> REPORT = new LinkedHashMap<>();
     private static final List<Map<String, Object>> SAMPLES = new ArrayList<>(), RESTARTS = new ArrayList<>(), AREA_JOINS = new ArrayList<>();
     private static final List<String> CHECKS = new ArrayList<>(), SHOTS = new ArrayList<>();
+    private static final Set<Integer> BUILDER_FEET_Y = new TreeSet<>();
     private static NativeStagedPerimeterFixture.Fixture fixture;
     private static CompletableFuture<Action> pending;
     private static Path directory, evidence;
@@ -119,6 +121,16 @@ public final class NativeStagedPerimeterQa {
                                 PerimeterProject.State state, int activeStage) {}
     private enum Action { NONE, OPEN_CORE, LIVE_MENU, CAPTURE_PLAN, USE_PLAN, RELOAD, CAPTURE_COMPLETE, DONE }
     private NativeStagedPerimeterQa() {}
+
+    @SubscribeEvent
+    public static void serverTick(TickEvent.ServerTickEvent event) {
+        if (!ENABLED || finished || fixture == null || event.phase != TickEvent.Phase.END) return;
+        try {
+            var entity = event.getServer().overworld().getEntity(fixture.builderId());
+            if (entity instanceof BuilderEntity builder && !builder.isNoAi())
+                BUILDER_FEET_Y.add(builder.blockPosition().getY());
+        } catch (Throwable ignored) {}
+    }
 
     @SubscribeEvent
     public static void tick(TickEvent.ClientTickEvent event) {
@@ -222,8 +234,14 @@ public final class NativeStagedPerimeterQa {
                         "Production quote did not bind four cardinal gates");
                 require(fixture.plan().materialCounts().getOrDefault("minecraft:dirt", 0) > 0,
                         "Production quote did not include fixture dirt-fill targets");
+                Map<String, Object> step = fixture.stepEvidence();
                 REPORT.put("targetCount", targetCount()); REPORT.put("materialCounts", fixture.plan().materialCounts());
                 REPORT.put("fillTargets", fixture.plan().materialCounts().getOrDefault("minecraft:dirt", 0));
+                REPORT.put("terrainStepEvidence", step); REPORT.put("nonLevelTransitionCount", step.get("nonLevelTransitionCount"));
+                REPORT.put("deckBaseLevels", step.get("baseLevels"));
+                REPORT.put("transitionClearanceVerified", step.get("transitionClearanceVerified"));
+                REPORT.put("loweredSurfaceY", NativeStagedPerimeterFixture.LOWERED_SURFACE_Y);
+                REPORT.put("flatSurfaceY", NativeStagedPerimeterFixture.FLAT_SURFACE_Y);
                 REPORT.put("gateCount", prepared.quote().gateContract().gates().size());
                 REPORT.put("gateCenters", prepared.quote().gateContract().gates().stream()
                         .map(g -> g.facing().getName() + ":" + g.outerCenter().toShortString()).toList());
@@ -319,6 +337,7 @@ public final class NativeStagedPerimeterQa {
                 verifyExactCompletion(level, owner);
                 REPORT.put("finalDiagnostics", diagnostics(level, owner, true)); REPORT.put("completedBlocks", placed(level));
                 REPORT.put("treasuryDebit", 64); REPORT.put("materialCounts", fixture.plan().materialCounts());
+                REPORT.put("builderFeetYLevelsObserved", List.copyOf(BUILDER_FEET_Y));
                 REPORT.put("betweenStageRestartApplicable", reviewedLayout.stages().size() > 1);
                 REPORT.put("nativeCompletionObserved", true); REPORT.put("midStageRestartVerified", midRestart); REPORT.put("betweenStageRestartVerified", betweenRestart);
                 REPORT.put("territoryChunkCount", 25); REPORT.put("nativeClaimRecords", fixture.claimIds().stream().map(UUID::toString).toList());
@@ -582,6 +601,9 @@ public final class NativeStagedPerimeterQa {
         verifyCurrentTerritory(level, NativeStagedPerimeterFixture.TERRITORY);
         for (var entry : fixture.nonPlanCells().entrySet()) require(level.getBlockState(entry.getKey()).equals(entry.getValue()),
                 "Native job modified a non-plan cell: " + entry.getKey());
+        require(BUILDER_FEET_Y.contains(NativeStagedPerimeterFixture.FLAT_SURFACE_Y)
+                        && BUILDER_FEET_Y.contains(NativeStagedPerimeterFixture.LOWERED_SURFACE_Y),
+                "Native builder did not traverse both flat and lowered foot levels: " + BUILDER_FEET_Y);
         conservation(level, owner);
     }
 
