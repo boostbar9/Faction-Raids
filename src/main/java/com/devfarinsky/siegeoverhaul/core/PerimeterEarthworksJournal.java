@@ -84,6 +84,7 @@ public final class PerimeterEarthworksJournal {
     }
 
     public Binding binding() { return binding; }
+    public String manifestHash() { return manifest.hash(); }
     public State state() { return state; }
     public State canceledFrom() { return canceledFrom; }
     public long revision() { return revision; }
