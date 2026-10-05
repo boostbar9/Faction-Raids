@@ -29,6 +29,7 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
     private ProtectedStorageContext.Source selected;
     private boolean closeOutstanding;
     private EarthworksSupplyDemand.Transfer earthworksTransfer;
+    private EarthworksSupplyDemand.DepositTransfer earthworksDeposit;
 
     private ProtectedStorageAccess(BuilderEntity worker, AbstractChestGoal delegate, Kind kind, Session session) {
         super(worker,delegate,session);this.chest=delegate;this.kind=kind;
@@ -195,7 +196,7 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
     @Override String beforeStart(){return null;}
     @Override void afterStart(){scannedArea=null;scannedBounds=null;selected=null;closeOutstanding=false;}
     @Override String beforeTick() {
-        phase=phase(); selected=null; earthworksTransfer=null;
+        phase=phase(); selected=null; earthworksTransfer=null; earthworksDeposit=null;
         String requests=ProtectedTransferCapacity.requestsProblem(worker);if(requests!=null)return requests;
         if(kind==Kind.NEEDED && EarthworksInventoryAccess.selected(worker) && EarthworksSupplyDemand.reconcileAvailable(worker))
             return "Waiting: the exact requested item is already present; finishing native storage cleanup";
@@ -237,6 +238,8 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
             writes=List.of(cached);
         } else if(phase.equals("DEPOSIT")) {
             String deposit=ProtectedTransferCapacity.depositProblem(worker,cached);if(deposit!=null)return deposit;
+            if(EarthworksInventoryAccess.selected(worker))
+                earthworksDeposit=EarthworksSupplyDemand.beforeDeposit(worker,cached,selected.cells());
             writes=List.of(cached);
         }
         return null;
@@ -260,6 +263,7 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
                 throw new IllegalStateException("Native transfer replaced its source");
             if(!phase().startsWith("CLOSE_CHEST_"))throw new IllegalStateException("Unsupported native transfer transition");
             if(earthworksTransfer!=null)EarthworksSupplyDemand.afterTransfer(worker,earthworksTransfer);
+            if(earthworksDeposit!=null)EarthworksSupplyDemand.afterDeposit(worker,selected.container(),earthworksDeposit);
         }
     }
     @Override String cleanup() {

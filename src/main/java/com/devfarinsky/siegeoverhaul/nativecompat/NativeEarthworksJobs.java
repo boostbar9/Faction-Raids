@@ -24,7 +24,11 @@ public final class NativeEarthworksJobs {
         public InventoryLease { core = core.immutable(); }
     }
     public static boolean selected(Mob worker) {
-        if (worker == null || worker.getPersistentData() == null) return false;
+        if (worker == null) return false;
+        // canWorkHere blocks discovery, but a stale/forced native assignment is not an authenticated lease.
+        // Select the guarded path even when this other builder has no job tag or recoverable world record.
+        if (worker instanceof BuilderEntity builder && builder.currentBuildArea instanceof EarthworksBuildArea) return true;
+        if (worker.getPersistentData() == null) return false;
         if (worker.getPersistentData().contains(KEY) || worker.getPersistentData().contains("SiegeEarthworksSupplyV1")) return true; // Includes malformed selectors and terminal recovery evidence.
         try {
             if (!(worker.level() instanceof ServerLevel level)) return false;

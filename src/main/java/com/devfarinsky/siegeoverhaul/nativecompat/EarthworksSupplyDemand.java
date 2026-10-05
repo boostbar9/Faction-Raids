@@ -34,6 +34,8 @@ final class EarthworksSupplyDemand {
     static final int MAX_RECEIPTS = 512;
     private static final int RETRY_TICKS = 1200;
     private static final Set<String> KEYS = Set.of("Version", "Scope", "Request", "Item", "State", "RetryAfter", "Receipts");
+    private static final Set<String> V2_KEYS = Set.of("Version", "Scope", "Request", "Item", "State", "RetryAfter", "Receipts", "Operations", "Tool", "Resume");
+    private static final Set<String> IN_FLIGHT = Set.of("TRANSFER", "DEPOSIT", "SWAP");
     private static final Set<String> RECEIPT_KEYS = Set.of("Request", "Scope", "Item", "GameTime", "SourceCells", "InventoryBefore", "InventoryAfter", "SourceBefore", "SourceAfter");
     private static final Set<String> SCOPE_KEYS = Set.of("Project", "Generation", "Area", "Manifest", "Binding", "Step");
     private EarthworksSupplyDemand() {}
@@ -74,13 +76,21 @@ final class EarthworksSupplyDemand {
         }
         @Override public boolean test(ItemStack stack) { return ordinary(stack, item, item == Items.IRON_SHOVEL); }
     }
-    private record Active(Scope scope, UUID request, Item item, String state, long retryAfter, ListTag receipts) {
-        CompoundTag save() {
-            var tag = new CompoundTag(); tag.putInt("Version", 1); tag.put("Scope", scope.save()); tag.putUUID("Request", request);
-            tag.putString("Item", BuiltInRegistries.ITEM.getKey(item).toString()); tag.putString("State", state);
-            tag.putLong("RetryAfter", retryAfter); tag.put("Receipts", receipts.copy()); return tag;
+    private record Active(Scope scope, UUID request, Item item, String state, long retryAfter, ListTag receipts,
+                          ListTag operations, CompoundTag tool, String resume) {
+        Active(Scope scope, UUID request, Item item, String state, long retryAfter, ListTag receipts) {
+            this(scope, request, item, state, retryAfter, receipts, new ListTag(), new CompoundTag(), "");
         }
-        Active state(String next) { return new Active(scope, request, item, next, retryAfter, receipts); }
+        CompoundTag save() {
+            var tag = new CompoundTag(); tag.putInt("Version", 2); tag.put("Scope", scope.save()); tag.putUUID("Request", request);
+            tag.putString("Item", BuiltInRegistries.ITEM.getKey(item).toString()); tag.putString("State", state);
+            tag.putLong("RetryAfter", retryAfter); tag.put("Receipts", receipts.copy()); tag.put("Operations", operations.copy());
+            tag.put("Tool", tool.copy()); tag.putString("Resume", resume); return tag;
+        }
+        Active state(String next) { return new Active(scope, request, item, next, retryAfter, receipts, operations, tool, ""); }
+        Active observed(String next, ListTag observed, CompoundTag nextTool) {
+            return new Active(scope, request, item, next, retryAfter, receipts, observed, nextTool, "");
+        }
     }
     private static Active read(BuilderEntity worker) {
         var data = worker.getPersistentData();
@@ -91,13 +101,15 @@ final class EarthworksSupplyDemand {
         if (!data.contains(KEY, Tag.TAG_COMPOUND)) throw invalid("Malformed supply history");
         var tag = data.getCompound(KEY);
         if (!hash(tag).equals(NativeEarthworksJobs.supplyDigest(worker))) throw invalid("Entity/world supply snapshots disagree");
-        if (!tag.getAllKeys().equals(KEYS) || !tag.contains("Version", Tag.TAG_INT) || tag.getInt("Version") != 1
+        int version = tag.getInt("Version");
+        if (!tag.getAllKeys().equals(version == 1 ? KEYS : V2_KEYS) || !tag.contains("Version", Tag.TAG_INT) || version < 1 || version > 2
                 || !tag.contains("Scope", Tag.TAG_COMPOUND) || !tag.hasUUID("Request") || !tag.contains("Item", Tag.TAG_STRING)
                 || !tag.contains("State", Tag.TAG_STRING) || !tag.contains("RetryAfter", Tag.TAG_LONG)
                 || !tag.contains("Receipts", Tag.TAG_LIST)) throw invalid("Malformed supply history");
         Item item = item(tag.getString("Item")); String state = tag.getString("State");
+        if (version == 1 && !Set.of("REQUESTED", "TRANSFER", "DELIVERED", "AVAILABLE").contains(state)) throw invalid("Unsupported legacy supply state");
         var receipts = tag.getList("Receipts", Tag.TAG_COMPOUND);
-        if (!Set.of("REQUESTED", "TRANSFER", "DELIVERED", "AVAILABLE").contains(state)
+        if (!Set.of("IDLE", "REQUESTED", "TRANSFER", "DELIVERED", "AVAILABLE", "DEPOSIT", "RETURNED", "SWAP").contains(state)
                 || receipts.size() > MAX_RECEIPTS || ((ListTag)tag.get("Receipts")).size() != receipts.size()) throw invalid("Unsupported supply history");
         Scope scope = Scope.read(tag.getCompound("Scope")); UUID request = tag.getUUID("Request");
         if (request.equals(new UUID(0, 0))) throw invalid("Missing supply request identity");
@@ -117,7 +129,24 @@ final class EarthworksSupplyDemand {
                 if (!receipt.contains(key, Tag.TAG_STRING) || !digest(receipt.getString(key))) throw invalid("Incomplete supply observation");
         }
         if (state.equals("DELIVERED") && !seen.contains(request)) throw invalid("Delivery lacks its observed receipt");
-        return new Active(scope, request, item, state, tag.getLong("RetryAfter"), receipts.copy());
+        ListTag operations = new ListTag(); CompoundTag tool = new CompoundTag(); String resume = "";
+        if (version == 2) {
+            if (!tag.contains("Operations", Tag.TAG_LIST) || !tag.contains("Tool", Tag.TAG_COMPOUND) || !tag.contains("Resume", Tag.TAG_STRING))
+                throw invalid("Incomplete native lifecycle evidence");
+            operations = tag.getList("Operations", Tag.TAG_COMPOUND).copy();
+            if (((ListTag)tag.get("Operations")).size() != operations.size()) throw invalid("Malformed operation history");
+            EarthworksSupplyOperations.validate(operations, scope); tool = tag.getCompound("Tool").copy(); resume = tag.getString("Resume");
+            if (!tool.isEmpty()) {
+                if (!tool.getAllKeys().equals(Set.of("Phase", "Worn")) || !tool.contains("Phase", Tag.TAG_STRING) || !tool.contains("Worn", Tag.TAG_COMPOUND)
+                        || !Set.of("FETCH", "RETURN", "DONE").contains(tool.getString("Phase")) || item != Items.IRON_SHOVEL
+                        || !EarthworksToolReplacement.ordinaryIron(ItemStack.of(tool.getCompound("Worn")), true)
+                        || ItemStack.of(tool.getCompound("Worn")).getDamageValue() != new ItemStack(Items.IRON_SHOVEL).getMaxDamage() - 1)
+                    throw invalid("Malformed native tool lifecycle");
+            }
+            if (state.equals("DEPOSIT") ? !Set.of("IDLE", "REQUESTED", "DELIVERED", "AVAILABLE", "RETURNED").contains(resume) : !resume.isEmpty())
+                throw invalid("Unverified deposit continuation");
+        }
+        return new Active(scope, request, item, state, tag.getLong("RetryAfter"), receipts.copy(), operations, tool, resume);
     }
     private static void save(BuilderEntity worker, Active active) {
         var data = worker.getPersistentData();
@@ -137,7 +166,9 @@ final class EarthworksSupplyDemand {
             if (lease == null || NativeConstructionGuard.hasProtectedReceipt(worker)) throw invalid("No exact new-job lease");
             if (worker.neededItems == null || worker.neededItems.size() > 1) throw invalid("Mixed native requests");
             Active active = read(worker);
-            if (active != null && (!active.scope.sameJob(Scope.from(lease)) || active.state.equals("TRANSFER"))) throw invalid("Unresolved supply transaction");
+            if (active != null && (!active.scope.sameJob(Scope.from(lease)) || IN_FLIGHT.contains(active.state) || active.scope.step > lease.nextStep()
+                    || active.scope.step != lease.nextStep() && (active.state.equals("REQUESTED")
+                        || !active.tool.isEmpty() && !active.tool.getString("Phase").equals("DONE")))) throw invalid("Unresolved supply transaction");
             if (worker.neededItems.isEmpty()) return null;
             var need = worker.neededItems.get(0);
             if (active == null || !active.scope.equals(Scope.from(lease)) || !active.state.equals("REQUESTED")
@@ -155,6 +186,20 @@ final class EarthworksSupplyDemand {
         var scope = Scope.from(lease); Item item = requiredItem(step);
         String problem = requestsProblem(worker); if (problem != null) throw invalid(problem);
         Active active = read(worker);
+        if (active != null && !active.tool.isEmpty() && !active.tool.getString("Phase").equals("DONE")) {
+            if (!active.scope.equals(scope) || item != Items.IRON_SHOVEL) throw invalid("Tool lifecycle escaped its exact step");
+            return prepareTool(worker, active);
+        }
+        if (item == Items.IRON_SHOVEL) {
+            CompoundTag worn = EarthworksToolReplacement.replacementNeeded(worker);
+            if (worn != null) {
+                if (!worker.neededItems.isEmpty() || ProtectedInventoryCleanup.outstanding(worker.getPersistentData())) return false;
+                var tool = new CompoundTag(); tool.putString("Phase", "FETCH"); tool.put("Worn", worn);
+                active = new Active(scope, UUID.randomUUID(), item, "IDLE", 0, active == null ? new ListTag() : active.receipts,
+                        active == null ? new ListTag() : active.operations, tool, "");
+                save(worker, active); return prepareTool(worker, active);
+            }
+        }
         boolean ready = selectable(worker, item);
         if (active != null && active.scope.equals(scope) && active.item != item) throw invalid("Supply item changed within step");
         if (active != null && active.scope.equals(scope) && Set.of("DELIVERED", "AVAILABLE").contains(active.state)) {
@@ -175,13 +220,146 @@ final class EarthworksSupplyDemand {
             throw invalid("Stale or unresolved prior supply step");
         ListTag receipts = active == null ? new ListTag() : active.receipts;
         if (receipts.size() >= MAX_RECEIPTS) throw invalid("Supply receipt history is full");
-        UUID request = active != null && active.scope.equals(scope) ? active.request : UUID.randomUUID();
-        active = new Active(scope, request, item, "REQUESTED", Math.addExact(now, RETRY_TICKS), receipts);
+        UUID request = active != null && active.scope.equals(scope) && active.state.equals("REQUESTED") ? active.request : UUID.randomUUID();
+        active = new Active(scope, request, item, "REQUESTED", Math.addExact(now, RETRY_TICKS), receipts,
+                active == null ? new ListTag() : active.operations, new CompoundTag(), "");
         // Retain request provenance before publishing the native request. An exception never grants stock.
         save(worker, active);
         worker.neededItems.add(new ExactMatcher(scope, request, item).nativeRequest);
         if (requestsProblem(worker) != null) throw invalid("Native request publication was not retained");
         return false;
+    }
+
+    private static boolean satisfied(BuilderEntity worker, Active active) {
+        return !active.tool.isEmpty() && active.tool.getString("Phase").equals("FETCH")
+                ? EarthworksToolReplacement.pair(worker, active.tool.getCompound("Worn")).freshSlot() >= 5
+                : selectable(worker, active.item);
+    }
+    private static boolean prepareTool(BuilderEntity worker, Active active) {
+        CompoundTag worn = active.tool.getCompound("Worn"); var pair = EarthworksToolReplacement.pair(worker, worn);
+        if (active.tool.getString("Phase").equals("FETCH")) {
+            if (pair.freshSlot() < 0) {
+                if (Set.of("DELIVERED", "AVAILABLE").contains(active.state)) throw invalid("Delivered replacement disappeared without an observed native return");
+                if (!worker.neededItems.isEmpty() || ProtectedInventoryCleanup.outstanding(worker.getPersistentData())
+                        || active.state.equals("REQUESTED") && worker.level().getGameTime() < active.retryAfter) return false;
+                if (active.receipts.size() >= MAX_RECEIPTS) throw invalid("Supply receipt history is full");
+                UUID request = active.state.equals("REQUESTED") ? active.request : UUID.randomUUID();
+                active = new Active(active.scope, request, active.item, "REQUESTED", Math.addExact(worker.level().getGameTime(), RETRY_TICKS),
+                        active.receipts, active.operations, active.tool, "");
+                save(worker, active); worker.neededItems.add(new ExactMatcher(active.scope, request, active.item).nativeRequest);
+                if (requestsProblem(worker) != null) throw invalid("Replacement request was not retained");
+                return false;
+            }
+            if (!worker.neededItems.isEmpty()) { reconcileAvailable(worker); active = read(worker); }
+            if (ProtectedInventoryCleanup.outstanding(worker.getPersistentData())) return false;
+            if (!nativeMaintenanceEligible(worker)) return false;
+            var before = EarthworksInventoryEvidence.inventory(worker);
+            String kind = pair.freshSlot() == 5 ? "OBSERVED_HAND" : "SWAP";
+            var reservation = EarthworksSupplyOperations.reserve(active.operations, active.scope, active.request, kind,
+                    worker.level().getGameTime(), Set.of(), before, "");
+            save(worker, active.state("SWAP")); // Unknown/exceptional swaps never auto-replay.
+            try {
+                requireLease(worker, active.scope);
+                String authority = EarthworksInventoryAccess.problem(worker, Set.of());
+                if (authority != null) throw invalid(authority);
+                EarthworksInventoryEvidence.unchanged(before);
+                if (pair.freshSlot() != 5) {
+                    EarthworksToolReplacement.swap(worker, worn);
+                    EarthworksInventoryEvidence.verifyNativeSwap(worker, before, pair.freshSlot());
+                } else EarthworksInventoryEvidence.unchanged(before);
+                var after = EarthworksInventoryEvidence.inventory(worker);
+                var operations = reservation.observe(after.hash(), "", Map.of());
+                CompoundTag tool = active.tool.copy(); tool.putString("Phase", "RETURN");
+                active = new Active(active.scope, active.request, active.item, "AVAILABLE", 0, active.receipts,
+                        operations, tool, "");
+                save(worker, active);
+            } catch (RuntimeException | LinkageError uncertain) {
+                ProtectedBuilderHandMirror.requireInventoryReview(worker.getPersistentData()); throw uncertain;
+            }
+        }
+        // Only the native deposit goal moves the worn tool out of cargo. No raw item edits or synthetic refunds.
+        pair = EarthworksToolReplacement.pair(worker, active.tool.getCompound("Worn"));
+        if (!active.tool.getString("Phase").equals("RETURN") || pair.freshSlot() != 5 || pair.wornSlot() < 6)
+            throw invalid("Tool return no longer has the exact fresh hand and worn cargo pair");
+        if (nativeMaintenanceEligible(worker) && worker.level().getGameTime() >= active.retryAfter) worker.forcedDeposit = true;
+        return false;
+    }
+    private static boolean nativeMaintenanceEligible(BuilderEntity worker) {
+        return worker.isAlive() && worker.shouldWork() && !worker.needsToSleep() && !worker.isPassenger() && !worker.isLeashed()
+                && worker.getTarget() == null && !worker.isFleeing && !ProtectedBuilderHandMirror.activeUse(worker)
+                && worker.neededItems.isEmpty() && !ProtectedInventoryCleanup.outstanding(worker.getPersistentData());
+    }
+    private static void requireLease(BuilderEntity worker, Scope scope) {
+        var lease = NativeEarthworksJobs.inventoryLease(worker);
+        if (lease == null || !scope.equals(Scope.from(lease))) throw invalid("Native inventory operation lease changed");
+    }
+
+    static final class DepositTransfer {
+        private final Active active;
+        private final EarthworksInventoryEvidence.Deposit before;
+        private final Set<BlockPos> cells;
+        private final List<NeededItem> requests;
+        private final NeededItem request;
+        private final EarthworksSupplyOperations.Reservation reservation;
+        private DepositTransfer(Active active, EarthworksInventoryEvidence.Deposit before, Set<BlockPos> cells, List<NeededItem> requests,
+                                EarthworksSupplyOperations.Reservation reservation) {
+            this.active = active; this.before = before; this.cells = Set.copyOf(cells); this.requests = requests;
+            this.request = requests.isEmpty() ? null : requests.get(0); this.reservation=reservation;
+        }
+    }
+    static DepositTransfer beforeDeposit(BuilderEntity worker, Container destination, Set<BlockPos> cells) {
+        if (requestsProblem(worker) != null || cells == null || cells.isEmpty() || cells.size() > 2) throw invalid("Unverified native deposit authority");
+        var lease = NativeEarthworksJobs.inventoryLease(worker); Scope scope = Scope.from(Objects.requireNonNull(lease));
+        Active active = read(worker);
+        if (active == null || !active.scope.equals(scope)) {
+            active = new Active(scope, UUID.randomUUID(), requiredItem(lease.step()), "IDLE", 0, active == null ? new ListTag() : active.receipts,
+                    active == null ? new ListTag() : active.operations, new CompoundTag(), "");
+            save(worker, active);
+        }
+        CompoundTag worn = null;
+        if (!active.tool.isEmpty() && active.tool.getString("Phase").equals("RETURN")) {
+            var pair = EarthworksToolReplacement.pair(worker, active.tool.getCompound("Worn"));
+            if (pair.freshSlot() != 5 || pair.wornSlot() < 6) throw invalid("Worn tool return was changed by an owner edit");
+            worn = active.tool.getCompound("Worn");
+        }
+        var before = EarthworksInventoryEvidence.beforeDeposit(worker, destination, worn);
+        var reservation = EarthworksSupplyOperations.reserve(active.operations, active.scope, active.request, "DEPOSIT",
+                worker.level().getGameTime(), cells, before.inventory(), before.storage().hash());
+        var operation = new DepositTransfer(active, before, cells, worker.neededItems, reservation);
+        save(worker, new Active(active.scope, active.request, active.item, "DEPOSIT", active.retryAfter, active.receipts,
+                active.operations, active.tool, active.state));
+        return operation;
+    }
+    static void afterDeposit(BuilderEntity worker, Container destination, DepositTransfer transfer) {
+        Active fenced = read(worker); Active active = transfer.active;
+        if (fenced == null || !fenced.state.equals("DEPOSIT") || !fenced.request.equals(active.request)
+                || !fenced.scope.equals(active.scope) || !fenced.resume.equals(active.state) || worker.neededItems != transfer.requests
+                || (transfer.request == null ? !worker.neededItems.isEmpty() : requestsWithoutFenceProblem(worker, active) != null))
+            throw invalid("Native deposit fence or requests changed");
+        requireLease(worker, active.scope);
+        var observed = EarthworksInventoryEvidence.afterDeposit(worker, destination, transfer.before);
+        ListTag operations = active.operations;
+        if (!observed.returned().isEmpty()) {
+            operations = transfer.reservation.observe(observed.inventory().hash(), observed.storage().hash(), observed.returned());
+        }
+        String state = active.state; CompoundTag tool = active.tool.copy(); long retry = active.retryAfter;
+        if (!tool.isEmpty() && tool.getString("Phase").equals("RETURN")) {
+            String wornKey = transfer.before.wornKey();
+            if (!observed.inventory().totals().containsKey(wornKey)) {
+                if (observed.returned().getOrDefault(wornKey, 0) != 1 || !ordinary(worker.getMainHandItem(), Items.IRON_SHOVEL, true))
+                    throw invalid("Worn tool disappeared without its exact storage return");
+                tool.putString("Phase", "DONE"); state = "AVAILABLE"; retry = 0;
+                // This also rejects a newly introduced third shovel before any later mining callback.
+                if (!selectable(worker, Items.IRON_SHOVEL)) throw invalid("Replacement hand is not safely selectable");
+            } else retry = Math.addExact(worker.level().getGameTime(), RETRY_TICKS);
+        } else {
+            String itemKey = EarthworksInventoryEvidence.key(new ItemStack(active.item).save(new CompoundTag()));
+            if (transfer.before.inventory().totals().getOrDefault(itemKey, 0) > 0 && !observed.inventory().totals().containsKey(itemKey)
+                    && observed.returned().getOrDefault(itemKey, 0) > 0) {
+                state = active.state.equals("REQUESTED") ? "REQUESTED" : "RETURNED"; retry = 0;
+            }
+        }
+        save(worker, new Active(active.scope, active.request, active.item, state, retry, active.receipts, operations, tool, ""));
     }
 
     /** A real player/pickup delivery may satisfy a pending demand while the worker is travelling.
@@ -190,7 +368,7 @@ final class EarthworksSupplyDemand {
         if (requestsProblem(worker) != null) throw invalid("Unverified pending supply");
         Active active = read(worker);
         if (active == null || !active.state.equals("REQUESTED") || worker.neededItems.isEmpty()) return false;
-        if (!selectable(worker, active.item)) return false;
+        if (!satisfied(worker, active)) return false;
         NeededItem request = worker.neededItems.get(0);
         // A failed publication leaves REQUESTED and cannot silently issue a second delivery.
         save(worker, active.state("AVAILABLE"));
@@ -273,7 +451,7 @@ final class EarthworksSupplyDemand {
     static Transfer beforeTransfer(BuilderEntity worker, Container source, Set<BlockPos> cells) {
         if (requestsProblem(worker) != null || worker.neededItems.size() != 1) throw invalid("Missing exact native demand");
         Active active = Objects.requireNonNull(read(worker));
-        if (selectable(worker, active.item)) throw invalid("Requested item already exists; do not deliver it twice");
+        if (satisfied(worker, active)) throw invalid("Requested item already exists; do not deliver it twice");
         var identities = new IdentityHashMap<ItemStack, Boolean>();
         var cargo = capture(worker.getInventory(), identities); var supplies = capture(source, identities);
         int slot = -1;
@@ -322,7 +500,7 @@ final class EarthworksSupplyDemand {
         receipt.putString("InventoryBefore", frameHash(transfer.cargo)); receipt.putString("InventoryAfter", frameHash(afterCargo));
         receipt.putString("SourceBefore", frameHash(transfer.supplies)); receipt.putString("SourceAfter", frameHash(afterSource));
         var receipts = active.receipts.copy(); receipts.add(receipt);
-        save(worker, new Active(active.scope, active.request, active.item, "DELIVERED", active.retryAfter, receipts));
+        save(worker, new Active(active.scope, active.request, active.item, "DELIVERED", active.retryAfter, receipts, active.operations, active.tool, ""));
     }
     private static String requestsWithoutFenceProblem(BuilderEntity worker, Active active) {
         if (worker.neededItems.size() != 1) return "Changed request list";

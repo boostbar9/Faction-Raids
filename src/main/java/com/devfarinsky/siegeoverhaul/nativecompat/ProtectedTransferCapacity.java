@@ -143,7 +143,8 @@ final class ProtectedTransferCapacity {
                     if(incoming.reference().isEmpty() || incoming.reference().getItem() instanceof net.minecraft.world.item.ArmorItem)continue;
                     for(var target:possible)if(!target.reference().isEmpty()
                             && target.reference().is(incoming.reference().getItem())
-                            && !sameItemData(incoming.nbt(),target.nbt()))
+                            && !sameItemData(incoming.nbt(),target.nbt())
+                            && (!EarthworksInventoryAccess.selected(worker) || target.count()<target.reference().getMaxStackSize()))
                         return "Paused: unload or separate differing item data before native deposit";
                     // Conservative: tools/food that native would retain remain candidates, avoiding
                     // extra arbitrary food-properties/keep callbacks during a read-only proof.

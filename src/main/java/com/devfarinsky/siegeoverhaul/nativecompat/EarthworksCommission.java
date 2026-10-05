@@ -76,10 +76,12 @@ final class EarthworksCommission {
         debit.putString("Manifest",review.manifest.hash());debit.putString("Receipt",review.binding.paymentReceipt());debit.putInt("Price",review.manifest.header().price());
         for(Tag row:debits)if(((CompoundTag)row).getUUID("Project").equals(review.manifest.header().project()))throw new IllegalStateException("Duplicate grading payment identity");
         debits.add(debit);paidCore.put(DEBITS,debits);
+        if(!jobs.canPrepare(review.manifest,review.binding,review.area,review.core))
+            throw new IllegalStateException("New grading history is full or conflicts; no reservation or payment taken");
         if(!EarthworksWorkGoal.install(builder,()->NativeEarthworksJobs.workGoal(builder))||!ProtectedStorageAccess.install(builder))
             throw new IllegalStateException("Exclusive native work/storage hooks unavailable; no payment taken");
         Set<BlockPos> reservation=review.manifest.observations().keySet().stream().map(BlockPos::of).collect(Collectors.toSet());
-        if(edits.reserves(reservation)||!edits.register(review.area,reservation))throw new IllegalStateException("Exact snapshot reservation changed");
+        reservePrepared(jobs,edits,review.manifest,review.binding,review.area,review.core,reservation);
         var job=jobs.prepare(review.manifest,review.binding,review.area,review.core);
         builder.getPersistentData().put(NativeEarthworksJobs.KEY,NativeEarthworksJobs.selector(job));
         ProtectedBuilderHandMirror.arm(builder.getPersistentData());
@@ -93,6 +95,12 @@ final class EarthworksCommission {
         core.putLongArray("BankLedger",paidCore.getLongArray("BankLedger"));
         core.put(DEBITS,paidCore.get(DEBITS).copy());data.setDirty();job.acknowledgeDebit();
         return area.getUUID();
+    }
+    /** Same-thread commit preflight; no rollback or inference from an absent job is used. */
+    static void reservePrepared(EarthworksJobLedger jobs,ConstructionEditLedger edits,PerimeterEarthworksManifest manifest,
+            PerimeterEarthworksJournal.Binding binding,UUID area,BlockPos core,Set<BlockPos> reservation) {
+        if(!jobs.canPrepare(manifest,binding,area,core))throw new IllegalStateException("New grading history cannot accept this identity; no reservation taken");
+        if(edits.reserves(reservation)||!edits.register(area,reservation))throw new IllegalStateException("Exact snapshot reservation changed");
     }
     private static EarthworksBuildArea create(ServerPlayer owner,EarthworksJobLedger.Job job,BlockPos marker){
         var area=ProtectedConstructionAreas.EARTHWORKS_TYPE.get().create(owner.serverLevel());if(area==null)throw new IllegalStateException("Local grading marker unavailable");
