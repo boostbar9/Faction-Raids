@@ -21,7 +21,7 @@ final class CivilianResidentButton extends Button {
         setMessage(Component.literal(value.label() + ". " + profession(value) + ". " + value.status()));
     }
     static String profession(CivilianReport.Resident r) {
-        if (!r.loaded()) return "Details unavailable";
+        if (!r.loaded()) return "Profession unknown";
         var id = r.profession();
         return Component.translatable("entity." + id.getNamespace() + ".villager." + id.getPath()).getString()
                 + " · Lv " + r.level() + (r.baby() ? " · Child" : " · Adult");

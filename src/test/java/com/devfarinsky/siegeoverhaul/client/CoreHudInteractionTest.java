@@ -321,6 +321,10 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
                 CoreHireScreen.civilianGuidance(true));
         assertTrue(CoreHireScreen.civilianGuidance(false).contains("not tracked"));
         assertTrue(CoreHireScreen.civilianGuidance(false).contains("unloaded is not dead"));
+        var unavailable = CivilianReport.Resident.unavailable(java.util.UUID.randomUUID(), false);
+        assertEquals("Profession unknown", CivilianResidentButton.profession(unavailable));
+        assertEquals("Details unavailable", unavailable.status());
+        assertNotEquals(unavailable.status(), CivilianResidentButton.profession(unavailable));
     }
 
     @Test void compactArmyRetainsItsRefreshCountdownWithPageNavigation() {
