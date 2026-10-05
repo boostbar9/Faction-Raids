@@ -230,6 +230,25 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         goal.route(level,target,20);
         verify(nav).createPath(anySet(),eq(0));
     }
+    @Test void nativeBlockWorkCanRouteToUnreservedFullReachStandingSpace() throws Exception {
+        terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
+        var reserved=new java.util.HashSet<Long>();var target=new BlockPos(0,64,0);
+        for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++)
+            if(dx*dx+dz*dz<16)reserved.add(target.offset(dx,0,dz).atY(0).asLong());
+        var field=WallBuilderAccess.class.getDeclaredField("reservedColumns");field.setAccessible(true);
+        field.set(goal,reserved);
+        var fullReachSite=new BlockPos(5,64,0);
+        var path=mock(Path.class);when(path.canReach()).thenReturn(true);
+        when(path.getEndNode()).thenReturn(new Node(fullReachSite.getX(),fullReachSite.getY(),fullReachSite.getZ()));
+        when(nav.createPath(anySet(),eq(0))).thenReturn(path);
+        goal.route(level,target,40);
+        verify(nav).createPath(argThat((java.util.Set<BlockPos> sites)->sites.contains(fullReachSite)
+                && sites.stream().noneMatch(p->p.distSqr(target.atY(p.getY()))>=40)
+                && sites.stream().noneMatch(p->reserved.contains(p.atY(0).asLong()))),eq(0));
+        verify(nav).moveTo(fullReachSite.getX(),fullReachSite.getY(),fullReachSite.getZ(),0.8);
+        verify(level,never()).setBlock(any(),any(),anyInt());
+        verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+    }
     @Test void nativeSleepSupplyAndOwnerCommandsRemainAuthoritative() throws Exception {
         NativeGoal original=mock(NativeGoal.class);when(original.getFlags()).thenReturn(EnumSet.of(Goal.Flag.MOVE));
         var goal=new WallBuilderAccess(worker,original);

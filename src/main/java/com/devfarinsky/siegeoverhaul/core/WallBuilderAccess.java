@@ -391,8 +391,9 @@ public final class WallBuilderAccess extends Goal {
     }
 
     private Set<BlockPos> routeSites(ServerLevel level, BlockPos target, int nativeReachSquared, boolean selfRecovery) {
-        Set<BlockPos> sites = standingSites(level, worker, target, selfRecovery ? 6 : 3,
-                selfRecovery ? nativeReachSquared : 16);
+        boolean fullNativeReach = selfRecovery || nativeReachSquared >= 40;
+        Set<BlockPos> sites = standingSites(level, worker, target, fullNativeReach ? 6 : 3,
+                fullNativeReach ? nativeReachSquared : 16);
         sites.removeIf(p -> reservedColumns.contains(p.atY(0).asLong())
                 || selfRecovery && !recoveryMargin(p, reservedColumns, worker.getBbWidth()));
         return sites;

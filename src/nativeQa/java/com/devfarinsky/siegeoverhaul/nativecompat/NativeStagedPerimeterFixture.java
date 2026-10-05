@@ -157,12 +157,14 @@ final class NativeStagedPerimeterFixture {
         List<String> parked = new ArrayList<>();
         int i = 0;
         for (Mob mob : level.getEntitiesOfClass(Mob.class, new AABB(CORE).inflate(16))) {
-            // Only unrelated starter NPCs are parked, far outside the native build/travel envelope.
+            // Only unrelated starter NPCs are parked inside the claim, above the native build/travel envelope.
             BlockPos park = auxiliaryParking(i);
-            require(!TERRITORY.contains(new ChunkPos(park)) && !park.equals(CORE) && !CHESTS.contains(park),
-                    "Auxiliary parking must stay outside the claim and fixture work cells");
+            require(TERRITORY.contains(new ChunkPos(park)) && park.getY() > BOUNDS.maxY - 8
+                            && !park.equals(CORE) && !CHESTS.contains(park),
+                    "Auxiliary parking must stay inside the claim but above fixture work cells");
             mob.moveTo(park.getX() + 0.5, park.getY(), park.getZ() + 0.5, 0, 0);
-            mob.getNavigation().stop(); mob.setNoAi(true); parked.add(mob.getUUID().toString()); i++;
+            mob.getNavigation().stop(); mob.setNoAi(true); mob.setNoGravity(true); mob.setDeltaMovement(0, 0, 0);
+            parked.add(mob.getUUID().toString()); i++;
         }
 
         List<UUID> storageIds = new ArrayList<>();
@@ -236,7 +238,7 @@ final class NativeStagedPerimeterFixture {
     }
 
     private static BlockPos auxiliaryParking(int index) {
-        return new BlockPos(116 + index % 5 * 2, FLAT_SURFACE_Y, 88 + index / 5 * 2);
+        return new BlockPos(160 + index % 5 * 2, FLAT_SURFACE_Y + 12, 40 + index / 5 * 2);
     }
 
     private static List<BlockPos> loweredBand() {

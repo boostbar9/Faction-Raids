@@ -52,8 +52,10 @@ import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.TickEvent;
@@ -677,6 +679,13 @@ public final class NativeStagedPerimeterQa {
         result.put("sleeping", builder.needsToSleep()); result.put("followState", builder.getFollowState());
         require(goal != null && storageGoal != null, "Fresh native goal references were unavailable after world load");
         result.put("nativeBuildState", String.valueOf(goal.state)); result.put("nativeTarget", String.valueOf(goal.blockPos));
+        result.put("builderBlockPosition", builder.blockPosition().toShortString());
+        if (goal.blockPos != null) {
+            double dx = builder.getX() - (goal.blockPos.getX() + 0.5D), dz = builder.getZ() - (goal.blockPos.getZ() + 0.5D);
+            result.put("nativeTargetHorizontalDistanceSquared", dx * dx + dz * dz);
+            result.put("nativeTargetDistanceSquared", builder.position().distanceToSqr(Vec3.atCenterOf(goal.blockPos)));
+            result.put("nativeTargetCurrentState", level.getBlockState(goal.blockPos).toString());
+        }
         result.put("nativeBuildError", String.valueOf(goal.errorMessage));
         result.put("nativeRemaining", builder.currentBuildArea == null ? -1 : builder.currentBuildArea.stackToPlace.size());
         result.put("storageState", String.valueOf(storageGoal.state)); result.put("storageChestTarget", String.valueOf(storageGoal.chestPos));
@@ -722,8 +731,10 @@ public final class NativeStagedPerimeterQa {
             result.put("registeredBuilderHeight", builder.getType().getDimensions().height);
             var mutationCells = NativeConstructionGuard.mutationCells(goal);
             result.put("nativeMutationCandidates", mutationCells.stream().map(BlockPos::toShortString).toList());
+            if (goal.blockPos != null) result.put("nativeTargetStandingCandidates",
+                    standingCandidates(level, builder, goal.blockPos, mutationCells));
             var occupants = new ArrayList<Map<String, Object>>();
-            var footprint = new net.minecraft.world.phys.AABB(fixture.plan().min(), fixture.plan().max().offset(1, 1, 1));
+            var footprint = new AABB(fixture.plan().min(), fixture.plan().max().offset(1, 1, 1));
             for (var entity : level.getEntities((net.minecraft.world.entity.Entity) null, footprint,
                     net.minecraft.world.entity.Entity::isAlive)) {
                 var occupant = new LinkedHashMap<String, Object>();
@@ -763,6 +774,32 @@ public final class NativeStagedPerimeterQa {
             result.put("targetNeighborhood", surroundings);
         }
         return result;
+    }
+    private static List<Map<String, Object>> standingCandidates(ServerLevel level, BuilderEntity builder,
+                                                                BlockPos target, Set<BlockPos> mutationCells) {
+        var reserved = new java.util.HashSet<Long>();
+        fixture.plan().blocks().keySet().forEach(cell -> reserved.add(BlockPos.of(cell).atY(0).asLong()));
+        var candidates = new ArrayList<Map<String, Object>>();
+        for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {
+            if (dx * dx + dz * dz >= 40) continue;
+            BlockPos column = target.offset(dx, 0, dz);
+            var entry = new LinkedHashMap<String, Object>(); entry.put("column", column.atY(target.getY()).toShortString());
+            entry.put("nativeReachDistanceSquared", dx * dx + dz * dz);
+            entry.put("chunkLoaded", level.hasChunkAt(column));
+            if (level.hasChunkAt(column)) {
+                int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.getX(), column.getZ());
+                BlockPos feet = column.atY(y);
+                entry.put("feet", feet.toShortString()); entry.put("reservedColumn", reserved.contains(feet.atY(0).asLong()));
+                entry.put("support", level.getBlockState(feet.below()).toString());
+                entry.put("feetState", level.getBlockState(feet).toString());
+                entry.put("headState", level.getBlockState(feet.above()).toString());
+                AABB body = builder.getBoundingBox().move(Vec3.atBottomCenterOf(feet).subtract(builder.position()));
+                entry.put("bodyCollisionFree", level.noCollision(builder, body));
+                entry.put("intersectsMutation", mutationCells.stream().anyMatch(cell -> new AABB(cell).intersects(body)));
+            }
+            candidates.add(entry);
+        }
+        return candidates;
     }
     private static Map<String, Object> stack(ItemStack stack) {
         return Map.of("item", String.valueOf(ForgeRegistries.ITEMS.getKey(stack.getItem())), "count", stack.getCount(),
