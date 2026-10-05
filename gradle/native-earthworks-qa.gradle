@@ -1,0 +1,43 @@
+// Uses real companion runtime and a real integrated player; no FakePlayer admission seam.
+if (providers.gradleProperty('nativeEarthworksQa').map { it.toBoolean() }.getOrElse(false)) {
+    if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)
+            || providers.gradleProperty('nativeServerQa').map { it.toBoolean() }.getOrElse(false))
+        throw new GradleException('Native earthworks QA requires an isolated invocation')
+    configurations { nativeEarthworksQaCompanions }
+    dependencies {
+        nativeEarthworksQaCompanions fg.deobf('curse.maven:workers-567450:8351157')
+        nativeEarthworksQaCompanions fg.deobf('curse.maven:recruits-523860:8339846')
+        nativeEarthworksQaCompanions fg.deobf('curse.maven:small-ships-450659:5566900')
+        nativeEarthworksQaCompanions fg.deobf('curse.maven:siegeweapons-1259343:7906096')
+    }
+    configurations.runtimeOnly.extendsFrom(configurations.nativeEarthworksQaCompanions)
+    sourceSets {
+        nativeEarthworksQa {
+            java.srcDir 'src/nativeEarthworksQa/java'
+            compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+            runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+        }
+    }
+    minecraft.runs.client {
+        workingDirectory project.file('build/native-earthworks-qa/client')
+        property 'mixin.env.remapRefMap', 'true'
+        property 'mixin.env.refMapRemappingFile', project.file('build/createSrgToMcp/output.srg').absolutePath
+        property 'siegeoverhaul.nativeEarthworksQa', 'true'
+        property 'siegeoverhaul.nativeEarthworksQa.directory', project.file('build/native-earthworks-qa/client').absolutePath
+        args '--width', '1280', '--height', '720'
+        jvmArgs '-Xms512m', '-Xmx3G'
+        mods { "${mod_id}" { source sourceSets.nativeEarthworksQa } }
+    }
+    tasks.matching { it.name == 'runClient' }.configureEach { dependsOn tasks.named('nativeEarthworksQaClasses') }
+    tasks.register('prepareNativeEarthworksQaClient') {
+        group = 'verification'
+        description = 'Compile and resolve isolated native one-FILL QA without launching Minecraft.'
+        dependsOn 'nativeEarthworksQaClasses', 'prepareRunClient'
+        doLast {
+            def clientRun = tasks.named('runClient').get()
+            def runtimeFiles = files(clientRun.minecraftArtifacts, clientRun.runtimeClasspathArtifacts,
+                    clientRun.runConfig.get().allSources.collect { it.runtimeClasspath })
+            logger.lifecycle("Prepared ${runtimeFiles.files.size()} native earthworks runtime entries without launching Minecraft.")
+        }
+    }
+}
