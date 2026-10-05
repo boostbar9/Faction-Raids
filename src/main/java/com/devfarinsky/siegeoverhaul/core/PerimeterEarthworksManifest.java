@@ -27,7 +27,7 @@ import java.util.TreeMap;
 import java.util.UUID;
 
 /**
- * Immutable, server-only proposal for one level component. Not an accepted project or mining authority.
+ * Immutable, server-only proposal for one bounded level region. Terrain-following walls may use this for local pads. Not an accepted project or mining authority.
  * No live caller consumes this format. Origins and adapter descriptors are recorded evidence, not
  * inferred truth: admission, specific-removal consent, native work access and accounting are separate gates.
  * Existing version-one PerimeterProject saves are deliberately not migrated through this contract.

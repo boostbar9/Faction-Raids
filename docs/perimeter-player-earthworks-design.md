@@ -1,6 +1,12 @@
-# Bounded player perimeter grading: staged design
+# Terrain-following perimeters and bounded local earthworks: staged design
 
-Status: a pure plane selector plus an exact, unhooked component-proposal manifest/codec. This branch does not enable excavation, alter current reviews, change accepted jobs or raise the existing support limit. The required UI proposal was delivered before implementation. Runtime integration needs the gates below.
+Status: pure level-region selection, an exact unhooked local-earthworks manifest/codec, and a versioned progress journal. Terrain-following stepped wall geometry is the approved next default; it is not live yet. This branch does not enable excavation, alter current reviews, change accepted jobs or raise the existing support limit. The required UI proposal was delivered before implementation. Runtime integration needs the gates below.
+
+## Approved default: follow the terrain
+
+The intended new-plan default is terrain-following stepped wall sections, short foundations over dips, and small level gate pads. Cutting/filling is a bounded local fallback for gates, transitions and dips, not a mandatory component-wide plane. The existing level-region selector and exact operation/progress contracts remain reusable for those local regions. They do not implement stepped wall geometry or establish its seams, footing, wall-walk continuity, native worker access, four cardinal gate joins or absence of holes.
+
+A terrain-following compiler needs separate geometry and admission proof before fresh reviewed commissioning. Existing accepted/built plans retain their recorded geometry and quote; there is no automatic regeneration or demolition. The updated grounded UI proposal must precede UI implementation. The current classes remain unhooked while those gates are developed.
 
 ## Current cause and retained contracts
 
@@ -12,7 +18,7 @@ The builder-arrival work in PR #274 addresses premature horizontal dispatch and 
 
 ## First planning stage
 
-`PerimeterGradePlane` accepts already sampled, bounded surface columns for exactly one connected component. It never reads the world. It proposes one level plane and exact per-column cut/fill depths and counts. It does not classify natural terrain or grant mutation authority.
+`PerimeterGradePlane` accepts already sampled, bounded surface columns for one already-bounded level region. It never reads the world. It proposes one level plane and exact per-column cut/fill depths and counts. It does not classify natural terrain or grant mutation authority.
 
 Provisional conservative policy for new reviewed plans:
 
@@ -23,11 +29,11 @@ Provisional conservative policy for new reviewed plans:
 - Reject the complete proposal when relief, counts or metadata are unsafe; do not return a partial buildable section
 - Keep disconnected components independent and ordering deterministic
 
-These are staged planning bounds, not a new gameplay setting or a claim that every allowed relief has a usable worker route. The four-cut bound does not increase the existing fill bound. Terrace/stair alternatives remain deferred until continuous wall-walk joins and worker access can be proven; do not join mismatched deck levels with a vertical wall.
+These are staged local-earthworks bounds, not a new gameplay setting or a claim that every allowed relief has a usable worker route. The four-cut bound does not increase the existing fill bound. Terrain-following steps are now the intended wall default, but still require proof of continuous wall-walk joins and worker access; do not join mismatched deck levels with an inaccessible vertical wall.
 
 ## Second stage: exact proposal contract (implemented, unhooked)
 
-`PerimeterEarthworksManifest` and its strict `EarthworksVersion: 1` codec persist one proposed level component, separately from accepted `PerimeterProject` v1 saves. There is no live compiler, acceptance/payment, world write, migration or native authorization caller. This deliberately narrow format records:
+`PerimeterEarthworksManifest` and its strict `EarthworksVersion: 1` codec persist one proposed level region, separately from accepted `PerimeterProject` v1 saves. There is no live compiler, acceptance/payment, world write, migration or native authorization caller. This deliberately narrow format records:
 
 - Full original block states/properties, durable edit-revision observations, explicit work versus protected/gate-floor/gate-headroom/dependency roles
 - Ordered single-cell cut, fill and build steps, including a cut followed by a build at the same cell; contiguous top-down cuts and bottom-up fills meet the component plane
@@ -41,6 +47,22 @@ The descriptor and origin fields are evidence to be validated later, not proof g
 Edit revisions are hashed and preserved, but the server edit-source integration, genuine natural-origin evidence, manufactured-structure admission, adapter registry, exact-removal review and fresh server revalidation are not implemented. The contract does not assert a native-serializer capacity check, access route, safe escape, claim ownership, staged payment/progress receipt or completed work. Those are subsequent gates. No existing `PerimeterProject`, stage layout, native reservation or construction ledger source changed in this stage. Gate persistence remains owned by the coordinated cardinal-entrance branch.
 
 Focused tests cover exact snapshots/property round trips, immutable/deterministic records, staged cut-before-build, gate observation exclusion, edit revisions, truthful unknown provenance, material counts, caps/order, malformed/tampered metadata and unchanged paid v1 saves.
+
+## Third stage: reusable progress journal (implemented, unhooked)
+
+`PerimeterEarthworksJournal` is a separate immutable `EarthworksJournalVersion: 1` contract bound to the exact manifest and an external ledger generation, admission receipt and whole-project payment receipt. It does not charge anything, authenticate those external receipts or authorize native work. Its transitions are:
+
+1. READY to PENDING: retain one exact next-step intent before exposing work to the native controller
+2. PENDING to observed receipt: require exact before/after states, unchanged observed edit revisions, and an external native tool/hand/inventory/drop-accounting receipt; cuts consume zero construction items and a fill/build consumes exactly one
+3. At the end of a stage, retain STAGE_VERIFIED until an independently authenticated native-detachment receipt is supplied; only then move to the next stage
+4. After every step and stage receipt, retain VERIFYING until a fresh whole-world/accounting reconciliation receipt is supplied
+5. Cancellation retains every prior receipt, the immutable payment reference and any unresolved pending intent; it never restores blocks, refunds stock, generates drops or revives work
+
+Exact repeat acknowledgments are idempotent under the current progress token; stale/foreign tokens, conflicting receipts, repeated placements, stage skips and rewritten progress fail closed. Save/load is strict and bounded, including exact prefix/stage digests and terminal metadata. Immutable linked receipt prefixes avoid copying all earlier cells on each ordinary acknowledgment.
+
+This is bookkeeping only. An accounting digest is a reference to future authenticated evidence, not proof fabricated by the contract. World state alone cannot establish who caused a change. Reloading PENDING preserves ambiguity rather than replaying a callback or guessing completion. Cancellation with a pending intent is not a completed accounting reconciliation or permission to discard the underlying audit records; the future cross-file controller must resolve that ambiguity without further work or item issuance. The current contract deliberately cannot revive a canceled journal. Native callbacks, storage, retrieval, claims, access, receipt authentication and cross-file recovery remain unwired.
+
+Twelve focused tests cover every serialized transition, pending restart, exact retry/conflict, cross-ledger identity, same-state edits, construction consumption, cancellation at partial boundaries, final reconciliation, malformed/tampered receipts and legacy-format separation.
 
 ## Exact mutation and occupancy manifest
 

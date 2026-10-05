@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Pure, bounded elevation proposal for one connected wall component.
+ * Pure, bounded elevation proposal for one already-bounded level region, such as a local gate pad.
  * This is not world/provenance/permission admission or permission to excavate.
  * Live construction deliberately does not call this staged planner yet.
  */
