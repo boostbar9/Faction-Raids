@@ -19,13 +19,27 @@ class RaidNetworkCompatibilityTest {
         }
     }
 
-    @Test void matchingEconomyProtocolIsAccepted() {
-        withChannelRegistration(() -> assertTrue(RaidNetwork.acceptsProtocol("20")));
+    @Test void civilianWatchWireRejectsUnboundedMenusStaleEpochShapesAndExtraFlags() {
+        var request = new RaidNetwork.CivilianWatch(4, 12L, true);
+        var buffer = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        try { request.encode(buffer); assertEquals(request, RaidNetwork.CivilianWatch.decode(buffer)); }
+        finally { buffer.release(); }
+        assertThrows(IllegalArgumentException.class, () -> new RaidNetwork.CivilianWatch(0, 1, true));
+        assertThrows(IllegalArgumentException.class, () -> new RaidNetwork.CivilianWatch(101, 1, true));
+        assertThrows(IllegalArgumentException.class, () -> new RaidNetwork.CivilianWatch(1, 0, true));
+        var bad = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        try { bad.writeVarInt(1); bad.writeLong(2); bad.writeByte(2);
+            assertThrows(IllegalArgumentException.class, () -> RaidNetwork.CivilianWatch.decode(bad)); }
+        finally { bad.release(); }
+    }
+
+    @Test void matchingSnapshotProtocolIsAccepted() {
+        withChannelRegistration(() -> assertTrue(RaidNetwork.acceptsProtocol("22")));
     }
 
     @Test void olderPriceContractsAndMissingOrMalformedPeersAreRejected() {
         withChannelRegistration(() -> {
-            for (String version : new String[]{"19", "18", "21", "4.52.4", "ABSENT", "ACCEPTVANILLA", "", " 20", "20 "})
+            for (String version : new String[]{"19", "18", "20", "21", "4.52.4", "ABSENT", "ACCEPTVANILLA", "", " 22", "22 "})
                 assertFalse(RaidNetwork.acceptsProtocol(version), version);
             assertFalse(RaidNetwork.acceptsProtocol(null));
         });

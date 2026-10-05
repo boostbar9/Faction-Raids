@@ -1,6 +1,6 @@
 # Recruits and Workers source compatibility review
 
-## Commissioned builder arrival dispatch (pending validation)
+## Commissioned builder arrival dispatch (4.52.9)
 
 Rechecked Workers `29d26e1df6475fc8d043dc5d455f67b2fd1e9982` (2.0.3), `BuilderWorkGoal.tick` / `placeBlocks`, `WorkerPathNavigation.moveTo` and `WorkersAsyncPathfinder.processPath`. The native goal's movement check runs every tenth tick, but placement runs every fifth tick. `placeBlocks` can pop its first target and mutate it in the same call without checking distance. The commissioned wrapper previously corrected a route only after that dispatch.
 

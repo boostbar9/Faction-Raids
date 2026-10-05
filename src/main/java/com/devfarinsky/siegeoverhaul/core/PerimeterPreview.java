@@ -11,10 +11,10 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 
-/** Bounded, owner-bound read-only perimeter selection, carried by normal inventory synchronization. */
+/** Persistent, bounded, owner-bound intent. Its fingerprint is always revalidated before commissioning. */
 public final class PerimeterPreview {
     public static final String TAG = "SiegePerimeterPreview";
-    public static final int LIFETIME = 2400, CONFIRM_DELAY = 10, MAX_CELLS = 32768, MAX_BOXES = 8192;
+    public static final int CONFIRM_DELAY = 10, MAX_CELLS = 32768, MAX_BOXES = 8192;
     public record Box(BlockPos min, BlockPos max, int material) {}
     public record Selection(BlockPos core, int material, long created, String fingerprint,
                             String problem, String materials, List<Box> boxes) {
@@ -55,7 +55,7 @@ public final class PerimeterPreview {
                 || !tag.contains("Created", Tag.TAG_LONG) || !tag.contains("Core", Tag.TAG_LONG)
                 || !tag.contains("Material", Tag.TAG_INT) || !tag.contains("Boxes", Tag.TAG_LONG_ARRAY)) return null;
         long created = tag.getLong("Created");
-        if (created < 0 || now < created || now - created > LIFETIME) return null;
+        if (created < 0 || now < created) return null;
         int material = tag.getInt("Material");
         if (material < 0 || material >= TerritoryFortification.MATERIALS.length) return null;
         long[] encoded = tag.getLongArray("Boxes");

@@ -53,10 +53,42 @@ class PerimeterConfirmationTest extends MinecraftTestSupport {
         assertNotNull(PerimeterPreview.read(stack,owner,Level.OVERWORLD.location(),120));
         PerimeterPreview.clear(stack);assertFalse(PerimeterConstruction.confirm(player,stack,selection->p,start));assertEquals(1,calls.get());
     }
-    @Test void expiredOrForeignSelectionsDoNotEvenPrepareOrStartAJob() throws Exception {
-        var player=player(2501);var p=ready();var stack=preview(p,hash(p));
-        assertFalse(PerimeterConstruction.confirm(player,stack,selection->{fail("Expired plan prepared");return p;},(prepared,material)->{fail("Expired plan started");return true;}));
-        player=player(120);when(player.getUUID()).thenReturn(UUID.randomUUID());
+    @Test void foreignSelectionsDoNotEvenPrepareOrStartAJob() throws Exception {
+        var player=player(120);var p=ready();var stack=preview(p,hash(p));
+        when(player.getUUID()).thenReturn(UUID.randomUUID());
         assertFalse(PerimeterConstruction.confirm(player,stack,selection->{fail("Foreign plan prepared");return p;},(prepared,material)->{fail("Foreign plan started");return true;}));
+    }
+    @Test void oldSavedPlanAlwaysPreparesFreshAndCanOnlyStartOnce() throws Exception {
+        var player=player(24_000_000);var p=ready();
+        var stack=ItemStack.of(preview(p,hash(p)).save(new net.minecraft.nbt.CompoundTag()));
+        var preparations=new java.util.concurrent.atomic.AtomicInteger();
+        var starts=new java.util.concurrent.atomic.AtomicInteger();
+        assertTrue(PerimeterConstruction.confirm(player,stack,selection->{preparations.incrementAndGet();return p;},
+                (prepared,material)->{starts.incrementAndGet();return true;}));
+        assertEquals(1,preparations.get()); assertEquals(1,starts.get());
+        assertFalse(PerimeterConstruction.confirm(player,stack,selection->{fail("Spent plan prepared twice");return p;},
+                (prepared,material)->{fail("Spent plan started twice");return true;}));
+    }
+    @Test void oldPlanWithChangedQuoteRefreshesAndWaitsForAnotherDeliberateUse() throws Exception {
+        var player=player(24_000_000);var p=ready();var stack=preview(p,"0".repeat(64));
+        var starts=new java.util.concurrent.atomic.AtomicInteger();
+        java.util.function.BiPredicate<PerimeterConstruction.Preparation,Integer> start=(prepared,material)->{starts.incrementAndGet();return true;};
+        assertFalse(PerimeterConstruction.confirm(player,stack,selection->p,start));
+        var refreshed=PerimeterPreview.read(stack,owner,Level.OVERWORLD.location(),24_000_000);
+        assertNotNull(refreshed); assertEquals(hash(p),refreshed.fingerprint()); assertFalse(refreshed.canConfirm(24_000_000));
+        assertFalse(PerimeterConstruction.confirm(player,stack,selection->{fail("Fresh confirmation delay bypassed");return p;},start));
+        assertEquals(0,starts.get()); assertEquals(1,stack.getCount());
+        when(player.level().getGameTime()).thenReturn(24_000_010L);
+        assertTrue(PerimeterConstruction.confirm(player,stack,selection->p,start)); assertEquals(1,starts.get());
+    }
+    @Test void oldBlockedPlanRetainsItsItemAndNeverHandsOff() throws Exception {
+        var player=player(24_000_000);var p=ready();var stack=preview(p,hash(p));
+        var blocked=PerimeterConstruction.Preparation.failed("Your faction no longer owns this claim.");
+        assertFalse(PerimeterConstruction.confirm(player,stack,selection->blocked,
+                (prepared,material)->{fail("Unauthorized stale plan started");return true;}));
+        assertEquals(1,stack.getCount());
+        var refreshed=PerimeterPreview.read(stack,owner,Level.OVERWORLD.location(),24_000_000);
+        assertNotNull(refreshed); assertFalse(refreshed.ready());
+        assertEquals(blocked.problem(),refreshed.problem());
     }
 }

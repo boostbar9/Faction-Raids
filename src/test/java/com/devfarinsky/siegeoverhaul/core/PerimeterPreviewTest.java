@@ -47,16 +47,27 @@ class PerimeterPreviewTest extends MinecraftTestSupport {
         assertNotEquals(hash,PerimeterPreview.fingerprint(cells,core,1,"other faction"));
         reversed.remove(keys.get(0)); assertNotEquals(hash,PerimeterPreview.fingerprint(reversed,core,1,"claim"));
     }
-    @Test void ownershipDimensionAgeAndConfirmationDelayAreEnforced() {
+    @Test void ownershipDimensionClockAndConfirmationDelayAreEnforcedWithoutExpiringTheItem() {
         ItemStack stack = preview();
         assertNull(PerimeterPreview.read(stack,UUID.randomUUID(),Level.OVERWORLD.location(),110));
         assertNull(PerimeterPreview.read(stack,owner,Level.NETHER.location(),110));
         assertNull(PerimeterPreview.read(stack,owner,Level.OVERWORLD.location(),99));
-        assertNull(PerimeterPreview.read(stack,owner,Level.OVERWORLD.location(),2501));
+        for (long now : new long[]{2501, 24000, 24_000_000, Long.MAX_VALUE}) {
+            var restored = ItemStack.of(stack.save(new CompoundTag()));
+            var saved = PerimeterPreview.read(restored,owner,Level.OVERWORLD.location(),now);
+            assertNotNull(saved); assertEquals(core,saved.core()); assertTrue(saved.canConfirm(now));
+        }
         var selection = PerimeterPreview.read(stack,owner,Level.OVERWORLD.location(),105);
         assertFalse(selection.canConfirm(105)); assertTrue(selection.canConfirm(110));
         stack.getTag().getCompound(PerimeterPreview.TAG).putLong("Created",Long.MIN_VALUE);
         assertNull(PerimeterPreview.read(stack,owner,Level.OVERWORLD.location(),110));
+    }
+    @Test void visitingAnotherDimensionOrOwnerDoesNotEraseTheOriginalSelection() {
+        var stack = preview(); var before = stack.save(new CompoundTag());
+        assertNull(PerimeterPreview.read(stack,owner,Level.NETHER.location(),10000));
+        assertNull(PerimeterPreview.read(stack,UUID.randomUUID(),Level.OVERWORLD.location(),10000));
+        assertEquals(before,stack.save(new CompoundTag()));
+        assertNotNull(PerimeterPreview.read(stack,owner,Level.OVERWORLD.location(),10000));
     }
     @Test void corruptPaletteHashBoxesAndOversizedVolumeFailClosed() {
         ItemStack stack=preview(); var tag=stack.getTag().getCompound(PerimeterPreview.TAG);

@@ -374,6 +374,7 @@ final class NativeBuildingGameplay {
                 require(coreHudExpectedJobs.size() == 1 && coreHudExpectedJobs.get(0).label().toLowerCase(Locale.ROOT).contains("perimeter")
                                 && acceptedPerimeter.header().projectId().equals(coreHudExpectedJobs.get(0).projectId()),
                         "Live paid perimeter is missing from server construction report");
+                NativeCivilianReportQa.begin(owner, fixture.corePos());
                 coreHudDeadline = System.nanoTime() + 30L * 1_000_000_000;
                 advance(now, 302, 0); return Action.LIVE_CORE_HUD;
             }
@@ -383,6 +384,7 @@ final class NativeBuildingGameplay {
                                 && NativeConstructionGuard.commissionPaid(area(level))
                                 && NativeConstructionGuard.hasReservation(level, jobId),
                         "Read-only live Building navigation changed Treasury, job or reservation");
+                RESULT.put("civilianReport", NativeCivilianReportQa.finish(owner));
                 check("Production core-use packets open live owner/faction/Treasury menu; actual Building navigation receives exact server construction rows without commissioning");
                 // Use a real accepted base cell from the active section, preserving the western-edge
                 // Survival placement/mining approach even if native serialization splits that section further.
@@ -852,6 +854,7 @@ final class NativeBuildingGameplay {
                 level.getBlockState(BlockPos.of(entry.getKey())).equals(entry.getValue()));
     }
     private static boolean captureLiveCoreHud(Minecraft mc) {
+        if (coreHudClientStage >= 4) return NativeCivilianReportQa.tick(mc);
         require(System.nanoTime() < coreHudDeadline, "Live core HUD packets or widgets did not become ready within 30 seconds");
         if (!(mc.screen instanceof CoreHireScreen screen) || !(mc.player.containerMenu instanceof CoreHireMenu menu)) return false;
         require(screen.getMenu() == menu && menu.containerId == coreHudMenuId, "Client/server live core menu identities differ");
@@ -883,7 +886,6 @@ final class NativeBuildingGameplay {
                 NativeBuildingQa.captureGameplay("17-live-core-construction.png");
                 coreHudClientStage = 4;
             }
-            case 4 -> { mc.player.closeContainer(); return true; }
             default -> throw new AssertionError("Unexpected live core HUD stage " + coreHudClientStage);
         }
         return false;

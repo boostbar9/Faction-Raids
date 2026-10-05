@@ -28,6 +28,16 @@ import static org.mockito.Mockito.*;
 
 /** Actual pinned Workers 2.0.3 goal; terrain/entity mocks isolate its dispatch contract. */
 class BuilderArrivalDispatchTest extends MinecraftTestSupport {
+    @Test void nativeHorizontalReachUsesTheSameStrictSquaredBoundaryRegardlessOfHeight() {
+        var f = new Fixture();
+        doCallRealMethod().when(f.builder).getHorizontalDistanceTo(any());
+        assertEquals(36, f.builder.getHorizontalDistanceTo(new BlockPos(6, 100, 0).getCenter()));
+        assertFalse(f.nativeGoal.moveToPosition(new BlockPos(6, 100, 0), 40));
+        assertEquals(40, f.builder.getHorizontalDistanceTo(new BlockPos(6, 100, 2).getCenter()));
+        assertTrue(f.nativeGoal.moveToPosition(new BlockPos(6, 100, 2), 40));
+        verify(f.navigation).moveTo(6, 100, 2, (double) .8F);
+    }
+
     @Test void pinnedNativeFifthTickCanPlaceAFirstTargetBeforeCallingMovement() {
         var f = new Fixture();
         f.nativeGoal.tick();

@@ -80,7 +80,7 @@ public final class PerimeterConstruction {
                            java.util.function.Function<PerimeterPreview.Selection, Preparation> prepare,
                            java.util.function.BiPredicate<Preparation, Integer> start) {
         var selection = PerimeterPreview.read(stack, player.getUUID(), player.level().dimension().location(), player.level().getGameTime());
-        if (selection == null) return fail(player, "This perimeter review expired. Open Building at your core to review it again.");
+        if (selection == null) return fail(player, "This saved plan cannot be confirmed here. Use it as its original owner in the original dimension, or refresh it in Building at your core.");
         if (!selection.canConfirm(player.level().getGameTime())) return false;
         if (player.distanceToSqr(selection.core().getX() + .5, selection.core().getY(), selection.core().getZ() + .5) > 256.0 * 256.0)
             return fail(player, "Return within 256 blocks of your core before confirming this perimeter.");
