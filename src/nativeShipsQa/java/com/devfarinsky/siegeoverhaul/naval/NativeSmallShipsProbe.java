@@ -265,9 +265,21 @@ public final class NativeSmallShipsProbe {
             Object helmBefore = finalRelease ? call(ship, "getSeatOf", new Class<?>[]{Entity.class}, captain) : null;
             List<Mob> crew = NavalConvoy.raidCrew(ship, team);
             require(crew.equals(List.of(raider)), "Landing selected an unrelated native captain");
+            BlockPos candidate = NavalConvoy.findLanding(level, ship, raider, origin.above(), List.of());
+            Map<String, Object> diagnostic = new LinkedHashMap<>();
+            diagnostic.put("preferred", origin.above().toString()); diagnostic.put("candidate", String.valueOf(candidate));
+            diagnostic.put("preferredHeightmapY", level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, origin.getX(), origin.getZ()));
+            diagnostic.put("preferredSafe", NavalConvoy.safeLanding(level, raider, origin.above(), List.of()));
+            diagnostic.put("preferredFloor", level.getBlockState(origin).toString());
+            diagnostic.put("preferredFeet", level.getBlockState(origin.above()).toString());
+            diagnostic.put("shipWidth", ship.getBbWidth()); diagnostic.put("shipHeight", ship.getBbHeight());
             int landed = NavalConvoy.disembark(level, ship, crew, origin.above(), origin.offset(4, 1, 0));
+            diagnostic.put("landed", landed); diagnostic.put("raiderPassenger", raider.isPassenger());
+            diagnostic.put("captainRetained", captain.getVehicle() == ship); diagnostic.put("shipRemoved", ship.isRemoved());
+            report.put("nativeLandingDiagnostic", diagnostic);
+            write();
             require(landed == 1 && !raider.isPassenger() && captain.getVehicle() == ship && !ship.isRemoved(),
-                    "Checked native landing failed or displaced protected captain/ship");
+                    "Checked native landing failed or displaced protected captain/ship: " + diagnostic);
             require(NavalConvoy.safeLanding(level, raider, raider.blockPosition(), List.of()), "Actual native landing was not safe");
             if (finalRelease) {
                 require(call(ship, "getSeatOf", new Class<?>[]{Entity.class}, raider) == null, "Dismounted raider kept a native seat");
