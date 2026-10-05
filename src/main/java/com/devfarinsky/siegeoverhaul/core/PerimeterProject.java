@@ -23,7 +23,7 @@ import java.util.UUID;
 /** Immutable, server-only authority for one reviewed whole-territory commission. */
 public final class PerimeterProject {
     public static final int FORMAT_VERSION = 1, GATE_FORMAT_VERSION = 2, FEE_VERSION = 1, NEW_PROJECT_PRICE = 64;
-    public static final String GATE_EXECUTION_BLOCKER = "Gate-aware perimeter execution awaits live approach verification; no worker assignment or payment is allowed.";
+    public static final String GATE_EXECUTION_BLOCKER = "Whole-perimeter project is not executable by native workers.";
     public enum State { PREPARED_UNPAID, PREPARED_PAID, RUNNING, STAGE_VERIFIED,
         WAITING_FOR_NEXT_STAGE, VERIFYING_COMPLETE, COMPLETE, CANCELED, RECOVERY_BLOCKED }
 
@@ -148,8 +148,8 @@ public final class PerimeterProject {
     public int formatVersion() { return gateContract == null ? FORMAT_VERSION : GATE_FORMAT_VERSION; }
     public PerimeterGateContract gateContract() { return gateContract; }
     public Map<Long, BlockState> observations() { return gateContract == null ? Map.of() : gateContract.observations(); }
-    /** A persisted v2 contract is not live authorization. Remove this barrier only with complete gate runtime checks. */
-    public boolean executionSupported() { return gateContract == null; }
+    /** Live native admission revalidates any saved gate observations before payment, stage activation and completion. */
+    public boolean executionSupported() { return true; }
     public int gateStageComponent(int stage) {
         if (gateContract == null || stage < 0 || stage >= gateStageComponents.size()) throw invalid("No gate component for this stage");
         return gateStageComponents.get(stage);

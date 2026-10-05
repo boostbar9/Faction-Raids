@@ -144,6 +144,38 @@ public final class PerimeterGateContract {
         return result;
     }
 
+    /** Stepped walls are already gated; this binds their approach observations to the saved native project. */
+    public static PerimeterGateContract create(Set<ChunkPos> territory, PerimeterBlueprint.Plan steppedWall,
+                                               PerimeterSteppedGeometry.Draft draft,
+                                               Map<Long, BlockState> observationBefore) {
+        if (draft == null || !draft.feasible() || draft.gates().isEmpty()) throw invalid("Complete stepped gates required");
+        List<Gate> descriptors = new ArrayList<>();
+        for (var supplied : draft.gates()) descriptors.add(new Gate(supplied.component(), direction(supplied.facing()),
+                new BlockPos(supplied.outerFeet().x(), supplied.outerFeet().y(), supplied.outerFeet().z())));
+        Geometry exact = geometry(descriptors);
+        Wall checked = validateWall(territory, steppedWall, exact.openings());
+        validateGates(descriptors, exact, checked);
+        Set<Long> floors = expectedFloors(exact, checked.columns());
+        var original = ungatedSource(steppedWall, exact, checked);
+        var result = new PerimeterGateContract(descriptors, exact.air(), floors, observationBefore, wallDigest(original));
+        result.validateAgainst(territory, steppedWall);
+        return result;
+    }
+
+    /** Exact observation keys needed before calling {@link #create(Set, PerimeterBlueprint.Plan, PerimeterSteppedGeometry.Draft, Map)}. */
+    public static Set<Long> steppedObservationCells(Set<ChunkPos> territory, PerimeterBlueprint.Plan steppedWall,
+                                                    PerimeterSteppedGeometry.Draft draft) {
+        if (draft == null || !draft.feasible() || draft.gates().isEmpty()) throw invalid("Complete stepped gates required");
+        List<Gate> descriptors = new ArrayList<>();
+        for (var supplied : draft.gates()) descriptors.add(new Gate(supplied.component(), direction(supplied.facing()),
+                new BlockPos(supplied.outerFeet().x(), supplied.outerFeet().y(), supplied.outerFeet().z())));
+        Geometry exact = geometry(descriptors);
+        Wall checked = validateWall(territory, steppedWall, exact.openings());
+        validateGates(descriptors, exact, checked);
+        Set<Long> cells = new HashSet<>(exact.air()); cells.addAll(expectedFloors(exact, checked.columns()));
+        return freeze(cells);
+    }
+
     /** Omits only newly planned skins. It never requests demolition or changes approach cells. */
     public PerimeterBlueprint.Plan applyOpenings(PerimeterBlueprint.Plan originalWall) {
         if (originalWall == null || !originalWallDigest.equals(wallDigest(originalWall)))
@@ -284,7 +316,7 @@ public final class PerimeterGateContract {
         }
         if ((long) maxX - minX + 1 > 256 || (long) maxZ - minZ + 1 > 256) throw invalid("Excessive gate territory extent");
         Map<ChunkPos, Integer> components = components(territory);
-        Map<Long, PerimeterBlueprint.Column> columns = new HashMap<>(); Map<Integer, Integer> heights = new HashMap<>();
+        Map<Long, PerimeterBlueprint.Column> columns = new HashMap<>();
         for (var column : wall.columns()) {
             if (column == null || column.base() == null || column.supportDepth() < 0 || column.supportDepth() > 64
                     || column.inwardDistance() < 1 || column.inwardDistance() > 5
@@ -292,8 +324,6 @@ public final class PerimeterGateContract {
                     || Math.abs((long) column.base().getX()) >= WORLD_LIMIT || Math.abs((long) column.base().getZ()) >= WORLD_LIMIT
                     || (long) column.base().getY() - column.supportDepth() < -2048 || (long) column.base().getY() + 5 > 2047
                     || columns.putIfAbsent(xz(column.base()), column) != null) throw invalid("Invalid saved gate wall column");
-            Integer prior = heights.putIfAbsent(column.componentId(), column.base().getY());
-            if (prior != null && prior != column.base().getY()) throw invalid("Uneven component passage elevation");
         }
         // Validate the complete five-layer footprint, including corner distance, directly from territory.
         int expectedColumns = 0;
@@ -460,6 +490,20 @@ public final class PerimeterGateContract {
                 c.base().immutable(), c.supportDepth(), c.inwardDistance(), c.componentId())).toList();
         return new PerimeterBlueprint.Plan(targets, columns, clearance, source.min().immutable(), source.max().immutable(),
                 source.runs(), source.connections(), counts, source.problems());
+    }
+    private static PerimeterBlueprint.Plan ungatedSource(PerimeterBlueprint.Plan gatedWall, Geometry geometry, Wall checked) {
+        Map<Long, String> original = new LinkedHashMap<>(gatedWall.blocks());
+        geometry.openings().forEach(cell -> original.put(cell, checked.skin()));
+        Set<Long> originalClearance = new LinkedHashSet<>(gatedWall.clearance()); originalClearance.removeAll(geometry.openings());
+        return copyPlan(gatedWall, original, originalClearance);
+    }
+    private static Direction direction(PerimeterSteppedProfile.Facing facing) {
+        return switch (facing) {
+            case NORTH -> Direction.NORTH;
+            case EAST -> Direction.EAST;
+            case SOUTH -> Direction.SOUTH;
+            case WEST -> Direction.WEST;
+        };
     }
     private static BlockPos bounds(Set<Long> cells, boolean max) {
         int x = max ? Integer.MIN_VALUE : Integer.MAX_VALUE, y = x, z = x;

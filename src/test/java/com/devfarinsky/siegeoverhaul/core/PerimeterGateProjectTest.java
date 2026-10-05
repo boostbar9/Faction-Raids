@@ -49,7 +49,7 @@ class PerimeterGateProjectTest extends MinecraftTestSupport {
     @Test void gateAwareV2RoundTripsEveryRoleWithoutAddingObservationCellsToNativeStages() {
         var project = PerimeterGateProjectFixture.project();
         var loaded = PerimeterProject.load(project.save());
-        assertEquals(2, loaded.formatVersion()); assertFalse(loaded.executionSupported());
+        assertEquals(2, loaded.formatVersion()); assertTrue(loaded.executionSupported());
         assertEquals(project.save(), loaded.save()); assertEquals(project.manifestHash(), loaded.manifestHash());
         assertEquals(project.observations(), loaded.observations()); assertEquals(project.stages(), loaded.stages());
         assertTrue(loaded.observations().keySet().stream().map(BlockPos::of).anyMatch(p -> !loaded.header().territory().contains(new ChunkPos(p))));
@@ -99,22 +99,21 @@ class PerimeterGateProjectTest extends MinecraftTestSupport {
             var restored = PerimeterProject.load(project.save());
             assertEquals(project.save(), restored.save()); assertEquals(running.manifestHash(), restored.manifestHash());
             assertEquals(running.observations(), restored.observations()); assertEquals(running.payment(), restored.payment());
-            assertFalse(restored.executionSupported());
+            assertTrue(restored.executionSupported());
         }
     }
 
-    @Test void storePreservesBothFormatsAndRefusesGatePaymentWithoutChangingTreasuryOrRecord() {
+    @Test void storePreservesBothFormatsAndChargesEachPaidPlanOnlyOnce() {
         var core = new CompoundTag(); core.putLong("BankEmeralds", 128);
         var legacy = PerimeterProjectTest.project(); var gates = PerimeterGateProjectFixture.project();
         PerimeterProjectStore.prepare(core, legacy, () -> {}); PerimeterProjectStore.prepare(core, gates, () -> {});
-        CompoundTag unchanged = core.copy();
-        var failure = assertThrows(IllegalArgumentException.class, () -> PerimeterProjectStore.consumeOnce(core,
-                gates.header().projectId(), gates.manifestHash(), 64, false, () -> fail("No dirty signal before a rejected debit")));
-        assertEquals(PerimeterProject.GATE_EXECUTION_BLOCKER, failure.getMessage());
-        assertEquals(unchanged, core); assertEquals(128, core.getLong("BankEmeralds"));
-        assertEquals(gates.save(), PerimeterProjectStore.get(core, gates.header().projectId()).save());
+        var gatePayment = PerimeterProjectStore.consumeOnce(core, gates.header().projectId(), gates.manifestHash(), 64, false, () -> {});
+        assertEquals(PerimeterProjectStore.PaymentStatus.PAID, gatePayment.status()); assertEquals(64, core.getLong("BankEmeralds"));
+        assertEquals(gatePayment.project().save(), PerimeterProjectStore.get(core, gates.header().projectId()).save());
+        var gateRetry = PerimeterProjectStore.consumeOnce(core, gates.header().projectId(), gates.manifestHash(), 64, false, () -> {});
+        assertEquals(PerimeterProjectStore.PaymentStatus.ALREADY_PAID, gateRetry.status()); assertEquals(64, core.getLong("BankEmeralds"));
         assertEquals(legacy.save(), PerimeterProjectStore.get(core, legacy.header().projectId()).save());
-        assertTrue(PerimeterProjectStore.consumeOnce(core, legacy.header().projectId(), legacy.manifestHash(), 64, false, () -> {}).paid());
-        assertEquals(64, core.getLong("BankEmeralds"));
+        var legacyPayment = PerimeterProjectStore.consumeOnce(core, legacy.header().projectId(), legacy.manifestHash(), 64, false, () -> {});
+        assertEquals(PerimeterProjectStore.PaymentStatus.PAID, legacyPayment.status()); assertEquals(0, core.getLong("BankEmeralds"));
     }
 }

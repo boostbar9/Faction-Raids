@@ -93,7 +93,6 @@ public final class PerimeterSteppedGeometry {
         }
         var heightLimits=new PerimeterSteppedProfile.Limits(0,limits.maxFillDepth,Math.max(-2047,limits.minY+1),Math.min(2042,limits.maxY-6),4096,20480,4_000_000,0,limits.maxTargets,true);
         Proposal profile=propose(profileLoops,heightLimits);need(profile.heightFeasible(),"No bounded height profile: "+profile.problems());
-        need(profile.transitions().isEmpty(),"Non-level seams need the separately verified transition compiler; no flat fallback was substituted");
         Map<Cell,Integer> levels=new TreeMap<>();for(var c:profile.columns())if(c.sample().role()==Role.WALL)levels.put(new Cell(c.sample().x(),c.sample().z()),c.baseY());
         Set<Pos> openings=new HashSet<>(),clearance=new HashSet<>(),footing=new HashSet<>();for(var gate:gates){openings.addAll(gate.passage);clearance.addAll(gate.inside);clearance.addAll(gate.outside);footing.addAll(gate.footing);}
         Map<Pos,Target> targets=new TreeMap<>();int fill=0;
@@ -140,7 +139,14 @@ public final class PerimeterSteppedGeometry {
     }
     private static void checkWalk(Layout t,Map<Cell,Integer> levels,Map<Pos,Target> targets,Set<Pos> clearance){
         for(var e:t.columns().entrySet())if(e.getValue().inwardDistance()>=2&&e.getValue().inwardDistance()<=4){Cell p=e.getKey();int base=levels.get(p);Pos deck=new Pos(p.x(),base+3,p.z());need(targets.get(deck)!=null&&targets.get(deck).block==Block.OAK_PLANKS&&clearance.contains(deck.above(1))&&clearance.contains(deck.above(2)),"Walk deck/headroom is incomplete");
-            for(var face:Facing.values()){Cell q=p.add(dx(face),dz(face));Column neighbor=t.columns().get(q);need(neighbor!=null,"Walk has an exposed edge");need(levels.get(q)==base,"Adjacent walk/skin levels are disconnected");if(neighbor.inwardDistance()==1||neighbor.inwardDistance()==5)need(targets.containsKey(new Pos(q.x(),base+4,q.z())),"Walk is missing its safety rail");}
+            for(var face:Facing.values()){
+                Cell q=p.add(dx(face),dz(face));Column neighbor=t.columns().get(q);need(neighbor!=null,"Walk has an exposed edge");
+                Integer other=levels.get(q);need(other!=null&&Math.abs(other-base)<=1,"Adjacent walk/skin levels are disconnected");
+                if(neighbor.inwardDistance()==1||neighbor.inwardDistance()==5)need(targets.containsKey(new Pos(q.x(),other+4,q.z())),"Walk is missing its safety rail");
+                else need(targets.get(new Pos(q.x(),other+3,q.z()))!=null&&targets.get(new Pos(q.x(),other+3,q.z())).block==Block.OAK_PLANKS
+                        &&clearance.contains(new Pos(q.x(),other+4,q.z()))&&clearance.contains(new Pos(q.x(),other+5,q.z())),
+                        "Stepped walk transition lacks deck or headroom");
+            }
         }
     }
     private static int dx(Facing f){return f==Facing.EAST?1:f==Facing.WEST?-1:0;}private static int dz(Facing f){return f==Facing.SOUTH?1:f==Facing.NORTH?-1:0;}

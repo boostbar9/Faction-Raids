@@ -149,6 +149,27 @@ class PerimeterGateContractTest extends MinecraftTestSupport {
         assertEquals(contract.digest(), restored.digest());
     }
 
+    @Test void steppedContractBindsGateApproachesWithoutAddingNativeReservations() {
+        var territory = Set.of(new ChunkPos(0, 0));
+        var draft = steppedDraft(cell -> PerimeterSteppedGeometry.Ground.safe(64));
+        var plan = PerimeterSteppedBlueprint.convert(territory, draft);
+        Map<Long, BlockState> before = new LinkedHashMap<>();
+        for (long cell : PerimeterGateContract.steppedObservationCells(territory, plan, draft).stream().sorted().toList()) {
+            BlockPos pos = BlockPos.of(cell);
+            before.put(cell, pos.getY() < 64 ? Blocks.DIRT.defaultBlockState() : Blocks.CAVE_AIR.defaultBlockState());
+        }
+        var contract = PerimeterGateContract.create(territory, plan, draft, before);
+        assertDoesNotThrow(() -> contract.validateAgainst(territory, plan));
+        assertEquals(before, contract.observations());
+        Set<Long> nativeCells = new HashSet<>(plan.blocks().keySet()); nativeCells.addAll(plan.clearance());
+        assertTrue(Collections.disjoint(nativeCells, contract.observations().keySet()));
+        for (var gate : draft.gates()) {
+            for (var pos : gate.inside()) assertTrue(contract.observations().containsKey(packed(pos)));
+            for (var pos : gate.outside()) assertTrue(contract.observations().containsKey(packed(pos)));
+            for (var pos : gate.footing()) assertTrue(contract.observations().containsKey(packed(pos)));
+        }
+    }
+
     @Test void publicLayoutRecordsCannotForgeMissingDuplicateOrExtraGateCells() {
         var original = flat(ONE); var selected = selection(ONE, original); var before = observations(original, selected);
         var missing = new HashSet<>(selected.approachClearance()); missing.remove(missing.iterator().next());
@@ -263,6 +284,15 @@ class PerimeterGateContractTest extends MinecraftTestSupport {
         Map<String, Integer> counts = new HashMap<>(); targets.values().forEach(material -> counts.merge(material, 1, Integer::sum));
         return new PerimeterBlueprint.Plan(targets, columns, clearance, plan.min(), plan.max(), List.of(), List.of(), counts, List.of());
     }
+    private static PerimeterSteppedGeometry.Draft steppedDraft(java.util.function.Function<PerimeterSteppedTopology.Cell, PerimeterSteppedGeometry.Ground> ground) {
+        var result = PerimeterSteppedGeometry.compile(Set.of(new PerimeterSteppedTopology.Chunk(0, 0)), new PerimeterSteppedGeometry.Terrain() {
+            @Override public PerimeterSteppedGeometry.Ground ground(PerimeterSteppedTopology.Cell column) { return ground.apply(column); }
+            @Override public String passageProblem(PerimeterSteppedTopology.Cell column, int feetY, PerimeterSteppedGeometry.Region region) { return null; }
+        }, PerimeterSteppedGeometry.Block.COBBLESTONE, PerimeterSteppedGeometry.Limits.DEFAULT);
+        assertTrue(result.feasible(), result.problem());
+        return result;
+    }
+    private static long packed(PerimeterSteppedGeometry.Pos pos) { return new BlockPos(pos.x(), pos.y(), pos.z()).asLong(); }
     private static void corrupt(PerimeterGateContract contract, Consumer<CompoundTag> change) {
         CompoundTag tag = contract.save(); change.accept(tag);
         assertThrows(IllegalArgumentException.class, () -> PerimeterGateContract.load(tag));

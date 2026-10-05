@@ -5,15 +5,12 @@ import com.devfarinsky.siegeoverhaul.core.PerimeterGateProjectFixture;
 import com.devfarinsky.siegeoverhaul.core.PerimeterProject;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.Mob;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
 class GateProjectReservationTest extends MinecraftTestSupport {
     @Test void approachReservationsSurviveReloadAndSameStateEditsInvalidateActiveChild() {
@@ -49,16 +46,18 @@ class GateProjectReservationTest extends MinecraftTestSupport {
         assertFalse(PerimeterProjectAuthority.workState(saved, true, true));
     }
 
-    @Test void persistedGateContractCannotCreateAssignOrAuthorizeANativeWorker() {
+    @Test void persistedGateContractUsesOrdinaryProjectWorkStatesAfterObservationRuntimeSupport() {
         var project = PerimeterGateProjectFixture.project();
-        var owner = mock(ServerPlayer.class); var builder = mock(Mob.class);
-        var rejected = assertThrows(IllegalArgumentException.class, () -> ProtectedConstructionAreas.createStage(owner, builder, project));
-        assertEquals(PerimeterProject.GATE_EXECUTION_BLOCKER, rejected.getMessage());
-        verifyNoInteractions(owner, builder);
-        assertFalse(PerimeterProjectAuthority.workState(project, true, true));
+        assertTrue(project.executionSupported());
+        assertTrue(PerimeterProjectAuthority.workState(project, true, true));
+        assertFalse(PerimeterProjectAuthority.workState(project, false, false));
         var running = PerimeterGateProjectFixture.paidRunning();
-        assertFalse(PerimeterProjectAuthority.workState(running, false, false));
+        assertTrue(running.executionSupported());
+        assertTrue(PerimeterProjectAuthority.workState(running, false, false));
         var verified = running.verifyStage(running.check(), running.expectedStageReceipt());
-        assertFalse(PerimeterProjectAuthority.workState(verified, true, true));
+        assertFalse(PerimeterProjectAuthority.workState(verified, false, false));
+        assertTrue(PerimeterProjectAuthority.workState(verified, true, true));
+        var canceled = running.cancel(running.check(), "Owner canceled");
+        assertFalse(PerimeterProjectAuthority.workState(canceled, true, true));
     }
 }

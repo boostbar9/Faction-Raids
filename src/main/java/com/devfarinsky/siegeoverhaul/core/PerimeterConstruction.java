@@ -31,7 +31,8 @@ public final class PerimeterConstruction {
     public static final String SITE_MIN = "SiegeDefenseSiteMin", SITE_MAX = "SiegeDefenseSiteMax";
     public record Quote(BlockPos core, int material, UUID owner, UUID builder,
                         PerimeterStageLayout.Layout layout, Map<Long, net.minecraft.world.level.block.state.BlockState> before,
-                        Map<Long, net.minecraft.world.level.block.state.BlockState> clearance, String fingerprint) {
+                        Map<Long, net.minecraft.world.level.block.state.BlockState> clearance,
+                        PerimeterGateContract gateContract, String fingerprint) {
         public Quote { core=core.immutable(); before=Map.copyOf(before); clearance=Map.copyOf(clearance); }
     }
     public record Preparation(Mob builder, PerimeterBlueprint.Plan plan, String claimIdentity, String problem,
@@ -121,29 +122,17 @@ public final class PerimeterConstruction {
         if (!territory.chunks().contains(new ChunkPos(core)))
             return Preparation.failed("Your active core must be inside the complete faction territory.");
         var identity = anchor.withIdentity(nativeClaim.ownerFactionStringId(), anchor.teamDisplay());
-        var limits = new PerimeterBlueprint.Limits(PerimeterTerritory.MAX_CHUNKS, TerritoryFortification.MAX_PERIMETER_BLOCKS,
-                20480, PerimeterPreview.MAX_CELLS, TerritoryFortification.FOUNDATION_DEPTH,
-                level.getMinBuildHeight(), level.getMaxBuildHeight(), 256, 1048576L);
-        var palette = switch (material) {
-            case 1 -> PerimeterBlueprint.Palette.COBBLESTONE;
-            case 2 -> PerimeterBlueprint.Palette.OAK;
-            default -> PerimeterBlueprint.Palette.STONE_BRICKS;
-        };
-        var legacyPlan = PerimeterBlueprint.create(territory.chunks(), (x, z) -> {
-            WallSurface.Ground ground = WallSurface.inspectGround(level, new BlockPos(x, core.getY(), z));
-            return ground.base() == null ? PerimeterBlueprint.Surface.blocked(ground.problem())
-                    : PerimeterBlueprint.Surface.ready(ground.base().getY());
-        }, palette, limits);
-        var steppedPlan = steppedPlan(level, territory.chunks(), core, material);
-        var plan = steppedPlan != null && steppedPlan.valid() && nativeScanWithinBudget(steppedPlan) ? steppedPlan : legacyPlan;
         String claimIdentity = key + ":" + nativeClaim.ownerFactionStringId() + ":"
                 + territory.chunks().stream().map(ChunkPos::toLong).sorted().toList();
+        var stepped = steppedPlan(level, territory.chunks(), core, material);
+        if (stepped.problem() != null) return new Preparation(null, stepped.plan(), claimIdentity, stepped.problem(), territory);
+        var plan = stepped.plan();
         if (!plan.valid()) return new Preparation(null, plan, claimIdentity, plan.problemSummary(), territory);
         if (!nativeScanWithinBudget(plan)) return new Preparation(null, plan, claimIdentity,
                 "The complete perimeter exceeds the bounded native Workers scan budget. Use smaller manual sections; no payment or partial job is created.", territory);
         PerimeterStageLayout.Layout layout;
         try {
-            layout=PerimeterStageLayout.partition(plan, part -> BlueprintNetworkBudget.problem(
+            layout=PerimeterGateStages.partition(plan, part -> BlueprintNetworkBudget.problem(
                     TerritoryFortification.blueprint(part.targets(),part.min(),part.max())));
         } catch(IllegalArgumentException unavailable) {
             return new Preparation(null,plan,claimIdentity,"The complete perimeter cannot be represented as bounded native sections. No payment or partial job is created.",territory);
@@ -156,6 +145,24 @@ public final class PerimeterConstruction {
                 && level.mayInteract(player, p);
         String problem = siteProblem(level, plan, permitted);
         if (problem != null) return new Preparation(null, plan, claimIdentity, problem, territory);
+        PerimeterGateContract gateContract;
+        try {
+            Map<Long, net.minecraft.world.level.block.state.BlockState> gateBefore = new LinkedHashMap<>();
+            for (long cell : PerimeterGateContract.steppedObservationCells(territory.chunks(), plan, stepped.draft()).stream().sorted().toList())
+                gateBefore.put(cell, level.getBlockState(BlockPos.of(cell)));
+            gateContract = PerimeterGateContract.create(territory.chunks(), plan, stepped.draft(), gateBefore);
+        } catch (IllegalArgumentException invalidGate) {
+            return new Preparation(null, plan, claimIdentity, "The complete perimeter gates could not be retained safely. " + invalidGate.getMessage(), territory);
+        }
+        Map<ChunkPos, Boolean> gatePermissions = new HashMap<>();
+        Predicate<BlockPos> gatePermitted = p -> gatePermissions.computeIfAbsent(new ChunkPos(p), chunk -> {
+            if (territory.chunks().contains(chunk))
+                return RecruitsClaimsBridge.isChunkOwnedBy(level, chunk, territory.factionStringId())
+                        && !ClaimBridge.isForeignClaim(level, chunk, identity);
+            return !ClaimBridge.isForeignClaim(level, chunk, identity);
+        }) && level.mayInteract(player, p);
+        String gateProblem = PerimeterGateAccess.observationProblem(level, player, gateContract, gatePermitted);
+        if (gateProblem != null) return new Preparation(null, plan, claimIdentity, gateProblem, territory);
         String nativeProblem = NativeConstructionGuard.availabilityProblem();
         if (nativeProblem != null && !nativeProblem.isBlank()) return new Preparation(null, plan, claimIdentity, nativeProblem, territory);
         var supplySites = plan.columns().stream().flatMap(column -> java.util.stream.Stream.of(
@@ -168,8 +175,8 @@ public final class PerimeterConstruction {
         Map<Long,net.minecraft.world.level.block.state.BlockState> before=new HashMap<>(),clearance=new HashMap<>();
         for(long cell:plan.blocks().keySet())before.put(cell,level.getBlockState(BlockPos.of(cell)));
         for(long cell:plan.clearance())clearance.put(cell,level.getBlockState(BlockPos.of(cell)));
-        String hash=PerimeterReviewFingerprint.create(plan,layout,before,clearance,core,material,claimIdentity,player.getUUID(),builder.getUUID());
-        Quote quote=new Quote(core,material,player.getUUID(),builder.getUUID(),layout,before,clearance,hash);
+        String hash=PerimeterReviewFingerprint.create(plan,layout,before,clearance,gateContract,core,material,claimIdentity,player.getUUID(),builder.getUUID());
+        Quote quote=new Quote(core,material,player.getUUID(),builder.getUUID(),layout,before,clearance,gateContract,hash);
         return new Preparation(builder,plan,claimIdentity,null,territory,quote);
     }
 
@@ -235,7 +242,9 @@ public final class PerimeterConstruction {
         } catch (ArithmeticException overflow) { return false; }
     }
 
-    private static PerimeterBlueprint.Plan steppedPlan(ServerLevel level, Set<ChunkPos> chunks, BlockPos core, int material) {
+    private record SteppedReview(PerimeterBlueprint.Plan plan, PerimeterSteppedGeometry.Draft draft, String problem) {}
+
+    private static SteppedReview steppedPlan(ServerLevel level, Set<ChunkPos> chunks, BlockPos core, int material) {
         try {
             var wall = switch (material) {
                 case 1 -> PerimeterSteppedGeometry.Block.COBBLESTONE;
@@ -257,9 +266,14 @@ public final class PerimeterConstruction {
                     return steppedPassageProblem(level, column, feetY, region);
                 }
             }, wall, limits);
-            return draft.feasible() ? PerimeterSteppedBlueprint.convert(chunks, draft) : null;
+            if (!draft.feasible()) return new SteppedReview(null, draft, draft.problem());
+            var plan = PerimeterSteppedBlueprint.convert(chunks, draft);
+            if (!plan.valid()) return new SteppedReview(plan, draft, plan.problemSummary());
+            if (!nativeScanWithinBudget(plan)) return new SteppedReview(plan, draft,
+                    "The complete perimeter exceeds the bounded native Workers scan budget. Use smaller manual sections; no payment or partial job is created.");
+            return new SteppedReview(plan, draft, null);
         } catch (RuntimeException | LinkageError unavailable) {
-            return null;
+            return new SteppedReview(null, null, "The stepped perimeter and gates could not be reviewed safely. No legacy gateless fallback was substituted.");
         }
     }
 
@@ -288,11 +302,11 @@ public final class PerimeterConstruction {
         Quote quote=prepared.quote();
         if(quote.material()!=material || !quote.owner().equals(player.getUUID())
                 || !quote.builder().equals(prepared.builder().getUUID()))return false;
-        String exact=PerimeterReviewFingerprint.create(prepared.plan(),quote.layout(),quote.before(),quote.clearance(),
+        String exact=PerimeterReviewFingerprint.create(prepared.plan(),quote.layout(),quote.before(),quote.clearance(),quote.gateContract(),
                 quote.core(),material,prepared.claimIdentity(),player.getUUID(),prepared.builder().getUUID());
         if(!exact.equals(quote.fingerprint()))return false;
         return com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.start(player,prepared.builder(),quote.core(),material,
-                prepared.plan(),quote.layout(),quote.before(),quote.clearance(),prepared.territory(),quote.fingerprint());
+                prepared.plan(),quote.layout(),quote.before(),quote.clearance(),quote.gateContract(),prepared.territory(),quote.fingerprint());
     }
 
     private static void writePreview(ItemStack stack, ServerPlayer player, BlockPos core, int material, Preparation result) {

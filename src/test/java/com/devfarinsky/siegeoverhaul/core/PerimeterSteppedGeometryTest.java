@@ -49,10 +49,16 @@ class PerimeterSteppedGeometryTest {
             var result=compile(Set.of(new Chunk(0,0)),terrain,Block.STONE_BRICKS,Limits.DEFAULT);atomicFailure(result);terrain.once();
         }
     }
-    @Test void solverSelectedStepsAreRefusedWithoutAComponentwideFlatFallback(){
+    @Test void solverSelectedStepsBecomeBoundedOneBlockWalkTransitionsWithoutFlatFallback(){
         Set<Chunk> claim=new HashSet<>();for(int x=0;x<4;x++)for(int z=0;z<4;z++)claim.add(new Chunk(x,z));var topology=create(claim);assertTrue(topology.valid());
         var low=topology.loops().get(0).bands().stream().filter(b->b.kind()==PerimeterSteppedProfile.Kind.STRAIGHT).skip(1).findFirst().orElseThrow();Set<Cell> dip=new HashSet<>(low.cells());
-        var result=compile(claim,new Flat(p->Ground.safe(dip.contains(p)?63:64)),Block.STONE_BRICKS,Limits.DEFAULT);atomicFailure(result);assertTrue(result.problem().contains("Non-level seams"),result.problem());
+        var result=compile(claim,new Flat(p->Ground.safe(dip.contains(p)?63:64)),Block.STONE_BRICKS,Limits.DEFAULT);assertTrue(result.feasible(),result.problem());
+        assertTrue(result.seams().stream().anyMatch(s->s.fromY()!=s.toY()),"Profile should preserve bounded terrain-following steps instead of flattening the whole component");
+        assertEquals(Set.of(63,64),new HashSet<>(result.levels().values()));
+        for(var e:topology.columns().entrySet())for(var facing:PerimeterSteppedProfile.Facing.values()){
+            var other=result.levels().get(e.getKey().add(dx(facing),dz(facing)));
+            if(other!=null)assertTrue(Math.abs(other-result.levels().get(e.getKey()))<=1,"Adjacent walk/skin levels must remain native-traversable");
+        }
     }
     @Test void sharedReadTargetAndObservationCapsAreAtomic(){
         for(var limits:List.of(new Limits(-64,320,8,499,65536,32768,16384),new Limits(-64,320,8,32768,100,32768,16384),new Limits(-64,320,8,32768,65536,219,16384),new Limits(-64,320,8,32768,65536,32768,1))){var terrain=new Flat();atomicFailure(compile(Set.of(new Chunk(0,0)),terrain,Block.STONE_BRICKS,limits));terrain.once();}
@@ -79,5 +85,7 @@ class PerimeterSteppedGeometryTest {
         var result=compile(claim,terrain,Block.STONE_BRICKS,Limits.DEFAULT);assertTrue(result.feasible(),result.problem());assertEquals(144,result.gates().size());assertEquals(18000,result.targets().size());terrain.once();
         claim.add(new Chunk(8,8));var refused=compile(claim,new Flat(),Block.STONE_BRICKS,Limits.DEFAULT);atomicFailure(refused);assertTrue(refused.problem().contains("observation budget"),refused.problem());
     }
+    private static int dx(PerimeterSteppedProfile.Facing f){return f==PerimeterSteppedProfile.Facing.EAST?1:f==PerimeterSteppedProfile.Facing.WEST?-1:0;}
+    private static int dz(PerimeterSteppedProfile.Facing f){return f==PerimeterSteppedProfile.Facing.SOUTH?1:f==PerimeterSteppedProfile.Facing.NORTH?-1:0;}
     private static void atomicFailure(Draft draft){assertFalse(draft.feasible());assertTrue(draft.targets().isEmpty());assertTrue(draft.gates().isEmpty());assertTrue(draft.clearance().isEmpty());assertTrue(draft.readOnlyFooting().isEmpty());assertTrue(draft.levels().isEmpty());assertFalse(draft.problem().isBlank());}
 }

@@ -37,7 +37,7 @@ public final class PerimeterGateProjectFixture {
         plan.clearance().forEach(cell -> clearance.put(cell, Blocks.AIR.defaultBlockState()));
         return PerimeterProject.prepareWithGates(header, plan, layout, before, clearance, contract);
     }
-    /** Models payment/state persistence only; the production store rejects a v2 debit at this checkpoint. */
+    /** Models payment/state persistence only; live terrain and native admission stay outside this fixture. */
     public static PerimeterProject paidRunning() {
         var paid = project().paid(false);
         return paid.activate(paid.check());
