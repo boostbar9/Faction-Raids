@@ -59,7 +59,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Opt-in, unshipped real Minecraft HUD acceptance. Values are explicitly labeled
- * client-menu samples, never evidence of server claims, payments or construction.
+ * client-menu samples and seeded capture terrain, never evidence of server claims, payments or construction.
  * No paid action, free-plan/review request or native gameplay guard is bypassed.
  */
 @Mod.EventBusSubscriber(modid = SiegeOverhaul.MOD_ID, value = Dist.CLIENT)
@@ -142,6 +142,7 @@ public final class NativeHudQa {
                 });
                 phase = 3; readyAt = ticks + 40; return;
             }
+            if (!NativeCaptureBoundaryQa.ready()) return;
             require(mc.player != null && mc.level != null, "Fresh HUD fixture player/world disappeared");
             if (phase == 3) {
                 if (!inspectionSetup.isDone()) return;
@@ -197,6 +198,8 @@ public final class NativeHudQa {
             click("X"); require(mc().screen == null, "Repeated header close failed");
             check("Header close and repeated fresh reopen return cleanly to the game");
         });
+        for (var captureStep : NativeCaptureBoundaryQa.steps())
+            add(captureStep.name(), captureStep.action()::run);
     }
 
     private static void coreMatrix(String prefix) {
@@ -204,6 +207,60 @@ public final class NativeHudQa {
         for (CoreCommandPage page : CoreCommandPage.values()) {
             add(prefix + " " + page.label(), () -> { selectPage(page); });
             add(prefix + " capture " + page.label(), () -> capture(prefix + "-" + slug(page.label())));
+            if (page == CoreCommandPage.LOOT) {
+                add(prefix + " possible epic rewards", () -> {
+                    click(((Button[]) read("lootPreviews"))[0]);
+                    require((Boolean) read("showingLootGallery"), "Items did not open the read-only gallery");
+                    require((Integer) read("confirmBox") == -1, "Gallery retained paid confirmation");
+                    require(!((Button[]) read("boxes"))[0].visible, "Purchase controls overlap gallery");
+                });
+                add(prefix + " epic gallery capture", () -> capture(prefix + "-loot-gallery-epic"));
+                add(prefix + " gallery end key", () -> {
+                    require(mc().screen.keyPressed(GLFW.GLFW_KEY_END, 0, 0), "Gallery End was not consumed");
+                    require((Integer) read("lootPage") > 0, "Gallery did not reveal later possible items");
+                    assertFocusVisible();
+                });
+                add(prefix + " gallery last page capture", () -> capture(prefix + "-loot-gallery-last"));
+                add(prefix + " Royal eligible tiers", () -> {
+                    click((Button) read("lootBack")); click(((Button[]) read("lootPreviews"))[2]);
+                    Button[] tiers = (Button[]) read("lootTiers");
+                    require(!tiers[0].active && !tiers[1].active && tiers[2].active && tiers[3].active,
+                            "Royal gallery exposes impossible lower tiers");
+                    click(tiers[2]);
+                    require((Integer) read("previewTier") == 2 && (Integer) read("lootPage") == 0,
+                            "Rarity navigation failed to reset gallery page");
+                });
+                add(prefix + " rare gallery capture", () -> capture(prefix + "-loot-gallery-rare"));
+                add(prefix + " return from gallery", () -> {
+                    click((Button) read("lootBack"));
+                    require(!(Boolean) read("showingLootGallery") && (Integer) read("confirmBox") == -1,
+                            "Back did not clear gallery safely");
+                    assertFocusVisible();
+                    check("Possible loot gallery uses eligible native ItemStacks, keyboard paging and returns without a purchase at " + prefix);
+                });
+            }
+            if (page == CoreCommandPage.CIVILIANS) {
+                add(prefix + " unavailable resident", () -> {
+                    require(menu().civilianReport() != null && menu().civilianReport().loaded() == 2,
+                            "Labeled resident fixture is missing loaded details");
+                    require(mc().screen.keyPressed(GLFW.GLFW_KEY_END, 0, 0), "Resident End was not consumed");
+                    require((Integer) read("civilianPage") > 0, "Resident paging did not reveal unloaded entries");
+                    assertFocusVisible();
+                });
+                add(prefix + " unavailable resident capture", () -> capture(prefix + "-civilians-unloaded"));
+                add(prefix + " resident care focus", () -> {
+                    require(mc().screen.keyPressed(GLFW.GLFW_KEY_HOME, 0, 0), "Resident Home was not consumed");
+                    click((Button) read("civilianCare")); assertFocusVisible();
+                });
+                add(prefix + " resident care capture", () -> capture(prefix + "-civilians-care"));
+                add(prefix + " resident sync preserves selection", () -> {
+                    Object before = read("selectedCivilian");
+                    var report = menu().civilianReport();
+                    menu().civilianReport(new com.devfarinsky.siegeoverhaul.core.CivilianReport.Snapshot(report.residents(), report.taxEligible()));
+                    require(java.util.Objects.equals(before, read("selectedCivilian")), "Read-only resident sync replaced selection");
+                    check("Resident native previews, unavailable state, keyboard paging and care focus without a purchase at " + prefix);
+                });
+            }
             if (page == CoreCommandPage.DEFENSES) {
                 add(prefix + " structure catalogue", () -> click("Place structure", "Structures"));
                 add(prefix + " structure capture", () -> capture(prefix + "-building-structures"));
@@ -267,6 +324,14 @@ public final class NativeHudQa {
         });
         add(prefix + " empty report", () -> { menu().construction(List.of()); fixture = "QA SAMPLE: empty report, not a server response"; });
         add(prefix + " empty report capture", () -> capture(prefix + "-construction-empty"));
+        add(prefix + " civilian loading", () -> { selectPage(CoreCommandPage.CIVILIANS); });
+        add(prefix + " civilian loading capture", () -> {
+            require(menu().civilianReport() == null, "Loading resident sample unexpectedly has data");
+            capture(prefix + "-civilians-loading");
+        });
+        add(prefix + " civilian empty", () -> menu().civilianReport(
+                new com.devfarinsky.siegeoverhaul.core.CivilianReport.Snapshot(List.of(), false)));
+        add(prefix + " civilian empty capture", () -> capture(prefix + "-civilians-empty"));
         add(prefix + " civilian limit", () -> {
             openCore("civilian capacity sample", true, true); menu().setData(32, CivilianLedger.LIMIT);
             selectPage(CoreCommandPage.CIVILIANS);
@@ -487,7 +552,10 @@ public final class NativeHudQa {
         return classes;
     }
 
+    private static com.devfarinsky.siegeoverhaul.core.CivilianReport.Snapshot residentSample;
+
     private static void openCore(String name, boolean offers, boolean report) {
+        residentSample = null;
         Minecraft mc = mc();
         CoreHireMenu menu = new CoreHireMenu(99, mc.player.getInventory());
         fixture = "QA SAMPLE: " + name + "; client data only, no live faction/core or server transaction";
@@ -502,6 +570,16 @@ public final class NativeHudQa {
             menu.setData(14, 17); menu.setData(18, 480); menu.setData(20, 50);
             menu.setData(21, 7); menu.setData(23, 96); menu.setData(25, 1); menu.setData(26, 6);
             menu.setData(29, 5); menu.setData(30, 12400); menu.setData(32, 12); menu.setData(33, 24); menu.setData(35, 120);
+            var residentSamples = new ArrayList<com.devfarinsky.siegeoverhaul.core.CivilianReport.Resident>();
+            for (int i = 0; i < 12; i++) {
+                UUID id = UUID.nameUUIDFromBytes(("hud-only-resident-" + i).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                residentSamples.add(i >= 2 ? com.devfarinsky.siegeoverhaul.core.CivilianReport.Resident.unavailable(id, false)
+                        : new com.devfarinsky.siegeoverhaul.core.CivilianReport.Resident(id, i == 0 ? "QA Aldric" : "QA Mira",
+                                new net.minecraft.resources.ResourceLocation("minecraft", i == 0 ? "farmer" : "librarian"),
+                                new net.minecraft.resources.ResourceLocation("minecraft", i == 0 ? "plains" : "desert"),
+                                i == 0 ? 2 : 1, true, false, i == 0, true, i == 1));
+            }
+            residentSample = new com.devfarinsky.siegeoverhaul.core.CivilianReport.Snapshot(residentSamples, true);
             // Real vanilla item stacks, placed only in the client display container.
             for (int i = 0; i < 4; i++) {
                 // CoreOfferEquipment.SLOTS order: head/chest/legs/feet/offhand/mainhand.
@@ -544,6 +622,8 @@ public final class NativeHudQa {
             if (tabs[target.ordinal()].visible) {
                 click(tabs[target.ordinal()]);
                 require(currentPage() == target, "Visible tab did not select " + target);
+                // Replace only labeled client display fixtures after real subscriptions clear stale data.
+                if (target == CoreCommandPage.CIVILIANS && residentSample != null) menu().civilianReport(residentSample);
                 assertFocusVisible(); return;
             }
             click((Button) read("nextPage"));
@@ -607,6 +687,12 @@ public final class NativeHudQa {
         GLFW.glfwSetCursorPos(mc().getWindow().getWindow(), 2, 2);
     }
 
+    static void captureWorld(String name, String label) {
+        require(mc().screen == null, "Capture terrain must use the actual in-world renderer");
+        fixture = label; capture = name + ".png"; captureFrame = frame + 3; captureStarted = System.nanoTime();
+        focusWindow(); mc().mouseHandler.releaseMouse();
+    }
+
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void render(TickEvent.RenderTickEvent event) {
         if (!ENABLED || finished || event.phase != TickEvent.Phase.END) return;
@@ -622,7 +708,12 @@ public final class NativeHudQa {
             require(changed > 50, "Actual framebuffer appears blank");
             Map<String, Object> view = new LinkedHashMap<>();
             view.put("screenshot", capture); view.put("fixture", fixture); view.put("viewport", viewport(mc));
-            view.put("screenClass", mc.screen.getClass().getName()); view.put("widgets", geometry());
+            if (mc.screen == null) {
+                view.put("screenClass", "native-world"); view.put("widgets", List.of());
+                view.put("captureBoundary", NativeCaptureBoundaryQa.evidence());
+            } else {
+                view.put("screenClass", mc.screen.getClass().getName()); view.put("widgets", geometry());
+            }
             if (mc.screen instanceof ProtectedConstructionScreen) {
                 long nativePreviews = mc.screen.children().stream().filter(child -> child instanceof com.talhanation.workers.client.gui.structureRenderer.StructurePreviewWidget).count();
                 require(nativePreviews == 1, "Actual native inspection preview is missing");
@@ -637,6 +728,23 @@ public final class NativeHudQa {
                 if (currentPage() == CoreCommandPage.ARMY && menu().role(0) >= 0) {
                     view.put("nativePortraits", portraitEvidence());
                     view.put("portraitLogicalSize", CoreHireLayout.fit(mc.screen.width, mc.screen.height).hirePortraitSize());
+                }
+                if (currentPage() == CoreCommandPage.LOOT && (Boolean) read("showingLootGallery")) {
+                    Object bounds = read("lootTooltipBounds");
+                    if (bounds != null) {
+                        var coordinates = new LinkedHashMap<String, Float>();
+                        for (String fieldName : List.of("x", "y", "width", "height", "scale")) {
+                            var accessor = bounds.getClass().getDeclaredMethod(fieldName); accessor.setAccessible(true);
+                            coordinates.put(fieldName, (Float) accessor.invoke(bounds));
+                        }
+                        require(coordinates.get("x") >= 4 && coordinates.get("y") >= 4
+                                        && coordinates.get("x") + coordinates.get("width") <= mc.screen.width - 4
+                                        && coordinates.get("y") + coordinates.get("height") <= mc.screen.height - 4,
+                                "Native loot tooltip clips the viewport");
+                        view.put("lootTooltipBounds", coordinates);
+                    }
+                    if (capture.endsWith("-loot-gallery-last.png")) require(bounds != null,
+                            "Keyboard-selected loot item must show its complete native tooltip");
                 }
                 if (currentPage() == CoreCommandPage.TERRITORY) {
                     Button[] upgrades = (Button[]) read("territoryBuffs");
@@ -653,17 +761,28 @@ public final class NativeHudQa {
                     check("Unavailable territory upgrades stay disabled and preserve sample ownership at " + capture);
                 }
                 if (currentPage() == CoreCommandPage.CIVILIANS) {
-                    var layout = (CoreHireLayout) read("layout");
-                    int height = layout.contentBottom() - layout.contentY() - 30;
-                    int portrait = Math.min(layout.compact() ? 48 : 96, Math.max(24, height - 28));
-                    int lineBudget = Math.max(0, (height - Math.max(portrait + 18, 65) - 7) / 10);
-                    var guidanceMethod = CoreHireScreen.class.getDeclaredMethod("civilianGuidance", boolean.class);
-                    guidanceMethod.setAccessible(true);
-                    String guidance = (String) guidanceMethod.invoke(null, layout.compact());
-                    int lineCount = mc.font.split(Component.literal(guidance), layout.width() - 40).size();
-                    require(lineCount <= lineBudget, "Civilian guidance cuts off before its complete final sentence");
-                    view.put("civilianGuidance", guidance);
-                    view.put("civilianGuidanceLines", lineCount); view.put("civilianGuidanceLineBudget", lineBudget);
+                    var report = menu().civilianReport();
+                    view.put("civilianReportLoaded", report != null);
+                    if (report != null) {
+                        view.put("civilianLoadedResidents", report.loaded());
+                        UUID selected = (UUID) read("selectedCivilian");
+                        var resident = report.residents().stream().filter(row -> row.id().equals(selected)).findFirst().orElse(null);
+                        view.put("civilianSelectedLoaded", resident != null && resident.loaded());
+                        if (resident != null && resident.loaded()) {
+                            Class<?> portrait = Class.forName("com.devfarinsky.siegeoverhaul.client.CivilianPortrait");
+                            var field = portrait.getDeclaredField("preview"); field.setAccessible(true);
+                            require(field.get(null) instanceof net.minecraft.world.entity.npc.Villager,
+                                    "Loaded resident must use native villager model");
+                            var villager = (net.minecraft.world.entity.npc.Villager) field.get(null);
+                            require(net.minecraft.core.registries.BuiltInRegistries.VILLAGER_PROFESSION.getKey(
+                                    villager.getVillagerData().getProfession()).equals(resident.profession()),
+                                    "Native resident preview has the wrong profession");
+                            view.put("civilianNativeProfession", resident.profession().toString());
+                        }
+                    }
+                    Button care = (Button) read("civilianCare");
+                    require(care.visible && care.active, "Complete civilian care guidance must remain keyboard-accessible");
+                    view.put("civilianCareAccessible", true);
                 }
                 if (currentPage() == CoreCommandPage.DEFENSES && read("buildingSection").toString().equals("STRUCTURES")) {
                     view.put("selectedPlan", read("selectedDefense").toString());
@@ -678,7 +797,7 @@ public final class NativeHudQa {
     private static void initialize(Minecraft mc) throws Exception {
         // A startup failure must still identify its mode and fixture scope.
         REPORT.put("mode", "hud"); REPORT.put("startedUtc", Instant.now().toString());
-        REPORT.put("coverage", "Actual Minecraft frames, fonts, sprites and production screen widgets in a fresh isolated world. Labeled client-menu and dashboard samples only; not server-generated transactions or reports.");
+        REPORT.put("coverage", "Actual Minecraft frames, fonts, sprites and production screen widgets in a fresh isolated world. Labeled client-menu/dashboard samples and seeded capture S2C/terrain fixtures; not live raids, server transactions or battle outcomes.");
         REPORT.put("notCovered", List.of("Paid actions or server authorization/payment/reward state", "Real faction claims, construction or native worker AI",
                 "Dedicated-server connection", "Resource-pack, shader, localization, screen-reader and physical GPU matrix",
                 "OS mouse routing: navigation uses actual Screen.mouseClicked hitboxes; keyboard uses native OS input"));
@@ -747,6 +866,7 @@ public final class NativeHudQa {
         check("Actual display-backed Robot initialized before world creation; native keyboard assertions remain required");
     }
 
+    static void requestCaptureViewport(int width, int height, int scale) { requestViewport(width, height, scale); }
     private static void requestViewport(int width, int height, int scale) {
         requestedWidth = width; requestedHeight = height; requestedScale = scale;
         GLFW.glfwRestoreWindow(mc().getWindow().getWindow()); mc().getWindow().setWindowed(width, height);

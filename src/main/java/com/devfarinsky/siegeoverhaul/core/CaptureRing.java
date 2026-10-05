@@ -20,8 +20,7 @@ public final class CaptureRing {
 
     /** True when the offsets from the core block center fall inside the contest cylinder. */
     public static boolean inside(double dx, double dy, double dz, int radius, int vertical) {
-        if (radius <= 0 || vertical < 0) return false;
-        return dx * dx + dz * dz <= (double) radius * radius && Math.abs(dy) <= vertical;
+        return CaptureGeometry.inside(dx, dy, dz, radius, vertical);
     }
 
     /** True when nothing solid sits between the core block and the contestant. */
