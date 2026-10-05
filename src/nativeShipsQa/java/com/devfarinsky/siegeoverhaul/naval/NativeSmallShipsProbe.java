@@ -71,7 +71,7 @@ public final class NativeSmallShipsProbe {
         report.put("logicalSide", level.isClientSide ? "CLIENT" : "SERVER");
         report.put("serverClass", level.getServer().getClass().getName());
         report.put("limitations", List.of("Disposable initialized water scene and direct production/native APIs, not a naturally spawned raid",
-                "No production compatibility flag, native config, vendor JAR or ownership is changed",
+                "No production compatibility flag, native config or vendor JAR is changed; synthetic fixture raid/ownership tags are restored after the regression",
                 "Entity NBT round trip is not a chunk unload or process restart",
                 "Captain navigation, live client rendering, ocean routes and arbitrary modpacks remain unverified"));
         Map<String, String> versions = new LinkedHashMap<>();
@@ -192,11 +192,11 @@ public final class NativeSmallShipsProbe {
                 require(seat != null && "DRIVER".equals(String.valueOf(call(seat, "type"))), "Native saved helm assignment lost");
             }
             item.put("nativeEntityNbtCrewRoundTrip", true);
-            item.put("noNavalOwnershipTagAdded", !ship.getPersistentData().contains(ModConstants.Tags.NAVAL_DISPOSABLE));
             // Exercise the actual production recovery/tick path on an unowned native
             // vessel carrying one lost raider plus an unrelated captain.
             String team = "team:native-ships-qa-" + ship.getId();
             sample.recruit.getPersistentData().putString(ModConstants.Tags.RAID_TEAM, team);
+            sample.captain.getPersistentData().putString(ModConstants.Tags.RAID_TEAM, team);
             var raid = new com.devfarinsky.siegeoverhaul.RaidSavedData.RaidState(team, "fixture", 0);
             raid.raiders.add(sample.recruit.getUUID()); raid.navalBeachPos = origin.offset(100, 0, 100);
             Vec3 velocity = ship.getDeltaMovement(); float originalYaw = ship.getYRot();
@@ -207,12 +207,22 @@ public final class NativeSmallShipsProbe {
             require(ship.getYRot() == originalYaw && ship.getDeltaMovement().equals(velocity), "Convoy steered an unowned native ship");
             // Even our own spawned vessel must yield when an unrelated living passenger boards.
             ship.getPersistentData().putBoolean(ModConstants.Tags.NAVAL_DISPOSABLE, true);
+            require(NavalConvoy.mayControl(ship, team), "Owned all-raid fixture did not allow convoy control");
+            sample.captain.getPersistentData().remove(ModConstants.Tags.RAID_TEAM);
             require(!NavalConvoy.mayControl(ship, team), "Unrelated native captain lost control to convoy");
+            NavalConvoy.tick(team, level, raid.navalBeachPos);
+            require(ship.getYRot() == originalYaw && ship.getDeltaMovement().equals(velocity), "Convoy steered with an unrelated native captain");
             NavalConvoy.forget(team);
             ship.getPersistentData().remove(ModConstants.Tags.NAVAL_TEAM);
             ship.getPersistentData().remove(ModConstants.Tags.NAVAL_BEACH);
             ship.getPersistentData().remove(ModConstants.Tags.NAVAL_DISPOSABLE);
             sample.recruit.getPersistentData().remove(ModConstants.Tags.RAID_TEAM);
+            require(!ship.getPersistentData().contains(ModConstants.Tags.NAVAL_DISPOSABLE)
+                    && !ship.getPersistentData().contains(ModConstants.Tags.NAVAL_TEAM)
+                    && !ship.getPersistentData().contains(ModConstants.Tags.NAVAL_BEACH)
+                    && !sample.recruit.getPersistentData().contains(ModConstants.Tags.RAID_TEAM)
+                    && !sample.captain.getPersistentData().contains(ModConstants.Tags.RAID_TEAM), "Synthetic ownership tags were not restored");
+            item.put("noNavalOwnershipTagAdded", true);
             item.put("productionRecoveryLeavesUnownedNativeShipMotionUnchanged", true);
             item.put("unrelatedNativeCaptainBlocksConvoySteering", true);
             observations.add(item);
