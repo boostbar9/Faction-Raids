@@ -19,7 +19,8 @@ public final class RaidNetwork {
     // discovered units/factions, and War Journal rows to DashboardSync.
     // Bump for wire changes or client-visible purchase contracts. Protocol 20 also
     // prevents older clients from showing obsolete manual prices or active unavailable upgrades.
-    private static final String PROTOCOL = "20";
+    // Protocol 21 adds server-owned capture geometry and participation snapshots.
+    private static final String PROTOCOL = "21";
     static boolean acceptsProtocol(String version) { return PROTOCOL.equals(version); }
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(SiegeOverhaul.MOD_ID, "main"))
@@ -110,16 +111,29 @@ public final class RaidNetwork {
                 }).add();
     }
 
-    public record CaptureBeam(ResourceLocation dimension,net.minecraft.core.BlockPos pos,int percent,long time) {
+    public record CaptureBeam(ResourceLocation dimension, net.minecraft.core.BlockPos pos, int percent, long time,
+                              int radius, int vertical, boolean requireSight, int allies, int enemies,
+                              com.devfarinsky.siegeoverhaul.core.CaptureStatus.Participation participation) {
         public CaptureBeam {
-            if(dimension==null || pos==null || percent< -1 || percent>100) throw new IllegalArgumentException("Invalid capture beam");
-            pos=pos.immutable();
+            if (dimension == null || pos == null || percent < -1 || percent > 100 || time < 0
+                    || radius < 2 || radius > 32 || vertical < 1 || vertical > 16
+                    || allies < 0 || enemies < 0 || participation == null)
+                throw new IllegalArgumentException("Invalid capture snapshot");
+            pos = pos.immutable();
         }
         public void encode(FriendlyByteBuf b) {
-            b.writeResourceLocation(dimension);b.writeBlockPos(pos);b.writeByte(percent);b.writeLong(time);
+            b.writeResourceLocation(dimension); b.writeBlockPos(pos); b.writeByte(percent); b.writeLong(time);
+            b.writeByte(radius); b.writeByte(vertical); b.writeBoolean(requireSight);
+            b.writeVarInt(allies); b.writeVarInt(enemies); b.writeByte(participation.ordinal());
         }
         public static CaptureBeam decode(FriendlyByteBuf b) {
-            return new CaptureBeam(b.readResourceLocation(),b.readBlockPos(),b.readByte(),b.readLong());
+            var dimension = b.readResourceLocation(); var pos = b.readBlockPos();
+            int percent = b.readByte(); long time = b.readLong();
+            int radius = b.readUnsignedByte(), vertical = b.readUnsignedByte(); boolean sight = b.readBoolean();
+            int allies = b.readVarInt(), enemies = b.readVarInt(), state = b.readUnsignedByte();
+            var states = com.devfarinsky.siegeoverhaul.core.CaptureStatus.Participation.values();
+            if (state >= states.length) throw new IllegalArgumentException("Invalid capture participation");
+            return new CaptureBeam(dimension, pos, percent, time, radius, vertical, sight, allies, enemies, states[state]);
         }
     }
     public static void sendCaptureBeam(ServerPlayer player,CaptureBeam packet) {

@@ -19,13 +19,13 @@ class RaidNetworkCompatibilityTest {
         }
     }
 
-    @Test void matchingEconomyProtocolIsAccepted() {
-        withChannelRegistration(() -> assertTrue(RaidNetwork.acceptsProtocol("20")));
+    @Test void matchingCaptureGeometryProtocolIsAccepted() {
+        withChannelRegistration(() -> assertTrue(RaidNetwork.acceptsProtocol("21")));
     }
 
     @Test void olderPriceContractsAndMissingOrMalformedPeersAreRejected() {
         withChannelRegistration(() -> {
-            for (String version : new String[]{"19", "18", "21", "4.52.4", "ABSENT", "ACCEPTVANILLA", "", " 20", "20 "})
+            for (String version : new String[]{"20", "19", "18", "22", "4.52.4", "ABSENT", "ACCEPTVANILLA", "", " 21", "21 "})
                 assertFalse(RaidNetwork.acceptsProtocol(version), version);
             assertFalse(RaidNetwork.acceptsProtocol(null));
         });
