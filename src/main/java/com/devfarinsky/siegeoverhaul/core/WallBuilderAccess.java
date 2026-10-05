@@ -162,6 +162,7 @@ public final class WallBuilderAccess extends Goal {
         if (cells.isEmpty() || !(worker.level() instanceof ServerLevel level)) return false;
         try {
             if (!(areaField.get(worker) instanceof Entity area) || !isCommission(area)) return false;
+            if (worker.isPassenger() || worker.isLeashed() || worker.getTarget() != null) return true;
             if (!reserveColumns(area)) return true;
             for (BlockPos target : cells) {
                 if (workStandingSite(level, target, BlockPos.containing(worker.position()))) continue;
@@ -175,11 +176,10 @@ public final class WallBuilderAccess extends Goal {
     }
 
     private boolean workStandingSite(ServerLevel level, BlockPos target, BlockPos feet) {
-        // Keep the native horizontal limit, and bound vertical reach from hand height.
+        // Preserve native horizontal reach and vertical behavior for already accepted plans.
         double dx = worker.getX() - (target.getX() + .5);
         double dz = worker.getZ() - (target.getZ() + .5);
-        double dy = worker.position().y + 1.0 - (target.getY() + .5);
-        return dx * dx + dy * dy + dz * dz < 40
+        return dx * dx + dz * dz < 40
                 && !reservedColumns.contains(feet.atY(0).asLong())
                 && safeStandingSite(level, worker, feet);
     }
@@ -332,9 +332,7 @@ public final class WallBuilderAccess extends Goal {
         // not a safe work position, even when its distance check passes.
         if (!selfRecovery && dx * dx + dz * dz < nativeReachSquared
                 && !reservedColumns.contains(BlockPos.containing(worker.position()).atY(0).asLong())
-                && safeStandingSite(level, worker, BlockPos.containing(worker.position()))
-                && (nativeReachSquared != 40 || workStandingSite(level, target,
-                        BlockPos.containing(worker.position())))) return;
+                && safeStandingSite(level, worker, BlockPos.containing(worker.position()))) return;
         if (!target.equals(lastTarget)) {
             pendingPath = null;
             pendingSites = Set.of();
@@ -396,8 +394,6 @@ public final class WallBuilderAccess extends Goal {
         Set<BlockPos> sites = standingSites(level, worker, target, selfRecovery ? 6 : 3,
                 selfRecovery ? nativeReachSquared : 16);
         sites.removeIf(p -> reservedColumns.contains(p.atY(0).asLong())
-                || nativeReachSquared == 40 && Vec3.atBottomCenterOf(p).add(0, 1, 0)
-                        .distanceToSqr(Vec3.atCenterOf(target)) >= 40
                 || selfRecovery && !recoveryMargin(p, reservedColumns, worker.getBbWidth()));
         return sites;
     }
@@ -473,9 +469,16 @@ public final class WallBuilderAccess extends Goal {
         var support=level.getBlockState(floor);
         if (!support.isFaceSturdy(level,floor,Direction.UP) || !support.getFluidState().isEmpty()
                 || support.is(Blocks.MAGMA_BLOCK) || support.is(Blocks.CAMPFIRE) || support.is(Blocks.SOUL_CAMPFIRE)
-                || support.is(Blocks.CACTUS) || !level.getBlockState(feet).isAir()
-                || !level.getBlockState(feet.above()).isAir()) return false;
+                || support.is(Blocks.CACTUS) || !standingOccupancy(level, feet)
+                || !standingOccupancy(level, feet.above())) return false;
         var body=worker.getBoundingBox().move(Vec3.atBottomCenterOf(feet).subtract(worker.position()));
         return level.getWorldBorder().isWithinBounds(body) && level.noCollision(worker,body);
     }
+    private static boolean standingOccupancy(ServerLevel level, BlockPos cell) {
+        var state = level.getBlockState(cell);
+        return state.getFluidState().isEmpty() && (state.isAir()
+                || com.devfarinsky.siegeoverhaul.camp.CampVegetation.singleCellPlant(state))
+                && state.getCollisionShape(level, cell).isEmpty();
+    }
+
 }

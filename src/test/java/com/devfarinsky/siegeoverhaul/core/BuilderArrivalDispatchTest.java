@@ -77,11 +77,10 @@ class BuilderArrivalDispatchTest extends MinecraftTestSupport {
         }
     }
 
-    @Test void nearHorizontalButTooHighAndUnloadedStandingGroundCannotAuthorizeWork() throws Exception {
+    @Test void nearHorizontalButBuriedOrUnloadedStandingGroundCannotAuthorizeWork() throws Exception {
         for (boolean unloaded : new boolean[]{false, true}) {
             var f = new Fixture();
             f.at(new Vec3(77.5, unloaded ? 64 : 54, .5));
-            when(f.level.getHeight(any(), anyInt(), anyInt())).thenReturn(unloaded ? 64 : 54);
             if (unloaded) when(f.level.hasChunkAt(any())).thenReturn(false);
             var wrapper = new WallBuilderAccess(f.builder, f.nativeGoal);
             try (var guard = mockStatic(NativeConstructionGuard.class, CALLS_REAL_METHODS)) {
@@ -106,15 +105,99 @@ class BuilderArrivalDispatchTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void auditedCollisionFreeSingleCellPlantsPermitStandingWithoutBeingCleared() throws Exception {
+        for (var plant : new net.minecraft.world.level.block.Block[]{Blocks.GRASS, Blocks.FERN, Blocks.DANDELION}) {
+            var f = new Fixture(); f.at(new Vec3(77.5, 64, .5));
+            when(f.level.getBlockState(any())).thenAnswer(call -> {
+                BlockPos pos = call.getArgument(0);
+                return pos.getY() < 64 ? Blocks.STONE.defaultBlockState()
+                        : pos.getY() == 64 && !pos.equals(f.target) ? plant.defaultBlockState() : Blocks.AIR.defaultBlockState();
+            });
+            var wrapper = new WallBuilderAccess(f.builder, f.nativeGoal);
+            try (var guard = mockStatic(NativeConstructionGuard.class, CALLS_REAL_METHODS)) {
+                guard.when(() -> NativeConstructionGuard.beforeNativeTick(f.builder, f.nativeGoal)).thenReturn(true);
+                wrapper.tick();
+                verify(f.level).setBlockAndUpdate(f.target, Blocks.COBBLESTONE.defaultBlockState());
+                verify(f.level, never()).destroyBlock(any(), anyBoolean());
+                verify(f.builder, never()).mineBlock(any());
+                assertEquals(7, f.material.getCount());
+            }
+        }
+    }
+
+    @Test void hazardousPairedAndFluidOccupiedStandingCellsCannotAuthorizeWork() throws Exception {
+        for (var obstacle : new net.minecraft.world.level.block.Block[]{Blocks.WITHER_ROSE, Blocks.TALL_GRASS,
+                Blocks.WATER, Blocks.FIRE, Blocks.POWDER_SNOW}) {
+            var f = new Fixture(); f.at(new Vec3(77.5, 64, .5));
+            when(f.level.getBlockState(any())).thenAnswer(call -> {
+                BlockPos pos = call.getArgument(0);
+                return pos.getY() < 64 ? Blocks.STONE.defaultBlockState()
+                        : pos.getY() == 64 ? obstacle.defaultBlockState() : Blocks.AIR.defaultBlockState();
+            });
+            var wrapper = new WallBuilderAccess(f.builder, f.nativeGoal);
+            try (var guard = mockStatic(NativeConstructionGuard.class, CALLS_REAL_METHODS)) {
+                guard.when(() -> NativeConstructionGuard.beforeNativeTick(f.builder, f.nativeGoal)).thenReturn(true);
+                wrapper.tick();
+                verify(f.level, never()).setBlockAndUpdate(any(), any());
+                verify(f.navigation, never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+                assertEquals(8, f.material.getCount());
+            }
+        }
+    }
+
+    @Test void mountLeashOrCombatNeverForcesAConstructionApproach() throws Exception {
+        for (int scenario = 0; scenario < 3; scenario++) {
+            var f = new Fixture();
+            switch (scenario) {
+                case 0 -> when(f.builder.isPassenger()).thenReturn(true);
+                case 1 -> when(f.builder.isLeashed()).thenReturn(true);
+                case 2 -> when(f.builder.getTarget()).thenReturn(mock(net.minecraft.world.entity.LivingEntity.class));
+            }
+            var wrapper = new WallBuilderAccess(f.builder, f.nativeGoal);
+            try (var guard = mockStatic(NativeConstructionGuard.class, CALLS_REAL_METHODS)) {
+                guard.when(() -> NativeConstructionGuard.beforeNativeTick(f.builder, f.nativeGoal)).thenReturn(true);
+                wrapper.tick();
+                verifyNoInteractions(f.navigation);
+                verify(f.level, never()).setBlockAndUpdate(any(), any());
+                assertEquals(8, f.material.getCount());
+                assertEquals(1, f.nativeGoal.stackToPlace.size());
+            }
+        }
+    }
+
+    @Test void acceptedFourAndEightBlockFoundationsRetainNativeVerticalSemantics() throws Exception {
+        for (int relief : new int[]{4, 8}) {
+            int groundY = 64 - relief;
+            var plan = PerimeterBlueprint.create(java.util.Set.of(new net.minecraft.world.level.ChunkPos(0, 0)),
+                    (x, z) -> PerimeterBlueprint.Surface.ready(x < 8 ? groundY : 64),
+                    PerimeterBlueprint.Palette.COBBLESTONE);
+            assertTrue(plan.valid(), plan.problemSummary());
+            var target = new BlockPos(0, 68, 7);
+            assertEquals("minecraft:cobblestone", plan.blocks().get(target.asLong()));
+            var f = new Fixture(target, groundY);
+            f.at(new Vec3(-2.5, groundY, 7.5));
+            var wrapper = new WallBuilderAccess(f.builder, f.nativeGoal);
+            try (var guard = mockStatic(NativeConstructionGuard.class, CALLS_REAL_METHODS)) {
+                guard.when(() -> NativeConstructionGuard.beforeNativeTick(f.builder, f.nativeGoal)).thenReturn(true);
+                wrapper.tick();
+                verify(f.level).setBlockAndUpdate(target, Blocks.COBBLESTONE.defaultBlockState());
+                assertEquals(7, f.material.getCount());
+            }
+            verify(f.builder, never()).teleportTo(anyDouble(), anyDouble(), anyDouble());
+        }
+    }
+
     private static final class Fixture {
         final BuilderEntity builder = mock(BuilderEntity.class);
         final BuildArea area = mock(BuildArea.class);
         final ServerLevel level = mock(ServerLevel.class);
         final PathNavigation navigation = mock(PathNavigation.class);
         final BuilderWorkGoal nativeGoal = new BuilderWorkGoal(builder);
-        final BlockPos target = new BlockPos(80, 64, 0);
+        final BlockPos target;
         final ItemStack material = new ItemStack(Items.COBBLESTONE, 8);
-        Fixture() {
+        Fixture() { this(new BlockPos(80, 64, 0), 64); }
+        Fixture(BlockPos target, int groundY) {
+            this.target = target;
             UUID owner = UUID.randomUUID(), areaId = UUID.randomUUID();
             var data = new CompoundTag();
             data.putUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID, areaId);
@@ -143,10 +226,10 @@ class BuilderArrivalDispatchTest extends MinecraftTestSupport {
             when(level.hasChunkAt(any())).thenReturn(true);
             when(level.getMinBuildHeight()).thenReturn(-64);
             when(level.getMaxBuildHeight()).thenReturn(320);
-            when(level.getHeight(any(), anyInt(), anyInt())).thenReturn(64);
+            when(level.getHeight(any(), anyInt(), anyInt())).thenReturn(groundY);
             when(level.getWorldBorder()).thenReturn(new WorldBorder());
             when(level.noCollision(eq(builder), any(AABB.class))).thenReturn(true);
-            when(level.getBlockState(any())).thenAnswer(call -> ((BlockPos) call.getArgument(0)).getY() < 64
+            when(level.getBlockState(any())).thenAnswer(call -> ((BlockPos) call.getArgument(0)).getY() < groundY
                     ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState());
             at(new Vec3(.5, 64, .5));
         }
