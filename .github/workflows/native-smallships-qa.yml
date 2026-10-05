@@ -93,6 +93,8 @@ jobs:
           assert len(data['hullsAndBoardingOrders']) == 4, data
           for item in data['hullsAndBoardingOrders']:
               assert item['nativeEntityNbtCrewRoundTrip'] and item['noNavalOwnershipTagAdded'], item
+              assert item['productionRecoveryLeavesUnownedNativeShipMotionUnchanged'], item
+              assert item['unrelatedNativeCaptainBlocksConvoySteering'], item
               assert all(value >= 19 for value in item['entityTicks'].values()), item
               if release == 'final':
                   assert item['captainSeatType'] == 'DRIVER' and item['nativeDockyardBoardingRefused'], item

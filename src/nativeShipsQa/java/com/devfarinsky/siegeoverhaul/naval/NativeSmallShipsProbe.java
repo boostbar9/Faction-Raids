@@ -193,6 +193,28 @@ public final class NativeSmallShipsProbe {
             }
             item.put("nativeEntityNbtCrewRoundTrip", true);
             item.put("noNavalOwnershipTagAdded", !ship.getPersistentData().contains(ModConstants.Tags.NAVAL_DISPOSABLE));
+            // Exercise the actual production recovery/tick path on an unowned native
+            // vessel carrying one lost raider plus an unrelated captain.
+            String team = "team:native-ships-qa-" + ship.getId();
+            sample.recruit.getPersistentData().putString(ModConstants.Tags.RAID_TEAM, team);
+            var raid = new com.devfarinsky.siegeoverhaul.RaidSavedData.RaidState(team, "fixture", 0);
+            raid.raiders.add(sample.recruit.getUUID()); raid.navalBeachPos = origin.offset(100, 0, 100);
+            Vec3 velocity = ship.getDeltaMovement(); float originalYaw = ship.getYRot();
+            NavalConvoy.recover(level, raid);
+            require(NavalConvoy.isRaiderBoat(team, ship), "Lost native raider crew was not recovered for safe landing");
+            require(!NavalConvoy.mayControl(ship, team), "Recovery claimed an unowned native ship");
+            NavalConvoy.tick(team, level, raid.navalBeachPos);
+            require(ship.getYRot() == originalYaw && ship.getDeltaMovement().equals(velocity), "Convoy steered an unowned native ship");
+            // Even our own spawned vessel must yield when an unrelated living passenger boards.
+            ship.getPersistentData().putBoolean(ModConstants.Tags.NAVAL_DISPOSABLE, true);
+            require(!NavalConvoy.mayControl(ship, team), "Unrelated native captain lost control to convoy");
+            NavalConvoy.forget(team);
+            ship.getPersistentData().remove(ModConstants.Tags.NAVAL_TEAM);
+            ship.getPersistentData().remove(ModConstants.Tags.NAVAL_BEACH);
+            ship.getPersistentData().remove(ModConstants.Tags.NAVAL_DISPOSABLE);
+            sample.recruit.getPersistentData().remove(ModConstants.Tags.RAID_TEAM);
+            item.put("productionRecoveryLeavesUnownedNativeShipMotionUnchanged", true);
+            item.put("unrelatedNativeCaptainBlocksConvoySteering", true);
             observations.add(item);
         }
         report.put("observedNativeTicks", level.getGameTime() - preparedAt);

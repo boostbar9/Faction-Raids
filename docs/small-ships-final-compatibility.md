@@ -1,6 +1,6 @@
 # Small Ships final 2.0.0 compatibility
 
-Status: reproduction and bounded bridge design; gameplay compatibility is not yet established.
+Status: exact-runtime reproduction and an unshipped, bounded turn-adapter prototype; gameplay compatibility is not yet established.
 
 ## Exact baseline
 
@@ -44,3 +44,15 @@ Dockyards, new hulls, ammunition and expanded fleets are outside this first comp
 The final-adapter matrix entry tests an unshipped, exact-version-gated runtime addon. It recognizes the native DRIVER occupant and feeds short-lived left/right requests into native `controlShip`; it never writes yaw, rotation speed, velocity, or the shared controlling-passenger result. Native collision/wind/sail handling remains the physics owner. Receipts expire after the current/previous-tick window and reject helm loss, dockyard work, locks, leash and sinking. Passenger captains cannot use stale wrappers to write sails. The hooks, config and helper classes are confined to `src/nativeShipsQa` and are absent from the production JAR.
 
 This prototype deliberately leaves Recruits' compatibility flag unchanged. Production activation also requires resolving the independent repair/damage mapping path and verifying the actual client, protected ownership, native waypoint convergence, unload/reload and production packaging. A passing prototype contract is not a completed gameplay fix.
+
+## Verified observations and remaining checks
+
+The original exact-version dedicated run [37273363433](https://github.com/boostbar9/Faction-Raids/actions/runs/37273363433) and ordinary Build [37273363635](https://github.com/boostbar9/Faction-Raids/actions/runs/37273363635) succeeded at `bb0560a6`. Final 2.0.0 returned `recruitsSmallShipsCompatible=false`; both hulls assigned captains to DRIVER even after crew-first boarding, but Recruits recognized them only when passenger index zero. Both hulls returned no controlling passenger, and the left getter suppressed a direct native input request. Native dockyard refusal and entity/passenger NBT round trips passed.
+
+The strengthened final-only baseline also passed at `b0286265` in [37274024340](https://github.com/boostbar9/Faction-Raids/actions/runs/37274024340), including each actor's tick counter and an obstacle intersecting translated real mast bounds. The legacy case exposed a fixture entity-ticking gap; the follow-on fixture now contains the full initialized scene inside an explicit 48×24×48 GameTest structure. The first adapter iteration failed on duplicate test resources before execution; source-set paths were corrected instead of hiding duplicate handling.
+
+The client fixture separately verifies actual native passenger/seat synchronization, takes real framebuffer screenshots, disconnects/saves, reopens the same disposable world, and checks original ship and crew UUIDs and helm assignment again. It lets final 2.0.0 generate its own default config and never uses the beta seed helper. At `803e1838`, [all four native jobs](https://github.com/boostbar9/Faction-Raids/actions/runs/37275172561) and [ordinary Build](https://github.com/boostbar9/Faction-Raids/actions/runs/37275172636) passed. The QA-only adapter produced native opposite turns of approximately ±16.36° for Cog and ±12.43° for Brigg without direct yaw mutation, and passed its expiration/helm/dockyard checks. Both 1280×720 client frames were inspected; unchanged final ships and their crew/helm assignments survived real integrated-server disk save/reopen. The client job does not enable the adapter, so adapter client synchronization and actual player takeover remain unverified.
+
+## Bounded production ownership safeguard
+
+Recovery previously retained a lost raid crew aboard an unowned ship but then still applied convoy steering to that ship. `NavalConvoy.mayControl` now requires the convoy's own disposable/team tags and refuses control while any player or unrelated living passenger is aboard, including nested seats. Recovery and collision-checked landing remain available for the raid crew. Native final/legacy/client fixtures call actual recovery and tick methods and require that unowned ship yaw/velocity remain unchanged; unit tests cover nested passengers and team mismatches. This safeguard does not activate the captain adapter or certify final-2.0.0 convoy navigation.
