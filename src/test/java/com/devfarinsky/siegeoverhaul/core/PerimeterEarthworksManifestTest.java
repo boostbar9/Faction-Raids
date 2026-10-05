@@ -122,7 +122,8 @@ class PerimeterEarthworksManifestTest extends MinecraftTestSupport {
     @Test void blockEntitiesFluidsAndUnsupportedPlacementAreRejectedBeforeAnyPlanExists() {
         for (BlockState unsafe : List.of(Blocks.CHEST.defaultBlockState(), Blocks.WATER.defaultBlockState(),
                 Blocks.OAK_SLAB.defaultBlockState().setValue(BlockStateProperties.WATERLOGGED, true))) {
-            assertThrows(IllegalArgumentException.class, () -> new Step(0, Kind.CUT, CUT, unsafe, AIR, removal()));
+            assertThrows(IllegalArgumentException.class, () -> new Step(0, Kind.CUT, CUT, unsafe, AIR, removal()),
+                    "Unsafe original must never be cut: " + unsafe);
         }
         assertThrows(IllegalArgumentException.class, () -> new Step(0, Kind.FILL, FILL, AIR, WALL, null));
         assertThrows(IllegalArgumentException.class, () -> new Step(0, Kind.BUILD, CUT, AIR, Blocks.CHEST.defaultBlockState(), null));

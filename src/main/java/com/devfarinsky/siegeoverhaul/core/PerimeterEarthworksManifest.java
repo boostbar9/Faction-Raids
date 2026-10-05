@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.nio.ByteBuffer;
@@ -74,6 +75,7 @@ public final class PerimeterEarthworksManifest {
             Objects.requireNonNull(kind); Objects.requireNonNull(before); Objects.requireNonNull(after);
             if (stage < 0 || stage >= MAX_STAGES || before.equals(after)
                     || before.hasBlockEntity() || after.hasBlockEntity()
+                    || before.getBlock() instanceof EntityBlock || after.getBlock() instanceof EntityBlock
                     || !before.getFluidState().isEmpty() || !after.getFluidState().isEmpty())
                 throw invalid("Unsafe earthworks state transition");
             if (kind == Kind.CUT) {
