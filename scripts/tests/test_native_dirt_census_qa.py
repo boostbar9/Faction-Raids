@@ -27,7 +27,7 @@ def illustrative_evidence():
     """Deliberately labeled synthetic JSON, only to test verifier grammar and rejections."""
     fill = ONE_FILL_TEST.illustrative_receipt()
     fill['target'] = [141, 64, 9]
-    fill['dirtCensus'] = {'enabled': True, 'status': 'captured', 'artifactSha256': 'a' * 64, 'failureType': ''}
+    fill['dirtCensus'] = {'enabled': True, 'status': 'captured', 'artifactSha256': 'a' * 64, 'failureType': '', 'failurePhase': ''}
     for mod in ('smallships', 'siegeweapons'):
         fill['loadedCompanionArtifacts'][mod] = {'sha256': 'b' * 64}
     ready = {'reason': 'READY', 'detail': 'Illustrative structural verifier sample only'}
@@ -47,7 +47,7 @@ def illustrative_evidence():
                'pendingMixins': [], 'transformations': [{'owner': 'net.minecraft.world.level.Level', 'kind': 'PLUGIN', 'contextDigests': ['d' * 64]}],
                'firstParty': {'mod': 'siegeoverhaul', 'module': 'siegeoverhaul', 'trustedClasses': VERIFY.TRUSTED}}
     observed = {'generation': 1, 'gameTime': 280, 'target': (141 << 38) | (9 << 12) | 64,
-                'dirt': {'pack': 'vanilla', 'builtin': True, 'sha256': VERIFY.DIRT_HASH, 'bytes': 376},
+                'dirt': {'pack': 'utf16-sha256:' + 'f' * 64, 'builtin': True, 'sha256': VERIFY.DIRT_HASH, 'bytes': 376},
                 'modifierLayers': [], 'listeners': [{'event': event, 'callback': 'net.minecraftforge.common.ForgeHooks#example(' + event + ')void',
                     'priority': 'NORMAL', 'receiveCanceled': False, 'genericFilter': '*',
                     'owner': origin('net.minecraftforge.common.ForgeHooks'), 'declaringClass': origin('net.minecraftforge.common.ForgeHooks'),
@@ -66,7 +66,9 @@ def illustrative_evidence():
     for key in ('worldCellsSha256', 'rngSha256', 'inventorySha256', 'nativeQueuesSha256', 'ledgerSha256', 'workerDataSha256'):
         state[key] = 'e' * 64
     return {'schema': 'native-dirt-census-qa-v1', 'profileStatus': 'PROFILE_UNREVIEWED', 'packagedProductionAcceptance': False,
-            'miningCallbacksInvoked': 0, 'target': [141, 64, 9], 'buildHeight': [-64, 320], 'stableSinceGameTime': 240,
+            'miningCallbacksInvoked': 0, 'packIdentityEncoding': 'sha256-length-framed-utf16-code-units',
+            'bindingAttempted': True, 'postBindStateCaptured': True, 'postInspectionStatesCaptured': [True, True],
+            'noEffectsEvidenceComplete': True, 'target': [141, 64, 9], 'buildHeight': [-64, 320], 'stableSinceGameTime': 240,
             'captureGameTime': 280, 'lifecycle': {'signal': 'ServerStartedEvent', 'successfulCompletion': True,
             'startedGameTime': 0, 'startedGeneration': 1, 'currentGeneration': 1}, 'binding': ready, 'bindingCensus': copy.deepcopy(observed),
             'decision': {'reason': 'PROFILE_UNREVIEWED', 'detail': 'Illustrative sample has no approved profile'},
@@ -156,6 +158,18 @@ class CensusVerifierTest(unittest.TestCase):
         self.mutate_census(lambda c: c.update(identity={'rawAudit': ['secret']})); self.reject()
     def test_unknown_pack_text_refuses(self):
         self.mutate_census(lambda c: c['dirt'].update(pack='secret=value')); self.reject()
+    def test_post_bind_state_cannot_be_assumed(self):
+        self.result['postBindStateCaptured'] = False; self.reject()
+    def test_missing_post_inspection_state_refuses(self):
+        self.result['postInspectionStatesCaptured'] = [True, False]; self.reject()
+    def test_partial_state_evidence_cannot_look_complete(self):
+        self.result['noEffectsEvidenceComplete'] = False; self.reject()
+    def test_no_raw_pack_identity_is_accepted(self):
+        self.mutate_census(lambda c: c['dirt'].update(pack='Mod Resources')); self.reject()
+    def test_pack_identity_encoding_is_explicit(self):
+        self.result['packIdentityEncoding'] = 'raw'; self.reject()
+    def test_failure_phase_cannot_hide_under_captured_receipt(self):
+        self.fill['dirtCensus']['failurePhase'] = 'OUTPUT_WRITE'; self.reject()
     def test_actual_partial_binding_census_is_required(self):
         self.result.pop('bindingCensus'); self.reject()
     def test_binding_census_cannot_be_replaced_by_fresh_summary(self):
@@ -270,6 +284,40 @@ public class BoundaryHarness {
         Path original = directory.resolve("result.json");
         byte[] passed = "{\"status\":\"passed\",\"journalState\":\"STAGE_VERIFIED\"}".getBytes(StandardCharsets.UTF_8);
         Files.write(original, passed);
+        if (args[0].startsWith("window-")) {
+            java.util.concurrent.atomic.AtomicInteger reads = new java.util.concurrent.atomic.AtomicInteger(), posts = new java.util.concurrent.atomic.AtomicInteger();
+            Object privateValue = new Object();
+            var window = NativeDirtCensusBoundary.readWindow(() -> {
+                reads.incrementAndGet();
+                if (args[0].equals("window-read-failure") || args[0].equals("window-both-fail")) throw new AssertionError("token=secret");
+                return privateValue;
+            }, () -> {
+                posts.incrementAndGet();
+                if (args[0].equals("window-post-failure") || args[0].equals("window-both-fail")) throw new IllegalArgumentException("token=secret");
+                return null;
+            });
+            boolean readFails = args[0].equals("window-read-failure") || args[0].equals("window-both-fail");
+            boolean postFails = args[0].equals("window-post-failure") || args[0].equals("window-both-fail");
+            if (reads.get() != 1 || posts.get() != 1 || window.postStateCaptured() == postFails
+                    || window.readFailureType().isEmpty() == readFails || window.postFailureType().isEmpty() == postFails
+                    || (!readFails && window.value() != privateValue)) throw new AssertionError("Read/post state accounting differs");
+            if (window.readFailureType().contains("secret") || window.postFailureType().contains("secret")) throw new AssertionError("Unsafe failure text");
+            if (!java.util.Arrays.equals(passed, Files.readAllBytes(original))) throw new AssertionError("Original outcome changed");
+            System.out.println("PASS " + args[0]); return;
+        }
+        if (args[0].startsWith("identity-")) {
+            String value = args[0].equals("identity-spaces") ? "Mod Resources" : "token=secret\n";
+            String identity = NativeDirtCensusBoundary.packIdentity(value);
+            if (!identity.matches("utf16-sha256:[0-9a-f]{64}") || identity.contains(value)) throw new AssertionError("Raw identity escaped");
+            if (args[0].equals("identity-surrogates") && NativeDirtCensusBoundary.packIdentity("\ud800").equals(NativeDirtCensusBoundary.packIdentity("\ud801")))
+                throw new AssertionError("Exact UTF16 identity lost");
+            if (args[0].equals("identity-limit")) {
+                boolean refused = false;
+                try { NativeDirtCensusBoundary.packIdentity("a".repeat(4097)); } catch (IllegalArgumentException expected) { refused = true; }
+                if (!refused) throw new AssertionError("Identity bound ignored");
+            }
+            System.out.println("PASS " + args[0]); return;
+        }
         var receipt = NativeDirtCensusBoundary.capture(() -> {
             switch (args[0]) {
                 case "preflight": throw new AssertionError("token=secret-preflight");
@@ -291,10 +339,11 @@ public class BoundaryHarness {
             throw new AssertionError("Unsafe receipt");
         if (args[0].equals("success")) {
             String digest = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(directory.resolve("dirt-census.json"))));
-            if (!receipt.status().equals("captured") || !receipt.artifactSha256().equals(digest) || !receipt.failureType().isEmpty())
+            if (!receipt.status().equals("captured") || !receipt.artifactSha256().equals(digest) || !receipt.failureType().isEmpty() || !receipt.failurePhase().isEmpty())
                 throw new AssertionError("Missing exact successful capture digest");
         } else {
-            if (!receipt.status().equals("refused") || !receipt.artifactSha256().isEmpty() || receipt.failureType().isEmpty())
+            if (!receipt.status().equals("refused") || !receipt.artifactSha256().isEmpty() || receipt.failureType().isEmpty()
+                    || !java.util.Set.of("CAPTURE", "PAYLOAD_BOUNDS", "OUTPUT_WRITE").contains(receipt.failurePhase()))
                 throw new AssertionError("Refusal escaped or retained approval");
             if (args[0].equals("existing") && !Files.readString(directory.resolve("dirt-census.json")).equals("old-sidecar"))
                 throw new AssertionError("Existing sidecar was overwritten");
@@ -323,6 +372,14 @@ public class BoundaryHarness {
     def test_io_failure_preserves_original(self): self.run_case('missingdirectory')
     def test_status_cannot_bless_profile(self): self.run_case('invalidstatus')
     def test_success_binds_exact_written_bytes(self): self.run_case('success')
+    def test_read_failure_still_captures_post_state(self): self.run_case('window-read-failure')
+    def test_post_failure_is_explicit(self): self.run_case('window-post-failure')
+    def test_both_failures_retained(self): self.run_case('window-both-fail')
+    def test_private_value_stays_exact(self): self.run_case('window-success')
+    def test_pack_spaces_are_digest_only(self): self.run_case('identity-spaces')
+    def test_pack_secrets_are_digest_only(self): self.run_case('identity-secret')
+    def test_pack_surrogates_remain_distinct(self): self.run_case('identity-surrogates')
+    def test_pack_identity_is_bounded(self): self.run_case('identity-limit')
 
 
 class CensusSourceContractTest(unittest.TestCase):
@@ -353,8 +410,8 @@ class CensusSourceContractTest(unittest.TestCase):
                           'new ItemStack(', 'new ItemEntity(', 'getListenerRegistry(', 'getInputArguments(', 'System.getenv(',
                           '.getLootTable(', '.getRandomItems(', '.post(', '.canUse(', '.tick(', '.evaluate(TARGET,'):
             self.assertNotIn(forbidden, java)
-        self.assertIn('NativeDirtPolicy.evaluate(observation, null, null)', java)
-        self.assertIn('observations.add(observation.census())', java)
+        self.assertIn('NativeDirtPolicy.evaluate(read.value(), null, null)', java)
+        self.assertIn('observations.add(exportCensus(read.value().census()))', java)
         self.assertNotIn('toJsonTree(observation)', java)
         self.assertNotIn('toJsonTree(reader)', java)
         self.assertNotIn('toJsonTree(snapshots)', java)
@@ -364,6 +421,7 @@ class CensusSourceContractTest(unittest.TestCase):
         self.assertIn('NativeDirtCensusBoundary.capture(() -> captureEvidence(', public)
         self.assertNotIn('require(', public)
         boundary = (QA / 'NativeDirtCensusBoundary.java').read_text()
+        boundary = boundary[boundary.index('    static Receipt capture('):]
         self.assertLess(boundary.index('try {'), boundary.index('operation.run()'))
         self.assertLess(boundary.index('Files.write('), boundary.index('catch (Exception | AssertionError | LinkageError'))
         self.assertNotIn('getMessage()', boundary)
@@ -378,7 +436,7 @@ class CensusSourceContractTest(unittest.TestCase):
         self.assertIn('AddReloadListenerEvent event', java); self.assertIn('if (ENABLED && epoch != null) epoch.beginReload()', java)
         self.assertNotIn('OnDatapackSyncEvent', java)
         self.assertEqual(java.count('reader.bindRuntimeCensus(TARGET)'), 1)
-        self.assertIn('out.put("bindingCensus", binding)', java)
+        self.assertIn('out.put("bindingCensus", exportCensus(binding.value()))', java)
     def test_private_rng_nbt_and_live_identity_not_exported(self):
         java = (QA / 'NativeDirtCensusQa.java').read_text()
         self.assertIn('state.put("rng", rng)', java); self.assertIn('exported.put("rngSha256", hash(rng.stream().map(RngState::values).toList().toString()))', java)
@@ -387,6 +445,19 @@ class CensusSourceContractTest(unittest.TestCase):
         self.assertIn('Snapshot::evidence', java)
         boundary = (QA / 'NativeDirtCensusBoundary.java').read_text()
         self.assertIn('StandardOpenOption.CREATE_NEW', boundary)
+    def test_read_windows_capture_post_state_before_export(self):
+        java = (QA / 'NativeDirtCensusQa.java').read_text()
+        self.assertIn('NativeDirtCensusBoundary.readWindow(() -> reader.bindRuntimeCensus(TARGET)', java)
+        self.assertIn('postBindCaptured = binding.postStateCaptured()', java)
+        self.assertLess(java.index('postBindCaptured = binding.postStateCaptured()'), java.index('exportCensus(binding.value())'))
+        self.assertIn('observations.size() == 2', java)
+        self.assertIn('!equal.isEmpty()', java)
+        self.assertIn('"phase", failedPhase.name()', java)
+        self.assertNotIn('toJsonTree(binding)', java)
+        self.assertNotIn('out.put("bindingCensus", binding.value())', java)
+        self.assertIn('NativeDirtCensusBoundary.packIdentity(original.pack())', java)
+        self.assertIn('original.builtin(), original.sha256(), original.bytes()', java)
+
     def test_forge_layer_fixture_is_exact_official_resource(self):
         resource = ROOT / 'src/test/resources/native-dirt/forge-47.4.16-empty-global-loot-modifiers.json'
         data = resource.read_bytes()

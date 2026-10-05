@@ -94,63 +94,94 @@ public final class NativeDirtCensusQa {
         return NativeDirtCensusBoundary.capture(() -> captureEvidence(level, owner, worker, job, stableSince, evidence));
     }
 
+    private enum Phase { PREFLIGHT, BEFORE_BIND_STATE, OFF_PULSE_BINDING, AFTER_BIND_STATE, BINDING_EXPORT,
+        FIRST_INSPECTION, AFTER_FIRST_STATE, FIRST_EXPORT, SECOND_INSPECTION, AFTER_SECOND_STATE, SECOND_EXPORT, SUMMARY }
+    private static final class CaptureFailure extends Exception {
+        final Phase phase; final String type;
+        CaptureFailure(Phase phase, String type) { this.phase = phase; this.type = type; }
+    }
+
     private static NativeDirtCensusBoundary.Payload captureEvidence(ServerLevel level, ServerPlayer owner, BuilderEntity worker,
                                                                    EarthworksJobLedger.Job job, long stableSince, Path evidence) throws Exception {
-        require(!captured && level == world && level.getServer().isSameThread(), "Census world/thread/capture differs");
-        captured = true;
-        require(level.getBlockState(TARGET) == Blocks.DIRT.defaultBlockState()
-                && job.read().journal().state() == PerimeterEarthworksJournal.State.STAGE_VERIFIED
-                && stableSince >= 0 && level.getGameTime() - stableSince >= 40
-                && job.read().inFlight() == null, "Census must follow genuine stable one-FILL completion");
         var out = new LinkedHashMap<String, Object>();
         out.put("schema", "native-dirt-census-qa-v1");
         out.put("profileStatus", "PROFILE_UNREVIEWED");
         out.put("packagedProductionAcceptance", false);
         out.put("miningCallbacksInvoked", 0);
+        out.put("packIdentityEncoding", "sha256-length-framed-utf16-code-units");
         out.put("target", List.of(TARGET.getX(), TARGET.getY(), TARGET.getZ()));
         out.put("buildHeight", List.of(level.getMinBuildHeight(), level.getMaxBuildHeight()));
         out.put("stableSinceGameTime", stableSince);
         out.put("captureGameTime", level.getGameTime());
-        out.put("lifecycle", Map.of("signal", "ServerStartedEvent", "successfulCompletion", completedAtServerStarted,
-                "startedGameTime", startedGameTime, "startedGeneration", startedGeneration, "currentGeneration", epoch.generation()));
         var snapshots = new ArrayList<Snapshot>();
         var metrics = new ArrayList<NativeDirtRuntime.Metrics>();
         var observations = new ArrayList<NativeDirtPolicy.Census>();
+        var postInspections = new ArrayList<Boolean>();
+        boolean bindingAttempted = false, postBindCaptured = false, failed = false;
+        NativeDirtPolicy.Check bindingCheck = null;
+        Phase phase = Phase.PREFLIGHT;
         try {
+            require(!captured && level == world && level.getServer().isSameThread(), "Census world/thread/capture differs");
+            captured = true;
+            require(level.getBlockState(TARGET) == Blocks.DIRT.defaultBlockState()
+                    && job.read().journal().state() == PerimeterEarthworksJournal.State.STAGE_VERIFIED
+                    && stableSince >= 0 && level.getGameTime() - stableSince >= 40
+                    && job.read().inFlight() == null, "Census must follow genuine stable one-FILL completion");
+            require(epoch != null && reader != null, "Census lifecycle unavailable");
+            out.put("lifecycle", Map.of("signal", "ServerStartedEvent", "successfulCompletion", completedAtServerStarted,
+                    "startedGameTime", startedGameTime, "startedGeneration", startedGeneration, "currentGeneration", epoch.generation()));
             require(completedAtServerStarted && epoch.generation() == startedGeneration,
                     "Initial resource completion missing or a later reload invalidated the census");
+            phase = Phase.BEFORE_BIND_STATE;
             snapshots.add(snapshot(level, owner, worker, job)); metrics.add(reader.runtimeMetrics());
-            // Off-pulse commissioning after work has settled, never from the native mining callback.
-            NativeDirtPolicy.Census binding = reader.bindRuntimeCensus(TARGET);
-            validateCensusExport(binding);
-            out.put("binding", binding.observation()); out.put("bindingCensus", binding);
-            snapshots.add(snapshot(level, owner, worker, job)); metrics.add(reader.runtimeMetrics());
+            phase = Phase.OFF_PULSE_BINDING; bindingAttempted = true;
+            // Post-state runs before any export validation, including when binding throws.
+            var binding = NativeDirtCensusBoundary.readWindow(() -> reader.bindRuntimeCensus(TARGET), () -> {
+                snapshots.add(snapshot(level, owner, worker, job)); metrics.add(reader.runtimeMetrics()); return null;
+            });
+            postBindCaptured = binding.postStateCaptured();
+            if (binding.value() != null) { bindingCheck = binding.value().observation(); out.put("binding", bindingCheck); }
+            if (!binding.readFailureType().isEmpty()) throw new CaptureFailure(Phase.OFF_PULSE_BINDING, binding.readFailureType());
+            if (!binding.postFailureType().isEmpty()) throw new CaptureFailure(Phase.AFTER_BIND_STATE, binding.postFailureType());
+            phase = Phase.BINDING_EXPORT;
+            out.put("bindingCensus", exportCensus(binding.value()));
             for (int i = 0; i < 2; i++) {
-                NativeDirtPolicy.Observation observation = reader.inspect(TARGET);
-                validateCensusExport(observation.census());
-                observations.add(observation.census());
-                // No profile is constructed from this evidence. Any earlier refusal is retained exactly.
-                out.put("decision", NativeDirtPolicy.evaluate(observation, null, null).check());
-                snapshots.add(snapshot(level, owner, worker, job)); metrics.add(reader.runtimeMetrics());
+                Phase readPhase = i == 0 ? Phase.FIRST_INSPECTION : Phase.SECOND_INSPECTION;
+                Phase postPhase = i == 0 ? Phase.AFTER_FIRST_STATE : Phase.AFTER_SECOND_STATE;
+                phase = readPhase;
+                var read = NativeDirtCensusBoundary.readWindow(() -> reader.inspect(TARGET), () -> {
+                    snapshots.add(snapshot(level, owner, worker, job)); metrics.add(reader.runtimeMetrics()); return null;
+                });
+                postInspections.add(read.postStateCaptured());
+                if (!read.readFailureType().isEmpty()) throw new CaptureFailure(readPhase, read.readFailureType());
+                if (!read.postFailureType().isEmpty()) throw new CaptureFailure(postPhase, read.postFailureType());
+                // Evaluate the private exact observation, never the reporting-only encoded pack identities.
+                out.put("decision", NativeDirtPolicy.evaluate(read.value(), null, null).check());
+                phase = i == 0 ? Phase.FIRST_EXPORT : Phase.SECOND_EXPORT;
+                observations.add(exportCensus(read.value().census()));
             }
-            out.put("censuses", observations);
-            out.put("metrics", metrics);
-            out.put("states", snapshots.stream().map(Snapshot::evidence).toList());
-            var equal = new LinkedHashMap<String, Boolean>();
-            for (String key : snapshots.get(0).privateState.keySet()) {
-                Object expected = snapshots.get(0).privateState.get(key);
-                equal.put(key, snapshots.stream().allMatch(s -> expected.equals(s.privateState.get(key))));
-            }
-            out.put("unchanged", equal);
-            out.put("status", equal.values().stream().allMatch(Boolean::booleanValue)
-                    && observations.stream().allMatch(c -> c.observation().ready()) ? "captured" : "refused");
-        } catch (Exception | AssertionError unavailable) {
-            // Exception strings can contain local/plugin inputs. Export only a fixed diagnostic/type.
-            out.put("status", "refused");
-            out.put("failure", Map.of("reason", "QA_STATE_UNAVAILABLE", "type", unavailable.getClass().getName()));
-            out.put("censuses", observations); out.put("metrics", metrics);
-            out.put("states", snapshots.stream().map(Snapshot::evidence).toList());
+            phase = Phase.SUMMARY;
+        } catch (Exception | AssertionError | LinkageError unavailable) {
+            failed = true;
+            Phase failedPhase = unavailable instanceof CaptureFailure known ? known.phase : phase;
+            String failedType = unavailable instanceof CaptureFailure known ? known.type : NativeDirtCensusBoundary.safeType(unavailable);
+            out.put("failure", Map.of("reason", "QA_STATE_UNAVAILABLE", "phase", failedPhase.name(), "type", failedType));
         }
+        out.put("bindingAttempted", bindingAttempted); out.put("postBindStateCaptured", postBindCaptured);
+        out.put("postInspectionStatesCaptured", postInspections);
+        out.put("censuses", observations); out.put("metrics", metrics);
+        out.put("states", snapshots.stream().map(Snapshot::evidence).toList());
+        var equal = new LinkedHashMap<String, Boolean>();
+        if (snapshots.size() >= 2) for (String key : snapshots.get(0).privateState.keySet()) {
+            Object expected = snapshots.get(0).privateState.get(key);
+            equal.put(key, snapshots.stream().allMatch(state -> expected.equals(state.privateState.get(key))));
+        }
+        out.put("unchanged", equal);
+        boolean completeStates = postBindCaptured && postInspections.equals(List.of(true, true)) && snapshots.size() == 4;
+        out.put("noEffectsEvidenceComplete", completeStates);
+        out.put("status", !failed && completeStates && bindingCheck != null && bindingCheck.ready()
+                && observations.size() == 2 && observations.stream().allMatch(c -> c.observation().ready())
+                && !equal.isEmpty() && equal.values().stream().allMatch(Boolean::booleanValue) ? "captured" : "refused");
         JsonElement safe = new GsonBuilder().serializeNulls().create().toJsonTree(out);
         validateExport(safe, 0, new int[]{0});
         String json = new GsonBuilder().serializeNulls().setPrettyPrinting().create().toJson(safe);
@@ -318,11 +349,18 @@ public final class NativeDirtCensusQa {
     }
     private static String hash(String value) throws Exception { return NativeDirtCensus.hash(value.getBytes(StandardCharsets.UTF_8)); }
 
-    private static void validateCensusExport(NativeDirtPolicy.Census census) {
-        var resources = new ArrayList<>(census.modifierLayers());
-        if (census.dirt() != null) resources.add(census.dirt());
-        for (var resource : resources)
-            require(resource.pack().matches("[A-Za-z0-9_.:-]{1,128}"), "Resource pack identifier is not safe census metadata");
+    /** Reporting-only copy. Raw resource-pack identity stays private in the provider observation. */
+    private static NativeDirtPolicy.Census exportCensus(NativeDirtPolicy.Census original) throws Exception {
+        var layers = new ArrayList<NativeDirtPolicy.ResourceProof>();
+        for (var layer : original.modifierLayers()) layers.add(exportResource(layer));
+        return new NativeDirtPolicy.Census(original.generation(), original.gameTime(), original.target(),
+                original.dirt() == null ? null : exportResource(original.dirt()), layers, original.listeners(),
+                original.implementation(), original.runtime(), original.chunks(), original.sections(), original.registries(),
+                original.lootGraph(), original.activeModifiers(), original.observation());
+    }
+    private static NativeDirtPolicy.ResourceProof exportResource(NativeDirtPolicy.ResourceProof original) throws Exception {
+        return new NativeDirtPolicy.ResourceProof(NativeDirtCensusBoundary.packIdentity(original.pack()),
+                original.builtin(), original.sha256(), original.bytes());
     }
 
     /** Only the explicit DTO/maps above reach Gson; no Identity, reader, runtime arguments, or private snapshots. */

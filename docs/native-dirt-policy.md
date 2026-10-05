@@ -326,3 +326,11 @@ on refusal. It never exports a live Identity. The original `bindRuntime` Check A
 continues to delegate to that same operation. QA exports both the actual binding
 Census and subsequent fresh Census values; no omitted diagnostic is replaced
 with an inferred resource or an approved profile.
+
+The optional QA exporter represents pack-name identities by bounded, length-framed
+UTF-16 SHA-256 values in reporting-only ResourceProof copies, so unusual pack names
+never leak raw plugin text. It retains the exact private provider Census for
+evaluation. This reporting encoding does not change this provider's admission or
+its native profile comparisons. QA fixed phase codes and actual post-state flags
+separately distinguish read refusal, export failure and incomplete no-effects
+observations; no missing state is assumed unchanged.

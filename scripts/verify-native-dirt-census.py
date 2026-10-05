@@ -74,7 +74,7 @@ def check(value, reason):
 
 def resource(value):
     keys(value, 'pack builtin sha256 bytes')
-    text(value['pack'], '[A-Za-z0-9_.:-]{1,128}'); digest(value['sha256'])
+    text(value['pack'], 'utf16-sha256:[0-9a-f]{64}'); digest(value['sha256'])
     require(type(value['builtin']) is bool, 'Missing resource built-in provenance')
     integer(value['bytes'], 1, 8192)
 
@@ -191,10 +191,14 @@ def census(value, root, fill):
 
 
 def validate(result, fill):
-    receipt = fill.get('dirtCensus'); keys(receipt, 'enabled status artifactSha256 failureType')
-    require(receipt['enabled'] is True and receipt['status'] == 'captured' and receipt['failureType'] == '', 'Optional census capture was refused')
+    receipt = fill.get('dirtCensus'); keys(receipt, 'enabled status artifactSha256 failureType failurePhase')
+    require(receipt['enabled'] is True and receipt['status'] == 'captured' and receipt['failureType'] == '' and receipt['failurePhase'] == '', 'Optional census capture was refused')
     digest(receipt['artifactSha256'])
-    keys(result, 'schema profileStatus packagedProductionAcceptance miningCallbacksInvoked target buildHeight stableSinceGameTime captureGameTime lifecycle binding bindingCensus decision censuses metrics states unchanged status')
+    keys(result, 'schema profileStatus packagedProductionAcceptance miningCallbacksInvoked packIdentityEncoding bindingAttempted postBindStateCaptured postInspectionStatesCaptured noEffectsEvidenceComplete target buildHeight stableSinceGameTime captureGameTime lifecycle binding bindingCensus decision censuses metrics states unchanged status')
+    require(result['packIdentityEncoding'] == 'sha256-length-framed-utf16-code-units', 'Raw or unknown pack identity encoding')
+    require(result['bindingAttempted'] is True and result['postBindStateCaptured'] is True
+            and result['postInspectionStatesCaptured'] == [True, True] and all(type(v) is bool for v in result['postInspectionStatesCaptured'])
+            and result['noEffectsEvidenceComplete'] is True, 'Post-state was not actually captured for every read window')
     require(result['schema'] == 'native-dirt-census-qa-v1' and result['status'] == 'captured', 'Successful native census absent')
     require(result['profileStatus'] == 'PROFILE_UNREVIEWED' and result['packagedProductionAcceptance'] is False,
             'Observed development census approved itself or claimed production acceptance')
@@ -260,9 +264,9 @@ def strict_load(path):
 
 
 def verify_sidecar_digest(path, fill):
-    receipt = fill.get('dirtCensus'); keys(receipt, 'enabled status artifactSha256 failureType')
+    receipt = fill.get('dirtCensus'); keys(receipt, 'enabled status artifactSha256 failureType failurePhase')
     digest(receipt['artifactSha256'])
-    require(receipt['status'] == 'captured' and receipt['enabled'] is True and receipt['failureType'] == '', 'Refused sidecar capture')
+    require(receipt['status'] == 'captured' and receipt['enabled'] is True and receipt['failureType'] == '' and receipt['failurePhase'] == '', 'Refused sidecar capture')
     data = Path(path).read_bytes(); require(len(data) <= 2_000_000, 'Sidecar exceeds output bound')
     require(hashlib.sha256(data).hexdigest() == receipt['artifactSha256'], 'Sidecar differs from the exact one-FILL capture receipt')
 

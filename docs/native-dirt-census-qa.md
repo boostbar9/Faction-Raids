@@ -38,7 +38,10 @@ reload and never treats player datapack sync as successful completion.
 
 After the original one-FILL checks, the observer captures bounded state, calls
 `bindRuntimeCensus` explicitly off-pulse, captures state again, and performs two fresh
-same-thread `inspect` calls with another state capture after each. The provider's
+same-thread `inspect` calls with another state capture after each. Each read
+window attempts its post-state exactly once even if the read throws; those
+attempts happen before metadata export. Explicit booleans record which post-states
+were actually captured, and incomplete evidence cannot claim a successful census. The provider's
 read counters prove that those fresh inspections reuse startup artifact/module
 bytes while still rechecking actual runtime metadata and all 27 registry entries.
 The actual partial binding Census is retained even if commissioning refuses;
@@ -90,8 +93,13 @@ NBT serialization is capped at 256 KiB before copying. Raw RNG seeds, private NB
 listener objects, Observation/Identity internals, JVM arguments and environment
 values are never serialized. The export is limited to three Census DTOs (binding plus two fresh inspections) and
 explicit safe maps, at most 100,000 JSON nodes, depth 16, 4,096 characters per
-string and 2 MB total. Resource pack identifiers are restricted to bounded
-identifier syntax. The provider already rejects private URI components and
+string and 2 MB total. Resource pack names are represented only by SHA-256 over a four-byte
+big-endian code-unit count followed by the original Java UTF-16 code units,
+including unpaired surrogates. Names are bounded at 4,096 code units before
+framing. The reporting-only Census copy marks this encoding explicitly and
+preserves each resource's original content hash/byte count/built-in flag.
+The original exact Census/Observation stays private and is used for policy
+comparison; encoded reporting data is never evaluated or promoted to a Profile. The provider already rejects private URI components and
 hashes arbitrary transformation labels instead of exporting them.
 
 These are bounded local no-effects observations, not a complete global-world or
@@ -103,7 +111,11 @@ CREATE_NEW output IO. It returns only a bounded capture receipt to the original
 one-FILL result. Successful sidecars are bound by their exact SHA-256; refused
 writes carry no digest and never overwrite an existing file. The separate verifier
 requires that receipt and digest to match the sidecar, so missing, stale or changed
-files cannot pass. Exception messages are never copied into the receipt. The
+files cannot pass. Exception messages are never copied into the receipt. Fixed phase codes identify
+preflight, binding, each inspection, post-state and reporting stages in diagnostic
+sidecars; the outer receipt also distinguishes capture, payload bounds and output
+write failures. A successfully written refusal sidecar can carry its digest, but
+its refusal status remains independent of genuine one-FILL success. The
 original one-FILL result is kept separate so an observation refusal does not
 rewrite its genuine native outcome.
 
