@@ -72,6 +72,12 @@ def verify(root):
         if name in {f'{prefix}-army.png' for prefix in MATRICES}:
             assert len(view['nativePortraits']) == 4, name
             assert all(value.startswith('com.talhanation.') for value in view['nativePortraits']), name
+        if name.endswith('-loot-gallery-last.png'):
+            tooltip = view['lootTooltipBounds']
+            assert tooltip['x'] >= 4 and tooltip['y'] >= 4, name
+            assert tooltip['x'] + tooltip['width'] <= viewport['guiWidth'] - 4, name
+            assert tooltip['y'] + tooltip['height'] <= viewport['guiHeight'] - 4, name
+            assert 0 < tooltip['scale'] <= 1, name
         if name.endswith('-territory.png'):
             assert view['territoryAvailability'] == {'ownershipMask': 5, 'active': 1, 'retained': 1, 'unavailableButtons': 2}, name
             unavailable = [widget for widget in view['widgets'] if widget['label'] == 'Unavailable']

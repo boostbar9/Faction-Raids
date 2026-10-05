@@ -111,6 +111,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private Button lootBack, lootPrevious, lootNext;
     private boolean showingLootGallery;
     private int previewBox, previewTier = 3, lootPage;
+    private CoreTooltipLayout lootTooltipBounds;
     private final Map<LootBoxItem.Tier, List<ItemStack>> lootPools = new java.util.EnumMap<>(LootBoxItem.Tier.class);
     private final Button[] bank = new Button[4];
     private Button feedbackButton;
@@ -772,6 +773,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     private void drawTooltips(GuiGraphics g, int mx, int my,
                               int tooltipX, int tooltipY) {
+        lootTooltipBounds = null;
         if (treasuryShortcut.isMouseOver(mx, my)) {
             tooltip(g, String.format(Locale.ROOT, "Faction Treasury: %,d emeralds. Purchases use this balance. Click to deposit or withdraw.", menu.bank()), tooltipX, tooltipY);
             return;
@@ -847,10 +849,12 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
         if (tab == CoreCommandPage.LOOT && showingLootGallery) {
             LootPreviewButton focused = null;
             for (var item : lootItems) if (item.visible) {
-                if (item.isMouseOver(mx, my)) { g.renderTooltip(font, item.preview(), tooltipX, tooltipY); return; }
+                if (item.isMouseOver(mx, my)) { lootTooltipBounds = CoreItemTooltip.draw(g, font, item.preview(), width, height, tooltipX, tooltipY); return; }
                 if (item.isFocused()) focused = item;
             }
-            if (focused != null) g.renderTooltip(font, focused.preview(), tooltipX, tooltipY);
+            if (focused != null) lootTooltipBounds = CoreItemTooltip.draw(g, font, focused.preview(), width, height,
+                    Math.round((focused.getX() + focused.getWidth()) * layout.scale()),
+                    Math.round((focused.getY() + focused.getHeight() / 2f) * layout.scale()));
             return;
         }
         if (tab == CoreCommandPage.LOOT) {

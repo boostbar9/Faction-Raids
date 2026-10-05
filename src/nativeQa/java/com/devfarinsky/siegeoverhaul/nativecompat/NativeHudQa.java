@@ -670,6 +670,23 @@ public final class NativeHudQa {
                     view.put("nativePortraits", portraitEvidence());
                     view.put("portraitLogicalSize", CoreHireLayout.fit(mc.screen.width, mc.screen.height).hirePortraitSize());
                 }
+                if (currentPage() == CoreCommandPage.LOOT && (Boolean) read("showingLootGallery")) {
+                    Object bounds = read("lootTooltipBounds");
+                    if (bounds != null) {
+                        var coordinates = new LinkedHashMap<String, Float>();
+                        for (String fieldName : List.of("x", "y", "width", "height", "scale")) {
+                            var accessor = bounds.getClass().getDeclaredMethod(fieldName); accessor.setAccessible(true);
+                            coordinates.put(fieldName, (Float) accessor.invoke(bounds));
+                        }
+                        require(coordinates.get("x") >= 4 && coordinates.get("y") >= 4
+                                        && coordinates.get("x") + coordinates.get("width") <= mc.screen.width - 4
+                                        && coordinates.get("y") + coordinates.get("height") <= mc.screen.height - 4,
+                                "Native loot tooltip clips the viewport");
+                        view.put("lootTooltipBounds", coordinates);
+                    }
+                    if (capture.endsWith("-loot-gallery-last.png")) require(bounds != null,
+                            "Keyboard-selected loot item must show its complete native tooltip");
+                }
                 if (currentPage() == CoreCommandPage.TERRITORY) {
                     Button[] upgrades = (Button[]) read("territoryBuffs");
                     for (int i : new int[]{0, 1}) require(!upgrades[i].active

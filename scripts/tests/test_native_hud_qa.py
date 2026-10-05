@@ -118,6 +118,11 @@ class NativeHudSourceContracts(unittest.TestCase):
         self.assertIn('require(lineCount <= lineBudget', source)
         self.assertIn('view.put("civilianGuidanceLineBudget", lineBudget)', source)
 
+    def test_loot_keyboard_tooltips_have_a_viewport_bounds_gate(self):
+        source = HARNESS.read_text()
+        self.assertIn('Native loot tooltip clips the viewport', source)
+        self.assertIn('Keyboard-selected loot item must show its complete native tooltip', source)
+
     def test_workflow_read_only_and_bounded_online_then_offline(self):
         workflow = (REPO / '.github/workflows/native-hud-qa.yml').read_text()
         for text in ['contents: read', 'persist-credentials: false', 'cache-read-only: true',
@@ -187,6 +192,8 @@ class NativeHudReceiptVerifier(unittest.TestCase):
                 view['selectedPlan'] = name.removesuffix('.png').split('-plan-')[1].upper()
                 view['nativeBlueprintCards'] = [{'plan': view['selectedPlan'], 'sourceBlueprintMatches': True,
                                                 'blockModels': 15, 'caption': 'Synthetic plan'}]
+            if name.endswith('-loot-gallery-last.png'):
+                view['lootTooltipBounds'] = {'x': 20, 'y': 20, 'width': 200, 'height': 170, 'scale': 1}
             if 'native-inspection' in name: view['nativeStructurePreviewCount'] = 1
             self.data['views'].append(view)
             (self.root / name).write_bytes(self.pngs[size])
