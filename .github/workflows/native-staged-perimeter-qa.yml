@@ -1,8 +1,11 @@
-name: Native Staged 5x5 Perimeter QA
+name: Native Staged Stepped Perimeter QA
 
-# Opt-in full5x5 acceptance. Actual production stage layout and applicable world restarts; no speed/refill changes.
+# Opt-in full stepped/gated acceptance. Actual production stage layout and applicable world restarts; no speed/refill changes.
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, labeled]
 
 permissions:
   contents: read
@@ -14,7 +17,10 @@ concurrency:
 jobs:
   native-staged-client:
     # Long full-completion coverage is opt-in when a specific risk warrants it.
-    if: github.event_name == 'workflow_dispatch'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       contains(github.event.pull_request.labels.*.name, 'native-staged-perimeter-qa'))
     runs-on: ubuntu-24.04
     timeout-minutes: 205
     env:
@@ -50,7 +56,7 @@ jobs:
           printf 'onboardAccessibility:false\ntutorialStep:none\nrenderDistance:6\nsimulationDistance:6\nmaxFps:30\nvsync:false\n' > build/native-staged-qa/client/options.txt
           git rev-parse HEAD > build/native-staged-qa/evidence/source-commit.txt
           java -version 2> build/native-staged-qa/evidence/java-version.txt
-      - name: Run full native staged 5x5 perimeter and applicable world restarts
+      - name: Run full native staged stepped perimeter and applicable world restarts
         run: |
           set -euo pipefail
           xvfb-run -a -s '-screen 0 1280x720x24' bash -c '
@@ -72,8 +78,11 @@ jobs:
           assert audit['status'] == 'passed' and audit['noVendorJarsUploaded'], audit
           assert sum(len(v['classes']) for v in audit['artifacts'].values()) == 18, audit
           assert data['mode'] == 'staged-perimeter' and data['status'] == 'passed', data
-          assert data['completedBlocks'] == 3900 and data['treasuryDebit'] == 64, data
-          assert data['materialCounts'] == {'minecraft:cobblestone': 2400, 'minecraft:oak_planks': 1500}, data
+          target_count = data['targetCount']
+          materials = data['materialCounts']
+          assert data['completedBlocks'] == target_count and data['treasuryDebit'] == 64, data
+          assert sum(materials.values()) == target_count and materials['minecraft:dirt'] == data['fillTargets'] > 0, data
+          assert data['gateCount'] == 4 and len(data['gateCenters']) == 4, data
           assert data['nativeCompletionObserved'] and data['completedCaptureTerrainCompiled'], data
           assert data['completionAuthority'] in ['COMPLETE full durable project', 'COMPLETE compact terminal receipt'], data
           assert data['completionAuthorityNbt'] and len(data['manifestHash']) == 64, data
@@ -89,10 +98,10 @@ jobs:
           if data['betweenStageRestartApplicable']:
               assert restarts[1]['projectState'] == 'WAITING_FOR_NEXT_STAGE', restarts
           for restart in restarts:
-              assert 0 < restart['placed'] < 3900 and restart['placed'] + restart['pending'] == 3900, restart
+              assert 0 < restart['placed'] < target_count and restart['placed'] + restart['pending'] == target_count, restart
           stages = data['stageLayout']
           assert len(stages) == data['reviewedStageCount'] >= 1, stages
-          assert sum(s['targets'] for s in stages) == 3900, stages
+          assert sum(s['targets'] for s in stages) == target_count, stages
           assert [s['index'] for s in stages] == list(range(len(stages))), stages
           assert len(set(s['area'] for s in stages)) == len(stages), stages
           joins = data['nativeStageJoins']
@@ -100,7 +109,7 @@ jobs:
           assert all(j['marker'] == data['originalMarker'] for j in joins), joins
           assert sum(not j['loadedFromDisk'] for j in joins) == len(stages), joins
           assert any(j['loadedFromDisk'] for j in joins), joins
-          expected = ['01-live-core-five-by-five-review.png', '02-free-five-by-five-perimeter-review.png', '03-native-completed-staged-perimeter.png']
+          expected = ['01-live-core-stepped-gated-review.png', '02-free-stepped-gated-perimeter-review.png', '03-native-completed-staged-perimeter.png']
           assert data['screenshots'] == expected, data
           for name in expected:
               content = (root / name).read_bytes()
@@ -114,12 +123,20 @@ jobs:
           assert bank['startingFunds'] == 2000 and bank['commissionDebit'] == 64 and bank['initialPaidBalance'] == 1936, bank
           assert bank['singleNegativeLedgerDelta'] == -64, bank
           assert bank['expectedFinalBalance'] == 1936 + bank['interestCredits'] + bank['taxCredits'], bank
-          assert final['placed'] == 3900 and final['treasury'] == bank['expectedFinalBalance'], final
+          assert final['placed'] == target_count and final['treasury'] == bank['expectedFinalBalance'], final
           assert len(data['treasuryObserverContracts']) == 10, data
-          assert final['placedCobble'] == 2400 and final['placedOak'] == 1500, final
-          for key in ['chestCobble', 'chestOak', 'builderCobble', 'builderOak', 'looseCobble', 'looseOak']:
-              assert final[key] == 0, (key, final)
-          print('Complete native5x5 staged perimeter and applicable real restarts passed. Review raw framebuffers and authority/stock evidence.')
+          assert final['placedCobble'] == materials.get('minecraft:cobblestone', 0), final
+          assert final['placedOak'] == materials.get('minecraft:oak_planks', 0), final
+          assert final['placedDirt'] == materials.get('minecraft:dirt', 0), final
+          supplied = {
+              'Cobble': 3000,
+              'Oak': 2000,
+              'Dirt': 256,
+          }
+          for suffix, amount in supplied.items():
+              accounted = final[f'placed{suffix}'] + final[f'chest{suffix}'] + final[f'builder{suffix}'] + final[f'owner{suffix}'] + final[f'loose{suffix}']
+              assert accounted == amount, (suffix, accounted, final)
+          print('Complete native staged stepped perimeter and applicable real restarts passed. Review raw framebuffers and authority/stock evidence.')
           PYQA
       - name: Collect diagnostics without companion JARs or worlds
         if: always()

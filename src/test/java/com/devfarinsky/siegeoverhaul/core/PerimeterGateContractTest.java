@@ -22,6 +22,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -170,6 +171,39 @@ class PerimeterGateContractTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void steppedJumpClearanceSurvivesGateContractProjectAdmissionAndReload() {
+        Set<PerimeterSteppedTopology.Chunk> model = new HashSet<>();
+        for (int x = 0; x < 4; x++) for (int z = 0; z < 4; z++) model.add(new PerimeterSteppedTopology.Chunk(x, z));
+        var topology = PerimeterSteppedTopology.create(model);
+        var lowerBand = topology.loops().get(0).bands().stream()
+                .filter(band -> band.kind() == PerimeterSteppedProfile.Kind.STRAIGHT).skip(1).findFirst().orElseThrow();
+        Set<PerimeterSteppedTopology.Cell> lower = new HashSet<>(lowerBand.cells());
+        var draft = steppedDraft(model, cell -> PerimeterSteppedGeometry.Ground.safe(lower.contains(cell) ? 63 : 64));
+        assertTrue(draft.seams().stream().anyMatch(seam -> seam.fromY() != seam.toY()));
+
+        Set<ChunkPos> territory = new HashSet<>();
+        model.forEach(chunk -> territory.add(new ChunkPos(chunk.x(), chunk.z())));
+        var plan = PerimeterSteppedBlueprint.convert(territory, draft);
+        BlockPos jump = jumpClearance(plan);
+        assertTrue(plan.clearance().contains(jump.asLong()));
+        assertFalse(plan.blocks().containsKey(jump.asLong()));
+
+        var contract = PerimeterGateContract.create(territory, plan, draft, steppedObservations(territory, plan, draft));
+        var restoredContract = PerimeterGateContract.load(contract.save().copy());
+        assertDoesNotThrow(() -> restoredContract.validateAgainst(territory, plan));
+        var layout = PerimeterGateStages.partition(plan, stage -> null);
+        var header = PerimeterProject.Header.newCommission(UUID.randomUUID(), 1, UUID.randomUUID(), UUID.randomUUID(),
+                "team:stepped", new BlockPos(32, 64, 32), "stepped", 1, "a".repeat(64), territory);
+        Map<Long, BlockState> before = new LinkedHashMap<>(), clearance = new LinkedHashMap<>();
+        plan.blocks().keySet().forEach(cell -> before.put(cell, Blocks.AIR.defaultBlockState()));
+        plan.clearance().forEach(cell -> clearance.put(cell, Blocks.AIR.defaultBlockState()));
+        var project = PerimeterProject.prepareWithGates(header, plan, layout, before, clearance, restoredContract);
+        var loaded = PerimeterProject.load(project.save().copy());
+        assertEquals(project.save(), loaded.save());
+        assertEquals(restoredContract.save(), loaded.gateContract().save());
+        assertTrue(loaded.reservation().contains(jump.asLong()));
+    }
+
     @Test void publicLayoutRecordsCannotForgeMissingDuplicateOrExtraGateCells() {
         var original = flat(ONE); var selected = selection(ONE, original); var before = observations(original, selected);
         var missing = new HashSet<>(selected.approachClearance()); missing.remove(missing.iterator().next());
@@ -285,12 +319,40 @@ class PerimeterGateContractTest extends MinecraftTestSupport {
         return new PerimeterBlueprint.Plan(targets, columns, clearance, plan.min(), plan.max(), List.of(), List.of(), counts, List.of());
     }
     private static PerimeterSteppedGeometry.Draft steppedDraft(java.util.function.Function<PerimeterSteppedTopology.Cell, PerimeterSteppedGeometry.Ground> ground) {
-        var result = PerimeterSteppedGeometry.compile(Set.of(new PerimeterSteppedTopology.Chunk(0, 0)), new PerimeterSteppedGeometry.Terrain() {
+        return steppedDraft(Set.of(new PerimeterSteppedTopology.Chunk(0, 0)), ground);
+    }
+    private static PerimeterSteppedGeometry.Draft steppedDraft(Set<PerimeterSteppedTopology.Chunk> claim,
+                                                               java.util.function.Function<PerimeterSteppedTopology.Cell, PerimeterSteppedGeometry.Ground> ground) {
+        var result = PerimeterSteppedGeometry.compile(claim, new PerimeterSteppedGeometry.Terrain() {
             @Override public PerimeterSteppedGeometry.Ground ground(PerimeterSteppedTopology.Cell column) { return ground.apply(column); }
             @Override public String passageProblem(PerimeterSteppedTopology.Cell column, int feetY, PerimeterSteppedGeometry.Region region) { return null; }
         }, PerimeterSteppedGeometry.Block.COBBLESTONE, PerimeterSteppedGeometry.Limits.DEFAULT);
         assertTrue(result.feasible(), result.problem());
         return result;
+    }
+    private static Map<Long, BlockState> steppedObservations(Set<ChunkPos> territory, PerimeterBlueprint.Plan plan,
+                                                             PerimeterSteppedGeometry.Draft draft) {
+        Map<Long, BlockState> before = new LinkedHashMap<>();
+        Set<Long> air = new HashSet<>();
+        for (var gate : draft.gates()) {
+            gate.inside().forEach(pos -> air.add(packed(pos)));
+            gate.outside().forEach(pos -> air.add(packed(pos)));
+        }
+        for (long cell : PerimeterGateContract.steppedObservationCells(territory, plan, draft).stream().sorted().toList())
+            before.put(cell, air.contains(cell) ? Blocks.CAVE_AIR.defaultBlockState() : Blocks.DIRT.defaultBlockState());
+        return before;
+    }
+    private static BlockPos jumpClearance(PerimeterBlueprint.Plan plan) {
+        Map<Long, PerimeterBlueprint.Column> columns = new HashMap<>();
+        plan.columns().forEach(column -> columns.put(new BlockPos(column.base().getX(), 0, column.base().getZ()).asLong(), column));
+        for (var column : plan.columns()) for (Direction direction : List.of(Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST)) {
+            var other = columns.get(new BlockPos(column.base().getX() + direction.getStepX(), 0,
+                    column.base().getZ() + direction.getStepZ()).asLong());
+            if (other == null || Math.abs(other.base().getY() - column.base().getY()) != 1) continue;
+            var lower = column.base().getY() < other.base().getY() ? column : other;
+            return lower.base().above(6);
+        }
+        throw new AssertionError("Expected a stepped one-block transition");
     }
     private static long packed(PerimeterSteppedGeometry.Pos pos) { return new BlockPos(pos.x(), pos.y(), pos.z()).asLong(); }
     private static void corrupt(PerimeterGateContract contract, Consumer<CompoundTag> change) {

@@ -213,6 +213,15 @@ public final class PerimeterConstruction {
                     return "Move players, creatures and vehicles out of the planned wall cells.";
             }
         }
+        for (long packed : plan.clearance()) {
+            BlockPos p = BlockPos.of(packed);
+            if (!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p))
+                return "The whole perimeter must be loaded and inside the world border.";
+            if (!permitted.test(p)) return "The entire footprint and walkway must remain inside your faction territory with building permission.";
+            var current = level.getBlockState(p);
+            String cellProblem = NativeConstructionGuard.initialPlacementProblem(level, p, current, Blocks.AIR.defaultBlockState());
+            if (cellProblem != null) return cellProblem;
+        }
         if (remaining.isEmpty()) return "This perimeter is already built. Nothing to commission.";
         String neighborhood = NativeConstructionGuard.placementNeighborhoodProblem(level, remaining);
         if (neighborhood != null) return neighborhood;

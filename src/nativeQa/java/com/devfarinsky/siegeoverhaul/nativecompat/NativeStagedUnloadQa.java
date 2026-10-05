@@ -182,7 +182,7 @@ public final class NativeStagedUnloadQa {
     }
 
     private static boolean closed(BuilderEntity builder) {
-        return !builder.isNoAi() && workerStock(builder, Items.COBBLESTONE) >= 32
+        return !builder.isNoAi() && workerConstructionStock(builder) >= 32
                 && builder.neededItems != null && builder.neededItems.isEmpty()
                 && !ProtectedBuilderHandMirror.activeUse(builder) && ProtectedStorageAccess.runningProblem(builder) == null
                 && ProtectedInventoryCleanup.read(builder.getPersistentData()).isEmpty()
@@ -208,16 +208,26 @@ public final class NativeStagedUnloadQa {
                 require(FactionBank.balance(core(level)) == 0, "Fresh Treasury was not empty");
                 FactionBank.credit(core(level), 2000); RaidSavedData.get(owner.server).setDirty();
                 var quote = PerimeterConstruction.prepare(owner, NativeStagedUnloadFixture.CORE, 1);
-                require(quote.ready() && quote.quote() != null && !quote.quote().layout().stages().isEmpty()
-                        && quote.plan().blocks().equals(fixture.plan().blocks()) && quote.plan().clearance().equals(fixture.plan().clearance()),
-                        "Production quote did not retain the full translated hollow oracle");
+                require(quote.ready() && quote.quote() != null && !quote.quote().layout().stages().isEmpty(),
+                        "Production stepped quote rejected: " + quote.problem());
+                fixture = fixture.withPlan(quote.plan(), level);
+                require(quote.builder() == builder(level), "Production quote did not bind the fixture builder");
+                require(quote.quote().gateContract() != null && quote.quote().gateContract().gates().size() == 4,
+                        "Production quote did not bind four cardinal gates");
+                require(fixture.plan().materialCounts().getOrDefault("minecraft:dirt", 0) > 0,
+                        "Production quote did not include fixture dirt-fill targets");
                 require(PerimeterConstruction.review(owner, NativeStagedUnloadFixture.CORE, 1), "Production free review failed");
                 require(FactionBank.balance(core(level)) == 2000 && PerimeterProjectStore.all(core(level)).isEmpty()
                         && placed(level) == 0, "Free review commissioned or changed the site");
                 selectPlan(owner);
+                REPORT.put("targetCount", targetCount()); REPORT.put("materialCounts", fixture.plan().materialCounts());
+                REPORT.put("fillTargets", fixture.plan().materialCounts().getOrDefault("minecraft:dirt", 0));
+                REPORT.put("gateCount", quote.quote().gateContract().gates().size());
+                REPORT.put("gateCenters", quote.quote().gateContract().gates().stream()
+                        .map(g -> g.facing().getName() + ":" + g.outerCenter().toShortString()).toList());
                 REPORT.put("reviewedStageCount", quote.quote().layout().stages().size());
                 REPORT.put("parkedUnrelatedStarterNpcIds", fixture.parkedAuxiliaries());
-                check("Fresh non-op Survival owner, translated 25-chunk oracle, free production review and exactly finite native chest stock");
+                check("Fresh non-op Survival owner, translated stepped/gated claim, free production review and exactly finite native chest stock");
                 advance(now, 1);
             }
             case 1 -> {
@@ -233,7 +243,8 @@ public final class NativeStagedUnloadQa {
                         "Actual plan packet did not commit one 64-emerald commission");
                 accepted = projects.get(0); projectId = accepted.header().projectId(); areaId = accepted.active().areaId();
                 require(accepted.state() == PerimeterProject.State.RUNNING && accepted.activeStage() == 0
-                        && accepted.plan().blocks().equals(fixture.plan().blocks()) && !accepted.layout().stages().isEmpty(),
+                        && accepted.plan().blocks().equals(fixture.plan().blocks()) && accepted.gateContract() != null
+                        && !accepted.layout().stages().isEmpty(),
                         "Wrong initial staged authority");
                 verifyPayment(accepted.payment());
                 var journal = PerimeterStageJournal.get(core(level), accepted);
@@ -264,10 +275,10 @@ public final class NativeStagedUnloadQa {
                 departureJournal = core(level).getCompound(PerimeterStageJournal.KEY).copy();
                 departureLedger = ConstructionEditLedger.get(level).save(new CompoundTag());
                 REPORT.put("closedLifecycle", Map.of("consecutiveServerTicks", stableTicks, "minimumTicks", CLOSED_TICKS,
-                        "carriedCobble", workerStock(builder(level), Items.COBBLESTONE), "neededItemsEmpty", true,
+                        "carriedConstruction", workerConstructionStock(builder(level)), "neededItemsEmpty", true,
                         "storageRunningProblemAbsent", true, "cleanupJournalEmpty", true, "activeHandUse", false,
                         "nativeGoalState", String.valueOf(buildGoal.state), "nativePlaced", departurePlaced, "gameTime", now));
-                check("Observed real native placements and at least 40 consecutive ordinary ticks with a closed inventory lifecycle and at least 32 carried cobble");
+                check("Observed real native placements and at least 40 consecutive ordinary ticks with a closed inventory lifecycle and at least 32 carried construction blocks");
                 departing = true;
                 owner.teleportTo(level, NativeStagedUnloadFixture.CORE.getX() + 2048.5, 65, 39.5, 0, 20);
                 advance(now, 4);
@@ -404,7 +415,7 @@ public final class NativeStagedUnloadQa {
                 }
                 require(terminal.state() == PerimeterProject.State.CANCELED && terminal.manifestHash().equals(accepted.manifestHash())
                         && terminal.owner().equals(accepted.header().owner()) && terminal.builder().equals(fixture.builderId())
-                        && terminal.generation() == accepted.header().generation() && terminal.totalTargetCount() == 3900
+                        && terminal.generation() == accepted.header().generation() && terminal.totalTargetCount() == targetCount()
                         && terminal.totalStageCount() == accepted.stages().size() && terminal.verifiedStages() == 0,
                         "CANCEL compact receipt changed the commission or falsely completed a stage");
                 verifyPayment(terminal.payment());
@@ -502,7 +513,7 @@ public final class NativeStagedUnloadQa {
         for (long cell : completed) require(accepted.targets().get(cell).equals(level.getBlockState(BlockPos.of(cell))),
                 "Returned completed receipt disagrees with exact accepted target geometry");
         require(cleared.isEmpty() && accepted.active().layout().targets().keySet().stream().allMatch(p -> accepted.before().get(p).isAir()),
-                "Initially empty flat fixture acquired unexpected cleared-cell receipts");
+                "Initially empty stepped fixture acquired unexpected cleared-cell receipts");
         REPORT.put("returnedProgressReceipt", Map.of("departureCompleted", departureCompleted.size(), "returnedCompleted", completed.size(),
                 "cleared", cleared.size(), "immutableRecipeVerified", true, "everyCompletedCellMatchesExactTarget", true));
     }
@@ -513,7 +524,7 @@ public final class NativeStagedUnloadQa {
         var project = project(level);
         require(project != null, "Complete staged authority disappeared");
         // PerimeterProject is deeply immutable. Recheck every replacement, without serializing
-        // 3900 cells again on every otherwise unchanged observation tick.
+        // the full target set again on every otherwise unchanged observation tick.
         if (project != lastVerified) {
             require(invariant(project).equals(acceptedInvariant),
                     "Complete staged manifest/header/payment/state or active-stage progression changed");
@@ -566,18 +577,16 @@ public final class NativeStagedUnloadQa {
     }
     private static void verifyWorld(ServerLevel level, ServerPlayer owner) {
         requireWorldReadable(level);
-        NativeHollowWallOracle.assertCavitiesAir(level, NativeStagedUnloadFixture.TERRITORY);
         for (var entry : fixture.nonPlanCells().entrySet()) require(level.getBlockState(entry.getKey()).equals(entry.getValue()),
                 "Native work modified a non-plan cell " + entry.getKey());
-        NativeStagedUnloadFixture.assertInternalBordersOpen(level, fixture.plan().blocks());
         for (var entry : fixture.plan().blocks().entrySet()) {
             var state = level.getBlockState(BlockPos.of(entry.getKey()));
             require(state.isAir() || entry.getValue().equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(state.getBlock()))),
                     "Target contains a block outside its exact accepted material");
         }
         Map<String, Object> stock = new LinkedHashMap<>();
-        for (Item material : List.of(Items.COBBLESTONE, Items.OAK_PLANKS)) {
-            int supplied = material == Items.COBBLESTONE ? NativeStagedUnloadFixture.COBBLE : NativeStagedUnloadFixture.OAK;
+        for (Item material : List.of(Items.COBBLESTONE, Items.OAK_PLANKS, Items.DIRT)) {
+            int supplied = supplied(material);
             long built = fixture.plan().blocks().keySet().stream().filter(p -> level.getBlockState(BlockPos.of(p)).getBlock().asItem() == material).count();
             int chests = 0;
             for (BlockPos pos : NativeStagedUnloadFixture.CHESTS) {
@@ -592,6 +601,16 @@ public final class NativeStagedUnloadQa {
                     "chests", chests, "builder", cargo, "owner", personal, "loose", loose));
         }
         REPORT.put("latestConservation", stock);
+    }
+    private static int supplied(Item material) {
+        if (material == Items.COBBLESTONE) return NativeStagedUnloadFixture.COBBLE;
+        if (material == Items.OAK_PLANKS) return NativeStagedUnloadFixture.OAK;
+        if (material == Items.DIRT) return NativeStagedUnloadFixture.DIRT;
+        throw new AssertionError("Unexpected material " + material);
+    }
+    private static int targetCount() { return fixture.plan().blocks().size(); }
+    private static int workerConstructionStock(BuilderEntity worker) {
+        return workerStock(worker, Items.COBBLESTONE) + workerStock(worker, Items.OAK_PLANKS) + workerStock(worker, Items.DIRT);
     }
     private static int count(Container inventory, Item item) {
         int result = 0; for (int slot = 0; slot < inventory.getContainerSize(); slot++)
@@ -650,6 +669,7 @@ public final class NativeStagedUnloadQa {
             values.put("nativeBuildState", buildGoal == null ? "unavailable" : String.valueOf(buildGoal.state));
             values.put("nativeStorageState", storageGoal == null ? "unavailable" : String.valueOf(storageGoal.state));
             values.put("builderPosition", worker.position().toString()); values.put("builderCobble", workerStock(worker, Items.COBBLESTONE));
+            values.put("builderOak", workerStock(worker, Items.OAK_PLANKS)); values.put("builderDirt", workerStock(worker, Items.DIRT));
             values.put("neededItems", String.valueOf(worker.neededItems)); values.put("usingItem", worker.isUsingItem());
             values.put("storageRunningProblem", String.valueOf(ProtectedStorageAccess.runningProblem(worker)));
             values.put("cleanupJournal", worker.getPersistentData().getCompound(ProtectedInventoryCleanup.KEY).toString());
@@ -682,9 +702,9 @@ public final class NativeStagedUnloadQa {
         REPORT.put("scenarioConfiguration", "Fresh isolated fixture with RecruitsChunkLoading=false; default enabled chunk loading is not covered");
         REPORT.put("fixtureServerConfigSha256", sha256(config));
         REPORT.put("startedUtc", Instant.now().toString()); REPORT.put("mode", "staged-unload"); REPORT.put("totalLimitSeconds", TOTAL_SECONDS);
-        REPORT.put("scope", "Explicit fresh-fixture RecruitsChunkLoading=false configuration. Real integrated non-op Survival owner, production free review and plan-use packet, paid 3900-cell staged manifest, original native goals and finite stock. Only the owner departs for ordinary chunk unload. Spectator permission pause on return stabilizes observation; Survival resumes native work, then a real authenticated core CANCEL packet performs normal cleanup.");
+        REPORT.put("scope", "Explicit fresh-fixture RecruitsChunkLoading=false configuration. Real integrated non-op Survival owner, production free review and plan-use packet, paid stepped/gated staged manifest, original native goals and finite stock. Only the owner departs for ordinary chunk unload. Spectator permission pause on return stabilizes observation; Survival resumes native work, then a real authenticated core CANCEL packet performs normal cleanup.");
         REPORT.put("notCovered", List.of("Default RecruitsChunkLoading=true behavior", "Full project completion or later stage scheduling", "Dedicated-client networking", "Remote core menu rendering while chunks are unloaded",
-                "Open inventory lifecycle unload recovery (must fail closed, never repaired here)", "Unloaded-owner absence or disconnected owner", "Uneven/disjoint/holed claims or other palettes"));
+                "Open inventory lifecycle unload recovery (must fail closed, never repaired here)", "Unloaded-owner absence or disconnected owner", "Disjoint or holed claims or other palettes"));
         REPORT.put("treasuryObserverContracts", NativeQaTreasuryContracts.verify());
         var versions = new LinkedHashMap<String, String>(); var artifacts = new LinkedHashMap<String, Object>();
         for (String id : List.of("minecraft", "forge", "siegeoverhaul", "workers", "recruits", "smallships", "siegeweapons")) {

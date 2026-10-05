@@ -378,6 +378,9 @@ public final class PerimeterGateContract {
             if ((long) expectedTargets.size() + expectedClearance.size() > PerimeterStageLayout.MAX_RESERVED)
                 throw invalid("Excessive complete wall geometry");
         }
+        addTransitionClearance(columns, expectedClearance);
+        if ((long) expectedTargets.size() + expectedClearance.size() > PerimeterStageLayout.MAX_RESERVED)
+            throw invalid("Excessive complete wall geometry");
         if (!expectedTargets.equals(wall.blocks()) || !expectedClearance.equals(wall.clearance())
                 || !counts.equals(wall.materialCounts()) || !expectedClearance.containsAll(openings))
             throw invalid("Wall targets or clearance do not match exact gate geometry");
@@ -387,6 +390,19 @@ public final class PerimeterGateContract {
                 || (long) (max.getX() - min.getX() + 1) * (max.getZ() - min.getZ() + 1) * (max.getY() - min.getY() + 1)
                 > PerimeterStageLayout.MAX_SCAN_VOLUME) throw invalid("Changed gate wall bounds");
         return new Wall(columns, components, exterior(territory), skin);
+    }
+
+    private static void addTransitionClearance(Map<Long, PerimeterBlueprint.Column> columns, Set<Long> clearance) {
+        for (var entry : columns.entrySet()) {
+            PerimeterBlueprint.Column column = entry.getValue();
+            for (Direction direction : CARDINALS) {
+                PerimeterBlueprint.Column other = columns.get(xz(column.base().relative(direction)));
+                if (other == null || Math.abs(other.base().getY() - column.base().getY()) != 1) continue;
+                int y = Math.min(column.base().getY(), other.base().getY()) + 6;
+                clearance.add(column.base().atY(y).asLong());
+                clearance.add(other.base().atY(y).asLong());
+            }
+        }
     }
 
     private static void validateGates(List<Gate> gates, Geometry geometry, Wall wall) {

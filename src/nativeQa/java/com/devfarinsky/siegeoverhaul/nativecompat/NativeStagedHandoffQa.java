@@ -246,11 +246,11 @@ public final class NativeStagedHandoffQa {
                         "Synthetic partition did not retain bounded multiple native sections");
                 var quote = prepared.quote();
                 String fingerprint = PerimeterReviewFingerprint.create(prepared.plan(), reviewedLayout, quote.before(), quote.clearance(),
-                        quote.core(), 1, prepared.claimIdentity(), owner.getUUID(), prepared.builder().getUUID());
+                        quote.gateContract(), quote.core(), 1, prepared.claimIdentity(), owner.getUUID(), prepared.builder().getUUID());
                 require(balance(owner) == 2000 && placed(level) == 0 && areaCount(level) == 0 && PerimeterProjectStore.all(core(owner)).isEmpty(),
                         "Full quote/synthetic review charged, placed blocks or started a project");
                 require(NativePerimeterProjects.start(owner, prepared.builder(), quote.core(), 1, prepared.plan(), reviewedLayout,
-                        quote.before(), quote.clearance(), prepared.territory(), fingerprint), "Public direct server commission failed");
+                        quote.before(), quote.clearance(), quote.gateContract(), prepared.territory(), fingerprint), "Public direct server commission failed");
                 var projects = PerimeterProjectStore.all(core(owner));
                 require(projects.size() == 1 && balance(owner) == 1936, "Direct server commission did not charge exactly 64 once");
                 acceptedProject = projects.get(0); projectId = acceptedProject.header().projectId();
