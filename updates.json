@@ -1,6 +1,7 @@
 {
   "homepage": "https://www.curseforge.com/minecraft/mc-mods/siege-overhaul/files",
   "1.20.1": {
+    "4.52.6": "Builder recovery no longer interrupts sleep, supply runs or item use. Free building reviews catch unsafe neighboring blocks and paired plants before you commit. Existing paid jobs, supplies and fees are preserved. Back up your world and update the server and all clients together.",
     "4.21.2": "Fixes the in-game configuration editor's list settings.",
     "4.21.3": "Raiders climb walls again during a siege.",
     "4.22.1": "Fortify Perimeter is live: turn part of your claim into a defensive wall.",
@@ -25,7 +26,7 @@
     "4.52.5": "Safer enemy camp scouting and one bounded wider search after a saved one-minute wait. Preparation stays paused while searching; unsafe terrain can still use camp-less raids. New and still-active searches gain recovery; already-abandoned raids keep their current fallback. Back up worlds and update the server and all clients together."
   },
   "promos": {
-    "1.20.1-latest": "4.52.5",
-    "1.20.1-recommended": "4.52.5"
+    "1.20.1-latest": "4.52.6",
+    "1.20.1-recommended": "4.52.6"
   }
 }
