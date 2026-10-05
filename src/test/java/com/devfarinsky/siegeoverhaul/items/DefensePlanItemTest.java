@@ -27,6 +27,46 @@ class DefensePlanItemTest extends MinecraftTestSupport {
     @Test void failedPlacementKeepsThePlan() throws Exception { confirmation(false, false, 1); }
     @Test void successfulPlacementConsumesExactlyOnePlan() throws Exception { confirmation(true, false, 0); }
     @Test void creativePlacementKeepsThePlan() throws Exception { confirmation(true, true, 1); }
+    @Test void heldPlanRemainsSavedAfterTwoMinutesAndLeavingItsSite() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.arm(); when(f.level.getGameTime()).thenReturn(24000L);
+            var original = f.stack.save(new net.minecraft.nbt.CompoundTag());
+            when(f.player.distanceToSqr(anyDouble(), anyDouble(), anyDouble())).thenReturn(100000D);
+            f.item.inventoryTick(f.stack, f.level, f.player, 0, true);
+            assertEquals(original, f.stack.save(new net.minecraft.nbt.CompoundTag()));
+            f.structures.verify(() -> DefenseStructures.prepare(any(), any(), any(), any()), never());
+            when(f.player.distanceToSqr(anyDouble(), anyDouble(), anyDouble())).thenReturn(0D);
+            f.item.inventoryTick(f.stack, f.level, f.player, 0, true);
+            assertNotNull(DefensePreview.read(f.stack,f.item.kind(),Level.OVERWORLD.location(),f.owner,24000));
+            f.structures.verify(() -> DefenseStructures.prepare(f.player,BlockPos.ZERO.above(),Direction.EAST,f.item.kind()));
+            f.noCommission();
+        }
+    }
+    @Test void dimensionAndOwnerChangesHideButDoNotEraseHeldPlan() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.arm(); var original = f.stack.save(new net.minecraft.nbt.CompoundTag());
+            when(f.level.dimension()).thenReturn(Level.NETHER);
+            f.item.inventoryTick(f.stack,f.level,f.player,0,true);
+            assertEquals(original,f.stack.save(new net.minecraft.nbt.CompoundTag()));
+            when(f.level.dimension()).thenReturn(Level.OVERWORLD);
+            when(f.player.getUUID()).thenReturn(UUID.randomUUID());
+            f.item.inventoryTick(f.stack,f.level,f.player,0,true);
+            assertEquals(original,f.stack.save(new net.minecraft.nbt.CompoundTag()));
+            f.structures.verify(() -> DefenseStructures.prepare(any(),any(),any(),any()),never());
+            when(f.player.getUUID()).thenReturn(f.owner);
+            assertNotNull(f.selection()); f.noCommission();
+        }
+    }
+    @Test void agedSavedManualPlanStillUsesFreshCommissionAndCannotRepeat() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.arm(); when(f.level.getGameTime()).thenReturn(24000L);
+            f.structures.when(() -> DefenseStructures.commission(f.player,BlockPos.ZERO.above(),Direction.EAST,f.item.kind())).thenReturn(true);
+            assertEquals(InteractionResult.CONSUME,f.item.useOn(f.context));
+            assertTrue(f.stack.isEmpty()); assertNull(f.selection());
+            // Vanilla will not dispatch a second use for the consumed item.
+            f.structures.verify(() -> DefenseStructures.commission(f.player,BlockPos.ZERO.above(),Direction.EAST,f.item.kind()),times(1));
+        }
+    }
 
     private void confirmation(boolean success, boolean creative, int remaining) throws Exception {
         try (Fixture f = new Fixture()) {
