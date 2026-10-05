@@ -37,11 +37,13 @@ before resource listeners run. This narrow fixture never re-completes a later
 reload and never treats player datapack sync as successful completion.
 
 After the original one-FILL checks, the observer captures bounded state, calls
-`bindRuntime` explicitly off-pulse, captures state again, and performs two fresh
+`bindRuntimeCensus` explicitly off-pulse, captures state again, and performs two fresh
 same-thread `inspect` calls with another state capture after each. The provider's
 read counters prove that those fresh inspections reuse startup artifact/module
 bytes while still rechecking actual runtime metadata and all 27 registry entries.
-Each exported Census includes exact dispatcher coordinates and closed registry
+The actual partial binding Census is retained even if commissioning refuses;
+its original resource/graph/GLM observations are never substituted with a later
+unbound inspection. Each exported Census includes exact dispatcher coordinates and closed registry
 kinds/statuses, frozen loaded-loot check, active GLM count and resource layers,
 actual remapped development artifacts, complete module content and provider
 identities, loaded class origins, inherited listeners, sanitized transformation
@@ -86,7 +88,7 @@ Private identity wrappers compare reference identity without calling arbitrary
 listener/entity/item `equals`, `hashCode` or `toString` methods. Per-tag binary
 NBT serialization is capped at 256 KiB before copying. Raw RNG seeds, private NBT,
 listener objects, Observation/Identity internals, JVM arguments and environment
-values are never serialized. The export is limited to two Census DTOs plus
+values are never serialized. The export is limited to three Census DTOs (binding plus two fresh inspections) and
 explicit safe maps, at most 100,000 JSON nodes, depth 16, 4,096 characters per
 string and 2 MB total. Resource pack identifiers are restricted to bounded
 identifier syntax. The provider already rejects private URI components and

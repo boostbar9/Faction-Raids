@@ -11,6 +11,7 @@ import java.util.Objects;
 public final class NativeDirtPolicy {
     public static final String VERSION = "minecraft-1.20.1-forge-47.4.16-closed-dirt-v1";
     public static final String VANILLA_DIRT_SHA256 = "9222e5df0ffbb258af7ad3c42a563b432d46bdaf398bf505eccd1df89db24d25";
+    public static final String FORGE_EMPTY_GLM_SHA256 = "ed72002040acf4aa51ce8d92dc9591bbf423f9be9860022e36060eaabb0ca4f3";
     public static final int MAX_RESOURCE_BYTES = 8_192, MAX_RESOURCE_LAYERS = 16;
     public static final int MAX_LISTENERS = 256, MAX_OWNERS = 512, MAX_OWNER_LISTENERS = 128;
     public static final int MAX_SECTIONS = 27, MAX_CHUNKS = 9;

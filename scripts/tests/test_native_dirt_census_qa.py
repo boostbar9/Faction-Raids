@@ -68,7 +68,7 @@ def illustrative_evidence():
     return {'schema': 'native-dirt-census-qa-v1', 'profileStatus': 'PROFILE_UNREVIEWED', 'packagedProductionAcceptance': False,
             'miningCallbacksInvoked': 0, 'target': [141, 64, 9], 'buildHeight': [-64, 320], 'stableSinceGameTime': 240,
             'captureGameTime': 280, 'lifecycle': {'signal': 'ServerStartedEvent', 'successfulCompletion': True,
-            'startedGameTime': 0, 'startedGeneration': 1, 'currentGeneration': 1}, 'binding': ready,
+            'startedGameTime': 0, 'startedGeneration': 1, 'currentGeneration': 1}, 'binding': ready, 'bindingCensus': copy.deepcopy(observed),
             'decision': {'reason': 'PROFILE_UNREVIEWED', 'detail': 'Illustrative sample has no approved profile'},
             'censuses': [copy.deepcopy(observed), copy.deepcopy(observed)],
             'metrics': [{'bytesRead': 0 if i == 0 else 1000, 'artifactsHashed': 0 if i == 0 else 7, 'modulesHashed': 0 if i == 0 else 6,
@@ -83,7 +83,7 @@ class CensusVerifierTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, pattern or '.'):
             VERIFY.validate(self.result, self.fill)
     def mutate_census(self, callback):
-        for row in self.result['censuses']: callback(row)
+        for row in [self.result['bindingCensus'], *self.result['censuses']]: callback(row)
 
     def test_structural_synthetic_example_is_not_native_acceptance(self):
         self.assertIs(VERIFY.validate(self.result, self.fill), self.result)
@@ -156,6 +156,10 @@ class CensusVerifierTest(unittest.TestCase):
         self.mutate_census(lambda c: c.update(identity={'rawAudit': ['secret']})); self.reject()
     def test_unknown_pack_text_refuses(self):
         self.mutate_census(lambda c: c['dirt'].update(pack='secret=value')); self.reject()
+    def test_actual_partial_binding_census_is_required(self):
+        self.result.pop('bindingCensus'); self.reject()
+    def test_binding_census_cannot_be_replaced_by_fresh_summary(self):
+        self.result['bindingCensus']['dirt']['sha256'] = 'a' * 64; self.reject()
     def test_fresh_census_must_match(self):
         self.result['censuses'][1]['implementation'][0]['classResourceSha256'] = 'a' * 64; self.reject()
     def test_no_startup_reread_on_inspection(self):
@@ -373,7 +377,8 @@ class CensusSourceContractTest(unittest.TestCase):
         self.assertIn('ServerStartedEvent event', java); self.assertIn('reader.completeReload(startedGeneration)', java)
         self.assertIn('AddReloadListenerEvent event', java); self.assertIn('if (ENABLED && epoch != null) epoch.beginReload()', java)
         self.assertNotIn('OnDatapackSyncEvent', java)
-        self.assertEqual(java.count('reader.bindRuntime(TARGET)'), 1)
+        self.assertEqual(java.count('reader.bindRuntimeCensus(TARGET)'), 1)
+        self.assertIn('out.put("bindingCensus", binding)', java)
     def test_private_rng_nbt_and_live_identity_not_exported(self):
         java = (QA / 'NativeDirtCensusQa.java').read_text()
         self.assertIn('state.put("rng", rng)', java); self.assertIn('exported.put("rngSha256", hash(rng.stream().map(RngState::values).toList().toString()))', java)
@@ -382,6 +387,19 @@ class CensusSourceContractTest(unittest.TestCase):
         self.assertIn('Snapshot::evidence', java)
         boundary = (QA / 'NativeDirtCensusBoundary.java').read_text()
         self.assertIn('StandardOpenOption.CREATE_NEW', boundary)
+    def test_forge_layer_fixture_is_exact_official_resource(self):
+        resource = ROOT / 'src/test/resources/native-dirt/forge-47.4.16-empty-global-loot-modifiers.json'
+        data = resource.read_bytes()
+        self.assertEqual(len(data), 254)
+        self.assertEqual(hashlib.sha256(data).hexdigest(), 'ed72002040acf4aa51ce8d92dc9591bbf423f9be9860022e36060eaabb0ca4f3')
+        parsed = json.loads(data); self.assertEqual(set(parsed), {'comment', 'replace', 'entries'})
+        self.assertIs(parsed['replace'], False); self.assertEqual(parsed['entries'], [])
+        provider = (ROOT / 'src/main/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeDirtCensus.java').read_text()
+        self.assertIn('builtin && bytes.length == 254', provider)
+        self.assertIn('FORGE_EMPTY_GLM_SHA256.equals(hash(bytes))', provider)
+        self.assertIn('emptyModifierLayer(bytes, layer.isBuiltin())', provider)
+        self.assertNotIn('field.equals("comment")', provider)
+
     def test_production_cut_refusal_unchanged(self):
         production = (ROOT / 'src/main/java/com/devfarinsky/siegeoverhaul/nativecompat/EarthworksExecution.java').read_text()
         self.assertNotIn('NativeDirtCensus', production)

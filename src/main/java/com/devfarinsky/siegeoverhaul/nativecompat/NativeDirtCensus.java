@@ -75,7 +75,10 @@ public final class NativeDirtCensus {
     }
 
     /** Explicit startup/commissioning-only stage; never call from a work pulse. No CUT approval is produced. */
-    public Check bindRuntime(BlockPos target) { return observe(target, true).census().observation(); }
+    public Check bindRuntime(BlockPos target) { return bindRuntimeCensus(target).observation(); }
+
+    /** Same explicit off-pulse binding, retaining safe partial evidence on refusal. Never exports Identity. */
+    public Census bindRuntimeCensus(BlockPos target) { return observe(target, true).census(); }
 
     /** Public dispatch-admission boundary: always makes a fresh synchronous world census. */
     public Decision evaluate(BlockPos target, Profile reviewed, Identity previous) {
@@ -157,7 +160,7 @@ public final class NativeDirtCensus {
             for (Resource layer : stack) {
                 byte[] bytes = bytes(layer.open(), MAX_RESOURCE_BYTES);
                 layers.add(new ResourceProof(layer.sourcePackId(), layer.isBuiltin(), hash(bytes), bytes.length));
-                if (!emptyModifierLayer(bytes)) throw stop(Reason.MODIFIERS_ACTIVE, "global modifier layer is not an exact empty supported list");
+                if (!emptyModifierLayer(bytes, layer.isBuiltin())) throw stop(Reason.MODIFIERS_ACTIVE, "global modifier layer is not an exact empty supported list");
             }
             NativeDirtListeners.Read observed = NativeDirtListeners.read(this::origin);
             listeners.addAll(observed.proof());
@@ -251,6 +254,14 @@ public final class NativeDirtCensus {
         }
     }
     static String hash(byte[] bytes) throws Exception { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)); }
+    /** One independently pinned built-in Forge resource contains a documentary comment, not a modifier. */
+    static boolean emptyModifierLayer(byte[] bytes, boolean builtin) {
+        if (builtin && bytes.length == 254) {
+            try { if (FORGE_EMPTY_GLM_SHA256.equals(hash(bytes))) return true; }
+            catch (Exception unavailable) { return false; }
+        }
+        return emptyModifierLayer(bytes);
+    }
     /** Deliberately accepts only empty lists; a replaced-away nonempty layer is still unsupported. */
     static boolean emptyModifierLayer(byte[] bytes) {
         if (bytes.length > MAX_RESOURCE_BYTES) return false;

@@ -155,7 +155,13 @@ edit, worker authority and contradiction fences remain independently mandatory.
 - Exact private Forge manager field/descriptor; public active modifier collection
   must be empty. Up to 16 layered resource inputs of 8 KiB each. This deliberately
   conservative first policy rejects any nonempty layer, even if later replaced
-  away, and strictly parses only `replace` boolean plus empty `entries` array.
+  away, and strictly parses only `replace` boolean plus empty `entries` array. The sole
+  additional accepted form is the exact built-in Forge 47.4.16 254-byte empty
+  resource, SHA-256 `ed72002040acf4aa51ce8d92dc9591bbf423f9be9860022e36060eaabb0ca4f3`,
+  which also contains a documentary `comment` string. It is recognized by complete
+  bytes/hash and built-in provenance, not by broadly accepting comment/unknown keys.
+  Modified comments, extra/duplicate keys and nonempty entries remain refused.
+  Its original pack/built-in/length/hash ResourceProof is retained without normalization.
 - Complete inherited arrays for LootTableLoad, EntityJoinLevel, EntityConstructing,
   AttachCapabilities (including generic registrations), NeighborNotify and
   VanillaGameEvent: max 256 entries each; max 512 owners and 128 registrations per
@@ -297,3 +303,26 @@ evidence capture after the existing one-FILL fixture has completed its original
 stable-window assertions. That separate observer requires independent source
 review before native runs and two clean-launch evidence comparison afterward.
 Production CUT refusal remains untouched.
+
+## Native empty-layer correction provenance
+
+The first read-only native attempt (run 37304902294, combined tree
+`15aa6f034c2f94ffd49085b1182bc82e95a6ae6e`) preserved genuine one-FILL success
+and unchanged bounded world/RNG/inventory/queue/receipt state, but its off-pulse
+binding refused the strict resource-layer shape before any startup bytes were
+hashed. That refused run is not a successful-profile capture or a reproducibility
+pair member. Inspection of the already pinned official Forge universal JAR
+`45c5c111c2bce893369e01f67efa4a042b488f29e3910f8872fe71c848e0c1ee`
+found its built-in `data/forge/loot_modifiers/global_loot_modifiers.json` includes
+that documentary comment alongside `replace:false` and `entries:[]`.
+The exact bytes are preserved only as a test resource. This correction recognizes
+only that immutable built-in empty-resource hash in addition to the original
+strict two-key parser; it changes no active-modifier refusal, graph/listener
+admission, runtime profile requirement or controller dispatch.
+
+`bindRuntimeCensus` performs the same explicit off-pulse binding and returns its
+safe Census DTO, including partial observed resource/graph/GLM/section evidence
+on refusal. It never exports a live Identity. The original `bindRuntime` Check API
+continues to delegate to that same operation. QA exports both the actual binding
+Census and subsequent fresh Census values; no omitted diagnostic is replaced
+with an inferred resource or an approved profile.

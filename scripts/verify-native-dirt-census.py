@@ -194,7 +194,7 @@ def validate(result, fill):
     receipt = fill.get('dirtCensus'); keys(receipt, 'enabled status artifactSha256 failureType')
     require(receipt['enabled'] is True and receipt['status'] == 'captured' and receipt['failureType'] == '', 'Optional census capture was refused')
     digest(receipt['artifactSha256'])
-    keys(result, 'schema profileStatus packagedProductionAcceptance miningCallbacksInvoked target buildHeight stableSinceGameTime captureGameTime lifecycle binding decision censuses metrics states unchanged status')
+    keys(result, 'schema profileStatus packagedProductionAcceptance miningCallbacksInvoked target buildHeight stableSinceGameTime captureGameTime lifecycle binding bindingCensus decision censuses metrics states unchanged status')
     require(result['schema'] == 'native-dirt-census-qa-v1' and result['status'] == 'captured', 'Successful native census absent')
     require(result['profileStatus'] == 'PROFILE_UNREVIEWED' and result['packagedProductionAcceptance'] is False,
             'Observed development census approved itself or claimed production acceptance')
@@ -208,9 +208,11 @@ def validate(result, fill):
     require(integer(lifecycle['startedGeneration'], 1) == integer(lifecycle['currentGeneration'], 1), 'Reload generation changed')
     require(integer(lifecycle['startedGameTime']) <= fill['acceptedGameTime'], 'Lifecycle established after work')
     check(result['binding'], 'READY'); check(result['decision'], 'PROFILE_UNREVIEWED')
+    census(result['bindingCensus'], result, fill)
+    require(result['bindingCensus']['observation'] == result['binding'], 'Binding check differs from its actual Census')
     require(type(result['censuses']) is list and len(result['censuses']) == 2, 'Missing fresh repeated observations')
     for row in result['censuses']: census(row, result, fill)
-    require(result['censuses'][0] == result['censuses'][1], 'Same-tick actual census drift')
+    require(result['bindingCensus'] == result['censuses'][0] == result['censuses'][1], 'Same-tick actual binding/fresh census drift')
     metrics = result['metrics']; require(type(metrics) is list and len(metrics) == 4, 'Missing bind/fresh read counters')
     for row in metrics:
         keys(row, 'bytesRead artifactsHashed modulesHashed cachedFileChecks cachedModuleChecks')

@@ -38,6 +38,33 @@ class NativeDirtCensusTest extends MinecraftTestSupport {
             "{\"replace\":false,\"entries\":[],\"other\":true}", "{\"replace\":false,\"entries\":[],\"entries\":[]}",
             "{\"replace\":\"false\",\"entries\":[]}", "{\"replace\":false,\"entries\":[]} {}", "[]", "null", "{bad}"})
     void unknownNonemptyMalformedOrDuplicateModifierLayersRefuse(String value) { assertFalse(empty(value)); }
+    @Test void onlyExactPinnedBuiltinForgeCommentLayerIsRecognized() throws Exception {
+        byte[] bytes = forgeEmptyLayer();
+        assertEquals(254, bytes.length);
+        assertEquals(FORGE_EMPTY_GLM_SHA256, NativeDirtCensus.hash(bytes));
+        assertTrue(NativeDirtCensus.emptyModifierLayer(bytes, true));
+        assertFalse(NativeDirtCensus.emptyModifierLayer(bytes, false));
+        assertFalse(NativeDirtCensus.emptyModifierLayer(bytes));
+    }
+    @ParameterizedTest @ValueSource(strings = {"modified-comment", "extra-key", "nonempty-entry", "duplicate-entries", "duplicate-replace"})
+    void unreviewedChangesToForgeAnnotatedLayerStillRefuse(String change) throws Exception {
+        String original = new String(forgeEmptyLayer(), StandardCharsets.UTF_8);
+        String changed = switch (change) {
+            case "modified-comment" -> original.replace("Entries will", "entries will");
+            case "extra-key" -> original.replace("\"replace\":", "\"extra\": true, \"replace\":");
+            case "nonempty-entry" -> original.replace("\"entries\": [", "\"entries\": [\"example:modifier\"");
+            case "duplicate-entries" -> original.replace("\"entries\": [", "\"entries\": [], \"entries\": [");
+            case "duplicate-replace" -> original.replace("\"replace\": false", "\"replace\": false, \"replace\": false");
+            default -> throw new AssertionError("Unknown test case");
+        };
+        assertNotEquals(original, changed);
+        assertFalse(NativeDirtCensus.emptyModifierLayer(changed.getBytes(StandardCharsets.UTF_8), true));
+    }
+    private static byte[] forgeEmptyLayer() throws Exception {
+        try (var input = NativeDirtCensusTest.class.getResourceAsStream("/native-dirt/forge-47.4.16-empty-global-loot-modifiers.json")) {
+            assertNotNull(input); return input.readAllBytes();
+        }
+    }
     @Test void resourceReadIsBoundedAndAlwaysClosesItsStream() throws Exception {
         AtomicInteger closed = new AtomicInteger();
         var stream = new ByteArrayInputStream(new byte[MAX_RESOURCE_BYTES + 1]) {
@@ -76,6 +103,15 @@ class NativeDirtCensusTest extends MinecraftTestSupport {
         assertThrows(UnsupportedOperationException.class, () -> result.census().registries().clear());
         verify(f.chunks, times(9)).getChunkNow(anyInt(), anyInt()); verify(f.chunk, never()).getListenerRegistry(anyInt());
         assertTrue(f.registries.isEmpty());
+    }
+    @Test void explicitBindingExportsItsActualPartialRefusalCensus() throws Exception {
+        World f = new World(); when(f.chunk.getBlockState(any(BlockPos.class))).thenReturn(Blocks.STONE.defaultBlockState());
+        var census = f.census.bindRuntimeCensus(f.target);
+        assertEquals(Reason.NOT_EXACT_DIRT, census.observation().reason());
+        assertEquals(27, census.registries().size());
+        assertEquals(9, census.chunks()); assertEquals(27, census.sections());
+        assertNull(census.runtime()); assertNull(census.lootGraph()); assertNull(census.activeModifiers());
+        assertEquals(0, f.census.runtimeMetrics().bytesRead());
     }
     @Test void currentWorldRegistriesAreRecheckedOnEveryObservation() throws Exception {
         World f = new World(); when(f.chunk.getBlockState(any(BlockPos.class))).thenReturn(Blocks.STONE.defaultBlockState());

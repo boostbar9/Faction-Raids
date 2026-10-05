@@ -121,7 +121,9 @@ public final class NativeDirtCensusQa {
                     "Initial resource completion missing or a later reload invalidated the census");
             snapshots.add(snapshot(level, owner, worker, job)); metrics.add(reader.runtimeMetrics());
             // Off-pulse commissioning after work has settled, never from the native mining callback.
-            out.put("binding", reader.bindRuntime(TARGET));
+            NativeDirtPolicy.Census binding = reader.bindRuntimeCensus(TARGET);
+            validateCensusExport(binding);
+            out.put("binding", binding.observation()); out.put("bindingCensus", binding);
             snapshots.add(snapshot(level, owner, worker, job)); metrics.add(reader.runtimeMetrics());
             for (int i = 0; i < 2; i++) {
                 NativeDirtPolicy.Observation observation = reader.inspect(TARGET);
