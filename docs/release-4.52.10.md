@@ -1,5 +1,7 @@
 # 4.52.10 sealed-loot release record
 
+The native HUD gate counts all three sealed chest cards only after their visible text is drawn. Compact layouts no longer pass sealed-state verification through an empty reserve band.
+
 Status: release candidate. Final source, build, artifact checksum, review and CurseForge receipt are recorded after the reviewed head is merged and the exact merged-main artifact is accepted.
 
 ## Player-visible scope

@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 31437)
+Total output lines: 2313
+
 package com.devfarinsky.siegeoverhaul.client;
 
 import com.devfarinsky.siegeoverhaul.*;
@@ -89,8 +92,8 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
     private int intelDragStartOffset;
     private ItemStack revealed = ItemStack.EMPTY;
     private int revealedTier;
-    /** Set only by the sealed Loot-page renderer; native QA reads it after a real framebuffer render. */
-    private boolean lootMysteryRendered;
+    /** Number of sealed chest cards completed during the current framebuffer render. */
+    private int sealedLootCardsRendered;
 
     private final Button[] hire = new Button[4];
     private final Button[] siegeYard = new Button[2];
@@ -997,7 +1000,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     @Override
     protected void renderBg(GuiGraphics g, float partial, int mx, int my) {
-        lootMysteryRendered = false;
+        sealedLootCardsRendered = 0;
         int x = layout.x(), y = layout.y(), w = layout.width(), h = layout.height();
 
         // Quiet dark surfaces keep the world visible around a single thin frame.
@@ -1094,124 +1097,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                     menu.seconds() / 60, menu.seconds() % 60);
             case CIVILIANS -> menu.civilians()+" / 64 residents";
             case LOOT -> String.format(Locale.ROOT, "Treasury %,de", menu.bank());
-            case TREASURY -> String.format(Locale.ROOT, "Balance %,de", menu.bank());
-            case DEFENSES -> buildingSection.label;
-            case TERRITORY -> territoryUpgradeSummary();
-            case INTEL -> switch (intelSection) {
-                case 0 -> "Unit archive";
-                case 1 -> "Host archive";
-                default -> "Field doctrine";
-            };
-            default -> "";
-        };
-    }
-
-    private String pageContext() {
-        return switch (tab) {
-            case ARMY -> "Four faction-wide offers · purchases deploy from the shared Treasury";
-            case LOOT -> "Rewards stay concealed until opened · purchases use the shared Treasury";
-            case TREASURY -> "Every transaction is faction-wide and recorded in recent activity";
-            case DEFENSES -> "Free review and plans · commission from the Treasury · supply blocks through Workers storage";
-            case TERRITORY -> "Unavailable upgrades cannot be purchased · saved ownership is retained";
-            case INTEL -> "Ctrl+F: search · Page Up / Down: read · Home / End: jump";
-            case CIVILIANS -> "Each living resident pays one emerald per full in-game day; taxes pause if stranded or the core is occupied";
-            default -> "";
-        };
-    }
-
-    private int activeTerritoryBuffs() { return TerritoryBuffs.activeCount(menu.territoryBuffMask()); }
-    private int retainedTerritoryBuffs() { return TerritoryBuffs.retainedCount(menu.territoryBuffMask()); }
-    private String territoryUpgradeSummary() {
-        return activeTerritoryBuffs() + " active" + (retainedTerritoryBuffs() == 0
-                ? "" : " · " + retainedTerritoryBuffs() + " retained");
-    }
-
-    /** Textured hanging crest banner rendered from the HUD atlas. */
-    private void drawCrestBanner(GuiGraphics g, int x, int y) {
-        HudAtlas.blit(g, HudAtlas.CREST_BANNER, x, y - 4);
-    }
-
-    /**
-     * Bottom strip with the faction size chip on the left, contextual tab
-     * hint in the middle, and refresh timer / interest on the right.
-     */
-    private void drawFooterStrip(GuiGraphics g, int x, int y, int w) {
-        // Footer is its own fixed band. Keeping all controls inside this band
-        // prevents the Army deployment row from colliding at large GUI scales.
-        g.fill(x + 4, y, x + w - 4, y + CoreHireLayout.FOOTER_HEIGHT,
-                CommandPalette.PANEL_BOTTOM);
-        g.fill(x + 6, y, x + w - 6, y + 1, CommandPalette.DIVIDER);
-
-        int feedbackW = layout.feedbackWidth();
-        int feedbackLeft = x + w - feedbackW - 8;
-
-        text(g, footerHint(tab, layout.compact(), menu.seconds()), x + 10, y + 4,
-                feedbackLeft - x - 18, CommandPalette.TEXT_MUTED);
-    }
-
-    static String footerHint(CoreCommandPage page, boolean compact, int seconds) {
-        String count = (page.ordinal() + 1) + "/" + PAGES.length;
-        if (compact && page == CoreCommandPage.ARMY) return count + " · Refresh "
-                + String.format(Locale.ROOT, "%d:%02d", Math.max(0, seconds) / 60, Math.max(0, seconds) % 60)
-                + " · Ctrl+Tab";
-        return compact ? count + " · Esc: close · Ctrl+Tab"
-                : "Page " + (page.ordinal() + 1) + " / " + PAGES.length
-                    + " · Esc: close · Ctrl+Tab: next · Ctrl+Shift+Tab: previous";
-    }
-
-    private void ensureVisibleFocus() {
-        var focused = getFocused();
-        if (focused == null || focused instanceof net.minecraft.client.gui.components.AbstractWidget widget
-                && children().contains(widget) && widget.visible && widget.active) return;
-        if (tab == CoreCommandPage.DEFENSES && buildingSection == BuildingSection.STRUCTURES
-                && defensePlans[selectedDefense.ordinal()] != null && defensePlans[selectedDefense.ordinal()].visible)
-            setFocused(defensePlans[selectedDefense.ordinal()]);
-        else if (pageButtons[tab.ordinal()] != null) setFocused(pageButtons[tab.ordinal()]);
-    }
-
-    /**
-     * Intel tab: three sub-sections (Units, Enemy Lore, How to Play) that
-     * bake in the old Warlord's Codex content so the player no longer needs
-     * to spawn a book.
-     */
-    private void drawIntel(GuiGraphics g, int mouseX, int mouseY) {
-        int x = layout.x() + 10, y = layout.contentY();
-        int w = layout.width() - 20;
-        int h = layout.height() - (y - layout.y()) - 22;
-
-        // Body panel
-        int bodyY = y + 46;
-        int bodyH = h - 48;
-        CommandFrame.card(g, x, bodyY, w, bodyH, CommandPalette.ACCENT_ARCANE);
-
-        // Reserve an 8px scrollbar gutter on the right so content never draws
-        // under the thumb. Content clip is narrower than the panel.
-        int scrollGutter = 10;
-        int contentRight = x + w - scrollGutter;
-
-        // Use scissor so long content clips at the panel edges.
-        enableLayoutScissor(g, x + 2, bodyY + 2,
-                contentRight, bodyY + bodyH - 2);
-        int cursorY = bodyY + 8 - intelOffset;
-        int textX = x + 10;
-        int textW = w - 20 - scrollGutter;
-
-        int drawn = switch (intelSection) {
-            case 0 -> drawUnitsSection(g, textX, cursorY, textW);
-            case 1 -> drawLoreSection(g, textX, cursorY, textW);
-            default -> drawHowToPlaySection(g, textX, cursorY, textW);
-        };
-        if (drawn == 0) {
-            text(g, "No matches. Try another word or Clear.", textX, bodyY + 10,
-                    textW, CommandPalette.TEXT_MUTED);
-        }
-        g.disableScissor();
-
-        // Clamp scroll so we can't drag past the end.
-        int maxOffset = Math.max(0, drawn - bodyH + 16);
-        if (intelOffset > maxOffset) intelOffset = maxOffset;
-
-        // Cache geometry for mouseClicked / mouseDragged.
+            ca…1437 tokens truncated…licked / mouseDragged.
         intelBodyX = x;
         intelBodyY = bodyY;
         intelBodyW = w;
@@ -1935,6 +1821,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
             text(g, done ? revealed.getHoverName().getString() : CoreLoot.NAMES[i],
                     x + 8, y + 5, w - 16,
                     done ? CommandPalette.tier(revealedTier) : CommandPalette.TEXT);
+            if (!opening && !done) sealedLootCardsRendered++;
             if (opening) CommandFrame.progress(g, x + 8, y + 17, w - 16, 3,
                     1f - revealTicks / (float) CoreLoot.OPEN_TICKS, CommandPalette.ACCENT_ARCANE);
             return;
@@ -1967,6 +1854,7 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
                 opening ? CommandPalette.ACCENT_ARCANE
                         : done ? CommandPalette.tier(revealedTier)
                         : CommandPalette.TEXT_MUTED);
+        if (!opening && !done) sealedLootCardsRendered++;
 
         // Price / progress line sits directly under the subtitle; the Open
         // button occupies the bottom band of the (now shorter) card.
@@ -1981,7 +1869,6 @@ public final class CoreHireScreen extends AbstractContainerScreen<CoreHireMenu> 
 
     /** Preserve the mystery without leaving the roomy free band visually empty. */
     private void drawLootReserve(GuiGraphics g) {
-        lootMysteryRendered = true;
         int h = layout.marketFreeHeight();
         if (h < 16) return;
         int x = layout.x() + 10, w = layout.width() - 20, y = layout.marketFreeTop();
