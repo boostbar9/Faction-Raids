@@ -5,6 +5,8 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.EntityBlock;
+import net.minecraft.world.level.block.LiquidBlock;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.nio.ByteBuffer;
@@ -76,7 +78,7 @@ public final class PerimeterEarthworksManifest {
             if (stage < 0 || stage >= MAX_STAGES || before.equals(after)
                     || before.hasBlockEntity() || after.hasBlockEntity()
                     || before.getBlock() instanceof EntityBlock || after.getBlock() instanceof EntityBlock
-                    || !before.getFluidState().isEmpty() || !after.getFluidState().isEmpty())
+                    || fluidBearing(before) || fluidBearing(after))
                 throw invalid("Unsafe earthworks state transition");
             if (kind == Kind.CUT) {
                 if (before.isAir() || !after.equals(Blocks.AIR.defaultBlockState()) || removal == null)
@@ -203,6 +205,11 @@ public final class PerimeterEarthworksManifest {
         BlockPos p = BlockPos.of(packed);
         return p.getX() >= -30_000_000 && p.getX() < 30_000_000 && p.getZ() >= -30_000_000 && p.getZ() < 30_000_000
                 && p.getY() >= h.minY() && p.getY() < h.maxY();
+    }
+    private static boolean fluidBearing(BlockState state) {
+        // Explicit block/property fences do not rely on an initialized native state cache.
+        return !state.getFluidState().isEmpty() || state.getBlock() instanceof LiquidBlock
+                || state.hasProperty(BlockStateProperties.WATERLOGGED) && state.getValue(BlockStateProperties.WATERLOGGED);
     }
     private static boolean identity(UUID id) { return id != null && !id.equals(new UUID(0, 0)); }
     private static boolean resource(String value) { return bounded(value, 256) && ResourceLocation.tryParse(value) != null; }
