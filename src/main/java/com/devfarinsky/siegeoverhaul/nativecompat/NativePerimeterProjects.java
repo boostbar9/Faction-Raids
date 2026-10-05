@@ -470,7 +470,7 @@ private static String context(ServerLevel level,ServerPlayer owner,Mob builder,P
         return null;
     }
 
-    private static String gateObservationProblem(ServerLevel level,ServerPlayer owner,PerimeterProject project,int component) {
+    static String gateObservationProblem(ServerLevel level,ServerPlayer owner,PerimeterProject project,int component) {
         if(project.gateContract()==null)return null;
         java.util.function.Predicate<BlockPos> permitted=gatePermissions(level,project);
         return component<0

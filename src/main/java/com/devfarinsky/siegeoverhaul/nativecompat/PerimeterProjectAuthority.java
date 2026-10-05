@@ -8,6 +8,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 
@@ -98,6 +99,9 @@ final class PerimeterProjectAuthority {
                     project.header().faction(), com.devfarinsky.siegeoverhaul.core.PerimeterTerritory.MAX_CHUNKS);
             if (!territoryMatches(project, territory))
                 return "Paused: the complete faction territory differs from the reviewed perimeter";
+            var owner=level.getServer().getPlayerList().getPlayer(project.header().owner());
+            var gates=activeGateObservationProblem(level,owner,project,scope.stage());
+            if (gates!=null) return gates;
             if ((!allowUnpaid || NativeConstructionGuard.hasAreaSnapshot(area))
                     && !NativeConstructionGuard.matchesProjectSnapshot(area, project))
                 return "Paused: the saved native stage differs from the authoritative whole-perimeter plan";
@@ -121,6 +125,10 @@ final class PerimeterProjectAuthority {
         return allowUnpaid && (project.state()==PerimeterProject.State.PREPARED_UNPAID && project.payment()==null
                 || project.state()==PerimeterProject.State.PREPARED_PAID && project.payment()!=null
                 || project.state()==PerimeterProject.State.WAITING_FOR_NEXT_STAGE && project.payment()!=null);
+    }
+    static String activeGateObservationProblem(ServerLevel level, ServerPlayer owner, PerimeterProject project, int stage) {
+        if (project==null || project.gateContract()==null) return null;
+        return NativePerimeterProjects.gateObservationProblem(level,owner,project,project.gateStageComponent(stage));
     }
     /** Only NativeConstructionGuard calls this after exact loaded-world and empty native-queue proof. */
     static boolean verified(Entity area) {

@@ -56,8 +56,15 @@ class PerimeterSteppedGeometryTest {
         assertTrue(result.seams().stream().anyMatch(s->s.fromY()!=s.toY()),"Profile should preserve bounded terrain-following steps instead of flattening the whole component");
         assertEquals(Set.of(63,64),new HashSet<>(result.levels().values()));
         for(var e:topology.columns().entrySet())for(var facing:PerimeterSteppedProfile.Facing.values()){
-            var other=result.levels().get(e.getKey().add(dx(facing),dz(facing)));
-            if(other!=null)assertTrue(Math.abs(other-result.levels().get(e.getKey()))<=1,"Adjacent walk/skin levels must remain native-traversable");
+            var q=e.getKey().add(dx(facing),dz(facing));var other=result.levels().get(q);var base=result.levels().get(e.getKey());
+            if(other!=null){
+                assertTrue(Math.abs(other-base)<=1,"Adjacent walk/skin levels must remain native-traversable");
+                if(!other.equals(base)){
+                    int y=Math.min(base,other)+6;
+                    assertTrue(result.clearance().contains(new Pos(e.getKey().x(),y,e.getKey().z())),"Lower transition approach needs jump clearance");
+                    assertTrue(result.clearance().contains(new Pos(q.x(),y,q.z())),"Upper transition approach needs jump clearance");
+                }
+            }
         }
     }
     @Test void sharedReadTargetAndObservationCapsAreAtomic(){

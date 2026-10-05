@@ -106,6 +106,7 @@ public final class PerimeterSteppedGeometry {
                 if(block==null)clearance.add(pos);else put(targets,pos,new Target(block,Phase.STRUCTURE,column.component()),limits);
             }
         }
+        addTransitionClearance(topology,levels,clearance,limits);
         need(Collections.disjoint(targets.keySet(),clearance)&&Collections.disjoint(targets.keySet(),footing),"Target collides with protected headroom or original footing");
         need(fill==profile.fillCells(),"Profile and unique physical fill counts differ");
         Set<Pos> all=new HashSet<>(targets.keySet());all.addAll(clearance);all.addAll(footing);need(all.size()<=limits.maxObservations,"Whole proposal exceeds observation budget");
@@ -142,12 +143,20 @@ public final class PerimeterSteppedGeometry {
             for(var face:Facing.values()){
                 Cell q=p.add(dx(face),dz(face));Column neighbor=t.columns().get(q);need(neighbor!=null,"Walk has an exposed edge");
                 Integer other=levels.get(q);need(other!=null&&Math.abs(other-base)<=1,"Adjacent walk/skin levels are disconnected");
+                if(!other.equals(base)){int y=Math.min(base,other)+6;need(clearance.contains(new Pos(p.x(),y,p.z()))&&clearance.contains(new Pos(q.x(),y,q.z())),"Stepped walk transition lacks jump clearance");}
                 if(neighbor.inwardDistance()==1||neighbor.inwardDistance()==5)need(targets.containsKey(new Pos(q.x(),other+4,q.z())),"Walk is missing its safety rail");
                 else need(targets.get(new Pos(q.x(),other+3,q.z()))!=null&&targets.get(new Pos(q.x(),other+3,q.z())).block==Block.OAK_PLANKS
                         &&clearance.contains(new Pos(q.x(),other+4,q.z()))&&clearance.contains(new Pos(q.x(),other+5,q.z())),
                         "Stepped walk transition lacks deck or headroom");
             }
         }
+    }
+    private static void addTransitionClearance(Layout t,Map<Cell,Integer> levels,Set<Pos> clearance,Limits limits){
+        for(var e:t.columns().entrySet()){Cell p=e.getKey();Integer base=levels.get(p);if(base==null)continue;for(var face:Facing.values()){
+            Cell q=p.add(dx(face),dz(face));Integer other=levels.get(q);if(other==null||Math.abs(other-base)!=1)continue;
+            int y=Math.min(base,other)+6;need(y>limits.minY&&y<limits.maxY,"Stepped walk transition exceeds world height");
+            clearance.add(new Pos(p.x(),y,p.z()));clearance.add(new Pos(q.x(),y,q.z()));
+        }}
     }
     private static int dx(Facing f){return f==Facing.EAST?1:f==Facing.WEST?-1:0;}private static int dz(Facing f){return f==Facing.SOUTH?1:f==Facing.NORTH?-1:0;}
     private static void put(Map<Pos,Target> targets,Pos p,Target t,Limits limits){need(p.y>limits.minY&&p.y<limits.maxY,"Target exceeds world height");need(targets.putIfAbsent(p,t)==null,"Duplicate physical mutation ownership");need(targets.size()<=limits.maxTargets,"Whole proposal exceeds target budget");}
