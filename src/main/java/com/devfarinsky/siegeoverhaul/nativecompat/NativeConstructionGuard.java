@@ -155,8 +155,8 @@ public final class NativeConstructionGuard {
                 BlockState state = level.getBlockState(pos);
                 if (project != null && !state.equals(project.before().get(pos.asLong())))
                     return pause(area, "Paused: a future section changed after the whole-territory review");
-                if (!initialCellSafe(state, plan.cells.get(pos)) || level.getBlockEntity(pos) != null)
-                    return pause(area, "Paused: protected blocks or paired plants need manual clearance");
+                String cellProblem = initialPlacementProblem(level, pos, state, plan.cells.get(pos));
+                if (cellProblem != null) return pause(area, cellProblem);
                 before.put(pos, state);
             }
             Snapshot snapshot = new Snapshot(plan, reservation, Map.copyOf(before), new HashSet<>(), new HashSet<>(),
@@ -664,6 +664,15 @@ public final class NativeConstructionGuard {
     static boolean initialCellSafe(BlockState current, BlockState target) {
         return current != null && target != null && !current.hasBlockEntity() && current.getFluidState().isEmpty()
                 && (current.isAir() || current.equals(target) || clearablePlant(current));
+    }
+
+    /** Read-only admission rule shared by free reviews and the final protected native handoff. */
+    public static String initialPlacementProblem(ServerLevel level, BlockPos pos, BlockState current, BlockState target) {
+        if (initialCellSafe(current, target) && level.getBlockEntity(pos) == null) return null;
+        String block = current == null ? "unreadable block"
+                : net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(current.getBlock()).toString();
+        return "Paused: " + block + " at " + pos.toShortString()
+                + " needs manual clearance; existing blocks and paired plants are protected";
     }
 
     private static boolean clearablePlant(BlockState state) {

@@ -1,6 +1,7 @@
 package com.devfarinsky.siegeoverhaul.core;
 
 import com.devfarinsky.siegeoverhaul.MinecraftTestSupport;
+import com.talhanation.workers.entities.BuilderEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
@@ -17,10 +18,13 @@ import static org.mockito.Mockito.*;
 
 class BuilderGroundRecoveryTest extends MinecraftTestSupport {
     private final ServerLevel level=mock(ServerLevel.class);
-    private final Mob worker=mock(Mob.class);
+    private final BuilderEntity worker=mock(BuilderEntity.class);
     private final CompoundTag data=new CompoundTag();
     private void setup() {
         when(worker.isAlive()).thenReturn(true);
+        when(worker.shouldWork()).thenReturn(true);
+        when(worker.needsToSleep()).thenReturn(false);
+        when(worker.needsToGetToChest()).thenReturn(false);
         when(worker.position()).thenReturn(new Vec3(0.5,60,0.5));
         when(worker.blockPosition()).thenReturn(new BlockPos(0,60,0));
         when(worker.getX()).thenReturn(0.5);when(worker.getY()).thenReturn(60.0);when(worker.getZ()).thenReturn(0.5);
@@ -95,5 +99,44 @@ class BuilderGroundRecoveryTest extends MinecraftTestSupport {
     @Test void reloadOrTimeResetRequiresANewObservationPeriod() {
         setup();pass(1000);pass(1040);pass(1080);pass(20);pass(60);
         verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+    }
+    @Test void nativeSleepStorageAndItemUseResetTheWholeStallObservationWindow() {
+        for (int interruption=0; interruption<5; interruption++) {
+            reset(worker,level); data.remove("SiegeWallGroundRecovery"); setup();
+            pass(0); pass(40); pass(80);
+            switch (interruption) {
+                case 0 -> when(worker.shouldWork()).thenReturn(false);
+                case 1 -> when(worker.needsToSleep()).thenReturn(true);
+                case 2 -> when(worker.needsToGetToChest()).thenReturn(true);
+                case 3 -> when(worker.isSleeping()).thenReturn(true);
+                case 4 -> when(worker.isUsingItem()).thenReturn(true);
+            }
+            pass(120); pass(160); pass(200); pass(240);
+            assertFalse(data.contains("SiegeWallGroundRecovery"));
+            verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+            verify(worker.getNavigation(),never()).stop();
+            verify(level,never()).getHeight(any(),anyInt(),anyInt());
+            verify(worker,never()).stopSleeping();
+            verify(worker,never()).stopUsingItem();
+
+            when(worker.shouldWork()).thenReturn(true);
+            when(worker.needsToSleep()).thenReturn(false);
+            when(worker.needsToGetToChest()).thenReturn(false);
+            when(worker.isSleeping()).thenReturn(false);
+            when(worker.isUsingItem()).thenReturn(false);
+            pass(280); pass(320); pass(360);
+            verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+            pass(400);
+            verify(worker).teleportTo(0.5,64,0.5);
+            verify(level,never()).setBlock(any(),any(),anyInt());
+        }
+    }
+    @Test void unreadableNativeSchedulingClearsStaleRecoveryWithoutMovingTheWorker() {
+        setup(); pass(0); pass(40); pass(80);
+        when(worker.needsToGetToChest()).thenThrow(new IllegalStateException("native API unavailable"));
+        pass(120);
+        assertFalse(data.contains("SiegeWallGroundRecovery"));
+        verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+        verify(worker.getNavigation(),never()).stop();
     }
 }

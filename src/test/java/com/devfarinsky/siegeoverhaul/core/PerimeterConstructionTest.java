@@ -33,6 +33,57 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
         return level;
     }
     @Test void completeDryOwnedFootprintIsAccepted() {assertNull(PerimeterConstruction.siteProblem(level(),plan(),p->true));}
+    @Test void wholePerimeterReviewReportsTheSameOutsideNeighborAsNativeAdmission() {
+        var level = level(); var plan = plan();
+        BlockPos sand = new BlockPos(-1, 64, 8);
+        assertFalse(PerimeterConstruction.reservedCells(plan).contains(sand));
+        when(level.getBlockState(sand)).thenReturn(Blocks.SAND.defaultBlockState());
+        String problem = PerimeterConstruction.siteProblem(level, plan, p -> true);
+        assertNotNull(problem);
+        assertTrue(problem.contains("minecraft:sand") && problem.contains(sand.toShortString()), problem);
+        String nativeProblem = com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.placementNeighborhoodProblem(
+                level, plan.blocks().keySet().stream().map(BlockPos::of).toList());
+        assertEquals(nativeProblem, problem);
+        verify(level, never()).setBlock(any(), any(), anyInt(), anyInt());
+        verify(level, never()).destroyBlock(any(), anyBoolean(), any());
+    }
+    @Test void wholePerimeterReviewChecksNeighborChunksWithoutLoadingThem() {
+        var level = level(); var plan = plan();
+        when(level.hasChunkAt(any())).thenAnswer(call -> ((BlockPos) call.getArgument(0)).getX() >= 0);
+        assertNotNull(PerimeterConstruction.siteProblem(level, plan, p -> true));
+        verify(level, never()).getBlockState(argThat(pos -> pos.getX() < 0));
+        verify(level, never()).hasNeighborSignal(any());
+    }
+    @Test void pairedPlantsInUnderDeckClearanceAreRejectedDuringTheFreeReview() {
+        var plan = plan(); BlockPos cell = new BlockPos(2, 64, 8);
+        assertTrue(plan.clearance().contains(cell.asLong()));
+        assertFalse(plan.blocks().containsKey(cell.asLong()));
+        for (var block : List.of(Blocks.TALL_GRASS, Blocks.LARGE_FERN, Blocks.SUNFLOWER, Blocks.WITHER_ROSE)) {
+            var level = level(); when(level.getBlockState(cell)).thenReturn(block.defaultBlockState());
+            String problem = PerimeterConstruction.siteProblem(level, plan, p -> true);
+            assertNotNull(problem);
+            assertTrue(problem.contains(cell.toShortString()), problem);
+            verify(level, never()).setBlock(any(), any(), anyInt(), anyInt());
+        }
+        var level = level(); when(level.getBlockState(cell)).thenReturn(Blocks.DANDELION.defaultBlockState());
+        assertNull(PerimeterConstruction.siteProblem(level, plan, p -> true));
+    }
+    @Test void completedCellsDoNotRequirePermissionToMutateTheirNeighborsAgain() {
+        var plan = plan(); var level = level();
+        BlockPos pending = new BlockPos(15, 64, 8), sand = new BlockPos(-1, 64, 8);
+        assertTrue(plan.blocks().containsKey(pending.asLong()));
+        when(level.getBlockState(any())).thenAnswer(call -> {
+            BlockPos p = call.getArgument(0);
+            if (p.equals(sand)) return Blocks.SAND.defaultBlockState();
+            if (p.equals(pending)) return Blocks.AIR.defaultBlockState();
+            String id = plan.blocks().get(p.asLong());
+            if (id != null) return net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                    .get(new net.minecraft.resources.ResourceLocation(id)).defaultBlockState();
+            return p.getY() < 64 ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState();
+        });
+        assertNull(PerimeterConstruction.siteProblem(level, plan, p -> true));
+        verify(level, never()).hasNeighborSignal(new BlockPos(0, 64, 8));
+    }
     @Test void reservationRetainsWalkwayHeadroomWithoutClaimingTheHollowCourtyard() {
         var plan = plan();
         var reserved = PerimeterConstruction.reservedCells(plan);

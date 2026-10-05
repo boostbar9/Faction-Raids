@@ -124,6 +124,29 @@ class DefenseStructuresTest extends MinecraftTestSupport {
     @Test void clearFlatClaimedSiteIsAccepted() {
         assertNull(DefenseStructures.siteProblem(clearLevel(), tower(), p -> true));
     }
+    @Test void manualReviewUsesNativePlantRulesForTargetsAndReservedHeadroom() {
+        var plan = DefenseBlueprint.create(DefenseBlueprint.Kind.GATEHOUSE, origin, Direction.SOUTH);
+        for (BlockPos cell : List.of(origin, origin.above(), plan.max())) {
+            for (var block : List.of(Blocks.TALL_GRASS, Blocks.LARGE_FERN, Blocks.SUNFLOWER, Blocks.WITHER_ROSE)) {
+                var level = clearLevel();
+                when(level.getBlockState(cell)).thenReturn(block.defaultBlockState());
+                String problem = DefenseStructures.siteProblem(level, plan, p -> true);
+                assertNotNull(problem, block + " at " + cell);
+                assertTrue(problem.contains(cell.toShortString()), problem);
+                verify(level, never()).setBlock(any(), any(), anyInt(), anyInt());
+                verify(level, never()).destroyBlock(any(), anyBoolean(), any());
+            }
+        }
+        var level = clearLevel();
+        when(level.getBlockState(origin)).thenReturn(Blocks.DANDELION.defaultBlockState());
+        assertNull(DefenseStructures.siteProblem(level, plan, p -> true), "Audited single-cell plants stay buildable");
+    }
+    @Test void manualReviewChecksPermissionInEveryReservedHeadroomCell() {
+        var plan = tower();
+        BlockPos denied = origin.above(2);
+        assertTrue(DefenseStructures.reservedCells(plan).contains(denied));
+        assertNotNull(DefenseStructures.siteProblem(clearLevel(), plan, p -> !p.equals(denied)));
+    }
     @Test void clearManualFootprintReportsTheSameNearbySandRefusalAsNativeAdmission() {
         var level = clearLevel();
         var plan = DefenseBlueprint.create(DefenseBlueprint.Kind.WALL, origin, Direction.SOUTH);

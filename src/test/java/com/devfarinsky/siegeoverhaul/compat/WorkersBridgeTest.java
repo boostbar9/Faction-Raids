@@ -3,6 +3,11 @@ package com.devfarinsky.siegeoverhaul.compat;
 import com.devfarinsky.siegeoverhaul.MinecraftTestSupport;
 import com.devfarinsky.siegeoverhaul.RaidConfig;
 import com.devfarinsky.siegeoverhaul.RecruitsBridge;
+import com.talhanation.workers.entities.BuilderEntity;
+import com.talhanation.workers.entities.ai.BuilderWorkGoal;
+import com.talhanation.workers.entities.ai.GetNeededItemsFromStorage;
+import com.talhanation.workers.entities.ai.WorkerGoHomeGoal;
+import com.talhanation.workers.entities.workarea.BuildArea;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -36,6 +41,92 @@ class WorkersBridgeTest extends MinecraftTestSupport {
         worker.state=3;assertFalse(WorkersBridge.workingOnApi(worker,area));
         worker.state=6;worker.isFleeing=true;assertFalse(WorkersBridge.workingOnApi(worker,area));
         assertFalse(WorkersBridge.workingOnApi(new Object(),area));
+    }
+    public static class RecoveryScheduleApi {
+        boolean work = true, sleep, chest;
+        public boolean shouldWork() { return work; }
+        public boolean needsToSleep() { return sleep; }
+        public boolean needsToGetToChest() { return chest; }
+    }
+    public static class ThrowingRecoveryScheduleApi extends RecoveryScheduleApi {
+        @Override public boolean needsToGetToChest() { throw new IllegalStateException("unavailable"); }
+    }
+    @Test void groundRecoveryFailsClosedForUnavailableNativeScheduling() {
+        var worker = new RecoveryScheduleApi();
+        assertTrue(WorkersBridge.readyForGroundRecoveryApi(worker));
+        worker.work = false;
+        assertFalse(WorkersBridge.readyForGroundRecoveryApi(worker));
+        worker.work = true; worker.sleep = true;
+        assertFalse(WorkersBridge.readyForGroundRecoveryApi(worker));
+        worker.sleep = false; worker.chest = true;
+        assertFalse(WorkersBridge.readyForGroundRecoveryApi(worker));
+        assertFalse(WorkersBridge.readyForGroundRecoveryApi(new Object()));
+        assertFalse(WorkersBridge.readyForGroundRecoveryApi(new WorkStateApi()));
+        assertFalse(WorkersBridge.readyForGroundRecoveryApi(new ThrowingRecoveryScheduleApi()));
+        assertFalse(WorkersBridge.readyForGroundRecoveryApi(null));
+        assertFalse(WorkersBridge.readyForGroundRecovery(null));
+    }
+    @Test void recoveryAgreesWithPinnedNativeConstructionSchedulingAndAddsItemUseExclusion() {
+        var worker = mock(BuilderEntity.class);
+        worker.currentBuildArea = mock(BuildArea.class);
+        var nativeWork = new BuilderWorkGoal(worker);
+        when(worker.isOwned()).thenReturn(true);
+        when(worker.getFollowState()).thenReturn(6);
+        doCallRealMethod().when(worker).shouldWork();
+        assertTrue(nativeWork.canUse());
+        assertTrue(WorkersBridge.readyForGroundRecovery(worker));
+
+        when(worker.needsToSleep()).thenReturn(true);
+        assertFalse(nativeWork.canUse());
+        assertFalse(WorkersBridge.readyForGroundRecovery(worker));
+        when(worker.needsToSleep()).thenReturn(false);
+        when(worker.needsToGetToChest()).thenReturn(true);
+        assertFalse(nativeWork.canUse());
+        assertFalse(WorkersBridge.readyForGroundRecovery(worker));
+        when(worker.needsToGetToChest()).thenReturn(false);
+        when(worker.isOwned()).thenReturn(false);
+        assertFalse(nativeWork.canUse());
+        assertFalse(WorkersBridge.readyForGroundRecovery(worker));
+        when(worker.isOwned()).thenReturn(true);
+        for (int command : new int[]{1, 2, 3, 5}) {
+            when(worker.getFollowState()).thenReturn(command);
+            assertFalse(nativeWork.canUse());
+            assertFalse(WorkersBridge.readyForGroundRecovery(worker));
+        }
+        when(worker.getFollowState()).thenReturn(6);
+        when(worker.isSleeping()).thenReturn(true);
+        assertTrue(nativeWork.canUse(), "An unusual daytime sleep still needs the explicit recovery exclusion");
+        assertFalse(WorkersBridge.readyForGroundRecovery(worker));
+        when(worker.isSleeping()).thenReturn(false);
+        when(worker.isUsingItem()).thenReturn(true);
+        assertTrue(nativeWork.canUse(), "Native build scheduling does not itself reject an active item use");
+        assertFalse(WorkersBridge.readyForGroundRecovery(worker));
+        verify(worker, never()).stopUsingItem();
+        verify(worker, never()).stopSleeping();
+    }
+    @Test void nativeHomeAndStorageKeepStateSixAndJobButCannotTriggerGroundRecovery() {
+        var worker = mock(BuilderEntity.class);
+        var area = mock(BuildArea.class);
+        worker.currentBuildArea = area;
+        var state = new java.util.concurrent.atomic.AtomicInteger(0);
+        when(worker.getFollowState()).thenAnswer(call -> state.get());
+        doAnswer(call -> { state.set(call.getArgument(0)); return null; }).when(worker).setFollowState(anyInt());
+        when(worker.shouldWork()).thenReturn(true);
+        when(worker.needsToSleep()).thenReturn(true);
+        new WorkerGoHomeGoal(worker).start();
+        assertTrue(WorkersBridge.workingOn(worker, area), "Native home starts state 6 without clearing the build area");
+        assertFalse(WorkersBridge.readyForGroundRecovery(worker));
+
+        state.set(0);
+        when(worker.needsToSleep()).thenReturn(false);
+        when(worker.needsToGetToChest()).thenReturn(true);
+        when(worker.position()).thenReturn(Vec3.ZERO);
+        when(worker.getNavigation()).thenReturn(mock(net.minecraft.world.entity.ai.navigation.PathNavigation.class));
+        when(worker.getLookControl()).thenReturn(mock(net.minecraft.world.entity.ai.control.LookControl.class));
+        assertTrue(new GetNeededItemsFromStorage(worker).moveToPosition(new BlockPos(100, 64, 100)));
+        assertTrue(WorkersBridge.workingOn(worker, area), "Native storage travel also retains state 6 and the exact job");
+        assertFalse(WorkersBridge.readyForGroundRecovery(worker));
+        assertSame(area, worker.currentBuildArea);
     }
     @Test
     void workers2ApiReceivesRaiderOwnerAndNonWorkingHoldMode() throws Exception {

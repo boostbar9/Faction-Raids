@@ -1,3 +1,10 @@
+## 4.52.6 — More reliable builder reviews and work breaks
+
+- Stop ground recovery from moving commissioned builders while they are sleeping, getting supplies or using an item. Native Workers work schedules stay in charge, and the stuck timer restarts after a break.
+- Check the complete perimeter's placement neighbors during the free review, so nearby protected blocks are reported before a native section is created.
+- Make manual and perimeter reviews use the same small-plant and headroom rules as native acceptance. Paired plants that need manual clearance now report their block and coordinates in the review; approved single-cell plants still work normally.
+- Check manual-plan building permissions throughout reserved headroom. Existing structures, claims, inventory, paid jobs, supplied materials and construction fees are preserved.
+
 ## 4.52.5 — Give camp scouts safer ways to recover
 
 - Try the existing safe soil-grading plan during the initial camp search, instead of discarding workable mounds with an older, stricter surface check.
