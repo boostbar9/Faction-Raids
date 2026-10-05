@@ -19,9 +19,12 @@ has been selected as recommended. Other published release channels may advance
 `1.20.1-latest` after public verification; this does not require future versions to
 use the Release channel. Do not bump the feed during builds.
 
-The current publicly verified recommended Release is **4.52.6**.
-The [4.52.6 release record](release-4.52.6.md) identifies its exact source, artifact,
-Release channel and public-verification evidence.
+The current publicly verified recommended Release is **4.52.8**.
+The [4.52.8 release record](release-4.52.8.md) identifies its exact source, artifact,
+Release channel and public-verification evidence. The historical
+[4.52.7 record](release-4.52.7.md) preserves the preceding grass-compatibility release.
+Both records distinguish verified accepted artifacts from the unavailable separate
+public-download byte hash.
 
 Players must install a version containing this feature before chat notifications
 can appear; older installed JARs cannot be retroactively changed. Forge's global
