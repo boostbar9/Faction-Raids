@@ -9,10 +9,10 @@ import net.minecraft.world.item.*;
 import java.util.*;
 
 /** Rebuildable catalog: no shared mutable stacks and no duplicate creative entries. */
-public final class CreativeCatalog {
+final class CreativeCatalog {
     private CreativeCatalog() {}
 
-    public static List<ItemStack> entries(Collection<Item> registered) {
+    static List<ItemStack> entries(Collection<Item> registered) {
         var result = new ArrayList<ItemStack>();
         for (var item : registered) add(result, new ItemStack(item));
         add(result, abilityGuide());
@@ -37,7 +37,7 @@ public final class CreativeCatalog {
         if (entries.stream().noneMatch(existing -> ItemStack.isSameItemSameTags(existing, stack))) entries.add(stack);
     }
 
-    public static ItemStack abilityGuide() {
+    static ItemStack abilityGuide() {
         var book = new ItemStack(Items.WRITTEN_BOOK);
         var tag = book.getOrCreateTag();
         tag.putString("title", "The Olympian Arts");

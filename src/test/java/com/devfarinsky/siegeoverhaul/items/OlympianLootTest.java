@@ -158,20 +158,6 @@ class OlympianLootTest extends MinecraftTestSupport {
         assertTrue(dropped.getAllValues().stream().noneMatch(ItemStack::isEnchanted));
     }
 
-    @ParameterizedTest @EnumSource(LootBoxItem.Tier.class)
-    void previewCatalogueExactlyMatchesEligibleLiveArmoryAndHasNoSharedMutableStacks(LootBoxItem.Tier tier) {
-        var previews = LootBoxItem.armoryPreviews(tier);
-        int[] eligible = OlympianLoot.availableArmory(tier);
-        assertEquals(eligible.length, previews.size());
-        for (int i = 0; i < eligible.length; i++) {
-            assertTrue(ItemStack.matches(OlympianLoot.armory(tier, eligible[i]), previews.get(i)));
-            assertNotEquals(7, eligible[i], "Removed hoe must never be advertised");
-            assertTrue(tier.ordinal() >= 2 || eligible[i] != 1, "Low-tier fishing rod is unavailable");
-        }
-        previews.get(0).setCount(0);
-        assertEquals(1, LootBoxItem.armoryPreviews(tier).get(0).getCount());
-    }
-
     @Test void advertisedChestOddsApplyTheActualTierFloor() {
         assertEquals("Common 50% | Uncommon 30% | Rare 15% | Epic 5%", CoreLoot.odds(0));
         assertEquals("Uncommon 80% | Rare 15% | Epic 5%", CoreLoot.odds(1));

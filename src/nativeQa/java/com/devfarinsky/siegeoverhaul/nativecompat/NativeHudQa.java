@@ -212,11 +212,12 @@ public final class NativeHudQa {
                     Button[] boxes = (Button[]) read("boxes");
                     require(java.util.Arrays.stream(boxes).allMatch(button -> button.visible),
                             "Mystery chest purchase controls are not all visible");
-                    require(mc().screen.children().stream()
-                                    .filter(child -> child instanceof AbstractWidget)
-                                    .map(child -> ((AbstractWidget) child).getMessage().getString())
-                                    .noneMatch(label -> label.equals("Items") || label.startsWith("Possible ")),
+                    require(possibleItemControls() == 0,
                             "Loot HUD still exposes a possible-item browser");
+                    require((Boolean) read("lootMysteryRendered"),
+                            "Sealed Loot-page presentation was not rendered into the actual framebuffer");
+                    require(((ItemStack) read("revealed")).isEmpty(),
+                            "Fresh Loot page retained a reward before purchase");
                     require((Integer) read("confirmBox") == -1,
                             "Sealed reward check changed purchase confirmation");
                     assertFocusVisible();
@@ -638,6 +639,24 @@ public final class NativeHudQa {
             require(widget.visible && widget.active, "Keyboard focus remained on a hidden/disabled widget");
     }
 
+    private static long possibleItemControls() {
+        return mc().screen.children().stream()
+                .filter(child -> child instanceof AbstractWidget)
+                .map(child -> ((AbstractWidget) child).getMessage().getString())
+                .filter(label -> label.equals("Items") || label.startsWith("Possible ")).count();
+    }
+
+    private static Map<String, Object> sealedLootEvidence() {
+        boolean rendered = (Boolean) read("lootMysteryRendered");
+        int rewardStacks = ((ItemStack) read("revealed")).isEmpty() ? 0 : 1;
+        long controls = possibleItemControls();
+        require(rendered, "Sealed Loot-page presentation did not complete before capture");
+        require(rewardStacks == 0, "Loot capture contains a reward before purchase");
+        require(controls == 0, "Loot capture exposes possible-item controls");
+        return Map.of("rendered", true, "nonEmptyRewardStacks", rewardStacks,
+                "possibleItemControls", controls);
+    }
+
     private static List<Map<String, Object>> geometry() {
         Screen screen = mc().screen;
         require(screen != null, "No actual screen to capture");
@@ -709,6 +728,8 @@ public final class NativeHudQa {
             view.put("nonblankSamples", changed);
             if (mc.screen instanceof CoreHireScreen) {
                 view.put("page", currentPage().name());
+                if (currentPage() == CoreCommandPage.LOOT)
+                    view.put("sealedLootPresentation", sealedLootEvidence());
                 if (currentPage() == CoreCommandPage.ARMY && menu().role(0) >= 0) {
                     view.put("nativePortraits", portraitEvidence());
                     view.put("portraitLogicalSize", CoreHireLayout.fit(mc.screen.width, mc.screen.height).hirePortraitSize());

@@ -132,6 +132,8 @@ class NativeHudSourceContracts(unittest.TestCase):
         source = HARNESS.read_text()
         self.assertIn('Loot HUD still exposes a possible-item browser', source)
         self.assertIn('Loot contents remain sealed until the owned box is opened', source)
+        self.assertIn('sealedLootPresentation', source)
+        self.assertIn('Sealed Loot-page presentation did not complete before capture', source)
         self.assertNotIn('lootTooltipBounds', source)
 
     def test_workflow_read_only_and_bounded_online_then_offline(self):
@@ -210,6 +212,9 @@ class NativeHudReceiptVerifier(unittest.TestCase):
                     'status': 'EMPTY' if state == 'idle' else 'TIED' if state in {'tied', 'waiting'} else 'ADVANCING',
                     'hud': {'x': 8, 'y': 79 if state == 'bossbars' else 8, 'width': 134 if state == 'bossbars' else 300, 'height': 58, 'lines': 4}}
             if name.endswith('-army.png'): view['nativePortraits'] = ['com.talhanation.synthetic.Test'] * 4
+            if name.endswith('-loot.png'):
+                view['sealedLootPresentation'] = {
+                    'rendered': True, 'nonEmptyRewardStacks': 0, 'possibleItemControls': 0}
             if name.endswith('-territory.png'):
                 view['territoryAvailability'] = {'ownershipMask': 5, 'active': 1, 'retained': 1, 'unavailableButtons': 2}
                 view['widgets'].extend([{'label': 'Unavailable', 'x': x, 'y': 1, 'width': 10, 'height': 10,
