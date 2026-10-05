@@ -105,14 +105,14 @@ public final class PerimeterSteppedProject {
                 "Unverified or foreign native child cannot retire");
         List<RetirementReceipt> retired = new ArrayList<>(snapshot.retired()); retired.add(receipt);
         int next = activePhase() + 1;
-        return changed(next == 2 ? State.VERIFYING_COMPLETE : State.WAITING_FOR_NEXT_PHASE, null, next,
+        return changed(next == contract.phases().size() ? State.VERIFYING_COMPLETE : State.WAITING_FOR_NEXT_PHASE, null, next,
                 snapshot.payment(), null, snapshot.verified(), retired, null, "");
     }
     public PerimeterSteppedProject recordCompletion(Check expected, CompletionReceipt receipt) {
         expect(expected); validateCompletion(receipt);
         if (state() == State.COMPLETE) { require(snapshot.completion().equals(receipt), "Conflicting whole-parent completion"); return this; }
-        require(state() == State.VERIFYING_COMPLETE, "Both real phases must verify and retire before final observation");
-        return changed(State.COMPLETE, null, 2, snapshot.payment(), null, snapshot.verified(), snapshot.retired(), receipt, "");
+        require(state() == State.VERIFYING_COMPLETE, "Every real phase must verify and retire before final observation");
+        return changed(State.COMPLETE, null, contract.phases().size(), snapshot.payment(), null, snapshot.verified(), snapshot.retired(), receipt, "");
     }
     /** Retains all receipts and reservations. Cancellation is not native detachment or cleanup evidence. */
     public PerimeterSteppedProject cancel(Check expected, String reason) {
@@ -140,7 +140,8 @@ public final class PerimeterSteppedProject {
 
     private void validate() {
         require(contract.digest().equals(snapshot.assemblyDigest()), "Changed assembly digest");
-        require(snapshot.state() != null && snapshot.revision() >= 0 && activePhase() >= 0 && activePhase() <= 2,
+        int phaseCount = contract.phases().size();
+        require(snapshot.state() != null && snapshot.revision() >= 0 && activePhase() >= 0 && activePhase() <= phaseCount,
                 "Invalid parent state or revision");
         require(snapshot.blocker() != null && snapshot.blocker().length() <= 256, "Invalid bounded blocker");
         boolean suspended = state() == State.CANCELED || state() == State.UNCERTAIN;
@@ -167,10 +168,10 @@ public final class PerimeterSteppedProject {
         int verified, retired; boolean lease;
         switch (effective) {
             case PREPARED_UNPAID, PREPARED_PAID -> { require(activePhase() == 0, "Prepared parent phase changed"); verified = 0; retired = 0; lease = false; }
-            case RUNNING -> { require(activePhase() < 2, "No active phase remains"); verified = activePhase(); retired = activePhase(); lease = true; }
-            case PHASE_VERIFIED -> { require(activePhase() < 2, "No verified phase remains"); verified = activePhase() + 1; retired = activePhase(); lease = true; }
-            case WAITING_FOR_NEXT_PHASE -> { require(activePhase() == 1, "Only structure can wait after retired fill"); verified = 1; retired = 1; lease = false; }
-            case VERIFYING_COMPLETE, COMPLETE -> { require(activePhase() == 2, "Whole completion requires both phases"); verified = 2; retired = 2; lease = false; }
+            case RUNNING -> { require(activePhase() < phaseCount, "No active phase remains"); verified = activePhase(); retired = activePhase(); lease = true; }
+            case PHASE_VERIFIED -> { require(activePhase() < phaseCount, "No verified phase remains"); verified = activePhase() + 1; retired = activePhase(); lease = true; }
+            case WAITING_FOR_NEXT_PHASE -> { require(activePhase() > 0 && activePhase() < phaseCount, "No later phase is waiting"); verified = activePhase(); retired = activePhase(); lease = false; }
+            case VERIFYING_COMPLETE, COMPLETE -> { require(activePhase() == phaseCount, "Whole completion requires every phase"); verified = phaseCount; retired = phaseCount; lease = false; }
             default -> throw new IllegalArgumentException("Unsupported effective state");
         }
         require(snapshot.verified().size() == verified && snapshot.retired().size() == retired
@@ -190,7 +191,7 @@ public final class PerimeterSteppedProject {
         require(receipt.debited() == (receipt.mode() == PaymentMode.TREASURY_DEBIT ? PRICE : 0), "Payment amount differs from the single parent fee");
     }
     private void validateActivation(ActivationReceipt receipt, int phase) {
-        require(phase >= 0 && phase < 2 && receipt != null && receipt.phase() == phase
+        require(phase >= 0 && phase < contract.phases().size() && receipt != null && receipt.phase() == phase
                 && contract.binding().equals(receipt.binding()), "Invalid native phase identity");
         Phase expected = contract.phases().get(phase);
         require(expected.areaId().equals(receipt.areaId()) && expected.digest().equals(receipt.phaseDigest()), "Changed native area or phase digest");
@@ -203,7 +204,8 @@ public final class PerimeterSteppedProject {
     private void validateCompletion(CompletionReceipt receipt) {
         require(receipt != null && contract.binding().equals(receipt.binding()) && digest(receipt.finalObservationDigest()), "Invalid whole-parent final observation");
         requireId(receipt.receiptId());
-        require(receipt.retirementReceiptIds().size() == 2 && receipt.retirementReceiptIds().equals(snapshot.retired().stream().map(RetirementReceipt::receiptId).toList()),
+        require(receipt.retirementReceiptIds().size() == contract.phases().size()
+                && receipt.retirementReceiptIds().equals(snapshot.retired().stream().map(RetirementReceipt::receiptId).toList()),
                 "Final observation lacks the exact actual native retirement prefix");
     }
     private static void distinct(Set<UUID> ids, UUID id) { requireId(id); require(ids.add(id), "Receipt identity reused for another event"); }

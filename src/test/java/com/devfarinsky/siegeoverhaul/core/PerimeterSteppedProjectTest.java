@@ -27,6 +27,20 @@ class PerimeterSteppedProjectTest {
         assertEquals(State.COMPLETE, p.state()); assertEquals(8, p.revision()); assertFalse(p.executionSupported());
         assertEquals(2, p.snapshot().verified().size()); assertEquals(2, p.snapshot().retired().size());
     }
+    @Test void noFillContractRunsAsOneStructurePhaseAfterTheSameSinglePayment() {
+        var p = prepare(structureOnlyAssembly()); assertEquals(1, p.contract().phases().size());
+        var payment = payment(p); p = p.recordPayment(p.check(), payment);
+        p = p.recordActivation(p.check(), activation(p, 0));
+        p = p.recordVerification(p.check(), verification(p));
+        p = p.recordRetirement(p.check(), retirement(p));
+        assertEquals(State.VERIFYING_COMPLETE, p.state());
+        assertEquals(1, p.activePhase());
+        assertEquals(payment, p.snapshot().payment());
+        p = p.recordCompletion(p.check(), completion(p));
+        assertEquals(State.COMPLETE, p.state());
+        assertEquals(1, p.snapshot().verified().size());
+        assertEquals(1, p.snapshot().retired().size());
+    }
     @Test void receiptsAreNeverInventedByPrepareOrRestore() {
         var p = prepare(assembly()); assertNull(p.snapshot().payment()); assertNull(p.snapshot().activeLease());
         assertTrue(p.snapshot().verified().isEmpty()); assertTrue(p.snapshot().retired().isEmpty()); assertNull(p.snapshot().completion());

@@ -43,10 +43,14 @@ class PerimeterSteppedAssemblyTest {
         var a = assemble(header(), 1, GEOMETRY, targets, observations(), bill);
         assertEquals(2, a.phases().get(0).targets().size()); assertEquals(64, a.header().quotedPrice());
     }
-    @Test void emptyFillIsExplicitlyRefusedRatherThanInventingARetirement() {
+    @Test void emptyFillCreatesOneStructurePhaseWithoutInventingARetirement() {
         var targets = targets(); targets.remove(FILL);
-        var e = assertThrows(IllegalArgumentException.class, () -> assemble(header(), 1, GEOMETRY, targets, observations(), Map.of("minecraft:cobblestone", 1)));
-        assertTrue(e.getMessage().contains("Empty fill"));
+        var a = assemble(header(), 1, GEOMETRY, targets, observations(), Map.of("minecraft:cobblestone", 1));
+        assertEquals(1, a.phases().size());
+        assertEquals(Kind.STRUCTURE, a.phases().get(0).kind());
+        assertEquals(0, a.phases().get(0).index());
+        assertTrue(a.phases().get(0).dependencies().isEmpty());
+        assertEquals(Set.of(WALL), a.phases().get(0).targets().keySet());
     }
     @Test void emptyStructureIsRefused() {
         var targets = targets(); targets.remove(WALL);

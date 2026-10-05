@@ -129,11 +129,13 @@ public final class PerimeterConstruction {
             case 2 -> PerimeterBlueprint.Palette.OAK;
             default -> PerimeterBlueprint.Palette.STONE_BRICKS;
         };
-        var plan = PerimeterBlueprint.create(territory.chunks(), (x, z) -> {
+        var legacyPlan = PerimeterBlueprint.create(territory.chunks(), (x, z) -> {
             WallSurface.Ground ground = WallSurface.inspectGround(level, new BlockPos(x, core.getY(), z));
             return ground.base() == null ? PerimeterBlueprint.Surface.blocked(ground.problem())
                     : PerimeterBlueprint.Surface.ready(ground.base().getY());
         }, palette, limits);
+        var steppedPlan = steppedPlan(level, territory.chunks(), core, material);
+        var plan = steppedPlan != null && steppedPlan.valid() && nativeScanWithinBudget(steppedPlan) ? steppedPlan : legacyPlan;
         String claimIdentity = key + ":" + nativeClaim.ownerFactionStringId() + ":"
                 + territory.chunks().stream().map(ChunkPos::toLong).sorted().toList();
         if (!plan.valid()) return new Preparation(null, plan, claimIdentity, plan.problemSummary(), territory);
@@ -231,6 +233,53 @@ public final class PerimeterConstruction {
             long work = Math.addExact(volume, plan.blocks().size());
             return volume <= 1_048_576L && work <= MAX_NATIVE_SCAN_WORK;
         } catch (ArithmeticException overflow) { return false; }
+    }
+
+    private static PerimeterBlueprint.Plan steppedPlan(ServerLevel level, Set<ChunkPos> chunks, BlockPos core, int material) {
+        try {
+            var wall = switch (material) {
+                case 1 -> PerimeterSteppedGeometry.Block.COBBLESTONE;
+                case 2 -> PerimeterSteppedGeometry.Block.OAK_PLANKS;
+                default -> PerimeterSteppedGeometry.Block.STONE_BRICKS;
+            };
+            Set<PerimeterSteppedTopology.Chunk> claim = new HashSet<>();
+            for (ChunkPos chunk : chunks) claim.add(new PerimeterSteppedTopology.Chunk(chunk.x, chunk.z));
+            var limits = new PerimeterSteppedGeometry.Limits(level.getMinBuildHeight(), level.getMaxBuildHeight(),
+                    TerritoryFortification.FOUNDATION_DEPTH, Math.min(PerimeterPreview.MAX_CELLS, PerimeterStageLayout.MAX_TARGETS),
+                    PerimeterStageLayout.MAX_RESERVED, 32_768, 16_384);
+            var draft = PerimeterSteppedGeometry.compile(claim, new PerimeterSteppedGeometry.Terrain() {
+                @Override public PerimeterSteppedGeometry.Ground ground(PerimeterSteppedTopology.Cell column) {
+                    WallSurface.Ground ground = WallSurface.inspectGround(level, new BlockPos(column.x(), core.getY(), column.z()));
+                    return ground.base() == null ? new PerimeterSteppedGeometry.Ground(0, false, ground.problem())
+                            : PerimeterSteppedGeometry.Ground.safe(ground.base().getY());
+                }
+                @Override public String passageProblem(PerimeterSteppedTopology.Cell column, int feetY, PerimeterSteppedGeometry.Region region) {
+                    return steppedPassageProblem(level, column, feetY, region);
+                }
+            }, wall, limits);
+            return draft.feasible() ? PerimeterSteppedBlueprint.convert(chunks, draft) : null;
+        } catch (RuntimeException | LinkageError unavailable) {
+            return null;
+        }
+    }
+
+    private static String steppedPassageProblem(ServerLevel level, PerimeterSteppedTopology.Cell column, int feetY,
+                                                PerimeterSteppedGeometry.Region region) {
+        if (feetY <= level.getMinBuildHeight() || feetY + 2 >= level.getMaxBuildHeight()) return "Gate passage exceeds world height";
+        for (int dy = 0; dy < 3; dy++) {
+            BlockPos pos = new BlockPos(column.x(), feetY + dy, column.z());
+            if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos)) return "Gate passage must be loaded and inside the world border";
+            String problem = NativeConstructionGuard.initialPlacementProblem(level, pos, level.getBlockState(pos), Blocks.AIR.defaultBlockState());
+            if (problem != null) return problem;
+        }
+        if (region != PerimeterSteppedGeometry.Region.WALL) {
+            BlockPos below = new BlockPos(column.x(), feetY - 1, column.z());
+            if (!level.hasChunkAt(below) || !level.getWorldBorder().isWithinBounds(below)) return "Gate approach footing must be loaded";
+            var support = level.getBlockState(below);
+            if (support.hasBlockEntity() || !support.getFluidState().isEmpty() || HirePlacement.dangerous(support)
+                    || !support.isFaceSturdy(level, below, Direction.UP)) return "Gate approach needs dry, safe, solid footing";
+        }
+        return null;
     }
 
     static boolean startJob(ServerPlayer player, Preparation prepared, int material) {

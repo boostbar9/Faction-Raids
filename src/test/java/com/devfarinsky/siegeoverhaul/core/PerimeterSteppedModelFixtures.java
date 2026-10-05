@@ -30,6 +30,10 @@ final class PerimeterSteppedModelFixtures {
     }
     static Map<String, Integer> bill() { return new HashMap<>(Map.of("minecraft:dirt", 1, "minecraft:cobblestone", 1)); }
     static PerimeterSteppedAssembly assembly() { return assemble(header(), 1, GEOMETRY, targets(), observations(), bill()); }
+    static PerimeterSteppedAssembly structureOnlyAssembly() {
+        var targets = targets(); targets.remove(FILL);
+        return assemble(header(), 1, GEOMETRY, targets, observations(), Map.of("minecraft:cobblestone", 1));
+    }
     static PaymentReceipt payment(PerimeterSteppedProject p) { return new PaymentReceipt(p.contract().binding(), id(100), 1, 64, 64, PaymentMode.TREASURY_DEBIT); }
     static ActivationReceipt activation(PerimeterSteppedProject p, int phase) {
         Phase f = p.contract().phases().get(phase);

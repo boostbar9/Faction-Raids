@@ -167,23 +167,28 @@ public final class PerimeterSteppedAssembly {
         require(plannedMaterialBill != null && plannedMaterialBill.size() <= MAX_MATERIALS
                 && calculated.equals(plannedMaterialBill), "Material bill differs from exact PLACE membership");
         this.materialBill = Collections.unmodifiableMap(new TreeMap<>(calculated));
-        require(this.targets.values().stream().anyMatch(t -> t.phase() == Kind.FILL),
-                "Empty fill is unsupported: no synthetic fill child or retirement may be recorded");
-        require(this.targets.values().stream().anyMatch(t -> t.phase() == Kind.STRUCTURE), "Structure phase must not be empty");
+        boolean hasFill = this.targets.values().stream().anyMatch(t -> t.phase() == Kind.FILL);
+        boolean hasStructure = this.targets.values().stream().anyMatch(t -> t.phase() == Kind.STRUCTURE);
+        require(hasStructure, "Structure phase must not be empty");
         this.digest = hash(this::writeContract);
         List<Phase> result = new ArrayList<>();
-        for (Kind kind : Kind.values()) {
+        for (Kind kind : phaseKinds(hasFill, hasStructure)) {
             TreeMap<Position, Target> membership = new TreeMap<>();
             this.targets.forEach((p, t) -> { if (t.phase() == kind) membership.put(p, t); });
+            int phaseIndex = result.size();
             TreeSet<Position> ownReservation = new TreeSet<>(membership.keySet()); ownReservation.addAll(this.observations.keySet());
-            String phaseDigest = hash(out -> { string(out, "siege-stepped-phase-v1"); string(out, this.digest); out.writeInt(kind.ordinal()); });
+            String phaseDigest = hash(out -> {
+                string(out, "siege-stepped-phase-v1"); string(out, this.digest);
+                out.writeInt(phaseIndex); out.writeInt(kind.ordinal());
+            });
             byte[] idBytes = HexFormat.of().parseHex(phaseDigest);
             UUID areaId = UUID.nameUUIDFromBytes(idBytes);
             require(!areaId.equals(header.projectId()), "Phase area collides with parent identity");
-            result.add(new Phase(kind.ordinal(), kind, areaId, phaseDigest,
-                    kind == Kind.FILL ? List.of() : List.of(0), membership, ownReservation, bill(membership)));
+            result.add(new Phase(phaseIndex, kind, areaId, phaseDigest,
+                    kind == Kind.STRUCTURE && hasFill ? List.of(0) : List.of(), membership, ownReservation, bill(membership)));
         }
-        require(!result.get(0).areaId().equals(result.get(1).areaId()), "Phase area identities must differ");
+        Set<UUID> areaIds = new java.util.HashSet<>();
+        for (Phase phase : result) require(areaIds.add(phase.areaId()), "Phase area identities must differ");
         this.phases = List.copyOf(result);
     }
 
@@ -230,9 +235,15 @@ public final class PerimeterSteppedAssembly {
             state(out, o.state()); out.writeLong(o.observedEditRevision());
         }
         // Commit to exact ordered phase memberships, dependencies and reservations as well as source maps.
-        out.writeInt(2);
-        for (Kind phase : Kind.values()) {
-            out.writeInt(phase.ordinal()); out.writeInt(phase == Kind.FILL ? 0 : 1); if (phase == Kind.STRUCTURE) out.writeInt(0);
+        boolean hasFill = targets.values().stream().anyMatch(t -> t.phase() == Kind.FILL);
+        boolean hasStructure = targets.values().stream().anyMatch(t -> t.phase() == Kind.STRUCTURE);
+        List<Kind> orderedPhases = phaseKinds(hasFill, hasStructure);
+        out.writeInt(orderedPhases.size());
+        for (int phaseIndex = 0; phaseIndex < orderedPhases.size(); phaseIndex++) {
+            Kind phase = orderedPhases.get(phaseIndex);
+            out.writeInt(phaseIndex); out.writeInt(phase.ordinal());
+            out.writeInt(phase == Kind.STRUCTURE && hasFill ? 1 : 0);
+            if (phase == Kind.STRUCTURE && hasFill) out.writeInt(0);
             List<Position> members = targets.entrySet().stream().filter(e -> e.getValue().phase() == phase).map(Map.Entry::getKey).toList();
             out.writeInt(members.size()); for (Position p : members) position(out, p);
             TreeSet<Position> reserved = new TreeSet<>(members); reserved.addAll(observations.keySet());
@@ -245,6 +256,12 @@ public final class PerimeterSteppedAssembly {
         long size = state.block().length();
         for (var property : state.properties().entrySet()) size += property.getKey().length() + property.getValue().length();
         return size;
+    }
+    private static List<Kind> phaseKinds(boolean hasFill, boolean hasStructure) {
+        List<Kind> result = new ArrayList<>(2);
+        if (hasFill) result.add(Kind.FILL);
+        if (hasStructure) result.add(Kind.STRUCTURE);
+        return result;
     }
     private static void state(DataOutputStream out, StateValue state) throws IOException {
         string(out, state.block()); out.writeInt(state.properties().size());
