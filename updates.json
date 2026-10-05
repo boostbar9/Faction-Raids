@@ -21,10 +21,11 @@
     "4.52.0": "Unified Building controls, flat 64-emerald automatic perimeters, hollow new walls, safer native construction/reload recovery, and camp-placement reliability. Back up worlds and update server and clients together; protected jobs require Workers 2.0.3 and Recruits 1.15.2.",
     "4.52.1": "Fallback camp scouting can raise its ground plane over exposed natural rock without cutting it. Existing protection, exit and finite earthworks limits remain; some locations cannot support a safe camp. Back up worlds and update server and clients together.",
     "4.52.2": "Building previews identify nearby blocks that prevent a safe start. Perimeter messages report blocked coordinates and unloaded, wet or occupied ground; failed commissions show the known refusal reason. Existing protections remain. Back up worlds and update server and clients together.",
-    "4.52.4": "Lower manual building commissions, clearer unavailable territory upgrades and saved once-only wave rewards. Whole-perimeter commissions stay 64 emeralds. Older unpaid plans need a fresh review. Back up worlds and update the server and all clients together; protocol 20 rejects older clients."
+    "4.52.4": "Lower manual building commissions, clearer unavailable territory upgrades and saved once-only wave rewards. Whole-perimeter commissions stay 64 emeralds. Older unpaid plans need a fresh review. Back up worlds and update the server and all clients together; protocol 20 rejects older clients.",
+    "4.52.5": "Safer enemy camp scouting and one bounded wider search after a saved one-minute wait. Preparation stays paused while searching; unsafe terrain can still use camp-less raids. New and still-active searches gain recovery; already-abandoned raids keep their current fallback. Back up worlds and update the server and all clients together."
   },
   "promos": {
-    "1.20.1-latest": "4.52.4",
-    "1.20.1-recommended": "4.52.4"
+    "1.20.1-latest": "4.52.5",
+    "1.20.1-recommended": "4.52.5"
   }
 }
