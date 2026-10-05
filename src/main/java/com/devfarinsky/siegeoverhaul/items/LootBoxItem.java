@@ -149,6 +149,14 @@ public final class LootBoxItem extends Item {
         return out;
     }
 
+    /** Fresh read-only examples from the exact eligible equipment pool used by roll().
+     * Does not advance an RNG or inspect any player's sealed reward. */
+    public static List<ItemStack> armoryPreviews(Tier tier) {
+        java.util.Objects.requireNonNull(tier, "tier");
+        return java.util.Arrays.stream(OlympianLoot.availableArmory(tier))
+                .mapToObj(choice -> OlympianLoot.armory(tier, choice)).toList();
+    }
+
     // ---- Wave-driven rolling ------------------------------------------------
 
     /**

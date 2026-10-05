@@ -20,7 +20,8 @@ def expected_screenshots():
     for prefix in MATRICES:
         names.extend(f'{prefix}-{page}.png' for page in PAGES)
         names.extend(f'{prefix}-{section}.png' for section in [
-            'building-structures', 'building-construction', 'intel-enemy-lore', 'intel-how-to-play'])
+            'building-structures', 'building-construction', 'intel-enemy-lore', 'intel-how-to-play',
+            'loot-gallery-epic', 'loot-gallery-last', 'loot-gallery-rare'])
         names.extend(f'{prefix}-plan-{plan}.png' for plan in PLANS)
     for prefix in MATRICES[:2]:
         names.extend(f'{prefix}-{state}.png' for state in STATES)

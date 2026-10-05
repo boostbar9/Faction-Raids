@@ -69,6 +69,10 @@ world, account or authentication file is uploaded.
   buttons remain disabled and are excluded from the active count at every scale;
   first-click local loot confirmation and its navigation
   cancellation. The second, paid loot click is never performed.
+- Possible-loot gallery at all four viewports: native enchanted/trimmed epic and
+  rare ItemStacks, bounded keyboard paging through later items, Royal tier-floor
+  controls and Back without a purchase. Gallery examples never inspect a sealed
+  reward. Review native tooltips, models and text clipping in the captures.
 - Intel search focus via its visible hitbox, real OS E typing without closing the
   inventory, no-result and Clear states, wheel scrolling, per-section scroll
   memory, native OS Ctrl+Tab/Ctrl+Shift+Tab, Escape, header Close, repeated reopening,

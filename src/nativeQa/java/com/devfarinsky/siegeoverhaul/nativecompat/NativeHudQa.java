@@ -204,6 +204,38 @@ public final class NativeHudQa {
         for (CoreCommandPage page : CoreCommandPage.values()) {
             add(prefix + " " + page.label(), () -> { selectPage(page); });
             add(prefix + " capture " + page.label(), () -> capture(prefix + "-" + slug(page.label())));
+            if (page == CoreCommandPage.LOOT) {
+                add(prefix + " possible epic rewards", () -> {
+                    click(((Button[]) read("lootPreviews"))[0]);
+                    require((Boolean) read("showingLootGallery"), "Items did not open the read-only gallery");
+                    require((Integer) read("confirmBox") == -1, "Gallery retained paid confirmation");
+                    require(!((Button[]) read("boxes"))[0].visible, "Purchase controls overlap gallery");
+                });
+                add(prefix + " epic gallery capture", () -> capture(prefix + "-loot-gallery-epic"));
+                add(prefix + " gallery end key", () -> {
+                    require(mc().screen.keyPressed(GLFW.GLFW_KEY_END, 0, 0), "Gallery End was not consumed");
+                    require((Integer) read("lootPage") > 0, "Gallery did not reveal later possible items");
+                    assertFocusVisible();
+                });
+                add(prefix + " gallery last page capture", () -> capture(prefix + "-loot-gallery-last"));
+                add(prefix + " Royal eligible tiers", () -> {
+                    click((Button) read("lootBack")); click(((Button[]) read("lootPreviews"))[2]);
+                    Button[] tiers = (Button[]) read("lootTiers");
+                    require(!tiers[0].active && !tiers[1].active && tiers[2].active && tiers[3].active,
+                            "Royal gallery exposes impossible lower tiers");
+                    click(tiers[2]);
+                    require((Integer) read("previewTier") == 2 && (Integer) read("lootPage") == 0,
+                            "Rarity navigation failed to reset gallery page");
+                });
+                add(prefix + " rare gallery capture", () -> capture(prefix + "-loot-gallery-rare"));
+                add(prefix + " return from gallery", () -> {
+                    click((Button) read("lootBack"));
+                    require(!(Boolean) read("showingLootGallery") && (Integer) read("confirmBox") == -1,
+                            "Back did not clear gallery safely");
+                    assertFocusVisible();
+                    check("Possible loot gallery uses eligible native ItemStacks, keyboard paging and returns without a purchase at " + prefix);
+                });
+            }
             if (page == CoreCommandPage.DEFENSES) {
                 add(prefix + " structure catalogue", () -> click("Place structure", "Structures"));
                 add(prefix + " structure capture", () -> capture(prefix + "-building-structures"));

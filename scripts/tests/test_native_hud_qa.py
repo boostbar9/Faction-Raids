@@ -139,7 +139,7 @@ class NativeHudSourceContracts(unittest.TestCase):
 
     def test_exact_named_matrix_has_all_pages_plans_states_and_native_inspection(self):
         expected = verify.expected_screenshots()
-        self.assertEqual(len(expected), 106)
+        self.assertEqual(len(expected), 118)
         for prefix in verify.MATRICES:
             for page in verify.PAGES:
                 self.assertIn(f'{prefix}-{page}.png', expected)
