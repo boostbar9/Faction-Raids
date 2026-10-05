@@ -4,6 +4,12 @@
   "package": "com.devfarinsky.siegeoverhaul.naval.prototype.mixin",
   "plugin": "com.devfarinsky.siegeoverhaul.naval.prototype.FinalShipsPrototypePlugin",
   "compatibilityLevel": "JAVA_17",
-  "mixins": ["FinalShipInputsMixin", "FinalRecruitsShipsMixin"],
-  "injectors": {"defaultRequire": 1}
+  "mixins": [
+    "FinalShipInputsMixin",
+    "FinalRecruitsShipsMixin",
+    "FinalCaptainWaterlineMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

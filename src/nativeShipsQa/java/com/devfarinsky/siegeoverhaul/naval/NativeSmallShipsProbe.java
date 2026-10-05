@@ -365,8 +365,8 @@ public final class NativeSmallShipsProbe {
         sample.put("attackTargetInRange", captain.attackController.isTargetInRange());
         var scanner = captain.smallShipsController.waterObstacleScanner;
         sample.put("scannerPresent", scanner != null);
-        if (scanner != null) sample.put("nativeObstacleCounts", Map.of("left", scanner.getObstaclesLeft(),
-                "right", scanner.getObstaclesRight(), "front", scanner.getObstaclesFront(10)));
+        if (scanner != null) sample.put("staticFrontColliderRay10", com.talhanation.recruits.util.WaterObstacleScanner.hasObstacle(ship.getForward().normalize(), ship, 10));
+        sample.put("onNativeServerThreadGroup", Thread.currentThread().getThreadGroup() == net.minecraftforge.fml.util.thread.SidedThreadGroups.SERVER);
         // Read-only observation of the exact pinned controller, never a planner override.
         var pathField = captain.smallShipsController.getClass().getDeclaredField("path");
         require(pathField.trySetAccessible(), "Cannot inspect pinned native path diagnostics");
@@ -383,7 +383,7 @@ public final class NativeSmallShipsProbe {
         sample.put("currentNode", String.valueOf(node));
         if (path instanceof net.minecraft.world.level.pathfinder.Path nativePath)
             sample.put("nativePath", Map.of("nodes", nativePath.getNodeCount(), "canReach", nativePath.canReach(),
-                    "target", nativePath.getTarget().toString()));
+                    "endNode", String.valueOf(nativePath.getEndNode())));
         navigationSamples.add(sample);
         if (moved >= 5 && reach > 0 && distance < reach && sail == 0) {
             navigationArrived = true;
