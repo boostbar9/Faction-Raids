@@ -1,0 +1,82 @@
+# Bounded player perimeter grading: staged design
+
+Status: design and a pure plane selector only. This branch does not enable excavation, alter current reviews, change accepted jobs or raise the existing support limit. The required UI proposal was delivered before implementation. Runtime integration needs the gates below.
+
+## Current cause and retained contracts
+
+`PerimeterBlueprint` chooses the maximum sampled surface Y per edge-connected claim component and fills lower columns up to that plane. Its eight-block support bound is intentional. A relief greater than eight therefore fails before a native job or payment; increasing that limit would hide access/capacity problems rather than level the land.
+
+Saved `PerimeterProject` v1 manifests, stages, payments and the protected native snapshot are immutable. They cannot be regenerated under a new grade policy on load. Existing `AcceptedConstructionReservation` describes unchanged occupancy, not authorization to mine. The protected area denies the native broad `FREE_AREA` mode. Existing soil/plant predicates used by enemy camps must not inherit new player permissions.
+
+The builder-arrival work in PR #274 addresses premature horizontal dispatch and native partial approaches. It deliberately preserves the companion's current vertical semantics. A strict physical vertical-reach policy requires a separately proved work-access plan; it cannot be added to a paid eight-depth plan as an isolated check.
+
+## First planning stage
+
+`PerimeterGradePlane` accepts already sampled, bounded surface columns for exactly one connected component. It never reads the world. It proposes one level plane and exact per-column cut/fill depths and counts. It does not classify natural terrain or grant mutation authority.
+
+Provisional conservative policy for new reviewed plans:
+
+- Preserve mode: no cuts, at most the existing eight fill blocks per column
+- Reviewed cut/fill mode: at most four cut blocks and eight fill blocks per column, at most 4,096 cuts and 32,768 fill cells, and at most 20,480 columns
+- Remain within world coordinates, build height, the wall's six-block clearance and all existing total-plan/native-serialization budgets
+- Prefer the highest feasible plane, minimizing removed terrain; no removal is proposed when the old support-only plane is feasible
+- Reject the complete proposal when relief, counts or metadata are unsafe; do not return a partial buildable section
+- Keep disconnected components independent and ordering deterministic
+
+These are staged planning bounds, not a new gameplay setting or a claim that every allowed relief has a usable worker route. The four-cut bound does not increase the existing fill bound. Terrace/stair alternatives remain deferred until continuous wall-walk joins and worker access can be proven; do not join mismatched deck levels with a vertical wall.
+
+## Exact mutation and occupancy manifest
+
+Before live wiring, add a versioned contract with disjoint or explicitly ordered roles:
+
+1. Original full block states, including properties, for every observed mutation and protected occupancy cell
+2. Exact native cut cells, exact post-cut state, and adapter/version identity for any nontrivial removal behavior
+3. Exact fill/build targets and material counts, separate from potential mining drops
+4. Read-only gate inside/outside approach floor/body/headroom cells; an occupancy reservation never grants a write
+5. Declared ordering/dependencies, component plane, work access and safe escape requirements
+6. Owner, builder, faction/claim, world, project generation, fee, quote, layout and policy/version identity
+
+Bind the whole contract into the review fingerprint and durable project/stage digests. Decode old v1 manifests under their existing meaning; reject unknown/corrupt new metadata without guessing. Every stage membership and cut/fill receipt must be lossless across save/reload, stage handoff, cancellation and ownership changes. Do not encode AIR as a native placement item or silently drop clearance-only columns to satisfy the old atom model.
+
+The gate planner is being staged separately. Its approaches can extend outside the current wall envelope. Admit them only after exact authority and loaded-state checks, and persist those same cells. An unclaimed outside path is not permission to alter someone else's claim; changed claims must pause the project.
+
+## Natural blocks are not reliable provenance
+
+A stone/log block state does not identify who placed it. Do not equate a `natural` tag, registry name, stone type or absence of a recent edit record with proof of world generation.
+
+- Always refuse inventories, block entities, known player edits, manufactured structures, claims/permissions the owner cannot modify, fluids and unknown state/side-effect contracts
+- Keep existing later-player-edit protections and neighbor-update checks active
+- Where provenance is unknown, the initial implementation must preserve the block or require an explicit in-game review/authorization of that exact proposed removal with truthful unknown-origin wording; generic natural-clearing permission is not proof
+- Start with independently audited bounded removal behavior. A broad modded-block/name/tag exemption is not acceptable
+- Trees require special treatment: breaking logs can trigger leaf decay, support loss and drops outside the immediate cell. Paired or dependent modded plants can remove partners in callbacks. Include every authorized dependent change in a bounded adapter contract or refuse it
+- Never transplant enemy camp restoration/clearing authority into player construction
+
+A player can inspect specific highlighted cells in the free review. The UI must say what will actually be removed, including unknown-origin warnings; it must not label all stone/logs as naturally generated. The final server rebuilds the exact plan and requires a fresh review on any change before charging or mining.
+
+## Native execution, access and accounting
+
+Do not call broad `setFreeArea(true)` or directly set construction blocks in production. Extend the protected native scan boundary to offer only the immutable authorized cut cells to the existing native mining machinery, after reviewing the pinned companion's current queue, tool, drop and interruption behavior. A cut stage must not authorize a different target because a queue changed.
+
+Revalidate loaded chunks, exact originals, claims, block entities, entities, neighbor dependencies, world border, access and reservations immediately before mutation. Break top-down only where dependency checks prove that ordering safe. Record progress from observed native changes, not optimistic queue removal. Missing tools or supplies should become ordinary native requests.
+
+Keep fill materials, mined drops, hand/inventory aliases, ground items and consumed construction supplies separately accounted. Do not count expected mining drops as available stock before they exist. Reload, sleep, eating and storage trips retain the accepted plan and cannot duplicate cuts, drops, items or payment.
+
+Physical vertical work access is a first-class gate for the later stricter-reach model. Merely allowing standing on completed foundation columns is insufficient: native layer order can create a six-block face before the worker decides to climb. A viable design must prove proactive ascent, native path continuity and a safe escape from each next mutation/body conflict, or reject the new site before payment. Do not teleport the worker or grant remote placement to make the fixture pass.
+
+## Review UX
+
+Keep the existing dark Building > Auto perimeter design, materials and 64-emerald one-time fee. Show separate build, clear and fill colors in the in-world plan; show gate direction and approach status, exact removal/fill/material totals and any unknown-origin blockers. Explicitly label a proposal that is not ready. Free review never mines, charges or assigns work. Confirmation binds the exact server-validated manifest; changed terrain requires refreshed review.
+
+Existing accepted jobs are not silently upgraded or demolished. A future upgrade is a new reviewed operation over known existing geometry with its own exact authorization and accounting.
+
+## Required acceptance before wiring/release
+
+- Pure plane tests: flat/4/8/12/13 relief, negative coordinates, independent components, deterministic order, immutable results, height/column/count bounds and no partial result
+- Manifest/codec tests: cut versus read-only clearance authority, exact target/original states, tampering, size, old-v1 fixtures, restart/handoff/cancel and same-state player edits
+- Admission tests: natural/modded behavior adapters, unknown provenance, house/container/claims, water/cliffs/unsupported platforms, unavailable chunks and late neighbor/entity changes before payment and before mutation
+- Real native fixture: finite cut/fill project, actual tool/material retrieval and drops, every authorized cell changed only once, no off-plan writes, pause/resume on sleep/storage/access changes, exact materials/payment, and complete reload/cancel accounting
+- Gate interaction: N/E/S/W usable in both directions on irregular/disconnected claims, protected external approaches, no internal or hole edges and no corner cuts
+- Render/input checks at compact and roomy scales, clear counts/colors, repeated confirm, back/close/cancel and stale review
+- Exact final-head full Build, independent review, merged-main artifact verification and existing release publication/public-availability gates
+
+Until those are satisfied, the selector stays unhooked and the user-visible feature remains in progress.
