@@ -358,3 +358,20 @@ server EULA acceptance, credentials or authentication changes are automated here
 ### Deterministic compact viewport
 
 Before any world or inspection capture, the fixture restores only its own window and requests a 960×720 client viewport through the existing GLFW/Window APIs. It waits at most ten seconds for the actual window and framebuffer dimensions. It does not change the desktop resolution or system settings. Native inspection and Building at GUI scale 3 must both report an actual 320×240 logical viewport; the verifier also checks every raw PNG is 960×720. The original cloud attempt had a readable 1180×812 maximized window, which did not exercise the intended compact height and correctly failed its fixture assertion.
+
+### Live civilian report acceptance
+
+The existing Survival gameplay fixture also navigates its actual claimed Core's
+Civilians page. It reuses the real starter villagers from production Core
+placement. Those unrelated startup NPCs were already AI-paused by the fixture to
+keep them out of the measured builder footprint; this check does not spawn, hire,
+rename, equip or change their AI, beds, jobs, food or tax clocks.
+
+The separate `NativeCivilianReportQa` helper compares server report identities and
+care observations to the actual owned villagers, then receives the report through
+the production watch/S2C path. It checks page-leave clearing, a fresh response on
+return, a normal core-block-use reopen with a different menu, and exact unchanged
+resident ledger, player inventory, Treasury and collected taxes. Two actual client
+captures are required by `scripts/verify-native-civilians.py`. This supplements the
+labeled HUD display samples; it does not establish native civilian AI, tax accrual,
+unloaded residents, hostile-client behavior or dedicated-server coverage.

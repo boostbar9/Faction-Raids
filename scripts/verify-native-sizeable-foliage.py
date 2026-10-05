@@ -34,10 +34,10 @@ def verify(data):
     assert not forbidden.intersection(runtime['declaredMethods']), runtime
     review = gameplay['sizeableFoliageReviews']
     for key in ['shortGrassTargetAndClearanceAccepted', 'runtimeStateSafetyVerified',
-                'plantsPreservedDuringReview', 'exactWorkerInventoryAndReceipts', 'fixtureTerrainRestored']:
+                'plantsPreservedDuringReview', 'shortGrassStandingSiteAccepted', 'exactWorkerInventoryAndReceipts', 'fixtureTerrainRestored']:
         assert review[key] is True, (key, review)
     assert review['treasuryDebit'] == 0, review
-    assert 'production prepare only' in review['scope'], review
+    assert 'production prepare and standing-site checks only' in review['scope'], review
     assert set(review['rejections']) == set(EXCLUDED), review
     for key, problem in review['rejections'].items():
         assert key in problem and review['targetCell'] in problem, (key, problem)

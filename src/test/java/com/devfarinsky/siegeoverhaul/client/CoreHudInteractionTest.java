@@ -297,11 +297,34 @@ class CoreHudInteractionTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void disconnectedRemovalStillClearsResidentIdentityWithoutSendingPackets() throws Exception {
+        var menu = mock(CoreHireMenu.class);
+        var screen = new CoreHireScreen(menu, mock(Inventory.class), Component.literal("Command"));
+        var client = mock(net.minecraft.client.Minecraft.class);
+        var clientField = net.minecraft.client.gui.screens.Screen.class.getDeclaredField("minecraft");
+        clientField.setAccessible(true); clientField.set(screen, client);
+        var subscription = (CivilianReportSubscription) get(screen, "civilianSubscription");
+        subscription.update(true, (request, watch) -> {});
+        assertFalse(CoreHireScreen.civilianConnectionReady(null));
+        assertFalse(CoreHireScreen.civilianConnectionReady(client));
+        screen.removed();
+        verify(menu).expectCivilianReport(anyLong(), eq(false));
+        verify(client, never()).getConnection(); // No player: do not even query a connection.
+        client.player = mock(net.minecraft.client.player.LocalPlayer.class);
+        assertFalse(CoreHireScreen.civilianConnectionReady(client));
+        when(client.getConnection()).thenReturn(mock(net.minecraft.client.multiplayer.ClientPacketListener.class));
+        assertTrue(CoreHireScreen.civilianConnectionReady(client));
+    }
+
     @Test void compactCivilianGuidanceKeepsCompleteCareAndTaxConditions() {
         assertEquals("Provide beds, food and workstations. Taxes pause if stranded or the core is occupied.",
                 CoreHireScreen.civilianGuidance(true));
-        assertTrue(CoreHireScreen.civilianGuidance(false).contains("assigned on arrival."));
-        assertTrue(CoreHireScreen.civilianGuidance(false).endsWith("core is occupied."));
+        assertTrue(CoreHireScreen.civilianGuidance(false).contains("not tracked"));
+        assertTrue(CoreHireScreen.civilianGuidance(false).contains("unloaded is not dead"));
+        var unavailable = CivilianReport.Resident.unavailable(java.util.UUID.randomUUID(), false);
+        assertEquals("Profession unknown", CivilianResidentButton.profession(unavailable));
+        assertEquals("Details unavailable", unavailable.status());
+        assertNotEquals(unavailable.status(), CivilianResidentButton.profession(unavailable));
     }
 
     @Test void compactArmyRetainsItsRefreshCountdownWithPageNavigation() {

@@ -10,9 +10,13 @@ PAGES = ['army', 'loot', 'treasury', 'territory', 'building', 'civilians', 'inte
 PLANS = ['barricade', 'watchtower', 'gatehouse', 'wall', 'corner', 'stairs']
 MATRICES = ['compact-scale2', 'compact-scale3', 'roomy-scale2', 'roomy-scale1']
 STATES = ['army-unavailable', 'treasury-empty', 'construction-loading', 'construction-empty',
-          'civilians-capacity', 'loot-confirmation', 'intel-keyboard-e', 'intel-no-results',
+          'civilians-capacity', 'civilians-loading', 'civilians-empty', 'loot-confirmation', 'intel-keyboard-e', 'intel-no-results',
           'intel-scrolled', 'intel-keyboard-focus', 'codex-core', 'codex-how-to-play',
           'codex-journal', 'settings', 'settings-no-results', 'settings-scrolled', 'hero-visuals', 'native-inspection']
+
+CAPTURE_PREFIXES = ['compact-scale3', 'roomy-scale1']
+CAPTURE_STATES = ['idle', 'inside', 'bossbars', 'wall', 'height', 'low-ceiling', 'custom', 'creative', 'tied',
+                  'waiting', 'expired', 'dimension-cleared']
 
 
 def expected_screenshots():
@@ -20,11 +24,13 @@ def expected_screenshots():
     for prefix in MATRICES:
         names.extend(f'{prefix}-{page}.png' for page in PAGES)
         names.extend(f'{prefix}-{section}.png' for section in [
-            'building-structures', 'building-construction', 'intel-enemy-lore', 'intel-how-to-play'])
+            'building-structures', 'building-construction', 'intel-enemy-lore', 'intel-how-to-play',
+            'loot-gallery-epic', 'loot-gallery-last', 'loot-gallery-rare', 'civilians-unloaded', 'civilians-care'])
         names.extend(f'{prefix}-plan-{plan}.png' for plan in PLANS)
     for prefix in MATRICES[:2]:
         names.extend(f'{prefix}-{state}.png' for state in STATES)
     names.extend(['roomy-scale1-native-inspection.png', 'resized-intel-preserved.png'])
+    names.extend(f'{prefix}-capture-{state}.png' for prefix in CAPTURE_PREFIXES for state in CAPTURE_STATES)
     return set(names)
 
 
@@ -57,7 +63,31 @@ def verify(root):
         assert (width, height) == size == (viewport['framebufferWidth'], viewport['framebufferHeight']), name
         assert (viewport['guiWidth'], viewport['guiHeight']) == (width // scale, height // scale), name
         assert viewport['requestedGuiScale'] == scale and view['nonblankSamples'] > 50, name
-        assert view['fixture'] and view['widgets'], name
+        capture = '-capture-' in name
+        assert view['fixture'] and (view['widgets'] or capture), name
+        if capture:
+            assert view['screenClass'] == 'native-world' and not view['widgets'], name
+            boundary = view['captureBoundary']
+            state = name.removesuffix('.png').split('-capture-')[1]
+            assert boundary['scenario'] == state and boundary['seeded'] and not boundary['liveRaid'], name
+            assert boundary['camera'] == ('THIRD_PERSON_BACK' if state == 'idle' else 'FIRST_PERSON'), name
+            if state in {'expired', 'dimension-cleared'}:
+                assert boundary['cleared'] and boundary['segments'] == 0 and boundary['activeSnapshots'] == 0, name
+                if state == 'dimension-cleared': assert boundary['dimension'] == 'minecraft:the_nether', name
+            else:
+                assert boundary['geometryMatches'] and boundary['reticleClear'] and 0 < boundary['segments'] <= 128, name
+                expected_status = {'idle': 'OUTSIDE', 'wall': 'BLOCKED', 'height': 'HEIGHT', 'creative': 'CREATIVE'}.get(state, 'COUNTED')
+                assert boundary['local'] == expected_status == boundary['server'], name
+                assert boundary['fresh'] == ('UNAVAILABLE' if state == 'waiting' else expected_status), name
+                assert (boundary['radius'], boundary['vertical'], boundary['requireSight']) == ((9, 4, False) if state == 'custom' else (6, 2, True)), name
+                assert boundary['percent'] == (0 if state == 'idle' else 50 if state in {'tied', 'waiting'} else 42), name
+                assert boundary['status'] == ('EMPTY' if state == 'idle' else 'TIED' if state in {'tied', 'waiting'} else 'ADVANCING'), name
+                hud = boundary['hud']
+                assert (hud['y'] + hud['height'] <= viewport['guiHeight'] // 2 - 18
+                        or hud['x'] + hud['width'] <= viewport['guiWidth'] // 2 - 18), name
+                assert boundary['bossBarsClear'] and hud['y'] >= boundary['bossBottom'] + 4, name
+                if state == 'bossbars': assert boundary['bossBottom'] >= 75, name
+                assert hud['x'] >= 0 and hud['x'] + hud['width'] <= viewport['guiWidth'], name
         for widget in view['widgets']:
             assert 0 <= widget['x'] < viewport['guiWidth'] and 0 <= widget['y'] < viewport['guiHeight'], (name, widget)
             assert widget['width'] > 0 and widget['height'] > 0, (name, widget)
@@ -71,6 +101,12 @@ def verify(root):
         if name in {f'{prefix}-army.png' for prefix in MATRICES}:
             assert len(view['nativePortraits']) == 4, name
             assert all(value.startswith('com.talhanation.') for value in view['nativePortraits']), name
+        if name.endswith('-loot-gallery-last.png'):
+            tooltip = view['lootTooltipBounds']
+            assert tooltip['x'] >= 4 and tooltip['y'] >= 4, name
+            assert tooltip['x'] + tooltip['width'] <= viewport['guiWidth'] - 4, name
+            assert tooltip['y'] + tooltip['height'] <= viewport['guiHeight'] - 4, name
+            assert 0 < tooltip['scale'] <= 1, name
         if name.endswith('-territory.png'):
             assert view['territoryAvailability'] == {'ownershipMask': 5, 'active': 1, 'retained': 1, 'unavailableButtons': 2}, name
             unavailable = [widget for widget in view['widgets'] if widget['label'] == 'Unavailable']

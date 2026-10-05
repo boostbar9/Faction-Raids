@@ -37,7 +37,7 @@ public final class PerimeterPlanItem extends Item {
     }
     @Override public void appendHoverText(ItemStack stack, Level level, List<Component> tooltip, TooltipFlag flag) {
         tooltip.add(Component.literal("Hold to inspect the exact template-style perimeter.").withStyle(ChatFormatting.AQUA));
-        tooltip.add(Component.literal("Use to confirm; sneak-use cancels. Expires after 2 minutes.").withStyle(ChatFormatting.GRAY));
+        tooltip.add(Component.literal("Saved until used or cancelled. Use to confirm; sneak-use cancels.").withStyle(ChatFormatting.GRAY));
         tooltip.add(Component.literal(TerritoryFortification.PRICE + " faction Treasury emeralds for the whole perimeter + supplied blocks.").withStyle(ChatFormatting.GOLD));
         tooltip.add(Component.literal("The server checks the whole claim, builder, storage and footprint again.").withStyle(ChatFormatting.GRAY));
     }

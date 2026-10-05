@@ -101,6 +101,9 @@ final class NativeSizeableFoliageContracts {
                                 && !(grass.getBlock() instanceof DoublePlantBlock) && grass.getProperties().isEmpty(),
                         "Actual short-grass state violates reviewed single-cell empty-collision contract");
             }
+            require(com.devfarinsky.siegeoverhaul.core.NativeQaBuilderStanding.admits(level, builder, target)
+                            && com.devfarinsky.siegeoverhaul.core.NativeQaBuilderStanding.admits(level, builder, cavity),
+                    "Reviewed real short grass must permit collision-free builder standing without being cleared");
             var accepted = PerimeterConstruction.prepare(owner, fixture.corePos(), 1);
             require(accepted.ready(), "Actual Sizeable Foliage grass perimeter review rejected: " + accepted.problem());
             require(level.getBlockState(target).equals(grass) && level.getBlockState(cavity).equals(grass),
@@ -113,6 +116,8 @@ final class NativeSizeableFoliageContracts {
                 require(problem != null && problem.contains(target.toShortString()) && problem.contains(id),
                         "Unsafe real-registry obstruction was accepted or lost exact diagnostics: " + id + " -> " + problem);
                 require(level.getBlockState(target).equals(obstruction), "Free rejection changed its obstacle: " + id);
+                require(!com.devfarinsky.siegeoverhaul.core.NativeQaBuilderStanding.admits(level, builder, target),
+                        "Unaudited or unsafe standing occupancy was admitted: " + id);
                 rejections.put(id, problem);
             }
         } finally {
@@ -125,12 +130,14 @@ final class NativeSizeableFoliageContracts {
                         && workerData.equals(builder.getPersistentData()) && inventory.equals(inventory(builder))
                         && hand.equals(builder.getMainHandItem().save(new CompoundTag())),
                 "Addon read-only reviews changed Treasury, projects, worker receipt or inventory");
-        return Map.of("targetCell", target.toShortString(), "clearanceCell", cavity.toShortString(),
-                "shortGrassTargetAndClearanceAccepted", true, "runtimeStateSafetyVerified", true,
-                "plantsPreservedDuringReview", true, "rejections", rejections,
-                "treasuryDebit", FactionBank.balance(core) - treasury, "exactWorkerInventoryAndReceipts", true,
-                "fixtureTerrainRestored", true,
-                "scope", "Explicit pre-commission registry states on bounded fixture terrain; production prepare only. No rejected confirmation packet or naturally grown multipart layout is claimed.");
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("targetCell", target.toShortString()); result.put("clearanceCell", cavity.toShortString());
+        result.put("shortGrassTargetAndClearanceAccepted", true); result.put("runtimeStateSafetyVerified", true);
+        result.put("plantsPreservedDuringReview", true); result.put("shortGrassStandingSiteAccepted", true);
+        result.put("rejections", rejections); result.put("treasuryDebit", FactionBank.balance(core) - treasury);
+        result.put("exactWorkerInventoryAndReceipts", true); result.put("fixtureTerrainRestored", true);
+        result.put("scope", "Explicit pre-commission registry states on bounded fixture terrain; production prepare and standing-site checks only. No native walking, rejected confirmation packet or naturally grown multipart layout is claimed.");
+        return Map.copyOf(result);
     }
 
     private static Block registered(String id) {

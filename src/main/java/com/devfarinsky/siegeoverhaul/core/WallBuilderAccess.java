@@ -133,6 +133,9 @@ public final class WallBuilderAccess extends Goal {
         }
         Entity guardedArea = NativeConstructionGuard.currentArea(worker);
         var mutationCells = NativeConstructionGuard.mutationCells(delegate);
+        // Workers checks movement every tenth tick but may place every fifth tick,
+        // including the first target popped from its stack. Route before dispatch.
+        if (awaitMutationArrival(mutationCells)) return;
         delegate.tick();
         NativeConstructionGuard.afterNativeTick(worker, guardedArea, mutationCells);
         if (!(worker.level() instanceof ServerLevel level) || worker.isPassenger()
@@ -153,6 +156,32 @@ public final class WallBuilderAccess extends Goal {
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             // Keep native behavior when a companion changes its public job state.
         }
+    }
+
+    private boolean awaitMutationArrival(Set<BlockPos> cells) {
+        if (cells.isEmpty() || !(worker.level() instanceof ServerLevel level)) return false;
+        try {
+            if (!(areaField.get(worker) instanceof Entity area) || !isCommission(area)) return false;
+            if (worker.isPassenger() || worker.isLeashed() || worker.getTarget() != null) return true;
+            if (!reserveColumns(area)) return true;
+            for (BlockPos target : cells) {
+                if (workStandingSite(level, target, BlockPos.containing(worker.position()))) continue;
+                route(level, target, 40);
+                return true;
+            }
+            return false;
+        } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            return true; // Never dispatch an unverified commissioned mutation.
+        }
+    }
+
+    private boolean workStandingSite(ServerLevel level, BlockPos target, BlockPos feet) {
+        // Preserve native horizontal reach and vertical behavior for already accepted plans.
+        double dx = worker.getX() - (target.getX() + .5);
+        double dz = worker.getZ() - (target.getZ() + .5);
+        return dx * dx + dz * dz < 40
+                && !reservedColumns.contains(feet.atY(0).asLong())
+                && safeStandingSite(level, worker, feet);
     }
 
     /** Keep collision protection, but let the existing pathfinder move this builder out of its own target. */
@@ -315,7 +344,8 @@ public final class WallBuilderAccess extends Goal {
         if (existing != null && !existing.isDone() && existing.canReach()) {
             var end = existing.getEndNode();
             BlockPos feet = end == null ? null : new BlockPos(end.x,end.y,end.z);
-            if (feet != null && feet.distSqr(target.atY(feet.getY())) < nativeReachSquared
+            if (feet != null && (feet.distSqr(target.atY(feet.getY())) < nativeReachSquared
+                    || !selfRecovery && target.equals(lastTarget) && feet.equals(destination))
                     && !reservedColumns.contains(feet.atY(0).asLong())
                     && (!selfRecovery || recoveryMargin(feet, reservedColumns, worker.getBbWidth()))
                     && safeStandingSite(level,worker,feet)) return;
@@ -332,9 +362,9 @@ public final class WallBuilderAccess extends Goal {
             Set<BlockPos> sites = pendingSites;
             pendingPath = null;
             pendingSites = Set.of();
-            BlockPos reached = now <= pendingUntil ? reachedSite(ready, sites) : null;
-            if (reached != null && routeSites(level, target, nativeReachSquared, selfRecovery).contains(reached)
-                    && moveToSite(reached)) destination = reached;
+            BlockPos reached = now <= pendingUntil
+                    ? routeEndpoint(level, target, ready, sites, nativeReachSquared, selfRecovery) : null;
+            if (reached != null && moveToSite(reached)) destination = reached;
             return;
         }
         if (now < nextSearch && now >= nextSearch - 40) {
@@ -355,7 +385,7 @@ public final class WallBuilderAccess extends Goal {
             pendingSites = Set.copyOf(candidates);
             pendingUntil = now + 100;
         } else {
-            BlockPos reached = reachedSite(path, candidates);
+            BlockPos reached = routeEndpoint(level, target, path, candidates, nativeReachSquared, selfRecovery);
             if (reached != null && moveToSite(reached)) destination = reached;
         }
     }
@@ -366,6 +396,23 @@ public final class WallBuilderAccess extends Goal {
         sites.removeIf(p -> reservedColumns.contains(p.atY(0).asLong())
                 || selfRecovery && !recoveryMargin(p, reservedColumns, worker.getBbWidth()));
         return sites;
+    }
+
+    private BlockPos routeEndpoint(ServerLevel level, BlockPos target, Path path,
+                                   Set<BlockPos> sites, int nativeReachSquared, boolean selfRecovery) {
+        BlockPos reached = reachedSite(path, sites);
+        if (reached != null)
+            return routeSites(level, target, nativeReachSquared, selfRecovery).contains(reached) ? reached : null;
+        if (selfRecovery || !pathReady(path) || path.canReach() || path.getNodeCount() < 2) return null;
+        var end = path.getEndNode();
+        if (end == null) return null;
+        BlockPos progress = new BlockPos(end.x, end.y, end.z);
+        // A native budget-limited route is an approach, never proof of work reach.
+        // Reissue through native coordinate movement to retain async callbacks.
+        if (reservedColumns.contains(progress.atY(0).asLong()) || !safeStandingSite(level, worker, progress)
+                || progress.distSqr(target) + 1 >= worker.position().distanceToSqr(Vec3.atBottomCenterOf(target)))
+            return null;
+        return progress;
     }
 
     private static BlockPos reachedSite(Path path, Set<BlockPos> sites) {
@@ -422,9 +469,16 @@ public final class WallBuilderAccess extends Goal {
         var support=level.getBlockState(floor);
         if (!support.isFaceSturdy(level,floor,Direction.UP) || !support.getFluidState().isEmpty()
                 || support.is(Blocks.MAGMA_BLOCK) || support.is(Blocks.CAMPFIRE) || support.is(Blocks.SOUL_CAMPFIRE)
-                || support.is(Blocks.CACTUS) || !level.getBlockState(feet).isAir()
-                || !level.getBlockState(feet.above()).isAir()) return false;
+                || support.is(Blocks.CACTUS) || !standingOccupancy(level, feet)
+                || !standingOccupancy(level, feet.above())) return false;
         var body=worker.getBoundingBox().move(Vec3.atBottomCenterOf(feet).subtract(worker.position()));
         return level.getWorldBorder().isWithinBounds(body) && level.noCollision(worker,body);
     }
+    private static boolean standingOccupancy(ServerLevel level, BlockPos cell) {
+        var state = level.getBlockState(cell);
+        return state.getFluidState().isEmpty() && (state.isAir()
+                || com.devfarinsky.siegeoverhaul.camp.CampVegetation.singleCellPlant(state))
+                && state.getCollisionShape(level, cell).isEmpty();
+    }
+
 }
