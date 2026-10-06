@@ -370,15 +370,10 @@ public final class WallBuilderAccess extends Goal {
                 pendingPath = null; pendingSites = Set.of(); destination = null; destinationPartial = false;
                 nav.stop(); nextSearch = 0; forceSearch = true;
             }
-        } else if (existing != null && existing.canReach()) {
+        } else if (existing != null) {
             var end = existing.getEndNode();
             BlockPos feet = end == null ? null : new BlockPos(end.x,end.y,end.z);
-            if (feet != null && ((navigationArrivalWithinNativeReach(feet, target, nativeReachSquared, worker.getBbWidth())
-                    && !rejectedArrival(feet))
-                    || destinationPartial && !selfRecovery && target.equals(lastTarget) && feet.equals(destination) && !rejectedArrival(feet))
-                    && !reservedColumns.contains(feet.atY(0).asLong())
-                    && (!selfRecovery || recoveryMargin(feet, reservedColumns, worker.getBbWidth()))
-                    && safeStandingSite(level,worker,feet)) return;
+            if (activeEndpointStillValid(level, target, nativeReachSquared, selfRecovery, feet)) return;
             // A reachable cave endpoint still sends the builder underground.
             // Stop that route before probing loaded surface standing space.
             rejectArrival(feet); rejectArrival(destination);
@@ -472,8 +467,19 @@ public final class WallBuilderAccess extends Goal {
     }
 
     private boolean safePartialProgress(ServerLevel level, BlockPos target, BlockPos progress) {
-        return !reservedColumns.contains(progress.atY(0).asLong()) && safeStandingSite(level, worker, progress)
+        return !rejectedArrival(progress)
+                && !reservedColumns.contains(progress.atY(0).asLong()) && safeStandingSite(level, worker, progress)
                 && progress.distSqr(target) + 1 < worker.position().distanceToSqr(Vec3.atBottomCenterOf(target));
+    }
+
+    private boolean activeEndpointStillValid(ServerLevel level, BlockPos target, int nativeReachSquared,
+                                             boolean selfRecovery, BlockPos feet) {
+        if (feet == null || rejectedArrival(feet)) return false;
+        if (navigationArrivalWithinNativeReach(feet, target, nativeReachSquared, worker.getBbWidth())
+                && !reservedColumns.contains(feet.atY(0).asLong())
+                && (!selfRecovery || recoveryMargin(feet, reservedColumns, worker.getBbWidth()))
+                && safeStandingSite(level, worker, feet)) return true;
+        return destinationPartial && !selfRecovery && target.equals(lastTarget) && safePartialProgress(level, target, feet);
     }
 
     private Set<BlockPos> routeSites(ServerLevel level, BlockPos target, int nativeReachSquared, boolean selfRecovery) {
@@ -501,8 +507,7 @@ public final class WallBuilderAccess extends Goal {
         BlockPos progress = new BlockPos(end.x, end.y, end.z);
         // A native budget-limited route is an approach, never proof of work reach.
         // Reissue through native coordinate movement to retain async callbacks.
-        if (reservedColumns.contains(progress.atY(0).asLong()) || !safeStandingSite(level, worker, progress)
-                || progress.distSqr(target) + 1 >= worker.position().distanceToSqr(Vec3.atBottomCenterOf(target)))
+        if (!safePartialProgress(level, target, progress))
             return null;
         return progress;
     }

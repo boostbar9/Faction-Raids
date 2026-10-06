@@ -669,7 +669,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
             verify(nav).moveTo(endpoint.getX(), endpoint.getY(), endpoint.getZ(), .8);
             verify(nav, never()).moveTo(any(Path.class), anyDouble());
             var movement = mock(Path.class);
-            when(movement.canReach()).thenReturn(true); when(movement.getEndNode()).thenReturn(partial.getEndNode());
+            when(movement.canReach()).thenReturn(false); when(movement.getEndNode()).thenReturn(new Node(25, 64, 0));
             when(nav.getPath()).thenReturn(movement);
             clearInvocations(nav);
             when(level.getGameTime()).thenReturn(20L); goal.route(level, target, 40);
@@ -691,6 +691,23 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         return (Path) method.invoke(new com.talhanation.workers.entities.ai.navigation.WorkersAsyncPathfinder(evaluator, 1),
                 evaluator, new Node(20, 64, 0), java.util.List.of(java.util.Map.entry(new Target(80, 64, 0),
                         new BlockPos(80, 64, 0))), 32f, 0, 1f, 1);
+    }
+
+    @Test void processedPartialMovementEndpointMustStillBeGenuineProgress() throws Exception {
+        terrain(); var target = new BlockPos(80, 64, 0);
+        Path partial = nativeLimitedProbe();
+        when(nav.createPath(anySet(), eq(0))).thenReturn(partial);
+        var goal = new WallBuilderAccess(worker, new NativeGoal());
+        when(level.getGameTime()).thenReturn(0L); goal.route(level, target, 40);
+        verify(nav).moveTo(26, 64, 0, .8);
+        var nonProgress = mock(Path.class);
+        when(nonProgress.canReach()).thenReturn(false);
+        when(nonProgress.getEndNode()).thenReturn(new Node(19, 64, 0));
+        when(nav.getPath()).thenReturn(nonProgress);
+        clearInvocations(nav);
+        when(level.getGameTime()).thenReturn(20L); goal.route(level, target, 40);
+        verify(nav).stop();
+        verify(nav, never()).moveTo(any(Path.class), anyDouble());
     }
 
     @Test void partialApproachRejectsUnsafeUnloadedReservedAndNonprogressingEndpoints() throws Exception {
