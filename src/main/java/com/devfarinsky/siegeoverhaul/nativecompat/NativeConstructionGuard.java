@@ -645,6 +645,16 @@ public final class NativeConstructionGuard {
         return value.substring(0, Math.min(160, value.length()));
     }
 
+    /** World-space mutation columns from the sealed accepted recipe; empty for older/unprotected native areas. */
+    public static Set<Long> acceptedColumns(Entity area) {
+        if (!protectedArea(area)) return Set.of();
+        try {
+            Set<Long> columns = new HashSet<>();
+            snapshot(area).plan.cells.keySet().forEach(pos -> columns.add(pos.atY(0).asLong()));
+            return Set.copyOf(columns);
+        } catch (RuntimeException unavailable) { return Set.of(); }
+    }
+
     public static Entity currentArea(Mob builder) {
         try {
             Object value = builder.getClass().getField("currentBuildArea").get(builder);

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -53,7 +54,96 @@ class PerimeterGateStagesTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void stagedFixtureCheckpointReconstructsTheKnownNativeStallCells() {
+        var chunks = stagedTerritory();
+        var claim = topologyClaim(chunks);
+        var lowered = stagedLoweredBand(claim);
+        var loweredColumns = new HashSet<Long>();
+        lowered.forEach(pos -> loweredColumns.add(xz(pos).asLong()));
+        stagedFillDips(claim, loweredColumns).forEach(pos -> loweredColumns.add(xz(pos).asLong()));
+        var draft = PerimeterSteppedGeometry.compile(claim, new PerimeterSteppedGeometry.Terrain() {
+            @Override public PerimeterSteppedGeometry.Ground ground(PerimeterSteppedTopology.Cell column) {
+                return PerimeterSteppedGeometry.Ground.safe(loweredColumns.contains(new BlockPos(column.x(), 0, column.z()).asLong()) ? 64 : 65);
+            }
+            @Override public String passageProblem(PerimeterSteppedTopology.Cell column, int feetY,
+                                                   PerimeterSteppedGeometry.Region region) {
+                return null;
+            }
+        }, PerimeterSteppedGeometry.Block.COBBLESTONE, new PerimeterSteppedGeometry.Limits(-64, 320, 8,
+                Math.min(PerimeterPreview.MAX_CELLS, PerimeterStageLayout.MAX_TARGETS),
+                PerimeterStageLayout.MAX_RESERVED, 32_768, 16_384));
+        assertTrue(draft.feasible(), draft.problem());
+        assertEquals(4, draft.gates().size());
+        var plan = PerimeterSteppedBlueprint.convert(chunks, draft);
+        assertEquals(3831, plan.blocks().size());
+        assertEquals(3, plan.materialCounts().getOrDefault("minecraft:dirt", 0));
+        // Plain JUnit cannot reproduce the client native serializer's production split,
+        // so mirror the failed CI artifact before probing the 1044-cell stall scene.
+        var layout = PerimeterGateStages.partition(plan, stage ->
+                stage.targets().size() <= 3480 ? null : "CI native staged fixture chunk split");
+        assertFalse(layout.stages().isEmpty());
+        assertEquals(2, layout.stages().size());
+        assertEquals(3480, layout.stages().get(0).targets().size());
+        assertEquals(351, layout.stages().get(1).targets().size());
+        var remaining = new HashSet<Long>();
+        for (int z = 0; z <= 15; z++) remaining.add(new BlockPos(128, 66, z).asLong());
+        remaining.add(new BlockPos(129, 66, 0).asLong());
+        long reconstructed = layout.stages().get(0).targets().keySet().stream().map(BlockPos::of)
+                .filter(pos -> pos.getY() < 66 || pos.getY() == 66 && !remaining.contains(pos.asLong()))
+                .count();
+        assertEquals(1044, reconstructed, "stages=" + layout.stages().size() + ", stage0Targets="
+                + layout.stages().get(0).targets().size() + ", gates=" + draft.gates().stream()
+                .map(gate -> gate.facing() + ":" + gate.outerFeet()).toList());
+    }
+
     private static PerimeterBlueprint.Plan wall(Set<ChunkPos> claim) {
         return PerimeterBlueprint.create(claim, (x, z) -> PerimeterBlueprint.Surface.ready(64), PerimeterBlueprint.Palette.COBBLESTONE);
+    }
+
+    private static Set<ChunkPos> stagedTerritory() {
+        var chunks = new HashSet<ChunkPos>();
+        for (int x = 8; x <= 12; x++) for (int z = 0; z <= 4; z++) chunks.add(new ChunkPos(x, z));
+        return Set.copyOf(chunks);
+    }
+
+    private static Set<PerimeterSteppedTopology.Chunk> topologyClaim(Set<ChunkPos> chunks) {
+        var claim = new java.util.TreeSet<PerimeterSteppedTopology.Chunk>();
+        chunks.forEach(chunk -> claim.add(new PerimeterSteppedTopology.Chunk(chunk.x, chunk.z)));
+        return Set.copyOf(claim);
+    }
+
+    private static List<BlockPos> stagedLoweredBand(Set<PerimeterSteppedTopology.Chunk> claim) {
+        var topology = PerimeterSteppedTopology.create(claim);
+        assertTrue(topology.valid(), topology.problem());
+        for (var loop : topology.loops()) if (loop.outer()) {
+            var bands = loop.bands();
+            for (int i = 0; i < bands.size(); i++) {
+                var band = bands.get(i);
+                var previous = bands.get((i + bands.size() - 1) % bands.size());
+                var next = bands.get((i + 1) % bands.size());
+                if (band.kind() == PerimeterSteppedProfile.Kind.STRAIGHT
+                        && previous.kind() == PerimeterSteppedProfile.Kind.STRAIGHT
+                        && next.kind() == PerimeterSteppedProfile.Kind.STRAIGHT)
+                    return band.cells().stream().sorted()
+                            .map(cell -> new BlockPos(cell.x(), 64, cell.z())).toList();
+            }
+        }
+        throw new AssertionError("Fixture claim lacks a complete straight band");
+    }
+
+    private static List<BlockPos> stagedFillDips(Set<PerimeterSteppedTopology.Chunk> claim, Set<Long> lowered) {
+        var topology = PerimeterSteppedTopology.create(claim);
+        for (var loop : topology.loops()) if (loop.outer()) for (var band : loop.bands())
+            if (band.kind() == PerimeterSteppedProfile.Kind.STRAIGHT) {
+                var cells = band.cells().stream().sorted()
+                        .filter(cell -> !lowered.contains(new BlockPos(cell.x(), 0, cell.z()).asLong()))
+                        .limit(3).map(cell -> new BlockPos(cell.x(), 64, cell.z())).toList();
+                if (cells.size() == 3) return cells;
+            }
+        throw new AssertionError("Fixture claim lacks separate fill-dip cells");
+    }
+
+    private static BlockPos xz(BlockPos pos) {
+        return new BlockPos(pos.getX(), 0, pos.getZ());
     }
 }

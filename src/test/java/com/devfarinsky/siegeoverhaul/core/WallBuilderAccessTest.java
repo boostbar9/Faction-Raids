@@ -693,6 +693,47 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
                         new BlockPos(80, 64, 0))), 32f, 0, 1f, 1);
     }
 
+    @Test void cornerWorksiteRoutesThroughAcceptedGateWhenDirectOuterApproachStalls() throws Exception {
+        terrain(); var target = new BlockPos(129, 66, 0);
+        when(worker.getX()).thenReturn(133.60858837120912); when(worker.getZ()).thenReturn(5.953259447731189);
+        when(worker.position()).thenReturn(new Vec3(133.60858837120912, 65, 5.953259447731189));
+        when(worker.getBoundingBox()).thenReturn(new AABB(133.3085883712091,65,5.653259447731189,
+                133.90858837120913,66.8,6.253259447731189));
+        when(level.getHeight(any(), anyInt(), anyInt())).thenReturn(65);
+        doAnswer(i -> ((BlockPos)i.getArgument(0)).getY()<65
+                ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState()).when(level).getBlockState(any());
+        var direct = mock(Path.class); when(direct.canReach()).thenReturn(false);
+        when(direct.getNodeCount()).thenReturn(16); when(direct.getEndNode()).thenReturn(new Node(136, 65, 5));
+        var gate = mock(Path.class); when(gate.canReach()).thenReturn(true);
+        when(gate.getEndNode()).thenReturn(new Node(167, 65, 0));
+        when(nav.createPath(anySet(), eq(0))).thenAnswer(i -> {
+            java.util.Set<BlockPos> sites = i.getArgument(0);
+            return sites.contains(new BlockPos(167, 65, 0)) ? gate : direct;
+        });
+        var goal = new WallBuilderAccess(worker, new NativeGoal());
+        var field = WallBuilderAccess.class.getDeclaredField("reservedColumns"); field.setAccessible(true);
+        field.set(goal, stagedGateColumns());
+        goal.route(level, target, 40);
+        verify(nav).moveTo(167, 65, 0, .8);
+        verify(nav, never()).moveTo(136, 65, 5, .8);
+        verify(nav, never()).moveTo(any(Path.class), anyDouble());
+        verify(level, never()).setBlock(any(), any(), anyInt());
+        verify(worker, never()).teleportTo(anyDouble(), anyDouble(), anyDouble());
+    }
+
+    private static java.util.Set<Long> stagedGateColumns() {
+        var columns = new java.util.HashSet<Long>();
+        for (int x = 128; x <= 207; x++) {
+            if (x < 165 || x > 169) columns.add(new BlockPos(x, 0, 0).asLong());
+            if (x < 165 || x > 169) columns.add(new BlockPos(x, 0, 79).asLong());
+        }
+        for (int z = 0; z <= 79; z++) {
+            if (z < 37 || z > 41) columns.add(new BlockPos(128, 0, z).asLong());
+            if (z < 37 || z > 41) columns.add(new BlockPos(207, 0, z).asLong());
+        }
+        return java.util.Set.copyOf(columns);
+    }
+
     @Test void processedPartialMovementEndpointMustStillBeGenuineProgress() throws Exception {
         terrain(); var target = new BlockPos(80, 64, 0);
         Path partial = nativeLimitedProbe();
