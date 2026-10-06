@@ -1,4 +1,12 @@
-## 4.52.10 — Keep Olympian loot sealed
+## 4.53.0-alpha.1 - Stepped perimeter testing Alpha
+
+- Experimental terrain-following perimeter plans add stepped walls, four cardinal gates on small level pads, and short dirt fills over dips. One paid plan prepares the ground and then builds using real chest supplies.
+- Include saved gate-authority routing for native Workers 2 builders, while retaining existing walls and paid plans. Deep excavation and CUT remain deferred.
+- Keep the current Command Center and sealed-loot changes from 4.52.10.
+- Known limitations: builders can still stall at corners or gates, and complete native dirt-fill-to-wall construction, travel, retry/reload and cancellation acceptance is not finished. This Alpha is for manual testing, not a stable construction-completion release.
+- Back up your world and test on a copy. Install exactly 4.53.0-alpha.1 on the server and every client, with the required Recruits, Workers 2, Small Ships and Siege Weapons dependencies. Do not assume worlds saved by this Alpha can be safely downgraded.
+
+## 4.52.10 - Keep Olympian loot sealed
 
 - Remove the possible-item browser and reward models from the Loot tab. Each chest now keeps its exact equipment pool mysterious until the purchased box is opened.
 - Give the chest purchase controls the full card width and replace the preview showcase with a compact Fates-themed rarity and price reminder.

@@ -146,6 +146,7 @@ public final class PerimeterProjectStore {
             markDirty.run(); return new PaymentResult(PaymentStatus.ALREADY_PAID, project);
         }
         if (project.state() != PerimeterProject.State.PREPARED_UNPAID) throw invalid("Project cannot take another payment");
+        if (!project.executionSupported()) throw invalid(PerimeterProject.GATE_EXECUTION_BLOCKER);
         if (!creative && FactionBank.balance(core) < price) return new PaymentResult(PaymentStatus.INSUFFICIENT_FUNDS, project);
         PerimeterProject paid = project.paid(creative); projects.set(index, paid);
         CompoundTag saved = encode(projects, contents.terminals()); // Serialize everything before touching the Treasury.
@@ -185,6 +186,10 @@ public final class PerimeterProjectStore {
             CompoundTag project = (CompoundTag) raw;
             if (!project.contains("Targets", Tag.TAG_LIST) || !project.contains("Clearance", Tag.TAG_LIST)) throw invalid("Missing project cells");
             cells += ((ListTag) project.get("Targets")).size() + (long) ((ListTag) project.get("Clearance")).size();
+            if (project.contains("GateContract")) {
+                if (!project.contains("GateContract", Tag.TAG_COMPOUND)) throw invalid("Invalid gate observation contract");
+                cells += PerimeterGateContract.encodedObservationCount(project.getCompound("GateContract"));
+            }
             stageIds += list(project, "Stages", PerimeterStageLayout.MAX_STAGES).size();
             if (cells > MAX_TOTAL_RESERVED || stageIds > MAX_HISTORY_STAGE_IDS) throw invalid("Perimeter storage budget exceeded");
         }
@@ -210,7 +215,7 @@ public final class PerimeterProjectStore {
         long cells = 0, stageIds = 0; Set<UUID> identifiers = new HashSet<>(); ListTag entries = new ListTag(), retired = new ListTag();
         // Full records also reserve eventual terminal metadata capacity before a new commission can be paid.
         for (PerimeterProject project : projects) {
-            cells += project.targets().size() + (long) project.clearanceBefore().size(); stageIds += project.stages().size();
+            cells += project.reservation().size(); stageIds += project.stages().size();
             if (cells > MAX_TOTAL_RESERVED || stageIds > MAX_HISTORY_STAGE_IDS) throw invalid("Perimeter full-record or history capacity reached");
             unique(identifiers, project.header().projectId()); for (var stage : project.stages()) unique(identifiers, stage.areaId()); entries.add(project.save());
         }
