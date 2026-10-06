@@ -25,7 +25,7 @@ env:
   REGRESSION_ARTIFACT: '11387698761'
   SERVER_RUN: '37407353461'
   SERVER_ARTIFACT: '11387985079'
-  REVIEW_COMMENT: 'PENDING'
+  REVIEW_COMMENT: '6008656882'
   ARTIFACT_SHA256: '5ff53f5ff67d378d3aa22b75b4f7bfa0ae33d8bed604fb6a667f340287ed4401'
 
 jobs:
@@ -212,9 +212,9 @@ jobs:
           from pathlib import Path
           headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'}
           base = 'https://api.github.com/repos/boostbar9/Faction-Raids/'
-          for path, expected in [('branches/main', os.environ['STABLE_SHA']), ('branches/release/4.53.0-alpha.1', os.environ['SOURCE_SHA'])]:
+          for path, field, expected in [('branches/main', 'commit', os.environ['STABLE_SHA']), ('pulls/284', 'head', os.environ['SOURCE_SHA'])]:
               with urllib.request.urlopen(urllib.request.Request(base + path, headers=headers), timeout=30) as response:
-                  assert json.load(response)['commit']['sha'] == expected, 'Source advanced before upload'
+                  assert json.load(response)[field]['sha'] == expected, 'Source advanced before upload'
           jar = Path('dist/siegeoverhaul-' + os.environ['VERSION'] + '.jar')
           assert hashlib.sha256(jar.read_bytes()).hexdigest() == os.environ['ARTIFACT_SHA256']
           PY
