@@ -8,7 +8,7 @@ root = Path(sys.argv[1]) if len(sys.argv) == 2 else Path('build/native-handoff-q
 data = json.loads((root / 'result.json').read_text())
 audit = json.loads((root / 'native-bytecode-audit.json').read_text())
 assert audit['status'] == 'passed' and audit['noVendorJarsUploaded'], audit
-assert sum(len(value['classes']) for value in audit['artifacts'].values()) == 18, audit
+assert sum(len(value['classes']) for value in audit['artifacts'].values()) == 22, audit
 assert data['mode'] == 'staged-handoff' and data['status'] == 'passed', data
 assert data['geometryProfile'] == 'hollow-five-wide-one-claim', data
 assert data['geometrySourceCommit'] == 'acbc66025e09152db75ab419b34fad81a3dd290e', data

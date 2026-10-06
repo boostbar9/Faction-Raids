@@ -76,7 +76,7 @@ jobs:
           data = json.loads((root / 'result.json').read_text())
           audit = json.loads((root / 'native-bytecode-audit.json').read_text())
           assert audit['status'] == 'passed' and audit['noVendorJarsUploaded'], audit
-          assert sum(len(v['classes']) for v in audit['artifacts'].values()) == 18, audit
+          assert sum(len(v['classes']) for v in audit['artifacts'].values()) == 22, audit
           assert data['mode'] == 'staged-perimeter' and data['status'] == 'passed', data
           target_count = data['targetCount']
           materials = data['materialCounts']
