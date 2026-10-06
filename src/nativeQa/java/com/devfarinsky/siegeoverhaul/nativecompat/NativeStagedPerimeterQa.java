@@ -19,6 +19,7 @@ import com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge;
 import com.devfarinsky.siegeoverhaul.core.PerimeterTerritory;
 import com.talhanation.workers.entities.ai.BuilderWorkGoal;
 import com.talhanation.workers.entities.ai.GetNeededItemsFromStorage;
+import com.talhanation.workers.world.BuildBlock;
 import com.devfarinsky.siegeoverhaul.core.FactionBank;
 import com.devfarinsky.siegeoverhaul.core.PerimeterConstruction;
 import com.devfarinsky.siegeoverhaul.core.PerimeterPreview;
@@ -27,8 +28,12 @@ import com.devfarinsky.siegeoverhaul.items.ModItems;
 import com.google.gson.GsonBuilder;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.talhanation.recruits.ClaimEvents;
+import com.talhanation.recruits.pathfinding.AsyncPathNavigation;
 import com.talhanation.recruits.world.RecruitsClaim;
 import com.talhanation.workers.entities.BuilderEntity;
+import com.talhanation.workers.entities.ai.navigation.WorkerPathNavigation;
+import com.talhanation.workers.entities.ai.navigation.WorkersAsyncPathfinder;
+import com.talhanation.workers.entities.ai.navigation.WorkersGroundPathNavigation;
 import com.talhanation.workers.entities.workarea.StorageArea;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -699,6 +704,12 @@ public final class NativeStagedPerimeterQa {
         }
         result.put("nativeBuildError", String.valueOf(goal.errorMessage));
         result.put("nativeRemaining", builder.currentBuildArea == null ? -1 : builder.currentBuildArea.stackToPlace.size());
+        result.put("nativeGoalQueueSize", goal.stackToPlace == null ? -1 : goal.stackToPlace.size());
+        result.put("nativeMinBuildHeight", goal.minBuildHeight);
+        if (goal.stackToPlace != null && !goal.stackToPlace.isEmpty())
+            result.put("nativeGoalQueueTop", goal.stackToPlace.peek().toShortString());
+        if (builder.currentBuildArea != null) result.put("nativeLowestPendingLayer",
+                lowestPendingLayer(level, builder.currentBuildArea.stackToPlace));
         result.put("storageState", String.valueOf(storageGoal.state)); result.put("storageChestTarget", String.valueOf(storageGoal.chestPos));
         result.put("requestedSupplies", WorkersConstructionView.requests(builder));
         result.put("navigationDone", builder.getNavigation().isDone());
@@ -784,6 +795,24 @@ public final class NativeStagedPerimeterQa {
                 surroundings.add(Map.of("position", cell.toShortString(), "state", level.getBlockState(cell).toString()));
             result.put("targetNeighborhood", surroundings);
         }
+        return result;
+    }
+    private static Map<String, Object> lowestPendingLayer(ServerLevel level, java.util.Stack<BuildBlock> pending) {
+        var result = new LinkedHashMap<String, Object>();
+        result.put("pending", pending == null ? -1 : pending.size());
+        if (pending == null || pending.isEmpty()) return result;
+        int minY = pending.stream().mapToInt(block -> block.getPos().getY()).min().orElse(Integer.MAX_VALUE);
+        result.put("y", minY);
+        var counts = new LinkedHashMap<String, Integer>();
+        var positions = new ArrayList<Map<String, String>>();
+        for (BuildBlock block : pending) {
+            if (block.getPos().getY() != minY) continue;
+            String material = String.valueOf(ForgeRegistries.BLOCKS.getKey(block.getState().getBlock()));
+            counts.merge(material, 1, Integer::sum);
+            if (positions.size() < 48) positions.add(Map.of("position", block.getPos().toShortString(),
+                    "expected", material, "actual", level.getBlockState(block.getPos()).toString()));
+        }
+        result.put("materials", counts); result.put("sample", positions);
         return result;
     }
     private static List<Map<String, Object>> standingCandidates(ServerLevel level, BuilderEntity builder,
@@ -872,10 +901,24 @@ public final class NativeStagedPerimeterQa {
         }
         require("2.0.3".equals(mods.get("workers")) && "1.15.2".equals(mods.get("recruits")), "Unreviewed native API versions");
         REPORT.put("loadedModVersions", mods); REPORT.put("loadedCompanionArtifacts", artifacts);
-        REPORT.put("nativeApiClasses", Map.of("builder", BuilderEntity.class.getName(), "buildGoal", BuilderWorkGoal.class.getName(),
-                "storageGoal", GetNeededItemsFromStorage.class.getName(), "storageArea", StorageArea.class.getName(),
-                "nativeClaim", RecruitsClaim.class.getName(), "protectedArea", ProtectedBuildArea.class.getName(),
-                "builderClassLoader", String.valueOf(BuilderEntity.class.getClassLoader())));
+        var nativeClasses = new LinkedHashMap<String, Class<?>>();
+        nativeClasses.put("builder", BuilderEntity.class); nativeClasses.put("buildGoal", BuilderWorkGoal.class);
+        nativeClasses.put("storageGoal", GetNeededItemsFromStorage.class); nativeClasses.put("storageArea", StorageArea.class);
+        nativeClasses.put("nativeClaim", RecruitsClaim.class); nativeClasses.put("protectedArea", ProtectedBuildArea.class);
+        nativeClasses.put("asyncPathNavigation", AsyncPathNavigation.class);
+        nativeClasses.put("workerPathNavigation", WorkerPathNavigation.class);
+        nativeClasses.put("workersGroundPathNavigation", WorkersGroundPathNavigation.class);
+        nativeClasses.put("workersAsyncPathfinder", WorkersAsyncPathfinder.class);
+        var nativeApiClasses = new LinkedHashMap<String, String>();
+        var nativeApiClassArtifacts = new LinkedHashMap<String, Object>();
+        nativeClasses.forEach((name, type) -> {
+            nativeApiClasses.put(name, type.getName());
+            try { nativeApiClassArtifacts.put(name, classArtifact(type)); }
+            catch (Exception e) { nativeApiClassArtifacts.put(name, Map.of("className", type.getName(), "error", e.toString())); }
+        });
+        nativeApiClasses.put("builderClassLoader", String.valueOf(BuilderEntity.class.getClassLoader()));
+        REPORT.put("nativeApiClasses", nativeApiClasses);
+        REPORT.put("nativeApiClassArtifacts", nativeApiClassArtifacts);
         REPORT.put("openGlVendor", GL11.glGetString(GL11.GL_VENDOR)); REPORT.put("openGlRenderer", GL11.glGetString(GL11.GL_RENDERER));
     }
     @SubscribeEvent
@@ -905,6 +948,20 @@ public final class NativeStagedPerimeterQa {
         try (var stream = Files.newInputStream(path)) { byte[] buffer = new byte[65536]; int count;
             while ((count = stream.read(buffer)) >= 0) digest.update(buffer, 0, count); }
         return java.util.HexFormat.of().formatHex(digest.digest());
+    }
+    private static Map<String, Object> classArtifact(Class<?> type) throws Exception {
+        var result = new LinkedHashMap<String, Object>();
+        result.put("className", type.getName());
+        var domain = type.getProtectionDomain();
+        var source = domain == null || domain.getCodeSource() == null ? null : domain.getCodeSource().getLocation();
+        result.put("codeSource", String.valueOf(source));
+        if (source != null && "file".equalsIgnoreCase(source.getProtocol())) {
+            Path path = Path.of(source.toURI());
+            result.put("fileName", path.getFileName().toString());
+            result.put("regularFile", Files.isRegularFile(path));
+            if (Files.isRegularFile(path)) result.put("sha256", sha256(path));
+        }
+        return result;
     }
     private static void fail(Minecraft mc, Throwable problem) {
         if (finishing || finished) return;
