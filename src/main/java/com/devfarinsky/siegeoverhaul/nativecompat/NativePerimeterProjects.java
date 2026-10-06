@@ -23,6 +23,23 @@ import java.util.*;
 public final class NativePerimeterProjects {
     private NativePerimeterProjects() {}
 
+    /** Fresh component-wide access authority, independent of the current native recipe's bounds. */
+    public static Set<BlockPos> gateDetourPads(Mob builder, Entity area) {
+        if (builder == null || area == null || !(builder.level() instanceof ServerLevel level)
+                || area.level() != level || NativeConstructionGuard.currentArea(builder) != area) return Set.of();
+        try {
+            if (!PerimeterProjectAuthority.tracked(area)
+                    || PerimeterProjectAuthority.problem(level, builder, area, false, false) != null) return Set.of();
+            var project = PerimeterProjectAuthority.project(level, PerimeterProjectAuthority.read(area.getPersistentData()));
+            if (project.gateContract() == null) return Set.of();
+            int component = project.gateStageComponent(project.activeStage());
+            Set<BlockPos> pads = new LinkedHashSet<>();
+            for (var gate : project.gateContract().gates()) if (gate.componentId() == component)
+                pads.add(gate.outerCenter().relative(gate.facing(), 2));
+            return Set.copyOf(pads);
+        } catch (RuntimeException | LinkageError unavailable) { return Set.of(); }
+    }
+
     public static boolean start(ServerPlayer owner,Mob builder,BlockPos corePos,int material,
                                 PerimeterBlueprint.Plan plan,PerimeterStageLayout.Layout layout,
                                 Map<Long,BlockState> before,Map<Long,BlockState> clearance,

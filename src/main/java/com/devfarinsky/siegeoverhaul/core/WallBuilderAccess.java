@@ -3,6 +3,7 @@ package com.devfarinsky.siegeoverhaul.core;
 import com.devfarinsky.siegeoverhaul.ModConstants;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard;
+import com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -409,15 +410,17 @@ public final class WallBuilderAccess extends Goal {
             pendingPath = null;
             pendingSites = Set.of();
             pendingDetour = false;
-            BlockPos reached = now <= pendingUntil ? detour
+            boolean usable = now <= pendingUntil && pathReady(ready);
+            BlockPos reached = usable ? detour
                     ? reachedSite(ready, sites)
                     : routeEndpoint(level, target, ready, sites, nativeReachSquared, selfRecovery) : null;
             if (reached != null) {
                 BlockPos installed = detour ? moveToDetourSite(level, reached)
                         : moveToSite(level, target, nativeReachSquared, selfRecovery, reached,
                         routeSites(level, target, nativeReachSquared, selfRecovery).contains(reached));
-                if (installed != null) destination = installed;
+                if (installed != null) { destination = installed; return; }
             }
+            if (usable && !detour && !selfRecovery) routeGateDetour(level, target, now);
             return;
         }
         if (!forceSearch && now < nextSearch && now >= nextSearch - 40) {
@@ -495,6 +498,8 @@ public final class WallBuilderAccess extends Goal {
     }
 
     private BlockPos moveToDetourSite(ServerLevel level, BlockPos site) {
+        // Async probes do not carry permission across ticks or a changed saved project.
+        if (!safeGateDetourSite(level, site)) return null;
         var nav = worker.getNavigation();
         if (!nav.moveTo(site.getX(), site.getY(), site.getZ(), 0.8)) {
             rejectArrival(site); rejectArrival(pathEndpoint(nav.getPath()));
@@ -522,7 +527,8 @@ public final class WallBuilderAccess extends Goal {
 
     private boolean safeGateDetourSite(ServerLevel level, BlockPos site) {
         return !rejectedArrival(site)
-                && !reservedColumns.contains(site.atY(0).asLong()) && safeStandingSite(level, worker, site);
+                && !reservedColumns.contains(site.atY(0).asLong()) && safeStandingSite(level, worker, site)
+                && NativePerimeterProjects.gateDetourPads(worker, reservedArea).contains(site);
     }
 
     private boolean activeEndpointStillValid(ServerLevel level, BlockPos target, int nativeReachSquared,
@@ -588,50 +594,12 @@ public final class WallBuilderAccess extends Goal {
     }
 
     private Set<BlockPos> gateDetourSites(ServerLevel level, BlockPos target) {
-        if (reservedColumns.size() < 16) return Set.of();
-        int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, minZ = Integer.MAX_VALUE, maxZ = Integer.MIN_VALUE;
-        for (long column : reservedColumns) {
-            BlockPos pos = BlockPos.of(column);
-            minX = Math.min(minX, pos.getX()); maxX = Math.max(maxX, pos.getX());
-            minZ = Math.min(minZ, pos.getZ()); maxZ = Math.max(maxZ, pos.getZ());
-        }
-        if (minX == Integer.MAX_VALUE || maxX - minX < 8 || maxZ - minZ < 8) return Set.of();
-        var candidates = new ArrayList<BlockPos>();
-        collectGateEdge(level, candidates, minX, maxX, minZ, true);
-        collectGateEdge(level, candidates, minX, maxX, maxZ, true);
-        collectGateEdge(level, candidates, minZ, maxZ, minX, false);
-        collectGateEdge(level, candidates, minZ, maxZ, maxX, false);
+        var candidates = new ArrayList<>(NativePerimeterProjects.gateDetourPads(worker, reservedArea));
+        candidates.removeIf(site -> rejectedArrival(site) || reservedColumns.contains(site.atY(0).asLong())
+                || !safeStandingSite(level, worker, site));
         candidates.sort(Comparator.comparingDouble((BlockPos pos) -> horizontalDistance(pos, target))
                 .thenComparingDouble(this::horizontalDistance));
         return new LinkedHashSet<>(candidates);
-    }
-
-    private void collectGateEdge(ServerLevel level, ArrayList<BlockPos> candidates,
-                                 int start, int end, int fixed, boolean xAxis) {
-        int gapStart = Integer.MIN_VALUE;
-        for (int coordinate = start; coordinate <= end + 1; coordinate++) {
-            boolean open = coordinate <= end && !reservedColumns.contains(xAxis
-                    ? new BlockPos(coordinate, 0, fixed).asLong()
-                    : new BlockPos(fixed, 0, coordinate).asLong());
-            if (open && gapStart == Integer.MIN_VALUE) gapStart = coordinate;
-            if (open) continue;
-            if (gapStart != Integer.MIN_VALUE) {
-                int gapEnd = coordinate - 1, width = gapEnd - gapStart + 1;
-                if (gapStart > start && gapEnd < end && width >= 2 && width <= 9) {
-                    int center = (gapStart + gapEnd) / 2;
-                    addGateCandidate(level, candidates, xAxis ? center : fixed, xAxis ? fixed : center);
-                }
-                gapStart = Integer.MIN_VALUE;
-            }
-        }
-    }
-
-    private void addGateCandidate(ServerLevel level, ArrayList<BlockPos> candidates, int x, int z) {
-        BlockPos column = new BlockPos(x, 0, z);
-        if (!level.hasChunkAt(column)) return;
-        int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
-        BlockPos feet = column.atY(y);
-        if (safeGateDetourSite(level, feet)) candidates.add(feet);
     }
 
     private BlockPos pathEndpoint(Path path) {

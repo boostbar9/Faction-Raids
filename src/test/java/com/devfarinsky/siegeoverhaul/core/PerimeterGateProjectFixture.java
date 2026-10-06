@@ -42,4 +42,36 @@ public final class PerimeterGateProjectFixture {
         var paid = project().paid(false);
         return paid.activate(paid.check());
     }
+
+    /** Production stepped geometry on flat mocked terrain; partition cap is a unit-test fixture. */
+    public static PerimeterProject stepped() {
+        var territory = new java.util.HashSet<ChunkPos>();
+        var claim = new java.util.HashSet<PerimeterSteppedTopology.Chunk>();
+        for (int x = 8; x <= 12; x++) for (int z = 0; z <= 4; z++) {
+            territory.add(new ChunkPos(x, z)); claim.add(new PerimeterSteppedTopology.Chunk(x, z));
+        }
+        var draft = PerimeterSteppedGeometry.compile(claim, new PerimeterSteppedGeometry.Terrain() {
+            @Override public PerimeterSteppedGeometry.Ground ground(PerimeterSteppedTopology.Cell cell) {
+                return PerimeterSteppedGeometry.Ground.safe(65);
+            }
+            @Override public String passageProblem(PerimeterSteppedTopology.Cell cell, int y,
+                                                    PerimeterSteppedGeometry.Region region) { return null; }
+        }, PerimeterSteppedGeometry.Block.COBBLESTONE,
+                new PerimeterSteppedGeometry.Limits(-64, 320, 8, PerimeterStageLayout.MAX_TARGETS,
+                        PerimeterStageLayout.MAX_RESERVED, 32_768, 16_384));
+        var plan = PerimeterSteppedBlueprint.convert(territory, draft);
+        Map<Long, BlockState> observations = new HashMap<>();
+        PerimeterGateContract.steppedObservationCells(territory, plan, draft).forEach(cell ->
+                observations.put(cell, BlockPos.of(cell).getY() < 65
+                        ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState()));
+        var contract = PerimeterGateContract.create(territory, plan, draft, observations);
+        var layout = PerimeterGateStages.partition(plan, stage ->
+                stage.targets().size() <= 400 ? null : "Unit-test stage capacity");
+        var header = PerimeterProject.Header.newCommission(UUID.randomUUID(), 1, UUID.randomUUID(), UUID.randomUUID(),
+                "team:gates", new BlockPos(166, 65, 39), "gates", 1, "a".repeat(64), territory);
+        Map<Long, BlockState> before = new HashMap<>(), clearance = new HashMap<>();
+        plan.blocks().keySet().forEach(cell -> before.put(cell, Blocks.AIR.defaultBlockState()));
+        plan.clearance().forEach(cell -> clearance.put(cell, Blocks.AIR.defaultBlockState()));
+        return PerimeterProject.load(PerimeterProject.prepareWithGates(header, plan, layout, before, clearance, contract).save());
+    }
 }

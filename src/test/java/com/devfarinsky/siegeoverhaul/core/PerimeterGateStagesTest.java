@@ -54,7 +54,7 @@ class PerimeterGateStagesTest extends MinecraftTestSupport {
         }
     }
 
-    @Test void stagedFixtureCheckpointReconstructsTheKnownNativeStallCells() {
+    @Test void syntheticPartitionMatchesRecordedCountsAndInferredObstacleCount() {
         var chunks = stagedTerritory();
         var claim = topologyClaim(chunks);
         var lowered = stagedLoweredBand(claim);
@@ -77,8 +77,7 @@ class PerimeterGateStagesTest extends MinecraftTestSupport {
         var plan = PerimeterSteppedBlueprint.convert(chunks, draft);
         assertEquals(3831, plan.blocks().size());
         assertEquals(3, plan.materialCounts().getOrDefault("minecraft:dirt", 0));
-        // Plain JUnit cannot reproduce the client native serializer's production split,
-        // so mirror the failed CI artifact before probing the 1044-cell stall scene.
+        // This capacity fixture is not native serializer or navigation evidence.
         var layout = PerimeterGateStages.partition(plan, stage ->
                 stage.targets().size() <= 3480 ? null : "CI native staged fixture chunk split");
         assertFalse(layout.stages().isEmpty());
