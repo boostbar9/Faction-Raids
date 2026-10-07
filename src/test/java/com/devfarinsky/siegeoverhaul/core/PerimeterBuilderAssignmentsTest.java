@@ -20,6 +20,13 @@ class PerimeterBuilderAssignmentsTest extends MinecraftTestSupport {
         assertFalse(loaded.canRebind(project,project.header().builder(),UUID.randomUUID()));
         assertEquals(next,loaded.builder(project.header().projectId(),project.header().generation(),project.manifestHash(),project.header().builder()));
     }
+    @Test void gatedPaidBlueprintAndGateContractRemainFrozenAcrossReplacement() {
+        var paid=PerimeterGateProjectFixture.project().paid(false);var p=paid.activate(paid.check());
+        var before=p.save();var a=new PerimeterBuilderAssignments();UUID replacement=UUID.randomUUID();
+        a.replace(p,p.header().builder(),replacement,p.active().areaId(),"a".repeat(64));
+        assertEquals(replacement,PerimeterBuilderAssignments.load(a.save()).builder(p));
+        assertEquals(before,p.save());assertNotNull(p.gateContract());
+    }
     @Test void repeatedDeathsRejectStaleAndPreviouslyRetiredWorkers() {
         var p=running();var a=new PerimeterBuilderAssignments();UUID b=UUID.randomUUID(),c=UUID.randomUUID();
         a.replace(p,p.header().builder(),b,p.active().areaId(),"a".repeat(64));
