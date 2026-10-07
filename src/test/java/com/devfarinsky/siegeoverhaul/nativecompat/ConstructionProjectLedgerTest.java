@@ -54,6 +54,18 @@ class ConstructionProjectLedgerTest extends MinecraftTestSupport {
         assertTrue(reload.projectBuilderDestroyed(running,next,running.active().areaId(),reload.generation()));
         assertTrue(reload.replaceDeadBuilder(running,UUID.randomUUID()));
     }
+    @Test void deathBetweenSectionsRetainsVerifiedPrefixAndLeasesNextSectionAfterReload() {
+        var p=project();var ledger=new ConstructionEditLedger();assertTrue(ledger.registerProject(p));assertTrue(ledger.leaseProjectStage(p));
+        var paid=paid(p);p=paid.activate(paid.check());UUID previous=p.active().areaId();
+        p=p.verifyStage(p.check(),p.expectedStageReceipt());ledger.retire(previous,true);p=p.retireVerifiedStage(p.check());
+        assertEquals(PerimeterProject.State.WAITING_FOR_NEXT_STAGE,p.state());var original=p.save();UUID replacement=UUID.randomUUID();
+        assertTrue(ledger.projectBuilderDestroyed(p,p.header().builder(),previous,ledger.generation()));
+        assertTrue(ledger.replaceDeadBuilder(p,replacement));assertEquals(original,p.save());
+        var reloaded=ConstructionEditLedger.load(ledger.save(new CompoundTag()));
+        assertEquals(replacement,reloaded.assignedBuilder(p));assertTrue(reloaded.matchesProjectReservation(p));
+        assertTrue(reloaded.leaseProjectStage(p));assertTrue(reloaded.matchesProjectLease(p));
+        assertTrue(reloaded.retired(previous));assertEquals(1,p.receipts().size());
+    }
     @Test void editedSiteCannotBeTransferredEvenWithConfirmedDeath() {
         var p=project();var ledger=new ConstructionEditLedger();assertTrue(ledger.registerProject(p));
         assertTrue(ledger.leaseProjectStage(p));var paid=paid(p);var running=paid.activate(paid.check());
