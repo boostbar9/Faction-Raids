@@ -809,7 +809,9 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
             // A different native block target must get a fresh waypoint search.
             when(nav.getPath()).thenReturn(null); when(level.getGameTime()).thenReturn(80L);
             clearInvocations(nav);
-            goal.route(level, new BlockPos(129, 66, 1), 40);
+            var nextTarget = new BlockPos(129, 66, -1);
+            assertFalse(WallBuilderAccess.nativeHorizontalReach(worker.getX(), worker.getZ(), nextTarget, 40));
+            goal.route(level, nextTarget, 40);
             verify(nav).createPath(eq(compiledPads()), eq(0));
         }
     }
