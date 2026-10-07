@@ -74,6 +74,7 @@ class PerimeterProjectAuthorityTest extends MinecraftTestSupport {
         var observations = new java.util.HashMap<>(running.observations());
         when(level.getBlockState(any())).thenAnswer(i -> observations.get(((BlockPos)i.getArgument(0)).asLong()));
         when(ledger.matchesProjectLease(any())).thenReturn(true);
+        when(ledger.assignedBuilder(any())).thenAnswer(i -> ((PerimeterProject)i.getArgument(0)).header().builder());
         PerimeterProjectAuthority.stamp(area, running);
         try (var saves = mockStatic(RaidSavedData.class); var workers = mockStatic(WorkersBridge.class);
              var claims = mockStatic(RecruitsClaimsBridge.class); var ledgers = mockStatic(ConstructionEditLedger.class);
