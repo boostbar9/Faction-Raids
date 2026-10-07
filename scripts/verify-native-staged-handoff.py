@@ -24,7 +24,8 @@ assert data['hollowOracle'] == {'columns': 220, 'skinColumns': 88, 'cavityColumn
                                 'cavityAirCount': 396, 'headroomAirCount': 352, 'reservedCellCount': 1320}, data
 assert data['hollowCavityAirPreserved'] and data['walkwayHeadroomAirPreserved'], data
 assert data['nativeStageHollowReservationVerified-0'] and data['nativeStageHollowReservationVerified-1'], data
-assert data['syntheticPartition'] is True and data['qaSectionTargetCap'] == 96, data
+section_cap = 192 if os.environ.get('BUILDER_REPLACEMENT_QA') == 'true' else 96
+assert data['syntheticPartition'] is True and data['qaSectionTargetCap'] == section_cap, data
 assert 'direct server commission' in data['commissionPath'], data
 assert data['wholePlanCompleted'] is False, data
 assert data['totalLimitSeconds'] == 600 and data['constructionLimitSeconds'] == 540, data
@@ -35,7 +36,7 @@ assert data['materialCounts'] == {'minecraft:cobblestone': 352, 'minecraft:oak_p
 assert data['treasuryDebit'] == 64 and len(data['manifestHash']) == len(data['reviewFingerprint']) == 64, data
 stages = data['stageLayout']
 assert len(stages) == data['reviewedStageCount'] > 2 and sum(part['targets'] for part in stages) == 572, stages
-assert all(0 < part['targets'] <= 96 and len(part['digest']) == 64 for part in stages), stages
+assert all(0 < part['targets'] <= section_cap and len(part['digest']) == 64 for part in stages), stages
 assert [part['index'] for part in stages] == list(range(len(stages))), stages
 assert len({part['area'] for part in stages}) == len(stages), stages
 assert data['firstSectionCompletionObserved'] is True and data['firstSectionTargetCount'] == stages[0]['targets'], data
