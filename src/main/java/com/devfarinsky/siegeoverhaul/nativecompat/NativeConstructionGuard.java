@@ -381,7 +381,7 @@ public final class NativeConstructionGuard {
             if (ledger.retired(previous.areaId())) return new HandProvenance(project.header().owner(), previous.areaId());
         }
         var terminal = authority.terminal(link.id());
-        if (terminal != null && terminal.builder().equals(builder.getUUID()) && terminal.generation() == link.generation()
+        if (terminal != null && ledger.assignedTerminalBuilder(terminal).equals(builder.getUUID()) && terminal.generation() == link.generation()
                 && terminal.manifestHash().equals(link.hash()) && terminal.coreKey().equals(link.core())
                 && terminal.cleanup().ledgerGeneration().equals(generation))
             return new HandProvenance(terminal.owner(), terminal.stages().get(0).areaId());
@@ -467,7 +467,7 @@ public final class NativeConstructionGuard {
             var project=authority.get(link.id());
             if (project!=null) {
                 var h=project.header();
-                if (!builder.equals(h.builder()) || h.generation()!=link.generation() || !project.manifestHash().equals(link.hash())
+                if (!builder.equals(ledger.assignedBuilder(project)) || h.generation()!=link.generation() || !project.manifestHash().equals(link.hash())
                         || !h.coreKey().equals(link.core()) || !ledger.matchesProjectIdentity(project) || !ledger.retired(area)) return false;
                 return project.receipts().stream().anyMatch(receipt -> receipt.areaId().equals(area)
                         && receipt.equals(new com.devfarinsky.siegeoverhaul.core.PerimeterProject.StageReceipt(h.projectId(),h.generation(),
@@ -475,7 +475,7 @@ public final class NativeConstructionGuard {
                         project.stages().get(receipt.stageIndex()).digest(),project.stages().get(receipt.stageIndex()).layout().targets().size())));
             }
             var terminal=authority.terminal(link.id());
-            return terminal!=null && builder.equals(terminal.builder()) && terminal.generation()==link.generation()
+            return terminal!=null && builder.equals(ledger.assignedTerminalBuilder(terminal)) && terminal.generation()==link.generation()
                     && terminal.manifestHash().equals(link.hash()) && terminal.coreKey().equals(link.core())
                     && terminal.cleanup().ledgerGeneration().equals(data.getUUID(PROTECTED_GENERATION))
                     && terminal.stages().stream().anyMatch(stage -> stage.areaId().equals(area));
