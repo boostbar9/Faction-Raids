@@ -235,6 +235,8 @@ public final class NativeConstructionGuard {
      */
     public static boolean beforeWorkerTick(Mob builder) {
         if (!WorkersBridge.isBuilder(builder) || !(builder.level() instanceof ServerLevel level)) return true;
+        if (builder instanceof com.talhanation.workers.entities.BuilderEntity nativeBuilder && NativeEarthworksJobs.selected(builder))
+            return NativeEarthworksJobs.beforeWorkerTick(nativeBuilder);
         var data = builder.getPersistentData();
         var ledger = ConstructionEditLedger.get(level.getServer().overworld());
         boolean projectWorker = projectAssociation(builder, ledger);
@@ -641,6 +643,16 @@ public final class NativeConstructionGuard {
         if (area == null) return "";
         String value = area.getPersistentData().getString(STATUS);
         return value.substring(0, Math.min(160, value.length()));
+    }
+
+    /** World-space mutation columns from the sealed accepted recipe; empty for older/unprotected native areas. */
+    public static Set<Long> acceptedColumns(Entity area) {
+        if (!protectedArea(area)) return Set.of();
+        try {
+            Set<Long> columns = new HashSet<>();
+            snapshot(area).plan.cells.keySet().forEach(pos -> columns.add(pos.atY(0).asLong()));
+            return Set.copyOf(columns);
+        } catch (RuntimeException unavailable) { return Set.of(); }
     }
 
     public static Entity currentArea(Mob builder) {

@@ -2,6 +2,7 @@ package com.devfarinsky.siegeoverhaul.nativecompat;
 
 import com.devfarinsky.siegeoverhaul.FactionLogger;
 import com.devfarinsky.siegeoverhaul.RaidSavedData;
+import com.devfarinsky.siegeoverhaul.compat.ClaimBridge;
 import com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import com.devfarinsky.siegeoverhaul.core.*;
@@ -22,9 +23,27 @@ import java.util.*;
 public final class NativePerimeterProjects {
     private NativePerimeterProjects() {}
 
+    /** Fresh component-wide access authority, independent of the current native recipe's bounds. */
+    public static Set<BlockPos> gateDetourPads(Mob builder, Entity area) {
+        if (builder == null || area == null || !(builder.level() instanceof ServerLevel level)
+                || area.level() != level || NativeConstructionGuard.currentArea(builder) != area) return Set.of();
+        try {
+            if (!PerimeterProjectAuthority.tracked(area)
+                    || PerimeterProjectAuthority.problem(level, builder, area, false, false) != null) return Set.of();
+            var project = PerimeterProjectAuthority.project(level, PerimeterProjectAuthority.read(area.getPersistentData()));
+            if (project.gateContract() == null) return Set.of();
+            int component = project.gateStageComponent(project.activeStage());
+            Set<BlockPos> pads = new LinkedHashSet<>();
+            for (var gate : project.gateContract().gates()) if (gate.componentId() == component)
+                pads.add(gate.outerCenter().relative(gate.facing(), 2));
+            return Set.copyOf(pads);
+        } catch (RuntimeException | LinkageError unavailable) { return Set.of(); }
+    }
+
     public static boolean start(ServerPlayer owner,Mob builder,BlockPos corePos,int material,
                                 PerimeterBlueprint.Plan plan,PerimeterStageLayout.Layout layout,
                                 Map<Long,BlockState> before,Map<Long,BlockState> clearance,
+                                PerimeterGateContract gateContract,
                                 RecruitsClaimsBridge.TerritorySnapshot territory,String reviewedHash) {
         if(owner==null || builder==null || territory==null || !territory.ready())return false;
         var data=RaidSavedData.get(owner.server);String key=SiegeCore.key(owner);CompoundTag core=data.siegeCores.get(key);
@@ -33,8 +52,11 @@ public final class NativePerimeterProjects {
         try {
             var header=PerimeterProject.Header.newCommission(UUID.randomUUID(),1,owner.getUUID(),builder.getUUID(),key,
                     corePos,territory.factionStringId(),material,reviewedHash,territory.chunks());
-            project=PerimeterProject.prepare(header,plan,layout,before,clearance);
+            project=gateContract==null?PerimeterProject.prepare(header,plan,layout,before,clearance)
+                    :PerimeterProject.prepareWithGates(header,plan,layout,before,clearance,gateContract);
             String problem=context(owner.serverLevel(),owner,builder,project);
+            if(problem!=null)throw new IllegalStateException(problem);
+            problem=gateObservationProblem(owner.serverLevel(),owner,project,-1);
             if(problem!=null)throw new IllegalStateException(problem);
             if(PerimeterProjectLink.reserved(builder))throw new IllegalStateException("Builder is reserved by another whole perimeter.");
             if(NativeConstructionGuard.currentArea(builder)!=null || WorkersBridge.hasActiveBuildArea(builder)
@@ -430,6 +452,8 @@ private static String context(ServerLevel level,ServerPlayer owner,Mob builder,P
             if(original==null || !level.getBlockState(pos).equals(original) || level.getBlockEntity(pos)!=null)
                 return "Paused: a future section changed after the whole-territory review.";
         }
+        String gates=gateObservationProblem(level,owner,project,project.gateContract()==null?-1:project.gateStageComponent(project.activeStage()));
+        if(gates!=null)return gates;
         return null;
     }
     private static String wholeWorldProblem(ServerLevel level,ServerPlayer owner,PerimeterProject project) {
@@ -445,6 +469,8 @@ private static String context(ServerLevel level,ServerPlayer owner,Mob builder,P
             if(!level.mayInteract(owner,pos) || !level.getBlockState(pos).equals(cell.getValue()) || level.getBlockEntity(pos)!=null)
                 return "Paused: accepted perimeter headroom changed.";
         }
+        String gates=gateObservationProblem(level,owner,project,-1);
+        if(gates!=null)return gates;
         return null;
     }
 
@@ -455,7 +481,29 @@ private static String context(ServerLevel level,ServerPlayer owner,Mob builder,P
             if(expected==null || !level.getBlockState(pos).equals(expected) || level.getBlockEntity(pos)!=null)
                 return "Paused: a verified section changed before native cleanup.";
         }
+        var owner=level.getServer().getPlayerList().getPlayer(project.header().owner());
+        String gates=gateObservationProblem(level,owner,project,project.gateContract()==null?-1:project.gateStageComponent(project.activeStage()));
+        if(gates!=null)return gates;
         return null;
+    }
+
+    static String gateObservationProblem(ServerLevel level,ServerPlayer owner,PerimeterProject project,int component) {
+        if(project.gateContract()==null)return null;
+        java.util.function.Predicate<BlockPos> permitted=gatePermissions(level,project);
+        return component<0
+                ? PerimeterGateAccess.observationProblem(level,owner,project.gateContract(),permitted)
+                : PerimeterGateAccess.componentObservationProblem(level,owner,project.gateContract(),component,permitted);
+    }
+    private static java.util.function.Predicate<BlockPos> gatePermissions(ServerLevel level,PerimeterProject project) {
+        RaidSavedData.Anchor anchor=RaidSavedData.get(level.getServer()).anchors.get(project.header().coreKey());
+        RaidSavedData.Anchor identity=anchor==null?null:anchor.withIdentity(project.header().faction(),anchor.teamDisplay());
+        Map<ChunkPos,Boolean> permitted=new HashMap<>();
+        return pos -> permitted.computeIfAbsent(new ChunkPos(pos), chunk -> {
+            if(project.header().territory().contains(chunk))
+                return RecruitsClaimsBridge.isChunkOwnedBy(level,chunk,project.header().faction())
+                        && !ClaimBridge.isForeignClaim(level,chunk,identity);
+            return !ClaimBridge.isForeignClaim(level,chunk,identity);
+        });
     }
 
     /** Authenticated whole-project cancellation; native section buttons route here rather than releasing one lease. */

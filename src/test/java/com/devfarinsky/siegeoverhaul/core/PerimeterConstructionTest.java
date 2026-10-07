@@ -3,6 +3,7 @@ package com.devfarinsky.siegeoverhaul.core;
 import com.devfarinsky.siegeoverhaul.MinecraftTestSupport;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -11,7 +12,10 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.phys.AABB;
 import org.junit.jupiter.api.Test;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -30,6 +34,19 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
         when(level.getWorldBorder()).thenReturn(new WorldBorder());
         when(level.getBlockState(any())).thenAnswer(call->((BlockPos)call.getArgument(0)).getY()<64
                 ?Blocks.STONE.defaultBlockState():Blocks.AIR.defaultBlockState());
+        return level;
+    }
+    private ServerLevel level(PerimeterBlueprint.Plan plan) {
+        var level = level();
+        Set<Long> reserved = new HashSet<>(plan.blocks().keySet()); reserved.addAll(plan.clearance());
+        Set<Long> supports = new HashSet<>();
+        plan.columns().forEach(column -> supports.add(column.foundationBase().below().asLong()));
+        doAnswer(call -> {
+            BlockPos p = call.getArgument(0);
+            if (supports.contains(p.asLong())) return Blocks.STONE.defaultBlockState();
+            if (reserved.contains(p.asLong())) return Blocks.AIR.defaultBlockState();
+            return p.getY() < 64 ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState();
+        }).when(level).getBlockState(any());
         return level;
     }
     @Test void completeDryOwnedFootprintIsAccepted() {assertNull(PerimeterConstruction.siteProblem(level(),plan(),p->true));}
@@ -107,6 +124,17 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
         assertNotNull(PerimeterConstruction.siteProblem(level(),plan(),p->p.getX()!=4));
         assertNotNull(PerimeterConstruction.siteProblem(level(),plan(),p->p.getY()!=69));
     }
+    @Test void steppedJumpClearanceObstructionOrPermissionFailsTheFreeReview() {
+        var plan = steppedRisePlan(); BlockPos jump = jumpClearance(plan);
+        assertTrue(plan.clearance().contains(jump.asLong()));
+        assertFalse(plan.blocks().containsKey(jump.asLong()));
+        assertNull(PerimeterConstruction.siteProblem(level(plan), plan, p -> true));
+
+        var obstructed = level(plan); when(obstructed.getBlockState(jump)).thenReturn(Blocks.OAK_PLANKS.defaultBlockState());
+        String problem = PerimeterConstruction.siteProblem(obstructed, plan, p -> true);
+        assertNotNull(problem); assertTrue(problem.contains(jump.toShortString()), problem);
+        assertNotNull(PerimeterConstruction.siteProblem(level(plan), plan, p -> !p.equals(jump)));
+    }
     @Test void allChunksAreCheckedBeforeReadingTerrain() {
         var level=level();when(level.hasChunkAt(any())).thenReturn(false);
         assertNotNull(PerimeterConstruction.siteProblem(level,plan(),p->true));verify(level,never()).getBlockState(any());
@@ -156,5 +184,35 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
     @Test void materialsCountSharedCornerCellsOnlyOnce() {
         assertEquals(572,plan().blocks().size());assertTrue(PerimeterConstruction.materials(plan()).contains("352 cobblestone"));
         assertTrue(PerimeterConstruction.materials(plan()).contains("220 oak planks"));
+    }
+    private PerimeterBlueprint.Plan steppedRisePlan() {
+        Set<PerimeterSteppedTopology.Chunk> claim = new HashSet<>();
+        for (int x = 0; x < 4; x++) for (int z = 0; z < 4; z++) claim.add(new PerimeterSteppedTopology.Chunk(x, z));
+        var topology = PerimeterSteppedTopology.create(claim);
+        var lowerBand = topology.loops().get(0).bands().stream()
+                .filter(band -> band.kind() == PerimeterSteppedProfile.Kind.STRAIGHT).skip(1).findFirst().orElseThrow();
+        Set<PerimeterSteppedTopology.Cell> lower = new HashSet<>(lowerBand.cells());
+        var draft = PerimeterSteppedGeometry.compile(claim, new PerimeterSteppedGeometry.Terrain() {
+            @Override public PerimeterSteppedGeometry.Ground ground(PerimeterSteppedTopology.Cell column) {
+                return PerimeterSteppedGeometry.Ground.safe(lower.contains(column) ? 63 : 64);
+            }
+            @Override public String passageProblem(PerimeterSteppedTopology.Cell column, int feetY,
+                                                   PerimeterSteppedGeometry.Region region) { return null; }
+        }, PerimeterSteppedGeometry.Block.COBBLESTONE, PerimeterSteppedGeometry.Limits.DEFAULT);
+        assertTrue(draft.feasible(), draft.problem());
+        Set<ChunkPos> chunks = new HashSet<>(); claim.forEach(chunk -> chunks.add(new ChunkPos(chunk.x(), chunk.z())));
+        return PerimeterSteppedBlueprint.convert(chunks, draft);
+    }
+    private BlockPos jumpClearance(PerimeterBlueprint.Plan plan) {
+        Map<Long, PerimeterBlueprint.Column> columns = new HashMap<>();
+        plan.columns().forEach(column -> columns.put(new BlockPos(column.base().getX(), 0, column.base().getZ()).asLong(), column));
+        for (var column : plan.columns()) for (Direction direction : List.of(Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST)) {
+            var other = columns.get(new BlockPos(column.base().getX() + direction.getStepX(), 0,
+                    column.base().getZ() + direction.getStepZ()).asLong());
+            if (other == null || Math.abs(other.base().getY() - column.base().getY()) != 1) continue;
+            var lower = column.base().getY() < other.base().getY() ? column : other;
+            return lower.base().above(6);
+        }
+        throw new AssertionError("Expected a stepped one-block transition");
     }
 }

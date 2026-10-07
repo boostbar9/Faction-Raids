@@ -23,6 +23,11 @@ public final class ProtectedConstructionAreas {
                     .sized(1.2F, 2.0F).fireImmune().noSummon()
                     .clientTrackingRange(ConstructionTracking.TRACKING_CHUNKS).build(ID.toString()));
 
+    public static final RegistryObject<EntityType<EarthworksBuildArea>> EARTHWORKS_TYPE = TYPES.register("earthworks_build_area", () ->
+            EntityType.Builder.<EarthworksBuildArea>of(EarthworksBuildArea::new, MobCategory.MISC)
+                    .sized(1.2F, 2.0F).fireImmune().noSummon().clientTrackingRange(ConstructionTracking.TRACKING_CHUNKS)
+                    .build(new ResourceLocation(SiegeOverhaul.MOD_ID, "earthworks_build_area").toString()));
+
     private ProtectedConstructionAreas() {}
 
     /** The caller still registers, starts, protects, assigns and pays for this sealed area. */
@@ -34,6 +39,8 @@ public final class ProtectedConstructionAreas {
         return createStage(owner,builder,project,null);
     }
     static Entity createStage(ServerPlayer owner,Mob builder,com.devfarinsky.siegeoverhaul.core.PerimeterProject project,BlockPos originalMarker) {
+        if (project == null || !project.executionSupported())
+            throw new IllegalArgumentException(com.devfarinsky.siegeoverhaul.core.PerimeterProject.GATE_EXECUTION_BLOCKER);
         var stage=project.active();if(stage==null)throw new IllegalArgumentException("No native section remains");
         var layout=stage.layout();
         var blueprint=com.devfarinsky.siegeoverhaul.core.TerritoryFortification.blueprint(layout.targets(),layout.min(),layout.max());

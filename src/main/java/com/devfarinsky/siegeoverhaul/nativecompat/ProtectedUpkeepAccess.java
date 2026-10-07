@@ -75,7 +75,7 @@ final class ProtectedUpkeepAccess extends ProtectedInventoryGoal {
         if(target instanceof StorageArea area && fields!=null) {
             acceptedBounds=ProtectedStorageContext.storage(worker,area,false);
             Set<BlockPos> reads=ProtectedStorageContext.scan(worker,area,false);
-            String authority=NativeConstructionGuard.storageProblem(worker,reads);if(authority!=null)return authority;
+            String authority=EarthworksInventoryAccess.problem(worker,reads);if(authority!=null)return authority;
             var level=ProtectedStorageContext.level(worker);
             for(BlockPos pos:BlockPos.betweenClosedStream(acceptedBounds).map(BlockPos::immutable).toList())
                 if(level.getBlockState(pos.above()).isAir()) {
@@ -160,7 +160,7 @@ final class ProtectedUpkeepAccess extends ProtectedInventoryGoal {
             return "Paused: native upkeep cached chest changed";
         if(!ProtectedStorageContext.contains(acceptedBounds,pos))throw new IllegalStateException("Upkeep queue escaped scan");
         Set<BlockPos> reads=ProtectedStorageContext.envelope(ProtectedStorageContext.level(worker),new AABB(pos,pos),1,1);
-        String authority=NativeConstructionGuard.storageProblem(worker,reads);if(authority!=null)return authority;
+        String authority=EarthworksInventoryAccess.problem(worker,reads);if(authority!=null)return authority;
         var selected=ProtectedStorageContext.source(ProtectedStorageContext.level(worker),source,pos);
         retainCleanup(selected);
         if(fields.position(delegate)!=null && fields.timer(delegate)>=16
@@ -184,7 +184,7 @@ final class ProtectedUpkeepAccess extends ProtectedInventoryGoal {
     }
 
     private String prepareTransfer(Container source,Set<BlockPos> positions,BlockPos selected) {
-        String authority=NativeConstructionGuard.storageProblem(worker,positions);if(authority!=null)return authority;
+        String authority=EarthworksInventoryAccess.problem(worker,positions);if(authority!=null)return authority;
         String data=ProtectedTransferCapacity.upkeepProblem(worker,source);if(data!=null)return data;
         transferSource=source;transferPosition=selected.immutable();transferCells=Set.copyOf(positions);writes=List.of(source);return null;
     }
@@ -202,7 +202,7 @@ final class ProtectedUpkeepAccess extends ProtectedInventoryGoal {
     private Container blockSource(BlockPos pos) {
         var level=ProtectedStorageContext.level(worker);
         Set<BlockPos> reads=ProtectedStorageContext.envelope(level,new AABB(pos,pos),1,1);
-        String authority=NativeConstructionGuard.storageProblem(worker,reads);if(authority!=null)throw new IllegalStateException(authority);
+        String authority=EarthworksInventoryAccess.problem(worker,reads);if(authority!=null)throw new IllegalStateException(authority);
         ProtectedStorageContext.blockImplementation(level,pos);
         var state=level.getBlockState(pos);var be=level.getBlockEntity(pos);
         Container source=state.getBlock() instanceof ChestBlock chest?ChestBlock.getContainer(chest,state,level,pos,false)
@@ -225,7 +225,7 @@ final class ProtectedUpkeepAccess extends ProtectedInventoryGoal {
         var level=ProtectedStorageContext.level(worker);
         Set<BlockPos> cells=new java.util.HashSet<>(List.of(target.blockPosition(),target.getOnPos()));
         ProtectedStorageContext.loaded(level,cells);
-        String authority=NativeConstructionGuard.storageProblem(worker,cells);if(authority!=null)throw new IllegalStateException(authority);
+        String authority=EarthworksInventoryAccess.problem(worker,cells);if(authority!=null)throw new IllegalStateException(authority);
     }
 
     private Container entitySource(Entity target) {
