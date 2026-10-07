@@ -3,6 +3,7 @@ package com.devfarinsky.siegeoverhaul.nativecompat;
 import com.devfarinsky.siegeoverhaul.camp.CampVegetation;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import com.devfarinsky.siegeoverhaul.core.SiegeCore;
+import com.devfarinsky.siegeoverhaul.core.PlayerFortificationJobs;
 import com.devfarinsky.siegeoverhaul.core.WallBuilderAccess;
 import com.devfarinsky.siegeoverhaul.core.PerimeterProjectStore;
 import com.devfarinsky.siegeoverhaul.core.PerimeterProjectLink;
