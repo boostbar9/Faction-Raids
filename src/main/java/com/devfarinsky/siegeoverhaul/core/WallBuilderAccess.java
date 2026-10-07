@@ -661,6 +661,28 @@ public final class WallBuilderAccess extends Goal {
         return standingSites(level, worker, target, 3, 16);
     }
 
+    /** Called only after the controller authenticates a paid next-section handoff.
+     * Keep marker creation/lease admission untouched until the worker leaves its
+     * next footprint. This requests ordinary navigation, never edits or teleports.
+     */
+    public static boolean clearNextSection(Mob worker, Set<Long> targets, Set<Long> reservation, BlockPos marker) {
+        if (!(worker.level() instanceof ServerLevel level) || marker==null) return false;
+        boolean obstructs=targets.stream().anyMatch(cell->worker.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(BlockPos.of(cell))));
+        if (!obstructs) return true;
+        if (worker.isPassenger() || worker.isLeashed() || worker.getTarget()!=null
+                || NativeConstructionGuard.currentArea(worker)!=null) return false;
+        Set<Long> columns=new java.util.HashSet<>();
+        reservation.forEach(cell->columns.add(BlockPos.of(cell).atY(0).asLong()));
+        var sites=new ArrayList<>(standingSites(level,worker,marker));
+        sites.removeIf(site->!recoveryMargin(site,columns,worker.getBbWidth()));
+        sites.sort(Comparator.comparingDouble(site->site.distToCenterSqr(worker.position())));
+        var nav=worker.getNavigation();
+        if (!nav.isDone() && nav.getPath()!=null) return false;
+        for (BlockPos site:sites)
+            if (nav.moveTo(site.getX(),site.getY(),site.getZ(),0.8)) break;
+        return false;
+    }
+
     /** Recovery-only search: at most 169 loaded columns, still inside the native reach. */
     private static Set<BlockPos> standingSites(ServerLevel level, Mob worker, BlockPos target, int radius, int reachSquared) {
         Set<BlockPos> sites = new LinkedHashSet<>();
