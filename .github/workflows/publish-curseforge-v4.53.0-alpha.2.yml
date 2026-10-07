@@ -1,0 +1,389 @@
+# One-use exact-artifact Alpha publisher. Keep this workflow off main.
+name: Publish tested 4.53.0-alpha.2 to CurseForge
+
+on:
+  push:
+    branches: [publish/curseforge-v4.53.0-alpha.2]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  issues: read
+
+concurrency:
+  group: curseforge-1364352-v4.53.0-alpha.2
+  cancel-in-progress: false
+
+env:
+  CONSTRUCTION_RUN: '37569414849'
+  CONSTRUCTION_ARTIFACT: '11464486536'
+  CONSTRUCTION_SOURCE: '95dd161d371dce9bbc906af0e27d6b3e08a236f8'
+  BASELINE_RUN: '37581902562'
+  BASELINE_ARTIFACT: '11465220479'
+  VERSION: '4.53.0-alpha.2'
+  SOURCE_SHA: '3e05c9f0b1073d289633554077fe5ff24e3ba72e'
+  SOURCE_TREE: '0531888e521fee11e5313c4309f6fba516762f8d'
+  STABLE_SHA: '9c6fd28089eb6cf9cecf48ec1dc25b4538af8463'
+  BUILD_RUN: '37581902563'
+  JAR_ARTIFACT: '11464314464'
+  REGRESSION_ARTIFACT: '11464749004'
+  SERVER_RUN: '37581902644'
+  SERVER_ARTIFACT: '11464519891'
+  REVIEW_COMMENT: '6032450305'
+  ARTIFACT_SHA256: '0d13b919a11e60767197758670d0798dd5ac159745a27f2d7b77a27d0f3a7156'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prevent duplicate or ambiguous uploads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.parse, urllib.request
+          base = 'https://api.github.com/repos/boostbar9/Faction-Raids/'
+          headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'}
+          def get(path):
+              with urllib.request.urlopen(urllib.request.Request(base + path, headers=headers), timeout=30) as response:
+                  return json.load(response)
+          current = int(os.environ['GITHUB_RUN_ID'])
+          attempt = int(os.environ.get('GITHUB_RUN_ATTEMPT', '1'))
+          inspect = [(current, value) for value in range(1, attempt)]
+          query = urllib.parse.urlencode({'branch': 'publish/curseforge-v4.53.0-alpha.2', 'event': 'push', 'per_page': 100})
+          history = get('actions/workflows/publish-curseforge-v4.53.0-alpha.2.yml/runs?' + query)
+          assert history['total_count'] == len(history['workflow_runs']), 'Truncated publisher history'
+          for run in history['workflow_runs']:
+              if run['id'] != current:
+                  inspect.extend((run['id'], value) for value in range(1, run['run_attempt'] + 1))
+          for run_id, value in inspect:
+              jobs = get(f'actions/runs/{run_id}/attempts/{value}/jobs?per_page=100')
+              assert jobs['total_count'] == len(jobs['jobs']), 'Truncated job history'
+              uploads = [step for job in jobs['jobs'] for step in job.get('steps', []) if step['name'] == 'Publish to CurseForge']
+              assert uploads and all(step.get('conclusion') == 'skipped' for step in uploads), 'Prior upload is ambiguous; inspect manually'
+          print('No prior upload attempt reached CurseForge.')
+          PY
+
+      - name: Verify immutable source, review and successful runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          from pathlib import Path
+          base = 'https://api.github.com/repos/boostbar9/Faction-Raids/'
+          headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'}
+          def get(path):
+              with urllib.request.urlopen(urllib.request.Request(base + path, headers=headers), timeout=30) as response:
+                  return json.load(response)
+          source, tree = os.environ['SOURCE_SHA'], os.environ['SOURCE_TREE']
+          assert get('git/commits/' + source)['tree']['sha'] == tree
+          assert get('branches/main')['commit']['sha'] == os.environ['STABLE_SHA'], 'Stable main changed; reconcile before upload'
+          pr = get('pulls/288')
+          assert pr['state'] == 'open' and pr['draft'] and not pr['merged'] and pr['head']['sha'] == source
+          review = get('issues/comments/' + os.environ['REVIEW_COMMENT'])
+          assert review['user']['login'] == 'boostbar9' and source in review['body']
+          assert 'no blocking findings' in review['body'].lower() and 'alpha' in review['body'].lower()
+          assert review['issue_url'].endswith('/issues/288')
+          query = '''query { repository(owner: "boostbar9", name: "Faction-Raids") { pullRequest(number: 288) { reviewThreads(first: 100) { pageInfo { hasNextPage } nodes { isResolved } } } } }'''
+          request = urllib.request.Request('https://api.github.com/graphql',
+              data=json.dumps({'query': query}).encode(), headers={**headers, 'Content-Type': 'application/json'})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              threads = json.load(response)['data']['repository']['pullRequest']['reviewThreads']
+          assert not threads['pageInfo']['hasNextPage'] and all(t['isResolved'] for t in threads['nodes'])
+          runs = {
+              os.environ['BUILD_RUN']: ('Build', '.github/workflows/build.yml', {
+                  'Faction-Raids-Forge-1.20.1': int(os.environ['JAR_ARTIFACT']),
+                  'regression-test-results': int(os.environ['REGRESSION_ARTIFACT'])}),
+              os.environ['SERVER_RUN']: ('Native Building Server QA', '.github/workflows/native-building-server-qa.yml', {
+                  'native-building-server-qa-' + os.environ['SERVER_RUN'] + '-1': int(os.environ['SERVER_ARTIFACT'])})}
+          receipt = {'source': source, 'source_tree': tree, 'stable_source': os.environ['STABLE_SHA'],
+                     'pull_request': 288, 'review_comment': int(os.environ['REVIEW_COMMENT']), 'runs': {}}
+          for run_id, (name, path, artifacts) in runs.items():
+              run = get('actions/runs/' + run_id)
+              assert (run['name'], run['path'], run['head_sha'], run['event'], run['run_attempt']) == (name, path, source, 'pull_request', 1)
+              assert run['status'] == 'completed' and run['conclusion'] == 'success'
+              listing = get('actions/runs/' + run_id + '/artifacts?per_page=100')
+              assert listing['total_count'] == len(listing['artifacts'])
+              for name, artifact_id in artifacts.items():
+                  matches = [a for a in listing['artifacts'] if a['name'] == name]
+                  assert len(matches) == 1 and matches[0]['id'] == artifact_id and not matches[0]['expired']
+              receipt['runs'][run_id] = artifacts
+          Path('verified-source.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+          print('Verified exact Alpha source, focused review and successful build/server runs; stable main untouched.')
+          PY
+
+      - name: Verify construction proof and narrow release delta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, urllib.request
+          from pathlib import Path
+          base='https://api.github.com/repos/boostbar9/Faction-Raids/'
+          headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'}
+          def get(path):
+              with urllib.request.urlopen(urllib.request.Request(base+path,headers=headers),timeout=30) as response:return json.load(response)
+          prior,source=os.environ['CONSTRUCTION_SOURCE'],os.environ['SOURCE_SHA']
+          comparison=get('compare/'+prior+'...'+source)
+          allowed={'gradle.properties','CHANGELOG.md','docs/upstream-compatibility.md','docs/release-4.53.0-alpha.2.md',
+                   'src/main/java/com/devfarinsky/siegeoverhaul/core/PerimeterSteppedGeometry.java',
+                   'src/test/java/com/devfarinsky/siegeoverhaul/core/PerimeterSteppedGeometryTest.java'}
+          assert {f['filename'] for f in comparison['files']}==allowed
+          path='src/main/java/com/devfarinsky/siegeoverhaul/core/PerimeterSteppedGeometry.java'
+          def file(ref):return base64.b64decode(get('contents/'+path+'?ref='+ref)['content']).decode()
+          old='Ground g=ground.get(p);need(g.problem()!=null&&g.problem().isEmpty()&&g.surfaceY()>limits.minY&&(long)g.surfaceY()+5<limits.maxY,"Unsafe or unavailable ground");return g;'
+          new='Ground g=ground.get(p);\n            need(g.problem()!=null&&g.problem().isEmpty(),g.problem()!=null&&!g.problem().isBlank()?g.problem():"Unsafe or unavailable ground");\n            need(g.surfaceY()>limits.minY&&(long)g.surfaceY()+5<limits.maxY,"Unsafe or unavailable ground");return g;'
+          before,after=file(prior),file(source)
+          assert before.count(old)==1 and before.replace(old,new)==after,'Construction code changed beyond refusal reporting'
+          for key,artifact_key,path,name in [('CONSTRUCTION_RUN','CONSTRUCTION_ARTIFACT','.github/workflows/native-staged-perimeter-qa.yml','Native Staged Stepped Perimeter QA'),
+                                           ('BASELINE_RUN','BASELINE_ARTIFACT','.github/workflows/native-building-qa.yml','Native Building QA')]:
+              run=get('actions/runs/'+os.environ[key])
+              expected=prior if key=='CONSTRUCTION_RUN' else source
+              assert (run['head_sha'],run['status'],run['conclusion'],run['run_attempt'],run['path'],run['name'])==(expected,'completed','success',1,path,name)
+              listing=get('actions/runs/'+os.environ[key]+'/artifacts?per_page=100')
+              assert listing['total_count']==len(listing['artifacts'])
+              assert any(a['id']==int(os.environ[artifact_key]) and not a['expired'] for a in listing['artifacts'])
+          Path('verified-construction-source.json').write_text(json.dumps({'construction_source':prior,'construction_run':int(os.environ['CONSTRUCTION_RUN']),
+              'construction_artifact':int(os.environ['CONSTRUCTION_ARTIFACT']),'baseline_run':int(os.environ['BASELINE_RUN']),
+              'baseline_artifact':int(os.environ['BASELINE_ARTIFACT']),'scope':'3831-target 25-chunk stepped/gated layout; final code differs only in refusal reporting and metadata/docs'},indent=2)+'\n')
+          PY
+
+      - name: Download construction evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.CONSTRUCTION_ARTIFACT }}
+          merge-multiple: true
+          run-id: ${{ env.CONSTRUCTION_RUN }}
+          github-token: ${{ github.token }}
+          path: construction
+
+      - name: Download final client safety evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.BASELINE_ARTIFACT }}
+          merge-multiple: true
+          run-id: ${{ env.BASELINE_RUN }}
+          github-token: ${{ github.token }}
+          path: baseline
+
+      - name: Verify native construction and safety receipts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request
+          from pathlib import Path
+          c=json.loads(Path('construction/result.json').read_text())
+          assert c['status']=='passed' and c['completedBlocks']==3831 and c['nativeCompletionObserved']
+          assert c['midStageRestartVerified'] and c['betweenStageRestartVerified'] and c['treasuryDebit']==64
+          b=json.loads(Path('baseline/result.json').read_text())
+          assert b['status']=='passed' and b['gameplay']['status']=='passed'
+          assert b['loadedModVersions']['siegeoverhaul']==os.environ['VERSION']
+          headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'}
+          def tree(path):
+              commit=Path(path).read_text().strip()
+              with urllib.request.urlopen(urllib.request.Request('https://api.github.com/repos/boostbar9/Faction-Raids/git/commits/'+commit,headers=headers),timeout=30) as response:return json.load(response)['tree']['sha']
+          assert tree('baseline/source-commit.txt')==os.environ['SOURCE_TREE']
+          with urllib.request.urlopen(urllib.request.Request('https://api.github.com/repos/boostbar9/Faction-Raids/git/commits/'+os.environ['CONSTRUCTION_SOURCE'],headers=headers),timeout=30) as response:expected=json.load(response)['tree']['sha']
+          assert tree('construction/source-commit.txt')==expected
+          PY
+
+      - name: Download exact tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.JAR_ARTIFACT }}
+          merge-multiple: true
+          run-id: ${{ env.BUILD_RUN }}
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Download regression evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.REGRESSION_ARTIFACT }}
+          merge-multiple: true
+          run-id: ${{ env.BUILD_RUN }}
+          github-token: ${{ github.token }}
+          path: regression
+
+      - name: Download server startup evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.SERVER_ARTIFACT }}
+          merge-multiple: true
+          run-id: ${{ env.SERVER_RUN }}
+          github-token: ${{ github.token }}
+          path: server
+
+      - name: Verify exact bytes, metadata, regressions and startup scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, tomllib, urllib.request, zipfile
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          jar = Path('dist/siegeoverhaul-' + os.environ['VERSION'] + '.jar')
+          assert list(Path('dist').rglob('*.jar')) == [jar]
+          assert hashlib.sha256(jar.read_bytes()).hexdigest() == os.environ['ARTIFACT_SHA256']
+          with zipfile.ZipFile(jar) as archive:
+              assert archive.testzip() is None and len(archive.namelist()) == len(set(archive.namelist()))
+              names = set(archive.namelist())
+              assert 'com/devfarinsky/siegeoverhaul/nativecompat/NativePerimeterProjects.class' in names
+              assert 'com/devfarinsky/siegeoverhaul/core/WallBuilderAccess.class' in names
+              assert not any('/nativecompat/NativeHudQa' in n or '/nativecompat/NativeBuildingQa' in n or '/nativecompat/NativeServerQa' in n or '/test/' in n for n in names)
+              assert 'com/devfarinsky/siegeoverhaul/client/CoreLootGalleryLayout.class' not in names
+              metadata = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+          mod = metadata['mods'][0]
+          assert (mod['modId'], mod['version'], mod['displayTest']) == ('siegeoverhaul', os.environ['VERSION'], 'MATCH_VERSION')
+          expected = {
+              'forge': (True, '[47,)', 'NONE'), 'minecraft': (True, '[1.20.1,1.21)', 'NONE'),
+              'recruits': (True, '[1.15.2,)', 'AFTER'), 'workers': (True, '[2.0.3,)', 'AFTER'),
+              'smallships': (True, '[0,)', 'AFTER'), 'siegeweapons': (True, '[0,)', 'AFTER'),
+              'ftbchunks': (False, '[0,)', 'AFTER'), 'openpartiesandclaims': (False, '[0,)', 'AFTER'),
+              'corpse': (False, '[0,)', 'AFTER'), 'magistuarmory': (False, '[0,)', 'AFTER'),
+              'musketmod': (False, '[0,)', 'AFTER'), 'curios': (False, '[5.14.1,6)', 'AFTER')}
+          deps = {d['modId']: d for d in metadata['dependencies']['siegeoverhaul']}
+          assert set(deps) == set(expected)
+          for name, contract in expected.items():
+              d = deps[name]
+              assert (d['mandatory'], d['versionRange'], d['ordering']) == contract and d['side'] == 'BOTH'
+          totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0)
+          suites = {}
+          for path in Path('regression').rglob('TEST-*.xml'):
+              suite = ET.parse(path).getroot()
+              name = suite.get('name')
+              assert suite.tag == 'testsuite' and name and name not in suites
+              cases = suite.findall('testcase')
+              assert len(cases) == int(suite.get('tests'))
+              assert all(case.find(tag) is None for case in cases for tag in ('failure', 'error', 'skipped'))
+              suites[name] = len(cases)
+              for key in totals: totals[key] += int(suite.get(key))
+          assert len(suites) == 293 and totals == {'tests': 1996, 'failures': 0, 'errors': 0, 'skipped': 0}
+          server = json.loads(Path('server/result.json').read_text())
+          assert server['status'] == 'passed' and server['testsExecuted'] == 1
+          assert server['physicalDistribution'] == 'DEDICATED_SERVER' and server['logicalSide'] == 'SERVER'
+          assert server['serverClass'] == 'net.minecraft.gametest.framework.GameTestServer' and server['connectedPlayers'] == 0
+          assert len(server['checks']) == 8
+          assert server['loadedModVersions'] == {
+              'minecraft': '1.20.1', 'forge': '47.4.16', 'siegeoverhaul': os.environ['VERSION'],
+              'workers': '2.0.3', 'recruits': '1.15.2', 'smallships': '2.0.0-b1.4', 'siegeweapons': '0.2.5'}
+          checkout = Path('server/source-commit.txt').read_text().strip()
+          headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'}
+          request = urllib.request.Request('https://api.github.com/repos/boostbar9/Faction-Raids/git/commits/' + checkout, headers=headers)
+          with urllib.request.urlopen(request, timeout=30) as response:
+              assert json.load(response)['tree']['sha'] == os.environ['SOURCE_TREE']
+          receipt = {'version': os.environ['VERSION'], 'sha256': os.environ['ARTIFACT_SHA256'],
+                     'tests': totals, 'suites': len(suites), 'server_checkout': checkout,
+                     'startup_scope': 'Exact-source Forge dedicated GameTest server with required native companions; not full construction completion or authenticated multiplayer',
+                     'release_type': 'alpha', 'stable_unchanged': True}
+          Path('verified-alpha.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+          print(json.dumps(receipt, sort_keys=True))
+          PY
+
+      - name: Recheck source and exact bytes immediately before upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, urllib.request
+          from pathlib import Path
+          headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'}
+          base = 'https://api.github.com/repos/boostbar9/Faction-Raids/'
+          for path, field, expected in [('branches/main', 'commit', os.environ['STABLE_SHA']), ('pulls/288', 'head', os.environ['SOURCE_SHA'])]:
+              with urllib.request.urlopen(urllib.request.Request(base + path, headers=headers), timeout=30) as response:
+                  assert json.load(response)[field]['sha'] == expected, 'Source advanced before upload'
+          jar = Path('dist/siegeoverhaul-' + os.environ['VERSION'] + '.jar')
+          assert hashlib.sha256(jar.read_bytes()).hexdigest() == os.environ['ARTIFACT_SHA256']
+          PY
+
+      - name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          curseforge-retry-attempts: 1
+          files: dist/siegeoverhaul-4.53.0-alpha.2.jar
+          name: The Siege Overhaul v4.53.0-alpha.2 - Perimeter Recovery ALPHA
+          version: v4.53.0-alpha.2
+          version-type: alpha
+          changelog: |
+            Experimental ALPHA: fixes consumed gate-waypoint loops and depleted-material target stalls so the native builder can select the remaining materials. Blocked-ground reviews retain the exact block and coordinates.
+
+            Actual native testing completed all 3,831 targets in one 25-chunk stepped/gated layout with finite chest materials, one 64-emerald commission and real world restarts at 871 and 3,480 blocks. Final versioned unit, dedicated GameTest startup and focused client safety/cancellation checks are separate evidence; this does not establish every terrain or modpack.
+
+            Deep excavation/CUT, authenticated packaged multiplayer and safe downgrade remain unproven. Replacement builders and simultaneous crews are not included. Back up your world and test on a copy. Install exactly 4.53.0-alpha.2 on server and every client, with Recruits 1.15.2+, Workers 2 2.0.3+, Small Ships and Siege Weapons. Stable 4.52.10 and its update feed are unchanged.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            ftb-chunks-forge(optional)
+            open-parties-and-claims(optional)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+            curios(optional)
+            epic-knights-addon(optional)
+          fail-mode: fail
+
+      - name: Record accepted Alpha upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          from urllib.parse import urlsplit
+          file_id, url = os.environ['RELEASE_FILE_ID'], os.environ['RELEASE_URL']
+          assert re.fullmatch(r'[1-9][0-9]*', file_id)
+          parsed = urlsplit(url)
+          assert parsed.scheme == 'https' and parsed.hostname in ('curseforge.com', 'www.curseforge.com')
+          assert parsed.path.rstrip('/') == '/minecraft/mc-mods/siege-overhaul/files/' + file_id
+          receipt = {**json.loads(Path('verified-source.json').read_text()), **json.loads(Path('verified-alpha.json').read_text()), **json.loads(Path('verified-construction-source.json').read_text()),
+                     'project': 1364352, 'file_id': file_id, 'url': url, 'status': 'accepted_upload',
+                     'public_availability': 'not_yet_verified', 'publisher_run': int(os.environ['GITHUB_RUN_ID'])}
+          Path('curseforge-alpha-receipt.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+          print(json.dumps(receipt, sort_keys=True))
+          PY
+
+      - name: Verify public download bytes
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,time,urllib.request
+          from pathlib import Path
+          receipt=json.loads(Path('curseforge-alpha-receipt.json').read_text())
+          file_id=int(receipt['file_id'])
+          url=f"https://mediafilez.forgecdn.net/files/{file_id//1000}/{file_id%1000}/siegeoverhaul-{receipt['version']}.jar"
+          for attempt in range(10):
+              try:
+                  with urllib.request.urlopen(url,timeout=30) as response:data=response.read(8*1024*1024)
+                  assert hashlib.sha256(data).hexdigest()==receipt['sha256'],'Public download hash differs'
+                  receipt.update(public_availability='verified_exact_bytes',public_download=url)
+                  Path('curseforge-alpha-receipt.json').write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
+                  print(json.dumps(receipt,sort_keys=True));break
+              except Exception:
+                  if attempt==9:raise
+                  time.sleep(15)
+          PY
+
+      - name: Preserve Alpha publication evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: curseforge-4.53.0-alpha.2-receipt
+          path: |
+            verified-source.json
+            verified-alpha.json
+            verified-construction-source.json
+            curseforge-alpha-receipt.json
+          if-no-files-found: warn
+          retention-days: 90
