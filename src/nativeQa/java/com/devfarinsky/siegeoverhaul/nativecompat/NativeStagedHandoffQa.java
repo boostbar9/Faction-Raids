@@ -10,6 +10,7 @@ import com.devfarinsky.siegeoverhaul.core.PerimeterStageLayout;
 import com.devfarinsky.siegeoverhaul.core.PerimeterTerminalReceipt;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.BlockHitResult;
 import com.devfarinsky.siegeoverhaul.ModConstants;
 import com.devfarinsky.siegeoverhaul.RaidSavedData;
@@ -90,6 +91,10 @@ import java.util.concurrent.CompletableFuture;
 public final class NativeStagedHandoffQa {
     private static final boolean ENABLED = Boolean.getBoolean("siegeoverhaul.nativeQa")
             && "staged-handoff".equals(System.getProperty("siegeoverhaul.nativeQa.mode"));
+    private static final boolean REPLACE_BUILDER = Boolean.getBoolean("siegeoverhaul.nativeQa.builderReplacement");
+    private static boolean replacementSpawned, replacementVerified;
+    private static long replacementTick, replacementPlaced;
+    private static UUID deadBuilder;
     private static final long SECOND = 1_000_000_000L, CONSTRUCTION_SECONDS = 9 * 60, TOTAL_SECONDS = 10 * 60;
     private static final Map<String, Object> REPORT = new LinkedHashMap<>();
     private static final List<Map<String, Object>> SAMPLES = new ArrayList<>(), RESTARTS = new ArrayList<>(), AREA_JOINS = new ArrayList<>(), KEYBOARD = new ArrayList<>();
@@ -283,6 +288,26 @@ public final class NativeStagedHandoffQa {
                 sample(level, owner, "direct-server-commission"); advance(now, 5); return Action.CAPTURE_COMMISSION;
             }
             case 5 -> {
+                if (REPLACE_BUILDER && !replacementVerified) {
+                    if (replacementSpawned) {
+                        require(now-replacementTick<1200,"Confirmed-death replacement failed to resume within one minute");
+                        if (level.getEntity(deadBuilder)!=null || project==null
+                                || !ConstructionEditLedger.get(level).assignedBuilder(project).equals(fixture.builderId())
+                                || !NativePerimeterProjects.projectLinkMatches(builder(level),project)
+                                || placed(level)<=replacementPlaced) return Action.NONE;
+                        require(project.header().builder().equals(deadBuilder),"Replacement rewrote original paid manifest");
+                        verifyActiveStage(level,project); conservation(level,owner);
+                        REPORT.put("builderReplacement",Map.of("deadBuilder",deadBuilder.toString(),"replacement",fixture.builderId().toString(),
+                                "placedBefore",replacementPlaced,"placedAfter",placed(level),"extraCommission",false));
+                        replacementVerified=true; lastProgress=System.nanoTime();
+                        check("Confirmed killed builder replaced by a new idle owned hire; original native AI resumed the same paid partial section without copying materials");
+                    } else if (project!=null && project.state()==PerimeterProject.State.RUNNING && project.activeStage()==0
+                            && stagePlaced(level,0)>=8 && workerStock(builder(level),Items.COBBLESTONE)==0
+                            && workerStock(builder(level),Items.OAK_PLANKS)==0 && !ProtectedBuilderHandMirror.activeUse(builder(level))
+                            && ProtectedStorageAccess.runningProblem(builder(level))==null) {
+                        spawnReplacement(level,owner,now); return Action.NONE;
+                    }
+                }
                 require(!owner.isCreative() && !owner.isSpectator() && !owner.hasPermissions(2) && !builder(level).isNoAi(), "Native work lost real Survival/AI conditions");
                 require(project != null && project.state() != PerimeterProject.State.COMPLETE, "Representative run unexpectedly lost its unfinished whole project");
                 if (midRestart && !betweenRestart && project.state() == PerimeterProject.State.WAITING_FOR_NEXT_STAGE && project.activeStage() == 1) {
@@ -297,7 +322,7 @@ public final class NativeStagedHandoffQa {
                 conservation(level, owner); verifyProject(level, project);
                 String transition = project.state() + ":" + project.activeStage() + ":" + project.receipts().size() + ":" + project.blocker();
                 if (!transition.equals(lastTransition) || now % 200 < 20) { sample(level, owner, "native-progress"); lastTransition = transition; }
-                if (!midRestart && project.state() == PerimeterProject.State.RUNNING && project.activeStage() == 0) {
+                if (!midRestart && (!REPLACE_BUILDER || replacementVerified) && project.state() == PerimeterProject.State.RUNNING && project.activeStage() == 0) {
                     long stagePlaced = stagePlaced(level, 0);
                     if (stagePlaced >= 8 && stagePlaced < project.active().layout().targets().size()
                             && stableTicks >= 40 && now - lastStableTick <= 1 && closed(builder(level))) {
@@ -414,12 +439,38 @@ public final class NativeStagedHandoffQa {
                 advance(now, 14); return Action.CAPTURE_FINAL;
             }
             case 14 -> {
+                require(!REPLACE_BUILDER || replacementVerified,"Replacement construction evidence missing");
                 require(SHOTS.contains("04-canceled-after-reopen.png"), "Missing actual canceled-world framebuffer");
                 verifyCancellation(level, owner); return Action.DONE;
             }
             default -> throw new AssertionError("Unexpected representative QA phase " + stage);
         }
         return Action.NONE;
+    }
+
+    /** Fixture hires a fresh worker with tools only; production selects and assigns it. */
+    private static void spawnReplacement(ServerLevel level,ServerPlayer owner,long now) throws Exception {
+        BuilderEntity old=builder(level);deadBuilder=old.getUUID();replacementPlaced=placed(level);
+        require(old.hurt(level.damageSources().generic(),Float.MAX_VALUE),"Fixture builder did not take lethal damage");
+        require(!old.isAlive(),"Fixture builder survived lethal damage");
+        var type=ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("workers","builder"));
+        require(type!=null,"Replacement builder registry unavailable");
+        var entity=type.create(level); require(entity instanceof BuilderEntity,"Replacement builder type changed");
+        BuilderEntity next=(BuilderEntity)entity;
+        next.moveTo(NativeStagedHandoffFixture.CORE.getX()+2.5,65,NativeStagedHandoffFixture.CORE.getZ()+2.5,0,0);
+        next.finalizeSpawn(level,level.getCurrentDifficultyAt(next.blockPosition()),net.minecraft.world.entity.MobSpawnType.COMMAND,null,null);
+        WorkersBridge.enablePlayerJob(next,owner.getUUID());next.setPersistenceRequired();
+        next.getInventory().setItem(6,new ItemStack(Items.BREAD,64));
+        next.getInventory().setItem(7,new ItemStack(Items.DIAMOND_PICKAXE));
+        next.getInventory().setItem(8,new ItemStack(Items.DIAMOND_AXE));
+        next.getInventory().setItem(9,new ItemStack(Items.DIAMOND_SHOVEL));next.getInventory().setChanged();
+        var goal=next.goalSelector.getAvailableGoals().stream().map(g->g.getGoal()).filter(BuilderWorkGoal.class::isInstance).map(BuilderWorkGoal.class::cast).findFirst().orElseThrow();
+        var storage=next.goalSelector.getAvailableGoals().stream().map(g->g.getGoal()).filter(GetNeededItemsFromStorage.class::isInstance).map(GetNeededItemsFromStorage.class::cast).findFirst().orElseThrow();
+        fixture=new NativeStagedHandoffFixture.Fixture(next.getUUID(),fixture.storageIds(),fixture.claimIds(),fixture.plan(),fixture.oracle(),
+                goal,storage,fixture.nonPlanCells(),fixture.parkedAuxiliaries());
+        liveBuildGoal=goal;liveStorageGoal=storage;
+        require(level.addFreshEntity(next),"Replacement hire could not enter fixture world");
+        replacementSpawned=true;replacementTick=now;stableTicks=0;
     }
 
     private static boolean cancelThroughMenu(Minecraft mc) {
