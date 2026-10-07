@@ -7,7 +7,7 @@ This candidate contains PR #286 gate-waypoint recovery and depleted-material que
 - Recovery production source: `95dd161d371dce9bbc906af0e27d6b3e08a236f8`.
 - Full regression Build: https://github.com/boostbar9/Faction-Raids/actions/runs/37569414853 ; downloaded XML verifies 1,995 tests / 293 suites with zero failures/errors/skips.
 - Actual stepped/gated construction and world restarts: https://github.com/boostbar9/Faction-Raids/actions/runs/37569414849 ; artifact 11464486536, status passed, 3,831 completed blocks, one 64-emerald debit, finite material conservation, mid-stage restart at 871 and between-stage restart at 3,480.
-- The native checkout merge tree equals the recovery branch tree. Only version and release documents change for this candidate. Final versioned source/build, dedicated startup with all required companion mods, exact reobfuscated JAR hash and release receipt must be pinned before publication.
+- The native checkout merge tree equals the recovery branch tree. The final candidate also preserves the existing exact block/coordinate text when stepped ground review refuses a site; its regression verifies atomic refusal. This changes only failure reporting, not feasible geometry, accepted plans or native AI. Final versioned source/build, dedicated startup with all required companion mods, exact reobfuscated JAR hash and release receipt must be pinned before publication.
 
 ## Focused release review
 
