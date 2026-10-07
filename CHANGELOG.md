@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 36570)
-Total output lines: 1354
-
 ## 4.53.0-alpha.2 - Perimeter travel and material recovery
 
 - Keep the exact blocking block and coordinates when stepped ground review refuses a site.
@@ -451,7 +448,385 @@ Total output lines: 1354
 
 # 4.47.19 beta
 
-- Every sealed loot box now guarantees a named, enchanted Olympian armory piece plus provisions. Twelve patron identities …11570 tokens truncated…b the same way any native Workers 2 job does, instead of forcing our raider night-shift goal onto them. The raider goal only fires when the worker has a raid team tag and an active enemy camp, so installing it on your builder actually disabled their AI. v4.23.1 uses a player-safe attachment that sets ownership and work state and leaves every native goal in place, so the builder walks to the buildarea, pulls blocks from your storagearea, and places them like any Workers 2 build.
+- Every sealed loot box now guarantees a named, enchanted Olympian armory piece plus provisions. Twelve patron identities span weapons, armor, shields and tools, with stronger materials and enchantments at higher rarities.
+- Rare and Epic boxes carry repairable relics such as Poseidon's Riptide trident, Zeus' returning thunderbolt and Hermes' fall-cushioning boots. Apollo's flaming Sunbow keeps Infinity instead of Mending. Armor has patron-colored trims; all abilities use vanilla enchantments.
+- Added useful themed supply bundles, real healing/speed potions and snaring arrows with working Slowness. Extra supply categories cannot repeat within one box. Epic boxes also guarantee an enchanted golden apple.
+- Opening a box names the armory prize and adds a short patron-colored particle/chime reveal. Contents stay hidden while sealed. Prices remain 16/48/96 emeralds and the existing rarity floors and wave-drop chances are unchanged.
+- Fixed partial inventory insertion duplicating the original reward in overflow drops. Opening the last box frees its slot before delivery.
+
+# 4.47.18 beta
+- Respect native vessel boarding rules and keep vanilla fallback boats at two crew members.
+- Check diagonal spawn-area corners, world borders and nearby entities before placing invasion vessels.
+- Give newly supplied friendly and enemy siege engineers a finite repair kit for native repairs. Existing inventories are unchanged.
+
+# 4.47.17 beta
+- Fix native diplomacy updates calling Villager Recruits' faction manager instead of its separate diplomacy manager. Siege hostility, relationship repair and post-siege neutral resets now reach the correct API.
+- Read the current diplomacy manager after server restarts and preserve safe handling while it is unavailable.
+- Record the Recruits 1.15.2 / Workers 2.0.3 source compatibility review and add tests that distinguish their manager types.
+
+# 4.47.16 beta
+- Enemy builders announce the Olympian installation they are starting and the advantage it will provide, giving defenders a chance to disrupt construction.
+- New camp installations grant their bonus only after the entire native build order finishes. An early centerpiece or abandoned shell no longer provides a finished building's advantage.
+- Keep completed-building sabotage, existing saved installations and finite construction supplies intact.
+
+# 4.47.15 beta
+- Arrange camp upgrades around the actual main gate, keeping a five-block-wide approach clear of pavilions and new supply barrels.
+- Add four interior corner sites when the main building wings are occupied, with space for the palisade and corner towers.
+- Reject pavilion foundations without solid support. Existing buildings and saved camp layouts stay in place.
+
+# 4.47.14 beta
+- Give each Olympian host its own camp installation names and active-building effects, with clear messages describing the benefit lost when a building falls.
+- Replace mismatched hero effects with patron signatures: Poseidon's sea surges, Ares' burning battle fury, Hephaestus' forge sparks, Athena's aegis magic and Artemis' moonlight. Newly summoned wolves are named Moon Hounds.
+- Offensive hero spells now wait for a living, visible enemy. Area spells no longer consume their cooldown when no eligible enemy is in reach.
+- Keep existing damage, effect durations, cooldowns, camp benefits and saved identities. Reduce particle counts for the tidal nova, battle fury and hound effects.
+
+# 4.47.13 beta
+- Fix the solid core blocking its own capture sight checks. Walls and roofs still prevent capture through cover.
+- Keep troops assigned to another siege out of a core's capture count. Native soldiers of the actual occupying faction still contest recovery.
+- Abandoned capture progress now drains at one second per second. Occupied ties still pause, and larger armies do not shorten the hold timer.
+- Reset recapture progress when the observed occupying faction changes, and reject enemy-core victory if its camp claim has been removed, replaced or transferred.
+
+# 4.47.12 beta
+- Fix commissioned wall blueprints shifting sideways when an outer edge is already built or protected. Existing solid blocks are no longer queued for demolition, and unloaded wall columns are left alone.
+- Grade camp-building entrances into walkable, three-wide steps; reject blocked interiors and sites without a safe connection to the courtyard.
+- Keep later camp buildings and supply barrels out of saved entrances and core courtyards. New perimeter gates record their actual ground height for troop waypoints.
+- Let attackers choose reachable floor beside a Siege Core during their final approach, using their actual collision size. Existing routes and protected-block breaching rules remain in place.
+
+# 4.47.11 beta
+
+- Fix Provisioning's interest bonus being skipped by automatic Treasury settlement and wave-clear payouts. All settlement paths now apply the same effective rate, whether the Command Center is open or closed.
+- Show the effective interest rate in the Treasury and label its interval as one in-game day instead of 24 hours. The existing interest cap, fractional carry, and saved payout timing still apply.
+
+# 4.47.10 beta
+
+- Remove stale enemy camp territory claims left behind by older or interrupted sieges. These invisible Recruits reservations could prevent players from claiming otherwise-empty land; active camps, occupied Siege Core territory and camps captured by players remain intact.
+- Run camp-claim maintenance once per interval and limit full native-claim discovery to every five minutes, avoiding repeated registry scans on the server tick.
+
+# 4.47.9 beta
+
+- Detach a failed Workers 2 wall job before resetting the builder's movement state. If detachment is rejected, the live job and working state now remain together instead of stalling.
+
+# 4.47.8 beta
+
+- Preserve a failed Workers 2 wall build area when the builder still references it, instead of discarding the entity and leaving a broken job pointer.
+- Report reflective detachment failures accurately while still allowing an incompatible movement-state reset to complete the safe half of cleanup.
+
+# 4.47.7 beta
+
+- Roll back a partially assigned Workers 2 build area when a wall commission fails, so the builder does not remain stuck in working mode on a discarded job.
+- Restore the builder's previous native job when the reflective Workers 2 handoff is incompatible, and never clear an unrelated job during cleanup.
+- Run movement-state and area cleanup independently so an incompatible optional API cannot block the rest of the rollback.
+- Treat a paid, started wall commission as successful even if later confirmation text or logging fails, preserving both the work and the player's Treasury purchase.
+
+# 4.47.6 beta
+
+- Check a wall area's current owner before reconnecting its saved job, including when the builder loads later. Transferred areas cannot reserve a former owner's builder.
+- If ownership is temporarily unavailable, keep the job pending and retry when it can be verified.
+- Remove confirmed ownership transfers from the former owner's pending-job scans.
+
+# 4.47.5 beta
+
+- Keep a wall builder's saved job reserved while chunks load, so a second wall area cannot replace it before work starts.
+- New perimeter commissions also wait for saved wall jobs to finish instead of replacing them during recovery.
+- Respect transferred workers and build areas. Recovery no longer assigns them back to a former owner, and waits when ownership cannot be read.
+- Keep enemy camp workers out of player wall recovery and remove unloaded or finished jobs from pending scans. Unfinished areas register again when their chunks load.
+- Includes the 4.47.4 wall-job reload and legacy migration fixes.
+
+# 4.47.4 beta
+
+- Recover paid Fortify Perimeter jobs when their Workers 2 builder loads after the wall build area. The correct owner's builder reconnects automatically or after finishing another job; other workers and active jobs are left alone.
+- Migrate older wall areas using positive player-owned Workers 2 evidence instead of raid timing. Active sieges no longer cause legacy player jobs to be discarded, while raider-team areas remain enemy assets and follow normal cleanup.
+- Limit reload checks to real Workers 2 builders and preserve existing saves, wall prices, Treasury rules, required and optional dependencies, claims, and player-supplied inventories.
+
+# 4.47.3 beta
+
+- Restrict the expanded masonry-and-plank breaching fallback to real Siege Core assaults. Legacy named defense points and synthetic claim targets no longer gain the stronger whitelist merely because their perimeter phase has been breached.
+- Preserve ordinary door, fence and siege-breach behavior, the 24-block claimed-core limit, tracked restoration, existing saves, prices and dependency requirements.
+
+# 4.47.2 beta
+
+- Modernize all five Command Center tabs around one quieter navy-and-aged-gold visual system: flat tab rails, slim purpose-colored card accents, clearer hover states, compact text badges and consistent two-line page headers.
+- Keep Army offers centered on real equipped Recruits and Workers previews while adding readable availability and hero-rarity states without restoring the removed mystery glyphs.
+- Rebuild Loot as an Olympian reliquary view with sealed/opening/revealed states, blessing-duration badges and an explicit no-preview protocol. Correct its copy to state that Command Center purchases debit the faction Treasury, not personal emeralds.
+- Rebuild Treasury around three glanceable metrics for balance, next-wave reward and daily interest, plus a cleaner member roster and palette-matched transaction graph.
+- Use Territory's former empty area for kingdom-readiness progress, permanent-decree status and Workers 2 perimeter requirements. Add clear fortification tooltips without changing prices or job behavior.
+- Present Intel entries as scrollable dossier cards with modern sub-navigation while preserving the complete unit, Olympian-host and field-playbook content.
+- Reduce HUD frame cost by replacing the full-window tiled backdrop and oversized ornamental corners with a gradient surface and lightweight architectural lines. Preserve responsive scaling, live models, hidden loot, save/network formats and server-authoritative purchases.
+
+# 4.47.1 beta
+
+- Restore real, continuously visible Recruits and Workers entity previews to all four Army offer cards. Models wear their preview loadouts and follow the cursor again; the flat procedural avatars now appear nowhere in the normal Command Center path.
+- Correct preview entity selection for the complete twenty-hero Olympian roster. Later heroes now map through their actual Recruit class instead of `role - 10`, and previews reuse the production equipment paths, including supported Epic Knights and Musket equipment when installed.
+- Remove the unclear equipment glyph rows, large tab-corner emblems and decorative icons from tabs, status, upgrades, blessings, roster and action buttons. Keep real Minecraft emeralds and revealed reward items where an item sprite has literal meaning.
+- Reduce Command Center frame work while preserving four live models: cache fitted and wrapped text, remove continuous motes and additive glow passes, remove three obsolete hidden map widgets, and keep control-state updates at game-tick frequency.
+- Tighten Army card text flow and use readable headings across Loot, Treasury, Territory and Intel at detailed and compact GUI sizes.
+- Preserve Minecraft 1.20.1 Forge / Java 17, saves, gameplay balance, loot-box prices, required and optional dependency metadata and server-side purchase validation.
+
+# 4.47.0 beta
+
+- Let stranded invasion crews disembark onto the prevalidated landing beach even when their vessel stops outside its old local landing search, while retaining collision, fluid, world-border and loaded-chunk safety checks.
+- Preserve player-commissioned Workers 2 fortification jobs across chunk and server reloads. Wall build areas now use a durable player-builder link instead of the enemy-camp cleanup tag, including migration for still-active legacy jobs.
+- Improve the final approach to claimed Siege Cores: raiders can operate ordinary doors, and breachers may slowly open a restored passage through a narrow whitelist of common masonry or planks within 24 blocks of the core. Containers, valuables, obsidian, machinery, foreign claims and the restoration cap remain protected.
+- Place new enemy pavilions wholly inside the palisade with a paved, validated three-wide approach. Preserve openings for older saved camps whose pavilion doorway intersects the later wall.
+- Make the Sanctuary of Demeter, Forge of Hephaestus and Strategion of Athena visibly active with bounded thematic particles while retaining their guard-healing, guard-damage and wave-coordination effects.
+- Reduce Command Center frame cost by rendering at most one live third-party entity preview while hovered and using the custom static portraits for the other cards. Button labels and state now update once per game tick instead of allocating again every rendered frame.
+- Preserve Minecraft 1.20.1 Forge / Java 17, saves, required and optional dependency metadata, loot-box prices, player structures, claims and existing restoration safeguards.
+
+# 4.46.0 beta
+
+- Turn every fifth wave into a clearly telegraphed patron-specific signature assault. Poseidon commits a Tidal Onslaught, Ares a Bronze Spearhead, Hephaestus a Forge Engine Advance, Athena an Aegis Phalanx, and Artemis a Moonlit Hunt, each with its own roster, title, sound cue and counterplay warning.
+- Give newly established Olympian camps distinct six-unit garrisons and defensive leashes: Tidewatch Sentries, Bronze Gateguards, Forgeward Sentries, Aegis Sentinels and Silver Hunt Wardens. New core keeps also use patron-specific pillar silhouettes; existing cores and guards keep their saved positions while guards adopt the matching title and leash.
+- Let coastal war camps actually deploy their configured naval contingent instead of redirecting would-be ship crews back through the land gate. Poseidon's checkpoint assault commits at least 75% of eligible non-cavalry troops to ships when a safe staging route exists.
+- Keep the Treasury interest countdown at `Due now` after its deadline until settlement advances the saved payout anchor, rather than wrapping to another future-day countdown.
+- Preserve the exact configured order of repeated wave roles, keep Artemis' Hunter's Mark command to its promised five seconds, and normalize both 4.44 boolean and 4.45 integer hero-identity markers into a save-compatible boolean plus a separate schema field.
+- Preserve wave/entity caps, ordinary reward balance, existing raids and saves, faction IDs, restoration limits, dependency requirements and player structures. Signature assaults replace normal wave slots instead of adding unbounded enemies.
+
+# 4.45.0 beta
+
+- Give every Olympian war host a real battlefield doctrine: Poseidon's broad tidal line, Ares' melee-heavy spearhead, Hephaestus' supplied siege column, Athena's captain-led shield square, and Artemis' ranged skirmish screen. Terrain and specialist safety can still override formation orders when needed.
+- Give each Strategos a distinct, five-second signature command at half health: Tidal Advance, War Cry, Forge Ward, Aegis Order, or Hunter's Mark. Effects are bounded, visible and non-destructive; they do not place water, spread fire, or alter terrain.
+- Bind enemy champions to the patron leading their invasion. The twenty existing hero roles are divided into four champions per host while preserving role IDs, rarity, prices, stats and mechanics. Untouched 4.44 names migrate; player-renamed heroes remain unchanged.
+- Give each host a recognizable command keep and progressive camp skyline using patron-specific palettes: prismarine waves, blackstone battlements, copper forge chimneys, a quartz acropolis, or a moss-and-birch hunting shrine.
+- Update Intel lore with each host's doctrine, camp silhouette, Strategos ability and counterplay. Existing faction IDs, active raids, saves, claims, diplomacy records, restoration tracking and dependency requirements remain compatible.
+
+# 4.44.0 beta
+
+- Recast the five enemy factions as Olympian war hosts: Poseidon's Tide, the Warhost of Ares, the Forgeguard of Hephaestus, the Aegis Order of Athena, and the Silver Hunt of Artemis. Their banners, map colors, uniforms, lore, commander titles, and visible territory names now share that identity.
+- Retheme all twenty recruitable and enemy heroes with Greek names, Olympian patrons, divine equipment names, and matching ability descriptions while preserving every role, rarity, price, stat, and combat mechanic.
+- Migrate untouched legacy hero names automatically. Heroes renamed by a player keep their custom names, and existing faction IDs, claims, diplomacy records, trophy data, active raids, and configuration allowlists remain compatible.
+- Give new enemy core sanctuaries and progressive camp pavilions a marble, quartz-column, and colored-terracotta visual language without changing their footprints, finite construction budgets, or restoration behavior.
+- Keep Minecraft 1.20.1 Forge, Java 17, the required dependency contract, save format, and loot-box prices unchanged.
+
+# 4.43.3 beta
+
+- Keep occupied Siege Cores recoverable when another Recruits faction takes control of the same native claim instead of leaving the occupation permanently stuck.
+- Count the current claim holder's nearby players and Recruits soldiers as opposition during recovery, while unrelated factions remain neutral to the capture meter.
+
+# 4.43.2 beta
+
+- Normalize saved `team:<id>` keys before calling Villager Recruits' diplomacy manager, so active-siege hostility is applied to the real faction instead of an unknown prefixed identity.
+- Ignore solo-player fallback keys at the native diplomacy boundary while preserving the existing safe no-op behavior when the Recruits API is unavailable.
+
+# 4.43.1 beta
+
+- Keep enemy command-core courtyards protected even when War Gate planning fails, and reject overlapping Workers 2 construction before gate or road setup can mutate the camp.
+- Keep every alternative five-wide command keep inside the camp palisade and cache queued columns plus claim checks during site searches, avoiding repeated work when terrain blocks placement.
+- Reassert Villager Recruits hostility in both directions during an active siege. A diplomacy change to neutral or ally can no longer disable native enemy targeting mid-battle; the relationship still resets when the siege ends.
+- Preserve existing cores, capture progress, faction claims, loot-box prices, dependency requirements, and save compatibility.
+
+# 4.34.0
+
+- Overhauls the Siege Overhaul creative tab. The generic Recruits spawn eggs are gone, replaced with dedicated spawn eggs for every hireable unit in the mod: the four recruit tiers (Recruit, Shieldman, Archer, Crossbowman) and every one of the twenty heroes across all five rarities.
+- Each egg spawns the unit in the exact same gear it would arrive in through a Siege Core hire. Recruits get their trimmed iron and chainmail armor, matching weapon, and a random first name. Heroes get their tier-appropriate gear from HeroTraits, an XP level 10 head start, a 60-hp health floor, +4 attack, bread and arrows where appropriate, and the hero flag so downstream systems recognize them.
+- Each egg has its own texture, colored to match the unit's tier. Recruits are palette-coded by role (gray, blue, green, brown). Heroes are colored by rarity: white Common, green Uncommon, blue Rare, purple Epic, gold Legendary. A weapon glyph on the egg tells you at a glance what the unit fights with, or a sparkle for mage heroes.
+- Egg names show the full hero name in the tooltip in the vanilla rarity color, so a stack of Solmyra the Radiant eggs reads in gold like a legendary should.
+- No hidden dependency: if Villager Recruits isn't installed, the egg politely tells you rather than spawning nothing.
+
+# 4.33.1
+
+- Redraws all four loot box textures in a proper vanilla item style. The originals were too polished and read like mobile-game gacha art next to real Minecraft items. New textures are 32x32 with a flat head-on view, a hard black outline, and a limited palette per tier so they sit next to a vanilla chest item without looking out of place.
+- Common gets iron bands on oak. Uncommon adds bronze bands and a green rarity halo. Rare has silver bands and a sapphire gem on the lid with a blue halo. Epic has gold bands on darker wood and an amethyst gem with a purple halo.
+
+# 4.33.0
+
+- Loot boxes are now real items you get for surviving a wave, instead of automatic emerald deposits alone. Every online defender receives one loot box at the end of every cleared wave, and higher waves shift the odds toward better boxes.
+- Four rarity tiers with their own textures: Common (iron-banded oak), Uncommon (bronze), Rare (silver with a sapphire), and Epic (gold with amethyst). The item name is color-coded by tier, and the tooltip tells you what you're holding.
+- Right-click a box to open it. A chest-open sound plays, a firework-star pop appears above your head, and the contents drop into your inventory (overflow drops at your feet so a full inventory never eats it).
+- Contents scale to the box. Common boxes carry iron, arrows, and basic building materials. Uncommon adds gold and a few emeralds. Rare pulls diamonds, ender pearls, and experience bottles. Epic can drop netherite, enchanted golden apples, and totems of undying.
+- Rough distribution: wave 1 clears are almost all Common with a small shot at anything better, by wave 10 you're seeing Rare boxes regularly and Epics start showing up, and past wave 20 the mix is dominated by Rare and Epic. A lucky wave-1 clear can still pop an Epic; it just isn't the usual outcome.
+- Loot boxes stack up to 16 in a single slot so they don't clog inventory when you're running a long Endless push. They're also listed in the creative Tools tab.
+
+# 4.32.0
+
+- Adds a proper Siege Overhaul tab to the vanilla advancement screen. Open your advancements (default L key) and there is now a full tree tracking your first kill, your first held wave, your first won raid, your first commander down, your first faction met, and every milestone that comes after that.
+- Tracks flawless defense two different ways. Win a raid without a single wall block being breached and you get Perimeter Intact. Win a raid without a single defender dying and you get Untouchable, which is the hidden challenge tier and pays real experience.
+- Tracks the five raiding factions as a set. Meet any faction for the first time and you get Faction Scholar. Meet all five and you get Know Thy Enemy, which is a full goal on the tree.
+- Tracks commanders the same way. Kill any commander and you get Commander Down. Kill a commander from all five factions and you get Regicide, which is hidden until you've done at least one, and drops a fat experience payout when the fifth one falls.
+- Tracks Endless siege progression. Voting to continue past wave 5 unlocks Endless. Reaching wave 10 in Endless gives you Double Digits. Reaching wave 25 in the same Endless push is the hidden long-war challenge.
+- Tracks career wins as Warlord, which unlocks after your tenth won raid. Win counter persists across relogs.
+- No new HUD and no new menu. Everything routes through the vanilla advancement screen so it reads exactly like a base-game achievement tree, just with siege-specific milestones inside it.
+
+# 4.31.0
+
+- Wave clears play a quiet experience-ping so the beat lands with sound, not just chat. Defeats now close on a low wither-death shout that fades like a war horn dying. Victories still get the raid horn they've always had, so the whole raid arc reads audibly whether or not chat is on screen.
+- Pending-spoils lookup on login no longer swallows failures silently. If a saved-data problem ever stops a returning player from being told about their unclaimed rewards, it now shows up in the server log so admins can catch it instead of the reward just seeming to vanish.
+
+# 4.30.0
+
+- Raider factions actually declare on your faction now. When a raid starts the attacking clan is marked ENEMY inside Villager Recruits' diplomacy manager, and marked back to NEUTRAL when the raid ends. That makes Recruits' own target selectors, HUD tints, and the vanilla diplomatic-status toast light up correctly instead of treating them as generic neutrals.
+- Treasury deposit and withdrawal notices no longer stomp the raid HUD. The action-bar copy of every purchase or bounty landed on the same row as the current phase and stronghold status, which flickered during a fight; it is chat-only now, so the raid HUD stays put.
+- Warlord's Codex attacker marker uses a real iron sword icon instead of the crossed-swords Unicode character. Font packs without that glyph were rendering a tofu box next to the attacking faction; the new marker reads on every default and modded font.
+
+# 4.29.1 beta
+
+- Keep the enemy command core in its raised keep, preferring a clear camp center and trying interior courtyard sites when the center is blocked.
+- Require a dry, supported footprint and open headroom; avoid roads, queued buildings, foreign claims and unloaded terrain. Reserve the keep against later obstructions.
+- Preserve existing active cores and capture progress.
+
+# 4.29.0
+
+- Marching enemy armies show up on the Recruits map. Press M and you can watch a column close on your territory the same way you watch your own recruits move. Soldiers and their siege engines get their own icons and slide across the map as the army advances.
+- Siege engines that fall behind now catch up. Catapults and ballistas are tracked by the loaded corridor alongside the infantry, so an engine no longer freezes in an unloaded chunk while the soldiers walk on. An engine that gets wedged sweeps its waypoint wider, shortens its steps, and after a few failed attempts is set down a few blocks further along its march line onto solid ground.
+- Artillery no longer parks inside the camp wall. Engine slots stay clear of the wall line and the ground the camp still has to build on, which was the main reason builders were found grinding against a catapult.
+- Camp builders can no longer be stuck on one project forever. A cell a builder cannot fill is left out of the plan, and a job that has made no progress for the configured time is abandoned so the camp moves on. In practice that is what kept the perimeter wall and its corner towers from ever being started. The gap before the next wall section or tower starts is now a minute by default and configurable.
+- Hero prices are down to a straightforward ladder. A Common hero costs 50 emeralds and each rarity above it adds another 50, up to 250 for a Legendary, instead of being scaled off recruit prices. Both the starting price and the step per rarity are configurable.
+- Raiders can actually climb their siege ladders now. A climber holds itself lined up with the rung column, a raider that loses its grip grabs the ladder again rather than dropping to the ground, climbers get the extra lift they need to step onto the walkway, and a ladder that really cannot be climbed is abandoned after a few seconds so the raider goes back to the assault instead of grinding against the wall.
+- War chests are completely rebuilt. Each of the three chests pulls from its own long, hand-picked table with dozens of possible outcomes, so opening the same chest twice rarely gives the same reward. Common rolls hand out supplies and materials, uncommon rolls hand out iron gear and potions, rare rolls hand out trimmed diamond pieces and modest weapons, and epic rolls hand out named trophies with sensible vanilla enchantments. No auto-Mending, no Fire Aspect stacking, no chest-only custom enchants; the gear is meant to feel earned, not to trivialize the rest of the game.
+- Every chest purchase now draws from the faction Treasury only. The war-key system and the three custom enchantments introduced in an earlier beta have been removed; if you have unused war keys from a beta build they will disappear on load without affecting anything else.
+- Command Center Loot page updated to match. The old key counter is replaced with an odds hint, so the panel actually reflects how the chest rolls.
+
+# 4.28.19 beta
+
+- All Command Center purchases use faction Treasury emeralds only. Deposit emeralds before buying units, siege kits, walls, upgrades, loot boxes or blessings; personal inventory is never used as a fallback.
+- Rename the Bank tab to Treasury and align purchase availability and help text with the shared balance.
+- Preserve saved balances, deposits, withdrawals and creative-mode purchases.
+
+# 4.28.19a beta
+
+- Enemy armies now carry their own loaded ground with them. A column that leaves a distant camp keeps ticking the whole way to your territory instead of freezing in unloaded chunks and never arriving, and an army caught mid-march by a server restart is pulled back into the world instead of being stranded. The corridor is capped and its chunk holds expire on their own, so nothing stays force-loaded after a siege.
+- The Siege Core contest is much tighter. The ring is now a low cylinder around the core rather than a wide bubble, the default radius drops from 10 blocks to 6, and combatants must have a clear view of the core, so troops standing on the roof above it or outside the wall no longer count toward capture or recapture. Both the radius and the height band are configurable.
+- Camp guards no longer arrive as full veterans. The garrison starts close to its normal Recruits stat line on the opening wave and earns its extra health, damage and knockback resistance as the siege reaches its later waves. Existing guards keep the stats they already had, and a new setting scales or disables the bonus entirely.
+- Hero hiring is priced by rarity again. A single flat minimum meant every rarity below Legendary cost the same 256 emeralds on ordinary recruit prices; each rarity now has its own minimum, so Commons stay affordable and Legendaries cost what they should.
+
+# 4.28.18 beta
+
+- Enemy troops leaving camp now walk out through the main gate instead of piling up against the inside of the wall. A unit still inside the perimeter heads for the gateway first, steps clear of it, and only then makes for its objective.
+- Formation orders hold off while a squad is still inside the wall, so a formation waypoint can no longer drag troops back into the stonework they were trying to get around.
+- Siege crews are handled the same way. An operator riding or walking with an engine is routed out through the gate before it resumes following its machine.
+- Replacement crews for a damaged engine now muster just outside the main gate rather than in the middle of camp, so they are not spawned behind their own wall.
+- The gateway threshold is paved level with the gate and carried a block past the wall on both sides, so nobody drops into a dip or catches a step on the way through.
+
+# 4.28.17 beta
+
+- Enemy camp builders now raise a defensive wall around the edge of the camp's own territory instead of only putting up a handful of outbuildings. The wall goes up one side at a time so a crew can finish a section before starting the next.
+- The wall keeps a wide main gate on the side the War Gate road comes in on. The gateway stays permanently open under a raised beam, so the road, reinforcements and the camp's own builders are never walled in.
+- A guard tower goes up at each corner of the camp's territory, with battlements at the top for archers.
+- Two extra camp sentries now take station either side of the main gate once it exists, and fall back to the wall line if their post is blocked.
+- Wall and tower sections skip any column sitting over a ravine, water or foreign claim rather than abandoning the whole section, and a section that cannot be started at all is retried a few times before the camp moves on.
+
+# 4.28.16 beta
+
+- Enemy troops no longer march off cliffs and ledges into a lethal fall. A raider that spots a killing drop in front of it stops, kills its forward momentum and steps back, and the assault orders leave it alone until it is back on safe ground.
+- Drops onto lava count as lethal, drops into water do not, and a raider warped forward past broken terrain no longer takes fall damage from the warp.
+- Enemy bridge builders actually show up now. The crew check was looking for troop roles that sieges never assign, so no wave could ever produce a builder. Ordinary line troops are eligible again, and the start of a crossing is written to the server log.
+- Fortify Perimeter is far more reliable. The job now goes to the closest free builder of your own instead of whichever builder happened to be nearby, never to a busy, fleeing or enemy camp builder, and the commission fails with a refund-safe error instead of charging you when the builder will not take the blueprint.
+- Fortify Perimeter only queues wall sections your storage area can actually supply and tells you how many sections were left out, so a wall on a large claim no longer stalls part-way through with no explanation.
+
+# 4.28.15 beta
+
+- Give blocked enemy assaults a dedicated bridge-builder role, using an existing soldier rather than unlimited extra reinforcements.
+- Build temporary crossings progressively across water and dry gaps toward the defending territory, with a configurable span limit, saved construction budgets, and restoration tracking.
+  - New configs default to 24-block spans (`maxBridgeSpan`, configurable up to 64), four attempts, and 96 planks per raid (`maxBridgeBlocksPerRaid`). Existing configured span limits are retained.
+- Keep bridge workers out of competing formation, ladder, breach, and straggler orders while they work; require safe, loaded construction routes and respect unrelated claims and later player edits.
+- Move enemy captains and patrol leaders into the assault leadership instead of rear support positioning, while preserving ranged and siege support behavior.
+  - Prevent the native captain land-army controller from overriding siege orders with regroup/retreat commands; retain native individual combat and ship controls.
+- Add regressions for bridge construction safety, persistence, work-order isolation, and captain movement.
+
+# 4.28.14 beta
+
+- Command Center polish pass:
+  - Better number readability for prices/reward text and affordability messaging (thousands separators and clearer emerald wording).
+  - Tooltip wrapping now uses the active panel width, improving readability and reducing overflow pressure on scaled/tiny windows.
+  - Long unbroken words in wrapped card text are now clipped with ellipsis instead of bleeding outside card bounds.
+  - Bank messaging now consistently refers to your **purse** (instead of mixed purse/pack wording).
+- Added responsive layout regression tests for `CoreHireLayout` covering roomy, constrained, and tiny-window scaled-canvas behavior.
+- Added hardened Copilot branch auto-publish workflow for CurseForge beta uploads with branch gating, concurrency lock, token preflight, artifact sanity checks, deterministic version metadata, and manual fallback.
+
+# 4.28.13 beta
+
+- Integrate Copilot HUD, onboarding, pathfinding and hero refinements onto current main, preserving the latest camp, inventory and enemy-hero systems.
+- Stabilize the Command Center crest and clarify upgrade affordability. Align Territory cards, hover regions and purchase controls; prevent compact description/status overlap.
+- Cache expensive fallback searches and add configurable final-approach urgency and pathing diagnostics. Rotate bounded breach scans through all sides and validate loaded, dry, in-border standing positions.
+- Use the native engineer compatibility initializer for player siege crews.
+- Give Bloodthorn absorption on a full-health melee hit, Wildsong a temporary attack-speed attribute bonus on confirmed kills, and Stonehand protection after a successful shield block.
+- Preserve attributed, cooldown-limited Starweaver and Ashenheart damage. Keep Ashenheart's working melee flame burst and describe it accurately instead of requiring a nonexistent fireball attack.
+
+# 4.28.12 beta
+
+- Give enemy waves access to all 20 player heroes with the same rarity weights, native equipment, stats and signature abilities.
+- Default to a 10% chance per wave from wave 2 onward, with at most one hero replacing an ordinary wave slot. Preserve commander, ravager and illusioner slots. Configure enemyHeroChancePercent (0 disables).
+- Save hero selection across squad retries and reloads; announce successful hero arrivals and show an Enemy Hero nameplate.
+- Restrict enemy hero abilities to the defending faction and support to their own invasion. Keep enemy heroes unhireable and shadow summons inside raid population and cleanup tracking.
+
+# 4.28.11 beta
+
+- Give future enemy camp upgrades distinct supply shelter, workshop and command shelter layouts, with reinforced lower walls, timber frames and screened openings.
+- Face upgrade entrances toward the main camp, keep a three-block-wide central access route and support raised roof ridges with continuous eaves.
+- Let camp sentries find safe posts up to two blocks above or below their assigned ground level, while avoiding queued fortifications, water and the world border.
+- Keep existing finite builder supplies, construction limits, claim validation and restoration tracking. Already-built camp structures are not rebuilt.
+
+# 4.28.10 beta
+
+- Make faction Treasury notices easier to scan with a gold [Treasury] prefix, green deposits, red deductions, signed amounts, thousands separators and singular wording for one emerald.
+- Combine same-tick transactions into one chat notice, keeping gains and deductions separate so spending remains visible.
+
+# 4.28.9 beta
+
+- Fix loot rewards, siege crew kits and emerald payments appearing stale or missing outside the hotbar while the Command Center is open. Synchronize changed player inventory slots independently of the Core's display menu, including items picked up while shopping.
+- Preserve use of all 36 inventory slots and existing full-inventory delivery rules.
+
+# 4.28.4 beta
+
+- Show faction Treasury changes in chat and the action bar: green gains, red spending/withdrawals, signed amounts and a gold Treasury label. Only the amount actually credited or debited is shown, including the Treasury portion of mixed payments.
+- Notify online members of the affected faction. Combine interest catch-up into one notice and keep failed/zero transactions silent.
+
+# 4.28.3 beta
+
+- Notify players in chat when Forge detects a newer Siege Overhaul release, with installed/available versions and a clickable CurseForge download link.
+- Delay the notice until the world has loaded and show it once per game launch, including across reconnects. Failed or disabled checks stay silent and never block gameplay.
+- Remind multiplayer players to update the server and clients together. Add the release update feed and publisher checklist.
+
+# 4.28.1 beta
+
+- Pay raider, commander, and scout bounties only when a member of the defending faction or one of its owned Recruits lands the kill. Environmental deaths and unrelated combatants still count toward normal siege progress but no longer create treasury emeralds.
+- Keep scout bounties disabled while a non-rewarding manual raid is active, and carry the scouting payout into the ensuing raid so the configured per-raid cap covers scouts, troops, and commanders together instead of resetting at wave one.
+- Correct Fortify Perimeter's storage validation to search from the commissioned builder, matching Workers 2's actual 64-block runtime lookup. A storage area reachable from the Core but not the builder can no longer be accepted and leave the job stalled.
+- Stop wall-foundation scans at non-replaceable obstructions instead of queuing a disconnected section beneath them. Existing blocks remain protected and Workers 2 receives a continuous build path.
+- Keep each wall segment and corner pillar at its configured height relative to its terrain-adjusted base. Sloped claim edges no longer create empty, buried, or incorrectly tall columns from a top fixed to the Core's Y level.
+- Include the half-block vertical spawn offset in siege-vehicle clearance, so ceilings in the top intersected layer are reported before native collision rejects the deployment.
+- Convert centered non-integral vehicle widths to the block columns they actually intersect instead of rejecting an unnecessarily large pad. Siege-yard help, purchase messages, and item tooltips now report the selected vehicle's actual pad size and required headroom.
+- Added regression coverage for Workers storage masks, wall foundations, vehicle dimension conversion, fallback sizing, top-layer clearance, and player guidance.
+
+# 4.28.0 beta
+
+- Newly generated configs award 5 emeralds per completed wave instead of 4. Forge preserves values already stored in an existing server config, including the former default of 4; set `victoryEmeraldsPerWave` to 5 to adopt the new balance without overwriting intentional custom settings.
+- Reduced major purchase prices: Fortify Perimeter 900 emeralds; Fortified Walls 700; Watchtower 500; Provisioning 900; Iron Levy 600; ballista crew 400; and catapult crew 480. Recruit, worker, hero, loot-box, temporary-buff, bounty, and interest values are unchanged.
+
+# 4.27.1 beta
+
+- Toned down the combat bounties added in 4.27.0 after they filled the treasury too fast on longer raids. Per-raider bounty is now 0 by default so a 30-raider wave no longer stacks another 30 emeralds on top of the wave-clear reward. Turn raiderBountyEmeralds up if you want per-kill bounties back.
+- Commander bounty lowered from 24 to 8 emeralds. Scout bounty lowered from 4 to 2.
+- Added maxBountyEmeraldsPerRaid, a hard cap on the total bounty a single raid can deposit into the treasury (default 32). Wave-clear payouts are not counted against it. Set to 0 to remove the cap.
+
+# 4.27.0 beta
+
+- Combat now fills the faction treasury directly. Every raider your faction defeats deposits 1 emerald into the bank, the siege commander deposits 24 on top of the existing per-player bonus, and every enemy scout your faction kills before the raid deposits 4. These are on top of the guaranteed wave payouts, and they show up on the Bank tab activity graph the same way wave payouts do so you can watch the treasury fill in real time during a big fight.
+- All three bounty amounts are individually configurable and can be set to 0 to disable. Manual raids started with /siegeoverhaul start still respect the manualRaidsGrantRewards toggle, so bounty farming is off by default.
+- Rough scale at defaults: a 30-raider wave with a commander is worth about 54 emeralds in bounties on top of the normal wave reward, and a scouted raid adds another 4 to 8 for cleaning up scouts.
+
+# 4.26.0 beta
+
+- Fortify Perimeter now fills gaps under the wall. If a wall column runs over a pit, ravine, or ledge, the wall extends downward through the air until it hits solid ground (up to 8 blocks). This closes the hole with wall material and gives the Workers 2 builder ground to stand on for the next column, so a single pit no longer stalls the whole perimeter.
+- Siege equipment kits now size the ground-clearance check to the actual vehicle. Catapults are 4 blocks wide, but the old check was a fixed 3 by 3, so the vehicle's corners fell outside the checked columns, the vanilla collision test found a block inside the bounding box, and the deployment failed with the misleading "Siege Weapons rejected the deployment spot" message. The kit now reads the entity's real width and height from Siege Weapons at commission time and inspects every column and vertical layer the vehicle will occupy, with a specific message about which block is in the way.
+- Ballista deployments are unaffected (2 by 2 fits inside the previous 3 by 3 window) but they now get the same accurate error messages when something is in the way.
+
+# 4.25.0 beta
+
+- Audited how Workers 2 builders actually pull materials from a storagearea. Found one silent failure mode that ate Fortify Perimeter commissions if the player's storagearea wasn't configured right, plus a subtle mismatch between where we searched for the storagearea and where the builder searches at runtime.
+- Fortify Perimeter now checks that your storagearea has Builders enabled in its GUI before it accepts your commission. Workers 2 gates every storagearea by job type, and if Builders isn't ticked the builder silently reports "No available storage found nearby" even though your storagearea is sitting right there. You now get a specific message telling you to open the storagearea and turn Builders on.
+- The storagearea search now anchors on your Core instead of on the builder. Workers 2 searches for storageareas from the builder's current position (which moves), and the Core is the stable centre of your perimeter, so this matches where the builder will actually spend most of its time working the wall.
+- If a storagearea in range doesn't have Builders enabled we still surface it (as a fallback candidate) instead of silently returning "not found", so you always get the actionable message.
+
+# 4.24.0 beta
+
+- Audited Fortify Perimeter against the actual Workers 2 source. Two more real problems came out of it and are fixed here.
+- The buildarea was being wired up before it was spawned into the world. Workers 2 always expects the reverse order (place the area, then push the blueprint), and its own setStartBuild reads live block state at the target positions to compute what still needs to be placed. Fortify now spawns the buildarea first and then hands it the blueprint, matching the built-in flow.
+- The buildarea was being tagged with the RAIDERS faction and team access off, which was harmless for the player-UUID access check but wrong on paper and could interact poorly with other systems that filter by faction. A new player-area path creates the buildarea with no team gating so it looks and behaves like any manually placed one.
+- Also passes the player's actual game name through to the area's owner label so the tooltip reads as your player instead of "Siege camp".
+
+# 4.23.1 beta
+
+- Fortify Perimeter now attaches your builder to the job the same way any native Workers 2 job does, instead of forcing our raider night-shift goal onto them. The raider goal only fires when the worker has a raid team tag and an active enemy camp, so installing it on your builder actually disabled their AI. v4.23.1 uses a player-safe attachment that sets ownership and work state and leaves every native goal in place, so the builder walks to the buildarea, pulls blocks from your storagearea, and places them like any Workers 2 build.
 - Removed the raider gear provisioning path from the player builder attachment. Your builder keeps whatever tools and armor you already gave it.
 - The confirmation message now tells you exactly how many blocks of the chosen material to load into your storage area, so you can stock the right amount before the builder starts.
 
