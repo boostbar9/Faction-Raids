@@ -82,7 +82,7 @@ final class PerimeterProjectAuthority {
             var stage=project.active();
             if (stage==null || stage.index()!=scope.stage() || !stage.digest().equals(scope.stageDigest())
                     || !stage.areaId().equals(area.getUUID()) || builder==null
-                    || !project.header().builder().equals(builder.getUUID())
+                    || !NativePerimeterProjects.assignedBuilder(builder,project)
                     || !project.header().owner().equals(WorkersBridge.readWorkerOwner(builder))
                     || !project.header().owner().equals(WorkersBridge.readOwner(area)))
                 return "Paused: whole-perimeter stage ownership or identity changed";
