@@ -61,7 +61,9 @@ public final class PerimeterSteppedGeometry {
                 Ground g;try{g=terrain.ground(p);}catch(RuntimeException|LinkageError unavailable){g=null;}
                 ground.put(p,g==null?new Ground(0,false,"unavailable"):g);
             }
-            Ground g=ground.get(p);need(g.problem()!=null&&g.problem().isEmpty()&&g.surfaceY()>limits.minY&&(long)g.surfaceY()+5<limits.maxY,"Unsafe or unavailable ground");return g;
+            Ground g=ground.get(p);
+            need(g.problem()!=null&&g.problem().isEmpty(),g.problem()!=null&&!g.problem().isBlank()?g.problem():"Unsafe or unavailable ground");
+            need(g.surfaceY()>limits.minY&&(long)g.surfaceY()+5<limits.maxY,"Unsafe or unavailable ground");return g;
         }
         boolean passage(Cell p,int y,Region region){var key=new Probe(p,y,region);if(passages.containsKey(key))return passages.get(key);need(passages.size()<limits.maxPassageReads,"Passage observation budget exhausted");boolean safe;try{safe=terrain.passageProblem(p,y,region)==null;}catch(RuntimeException|LinkageError unavailable){safe=false;}passages.put(key,safe);return safe;}
     }
