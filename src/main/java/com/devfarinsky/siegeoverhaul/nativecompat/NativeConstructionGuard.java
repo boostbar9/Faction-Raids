@@ -874,7 +874,7 @@ public final class NativeConstructionGuard {
             var ledger = ConstructionEditLedger.get(level);
             Snapshot old = snapshot(area); UUID replacement = ledger.assignedBuilder(project);
             if (replacement.equals(old.builder) && replacement.equals(area.reservedBuilderId())
-                    && NativePerimeterProjects.projectLinkMatches(builder,project) && hasProtectedReceipt(builder)) return true;
+                    && NativePerimeterProjects.projectLinkMatches(builder,project) && area.getUUID().equals(protectedReceiptArea(builder))) return true;
             if (!replacement.equals(builder.getUUID()) || !ledger.matchesProjectLease(project)
                     || !owner.getUUID().equals(old.owner) || !old.owner.equals(WorkersBridge.readWorkerOwner(builder))
                     || !area.getUUID().equals(project.active().areaId())
@@ -883,6 +883,12 @@ public final class NativeConstructionGuard {
                         && !ledger.canRebindBuilder(project,area.reservedBuilderId(),area.getUUID()))
                     || !projectSnapshotMatches(project,old.plan,old.reservation,old.before,old.owner,old.builder,
                         old.coreKey,old.corePos,old.builder) || !old.plan.matches(area)) return false;
+            var scope=PerimeterProjectAuthority.read(area.getPersistentData());
+            if (!scope.projectId().equals(project.header().projectId()) || scope.generation()!=project.header().generation()
+                    || !scope.manifestHash().equals(project.manifestHash()) || scope.stage()!=project.activeStage()
+                    || !scope.stageDigest().equals(project.active().digest()) || !scope.coreKey().equals(project.header().coreKey())
+                    || !old.owner.equals(WorkersBridge.readOwner(area))
+                    || PerimeterProjectLink.reserved(builder) && !NativePerimeterProjects.projectLinkMatches(builder,project)) return false;
             Entity current = currentArea(builder);
             if (current != null && current != area || commissionProblem(builder) != null
                     || hasProtectedReceipt(builder) && !area.getUUID().equals(protectedReceiptArea(builder))
