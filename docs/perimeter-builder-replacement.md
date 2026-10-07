@@ -8,6 +8,8 @@ The replacement inherits the unfinished section's protected snapshot, including 
 
 Unknown or conflicting saves pause for review. Assignment history is bounded to 64 projects and 64 replacements per project; exhaustion fails closed. This change maintains one active native section and one assigned builder per project. Concurrent crews need separate task leases and are not enabled here.
 
+Before admitting a later paid section, the controller checks whether the assigned worker overlaps its targets. If so, it requests ordinary native walking to loaded, dry, collision-free standing space near the original marker and outside the entire reserved footprint, with a body-width margin. It creates no marker, lease or admission journal until the builder is clear. Other assignments, combat, leash/passenger state or unavailable ground pause this approach; collision and placement guards are unchanged. This avoids sealing an incomplete admission while the builder itself occupies the next section.
+
 ## Validation
 
 `PerimeterBuilderAssignmentsTest` covers immutable payment/blueprint preservation, saved assignment round trips, repeated deaths, stale-worker rejection, corrupt chains and conflicting identity. `ConstructionProjectLedgerTest` exercises authenticated death, unchanged reservations, edited-site refusal, reload and a second death. These are model/server-boundary tests, not in-game proof.
