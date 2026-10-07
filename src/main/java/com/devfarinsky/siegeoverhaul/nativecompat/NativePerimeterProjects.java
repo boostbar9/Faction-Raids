@@ -308,10 +308,15 @@ public final class NativePerimeterProjects {
         }
     }
 
-    private static boolean idleReplacement(Mob builder) {
+    static boolean idleReplacement(Mob builder) {
         try {
+            int command=((Number)builder.getClass().getMethod("getFollowState").invoke(builder)).intValue();
+            // Workers 2 changes idle command 0 to work command 6 as its selection
+            // goal starts, even before it owns a build area. Both are available
+            // only while the native assignment is empty; following/holding is not.
             return builder.getTarget() == null && !builder.isPassenger()
-                    && ((Number)builder.getClass().getMethod("getFollowState").invoke(builder)).intValue() == 0;
+                    && (command == 0 || command == 6)
+                    && NativeConstructionGuard.currentArea(builder)==null;
         } catch (ReflectiveOperationException | RuntimeException unavailable) { return false; }
     }
 
