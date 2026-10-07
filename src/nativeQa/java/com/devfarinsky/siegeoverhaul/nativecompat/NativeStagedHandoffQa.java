@@ -942,6 +942,7 @@ public final class NativeStagedHandoffQa {
             }
         }
         require("2.0.3".equals(mods.get("workers")) && "1.15.2".equals(mods.get("recruits")), "Unreviewed native API versions");
+        REPORT.put("builderReplacementRequested", REPLACE_BUILDER);
         REPORT.put("loadedModVersions", mods); REPORT.put("loadedCompanionArtifacts", artifacts);
         REPORT.put("nativeApiClasses", Map.of("builder", BuilderEntity.class.getName(), "buildGoal", BuilderWorkGoal.class.getName(),
                 "storageGoal", GetNeededItemsFromStorage.class.getName(), "storageArea", StorageArea.class.getName(),
