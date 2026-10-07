@@ -138,6 +138,7 @@ public final class WallBuilderAccess extends Goal {
             return;
         }
         Entity guardedArea = NativeConstructionGuard.currentArea(worker);
+        clearPreparedPlacementTarget();
         var mutationCells = NativeConstructionGuard.mutationCells(delegate);
         // Workers checks movement every tenth tick but may place every fifth tick,
         // including the first target popped from its stack. Route before dispatch.
@@ -162,6 +163,23 @@ public final class WallBuilderAccess extends Goal {
             route(level, target, state instanceof Enum<?> e && e.name().equals("MOVE_TO_WORK_AREA") ? 20 : 40);
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             // Keep native behavior when a companion changes its public job state.
+        }
+    }
+
+    /** Workers rebuilds its material-filtered queue here but retains the previous block target. */
+    private void clearPreparedPlacementTarget() {
+        if (!(worker.level() instanceof ServerLevel)) return;
+        try {
+            if (stateField.get(delegate) instanceof Enum<?> state
+                    && state.name().equals("PREPARE_PLACE_BLOCKS")
+                    && areaField.get(worker) instanceof Entity area && isCommission(area)) {
+                // A depleted material can leave blockPos outside the newly prepared queue.
+                // Let the next native placement pop its own target; keep the durable plan,
+                // inventory and native supply requests untouched.
+                blockField.set(delegate, null);
+            }
+        } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            // Unsupported companions retain their own preparation behavior.
         }
     }
 
