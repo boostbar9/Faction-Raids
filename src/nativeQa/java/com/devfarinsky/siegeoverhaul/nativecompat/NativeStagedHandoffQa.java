@@ -550,7 +550,8 @@ public final class NativeStagedHandoffQa {
         require(snapshot.get(projectId) == null && terminal != null && terminal.state() == PerimeterProject.State.CANCELED,
                 "Expected durable compact CANCELED receipt after actual native cleanup");
         require(terminal.projectId().equals(projectId) && terminal.manifestHash().equals(acceptedProject.manifestHash())
-                && terminal.owner().equals(acceptedProject.header().owner()) && terminal.builder().equals(fixture.builderId())
+                && terminal.owner().equals(acceptedProject.header().owner()) && terminal.builder().equals(acceptedProject.header().builder())
+                && ConstructionEditLedger.get(level).assignedTerminalBuilder(terminal).equals(fixture.builderId())
                 && terminal.totalTargetCount() == NativeStagedHandoffFixture.BLOCKS && terminal.claimChunkCount() == 1
                 && terminal.activeStage() == 1 && terminal.verifiedStages() == 1
                 && terminal.stages().equals(acceptedProject.stages().stream().map(part -> new PerimeterTerminalReceipt.Stage(
