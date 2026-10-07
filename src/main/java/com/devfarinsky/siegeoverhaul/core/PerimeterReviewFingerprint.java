@@ -19,6 +19,13 @@ public final class PerimeterReviewFingerprint {
     public static String create(PerimeterBlueprint.Plan plan, PerimeterStageLayout.Layout layout,
                                 Map<Long, BlockState> before, Map<Long, BlockState> clearance,
                                 BlockPos core, int material, String territoryIdentity, UUID owner, UUID builder) {
+        return create(plan, layout, before, clearance, null, core, material, territoryIdentity, owner, builder);
+    }
+
+    public static String create(PerimeterBlueprint.Plan plan, PerimeterStageLayout.Layout layout,
+                                Map<Long, BlockState> before, Map<Long, BlockState> clearance,
+                                PerimeterGateContract gateContract, BlockPos core, int material,
+                                String territoryIdentity, UUID owner, UUID builder) {
         if (plan == null || !plan.valid() || layout == null || before == null || clearance == null
                 || !before.keySet().equals(plan.blocks().keySet()) || !clearance.keySet().equals(plan.clearance())
                 || core == null || material < 0 || material > 2 || territoryIdentity == null
@@ -35,6 +42,10 @@ public final class PerimeterReviewFingerprint {
             part(hash,layout.digest());
             new TreeMap<>(plan.blocks()).forEach((cell,id)-> { part(hash,"target"); part(hash,Long.toString(cell)); part(hash,id); });
             states(hash,"before",before); states(hash,"clearance",clearance);
+            if (gateContract != null) {
+                part(hash,"gates"); part(hash,gateContract.digest());
+                states(hash,"gate-observation",gateContract.observations());
+            }
             return HexFormat.of().formatHex(hash.digest());
         } catch (NoSuchAlgorithmException unavailable) { throw new IllegalStateException(unavailable); }
     }

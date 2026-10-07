@@ -270,6 +270,7 @@ if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)
         property 'mixin.env.refMapRemappingFile', project.file('build/createSrgToMcp/output.srg').absolutePath
         property 'siegeoverhaul.nativeQa', 'true'
         property 'siegeoverhaul.nativeQa.mode', nativeQaMode
+        property 'siegeoverhaul.nativeQa.builderReplacement', providers.gradleProperty('nativeBuilderReplacementQa').getOrElse('false')
         property 'siegeoverhaul.nativeQa.sizeableFoliage', sizeableFoliageQa.toString()
         property 'siegeoverhaul.nativeQa.directory', project.file(nativeQaDirectory).absolutePath
         args '--width', '1280', '--height', '720'
@@ -344,3 +345,6 @@ if (providers.gradleProperty('nativeServerQa').map { it.toBoolean() }.getOrElse(
         }
     }
 }
+
+// Separate, opt-in first-slice grading QA; never included in the shipped JAR.
+apply from: 'gradle/native-earthworks-qa.gradle'

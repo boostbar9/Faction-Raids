@@ -3,6 +3,7 @@ package com.devfarinsky.siegeoverhaul.core;
 import com.devfarinsky.siegeoverhaul.ModConstants;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard;
+import com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -16,6 +17,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import net.minecraft.world.level.pathfinder.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -26,6 +28,7 @@ public final class WallBuilderAccess extends Goal {
     private final Field areaField, blockField, stateField, workDoneField;
     private Path pendingPath;
     private Set<BlockPos> pendingSites = Set.of();
+    private boolean pendingDetour;
     private long pendingUntil;
     private static final ClassValue<java.util.Optional<Method>> PATH_READY = new ClassValue<>() {
         @Override protected java.util.Optional<Method> computeValue(Class<?> type) {
@@ -35,6 +38,8 @@ public final class WallBuilderAccess extends Goal {
     };
     private long nextSearch, nextRoute;
     private BlockPos lastTarget, destination;
+    private boolean destinationPartial, destinationDetour;
+    private Set<BlockPos> rejectedArrivals = Set.of();
     private Entity reservedArea;
     private Set<Long> reservedColumns = Set.of();
     private BlockPos approachTarget;
@@ -106,7 +111,8 @@ public final class WallBuilderAccess extends Goal {
             for (int i = 0; i < 3; i++) fields.get(i).set(delegate, new java.util.Stack<>());
             stateField.set(delegate, selection); blockField.set(delegate, null); workDoneField.setBoolean(delegate, false);
             reservedArea = null; reservedColumns = Set.of(); approachTarget = null; lastSelfObstruction = null;
-            pendingPath = null; pendingSites = Set.of(); destination = null; lastTarget = null;
+            pendingPath = null; pendingSites = Set.of(); pendingDetour = false; destination = null;
+            destinationPartial = false; destinationDetour = false; lastTarget = null; rejectedArrivals = Set.of();
             return true;
         } catch (ReflectiveOperationException | RuntimeException unavailable) {
             for (int i = 0; i < fields.size(); i++) try { fields.get(i).set(delegate, previous.get(i)); }
@@ -120,7 +126,7 @@ public final class WallBuilderAccess extends Goal {
     @Override public boolean isInterruptable() { return delegate.isInterruptable(); }
     @Override public boolean requiresUpdateEveryTick() { return delegate.requiresUpdateEveryTick(); }
     @Override public void start() { reservedArea = null; approachTarget = null; lastSelfObstruction = null; delegate.start(); }
-    @Override public void stop() { delegate.stop(); reservedArea = null; approachTarget = null; lastSelfObstruction = null; destination = null; lastTarget = null; pendingPath = null; pendingSites = Set.of(); }
+    @Override public void stop() { delegate.stop(); reservedArea = null; approachTarget = null; lastSelfObstruction = null; destination = null; destinationPartial = false; destinationDetour = false; lastTarget = null; pendingPath = null; pendingSites = Set.of(); pendingDetour = false; rejectedArrivals = Set.of(); }
     @Override public void tick() {
         retainCommission();
         if (approachCommission()) return;
@@ -132,6 +138,7 @@ public final class WallBuilderAccess extends Goal {
             return;
         }
         Entity guardedArea = NativeConstructionGuard.currentArea(worker);
+        clearPreparedPlacementTarget();
         var mutationCells = NativeConstructionGuard.mutationCells(delegate);
         // Workers checks movement every tenth tick but may place every fifth tick,
         // including the first target popped from its stack. Route before dispatch.
@@ -144,7 +151,8 @@ public final class WallBuilderAccess extends Goal {
             Object current = areaField.get(worker);
             if (current != reservedArea) {
                 reservedArea = null; reservedColumns = Set.of(); lastSelfObstruction = null;
-                pendingPath = null; pendingSites = Set.of(); destination = null; lastTarget = null;
+                pendingPath = null; pendingSites = Set.of(); pendingDetour = false; destination = null;
+                destinationPartial = false; destinationDetour = false; lastTarget = null; rejectedArrivals = Set.of();
             }
             if (!(current instanceof Entity area) || !isCommission(area)) return;
             Object state = stateField.get(delegate);
@@ -155,6 +163,23 @@ public final class WallBuilderAccess extends Goal {
             route(level, target, state instanceof Enum<?> e && e.name().equals("MOVE_TO_WORK_AREA") ? 20 : 40);
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             // Keep native behavior when a companion changes its public job state.
+        }
+    }
+
+    /** Workers rebuilds its material-filtered queue here but retains the previous block target. */
+    private void clearPreparedPlacementTarget() {
+        if (!(worker.level() instanceof ServerLevel)) return;
+        try {
+            if (stateField.get(delegate) instanceof Enum<?> state
+                    && state.name().equals("PREPARE_PLACE_BLOCKS")
+                    && areaField.get(worker) instanceof Entity area && isCommission(area)) {
+                // A depleted material can leave blockPos outside the newly prepared queue.
+                // Let the next native placement pop its own target; keep the durable plan,
+                // inventory and native supply requests untouched.
+                blockField.set(delegate, null);
+            }
+        } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            // Unsupported companions retain their own preparation behavior.
         }
     }
 
@@ -177,11 +202,26 @@ public final class WallBuilderAccess extends Goal {
 
     private boolean workStandingSite(ServerLevel level, BlockPos target, BlockPos feet) {
         // Preserve native horizontal reach and vertical behavior for already accepted plans.
-        double dx = worker.getX() - (target.getX() + .5);
-        double dz = worker.getZ() - (target.getZ() + .5);
-        return dx * dx + dz * dz < 40
+        return nativeHorizontalReach(worker.getX(), worker.getZ(), target, 40)
                 && !reservedColumns.contains(feet.atY(0).asLong())
                 && safeStandingSite(level, worker, feet);
+    }
+
+    private boolean routeStandingSite(ServerLevel level, BlockPos target, int reachSquared) {
+        BlockPos feet = BlockPos.containing(worker.position());
+        return nativeHorizontalReach(worker.getX(), worker.getZ(), target, reachSquared)
+                && !reservedColumns.contains(feet.atY(0).asLong())
+                && safeStandingSite(level, worker, feet);
+    }
+
+    private void rejectArrival(BlockPos pos) {
+        if (pos == null) return;
+        if (rejectedArrivals.isEmpty()) rejectedArrivals = new LinkedHashSet<>();
+        rejectedArrivals.add(pos.immutable());
+    }
+
+    private boolean rejectedArrival(BlockPos pos) {
+        return pos != null && rejectedArrivals.contains(pos);
     }
 
     /** Keep collision protection, but let the existing pathfinder move this builder out of its own target. */
@@ -267,7 +307,7 @@ public final class WallBuilderAccess extends Goal {
     private boolean reserveColumns(Entity area) throws ReflectiveOperationException {
         if (reservedArea == area) return true;
         reservedArea=null;reservedColumns=Set.of();approachTarget=null;lastSelfObstruction=null;
-        pendingPath=null;pendingSites=Set.of();destination=null;lastTarget=null;
+        pendingPath=null;pendingSites=Set.of();pendingDetour=false;destination=null;destinationPartial=false;destinationDetour=false;lastTarget=null;rejectedArrivals=Set.of();
         var columns=new java.util.HashSet<Long>();
         for (String name : new String[]{"stackToPlace", "stackToPlaceMultiBlock"}) {
             Object cells=area.getClass().getField(name).get(area);
@@ -279,13 +319,19 @@ public final class WallBuilderAccess extends Goal {
                     approachTarget = pos.immutable();
             }
         }
-        reservedColumns=columns;reservedArea=area;
+        columns.addAll(NativeConstructionGuard.acceptedColumns(area));
+        reservedColumns=Set.copyOf(columns);reservedArea=area;
         return true;
     }
 
     private double horizontalDistance(BlockPos pos) {
         double dx=worker.getX()-(pos.getX()+0.5), dz=worker.getZ()-(pos.getZ()+0.5);
         return dx*dx+dz*dz;
+    }
+
+    private static double horizontalDistance(BlockPos a, BlockPos b) {
+        double dx = a.getX() - b.getX(), dz = a.getZ() - b.getZ();
+        return dx * dx + dz * dz;
     }
 
     /** Native SELECT_WORK_AREA otherwise replaces currentBuildArea with a competing nearby job. */
@@ -336,64 +382,200 @@ public final class WallBuilderAccess extends Goal {
         if (!target.equals(lastTarget)) {
             pendingPath = null;
             pendingSites = Set.of();
+            pendingDetour = false;
             destination = null;
+            destinationPartial = false;
+            destinationDetour = false;
+            rejectedArrivals = Set.of();
         }
         var nav = worker.getNavigation();
+        long now = level.getGameTime();
+        boolean forceSearch = false;
         var existing = nav.getPath();
         if (existing != null && !pathReady(existing)) return;
-        if (existing != null && !existing.isDone() && existing.canReach()) {
+        if (existing != null && existing.isDone()) {
             var end = existing.getEndNode();
             BlockPos feet = end == null ? null : new BlockPos(end.x,end.y,end.z);
-            if (feet != null && (feet.distSqr(target.atY(feet.getY())) < nativeReachSquared
-                    || !selfRecovery && target.equals(lastTarget) && feet.equals(destination))
-                    && !reservedColumns.contains(feet.atY(0).asLong())
-                    && (!selfRecovery || recoveryMargin(feet, reservedColumns, worker.getBbWidth()))
-                    && safeStandingSite(level,worker,feet)) return;
+            if (!routeStandingSite(level, target, nativeReachSquared)) {
+                if (destinationDetour && destination != null && destination.equals(feet)) {
+                    // This waypoint has already been consumed for the current work target.
+                    // Selecting it again creates a zero-progress gate loop.
+                    rejectArrival(destination);
+                    pendingPath = null; pendingSites = Set.of(); pendingDetour = false;
+                    destination = null; destinationPartial = false; destinationDetour = false;
+                } else {
+                    rejectArrival(feet); rejectArrival(destination); rejectArrival(BlockPos.containing(worker.position()));
+                    pendingPath = null; pendingSites = Set.of(); pendingDetour = false;
+                    destination = null; destinationPartial = false; destinationDetour = false;
+                }
+                nav.stop(); nextSearch = 0; forceSearch = true;
+            }
+        } else if (existing != null) {
+            var end = existing.getEndNode();
+            BlockPos feet = end == null ? null : new BlockPos(end.x,end.y,end.z);
+            if (activeEndpointStillValid(level, target, nativeReachSquared, selfRecovery, feet)) return;
             // A reachable cave endpoint still sends the builder underground.
             // Stop that route before probing loaded surface standing space.
-            nav.stop();
+            rejectArrival(feet); rejectArrival(destination);
+            pendingPath = null; pendingSites = Set.of(); pendingDetour = false;
+            destination = null; destinationPartial = false; destinationDetour = false;
+            nav.stop(); nextSearch = 0; forceSearch = true;
         }
-        long now = level.getGameTime();
-        if (now < nextRoute && now >= nextRoute - 10) return;
+        if (!forceSearch && now < nextRoute && now >= nextRoute - 10) return;
         nextRoute = now + 10;
         if (pendingPath != null) {
             if (now <= pendingUntil && !pathReady(pendingPath)) return;
             Path ready = pendingPath;
             Set<BlockPos> sites = pendingSites;
+            boolean detour = pendingDetour;
             pendingPath = null;
             pendingSites = Set.of();
-            BlockPos reached = now <= pendingUntil
-                    ? routeEndpoint(level, target, ready, sites, nativeReachSquared, selfRecovery) : null;
-            if (reached != null && moveToSite(reached)) destination = reached;
+            pendingDetour = false;
+            boolean usable = now <= pendingUntil && pathReady(ready);
+            BlockPos reached = usable ? detour
+                    ? reachedSite(ready, sites)
+                    : routeEndpoint(level, target, ready, sites, nativeReachSquared, selfRecovery) : null;
+            if (reached != null) {
+                BlockPos installed = detour ? moveToDetourSite(level, reached)
+                        : moveToSite(level, target, nativeReachSquared, selfRecovery, reached,
+                        routeSites(level, target, nativeReachSquared, selfRecovery).contains(reached));
+                if (installed != null) { destination = installed; return; }
+            }
+            if (usable && !detour && !selfRecovery) routeGateDetour(level, target, now);
             return;
         }
-        if (now < nextSearch && now >= nextSearch - 40) {
+        if (!forceSearch && now < nextSearch && now >= nextSearch - 40) {
             if (target.equals(lastTarget) && destination != null
+                    && !rejectedArrival(destination)
                     && (!selfRecovery || recoveryMargin(destination, reservedColumns, worker.getBbWidth()))
-                    && safeStandingSite(level,worker,destination)) moveToSite(destination);
+                    && safeStandingSite(level,worker,destination)) return;
             return;
         }
         nextSearch = now + 40;
         lastTarget = target.immutable();
         destination = null;
-        Set<BlockPos> candidates = routeSites(level, target, nativeReachSquared, selfRecovery);
-        if (candidates.isEmpty()) return;
-        var path = nav.createPath(candidates, 0);
-        if (path == null) return;
-        if (!pathReady(path)) {
-            pendingPath = path;
-            pendingSites = Set.copyOf(candidates);
-            pendingUntil = now + 100;
-        } else {
+        destinationPartial = false;
+        destinationDetour = false;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            int rejectedBefore = rejectedArrivals.size();
+            Set<BlockPos> candidates = routeSites(level, target, nativeReachSquared, selfRecovery);
+            if (candidates.isEmpty()) {
+                if (!selfRecovery) routeGateDetour(level, target, now);
+                return;
+            }
+            var path = nav.createPath(candidates, 0);
+            if (path == null) {
+                if (!selfRecovery) routeGateDetour(level, target, now);
+                return;
+            }
+            if (!pathReady(path)) {
+                pendingPath = path;
+                pendingSites = Set.copyOf(candidates);
+                pendingDetour = false;
+                pendingUntil = now + 100;
+                return;
+            }
             BlockPos reached = routeEndpoint(level, target, path, candidates, nativeReachSquared, selfRecovery);
-            if (reached != null && moveToSite(reached)) destination = reached;
+            if (reached != null) {
+                BlockPos installed = moveToSite(level, target, nativeReachSquared, selfRecovery, reached,
+                        routeSites(level, target, nativeReachSquared, selfRecovery).contains(reached));
+                if (installed != null) {
+                    destination = installed;
+                    destinationPartial = !routeSites(level, target, nativeReachSquared, selfRecovery).contains(installed);
+                    destinationDetour = false;
+                    return;
+                }
+            }
+            if (!selfRecovery && routeGateDetour(level, target, now)) return;
+            if (rejectedArrivals.size() == rejectedBefore) return;
         }
     }
 
+    private BlockPos moveToSite(ServerLevel level, BlockPos target, int nativeReachSquared,
+                                boolean selfRecovery, BlockPos site, boolean finalArrival) {
+        var nav = worker.getNavigation();
+        if (!nav.moveTo(site.getX(), site.getY(), site.getZ(), 0.8)) {
+            rejectArrival(site); rejectArrival(pathEndpoint(nav.getPath()));
+            nav.stop();
+            return null;
+        }
+        destinationDetour = false;
+        Path installed = nav.getPath();
+        if (installed == null || !pathReady(installed)) {
+            destinationPartial = !finalArrival;
+            return site;
+        }
+        BlockPos endpoint = pathEndpoint(installed);
+        if (endpoint == null) {
+            rejectArrival(site); nav.stop(); return null;
+        }
+        if (finalArrival) {
+            if (routeSites(level, target, nativeReachSquared, selfRecovery).contains(endpoint)) {
+                destinationPartial = false;
+                return endpoint;
+            }
+            rejectArrival(site); rejectArrival(endpoint); nav.stop(); return null;
+        }
+        if (safePartialProgress(level, target, endpoint)) {
+            destinationPartial = true;
+            return endpoint;
+        }
+        rejectArrival(site); rejectArrival(endpoint); nav.stop();
+        return null;
+    }
+
+    private BlockPos moveToDetourSite(ServerLevel level, BlockPos site) {
+        // Async probes do not carry permission across ticks or a changed saved project.
+        if (!safeGateDetourSite(level, site)) return null;
+        var nav = worker.getNavigation();
+        if (!nav.moveTo(site.getX(), site.getY(), site.getZ(), 0.8)) {
+            rejectArrival(site); rejectArrival(pathEndpoint(nav.getPath()));
+            nav.stop();
+            return null;
+        }
+        Path installed = nav.getPath();
+        if (installed != null && pathReady(installed)) {
+            BlockPos endpoint = pathEndpoint(installed);
+            if (endpoint == null || !endpoint.equals(site) || !safeGateDetourSite(level, endpoint)) {
+                rejectArrival(site); rejectArrival(endpoint); nav.stop(); return null;
+            }
+            site = endpoint;
+        }
+        destinationPartial = true;
+        destinationDetour = true;
+        return site;
+    }
+
+    private boolean safePartialProgress(ServerLevel level, BlockPos target, BlockPos progress) {
+        return !rejectedArrival(progress)
+                && !reservedColumns.contains(progress.atY(0).asLong()) && safeStandingSite(level, worker, progress)
+                && progress.distSqr(target) + 1 < worker.position().distanceToSqr(Vec3.atBottomCenterOf(target));
+    }
+
+    private boolean safeGateDetourSite(ServerLevel level, BlockPos site) {
+        return !rejectedArrival(site)
+                && !reservedColumns.contains(site.atY(0).asLong()) && safeStandingSite(level, worker, site)
+                && NativePerimeterProjects.gateDetourPads(worker, reservedArea).contains(site);
+    }
+
+    private boolean activeEndpointStillValid(ServerLevel level, BlockPos target, int nativeReachSquared,
+                                             boolean selfRecovery, BlockPos feet) {
+        if (feet == null || rejectedArrival(feet)) return false;
+        if (destinationDetour && !selfRecovery && target.equals(lastTarget) && destination != null
+                && destination.equals(feet) && safeGateDetourSite(level, feet)) return true;
+        if (navigationArrivalWithinNativeReach(feet, target, nativeReachSquared, worker.getBbWidth())
+                && !reservedColumns.contains(feet.atY(0).asLong())
+                && (!selfRecovery || recoveryMargin(feet, reservedColumns, worker.getBbWidth()))
+                && safeStandingSite(level, worker, feet)) return true;
+        return destinationPartial && !selfRecovery && target.equals(lastTarget) && safePartialProgress(level, target, feet);
+    }
+
     private Set<BlockPos> routeSites(ServerLevel level, BlockPos target, int nativeReachSquared, boolean selfRecovery) {
-        Set<BlockPos> sites = standingSites(level, worker, target, selfRecovery ? 6 : 3,
-                selfRecovery ? nativeReachSquared : 16);
+        boolean fullNativeReach = selfRecovery || nativeReachSquared >= 40;
+        Set<BlockPos> sites = standingSites(level, worker, target, fullNativeReach ? 6 : 3,
+                fullNativeReach ? nativeReachSquared : 16);
         sites.removeIf(p -> reservedColumns.contains(p.atY(0).asLong())
+                || rejectedArrival(p)
                 || selfRecovery && !recoveryMargin(p, reservedColumns, worker.getBbWidth()));
         return sites;
     }
@@ -401,18 +583,59 @@ public final class WallBuilderAccess extends Goal {
     private BlockPos routeEndpoint(ServerLevel level, BlockPos target, Path path,
                                    Set<BlockPos> sites, int nativeReachSquared, boolean selfRecovery) {
         BlockPos reached = reachedSite(path, sites);
-        if (reached != null)
-            return routeSites(level, target, nativeReachSquared, selfRecovery).contains(reached) ? reached : null;
+        if (reached != null) {
+            if (routeSites(level, target, nativeReachSquared, selfRecovery).contains(reached)) return reached;
+            rejectArrival(reached);
+            return null;
+        }
+        if (pathReady(path) && path.canReach()) rejectArrival(pathEndpoint(path));
         if (selfRecovery || !pathReady(path) || path.canReach() || path.getNodeCount() < 2) return null;
         var end = path.getEndNode();
         if (end == null) return null;
         BlockPos progress = new BlockPos(end.x, end.y, end.z);
         // A native budget-limited route is an approach, never proof of work reach.
         // Reissue through native coordinate movement to retain async callbacks.
-        if (reservedColumns.contains(progress.atY(0).asLong()) || !safeStandingSite(level, worker, progress)
-                || progress.distSqr(target) + 1 >= worker.position().distanceToSqr(Vec3.atBottomCenterOf(target)))
+        if (!safePartialProgress(level, target, progress))
             return null;
         return progress;
+    }
+
+    private boolean routeGateDetour(ServerLevel level, BlockPos target, long now) {
+        Set<BlockPos> detours = gateDetourSites(level, target);
+        if (detours.isEmpty()) return false;
+        var path = worker.getNavigation().createPath(detours, 0);
+        if (path == null) return false;
+        if (!pathReady(path)) {
+            pendingPath = path;
+            pendingSites = Set.copyOf(detours);
+            pendingDetour = true;
+            pendingUntil = now + 100;
+            return true;
+        }
+        BlockPos reached = reachedSite(path, detours);
+        if (reached == null) return false;
+        BlockPos installed = moveToDetourSite(level, reached);
+        if (installed == null) return false;
+        destination = installed;
+        return true;
+    }
+
+    private Set<BlockPos> gateDetourSites(ServerLevel level, BlockPos target) {
+        var candidates = new ArrayList<>(NativePerimeterProjects.gateDetourPads(worker, reservedArea));
+        candidates.removeIf(site -> rejectedArrival(site) || reservedColumns.contains(site.atY(0).asLong())
+                || !safeStandingSite(level, worker, site)
+                // Navigation may discard a finished path before our next tick.
+                // A pad we are already standing on cannot advance the approach.
+                || site.distToCenterSqr(worker.position()) < 2.25);
+        candidates.sort(Comparator.comparingDouble((BlockPos pos) -> horizontalDistance(pos, target))
+                .thenComparingDouble(this::horizontalDistance));
+        return new LinkedHashSet<>(candidates);
+    }
+
+    private BlockPos pathEndpoint(Path path) {
+        if (path == null) return null;
+        var end = path.getEndNode();
+        return end == null ? null : new BlockPos(end.x, end.y, end.z);
     }
 
     private static BlockPos reachedSite(Path path, Set<BlockPos> sites) {
@@ -426,16 +649,38 @@ public final class WallBuilderAccess extends Goal {
         return sites.contains(reached) ? reached : null;
     }
 
-    private boolean moveToSite(BlockPos site) {
-        // The multi-target path is a reachability probe. A late-installed AsyncPath misses
-        // native target/reach-range callbacks; let native moveTo own its movement path.
-        // Integer coordinates also avoid upstream truncation of negative half-coordinates.
-        return worker.getNavigation().moveTo(site.getX(), site.getY(), site.getZ(), 0.8);
+    private boolean moveToPath(Path path, BlockPos site) {
+        if (worker.getNavigation().moveTo(path, 0.8)) return true;
+        rejectArrival(site); rejectArrival(pathEndpoint(path));
+        worker.getNavigation().stop();
+        return false;
     }
 
     /** At most 49 columns, inside native horizontal reach; never dig or move the blueprint. */
     static Set<BlockPos> standingSites(ServerLevel level, Mob worker, BlockPos target) {
         return standingSites(level, worker, target, 3, 16);
+    }
+
+    /** Called only after the controller authenticates a paid next-section handoff.
+     * Keep marker creation/lease admission untouched until the worker leaves its
+     * next footprint. This requests ordinary navigation, never edits or teleports.
+     */
+    public static boolean clearNextSection(Mob worker, Set<Long> targets, Set<Long> reservation, BlockPos marker) {
+        if (!(worker.level() instanceof ServerLevel level) || marker==null) return false;
+        boolean obstructs=targets.stream().anyMatch(cell->worker.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(BlockPos.of(cell))));
+        if (!obstructs) return true;
+        if (worker.isPassenger() || worker.isLeashed() || worker.getTarget()!=null
+                || NativeConstructionGuard.currentArea(worker)!=null) return false;
+        Set<Long> columns=new java.util.HashSet<>();
+        reservation.forEach(cell->columns.add(BlockPos.of(cell).atY(0).asLong()));
+        var sites=new ArrayList<>(standingSites(level,worker,marker));
+        sites.removeIf(site->!recoveryMargin(site,columns,worker.getBbWidth()));
+        sites.sort(Comparator.comparingDouble(site->site.distToCenterSqr(worker.position())));
+        var nav=worker.getNavigation();
+        if (!nav.isDone() && nav.getPath()!=null) return false;
+        for (BlockPos site:sites)
+            if (nav.moveTo(site.getX(),site.getY(),site.getZ(),0.8)) break;
+        return false;
     }
 
     /** Recovery-only search: at most 169 loaded columns, still inside the native reach. */
@@ -447,9 +692,24 @@ public final class WallBuilderAccess extends Goal {
             int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.getX(), column.getZ());
             if (Math.abs(y-target.getY()) > 12 || y <= level.getMinBuildHeight() || y+2 >= level.getMaxBuildHeight()) continue;
             BlockPos feet = column.atY(y);
-            if (safeStandingSite(level,worker,feet)) sites.add(feet);
+            if (navigationArrivalWithinNativeReach(feet, target, reachSquared, worker.getBbWidth())
+                    && safeStandingSite(level,worker,feet)) sites.add(feet);
         }
         return sites;
+    }
+
+    static boolean nativeHorizontalReach(double workerX, double workerZ, BlockPos target, int reachSquared) {
+        double dx = workerX - (target.getX() + .5), dz = workerZ - (target.getZ() + .5);
+        return dx * dx + dz * dz < reachSquared;
+    }
+
+    static boolean navigationArrivalWithinNativeReach(BlockPos feet, BlockPos target, int reachSquared, float width) {
+        if (!Float.isFinite(width) || width < 0) return false;
+        double centerOffset = (width + 1.0) / 2.0;
+        double tolerance = width > .75f ? width / 2.0 : .75 - width / 2.0;
+        double dx = Math.abs(feet.getX() + centerOffset - target.getX() - .5) + tolerance;
+        double dz = Math.abs(feet.getZ() + centerOffset - target.getZ() - .5) + tolerance;
+        return dx * dx + dz * dz < reachSquared;
     }
 
     /** Arrival tolerance must not leave the worker body straddling a neighboring wall column. */
