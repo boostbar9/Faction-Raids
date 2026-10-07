@@ -19,12 +19,13 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
-       contains(github.event.pull_request.labels.*.name, 'native-handoff-qa'))
+       (contains(github.event.pull_request.labels.*.name, 'native-handoff-qa') || contains(github.event.pull_request.labels.*.name, 'native-builder-replacement-qa')))
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     env:
       LIBGL_ALWAYS_SOFTWARE: 'true'
       GALLIUM_DRIVER: llvmpipe
+      BUILDER_REPLACEMENT_QA: ${{ contains(github.event.pull_request.labels.*.name, 'native-builder-replacement-qa') }}
     steps:
       - name: Check out exact integrated source
         uses: actions/checkout@v4
@@ -57,7 +58,7 @@ jobs:
       - name: Prepare compilation, client assets and runtime with a separate thirty-minute cap
         run: |
           set -euo pipefail
-          timeout --signal=KILL 1800s ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=staged-handoff prepareNativeQaClient 2>&1 | tee build/native-handoff-qa/evidence/prepare-console.log
+          timeout --signal=KILL 1800s ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=staged-handoff -PnativeBuilderReplacementQa=$BUILDER_REPLACEMENT_QA prepareNativeQaClient 2>&1 | tee build/native-handoff-qa/evidence/prepare-console.log
       - name: Run representative lifecycle with a hard ten-minute process cap
         run: |
           set -euo pipefail
@@ -67,7 +68,7 @@ jobs:
           timeout --signal=KILL 600s xvfb-run -a -s '-screen 0 1280x720x24' bash -c '
             set -euo pipefail
             glxinfo -B | tee build/native-handoff-qa/evidence/opengl.txt
-            ./gradlew --no-daemon --offline --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=staged-handoff runClient
+            ./gradlew --no-daemon --offline --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=staged-handoff -PnativeBuilderReplacementQa=$BUILDER_REPLACEMENT_QA runClient
           ' 2>&1 | tee build/native-handoff-qa/evidence/client-console.log
       - name: Audit exact loaded native API bytecode
         if: always()
