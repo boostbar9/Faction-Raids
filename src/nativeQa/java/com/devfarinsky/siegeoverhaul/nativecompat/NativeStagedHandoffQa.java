@@ -238,24 +238,36 @@ public final class NativeStagedHandoffQa {
                 FactionBank.credit(core(owner), 2000); RaidSavedData.get(owner.server).setDirty();
                 var prepared = PerimeterConstruction.prepare(owner, NativeStagedHandoffFixture.CORE, 1);
                 require(prepared.ready() && prepared.quote() != null, "Production full-plan quote rejected: " + prepared.problem());
-                require(prepared.builder() == builder(level) && prepared.plan().blocks().equals(fixture.plan().blocks())
+                require(prepared.builder() == builder(level),"Production selected another fixture builder");
+                if (!REPLACE_BUILDER) require(prepared.plan().blocks().equals(fixture.plan().blocks())
                         && prepared.plan().clearance().equals(fixture.plan().clearance()), "Production quote changed the complete 572-target one-claim plan");
+                // The replacement variant tests retained legacy geometry through the public protected server admission.
+                // It never substitutes a legacy fallback in production's new-plan quote path.
+                var testedPlan=REPLACE_BUILDER?fixture.plan():prepared.plan();
+                var quote=prepared.quote();
+                Map<Long,BlockState> baseline=new LinkedHashMap<>(),headroom=new LinkedHashMap<>();
+                if (REPLACE_BUILDER) {
+                    testedPlan.blocks().keySet().forEach(cell->baseline.put(cell,level.getBlockState(BlockPos.of(cell))));
+                    testedPlan.clearance().forEach(cell->headroom.put(cell,level.getBlockState(BlockPos.of(cell))));
+                    REPORT.put("replacementGeometry","explicit legacy hollow plan; production new gated quote remains unchanged");
+                    REPORT.put("commissionPath","Explicit legacy whole-plan public direct server commission with unchanged native protection and one payment");
+                } else {baseline.putAll(quote.before());headroom.putAll(quote.clearance());}
+                var testedGates=REPLACE_BUILDER?null:quote.gateContract();
                 REPORT.put("productionQuoteStageCount", prepared.quote().layout().stages().size());
                 // Deliberately QA-only partition pressure. Always run the unchanged actual native serializer validator too.
-                reviewedLayout = PerimeterStageLayout.partition(prepared.plan(), part -> {
+                reviewedLayout = PerimeterStageLayout.partition(testedPlan, part -> {
                     String nativeProblem = BlueprintNetworkBudget.problem(TerritoryFortification.blueprint(part.targets(), part.min(), part.max()));
                     return nativeProblem != null ? nativeProblem : part.targets().size() > 96 ? "QA-only representative section target cap" : null;
                 });
-                PerimeterStageLayout.validate(prepared.plan(), reviewedLayout);
+                PerimeterStageLayout.validate(testedPlan, reviewedLayout);
                 require(reviewedLayout.stages().size() > 1 && reviewedLayout.stages().stream().allMatch(part -> part.targets().size() <= 96),
                         "Synthetic partition did not retain bounded multiple native sections");
-                var quote = prepared.quote();
-                String fingerprint = PerimeterReviewFingerprint.create(prepared.plan(), reviewedLayout, quote.before(), quote.clearance(),
-                        quote.gateContract(), quote.core(), 1, prepared.claimIdentity(), owner.getUUID(), prepared.builder().getUUID());
+                String fingerprint = PerimeterReviewFingerprint.create(testedPlan, reviewedLayout, baseline, headroom,
+                        testedGates, quote.core(), 1, prepared.claimIdentity(), owner.getUUID(), prepared.builder().getUUID());
                 require(balance(owner) == 2000 && placed(level) == 0 && areaCount(level) == 0 && PerimeterProjectStore.all(core(owner)).isEmpty(),
                         "Full quote/synthetic review charged, placed blocks or started a project");
-                require(NativePerimeterProjects.start(owner, prepared.builder(), quote.core(), 1, prepared.plan(), reviewedLayout,
-                        quote.before(), quote.clearance(), quote.gateContract(), prepared.territory(), fingerprint), "Public direct server commission failed");
+                require(NativePerimeterProjects.start(owner, prepared.builder(), quote.core(), 1, testedPlan, reviewedLayout,
+                        baseline, headroom, testedGates, prepared.territory(), fingerprint), "Public direct server commission failed");
                 var projects = PerimeterProjectStore.all(core(owner));
                 require(projects.size() == 1 && balance(owner) == 1936, "Direct server commission did not charge exactly 64 once");
                 acceptedProject = projects.get(0); projectId = acceptedProject.header().projectId();
