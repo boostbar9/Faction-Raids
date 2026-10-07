@@ -380,6 +380,9 @@ public final class WallBuilderAccess extends Goal {
             BlockPos feet = end == null ? null : new BlockPos(end.x,end.y,end.z);
             if (!routeStandingSite(level, target, nativeReachSquared)) {
                 if (destinationDetour && destination != null && destination.equals(feet)) {
+                    // This waypoint has already been consumed for the current work target.
+                    // Selecting it again creates a zero-progress gate loop.
+                    rejectArrival(destination);
                     pendingPath = null; pendingSites = Set.of(); pendingDetour = false;
                     destination = null; destinationPartial = false; destinationDetour = false;
                 } else {
@@ -438,9 +441,15 @@ public final class WallBuilderAccess extends Goal {
         for (int attempt = 0; attempt < 2; attempt++) {
             int rejectedBefore = rejectedArrivals.size();
             Set<BlockPos> candidates = routeSites(level, target, nativeReachSquared, selfRecovery);
-            if (candidates.isEmpty()) return;
+            if (candidates.isEmpty()) {
+                if (!selfRecovery) routeGateDetour(level, target, now);
+                return;
+            }
             var path = nav.createPath(candidates, 0);
-            if (path == null) return;
+            if (path == null) {
+                if (!selfRecovery) routeGateDetour(level, target, now);
+                return;
+            }
             if (!pathReady(path)) {
                 pendingPath = path;
                 pendingSites = Set.copyOf(candidates);
@@ -596,7 +605,10 @@ public final class WallBuilderAccess extends Goal {
     private Set<BlockPos> gateDetourSites(ServerLevel level, BlockPos target) {
         var candidates = new ArrayList<>(NativePerimeterProjects.gateDetourPads(worker, reservedArea));
         candidates.removeIf(site -> rejectedArrival(site) || reservedColumns.contains(site.atY(0).asLong())
-                || !safeStandingSite(level, worker, site));
+                || !safeStandingSite(level, worker, site)
+                // Navigation may discard a finished path before our next tick.
+                // A pad we are already standing on cannot advance the approach.
+                || site.distToCenterSqr(worker.position()) < 2.25);
         candidates.sort(Comparator.comparingDouble((BlockPos pos) -> horizontalDistance(pos, target))
                 .thenComparingDouble(this::horizontalDistance));
         return new LinkedHashSet<>(candidates);
