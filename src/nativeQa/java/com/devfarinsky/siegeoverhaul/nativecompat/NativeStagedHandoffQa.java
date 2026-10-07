@@ -92,6 +92,7 @@ public final class NativeStagedHandoffQa {
     private static final boolean ENABLED = Boolean.getBoolean("siegeoverhaul.nativeQa")
             && "staged-handoff".equals(System.getProperty("siegeoverhaul.nativeQa.mode"));
     private static final boolean REPLACE_BUILDER = Boolean.getBoolean("siegeoverhaul.nativeQa.builderReplacement");
+    private static final int SECTION_TARGET_CAP = REPLACE_BUILDER ? 192 : 96;
     private static boolean replacementSpawned, replacementVerified;
     private static long replacementTick, replacementPlaced;
     private static UUID deadBuilder;
@@ -257,10 +258,10 @@ public final class NativeStagedHandoffQa {
                 // Deliberately QA-only partition pressure. Always run the unchanged actual native serializer validator too.
                 reviewedLayout = PerimeterStageLayout.partition(testedPlan, part -> {
                     String nativeProblem = BlueprintNetworkBudget.problem(TerritoryFortification.blueprint(part.targets(), part.min(), part.max()));
-                    return nativeProblem != null ? nativeProblem : part.targets().size() > 96 ? "QA-only representative section target cap" : null;
+                    return nativeProblem != null ? nativeProblem : part.targets().size() > SECTION_TARGET_CAP ? "QA-only representative section target cap" : null;
                 });
                 PerimeterStageLayout.validate(testedPlan, reviewedLayout);
-                require(reviewedLayout.stages().size() > 1 && reviewedLayout.stages().stream().allMatch(part -> part.targets().size() <= 96),
+                require(reviewedLayout.stages().size() > 1 && reviewedLayout.stages().stream().allMatch(part -> part.targets().size() <= SECTION_TARGET_CAP),
                         "Synthetic partition did not retain bounded multiple native sections");
                 String fingerprint = PerimeterReviewFingerprint.create(testedPlan, reviewedLayout, baseline, headroom,
                         testedGates, quote.core(), 1, prepared.claimIdentity(), owner.getUUID(), prepared.builder().getUUID());
@@ -296,7 +297,7 @@ public final class NativeStagedHandoffQa {
                         "cavityAirCount", fixture.oracle().cavities().size(), "headroomAirCount", fixture.oracle().headroom().size(),
                         "reservedCellCount", NativeStagedHandoffFixture.RESERVED));
                 recordAuthority(level, "commission");
-                check("Full production 572-target quote, lossless QA-only <=96-target partition plus unchanged native serializer validation, public direct server commission and one noncreative 64-emerald debit");
+                check("Full production 572-target quote, lossless QA-only <="+SECTION_TARGET_CAP+"-target partition plus unchanged native serializer validation, public direct server commission and one noncreative 64-emerald debit");
                 sample(level, owner, "direct-server-commission"); advance(now, 5); return Action.CAPTURE_COMMISSION;
             }
             case 5 -> {
@@ -940,9 +941,9 @@ public final class NativeStagedHandoffQa {
         REPORT.put("geometryProfile", "hollow-five-wide-one-claim");
         REPORT.put("geometrySourceCommit", NativeStagedHandoffFixture.GEOMETRY_SOURCE);
         REPORT.put("legacySolidRecords", "Not recompiled or reinterpreted by QA; unchanged production saved-plan semantics remain authoritative");
-        REPORT.put("syntheticPartition", true); REPORT.put("qaSectionTargetCap", 96);
+        REPORT.put("syntheticPartition", true); REPORT.put("qaSectionTargetCap", SECTION_TARGET_CAP);
         REPORT.put("commissionPath", "Public NativePerimeterProjects.start direct server commission; no normal review-menu/plan-use packet coverage in this mode");
-        REPORT.put("scope", "Complete 572-target one-claim plan, exact finite 352 cobblestone plus 220 oak, one native builder, unchanged native goals/ticks/materials. QA-only <=96-target partition uses unchanged native blueprint serializer checks. Actual partial first-stage save/close/reopen, native first-section completion and controller handoff at the original shovel site, native next-section placement, authenticated real core-menu cancellation, and canceled close/reopen. Between-stage close/reopen only when its ordinary spectator pause boundary is cleanly observed.");
+        REPORT.put("scope", "Complete 572-target one-claim plan, exact finite 352 cobblestone plus 220 oak, one native builder, unchanged native goals/ticks/materials. QA-only bounded target partition uses unchanged native blueprint serializer checks. Actual partial first-stage save/close/reopen, native first-section completion and controller handoff at the original shovel site, native next-section placement, authenticated real core-menu cancellation, and canceled close/reopen. Between-stage close/reopen only when its ordinary spectator pause boundary is cleanly observed.");
         REPORT.put("notCovered", List.of("Whole-plan completion", "Migration or reinterpretation of existing accepted solid records", "Naturally occurring production partition sizes", "Normal commission review-menu and plan-use packet path", "Dedicated-client networking", "Unloaded-owner absence", "Uneven/disjoint/holed territory or other material palettes", "Storage farther than native reach", "Arbitrary shader/GPU combinations"));
         var mods = new LinkedHashMap<String, String>(); var artifacts = new LinkedHashMap<String, Object>();
         for (String id : List.of("minecraft", "forge", "siegeoverhaul", "workers", "recruits", "smallships", "siegeweapons")) {
