@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fail closed unless a real bounded representative native lifecycle produced all evidence."""
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -10,6 +11,13 @@ audit = json.loads((root / 'native-bytecode-audit.json').read_text())
 assert audit['status'] == 'passed' and audit['noVendorJarsUploaded'], audit
 assert sum(len(value['classes']) for value in audit['artifacts'].values()) == 22, audit
 assert data['mode'] == 'staged-handoff' and data['status'] == 'passed', data
+if os.environ.get('BUILDER_REPLACEMENT_QA') == 'true':
+    assert data.get('builderReplacementRequested') is True, data
+    replacement = data['builderReplacement']
+    assert replacement['deadBuilder'] != replacement['replacement'], replacement
+    assert len(replacement['deadBuilder']) == len(replacement['replacement']) == 36, replacement
+    assert 0 < replacement['placedBefore'] < replacement['placedAfter'] < 572, replacement
+    assert replacement['extraCommission'] is False, replacement
 assert data['geometryProfile'] == 'hollow-five-wide-one-claim', data
 assert data['geometrySourceCommit'] == 'acbc66025e09152db75ab419b34fad81a3dd290e', data
 assert data['hollowOracle'] == {'columns': 220, 'skinColumns': 88, 'cavityColumns': 132, 'targetCount': 572,
