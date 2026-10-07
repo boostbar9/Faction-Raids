@@ -164,7 +164,7 @@ public final class NativeConstructionGuard {
             // exists. Bind this local candidate before writing any handoff receipt
             // or letting the caller take the one project payment.
             if (project != null && !projectSnapshotMatches(project, plan, reservation, snapshot.before,
-                    snapshot.owner, snapshot.builder, snapshot.coreKey, snapshot.corePos))
+                    snapshot.owner, snapshot.builder, snapshot.coreKey, snapshot.corePos, ledger.assignedBuilder(project)))
                 return pause(area, "Paused: native stage geometry or recipe differs from the complete accepted plan");
             before.forEach((pos, state) -> { if (state.equals(plan.cells.get(pos))) snapshot.completed.add(pos.asLong()); });
             String problem = worldProblem(level, builder, area, snapshot, snapshot.plan.cells.keySet(), false);
@@ -348,7 +348,7 @@ public final class NativeConstructionGuard {
             var project=PerimeterProjectAuthority.snapshot(level.getServer().overworld(),link.core()).get(link.id());
             return project!=null && project.state()==com.devfarinsky.siegeoverhaul.core.PerimeterProject.State.CANCELED
                     && project.payment()==null && project.receipts().isEmpty() && project.activeStage()==0
-                    && PerimeterProjectLink.matches(builder,project) && ledger.matchesProjectIdentity(project);
+                    && NativePerimeterProjects.projectLinkMatches(builder,project) && ledger.matchesProjectIdentity(project);
         } catch(RuntimeException | LinkageError unverified) { return false; }
     }
 
@@ -374,7 +374,7 @@ public final class NativeConstructionGuard {
         UUID generation = PerimeterProjectLink.ledgerGeneration(data);
         if (!ledger.sameGeneration(generation) || data.contains(PROTECTED_LINK) || data.contains(PROTECTED_GENERATION)) return null;
         var project = authority.get(link.id());
-        if (project != null && PerimeterProjectLink.matches(builder, project) && ledger.matchesProjectIdentity(project)
+        if (project != null && NativePerimeterProjects.projectLinkMatches(builder,project) && ledger.matchesProjectIdentity(project)
                 && !project.receipts().isEmpty()) {
             var previous = project.receipts().get(project.receipts().size() - 1);
             if (ledger.retired(previous.areaId())) return new HandProvenance(project.header().owner(), previous.areaId());
@@ -865,6 +865,44 @@ public final class NativeConstructionGuard {
 
     static boolean hasAreaSnapshot(Entity area) { return area != null && area.getPersistentData().contains(KEY); }
 
+    /** Replays only a saved death handoff; construction and inventory remain behind the ordinary guard. */
+    static boolean resumeReplacement(ServerPlayer owner, Mob builder, ProtectedBuildArea area,
+                                     com.devfarinsky.siegeoverhaul.core.PerimeterProject project) {
+        if (owner == null || builder == null || !(area.level() instanceof ServerLevel level)) return false;
+        try {
+            var ledger = ConstructionEditLedger.get(level);
+            Snapshot old = snapshot(area); UUID replacement = ledger.assignedBuilder(project);
+            if (replacement.equals(old.builder) && replacement.equals(area.reservedBuilderId())
+                    && NativePerimeterProjects.projectLinkMatches(builder,project) && hasProtectedReceipt(builder)) return true;
+            if (!replacement.equals(builder.getUUID()) || !ledger.matchesProjectLease(project)
+                    || !owner.getUUID().equals(old.owner) || !old.owner.equals(WorkersBridge.readWorkerOwner(builder))
+                    || !area.getUUID().equals(project.active().areaId())
+                    || (!replacement.equals(old.builder) && !ledger.canRebindBuilder(project,old.builder,area.getUUID()))
+                    || (!replacement.equals(area.reservedBuilderId())
+                        && !ledger.canRebindBuilder(project,area.reservedBuilderId(),area.getUUID()))
+                    || !projectSnapshotMatches(project,old.plan,old.reservation,old.before,old.owner,old.builder,
+                        old.coreKey,old.corePos,old.builder) || !old.plan.matches(area)) return false;
+            Entity current = currentArea(builder);
+            if (current != null && current != area || commissionProblem(builder) != null
+                    || hasProtectedReceipt(builder) && !area.getUUID().equals(protectedReceiptArea(builder))
+                    || !ledger.canRetainHandLifecycle(builder.getPersistentData(),replacement)) return false;
+            if (!WallBuilderAccess.install(builder) || !ProtectedStorageAccess.install(builder)) return false;
+            Snapshot next = new Snapshot(old.plan,old.reservation,old.before,new HashSet<>(old.completed),
+                    new HashSet<>(old.cleared),old.owner,replacement,old.coreKey,old.corePos);
+            if (!replacement.equals(area.reservedBuilderId())
+                    && !area.rebindBuilder(area.reservedBuilderId(),replacement)) return false;
+            area.getPersistentData().put(KEY,save(next)); CACHE.put(area,next);
+            CACHE_RECORDS.put(area,area.getPersistentData().get(KEY)); STAGE_BINDINGS.remove(area);
+            PerimeterProjectLink.set(builder,project,replacement);
+            if (!PerimeterProjectLink.bindLedgerGeneration(builder,ledger.generation())) return false;
+            var data=builder.getPersistentData(); data.putUUID(PROTECTED_LINK,area.getUUID());
+            data.putUUID(PROTECTED_GENERATION,ledger.generation()); ProtectedBuilderHandMirror.arm(data);
+            String handProblem=ProtectedBuilderHandMirror.restore(builder);
+            if (handProblem != null || !ledger.retainHandLifecycle(data,replacement,old.owner,area.getUUID())) return false;
+            PlayerFortificationJobs.link(builder,area,old.owner); data.remove(STATUS); return true;
+        } catch (ReflectiveOperationException | RuntimeException unavailable) { return false; }
+    }
+
     /** Snapshot identity is cached only after complete immutable geometry/context equality. */
     static boolean matchesProjectSnapshot(Entity area, com.devfarinsky.siegeoverhaul.core.PerimeterProject project) {
         if (!(area instanceof ProtectedBuildArea protectedArea) || project == null || project.active() == null) return false;
@@ -874,12 +912,14 @@ public final class NativeConstructionGuard {
             if (!layout.origin().equals(protectedArea.getOriginPos()) || protectedArea.getFacing() != Direction.SOUTH
                     || layout.width() != protectedArea.getWidthSize() || layout.depth() != protectedArea.getDepthSize()
                     || layout.height() != protectedArea.getHeightSize()) return false;
+            UUID assigned = ConstructionEditLedger.get((ServerLevel) area.level()).assignedBuilder(project);
+            if (!assigned.equals(snapshot.builder) || !assigned.equals(protectedArea.reservedBuilderId())) return false;
             Tag record = area.getPersistentData().get(KEY); Object nativeRecipe = protectedArea.nativeRecipeIdentity();
             StageBinding cached = STAGE_BINDINGS.get(area);
             if (cached != null && cached.stage() == stage && cached.snapshot() == snapshot
                     && cached.receipt() == record && cached.nativeRecipe() == nativeRecipe) return true;
             if (!projectSnapshotMatches(project, snapshot.plan, snapshot.reservation, snapshot.before,
-                    snapshot.owner, snapshot.builder, snapshot.coreKey, snapshot.corePos) || !snapshot.plan.matches(area)) return false;
+                    snapshot.owner, snapshot.builder, snapshot.coreKey, snapshot.corePos, assigned) || !snapshot.plan.matches(area)) return false;
             STAGE_BINDINGS.put(area, new StageBinding(stage, snapshot, record, nativeRecipe));
             return true;
         } catch (ReflectiveOperationException | RuntimeException unavailable) { return false; }
@@ -889,9 +929,16 @@ public final class NativeConstructionGuard {
                                           AcceptedConstructionPlan plan, AcceptedConstructionReservation reservation,
                                           Map<BlockPos, BlockState> before, UUID owner, UUID builder,
                                           String coreKey, BlockPos corePos) {
+        return projectSnapshotMatches(project, plan, reservation, before, owner, builder, coreKey, corePos,
+                project == null ? null : project.header().builder());
+    }
+    static boolean projectSnapshotMatches(com.devfarinsky.siegeoverhaul.core.PerimeterProject project,
+                                          AcceptedConstructionPlan plan, AcceptedConstructionReservation reservation,
+                                          Map<BlockPos, BlockState> before, UUID owner, UUID builder,
+                                          String coreKey, BlockPos corePos, UUID assigned) {
         if (project == null || project.active() == null) return false;
         var stage = project.active().layout(); var header = project.header();
-        if (!header.owner().equals(owner) || !header.builder().equals(builder) || !header.coreKey().equals(coreKey)
+        if (!header.owner().equals(owner) || !java.util.Objects.equals(assigned,builder) || !header.coreKey().equals(coreKey)
                 || !header.originalCore().equals(corePos) || !stage.origin().equals(plan.origin)
                 || plan.facing != Direction.SOUTH || stage.width() != plan.width || stage.depth() != plan.depth
                 || stage.height() != plan.height || before.size() != stage.targets().size()
@@ -1042,7 +1089,7 @@ public final class NativeConstructionGuard {
                 try {
                     var link = PerimeterProjectLink.read(data);
                     var project = PerimeterProjectAuthority.snapshot(overworld, link.core()).get(link.id());
-                    if (project != null && WorkersBridge.isBuilder(worker) && PerimeterProjectLink.matches(worker, project)) {
+                    if (project != null && WorkersBridge.isBuilder(worker) && NativePerimeterProjects.projectLinkMatches(worker,project)) {
                         var core = com.devfarinsky.siegeoverhaul.RaidSavedData.get(level.getServer()).siegeCores.get(link.core());
                         var journal = core == null ? null : com.devfarinsky.siegeoverhaul.core.PerimeterStageJournal.get(core, project);
                         int last = ledger.projectLeaseIndex(link.id());
