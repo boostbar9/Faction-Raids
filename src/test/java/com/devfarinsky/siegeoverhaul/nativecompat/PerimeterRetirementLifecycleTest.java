@@ -217,7 +217,9 @@ class PerimeterRetirementLifecycleTest extends MinecraftTestSupport {
         when(area.blockPosition()).thenReturn(marker);when(area.reservedBuilderId()).thenReturn(p.header().builder());
         PerimeterProjectAuthority.stamp(area,p);
         var attempt=new PerimeterStageJournal.Attempt(0,p.active().areaId(),marker,PerimeterStageJournal.State.LIVE);
-        try(var workers=mockStatic(WorkersBridge.class)) {
+        when(area.level()).thenReturn(f.level());
+        try(var workers=mockStatic(WorkersBridge.class);var ledgers=mockStatic(ConstructionEditLedger.class)) {
+            ledgers.when(()->ConstructionEditLedger.get(f.level())).thenReturn(f.ledger());
             workers.when(()->WorkersBridge.readOwner(area)).thenReturn(p.header().owner());
             assertTrue(NativePerimeterProjects.retirementMarkerMatches(area,p,attempt,marker));
             when(area.blockPosition()).thenReturn(marker.east());assertFalse(NativePerimeterProjects.retirementMarkerMatches(area,p,attempt,marker));
