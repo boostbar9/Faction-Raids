@@ -106,8 +106,12 @@ final class NativeStagedHandoffFixture {
         List<String> parked = new ArrayList<>();
         int i = 0;
         for (Mob mob : level.getEntitiesOfClass(Mob.class, new AABB(CORE).inflate(16))) {
-            // Unrelated starter NPCs only; outside both the wall and the candidate-builder radius.
-            mob.moveTo(107.5 + i % 5 * 2, 65, -20.5 + i / 5 * 2, 0, 0);
+            // Keep replacement-fixture civilians inside their claim: native faction
+            // recovery otherwise returns outside parked NoAI actors into the west
+            // construction approach. Only pre-review unrelated fixture actors move.
+            if (Boolean.getBoolean("siegeoverhaul.nativeQa.builderReplacement"))
+                mob.moveTo(136.5+i%3,65,10.5-i/3,0,0);
+            else mob.moveTo(107.5 + i % 5 * 2, 65, -20.5 + i / 5 * 2, 0, 0);
             mob.getNavigation().stop(); mob.setNoAi(true); parked.add(mob.getUUID().toString()); i++;
         }
 
