@@ -10,6 +10,7 @@ import com.devfarinsky.siegeoverhaul.core.PerimeterStageLayout;
 import com.devfarinsky.siegeoverhaul.core.PerimeterTerminalReceipt;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.BlockHitResult;
 import com.devfarinsky.siegeoverhaul.ModConstants;
 import com.devfarinsky.siegeoverhaul.RaidSavedData;
@@ -90,6 +91,11 @@ import java.util.concurrent.CompletableFuture;
 public final class NativeStagedHandoffQa {
     private static final boolean ENABLED = Boolean.getBoolean("siegeoverhaul.nativeQa")
             && "staged-handoff".equals(System.getProperty("siegeoverhaul.nativeQa.mode"));
+    private static final boolean REPLACE_BUILDER = Boolean.getBoolean("siegeoverhaul.nativeQa.builderReplacement");
+    private static final int SECTION_TARGET_CAP = REPLACE_BUILDER ? 192 : 96;
+    private static boolean replacementSpawned, replacementVerified;
+    private static long replacementTick, replacementPlaced;
+    private static UUID deadBuilder;
     private static final long SECOND = 1_000_000_000L, CONSTRUCTION_SECONDS = 9 * 60, TOTAL_SECONDS = 10 * 60;
     private static final Map<String, Object> REPORT = new LinkedHashMap<>();
     private static final List<Map<String, Object>> SAMPLES = new ArrayList<>(), RESTARTS = new ArrayList<>(), AREA_JOINS = new ArrayList<>(), KEYBOARD = new ArrayList<>();
@@ -233,24 +239,36 @@ public final class NativeStagedHandoffQa {
                 FactionBank.credit(core(owner), 2000); RaidSavedData.get(owner.server).setDirty();
                 var prepared = PerimeterConstruction.prepare(owner, NativeStagedHandoffFixture.CORE, 1);
                 require(prepared.ready() && prepared.quote() != null, "Production full-plan quote rejected: " + prepared.problem());
-                require(prepared.builder() == builder(level) && prepared.plan().blocks().equals(fixture.plan().blocks())
+                require(prepared.builder() == builder(level),"Production selected another fixture builder");
+                if (!REPLACE_BUILDER) require(prepared.plan().blocks().equals(fixture.plan().blocks())
                         && prepared.plan().clearance().equals(fixture.plan().clearance()), "Production quote changed the complete 572-target one-claim plan");
+                // The replacement variant tests retained legacy geometry through the public protected server admission.
+                // It never substitutes a legacy fallback in production's new-plan quote path.
+                var testedPlan=REPLACE_BUILDER?fixture.plan():prepared.plan();
+                var quote=prepared.quote();
+                Map<Long,BlockState> baseline=new LinkedHashMap<>(),headroom=new LinkedHashMap<>();
+                if (REPLACE_BUILDER) {
+                    testedPlan.blocks().keySet().forEach(cell->baseline.put(cell,level.getBlockState(BlockPos.of(cell))));
+                    testedPlan.clearance().forEach(cell->headroom.put(cell,level.getBlockState(BlockPos.of(cell))));
+                    REPORT.put("replacementGeometry","explicit legacy hollow plan; production new gated quote remains unchanged");
+                    REPORT.put("commissionPath","Explicit legacy whole-plan public direct server commission with unchanged native protection and one payment");
+                } else {baseline.putAll(quote.before());headroom.putAll(quote.clearance());}
+                var testedGates=REPLACE_BUILDER?null:quote.gateContract();
                 REPORT.put("productionQuoteStageCount", prepared.quote().layout().stages().size());
                 // Deliberately QA-only partition pressure. Always run the unchanged actual native serializer validator too.
-                reviewedLayout = PerimeterStageLayout.partition(prepared.plan(), part -> {
+                reviewedLayout = PerimeterStageLayout.partition(testedPlan, part -> {
                     String nativeProblem = BlueprintNetworkBudget.problem(TerritoryFortification.blueprint(part.targets(), part.min(), part.max()));
-                    return nativeProblem != null ? nativeProblem : part.targets().size() > 96 ? "QA-only representative section target cap" : null;
+                    return nativeProblem != null ? nativeProblem : part.targets().size() > SECTION_TARGET_CAP ? "QA-only representative section target cap" : null;
                 });
-                PerimeterStageLayout.validate(prepared.plan(), reviewedLayout);
-                require(reviewedLayout.stages().size() > 1 && reviewedLayout.stages().stream().allMatch(part -> part.targets().size() <= 96),
+                PerimeterStageLayout.validate(testedPlan, reviewedLayout);
+                require(reviewedLayout.stages().size() > 1 && reviewedLayout.stages().stream().allMatch(part -> part.targets().size() <= SECTION_TARGET_CAP),
                         "Synthetic partition did not retain bounded multiple native sections");
-                var quote = prepared.quote();
-                String fingerprint = PerimeterReviewFingerprint.create(prepared.plan(), reviewedLayout, quote.before(), quote.clearance(),
-                        quote.core(), 1, prepared.claimIdentity(), owner.getUUID(), prepared.builder().getUUID());
+                String fingerprint = PerimeterReviewFingerprint.create(testedPlan, reviewedLayout, baseline, headroom,
+                        testedGates, quote.core(), 1, prepared.claimIdentity(), owner.getUUID(), prepared.builder().getUUID());
                 require(balance(owner) == 2000 && placed(level) == 0 && areaCount(level) == 0 && PerimeterProjectStore.all(core(owner)).isEmpty(),
                         "Full quote/synthetic review charged, placed blocks or started a project");
-                require(NativePerimeterProjects.start(owner, prepared.builder(), quote.core(), 1, prepared.plan(), reviewedLayout,
-                        quote.before(), quote.clearance(), prepared.territory(), fingerprint), "Public direct server commission failed");
+                require(NativePerimeterProjects.start(owner, prepared.builder(), quote.core(), 1, testedPlan, reviewedLayout,
+                        baseline, headroom, testedGates, prepared.territory(), fingerprint), "Public direct server commission failed");
                 var projects = PerimeterProjectStore.all(core(owner));
                 require(projects.size() == 1 && balance(owner) == 1936, "Direct server commission did not charge exactly 64 once");
                 acceptedProject = projects.get(0); projectId = acceptedProject.header().projectId();
@@ -279,10 +297,30 @@ public final class NativeStagedHandoffQa {
                         "cavityAirCount", fixture.oracle().cavities().size(), "headroomAirCount", fixture.oracle().headroom().size(),
                         "reservedCellCount", NativeStagedHandoffFixture.RESERVED));
                 recordAuthority(level, "commission");
-                check("Full production 572-target quote, lossless QA-only <=96-target partition plus unchanged native serializer validation, public direct server commission and one noncreative 64-emerald debit");
+                check("Full production 572-target quote, lossless QA-only <="+SECTION_TARGET_CAP+"-target partition plus unchanged native serializer validation, public direct server commission and one noncreative 64-emerald debit");
                 sample(level, owner, "direct-server-commission"); advance(now, 5); return Action.CAPTURE_COMMISSION;
             }
             case 5 -> {
+                if (REPLACE_BUILDER && !replacementVerified) {
+                    if (replacementSpawned) {
+                        require(now-replacementTick<1200,"Confirmed-death replacement failed to resume within one minute");
+                        if (level.getEntity(deadBuilder)!=null || project==null
+                                || !ConstructionEditLedger.get(level).assignedBuilder(project).equals(fixture.builderId())
+                                || !NativePerimeterProjects.projectLinkMatches(builder(level),project)
+                                || placed(level)<=replacementPlaced) return Action.NONE;
+                        require(project.header().builder().equals(deadBuilder),"Replacement rewrote original paid manifest");
+                        verifyActiveStage(level,project); conservation(level,owner);
+                        REPORT.put("builderReplacement",Map.of("deadBuilder",deadBuilder.toString(),"replacement",fixture.builderId().toString(),
+                                "placedBefore",replacementPlaced,"placedAfter",placed(level),"extraCommission",false));
+                        replacementVerified=true; lastProgress=System.nanoTime();
+                        check("Confirmed killed builder replaced by a new idle owned hire; original native AI resumed the same paid partial section without copying materials");
+                    } else if (project!=null && project.state()==PerimeterProject.State.RUNNING && project.activeStage()==0
+                            && stagePlaced(level,0)>=8 && workerStock(builder(level),Items.COBBLESTONE)==0
+                            && workerStock(builder(level),Items.OAK_PLANKS)==0 && !ProtectedBuilderHandMirror.activeUse(builder(level))
+                            && ProtectedStorageAccess.runningProblem(builder(level))==null) {
+                        spawnReplacement(level,owner,now); return Action.NONE;
+                    }
+                }
                 require(!owner.isCreative() && !owner.isSpectator() && !owner.hasPermissions(2) && !builder(level).isNoAi(), "Native work lost real Survival/AI conditions");
                 require(project != null && project.state() != PerimeterProject.State.COMPLETE, "Representative run unexpectedly lost its unfinished whole project");
                 if (midRestart && !betweenRestart && project.state() == PerimeterProject.State.WAITING_FOR_NEXT_STAGE && project.activeStage() == 1) {
@@ -297,7 +335,7 @@ public final class NativeStagedHandoffQa {
                 conservation(level, owner); verifyProject(level, project);
                 String transition = project.state() + ":" + project.activeStage() + ":" + project.receipts().size() + ":" + project.blocker();
                 if (!transition.equals(lastTransition) || now % 200 < 20) { sample(level, owner, "native-progress"); lastTransition = transition; }
-                if (!midRestart && project.state() == PerimeterProject.State.RUNNING && project.activeStage() == 0) {
+                if (!midRestart && (!REPLACE_BUILDER || replacementVerified) && project.state() == PerimeterProject.State.RUNNING && project.activeStage() == 0) {
                     long stagePlaced = stagePlaced(level, 0);
                     if (stagePlaced >= 8 && stagePlaced < project.active().layout().targets().size()
                             && stableTicks >= 40 && now - lastStableTick <= 1 && closed(builder(level))) {
@@ -414,12 +452,38 @@ public final class NativeStagedHandoffQa {
                 advance(now, 14); return Action.CAPTURE_FINAL;
             }
             case 14 -> {
+                require(!REPLACE_BUILDER || replacementVerified,"Replacement construction evidence missing");
                 require(SHOTS.contains("04-canceled-after-reopen.png"), "Missing actual canceled-world framebuffer");
                 verifyCancellation(level, owner); return Action.DONE;
             }
             default -> throw new AssertionError("Unexpected representative QA phase " + stage);
         }
         return Action.NONE;
+    }
+
+    /** Fixture hires a fresh worker with tools only; production selects and assigns it. */
+    private static void spawnReplacement(ServerLevel level,ServerPlayer owner,long now) throws Exception {
+        BuilderEntity old=builder(level);deadBuilder=old.getUUID();replacementPlaced=placed(level);
+        require(old.hurt(level.damageSources().generic(),Float.MAX_VALUE),"Fixture builder did not take lethal damage");
+        require(!old.isAlive(),"Fixture builder survived lethal damage");
+        var type=ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("workers","builder"));
+        require(type!=null,"Replacement builder registry unavailable");
+        var entity=type.create(level); require(entity instanceof BuilderEntity,"Replacement builder type changed");
+        BuilderEntity next=(BuilderEntity)entity;
+        next.moveTo(NativeStagedHandoffFixture.CORE.getX()+2.5,65,NativeStagedHandoffFixture.CORE.getZ()+2.5,0,0);
+        next.finalizeSpawn(level,level.getCurrentDifficultyAt(next.blockPosition()),net.minecraft.world.entity.MobSpawnType.COMMAND,null,null);
+        WorkersBridge.enablePlayerJob(next,owner.getUUID());next.setPersistenceRequired();
+        next.getInventory().setItem(6,new ItemStack(Items.BREAD,64));
+        next.getInventory().setItem(7,new ItemStack(Items.DIAMOND_PICKAXE));
+        next.getInventory().setItem(8,new ItemStack(Items.DIAMOND_AXE));
+        next.getInventory().setItem(9,new ItemStack(Items.DIAMOND_SHOVEL));next.getInventory().setChanged();
+        var goal=next.goalSelector.getAvailableGoals().stream().map(g->g.getGoal()).filter(BuilderWorkGoal.class::isInstance).map(BuilderWorkGoal.class::cast).findFirst().orElseThrow();
+        var storage=next.goalSelector.getAvailableGoals().stream().map(g->g.getGoal()).filter(GetNeededItemsFromStorage.class::isInstance).map(GetNeededItemsFromStorage.class::cast).findFirst().orElseThrow();
+        fixture=new NativeStagedHandoffFixture.Fixture(next.getUUID(),fixture.storageIds(),fixture.claimIds(),fixture.plan(),fixture.oracle(),
+                goal,storage,fixture.nonPlanCells(),fixture.parkedAuxiliaries());
+        liveBuildGoal=goal;liveStorageGoal=storage;
+        require(level.addFreshEntity(next),"Replacement hire could not enter fixture world");
+        replacementSpawned=true;replacementTick=now;stableTicks=0;
     }
 
     private static boolean cancelThroughMenu(Minecraft mc) {
@@ -499,7 +563,8 @@ public final class NativeStagedHandoffQa {
         require(snapshot.get(projectId) == null && terminal != null && terminal.state() == PerimeterProject.State.CANCELED,
                 "Expected durable compact CANCELED receipt after actual native cleanup");
         require(terminal.projectId().equals(projectId) && terminal.manifestHash().equals(acceptedProject.manifestHash())
-                && terminal.owner().equals(acceptedProject.header().owner()) && terminal.builder().equals(fixture.builderId())
+                && terminal.owner().equals(acceptedProject.header().owner()) && terminal.builder().equals(acceptedProject.header().builder())
+                && ConstructionEditLedger.get(level).assignedTerminalBuilder(terminal).equals(fixture.builderId())
                 && terminal.totalTargetCount() == NativeStagedHandoffFixture.BLOCKS && terminal.claimChunkCount() == 1
                 && terminal.activeStage() == 1 && terminal.verifiedStages() == 1
                 && terminal.stages().equals(acceptedProject.stages().stream().map(part -> new PerimeterTerminalReceipt.Stage(
@@ -876,9 +941,9 @@ public final class NativeStagedHandoffQa {
         REPORT.put("geometryProfile", "hollow-five-wide-one-claim");
         REPORT.put("geometrySourceCommit", NativeStagedHandoffFixture.GEOMETRY_SOURCE);
         REPORT.put("legacySolidRecords", "Not recompiled or reinterpreted by QA; unchanged production saved-plan semantics remain authoritative");
-        REPORT.put("syntheticPartition", true); REPORT.put("qaSectionTargetCap", 96);
+        REPORT.put("syntheticPartition", true); REPORT.put("qaSectionTargetCap", SECTION_TARGET_CAP);
         REPORT.put("commissionPath", "Public NativePerimeterProjects.start direct server commission; no normal review-menu/plan-use packet coverage in this mode");
-        REPORT.put("scope", "Complete 572-target one-claim plan, exact finite 352 cobblestone plus 220 oak, one native builder, unchanged native goals/ticks/materials. QA-only <=96-target partition uses unchanged native blueprint serializer checks. Actual partial first-stage save/close/reopen, native first-section completion and controller handoff at the original shovel site, native next-section placement, authenticated real core-menu cancellation, and canceled close/reopen. Between-stage close/reopen only when its ordinary spectator pause boundary is cleanly observed.");
+        REPORT.put("scope", "Complete 572-target one-claim plan, exact finite 352 cobblestone plus 220 oak, one native builder, unchanged native goals/ticks/materials. QA-only bounded target partition uses unchanged native blueprint serializer checks. Actual partial first-stage save/close/reopen, native first-section completion and controller handoff at the original shovel site, native next-section placement, authenticated real core-menu cancellation, and canceled close/reopen. Between-stage close/reopen only when its ordinary spectator pause boundary is cleanly observed.");
         REPORT.put("notCovered", List.of("Whole-plan completion", "Migration or reinterpretation of existing accepted solid records", "Naturally occurring production partition sizes", "Normal commission review-menu and plan-use packet path", "Dedicated-client networking", "Unloaded-owner absence", "Uneven/disjoint/holed territory or other material palettes", "Storage farther than native reach", "Arbitrary shader/GPU combinations"));
         var mods = new LinkedHashMap<String, String>(); var artifacts = new LinkedHashMap<String, Object>();
         for (String id : List.of("minecraft", "forge", "siegeoverhaul", "workers", "recruits", "smallships", "siegeweapons")) {
@@ -890,6 +955,7 @@ public final class NativeStagedHandoffQa {
             }
         }
         require("2.0.3".equals(mods.get("workers")) && "1.15.2".equals(mods.get("recruits")), "Unreviewed native API versions");
+        REPORT.put("builderReplacementRequested", REPLACE_BUILDER);
         REPORT.put("loadedModVersions", mods); REPORT.put("loadedCompanionArtifacts", artifacts);
         REPORT.put("nativeApiClasses", Map.of("builder", BuilderEntity.class.getName(), "buildGoal", BuilderWorkGoal.class.getName(),
                 "storageGoal", GetNeededItemsFromStorage.class.getName(), "storageArea", StorageArea.class.getName(),

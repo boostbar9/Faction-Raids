@@ -29,16 +29,16 @@ class PerimeterHandoffTest extends MinecraftTestSupport {
         plan.blocks().keySet().forEach(p->before.put(p,Blocks.AIR.defaultBlockState()));
         plan.clearance().forEach(p->clear.put(p,Blocks.AIR.defaultBlockState()));
         String hash=PerimeterReviewFingerprint.create(plan,layout,before,clear,core,1,"team:blue:[0]",owner,builderId);
-        var quote=new PerimeterConstruction.Quote(core,1,owner,builderId,layout,before,clear,hash);
+        var quote=new PerimeterConstruction.Quote(core,1,owner,builderId,layout,before,clear,null,hash);
         return new PerimeterConstruction.Preparation(builder,plan,"team:blue:[0]",null,
                 new RecruitsClaimsBridge.TerritorySnapshot("blue",Set.of(new ChunkPos(0,0)),null),quote);
     }
     @Test void exactCompleteQuoteGoesOnlyToOneWholeProjectHandoffWithoutLegacyPaymentOrTeleport() {
         var p=prepared();var q=p.quote();
         try(var projects=mockStatic(NativePerimeterProjects.class);var payment=mockStatic(PaymentSource.class);var bridge=mockStatic(WorkersBridge.class)) {
-            projects.when(()->NativePerimeterProjects.start(player,builder,core,1,p.plan(),q.layout(),q.before(),q.clearance(),p.territory(),q.fingerprint())).thenReturn(true);
+            projects.when(()->NativePerimeterProjects.start(player,builder,core,1,p.plan(),q.layout(),q.before(),q.clearance(),null,p.territory(),q.fingerprint())).thenReturn(true);
             assertTrue(PerimeterConstruction.startJob(player,p,1));
-            projects.verify(()->NativePerimeterProjects.start(player,builder,core,1,p.plan(),q.layout(),q.before(),q.clearance(),p.territory(),q.fingerprint()),times(1));
+            projects.verify(()->NativePerimeterProjects.start(player,builder,core,1,p.plan(),q.layout(),q.before(),q.clearance(),null,p.territory(),q.fingerprint()),times(1));
             payment.verifyNoInteractions();bridge.verifyNoInteractions();verify(builder,never()).setItemSlot(any(),any());
         }
     }
@@ -56,7 +56,7 @@ class PerimeterHandoffTest extends MinecraftTestSupport {
             when(player.getUUID()).thenReturn(owner);when(builder.getUUID()).thenReturn(UUID.randomUUID());assertFalse(PerimeterConstruction.startJob(player,p,1));
             when(builder.getUUID()).thenReturn(builderId);var before=new HashMap<>(q.before());before.put(before.keySet().iterator().next(),Blocks.DANDELION.defaultBlockState());
             var changed=new PerimeterConstruction.Preparation(builder,p.plan(),p.claimIdentity(),null,p.territory(),
-                    new PerimeterConstruction.Quote(core,1,owner,builderId,q.layout(),before,q.clearance(),q.fingerprint()));
+                    new PerimeterConstruction.Quote(core,1,owner,builderId,q.layout(),before,q.clearance(),null,q.fingerprint()));
             assertFalse(PerimeterConstruction.startJob(player,changed,1));projects.verifyNoInteractions();
         }
     }

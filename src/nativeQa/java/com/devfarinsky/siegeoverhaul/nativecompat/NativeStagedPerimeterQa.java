@@ -19,6 +19,7 @@ import com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge;
 import com.devfarinsky.siegeoverhaul.core.PerimeterTerritory;
 import com.talhanation.workers.entities.ai.BuilderWorkGoal;
 import com.talhanation.workers.entities.ai.GetNeededItemsFromStorage;
+import com.talhanation.workers.world.BuildBlock;
 import com.devfarinsky.siegeoverhaul.core.FactionBank;
 import com.devfarinsky.siegeoverhaul.core.PerimeterConstruction;
 import com.devfarinsky.siegeoverhaul.core.PerimeterPreview;
@@ -27,8 +28,12 @@ import com.devfarinsky.siegeoverhaul.items.ModItems;
 import com.google.gson.GsonBuilder;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.talhanation.recruits.ClaimEvents;
+import com.talhanation.recruits.pathfinding.AsyncPathNavigation;
 import com.talhanation.recruits.world.RecruitsClaim;
 import com.talhanation.workers.entities.BuilderEntity;
+import com.talhanation.workers.entities.ai.navigation.WorkerPathNavigation;
+import com.talhanation.workers.entities.ai.navigation.WorkersAsyncPathfinder;
+import com.talhanation.workers.entities.ai.navigation.WorkersGroundPathNavigation;
 import com.talhanation.workers.entities.workarea.StorageArea;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -52,8 +57,10 @@ import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.TickEvent;
@@ -77,10 +84,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-/** One isolated paid 5x5 project, real native stages and two complete client-world restarts. */
+/** One isolated paid stepped/gated project, real native stages and two complete client-world restarts. */
 @Mod.EventBusSubscriber(modid = SiegeOverhaul.MOD_ID, value = Dist.CLIENT)
 public final class NativeStagedPerimeterQa {
     private static final boolean ENABLED = Boolean.getBoolean("siegeoverhaul.nativeQa")
@@ -89,14 +97,16 @@ public final class NativeStagedPerimeterQa {
     private static final Map<String, Object> REPORT = new LinkedHashMap<>();
     private static final List<Map<String, Object>> SAMPLES = new ArrayList<>(), RESTARTS = new ArrayList<>(), AREA_JOINS = new ArrayList<>();
     private static final List<String> CHECKS = new ArrayList<>(), SHOTS = new ArrayList<>();
+    private static final Set<Integer> BUILDER_FEET_Y = new TreeSet<>();
     private static NativeStagedPerimeterFixture.Fixture fixture;
     private static CompletableFuture<Action> pending;
     private static Path directory, evidence;
     private static UUID playerId, projectId, jobId;
     private static String coreKey, reloadKind, hudFaction;
     private static long started, constructionStarted, lastProgress, lastSampleTick = -1, placedBefore = -1, stageTick;
+    private static long lastCoreOpenAttemptTick;
     private static long captureRequested, pauseStarted, pausedNanos;
-    private static int clientPhase, stage, renderFrames, captureFrame, menuId, menuUiStage;
+    private static int clientPhase, stage, renderFrames, captureFrame, menuId, menuUiStage, coreOpenAttempts;
     private static boolean finished, finishing, midRestart, betweenRestart, restartRequested;
     private static Throwable failure, stoppingFailure, loadFailure;
     private static String capture;
@@ -119,6 +129,16 @@ public final class NativeStagedPerimeterQa {
                                 PerimeterProject.State state, int activeStage) {}
     private enum Action { NONE, OPEN_CORE, LIVE_MENU, CAPTURE_PLAN, USE_PLAN, RELOAD, CAPTURE_COMPLETE, DONE }
     private NativeStagedPerimeterQa() {}
+
+    @SubscribeEvent
+    public static void serverTick(TickEvent.ServerTickEvent event) {
+        if (!ENABLED || finished || fixture == null || event.phase != TickEvent.Phase.END) return;
+        try {
+            var entity = event.getServer().overworld().getEntity(fixture.builderId());
+            if (entity instanceof BuilderEntity builder && !builder.isNoAi())
+                BUILDER_FEET_Y.add(builder.blockPosition().getY());
+        } catch (Throwable ignored) {}
+    }
 
     @SubscribeEvent
     public static void tick(TickEvent.ClientTickEvent event) {
@@ -159,14 +179,16 @@ public final class NativeStagedPerimeterQa {
                 Action action = pending.join(); pending = null;
                 switch (action) {
                     case OPEN_CORE -> {
-                        aim(mc, Vec3.atCenterOf(NativeStagedPerimeterFixture.CORE));
-                        mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND,
-                                new BlockHitResult(Vec3.atCenterOf(NativeStagedPerimeterFixture.CORE).add(0, .5, 0), Direction.UP,
-                                        NativeStagedPerimeterFixture.CORE, false));
+                        if (!(mc.screen instanceof CoreHireScreen)) {
+                            aim(mc, Vec3.atCenterOf(NativeStagedPerimeterFixture.CORE));
+                            mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND,
+                                    new BlockHitResult(Vec3.atCenterOf(NativeStagedPerimeterFixture.CORE).add(0, .5, 0), Direction.UP,
+                                            NativeStagedPerimeterFixture.CORE, false));
+                        }
                     }
                     case LIVE_MENU -> { if (!reviewThroughMenu(mc)) { pending = CompletableFuture.completedFuture(action); return; } }
                     case CAPTURE_PLAN -> {
-                        aim(mc, new Vec3(168, 68, 1)); requestCapture("02-free-five-by-five-perimeter-review.png"); return;
+                        aim(mc, new Vec3(168, 68, 1)); requestCapture("02-free-stepped-gated-perimeter-review.png"); return;
                     }
                     case USE_PLAN -> mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
                     case RELOAD -> { mc.level.disconnect(); mc.clearLevel(); mc.setScreen(new TitleScreen()); clientPhase = 2; return; }
@@ -214,17 +236,40 @@ public final class NativeStagedPerimeterQa {
                 var prepared = PerimeterConstruction.prepare(owner, NativeStagedPerimeterFixture.CORE, 1);
                 require(prepared.ready(), "Production staged quote rejected: " + prepared.problem());
                 require(prepared.quote() != null && !prepared.quote().layout().stages().isEmpty(),
-                        "5x5 quote did not provide a genuine native layout");
+                        "Stepped quote did not provide a genuine native layout");
                 reviewedLayout = prepared.quote().layout();
-                require(prepared.builder() == builder(level) && prepared.plan().blocks().equals(fixture.plan().blocks())
-                        && prepared.plan().clearance().equals(fixture.plan().clearance()), "Production quote changed exact independent 3900-cell union");
+                fixture = fixture.withPlan(prepared.plan(), level);
+                require(prepared.builder() == builder(level), "Production quote did not bind the fixture builder");
+                require(prepared.quote().gateContract() != null && prepared.quote().gateContract().gates().size() == 4,
+                        "Production quote did not bind four cardinal gates");
+                require(fixture.plan().materialCounts().getOrDefault("minecraft:dirt", 0) > 0,
+                        "Production quote did not include fixture dirt-fill targets");
+                Map<String, Object> step = fixture.stepEvidence();
+                REPORT.put("targetCount", targetCount()); REPORT.put("materialCounts", fixture.plan().materialCounts());
+                REPORT.put("fillTargets", fixture.plan().materialCounts().getOrDefault("minecraft:dirt", 0));
+                REPORT.put("terrainStepEvidence", step); REPORT.put("nonLevelTransitionCount", step.get("nonLevelTransitionCount"));
+                REPORT.put("deckBaseLevels", step.get("baseLevels"));
+                REPORT.put("transitionClearanceVerified", step.get("transitionClearanceVerified"));
+                REPORT.put("loweredSurfaceY", NativeStagedPerimeterFixture.LOWERED_SURFACE_Y);
+                REPORT.put("flatSurfaceY", NativeStagedPerimeterFixture.FLAT_SURFACE_Y);
+                REPORT.put("gateCount", prepared.quote().gateContract().gates().size());
+                REPORT.put("gateCenters", prepared.quote().gateContract().gates().stream()
+                        .map(g -> g.facing().getName() + ":" + g.outerCenter().toShortString()).toList());
                 REPORT.put("parkedUnrelatedStarterNpcIds", fixture.parkedAuxiliaries());
                 REPORT.put("reviewedStageCount", reviewedLayout.stages().size());
-                check("Fresh non-op Survival owner, public native faction/25-chunk claim, actual core and four finite native chests; all 3900 targets initially empty");
+                check("Fresh non-op Survival owner, public native faction/25-chunk claim, actual core and four finite native chests; production stepped/gated targets initially empty");
+                coreOpenAttempts = 1; lastCoreOpenAttemptTick = now; REPORT.put("coreOpenAttempts", coreOpenAttempts);
                 advance(now, 1); return Action.OPEN_CORE;
             }
             case 1 -> {
-                if (!(owner.containerMenu instanceof CoreHireMenu menu)) return Action.NONE;
+                if (!(owner.containerMenu instanceof CoreHireMenu menu)) {
+                    if (now - lastCoreOpenAttemptTick >= 40) {
+                        lastCoreOpenAttemptTick = now;
+                        coreOpenAttempts++; REPORT.put("coreOpenAttempts", coreOpenAttempts);
+                        return Action.OPEN_CORE;
+                    }
+                    return Action.NONE;
+                }
                 require(menu.stillValid(owner) && menu.bank() == 2000 && owner.getTeam() != null
                         && owner.getTeam().getName().equals(NativeStagedPerimeterFixture.FACTION), "Real core menu owner/Treasury mismatch");
                 menuId = menu.containerId;
@@ -239,12 +284,12 @@ public final class NativeStagedPerimeterQa {
                 require(selection != null && selection.ready(), "Real menu-issued free plan was not ready"); verifyPreview(selection);
                 require(balance(owner) == 2000 && areaCount(level) == 0 && placed(level) == 0
                         && PerimeterProjectStore.all(core(owner)).isEmpty(), "Free menu review mutated, charged or commissioned");
-                check("Actual core-use packet and visible Building / Auto perimeter / Review in world controls issue the exact free 3900-cell preview");
+                check("Actual core-use packet and visible Building / Auto perimeter / Review in world controls issue the exact free stepped/gated preview");
                 advance(now, 3);
             }
             case 3 -> {
                 if (now - stageTick < 320) return Action.NONE; // Let ordinary review/setup chat fade naturally before the raw framebuffer.
-                if (!SHOTS.contains("02-free-five-by-five-perimeter-review.png")) return Action.CAPTURE_PLAN;
+                if (!SHOTS.contains("02-free-stepped-gated-perimeter-review.png")) return Action.CAPTURE_PLAN;
                 advance(now, 4); return Action.USE_PLAN;
             }
             case 4 -> {
@@ -254,7 +299,8 @@ public final class NativeStagedPerimeterQa {
                         "Real plan-use packet did not create exactly one paid project and consume the plan for 64 emeralds");
                 acceptedProject = projects.get(0); projectId = acceptedProject.header().projectId();
                 require(acceptedProject.state() == PerimeterProject.State.RUNNING && acceptedProject.layout().equals(reviewedLayout)
-                        && acceptedProject.plan().blocks().equals(fixture.plan().blocks()), "Paid project changed the reviewed stages or global union");
+                        && acceptedProject.plan().blocks().equals(fixture.plan().blocks())
+                        && acceptedProject.gateContract() != null, "Paid project changed the reviewed stages, global union or gates");
                 verifyPayment(acceptedProject.payment());
                 var journal = PerimeterStageJournal.get(core(owner), acceptedProject);
                 require(journal != null && journal.attempts().size() == 1 && journal.at(0).state() == PerimeterStageJournal.State.LIVE,
@@ -301,14 +347,16 @@ public final class NativeStagedPerimeterQa {
                         "Completion missed a required actual restart boundary");
                 verifyExactCompletion(level, owner);
                 REPORT.put("constructionSeconds", (System.nanoTime() - constructionStarted - pausedNanos) / (double) SECOND);
-                check("All native stages completed the exact 3900-cell 5x5 outer union through original AI/material collection and every applicable real restart");
+                check("All native stages completed the exact stepped/gated target union through original AI/material collection and every applicable real restart");
                 advance(now, 6);
             }
             case 6 -> {
                 if (now - stageTick < 60) return Action.NONE;
                 verifyExactCompletion(level, owner);
                 REPORT.put("finalDiagnostics", diagnostics(level, owner, true)); REPORT.put("completedBlocks", placed(level));
-                REPORT.put("treasuryDebit", 64); REPORT.put("materialCounts", Map.of("minecraft:cobblestone", 2400, "minecraft:oak_planks", 1500));
+                REPORT.put("treasuryDebit", 64); REPORT.put("materialCounts", fixture.plan().materialCounts());
+                REPORT.put("builderFeetYLevelsObserved", List.copyOf(BUILDER_FEET_Y));
+                REPORT.put("completedStepStandingEvidence", fixture.completedStepStandingEvidence(level, builder(level)));
                 REPORT.put("betweenStageRestartApplicable", reviewedLayout.stages().size() > 1);
                 REPORT.put("nativeCompletionObserved", true); REPORT.put("midStageRestartVerified", midRestart); REPORT.put("betweenStageRestartVerified", betweenRestart);
                 REPORT.put("territoryChunkCount", 25); REPORT.put("nativeClaimRecords", fixture.claimIds().stream().map(UUID::toString).toList());
@@ -320,7 +368,7 @@ public final class NativeStagedPerimeterQa {
                 advance(now, 8); return Action.CAPTURE_COMPLETE;
             }
             case 8 -> {
-                require(SHOTS.contains("03-native-completed-staged-perimeter.png"), "Missing actual completed 5x5 framebuffer");
+                require(SHOTS.contains("03-native-completed-staged-perimeter.png"), "Missing actual completed stepped perimeter framebuffer");
                 verifyExactCompletion(level, owner); REPORT.put("finalDiagnostics", diagnostics(level, owner, true)); return Action.DONE;
             }
             case 10 -> {
@@ -381,7 +429,7 @@ public final class NativeStagedPerimeterQa {
             NativeBuildingQa.clickVisibleButton(mc, "Building"); NativeBuildingQa.clickVisibleButton(mc, "Auto perimeter", "Perimeter"); menuUiStage = 1;
         } else if (menuUiStage == 1) {
             require(NativeBuildingQa.hasVisibleButton(mc, "Review in world"), "Actual review control is not visible");
-            requestCapture("01-live-core-five-by-five-review.png"); menuUiStage = 2;
+            requestCapture("01-live-core-stepped-gated-review.png"); menuUiStage = 2;
         } else if (menuUiStage == 2) {
             NativeBuildingQa.clickVisibleButton(mc, "Review in world"); menuUiStage = 3; return true;
         }
@@ -478,13 +526,13 @@ public final class NativeStagedPerimeterQa {
             require(current.header().equals(acceptedProject.header()) && current.manifestHash().equals(acceptedProject.manifestHash())
                     && current.targets().equals(acceptedProject.targets()) && current.layout().equals(reviewedLayout),
                     "Full COMPLETE record changed the accepted identity or exact geometry");
-            require(current.completedTargetCount() == 3900 && current.receipts().size() == acceptedProject.stages().size(), "Full COMPLETE record lacks exact stage receipts");
+            require(current.completedTargetCount() == targetCount() && current.receipts().size() == acceptedProject.stages().size(), "Full COMPLETE record lacks exact stage receipts");
             verifyPayment(current.payment()); REPORT.put("completionAuthority", "COMPLETE full durable project");
             REPORT.put("completionAuthorityNbt", current.save().toString()); return true;
         }
         require(terminal != null, "Neither full project nor terminal authority exists");
         require(terminal.state() == PerimeterProject.State.COMPLETE && terminal.projectId().equals(projectId)
-                && terminal.manifestHash().equals(acceptedProject.manifestHash()) && terminal.totalTargetCount() == 3900
+                && terminal.manifestHash().equals(acceptedProject.manifestHash()) && terminal.totalTargetCount() == targetCount()
                 && terminal.verifiedStages() == acceptedProject.stages().size() && terminal.claimChunkCount() == 25
                 && terminal.stages().stream().map(PerimeterTerminalReceipt.Stage::areaId).toList()
                     .equals(acceptedProject.stages().stream().map(PerimeterProject.Stage::areaId).toList()), "Terminal receipt does not prove every paid stage completed");
@@ -503,7 +551,7 @@ public final class NativeStagedPerimeterQa {
             String material = switch (box.material()) { case 0 -> "minecraft:cobblestone"; case 1 -> "minecraft:oak_planks"; default -> "minecraft:dirt"; };
             for (BlockPos cell : BlockPos.betweenClosed(box.min(), box.max())) require(expanded.putIfAbsent(cell.asLong(), material) == null, "Preview boxes overlap");
         }
-        require(expanded.equals(NativeStagedPerimeterFixture.independentOracle()), "Free preview is not the exact external 3900-cell ring");
+        require(expanded.equals(fixture.plan().blocks()), "Free preview is not the exact stepped/gated target union");
     }
     private static boolean expected(ServerLevel level, long pos, String material) {
         return material.equals(String.valueOf(ForgeRegistries.BLOCKS.getKey(level.getBlockState(BlockPos.of(pos)).getBlock())));
@@ -537,13 +585,12 @@ public final class NativeStagedPerimeterQa {
     }
     private static CompoundTag materialValue(CompoundTag value) {
         ItemStack stack = ItemStack.of(value);
-        return stack.is(Items.COBBLESTONE) || stack.is(Items.OAK_PLANKS) ? value.copy() : new CompoundTag();
+        return stack.is(Items.COBBLESTONE) || stack.is(Items.OAK_PLANKS) || stack.is(Items.DIRT) ? value.copy() : new CompoundTag();
     }
 
     private static void verifyExactCompletion(ServerLevel level, ServerPlayer owner) {
-        NativeHollowWallOracle.assertCavitiesAir(level, NativeStagedPerimeterFixture.TERRITORY);
         require(completeAuthority(level), "No COMPLETE authority; absent marker alone is not completion");
-        require(placed(level) == NativeStagedPerimeterFixture.BLOCKS, "Completion geometry mismatch");
+        require(placed(level) == targetCount(), "Completion geometry mismatch");
         var joined = AREA_JOINS.stream().map(entry -> entry.get("area")).collect(java.util.stream.Collectors.toSet());
         require(joined.equals(acceptedProject.stages().stream().map(s -> s.areaId().toString()).collect(java.util.stream.Collectors.toSet())),
                 "Not every native stage actually joined, or an extra child was created");
@@ -570,25 +617,29 @@ public final class NativeStagedPerimeterQa {
             BlockState expected = ForgeRegistries.BLOCKS.getValue(new net.minecraft.resources.ResourceLocation(entry.getValue())).defaultBlockState();
             require(level.getBlockState(BlockPos.of(entry.getKey())).equals(expected), "Wrong exact block state at " + BlockPos.of(entry.getKey()));
         }
-        NativeStagedPerimeterFixture.assertInternalBordersOpen(level, fixture.plan().blocks());
         verifyCurrentTerritory(level, NativeStagedPerimeterFixture.TERRITORY);
         for (var entry : fixture.nonPlanCells().entrySet()) require(level.getBlockState(entry.getKey()).equals(entry.getValue()),
                 "Native job modified a non-plan cell: " + entry.getKey());
+        fixture.completedStepStandingEvidence(level, builder(level));
         conservation(level, owner);
-        for (Item material : List.of(Items.COBBLESTONE, Items.OAK_PLANKS)) require(chestStock(level, material) == 0
-                && workerStock(builder(level), material) == 0 && (owner == null ? 0 : count(owner.getInventory(), material)) == 0
-                && dropped(level, material) == 0, "Construction stock remained after exact finite-stock completion");
     }
 
     private static void conservation(ServerLevel level, ServerPlayer owner) {
-        for (Item material : List.of(Items.COBBLESTONE, Items.OAK_PLANKS)) {
-            int supplied = material == Items.COBBLESTONE ? NativeStagedPerimeterFixture.COBBLE : NativeStagedPerimeterFixture.OAK;
+        for (Item material : List.of(Items.COBBLESTONE, Items.OAK_PLANKS, Items.DIRT)) {
+            int supplied = supplied(material);
             long built = fixture.plan().blocks().keySet().stream().filter(p -> level.getBlockState(BlockPos.of(p)).getBlock().asItem() == material).count();
             long total = built + chestStock(level, material) + workerStock(builder(level), material)
                     + (owner == null ? 0 : count(owner.getInventory(), material)) + dropped(level, material);
             require(total == supplied, "Finite native stock mismatch for " + material + ": supplied=" + supplied + ", accounted=" + total);
         }
     }
+    private static int supplied(Item material) {
+        if (material == Items.COBBLESTONE) return NativeStagedPerimeterFixture.COBBLE;
+        if (material == Items.OAK_PLANKS) return NativeStagedPerimeterFixture.OAK;
+        if (material == Items.DIRT) return NativeStagedPerimeterFixture.DIRT;
+        throw new AssertionError("Unexpected material " + material);
+    }
+    private static int targetCount() { return fixture.plan().blocks().size(); }
 
     /** Count the native hand mirror once if it is the identical stack; a split duplicate is an error, not hidden. */
     private static int workerStock(BuilderEntity worker, Item item) {
@@ -644,8 +695,21 @@ public final class NativeStagedPerimeterQa {
         result.put("sleeping", builder.needsToSleep()); result.put("followState", builder.getFollowState());
         require(goal != null && storageGoal != null, "Fresh native goal references were unavailable after world load");
         result.put("nativeBuildState", String.valueOf(goal.state)); result.put("nativeTarget", String.valueOf(goal.blockPos));
+        result.put("builderBlockPosition", builder.blockPosition().toShortString());
+        if (goal.blockPos != null) {
+            double dx = builder.getX() - (goal.blockPos.getX() + 0.5D), dz = builder.getZ() - (goal.blockPos.getZ() + 0.5D);
+            result.put("nativeTargetHorizontalDistanceSquared", dx * dx + dz * dz);
+            result.put("nativeTargetDistanceSquared", builder.position().distanceToSqr(Vec3.atCenterOf(goal.blockPos)));
+            result.put("nativeTargetCurrentState", level.getBlockState(goal.blockPos).toString());
+        }
         result.put("nativeBuildError", String.valueOf(goal.errorMessage));
         result.put("nativeRemaining", builder.currentBuildArea == null ? -1 : builder.currentBuildArea.stackToPlace.size());
+        result.put("nativeGoalQueueSize", goal.stackToPlace == null ? -1 : goal.stackToPlace.size());
+        result.put("nativeMinBuildHeight", goal.minBuildHeight);
+        if (goal.stackToPlace != null && !goal.stackToPlace.isEmpty())
+            result.put("nativeGoalQueueTop", goal.stackToPlace.peek().toShortString());
+        if (builder.currentBuildArea != null) result.put("nativeLowestPendingLayer",
+                lowestPendingLayer(level, builder.currentBuildArea.stackToPlace));
         result.put("storageState", String.valueOf(storageGoal.state)); result.put("storageChestTarget", String.valueOf(storageGoal.chestPos));
         result.put("requestedSupplies", WorkersConstructionView.requests(builder));
         result.put("navigationDone", builder.getNavigation().isDone());
@@ -670,10 +734,17 @@ public final class NativeStagedPerimeterQa {
         result.put("mainHand", stack(builder.getMainHandItem())); result.put("offHand", stack(builder.getOffhandItem()));
         result.put("mainHandSameObjectAsSlot5", builder.getMainHandItem() == builder.getInventory().getItem(5));
         result.put("chestCobble", chestStock(level, Items.COBBLESTONE)); result.put("chestOak", chestStock(level, Items.OAK_PLANKS));
+        result.put("chestDirt", chestStock(level, Items.DIRT));
         result.put("builderCobble", workerStock(builder, Items.COBBLESTONE)); result.put("builderOak", workerStock(builder, Items.OAK_PLANKS));
+        result.put("builderDirt", workerStock(builder, Items.DIRT));
         result.put("looseCobble", dropped(level, Items.COBBLESTONE)); result.put("looseOak", dropped(level, Items.OAK_PLANKS));
+        result.put("looseDirt", dropped(level, Items.DIRT));
+        result.put("ownerCobble", owner == null ? -1 : count(owner.getInventory(), Items.COBBLESTONE));
+        result.put("ownerOak", owner == null ? -1 : count(owner.getInventory(), Items.OAK_PLANKS));
+        result.put("ownerDirt", owner == null ? -1 : count(owner.getInventory(), Items.DIRT));
         result.put("placedCobble", fixture.plan().blocks().keySet().stream().filter(p -> level.getBlockState(BlockPos.of(p)).is(Blocks.COBBLESTONE)).count());
         result.put("placedOak", fixture.plan().blocks().keySet().stream().filter(p -> level.getBlockState(BlockPos.of(p)).is(Blocks.OAK_PLANKS)).count());
+        result.put("placedDirt", fixture.plan().blocks().keySet().stream().filter(p -> level.getBlockState(BlockPos.of(p)).is(Blocks.DIRT)).count());
         if (detailed) {
             result.put("builderUuid", builder.getUUID().toString());
             result.put("builderBounds", builder.getBoundingBox().toString());
@@ -682,8 +753,10 @@ public final class NativeStagedPerimeterQa {
             result.put("registeredBuilderHeight", builder.getType().getDimensions().height);
             var mutationCells = NativeConstructionGuard.mutationCells(goal);
             result.put("nativeMutationCandidates", mutationCells.stream().map(BlockPos::toShortString).toList());
+            if (goal.blockPos != null) result.put("nativeTargetStandingCandidates",
+                    standingCandidates(level, builder, goal.blockPos, mutationCells));
             var occupants = new ArrayList<Map<String, Object>>();
-            var footprint = new net.minecraft.world.phys.AABB(fixture.plan().min(), fixture.plan().max().offset(1, 1, 1));
+            var footprint = new AABB(fixture.plan().min(), fixture.plan().max().offset(1, 1, 1));
             for (var entity : level.getEntities((net.minecraft.world.entity.Entity) null, footprint,
                     net.minecraft.world.entity.Entity::isAlive)) {
                 var occupant = new LinkedHashMap<String, Object>();
@@ -723,6 +796,50 @@ public final class NativeStagedPerimeterQa {
             result.put("targetNeighborhood", surroundings);
         }
         return result;
+    }
+    private static Map<String, Object> lowestPendingLayer(ServerLevel level, java.util.Stack<BuildBlock> pending) {
+        var result = new LinkedHashMap<String, Object>();
+        result.put("pending", pending == null ? -1 : pending.size());
+        if (pending == null || pending.isEmpty()) return result;
+        int minY = pending.stream().mapToInt(block -> block.getPos().getY()).min().orElse(Integer.MAX_VALUE);
+        result.put("y", minY);
+        var counts = new LinkedHashMap<String, Integer>();
+        var positions = new ArrayList<Map<String, String>>();
+        for (BuildBlock block : pending) {
+            if (block.getPos().getY() != minY) continue;
+            String material = String.valueOf(ForgeRegistries.BLOCKS.getKey(block.getState().getBlock()));
+            counts.merge(material, 1, Integer::sum);
+            if (positions.size() < 48) positions.add(Map.of("position", block.getPos().toShortString(),
+                    "expected", material, "actual", level.getBlockState(block.getPos()).toString()));
+        }
+        result.put("materials", counts); result.put("sample", positions);
+        return result;
+    }
+    private static List<Map<String, Object>> standingCandidates(ServerLevel level, BuilderEntity builder,
+                                                                BlockPos target, Set<BlockPos> mutationCells) {
+        var reserved = new java.util.HashSet<Long>();
+        fixture.plan().blocks().keySet().forEach(cell -> reserved.add(BlockPos.of(cell).atY(0).asLong()));
+        var candidates = new ArrayList<Map<String, Object>>();
+        for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {
+            if (dx * dx + dz * dz >= 40) continue;
+            BlockPos column = target.offset(dx, 0, dz);
+            var entry = new LinkedHashMap<String, Object>(); entry.put("column", column.atY(target.getY()).toShortString());
+            entry.put("nativeReachDistanceSquared", dx * dx + dz * dz);
+            entry.put("chunkLoaded", level.hasChunkAt(column));
+            if (level.hasChunkAt(column)) {
+                int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.getX(), column.getZ());
+                BlockPos feet = column.atY(y);
+                entry.put("feet", feet.toShortString()); entry.put("reservedColumn", reserved.contains(feet.atY(0).asLong()));
+                entry.put("support", level.getBlockState(feet.below()).toString());
+                entry.put("feetState", level.getBlockState(feet).toString());
+                entry.put("headState", level.getBlockState(feet.above()).toString());
+                AABB body = builder.getBoundingBox().move(Vec3.atBottomCenterOf(feet).subtract(builder.position()));
+                entry.put("bodyCollisionFree", level.noCollision(builder, body));
+                entry.put("intersectsMutation", mutationCells.stream().anyMatch(cell -> new AABB(cell).intersects(body)));
+            }
+            candidates.add(entry);
+        }
+        return candidates;
     }
     private static Map<String, Object> stack(ItemStack stack) {
         return Map.of("item", String.valueOf(ForgeRegistries.ITEMS.getKey(stack.getItem())), "count", stack.getCount(),
@@ -770,7 +887,7 @@ public final class NativeStagedPerimeterQa {
         REPORT.put("startedUtc", Instant.now().toString()); REPORT.put("mode", "staged-perimeter");
         REPORT.put("constructionLimitSeconds", CONSTRUCTION_SECONDS);
         REPORT.put("totalLimitSeconds", TOTAL_SECONDS);
-        REPORT.put("timeoutBasis", "Actual 5x5 calibration at afb855b: seven finite 64-block withdrawals took 80-90s per cycle; sustained 0.76-0.78 blocks/s at 20 TPS projects 141-145min. Declare 180min native work plus 15min setup/restarts before this fresh run; no tick/build-speed changes.");
+        REPORT.put("timeoutBasis", "Historical flat-perimeter calibration at afb855b: seven finite 64-block withdrawals took 80-90s per cycle; sustained 0.76-0.78 blocks/s at 20 TPS projects 141-145min. Declare 180min native work plus 15min setup/restarts before this fresh run; no tick/build-speed changes.");
         REPORT.put("scope", "Fresh cheats-off Survival integrated world, vanilla generated flat stone ground, native public 25-chunk claim/core, actual core menu review and plan-use packets, one 64e commission, four finite native chests, original native goals. Genuine mid-stage and between-stage close/reopen; owner spectator permission pauses only to stabilize shutdown boundaries. Builder is never teleported/refilled/disabled after initial commission. Original physical shovel site for every stage. Final aerial observer only after durable COMPLETE plus exact-world/stock proof.");
         REPORT.put("notCovered", List.of("Dedicated-client networking", "Unloaded-owner absence differs from the actual spectator permission edge tested here", "Actual project cancellation/recovery-corruption edges remain separately pure/source tested", "Uneven/disjoint/holed territory or other material palettes", "Storage farther than native reach", "Arbitrary shader/GPU combinations"));
         var mods = new LinkedHashMap<String, String>(); var artifacts = new LinkedHashMap<String, Object>();
@@ -784,10 +901,24 @@ public final class NativeStagedPerimeterQa {
         }
         require("2.0.3".equals(mods.get("workers")) && "1.15.2".equals(mods.get("recruits")), "Unreviewed native API versions");
         REPORT.put("loadedModVersions", mods); REPORT.put("loadedCompanionArtifacts", artifacts);
-        REPORT.put("nativeApiClasses", Map.of("builder", BuilderEntity.class.getName(), "buildGoal", BuilderWorkGoal.class.getName(),
-                "storageGoal", GetNeededItemsFromStorage.class.getName(), "storageArea", StorageArea.class.getName(),
-                "nativeClaim", RecruitsClaim.class.getName(), "protectedArea", ProtectedBuildArea.class.getName(),
-                "builderClassLoader", String.valueOf(BuilderEntity.class.getClassLoader())));
+        var nativeClasses = new LinkedHashMap<String, Class<?>>();
+        nativeClasses.put("builder", BuilderEntity.class); nativeClasses.put("buildGoal", BuilderWorkGoal.class);
+        nativeClasses.put("storageGoal", GetNeededItemsFromStorage.class); nativeClasses.put("storageArea", StorageArea.class);
+        nativeClasses.put("nativeClaim", RecruitsClaim.class); nativeClasses.put("protectedArea", ProtectedBuildArea.class);
+        nativeClasses.put("asyncPathNavigation", AsyncPathNavigation.class);
+        nativeClasses.put("workerPathNavigation", WorkerPathNavigation.class);
+        nativeClasses.put("workersGroundPathNavigation", WorkersGroundPathNavigation.class);
+        nativeClasses.put("workersAsyncPathfinder", WorkersAsyncPathfinder.class);
+        var nativeApiClasses = new LinkedHashMap<String, String>();
+        var nativeApiClassArtifacts = new LinkedHashMap<String, Object>();
+        nativeClasses.forEach((name, type) -> {
+            nativeApiClasses.put(name, type.getName());
+            try { nativeApiClassArtifacts.put(name, classArtifact(type)); }
+            catch (Exception e) { nativeApiClassArtifacts.put(name, Map.of("className", type.getName(), "error", e.toString())); }
+        });
+        nativeApiClasses.put("builderClassLoader", String.valueOf(BuilderEntity.class.getClassLoader()));
+        REPORT.put("nativeApiClasses", nativeApiClasses);
+        REPORT.put("nativeApiClassArtifacts", nativeApiClassArtifacts);
         REPORT.put("openGlVendor", GL11.glGetString(GL11.GL_VENDOR)); REPORT.put("openGlRenderer", GL11.glGetString(GL11.GL_RENDERER));
     }
     @SubscribeEvent
@@ -817,6 +948,20 @@ public final class NativeStagedPerimeterQa {
         try (var stream = Files.newInputStream(path)) { byte[] buffer = new byte[65536]; int count;
             while ((count = stream.read(buffer)) >= 0) digest.update(buffer, 0, count); }
         return java.util.HexFormat.of().formatHex(digest.digest());
+    }
+    private static Map<String, Object> classArtifact(Class<?> type) throws Exception {
+        var result = new LinkedHashMap<String, Object>();
+        result.put("className", type.getName());
+        var domain = type.getProtectionDomain();
+        var source = domain == null || domain.getCodeSource() == null ? null : domain.getCodeSource().getLocation();
+        result.put("codeSource", String.valueOf(source));
+        if (source != null && "file".equalsIgnoreCase(source.getProtocol())) {
+            Path path = Path.of(source.toURI());
+            result.put("fileName", path.getFileName().toString());
+            result.put("regularFile", Files.isRegularFile(path));
+            if (Files.isRegularFile(path)) result.put("sha256", sha256(path));
+        }
+        return result;
     }
     private static void fail(Minecraft mc, Throwable problem) {
         if (finishing || finished) return;

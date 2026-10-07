@@ -3,6 +3,8 @@ package com.devfarinsky.siegeoverhaul.nativecompat;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import com.devfarinsky.siegeoverhaul.core.CoreBlocks;
 import com.devfarinsky.siegeoverhaul.core.PerimeterBlueprint;
+import com.devfarinsky.siegeoverhaul.core.PerimeterSteppedProfile;
+import com.devfarinsky.siegeoverhaul.core.PerimeterSteppedTopology;
 import com.devfarinsky.siegeoverhaul.core.SiegeCore;
 import com.devfarinsky.siegeoverhaul.items.ModItems;
 import com.talhanation.recruits.ClaimEvents;
@@ -43,8 +45,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/** Isolated 5x5 fixture translated +2048 X away from vanilla spawn tickets.
- * Geometry, finite stock and original goals match NativeStagedPerimeterFixture.
+/** Isolated stepped/gated fixture translated +2048 X away from vanilla spawn tickets.
+ * Terrain, finite stock and original goals match NativeStagedPerimeterFixture.
  * This fixture never changes spawn or adds/removes force tickets. */
 final class NativeStagedUnloadFixture {
     static final String WORLD = "siege-native-staged-unload";
@@ -53,7 +55,10 @@ final class NativeStagedUnloadFixture {
     static final BlockPos CORE = new BlockPos(2214, 65, 39);
     static final List<BlockPos> CHESTS = List.of(new BlockPos(2211, 65, 35), new BlockPos(2219, 65, 35),
             new BlockPos(2211, 65, 43), new BlockPos(2219, 65, 43));
-    static final int COBBLE = 2400, OAK = 1500, BLOCKS = 3900;
+    static final int FLAT_SURFACE_Y = 65, LOWERED_SURFACE_Y = 64;
+    static final List<BlockPos> TERRAIN_LOWERED_BAND = loweredBand();
+    static final List<BlockPos> TERRAIN_FILL_DIPS = fillDips();
+    static final int COBBLE = 3000, OAK = 2000, DIRT = 256;
     static final AABB BOUNDS = new AABB(2160, 63, -16, 2272, 82, 96);
 
     private static Set<ChunkPos> territory() {
@@ -74,7 +79,32 @@ final class NativeStagedUnloadFixture {
 
     record Fixture(UUID builderId, List<UUID> storageIds, List<UUID> claimIds, PerimeterBlueprint.Plan plan,
                    BuilderWorkGoal buildGoal, GetNeededItemsFromStorage storageGoal,
-                   Map<BlockPos, BlockState> nonPlanCells, List<String> parkedAuxiliaries) {}
+                   Map<BlockPos, BlockState> nonPlanCells, List<String> parkedAuxiliaries) {
+        Fixture withPlan(PerimeterBlueprint.Plan reviewed, ServerLevel level) {
+            require(reviewed != null && reviewed.valid(), "Production reviewed plan is not buildable");
+            for (long packed : reviewed.blocks().keySet()) {
+                BlockPos cell = BlockPos.of(packed);
+                require(TERRITORY.contains(new ChunkPos(cell)) && level.getBlockState(cell).isAir(),
+                        "Plan target leaves actual claim or starts prebuilt: " + cell);
+                require(NativeConstructionGuard.neighborhoodProblem(level, cell) == null,
+                        "Fixture puts a reactive/protected neighbor inside the native safety envelope at " + cell);
+            }
+            require(!reviewed.blocks().containsKey(CORE.asLong()) && CHESTS.stream().noneMatch(p -> reviewed.blocks().containsKey(p.asLong())),
+                    "Core/chest overlaps stepped perimeter");
+            Map<String, Object> step = NativeStagedUnloadFixture.stepEvidence(reviewed);
+            require(Boolean.TRUE.equals(step.get("loweredBandAtExpectedBase")), "Production plan filled the lowered band instead of stepping down");
+            require(Boolean.TRUE.equals(step.get("transitionClearanceVerified")), "Production plan lacks required one-block transition clearance");
+            Map<BlockPos, BlockState> nonPlan = new LinkedHashMap<>();
+            for (int x = 2172; x <= 2259; x++) for (int z = -4; z <= 83; z++)
+                for (int y = 63; y <= 72; y++) {
+                    BlockPos cell = new BlockPos(x, y, z);
+                    if (!reviewed.blocks().containsKey(cell.asLong())) nonPlan.put(cell, level.getBlockState(cell));
+                }
+            return new Fixture(builderId, storageIds, claimIds, reviewed, buildGoal, storageGoal,
+                    Map.copyOf(nonPlan), parkedAuxiliaries);
+        }
+        Map<String, Object> stepEvidence() { return NativeStagedUnloadFixture.stepEvidence(plan); }
+    }
 
     private NativeStagedUnloadFixture() {}
 
@@ -95,6 +125,13 @@ final class NativeStagedUnloadFixture {
         for (int x = 135; x <= 141; x++) for (int z = -1; z <= 5; z++) level.getChunk(x, z);
         require(level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, 2215, 40) == 65,
                 "Generated fixture footing is not at the declared height");
+        for (BlockPos dip : terrainCuts()) {
+            require(level.getBlockState(dip).is(Blocks.STONE) && level.getBlockState(dip.above()).isAir(),
+                    "Fixture lowered terrain does not start as one-block natural stone: " + dip);
+            level.setBlock(dip, Blocks.AIR.defaultBlockState(), 3);
+            require(level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    dip.getX(), dip.getZ()) == dip.getY(), "Fixture lowered terrain was not exposed as one-block lower ground: " + dip);
+        }
         level.setDayTime(6000);
         owner.teleportTo(level, 2215.5, 65, 37.5, 0, 20);
         FactionEvents.createTeam(false, owner, level, FACTION, "Native Unload QA", owner.getScoreboardName(),
@@ -102,7 +139,7 @@ final class NativeStagedUnloadFixture {
         var faction = FactionEvents.recruitsFactionManager.getFactionByStringID(FACTION);
         require(faction != null && owner.getTeam() != null && FACTION.equals(owner.getTeam().getName()),
                 "Native faction membership was not indexed");
-        RecruitsClaim claim = new RecruitsClaim("Native Unload 5x5 Claim", faction);
+        RecruitsClaim claim = new RecruitsClaim("Native Unload Stepped Claim", faction);
         claim.setCenter(new ChunkPos(CORE));
         claim.setPlayer(new RecruitsPlayerInfo(owner.getUUID(), owner.getScoreboardName(), faction));
         TERRITORY.forEach(claim::addChunk); claim.setHealth(claim.getMaxHealth());
@@ -133,15 +170,17 @@ final class NativeStagedUnloadFixture {
             Container chest = (Container) level.getBlockEntity(chestPos);
             require(chest.isEmpty() && chest.getContainerSize() == 27, "Fixture requires four empty separate single chests");
             int slot = 0;
-            // Each exact quarter is 600 cobble + 375 oak: 16 slots. No chest is replenished.
-            for (var material : Map.of(Items.COBBLESTONE, COBBLE / 4, Items.OAK_PLANKS, OAK / 4).entrySet()) {
+            // Bounded surplus only. No chest is replenished; final accounting proves conservation.
+            Map<net.minecraft.world.item.Item, Integer> stock = new LinkedHashMap<>();
+            stock.put(Items.COBBLESTONE, COBBLE / 4); stock.put(Items.OAK_PLANKS, OAK / 4); stock.put(Items.DIRT, DIRT / 4);
+            for (var material : stock.entrySet()) {
                 int remaining = material.getValue();
                 while (remaining > 0) {
                     int count = Math.min(64, remaining);
                     chest.setItem(slot++, new ItemStack(material.getKey(), count)); remaining -= count;
                 }
             }
-            require(slot == 16, "Unexpected finite stock packing");
+            require(slot == 21, "Unexpected finite stock packing");
             chest.setChanged(); // Initial fixture supply only, never a native-transfer/reload workaround.
             var raw = WorkersBridge.createPlayerArea(level, "storagearea", chestPos, owner.getUUID(),
                     owner.getScoreboardName(), 1, 1, 1);
@@ -165,7 +204,9 @@ final class NativeStagedUnloadFixture {
         require(builder.getInventory().getContainerSize() >= 10
                 && builder.getInventory().countItem(Items.COBBLESTONE) == 0
                 && builder.getInventory().countItem(Items.OAK_PLANKS) == 0
-                && !builder.getMainHandItem().is(Items.COBBLESTONE) && !builder.getMainHandItem().is(Items.OAK_PLANKS),
+                && builder.getInventory().countItem(Items.DIRT) == 0
+                && !builder.getMainHandItem().is(Items.COBBLESTONE) && !builder.getMainHandItem().is(Items.OAK_PLANKS)
+                && !builder.getMainHandItem().is(Items.DIRT),
                 "Unexpected initial construction material");
         builder.getInventory().setItem(6, new ItemStack(Items.BREAD, 64));
         builder.getInventory().setItem(7, new ItemStack(Items.DIAMOND_PICKAXE));
@@ -181,69 +222,93 @@ final class NativeStagedUnloadFixture {
         GetNeededItemsFromStorage storageGoal = builder.goalSelector.getAvailableGoals().stream().map(g -> g.getGoal())
                 .filter(GetNeededItemsFromStorage.class::isInstance).map(GetNeededItemsFromStorage.class::cast).findFirst().orElseThrow();
 
-        PerimeterBlueprint.Plan plan = PerimeterBlueprint.create(TERRITORY,
-                (x, z) -> PerimeterBlueprint.Surface.ready(65), PerimeterBlueprint.Palette.COBBLESTONE);
-        require(plan.valid() && plan.blocks().size() == BLOCKS
-                && plan.materialCounts().equals(Map.of("minecraft:cobblestone", COBBLE, "minecraft:oak_planks", OAK)),
-                "Expected flat 5x5 perimeter totals changed");
-        NativeHollowWallOracle.assertFlatPlan(plan, TERRITORY);
-        NativeHollowWallOracle.assertCavitiesAir(level, TERRITORY);
-        for (long cell : plan.blocks().keySet()) require(TERRITORY.contains(new ChunkPos(BlockPos.of(cell)))
-                && level.getBlockState(BlockPos.of(cell)).isAir(), "Plan leaves actual claim or starts prebuilt");
-        require(!plan.blocks().containsKey(CORE.asLong()) && CHESTS.stream().noneMatch(p -> plan.blocks().containsKey(p.asLong())),
-                "Core/chest overlaps five-wide ring");
-        // Containers and the core must also clear production's two-cell reactive-neighbor guard.
-        // The central supplies in this 70-wide courtyard are well outside every wall's neighbor envelope.
-        for (long cell : plan.blocks().keySet()) require(
-                NativeConstructionGuard.neighborhoodProblem(level, BlockPos.of(cell)) == null,
-                "Fixture puts a reactive/protected neighbor inside the native safety envelope at " + BlockPos.of(cell));
-        Map<Long, String> oracle = independentOracle();
-        require(plan.blocks().equals(oracle) && plan.columns().size() == 1500 && plan.runs().size() == 4,
-                "Production compiler differs from independent distance-to-unowned 5x5 oracle");
-        for (long cell : plan.clearance()) require(TERRITORY.contains(new ChunkPos(BlockPos.of(cell))),
-                "Reserved clearance escaped actual territory");
-        assertInternalBordersOpen(level, oracle);
-        Map<BlockPos, BlockState> nonPlan = new LinkedHashMap<>();
-        for (int x = 2172; x <= 2259; x++) for (int z = -4; z <= 83; z++)
-            for (int y = 64; y <= 71; y++) {
-                BlockPos cell = new BlockPos(x, y, z);
-                if (!plan.blocks().containsKey(cell.asLong())) nonPlan.put(cell, level.getBlockState(cell));
-            }
-        return new Fixture(builder.getUUID(), List.copyOf(storageIds), List.of(claim.getUUID()), plan, buildGoal, storageGoal,
-                Map.copyOf(nonPlan), List.copyOf(parked));
+        return new Fixture(builder.getUUID(), List.copyOf(storageIds), List.of(claim.getUUID()), null, buildGoal, storageGoal,
+                Map.of(), List.copyOf(parked));
     }
 
-    /** Independent geometric oracle: five Chebyshev layers inward from any unowned column. */
-    static Map<Long, String> independentOracle() {
-        Map<Long, String> cells = new LinkedHashMap<>();
-        for (ChunkPos chunk : TERRITORY) for (int x = chunk.getMinBlockX(); x <= chunk.getMaxBlockX(); x++)
-            for (int z = chunk.getMinBlockZ(); z <= chunk.getMaxBlockZ(); z++) {
-                int distance = 6;
-                for (int dx = -5; dx <= 5; dx++) for (int dz = -5; dz <= 5; dz++)
-                    if (!TERRITORY.contains(new ChunkPos(new BlockPos(x + dx, 65, z + dz))))
-                        distance = Math.min(distance, Math.max(Math.abs(dx), Math.abs(dz)));
-                if (distance > 5) continue;
-                if (distance == 1 || distance == 5)
-                    for (int dy = 0; dy < 3; dy++) cells.put(new BlockPos(x, 65 + dy, z).asLong(), "minecraft:cobblestone");
-                cells.put(new BlockPos(x, 68, z).asLong(), "minecraft:oak_planks");
-                if (distance == 1 || distance == 5) cells.put(new BlockPos(x, 69, z).asLong(), "minecraft:cobblestone");
-            }
-        return Map.copyOf(cells);
+    private static List<BlockPos> terrainCuts() {
+        var cuts = new java.util.TreeSet<BlockPos>(java.util.Comparator.comparingInt((BlockPos pos) -> pos.getX())
+                .thenComparingInt(pos -> pos.getY()).thenComparingInt(pos -> pos.getZ()));
+        cuts.addAll(TERRAIN_LOWERED_BAND); cuts.addAll(TERRAIN_FILL_DIPS);
+        return List.copyOf(cuts);
     }
 
-    static void assertInternalBordersOpen(ServerLevel level, Map<Long, String> oracle) {
-        // All interior chunk seams stay open. Only the global five-wide ring may contain targets.
-        for (int x : List.of(2191, 2192, 2207, 2208, 2223, 2224, 2239, 2240))
-            for (int z = 5; z <= 74; z++) for (int y = 65; y <= 70; y++) {
-                BlockPos cell = new BlockPos(x, y, z);
-                require(!oracle.containsKey(cell.asLong()) && level.getBlockState(cell).isAir(), "Internal east-west chunk seam was walled: " + cell);
+    private static List<BlockPos> loweredBand() {
+        var topology = PerimeterSteppedTopology.create(topologyClaim());
+        require(topology.valid(), topology.problem());
+        for (var loop : topology.loops()) if (loop.outer()) {
+            var bands = loop.bands();
+            for (int i = 0; i < bands.size(); i++) {
+                var band = bands.get(i);
+                var previous = bands.get((i + bands.size() - 1) % bands.size());
+                var next = bands.get((i + 1) % bands.size());
+                if (band.kind() == PerimeterSteppedProfile.Kind.STRAIGHT
+                        && previous.kind() == PerimeterSteppedProfile.Kind.STRAIGHT
+                        && next.kind() == PerimeterSteppedProfile.Kind.STRAIGHT)
+                    return band.cells().stream().sorted()
+                            .map(cell -> new BlockPos(cell.x(), LOWERED_SURFACE_Y, cell.z())).toList();
             }
-        for (int z : List.of(15, 16, 31, 32, 47, 48, 63, 64))
-            for (int x = 2181; x <= 2250; x++) for (int y = 65; y <= 70; y++) {
-                BlockPos cell = new BlockPos(x, y, z);
-                require(!oracle.containsKey(cell.asLong()) && level.getBlockState(cell).isAir(), "Internal north-south chunk seam was walled: " + cell);
-            }
+        }
+        throw new AssertionError("Fixture claim lacks a complete straight band that can step between straight seams");
     }
+
+    private static List<BlockPos> fillDips() {
+        Set<Long> lowered = TERRAIN_LOWERED_BAND.stream().map(pos -> xz(pos).asLong()).collect(java.util.stream.Collectors.toSet());
+        var topology = PerimeterSteppedTopology.create(topologyClaim());
+        for (var loop : topology.loops()) if (loop.outer()) for (var band : loop.bands())
+            if (band.kind() == PerimeterSteppedProfile.Kind.STRAIGHT) {
+                var cells = band.cells().stream().sorted()
+                        .filter(cell -> !lowered.contains(new BlockPos(cell.x(), 0, cell.z()).asLong()))
+                        .limit(3).map(cell -> new BlockPos(cell.x(), LOWERED_SURFACE_Y, cell.z())).toList();
+                if (cells.size() == 3) return cells;
+            }
+        throw new AssertionError("Fixture claim lacks separate fill-dip cells");
+    }
+
+    private static Set<PerimeterSteppedTopology.Chunk> topologyClaim() {
+        var claim = new java.util.TreeSet<PerimeterSteppedTopology.Chunk>();
+        TERRITORY.forEach(chunk -> claim.add(new PerimeterSteppedTopology.Chunk(chunk.x, chunk.z)));
+        return Set.copyOf(claim);
+    }
+
+    private static Map<String, Object> stepEvidence(PerimeterBlueprint.Plan plan) {
+        require(plan != null && plan.valid(), "Step evidence requires a valid plan");
+        Map<Long, PerimeterBlueprint.Column> columns = new LinkedHashMap<>();
+        plan.columns().forEach(column -> columns.put(xz(column.base()).asLong(), column));
+        var baseLevels = new java.util.TreeSet<Integer>();
+        plan.columns().forEach(column -> baseLevels.add(column.base().getY()));
+        int loweredAtExpectedBase = 0;
+        for (BlockPos lowered : TERRAIN_LOWERED_BAND) {
+            PerimeterBlueprint.Column column = columns.get(xz(lowered).asLong());
+            require(column != null, "Lowered fixture band was not part of the production plan: " + lowered);
+            if (column.base().getY() == LOWERED_SURFACE_Y) loweredAtExpectedBase++;
+        }
+        var transitions = new java.util.TreeSet<String>();
+        int transitionClearance = 0;
+        for (var column : plan.columns()) for (Direction direction : List.of(Direction.EAST, Direction.SOUTH)) {
+            PerimeterBlueprint.Column other = columns.get(xz(column.base().relative(direction)).asLong());
+            if (other == null || Math.abs(other.base().getY() - column.base().getY()) != 1) continue;
+            int y = Math.min(column.base().getY(), other.base().getY()) + 6;
+            BlockPos a = column.base().atY(y), b = other.base().atY(y);
+            require(plan.clearance().contains(a.asLong()) && plan.clearance().contains(b.asLong()),
+                    "Non-level transition lacks persistent movement clearance: " + a + " / " + b);
+            transitionClearance++;
+            transitions.add(column.base().toShortString() + "<->" + other.base().toShortString() + " jumpY=" + y);
+        }
+        require(loweredAtExpectedBase == TERRAIN_LOWERED_BAND.size(), "Not every lowered band column retained the expected base");
+        require(baseLevels.contains(FLAT_SURFACE_Y) && baseLevels.contains(LOWERED_SURFACE_Y),
+                "Fixture plan did not retain distinct flat and lowered deck bases");
+        require(transitionClearance > 0, "Fixture plan has no non-level transition");
+        return Map.of("loweredBandCells", TERRAIN_LOWERED_BAND.size(),
+                "fillDipCells", TERRAIN_FILL_DIPS.size(),
+                "baseLevels", List.copyOf(baseLevels),
+                "nonLevelTransitionCount", transitionClearance,
+                "transitions", List.copyOf(transitions),
+                "loweredBandAtExpectedBase", true,
+                "transitionClearanceVerified", true);
+    }
+
+    private static BlockPos xz(BlockPos pos) { return new BlockPos(pos.getX(), 0, pos.getZ()); }
 
     private static void require(boolean condition, String message) { if (!condition) throw new AssertionError(message); }
 }

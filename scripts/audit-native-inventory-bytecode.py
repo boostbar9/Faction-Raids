@@ -23,6 +23,7 @@ TARGETS = {
         'com.talhanation.recruits.entities.ScoutEntity',
         'com.talhanation.recruits.entities.BowmanEntity',
         'com.talhanation.recruits.entities.ai.navigation.RecruitPathNavigation',
+        'com.talhanation.recruits.pathfinding.AsyncPathNavigation',
         'com.talhanation.recruits.pathfinding.AsyncGroundPathNavigation',
         'com.talhanation.recruits.init.ModEntityTypes',
     ]),
@@ -32,6 +33,9 @@ TARGETS = {
         'com.talhanation.workers.entities.ai.RecruitStorageUpkeepGoal',
         'com.talhanation.workers.entities.ai.AbstractChestGoal',
         'com.talhanation.workers.entities.ai.BuilderWorkGoal',
+        'com.talhanation.workers.entities.ai.navigation.WorkerPathNavigation',
+        'com.talhanation.workers.entities.ai.navigation.WorkersGroundPathNavigation',
+        'com.talhanation.workers.entities.ai.navigation.WorkersAsyncPathfinder',
         'com.talhanation.workers.entities.AbstractWorkerEntity',
     ]),
 }
@@ -83,7 +87,8 @@ def main():
             outputs.append({'class': name, 'file': target.name, 'sha256': sha256(target)})
         report['artifacts'][mod] = {'fileName': filename, 'sha256': expected['sha256'], 'classes': outputs}
     (evidence / 'native-bytecode-audit.json').write_text(json.dumps(report, indent=2) + '\n')
-    print('Verified disassembly evidence for 18 exact pinned native inventory/goal/claim/spawn classes; no vendor JARs copied.')
+    total = sum(len(classes) for _, classes in TARGETS.values())
+    print(f'Verified disassembly evidence for {total} exact pinned native inventory/goal/claim/spawn/navigation classes; no vendor JARs copied.')
 
 if __name__ == '__main__':
     main()

@@ -6,3 +6,4 @@ src/generated/**/*.json text eol=lf
 
 # Preserve captured native defaults exactly, including Forge's terminal blank line.
 scripts/fixtures/smallships-2.0.0-b1.4/*.toml -text whitespace=-blank-at-eof
+src/test/resources/native-dirt/* -text

@@ -2,6 +2,7 @@ package com.devfarinsky.siegeoverhaul.nativecompat;
 
 import com.devfarinsky.siegeoverhaul.FactionLogger;
 import com.devfarinsky.siegeoverhaul.RaidSavedData;
+import com.devfarinsky.siegeoverhaul.compat.ClaimBridge;
 import com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import com.devfarinsky.siegeoverhaul.core.*;
@@ -22,9 +23,43 @@ import java.util.*;
 public final class NativePerimeterProjects {
     private NativePerimeterProjects() {}
 
+    /** The original builder stays in the paid manifest; this resolves the current saved assignment. */
+    public static boolean assignedBuilder(Mob worker, PerimeterProject project) {
+        if (worker == null || project == null) return false;
+        try {
+            UUID expected = worker.level() instanceof ServerLevel level
+                    ? ConstructionEditLedger.get(level).assignedBuilder(project) : project.header().builder();
+            return expected.equals(worker.getUUID());
+        } catch (RuntimeException unavailable) { return false; }
+    }
+
+    public static boolean projectLinkMatches(Mob worker,PerimeterProject project) {
+        if (worker==null || !(worker.level() instanceof ServerLevel level)) return false;
+        try { return PerimeterProjectLink.matches(worker,project,ConstructionEditLedger.get(level).assignedBuilder(project)); }
+        catch (RuntimeException unavailable) { return false; }
+    }
+
+    /** Fresh component-wide access authority, independent of the current native recipe's bounds. */
+    public static Set<BlockPos> gateDetourPads(Mob builder, Entity area) {
+        if (builder == null || area == null || !(builder.level() instanceof ServerLevel level)
+                || area.level() != level || NativeConstructionGuard.currentArea(builder) != area) return Set.of();
+        try {
+            if (!PerimeterProjectAuthority.tracked(area)
+                    || PerimeterProjectAuthority.problem(level, builder, area, false, false) != null) return Set.of();
+            var project = PerimeterProjectAuthority.project(level, PerimeterProjectAuthority.read(area.getPersistentData()));
+            if (project.gateContract() == null) return Set.of();
+            int component = project.gateStageComponent(project.activeStage());
+            Set<BlockPos> pads = new LinkedHashSet<>();
+            for (var gate : project.gateContract().gates()) if (gate.componentId() == component)
+                pads.add(gate.outerCenter().relative(gate.facing(), 2));
+            return Set.copyOf(pads);
+        } catch (RuntimeException | LinkageError unavailable) { return Set.of(); }
+    }
+
     public static boolean start(ServerPlayer owner,Mob builder,BlockPos corePos,int material,
                                 PerimeterBlueprint.Plan plan,PerimeterStageLayout.Layout layout,
                                 Map<Long,BlockState> before,Map<Long,BlockState> clearance,
+                                PerimeterGateContract gateContract,
                                 RecruitsClaimsBridge.TerritorySnapshot territory,String reviewedHash) {
         if(owner==null || builder==null || territory==null || !territory.ready())return false;
         var data=RaidSavedData.get(owner.server);String key=SiegeCore.key(owner);CompoundTag core=data.siegeCores.get(key);
@@ -33,8 +68,11 @@ public final class NativePerimeterProjects {
         try {
             var header=PerimeterProject.Header.newCommission(UUID.randomUUID(),1,owner.getUUID(),builder.getUUID(),key,
                     corePos,territory.factionStringId(),material,reviewedHash,territory.chunks());
-            project=PerimeterProject.prepare(header,plan,layout,before,clearance);
+            project=gateContract==null?PerimeterProject.prepare(header,plan,layout,before,clearance)
+                    :PerimeterProject.prepareWithGates(header,plan,layout,before,clearance,gateContract);
             String problem=context(owner.serverLevel(),owner,builder,project);
+            if(problem!=null)throw new IllegalStateException(problem);
+            problem=gateObservationProblem(owner.serverLevel(),owner,project,-1);
             if(problem!=null)throw new IllegalStateException(problem);
             if(PerimeterProjectLink.reserved(builder))throw new IllegalStateException("Builder is reserved by another whole perimeter.");
             if(NativeConstructionGuard.currentArea(builder)!=null || WorkersBridge.hasActiveBuildArea(builder)
@@ -50,7 +88,7 @@ public final class NativePerimeterProjects {
             project=PerimeterProjectStore.prepare(core,project,data::setDirty);
             PerimeterStageJournal.prepare(core,project,data::setDirty);
             if(!ledger.registerProject(project))throw new IllegalStateException("The complete footprint could not be reserved.");
-            PerimeterProjectLink.set(builder,project);
+            PerimeterProjectLink.set(builder,project,ConstructionEditLedger.get((ServerLevel)builder.level()).assignedBuilder(project));
             if(!admit(owner,builder,core,project,candidate,data::setDirty))throw new IllegalStateException("The first native section could not be accepted safely.");
             paymentAttempted=true;
             var payment=PerimeterProjectStore.consumeOnce(core,header.projectId(),project.manifestHash(),header.quotedPrice(),owner.isCreative(),data::setDirty);
@@ -139,12 +177,33 @@ public final class NativePerimeterProjects {
         }
         if(project.state()==PerimeterProject.State.RECOVERY_BLOCKED)return;
         var ledger=ConstructionEditLedger.get(level);
-        if(!ledger.matchesProjectReservation(project)) {pause(core,project,"Paused: complete reservation or edit history differs from the reviewed perimeter.",dirty);return;}
+        if(!ledger.matchesProjectIdentity(project)) {pause(core,project,"Paused: complete reservation or edit history differs from the reviewed perimeter.",dirty);return;}
         var owner=level.getServer().getPlayerList().getPlayer(project.header().owner());
-        Entity found=level.getEntity(project.header().builder());Mob builder=found instanceof Mob mob?mob:null;
+        Entity found=level.getEntity(ledger.assignedBuilder(project));Mob builder=found instanceof Mob mob?mob:null;
+        // Authenticated destruction differs from an unloaded worker. Only confirmed death opens an assignment.
+        if (builder == null && ledger.projectBuilderDestructionReceipt(project) != null) {
+            tryReplaceDeadBuilder(level, owner, project, ledger);
+            found = level.getEntity(ledger.assignedBuilder(project)); builder = found instanceof Mob mob ? mob : null;
+        }
+        if (!ledger.matchesProjectReservation(project)) {
+            pause(core,project,ledger.projectBuilderDestructionReceipt(project) != null
+                    ? "Waiting: hire an idle builder near the original Siege Core to replace the dead builder. No extra commission is due."
+                    : "Paused: complete reservation or edit history differs from the reviewed perimeter.",dirty);return;
+        }
+        if (builder != null && project.state()==PerimeterProject.State.WAITING_FOR_NEXT_STAGE
+                && !builder.getUUID().equals(project.header().builder()) && !PerimeterProjectLink.reserved(builder)
+                && idleReplacement(builder) && NativeConstructionGuard.currentArea(builder)==null
+                && !NativeConstructionGuard.hasProtectedReceipt(builder)) {
+            PerimeterProjectLink.set(builder,project,ConstructionEditLedger.get((ServerLevel)builder.level()).assignedBuilder(project));
+            if (!PerimeterProjectLink.bindLedgerGeneration(builder,ledger.generation())) return;
+        }
+        if (builder != null && project.active() != null && level.getEntity(project.active().areaId()) instanceof ProtectedBuildArea live
+                && !NativeConstructionGuard.resumeReplacement(owner,builder,live,project)) {
+            pause(core,project,"Waiting: replacement builder handoff needs loaded, unchanged section evidence.",dirty);return;
+        }
         String problem=context(level,owner,builder,project);
         if(problem!=null) {pause(core,project,problem,dirty);return;}
-        if(!PerimeterProjectLink.matches(builder,project)) {pause(core,project,"Paused: the reserved builder's whole-perimeter identity changed.",dirty);return;}
+        if(!projectLinkMatches(builder,project)) {pause(core,project,"Paused: the reserved builder's whole-perimeter identity changed.",dirty);return;}
         var journal=PerimeterStageJournal.get(core,project);
         if(journal==null) {pause(core,project,"Paused: native marker creation history is unavailable.",dirty);return;}
         if(project.state()==PerimeterProject.State.VERIFYING_COMPLETE) {
@@ -171,6 +230,9 @@ public final class NativePerimeterProjects {
             if(problem!=null) {pause(core,project,"Waiting: builder is finishing native supplies or item use.",dirty);return;}
             problem=unstartedStageProblem(level,owner,project);
             if(problem!=null) {pause(core,project,problem,dirty);return;}
+            if (!WallBuilderAccess.clearNextSection(builder,project.active().layout().targets().keySet(),project.reservation(),first.marker())) {
+                pause(core,project,"Waiting: assigned builder is walking out of the next section before native admission.",dirty);return;
+            }
             Entity area;
             try {area=ProtectedConstructionAreas.createStage(owner,builder,project,first.marker());}
             catch(RuntimeException unavailable) {pause(core,project,"Waiting: clear and load the original shovel site for the next native section.",dirty);return;}
@@ -187,6 +249,9 @@ public final class NativePerimeterProjects {
         }
         if(!(area instanceof ProtectedBuildArea protectedArea) || !area.isAlive() || !area.blockPosition().equals(attempt.marker())) {
             pause(core,project,"Paused: recorded native marker is missing or moved. It will not be recreated.",dirty);return;
+        }
+        if (!NativeConstructionGuard.resumeReplacement(owner, builder, protectedArea, project)) {
+            pause(core,project,"Waiting: replacement builder handoff needs loaded, unchanged section evidence.",dirty);return;
         }
         problem=PerimeterProjectAuthority.problem(level,builder,area,true,false);
         if(problem!=null) {pause(core,project,problem,dirty);return;}
@@ -208,6 +273,54 @@ public final class NativePerimeterProjects {
             }catch(ReflectiveOperationException unavailable){pause(core,project,"Paused: native builder API is unavailable.",dirty);return;}
         }
         pause(core,project,"",dirty);
+    }
+
+    private static void tryReplaceDeadBuilder(ServerLevel level, ServerPlayer owner, PerimeterProject project,
+                                              ConstructionEditLedger ledger) {
+        if (owner == null || !owner.isAlive() || owner.isSpectator() || !owner.mayBuild()
+                || owner.serverLevel() != level || !owner.getUUID().equals(project.header().owner())
+                || !SiegeCore.key(owner).equals(project.header().coreKey())
+                || project.active() == null || !(project.state() == PerimeterProject.State.RUNNING
+                    || project.state() == PerimeterProject.State.STAGE_VERIFIED
+                    || project.state() == PerimeterProject.State.WAITING_FOR_NEXT_STAGE)) return;
+        var core = RaidSavedData.get(level.getServer()).siegeCores.get(project.header().coreKey());
+        var journal = core == null ? null : PerimeterStageJournal.get(core,project);
+        boolean between=project.state()==PerimeterProject.State.WAITING_FOR_NEXT_STAGE;
+        var attempt = journal == null ? null : journal.at(between?project.activeStage()-1:project.activeStage());
+        if (attempt == null || !entitiesLoaded(level,attempt.marker())
+                || !ledger.matchesProjectIdentity(project) || ledger.edited(project.header().projectId())) return;
+        Entity marker=level.getEntity(attempt.area());
+        if (between ? attempt.state()!=PerimeterStageJournal.State.RETIRED || !ledger.retired(attempt.area()) || marker!=null
+                : !(marker instanceof ProtectedBuildArea) || !marker.isAlive() || !marker.blockPosition().equals(attempt.marker())) return;
+        var point=SiegeCore.point(level.getServer(),project.header().coreKey());
+        if (point == null || !point.pos().equals(project.header().originalCore())
+                || !PerimeterProjectAuthority.territoryMatches(project,RecruitsClaimsBridge.getFactionTerritory(level,
+                    project.header().faction(),PerimeterTerritory.MAX_CHUNKS))) return;
+        // Selection never loads chunks, revives workers, or moves materials out of death drops.
+        var candidates = level.getEntitiesOfClass(Mob.class,new net.minecraft.world.phys.AABB(project.header().originalCore()).inflate(64),
+                mob -> mob.isAlive() && WorkersBridge.isBuilder(mob)
+                        && project.header().owner().equals(WorkersBridge.readWorkerOwner(mob)))
+                .stream().sorted(java.util.Comparator.comparingDouble(mob -> mob.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(attempt.marker())))).toList();
+        for (Mob candidate : candidates) {
+            if (!idleReplacement(candidate) || PerimeterProjectLink.reserved(candidate) || NativeConstructionGuard.hasProtectedReceipt(candidate)
+                    || WorkersBridge.hasActiveBuildArea(candidate) || NativeConstructionGuard.currentArea(candidate) != null
+                    || candidate.getPersistentData().contains(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
+                    || NativeConstructionGuard.commissionProblem(candidate) != null
+                    || !ledger.canRetainHandLifecycle(candidate.getPersistentData(),candidate.getUUID())) continue;
+            if (ledger.replaceDeadBuilder(project,candidate.getUUID())) return;
+        }
+    }
+
+    static boolean idleReplacement(Mob builder) {
+        try {
+            int command=((Number)builder.getClass().getMethod("getFollowState").invoke(builder)).intValue();
+            // Workers 2 changes idle command 0 to work command 6 as its selection
+            // goal starts, even before it owns a build area. Both are available
+            // only while the native assignment is empty; following/holding is not.
+            return builder.getTarget() == null && !builder.isPassenger()
+                    && (command == 0 || command == 6)
+                    && NativeConstructionGuard.currentArea(builder)==null;
+        } catch (ReflectiveOperationException | RuntimeException unavailable) { return false; }
     }
 
     private static void retireVerified(ServerLevel level,CompoundTag core,PerimeterProject project,Mob builder,
@@ -259,12 +372,12 @@ public final class NativePerimeterProjects {
         var ledger=ConstructionEditLedger.get(level);
         if(!ledger.matchesProjectIdentity(project))return;
         if(!cleanupHistoryMatches(project,journal,ledger.projectLeaseIndex(project.header().projectId())))return;
-        Mob builder=findBuilder(level.getServer(),project.header().builder());
+        Mob builder=findBuilder(level.getServer(),ledger.assignedBuilder(project));
         String destruction=builder==null?ledger.projectBuilderDestructionReceipt(project):null;
         // A missing worker is never death evidence. Only the exact authenticated, durable destruction
         // receipt can replace live detachment; a restored loaded worker still needs ordinary safe cleanup.
         if(destruction==null) {
-            if(builder==null || !builder.isAlive() || !WorkersBridge.isBuilder(builder) || !PerimeterProjectLink.matches(builder,project))return;
+            if(builder==null || !builder.isAlive() || !WorkersBridge.isBuilder(builder) || !projectLinkMatches(builder,project))return;
             if(!NativeConstructionGuard.retirementReceiptMatches(builder.getPersistentData(),
                     project.stages().stream().map(PerimeterProject.Stage::areaId).toList(),ledger.generation())) {
                 NativeConstructionGuard.pauseStorage(builder,"Paused: whole-perimeter cleanup worker receipt needs recovery review");return;
@@ -341,7 +454,7 @@ public final class NativePerimeterProjects {
             var snapshot=PerimeterProjectAuthority.snapshot(level.getServer().overworld(),link.core());
             var project=snapshot.get(link.id());
             if(project!=null) {
-                if(!PerimeterProjectLink.matches(worker,project) || !ledger.matchesProjectIdentity(project)
+                if(!projectLinkMatches(worker,project) || !ledger.matchesProjectIdentity(project)
                         || !NativeConstructionGuard.retirementReceiptMatches(worker.getPersistentData(),
                         project.stages().stream().map(PerimeterProject.Stage::areaId).toList(),ledger.generation()))
                     return NativeConstructionGuard.pauseStorage(worker,"Paused: whole-perimeter worker or ledger identity needs recovery review");
@@ -369,7 +482,7 @@ public final class NativePerimeterProjects {
             }
             var terminal=snapshot.terminal(link.id());
             if(terminal==null || terminal.generation()!=link.generation() || !terminal.manifestHash().equals(link.hash())
-                    || !terminal.coreKey().equals(link.core()) || !terminal.builder().equals(worker.getUUID())
+                    || !terminal.coreKey().equals(link.core()) || !ledger.assignedTerminalBuilder(terminal).equals(worker.getUUID())
                     || !ledger.sameGeneration(terminal.cleanup().ledgerGeneration())
                     || !NativeConstructionGuard.retirementReceiptMatches(worker.getPersistentData(),
                     terminal.stages().stream().map(PerimeterTerminalReceipt.Stage::areaId).toList(),terminal.cleanup().ledgerGeneration()))
@@ -396,7 +509,7 @@ public final class NativePerimeterProjects {
             var stage=project.stages().get(attempt.stage());var h=project.header();
             if(!attempt.area().equals(stage.areaId()) || !marker.getUUID().equals(stage.areaId())
                     || !attempt.marker().equals(fixedMarker) || !marker.blockPosition().equals(fixedMarker)
-                    || !h.builder().equals(area.reservedBuilderId()) || !h.owner().equals(WorkersBridge.readOwner(marker)))return false;
+                    || !ConstructionEditLedger.get((ServerLevel)marker.level()).builderForArea(project,attempt.area()).equals(area.reservedBuilderId()) || !h.owner().equals(WorkersBridge.readOwner(marker)))return false;
             var scope=PerimeterProjectAuthority.read(marker.getPersistentData());
             return scope.projectId().equals(h.projectId()) && scope.generation()==h.generation()
                     && scope.manifestHash().equals(project.manifestHash()) && scope.coreKey().equals(h.coreKey())
@@ -408,8 +521,8 @@ private static String context(ServerLevel level,ServerPlayer owner,Mob builder,P
         if(owner==null || owner.serverLevel()!=level || !owner.isAlive() || owner.isSpectator() || !owner.mayBuild())
             return "Paused: the perimeter owner must be online in the Overworld to authorize construction.";
         if(builder==null || !builder.isAlive() || builder.level()!=level || !WorkersBridge.isBuilder(builder)
-                || !project.header().builder().equals(builder.getUUID()) || !project.header().owner().equals(WorkersBridge.readWorkerOwner(builder)))
-            return "Paused: load the original owned builder to continue this perimeter.";
+                || !assignedBuilder(builder,project) || !project.header().owner().equals(WorkersBridge.readWorkerOwner(builder)))
+            return "Paused: load the assigned owned builder to continue this perimeter.";
         if(!SiegeCore.key(owner).equals(project.header().coreKey()) || !level.dimension().equals(Level.OVERWORLD))
             return "Paused: the original faction authority changed.";
         var point=SiegeCore.point(level.getServer(),project.header().coreKey());
@@ -430,6 +543,8 @@ private static String context(ServerLevel level,ServerPlayer owner,Mob builder,P
             if(original==null || !level.getBlockState(pos).equals(original) || level.getBlockEntity(pos)!=null)
                 return "Paused: a future section changed after the whole-territory review.";
         }
+        String gates=gateObservationProblem(level,owner,project,project.gateContract()==null?-1:project.gateStageComponent(project.activeStage()));
+        if(gates!=null)return gates;
         return null;
     }
     private static String wholeWorldProblem(ServerLevel level,ServerPlayer owner,PerimeterProject project) {
@@ -445,6 +560,8 @@ private static String context(ServerLevel level,ServerPlayer owner,Mob builder,P
             if(!level.mayInteract(owner,pos) || !level.getBlockState(pos).equals(cell.getValue()) || level.getBlockEntity(pos)!=null)
                 return "Paused: accepted perimeter headroom changed.";
         }
+        String gates=gateObservationProblem(level,owner,project,-1);
+        if(gates!=null)return gates;
         return null;
     }
 
@@ -455,7 +572,29 @@ private static String context(ServerLevel level,ServerPlayer owner,Mob builder,P
             if(expected==null || !level.getBlockState(pos).equals(expected) || level.getBlockEntity(pos)!=null)
                 return "Paused: a verified section changed before native cleanup.";
         }
+        var owner=level.getServer().getPlayerList().getPlayer(project.header().owner());
+        String gates=gateObservationProblem(level,owner,project,project.gateContract()==null?-1:project.gateStageComponent(project.activeStage()));
+        if(gates!=null)return gates;
         return null;
+    }
+
+    static String gateObservationProblem(ServerLevel level,ServerPlayer owner,PerimeterProject project,int component) {
+        if(project.gateContract()==null)return null;
+        java.util.function.Predicate<BlockPos> permitted=gatePermissions(level,project);
+        return component<0
+                ? PerimeterGateAccess.observationProblem(level,owner,project.gateContract(),permitted)
+                : PerimeterGateAccess.componentObservationProblem(level,owner,project.gateContract(),component,permitted);
+    }
+    private static java.util.function.Predicate<BlockPos> gatePermissions(ServerLevel level,PerimeterProject project) {
+        RaidSavedData.Anchor anchor=RaidSavedData.get(level.getServer()).anchors.get(project.header().coreKey());
+        RaidSavedData.Anchor identity=anchor==null?null:anchor.withIdentity(project.header().faction(),anchor.teamDisplay());
+        Map<ChunkPos,Boolean> permitted=new HashMap<>();
+        return pos -> permitted.computeIfAbsent(new ChunkPos(pos), chunk -> {
+            if(project.header().territory().contains(chunk))
+                return RecruitsClaimsBridge.isChunkOwnedBy(level,chunk,project.header().faction())
+                        && !ClaimBridge.isForeignClaim(level,chunk,identity);
+            return !ClaimBridge.isForeignClaim(level,chunk,identity);
+        });
     }
 
     /** Authenticated whole-project cancellation; native section buttons route here rather than releasing one lease. */

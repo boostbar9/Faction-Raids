@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fail closed unless a real bounded representative native lifecycle produced all evidence."""
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -8,15 +9,23 @@ root = Path(sys.argv[1]) if len(sys.argv) == 2 else Path('build/native-handoff-q
 data = json.loads((root / 'result.json').read_text())
 audit = json.loads((root / 'native-bytecode-audit.json').read_text())
 assert audit['status'] == 'passed' and audit['noVendorJarsUploaded'], audit
-assert sum(len(value['classes']) for value in audit['artifacts'].values()) == 18, audit
+assert sum(len(value['classes']) for value in audit['artifacts'].values()) == 22, audit
 assert data['mode'] == 'staged-handoff' and data['status'] == 'passed', data
+if os.environ.get('BUILDER_REPLACEMENT_QA') == 'true':
+    assert data.get('builderReplacementRequested') is True, data
+    replacement = data['builderReplacement']
+    assert replacement['deadBuilder'] != replacement['replacement'], replacement
+    assert len(replacement['deadBuilder']) == len(replacement['replacement']) == 36, replacement
+    assert 0 < replacement['placedBefore'] < replacement['placedAfter'] < 572, replacement
+    assert replacement['extraCommission'] is False, replacement
 assert data['geometryProfile'] == 'hollow-five-wide-one-claim', data
 assert data['geometrySourceCommit'] == 'acbc66025e09152db75ab419b34fad81a3dd290e', data
 assert data['hollowOracle'] == {'columns': 220, 'skinColumns': 88, 'cavityColumns': 132, 'targetCount': 572,
                                 'cavityAirCount': 396, 'headroomAirCount': 352, 'reservedCellCount': 1320}, data
 assert data['hollowCavityAirPreserved'] and data['walkwayHeadroomAirPreserved'], data
 assert data['nativeStageHollowReservationVerified-0'] and data['nativeStageHollowReservationVerified-1'], data
-assert data['syntheticPartition'] is True and data['qaSectionTargetCap'] == 96, data
+section_cap = 192 if os.environ.get('BUILDER_REPLACEMENT_QA') == 'true' else 96
+assert data['syntheticPartition'] is True and data['qaSectionTargetCap'] == section_cap, data
 assert 'direct server commission' in data['commissionPath'], data
 assert data['wholePlanCompleted'] is False, data
 assert data['totalLimitSeconds'] == 600 and data['constructionLimitSeconds'] == 540, data
@@ -27,7 +36,7 @@ assert data['materialCounts'] == {'minecraft:cobblestone': 352, 'minecraft:oak_p
 assert data['treasuryDebit'] == 64 and len(data['manifestHash']) == len(data['reviewFingerprint']) == 64, data
 stages = data['stageLayout']
 assert len(stages) == data['reviewedStageCount'] > 2 and sum(part['targets'] for part in stages) == 572, stages
-assert all(0 < part['targets'] <= 96 and len(part['digest']) == 64 for part in stages), stages
+assert all(0 < part['targets'] <= section_cap and len(part['digest']) == 64 for part in stages), stages
 assert [part['index'] for part in stages] == list(range(len(stages))), stages
 assert len({part['area'] for part in stages}) == len(stages), stages
 assert data['firstSectionCompletionObserved'] is True and data['firstSectionTargetCount'] == stages[0]['targets'], data

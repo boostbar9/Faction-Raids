@@ -84,7 +84,7 @@ jobs:
           assert 0 < data['elapsedSeconds'] <= data['totalLimitSeconds'] == 600, data
           gate = data['closedLifecycle']
           assert gate['consecutiveServerTicks'] >= gate['minimumTicks'] == 40, gate
-          assert gate['carriedCobble'] >= 32 and gate['nativePlaced'] > 0, gate
+          assert gate['carriedConstruction'] >= 32 and gate['nativePlaced'] > 0, gate
           assert gate['neededItemsEmpty'] and gate['storageRunningProblemAbsent'] and gate['cleanupJournalEmpty'], gate
           assert not gate['activeHandUse'] and gate['nativeGoalState'] == 'PLACE_BLOCKS', gate
           assert data['controllerSettlingRevisions'] in [0, 1] and 0 <= data['unloadedBeforeSettlingTicks'] < 40, data
@@ -114,12 +114,25 @@ jobs:
           assert loaded['cleanup'] == '{}' and data['returnedCleanupJournal'] == '{}', data
           assert data['nativeInventoryReloadVerified'] and data['returnedConservationVerified'], data
           assert data['placementsDuringDepartureBeforeConfirmedUnload'] >= 0, data
-          assert 0 < data['returnedPlaced'] < data['resumedPlaced'] <= data['finalPlaced'] < 3900, data
+          target_count = data['targetCount']
+          materials = data['materialCounts']
+          assert sum(materials.values()) == target_count and materials['minecraft:dirt'] == data['fillTargets'] > 0, data
+          assert data['nonLevelTransitionCount'] > 0 and data['transitionClearanceVerified'], data
+          assert data['loweredSurfaceY'] in data['deckBaseLevels'] and data['flatSurfaceY'] in data['deckBaseLevels'], data
+          step = data['terrainStepEvidence']
+          assert step['loweredBandAtExpectedBase'] and step['transitionClearanceVerified'], step
+          assert step['nonLevelTransitionCount'] == data['nonLevelTransitionCount'] and len(step['transitions']) > 0, step
+          assert data['gateCount'] == 4 and len(data['gateCenters']) == 4, data
+          assert 0 < data['returnedPlaced'] < data['resumedPlaced'] <= data['finalPlaced'] < target_count, data
           assert data['nativePlacementResumed'] and data['cancelPacketAuthenticated'] and data['safeCleanupVerified'], data
           assert data['cancelAuthorityNbt'] and data['reviewedStageCount'] >= 1, data
-          assert sum(stage['targets'] for stage in data['stageLayout']) == 3900, data
+          assert sum(stage['targets'] for stage in data['stageLayout']) == target_count, data
           for material, totals in data['latestConservation'].items():
-              expected = 2400 if material == 'minecraft:cobblestone' else 1500
+              expected = {
+                  'minecraft:cobblestone': 3000,
+                  'minecraft:oak_planks': 2000,
+                  'minecraft:dirt': 256,
+              }[material]
               assert totals['supplied'] == expected, totals
               assert sum(totals[k] for k in ['built', 'chests', 'builder', 'owner', 'loose']) == expected, totals
           bank = data['treasuryAccounting']

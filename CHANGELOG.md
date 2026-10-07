@@ -1,4 +1,30 @@
-## 4.52.10 — Keep Olympian loot sealed
+## 4.53.0-alpha.3 - Replacement builders resume paid perimeter work
+
+- After a builder dies, hire an eligible idle owned builder near the original Siege Core to resume the saved paid perimeter. The owner must be online with unchanged core, faction and territory; the blueprint and progress remain intact, with no second commission fee.
+- Builders walk clear before the next section is admitted, avoiding stalls when standing inside its planned blocks. Native placement, finite chest supplies and protection checks remain in force.
+- Includes alpha.2 gate travel, material queue recovery and exact blocked-ground feedback fixes.
+- One active builder per project. Missing or unloaded builders do not authorize replacement, and death cargo is not copied; recover and resupply materials normally.
+- Still experimental: representative death/replacement, section handoff, reload and cancellation checks do not prove every gated layout, terrain or modpack. Deep excavation/CUT, simultaneous crews, authenticated packaged multiplayer and safe downgrade remain unproven.
+- Back up your world and match 4.53.0-alpha.3 on the server and every client with Recruits 1.15.2+, Workers 2 2.0.3+, Small Ships and Siege Weapons. Stable 4.52.10 and its update feed remain unchanged.
+
+## 4.53.0-alpha.2 - Perimeter travel and material recovery
+
+- Keep the exact blocking block and coordinates when stepped ground review refuses a site.
+- Fix native builders reusing a gate approach pad after reaching it, including fallback when no standing site or complete path is found. Existing claim, collision, loaded-chunk and reservation checks remain in force.
+- Fix depleted-material batches keeping the previous block target. Workers now selects from its freshly prepared queue and makes its normal finite supply requests.
+- A real 25-chunk stepped/gated fixture completed all 3,831 blocks from finite chest supplies, with one 64-emerald commission and actual mid-section and between-section world restarts. This is focused evidence on the tested layout, not a guarantee for every terrain or modpack.
+- Still experimental: deep excavation/CUT is deferred; broader terrain, multiplayer, retry/cancellation and downgrade coverage remains limited. Replacement builders and simultaneous crews are separate development work and are not included in this alpha.
+- Back up your world and test on a copy. Match 4.53.0-alpha.2 on the server and every client, with Recruits 1.15.2+, Workers 2 2.0.3+, Small Ships and Siege Weapons. Stable 4.52.10 and its update feed remain unchanged.
+
+## 4.53.0-alpha.1 - Stepped perimeter testing Alpha
+
+- Experimental terrain-following perimeter plans add stepped walls, four cardinal gates on small level pads, and short dirt fills over dips. One paid plan prepares the ground and then builds using real chest supplies.
+- Include saved gate-authority routing for native Workers 2 builders, while retaining existing walls and paid plans. Deep excavation and CUT remain deferred.
+- Keep the current Command Center and sealed-loot changes from 4.52.10.
+- Known limitations: builders can still stall at corners or gates, and complete native dirt-fill-to-wall construction, travel, retry/reload and cancellation acceptance is not finished. This Alpha is for manual testing, not a stable construction-completion release.
+- Back up your world and test on a copy. Install exactly 4.53.0-alpha.1 on the server and every client, with the required Recruits, Workers 2, Small Ships and Siege Weapons dependencies. Do not assume worlds saved by this Alpha can be safely downgraded.
+
+## 4.52.10 - Keep Olympian loot sealed
 
 - Remove the possible-item browser and reward models from the Loot tab. Each chest now keeps its exact equipment pool mysterious until the purchased box is opened.
 - Give the chest purchase controls the full card width and replace the preview showcase with a compact Fates-themed rarity and price reminder.
