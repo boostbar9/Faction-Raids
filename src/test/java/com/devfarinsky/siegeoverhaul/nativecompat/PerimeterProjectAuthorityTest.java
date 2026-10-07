@@ -181,7 +181,7 @@ class PerimeterProjectAuthorityTest extends MinecraftTestSupport {
             claims.when(()->RecruitsClaimsBridge.getFactionTerritory(level,running.header().faction(), PerimeterTerritory.MAX_CHUNKS))
                     .thenReturn(new RecruitsClaimsBridge.TerritorySnapshot(running.header().faction(),running.header().territory(),null));
             ledgers.when(()->ConstructionEditLedger.get(level)).thenReturn(ledger);
-            nativeProjects.when(()->NativePerimeterProjects.assignedBuilder(builder,running)).thenReturn(true);
+            nativeProjects.when(()->NativePerimeterProjects.assignedBuilder(eq(builder),any())).thenReturn(true);
             nativeProjects.when(()->NativePerimeterProjects.gateObservationProblem(eq(level),eq(owner),any(),eq(component)))
                     .thenReturn("Paused: gate approach permissions changed");
             assertEquals("Paused: gate approach permissions changed",PerimeterProjectAuthority.problem(level,builder,area,true,false));
