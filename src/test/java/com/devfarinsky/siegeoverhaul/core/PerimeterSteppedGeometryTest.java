@@ -49,6 +49,12 @@ class PerimeterSteppedGeometryTest {
             var result=compile(Set.of(new Chunk(0,0)),terrain,Block.STONE_BRICKS,Limits.DEFAULT);atomicFailure(result);terrain.once();
         }
     }
+    @Test void refusedGroundKeepsItsExactBlockAndCoordinateDiagnostic(){
+        String blocker="Blocked at 130, 65, 8: minecraft:tall_grass";
+        var terrain=new Flat(p->p.equals(new Cell(0,0))?new Ground(0,false,blocker):Ground.safe(64));
+        var result=compile(Set.of(new Chunk(0,0)),terrain,Block.STONE_BRICKS,Limits.DEFAULT);
+        atomicFailure(result);assertEquals(blocker,result.problem());terrain.once();
+    }
     @Test void solverSelectedStepsBecomeBoundedOneBlockWalkTransitionsWithoutFlatFallback(){
         Set<Chunk> claim=new HashSet<>();for(int x=0;x<4;x++)for(int z=0;z<4;z++)claim.add(new Chunk(x,z));var topology=create(claim);assertTrue(topology.valid());
         var low=topology.loops().get(0).bands().stream().filter(b->b.kind()==PerimeterSteppedProfile.Kind.STRAIGHT).skip(1).findFirst().orElseThrow();Set<Cell> dip=new HashSet<>(low.cells());
