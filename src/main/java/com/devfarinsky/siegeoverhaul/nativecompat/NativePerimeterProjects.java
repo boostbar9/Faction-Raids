@@ -230,6 +230,9 @@ public final class NativePerimeterProjects {
             if(problem!=null) {pause(core,project,"Waiting: builder is finishing native supplies or item use.",dirty);return;}
             problem=unstartedStageProblem(level,owner,project);
             if(problem!=null) {pause(core,project,problem,dirty);return;}
+            if (!WallBuilderAccess.clearNextSection(builder,project.active().layout().targets().keySet(),project.reservation(),first.marker())) {
+                pause(core,project,"Waiting: assigned builder is walking out of the next section before native admission.",dirty);return;
+            }
             Entity area;
             try {area=ProtectedConstructionAreas.createStage(owner,builder,project,first.marker());}
             catch(RuntimeException unavailable) {pause(core,project,"Waiting: clear and load the original shovel site for the next native section.",dirty);return;}
