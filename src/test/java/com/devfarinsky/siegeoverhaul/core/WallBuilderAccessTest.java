@@ -738,6 +738,96 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void missingDirectPathStillTriesAnAuthorizedGate() throws Exception {
+        var goal = cornerRoute();
+        var gate = mock(Path.class); when(gate.canReach()).thenReturn(true);
+        when(gate.getEndNode()).thenReturn(new Node(167, 65, -2));
+        when(nav.createPath(anySet(), eq(0))).thenReturn(null, gate);
+        try (var projects = mockStatic(com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.class)) {
+            projects.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.gateDetourPads(worker, worker.currentBuildArea))
+                    .thenReturn(compiledPads());
+            goal.route(level, new BlockPos(129, 66, 0), 40);
+            verify(nav, times(2)).createPath(anySet(), eq(0));
+            verify(nav).moveTo(167, 65, -2, .8);
+            verify(level, never()).setBlock(any(), any(), anyInt());
+            verify(worker, never()).teleportTo(anyDouble(), anyDouble(), anyDouble());
+        }
+    }
+
+    @Test void reservedDirectStandingSpaceStillAllowsAnAuthorizedGateApproach() throws Exception {
+        var goal = cornerRoute();
+        var columns = new java.util.HashSet<Long>();
+        for (int x = 123; x <= 135; x++) for (int z = -6; z <= 6; z++)
+            columns.add(new BlockPos(x, 0, z).asLong());
+        var field = WallBuilderAccess.class.getDeclaredField("reservedColumns"); field.setAccessible(true);
+        field.set(goal, columns);
+        var gate = mock(Path.class); when(gate.canReach()).thenReturn(true);
+        when(gate.getEndNode()).thenReturn(new Node(167, 65, -2));
+        when(nav.createPath(anySet(), eq(0))).thenReturn(gate);
+        try (var projects = mockStatic(com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.class)) {
+            projects.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.gateDetourPads(worker, worker.currentBuildArea))
+                    .thenReturn(compiledPads());
+            goal.route(level, new BlockPos(129, 66, 0), 40);
+            verify(nav).createPath(eq(compiledPads()), eq(0));
+            verify(nav).moveTo(167, 65, -2, .8);
+        }
+    }
+
+    @Test void missingDirectPathNeverInventsGateAuthorityOrUsesItForSelfRecovery() throws Exception {
+        for (boolean recovery : new boolean[]{false, true}) {
+            reset(worker, level, nav); var goal = cornerRoute();
+            when(nav.createPath(anySet(), eq(0))).thenReturn(null);
+            try (var projects = mockStatic(com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.class)) {
+                projects.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.gateDetourPads(worker, worker.currentBuildArea))
+                        .thenReturn(recovery ? compiledPads() : java.util.Set.of());
+                goal.route(level, new BlockPos(129, 66, 0), 40, recovery);
+                verify(nav, atMostOnce()).createPath(anySet(), eq(0));
+                verify(nav, never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+                if (recovery) projects.verifyNoInteractions();
+            }
+        }
+    }
+
+    @Test void completedGateDetourIsNotSelectedAgainForTheSameWorkTarget() throws Exception {
+        var goal = cornerRoute(); var target = new BlockPos(129, 66, 0);
+        var gate = mock(Path.class); when(gate.canReach()).thenReturn(true);
+        when(gate.getEndNode()).thenReturn(new Node(167, 65, -2));
+        when(nav.createPath(anySet(), eq(0))).thenReturn(null, gate);
+        try (var projects = mockStatic(com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.class)) {
+            projects.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.gateDetourPads(worker, worker.currentBuildArea))
+                    .thenReturn(compiledPads());
+            goal.route(level, target, 40);
+            when(nav.getPath()).thenReturn(gate); when(gate.isDone()).thenReturn(true);
+            when(level.getGameTime()).thenReturn(40L);
+            when(nav.createPath(anySet(), eq(0))).thenReturn(null);
+            clearInvocations(nav);
+            goal.route(level, target, 40);
+            verify(nav).createPath(argThat((java.util.Set<BlockPos> sites) ->
+                    !sites.isEmpty() && compiledPads().containsAll(sites)
+                            && !sites.contains(new BlockPos(167, 65, -2))), eq(0));
+            verify(nav, never()).moveTo(167, 65, -2, .8);
+            // A different native block target must get a fresh waypoint search.
+            when(nav.getPath()).thenReturn(null); when(level.getGameTime()).thenReturn(80L);
+            clearInvocations(nav);
+            goal.route(level, new BlockPos(129, 66, 1), 40);
+            verify(nav).createPath(eq(compiledPads()), eq(0));
+        }
+    }
+
+    @Test void gatePadUnderWorkerIsExcludedEvenWhenNavigationHasDiscardedItsPath() throws Exception {
+        var goal = cornerRoute(); var pad = new BlockPos(167, 65, -2);
+        when(worker.getX()).thenReturn(167.5); when(worker.getZ()).thenReturn(-1.5);
+        when(worker.position()).thenReturn(Vec3.atBottomCenterOf(pad));
+        when(nav.createPath(anySet(), eq(0))).thenReturn(null);
+        try (var projects = mockStatic(com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.class)) {
+            projects.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.gateDetourPads(worker, worker.currentBuildArea))
+                    .thenReturn(java.util.Set.of(pad));
+            goal.route(level, new BlockPos(129, 66, 0), 40);
+            verify(nav, times(1)).createPath(anySet(), eq(0));
+            verify(nav, never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+        }
+    }
+
     @Test void unchangedSavedGateAuthorityAllowsDelayedDetourMovement() throws Exception {
         var goal = cornerRoute();
         var gate = mock(DelayedPath.class); when(gate.canReach()).thenReturn(true);
