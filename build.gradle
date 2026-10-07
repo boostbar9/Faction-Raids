@@ -270,6 +270,7 @@ if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)
         property 'mixin.env.refMapRemappingFile', project.file('build/createSrgToMcp/output.srg').absolutePath
         property 'siegeoverhaul.nativeQa', 'true'
         property 'siegeoverhaul.nativeQa.mode', nativeQaMode
+        property 'siegeoverhaul.nativeQa.builderReplacement', providers.gradleProperty('nativeBuilderReplacementQa').getOrElse('false')
         property 'siegeoverhaul.nativeQa.sizeableFoliage', sizeableFoliageQa.toString()
         property 'siegeoverhaul.nativeQa.directory', project.file(nativeQaDirectory).absolutePath
         args '--width', '1280', '--height', '720'
