@@ -16,10 +16,33 @@ import net.minecraft.world.level.pathfinder.Target;
 import net.minecraft.world.phys.*;
 import org.junit.jupiter.api.Test;
 import java.util.EnumSet;
+import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class WallBuilderAccessTest extends MinecraftTestSupport {
+    @Test void nextSectionWaitsForNativeWalkingOutsideTheWholeReservedFootprint() {
+        terrain();when(worker.level()).thenReturn(level);
+        long target=new BlockPos(20,64,0).asLong();
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),new BlockPos(22,64,0)));
+        var x=org.mockito.ArgumentCaptor.forClass(Double.class);var z=org.mockito.ArgumentCaptor.forClass(Double.class);
+        verify(nav).moveTo(x.capture(),eq(64.0),z.capture(),eq(0.8));
+        assertTrue(WallBuilderAccess.recoveryMargin(BlockPos.containing(x.getValue(),64,z.getValue()),
+                Set.of(new BlockPos(20,0,0).asLong()),.6f));
+        verify(level,never()).setBlock(any(),any(),anyInt());verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+        when(worker.getBoundingBox()).thenReturn(new AABB(22.2,64,.2,22.8,65.8,.8));
+        assertTrue(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),new BlockPos(22,64,0)));
+        verify(nav,times(1)).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+    }
+    @Test void nextSectionNeverCreatesMovementThroughUnloadedGroundOrOverridesAnotherJob() {
+        terrain();when(worker.level()).thenReturn(level);when(level.hasChunkAt(any())).thenReturn(false);
+        long target=new BlockPos(20,64,0).asLong();
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),new BlockPos(22,64,0)));
+        verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+        when(level.hasChunkAt(any())).thenReturn(true);worker.currentBuildArea=mock(Area.class);
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),new BlockPos(22,64,0)));
+        verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+    }
     @Test void reachableNativeCaveEndpointIsStoppedAndReplacedWithSurfaceApproach() throws Exception {
         terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
         var cave=mock(Path.class);when(cave.canReach()).thenReturn(true);
