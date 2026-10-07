@@ -37,6 +37,30 @@ class ConstructionProjectLedgerTest extends MinecraftTestSupport {
         PerimeterProjectStore.prepare(core,project,()->{});
         return PerimeterProjectStore.consumeOnce(core,project.header().projectId(),project.manifestHash(),64,false,()->{}).project();
     }
+    @Test void exactDeathOpensReplacementWithoutReleasingReservationOrChangingPayment() {
+        var prepared=project();var ledger=new ConstructionEditLedger();
+        assertTrue(ledger.registerProject(prepared));assertTrue(ledger.leaseProjectStage(prepared));
+        var paid=paid(prepared);var running=paid.activate(paid.check());var original=running.save();
+        UUID next=UUID.randomUUID();assertFalse(ledger.replaceDeadBuilder(running,next));
+        assertFalse(ledger.projectBuilderDestroyed(running,UUID.randomUUID(),running.active().areaId(),ledger.generation()));
+        assertTrue(ledger.projectBuilderDestroyed(running,running.header().builder(),running.active().areaId(),ledger.generation()));
+        assertFalse(ledger.matchesProjectReservation(running));assertTrue(ledger.replaceDeadBuilder(running,next));
+        assertEquals(next,ledger.assignedBuilder(running));assertTrue(ledger.matchesProjectLease(running));
+        assertTrue(ledger.canRebindBuilder(running,running.header().builder(),running.active().areaId()));
+        assertEquals(original,running.save());assertNull(ledger.projectBuilderDestructionReceipt(running));
+        var reload=ConstructionEditLedger.load(ledger.save(new CompoundTag()));
+        assertEquals(next,reload.assignedBuilder(running));assertTrue(reload.matchesProjectLease(running));
+        assertFalse(reload.projectBuilderDestroyed(running,running.header().builder(),running.active().areaId(),reload.generation()));
+        assertTrue(reload.projectBuilderDestroyed(running,next,running.active().areaId(),reload.generation()));
+        assertTrue(reload.replaceDeadBuilder(running,UUID.randomUUID()));
+    }
+    @Test void editedSiteCannotBeTransferredEvenWithConfirmedDeath() {
+        var p=project();var ledger=new ConstructionEditLedger();assertTrue(ledger.registerProject(p));
+        assertTrue(ledger.leaseProjectStage(p));var paid=paid(p);var running=paid.activate(paid.check());
+        assertTrue(ledger.projectBuilderDestroyed(running,running.header().builder(),running.active().areaId(),ledger.generation()));
+        ledger.record(BlockPos.of(running.targets().keySet().iterator().next()));
+        assertFalse(ledger.replaceDeadBuilder(running,UUID.randomUUID()));assertEquals(running.header().builder(),ledger.assignedBuilder(running));
+    }
     @Test void oneGlobalReservationSurvivesEveryChildRetirementAndRestart() {
         var project = project(); var ledger = new ConstructionEditLedger();
         assertTrue(project.stages().size() > 1); assertTrue(ledger.registerProject(project));
