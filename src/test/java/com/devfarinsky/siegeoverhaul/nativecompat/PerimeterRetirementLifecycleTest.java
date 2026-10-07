@@ -32,6 +32,10 @@ class PerimeterRetirementLifecycleTest extends MinecraftTestSupport {
         var paid=PerimeterProjectStore.consumeOnce(core,project.header().projectId(),project.manifestHash(),64,true,()->{}).project();
         project=PerimeterProjectStore.replace(core,paid.check(),paid.activate(paid.check()),()->{});
         var worker=mock(BuilderEntity.class);var data=new CompoundTag();var level=mock(ServerLevel.class);var server=mock(MinecraftServer.class);
+        // This v1 fixture has a known healthy, empty NEW-job ledger. An unavailable world ledger is intentionally fail-closed.
+        var earthworksStorage=mock(net.minecraft.world.level.storage.DimensionDataStorage.class);
+        when(level.getDataStorage()).thenReturn(earthworksStorage);
+        when(earthworksStorage.<EarthworksJobLedger>computeIfAbsent(any(),any(),eq("siege_earthworks_jobs_v1"))).thenReturn(new EarthworksJobLedger());
         when(level.getServer()).thenReturn(server);when(server.overworld()).thenReturn(level);when(worker.level()).thenReturn(level);
         when(worker.getUUID()).thenReturn(project.header().builder());when(worker.getPersistentData()).thenReturn(data);
         when(worker.getUseItem()).thenReturn(ItemStack.EMPTY);when(worker.getMainHandItem()).thenReturn(ItemStack.EMPTY);

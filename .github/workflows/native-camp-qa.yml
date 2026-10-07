@@ -79,7 +79,7 @@ jobs:
           assert data['mode'] == 'camp-spawn' and data['status'] == 'passed', data
           audit = json.loads((root / 'native-bytecode-audit.json').read_text())
           assert audit['status'] == 'passed' and audit['noVendorJarsUploaded'], audit
-          assert sum(len(v['classes']) for v in audit['artifacts'].values()) == 18, audit
+          assert sum(len(v['classes']) for v in audit['artifacts'].values()) == 22, audit
           versions = data['loadedModVersions']
           for mod, version in {'minecraft': '1.20.1', 'forge': '47.4.16', 'workers': '2.0.3',
                                'recruits': '1.15.2', 'smallships': '2.0.0-b1.4', 'siegeweapons': '0.2.5'}.items():

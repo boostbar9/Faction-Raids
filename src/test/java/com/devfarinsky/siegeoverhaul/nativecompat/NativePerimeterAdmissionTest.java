@@ -146,7 +146,7 @@ class NativePerimeterAdmissionTest extends MinecraftTestSupport {
             });
         }
         boolean start() {var h=model.header();return NativePerimeterProjects.start(owner,builder,h.originalCore(),h.material(),model.plan(),model.layout(),
-                model.before(),model.clearanceBefore(),new RecruitsClaimsBridge.TerritorySnapshot(h.faction(),h.territory(),null),h.reviewedFingerprint());}
+                model.before(),model.clearanceBefore(),null,new RecruitsClaimsBridge.TerritorySnapshot(h.faction(),h.territory(),null),h.reviewedFingerprint());}
         public void close(){access.close();guards.close();factory.close();ledgers.close();claims.close();bridge.close();cores.close();saved.close();}
     }
 }

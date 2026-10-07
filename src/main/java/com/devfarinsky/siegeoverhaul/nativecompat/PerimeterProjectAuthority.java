@@ -8,6 +8,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 
@@ -77,6 +78,7 @@ final class PerimeterProjectAuthority {
         if (!tracked(area)) return null;
         try {
             Scope scope=read(area.getPersistentData()); PerimeterProject project=project(level,scope);
+            if (!project.executionSupported()) return PerimeterProject.GATE_EXECUTION_BLOCKER;
             var stage=project.active();
             if (stage==null || stage.index()!=scope.stage() || !stage.digest().equals(scope.stageDigest())
                     || !stage.areaId().equals(area.getUUID()) || builder==null
@@ -97,6 +99,9 @@ final class PerimeterProjectAuthority {
                     project.header().faction(), com.devfarinsky.siegeoverhaul.core.PerimeterTerritory.MAX_CHUNKS);
             if (!territoryMatches(project, territory))
                 return "Paused: the complete faction territory differs from the reviewed perimeter";
+            var owner=level.getServer().getPlayerList().getPlayer(project.header().owner());
+            var gates=activeGateObservationProblem(level,owner,project,scope.stage());
+            if (gates!=null) return gates;
             if ((!allowUnpaid || NativeConstructionGuard.hasAreaSnapshot(area))
                     && !NativeConstructionGuard.matchesProjectSnapshot(area, project))
                 return "Paused: the saved native stage differs from the authoritative whole-perimeter plan";
@@ -114,18 +119,23 @@ final class PerimeterProjectAuthority {
                 && project.header().territory().equals(current.chunks());
     }
     static boolean workState(PerimeterProject project, boolean allowUnpaid, boolean allowVerified) {
+        if (project == null || !project.executionSupported()) return false;
         if (project.state()==PerimeterProject.State.RUNNING) return project.payment()!=null;
         if (allowVerified && project.state()==PerimeterProject.State.STAGE_VERIFIED) return project.payment()!=null;
         return allowUnpaid && (project.state()==PerimeterProject.State.PREPARED_UNPAID && project.payment()==null
                 || project.state()==PerimeterProject.State.PREPARED_PAID && project.payment()!=null
                 || project.state()==PerimeterProject.State.WAITING_FOR_NEXT_STAGE && project.payment()!=null);
     }
+    static String activeGateObservationProblem(ServerLevel level, ServerPlayer owner, PerimeterProject project, int stage) {
+        if (project==null || project.gateContract()==null) return null;
+        return NativePerimeterProjects.gateObservationProblem(level,owner,project,project.gateStageComponent(stage));
+    }
     /** Only NativeConstructionGuard calls this after exact loaded-world and empty native-queue proof. */
     static boolean verified(Entity area) {
         if (!(area.level() instanceof ServerLevel level)) return false;
         try {
             Scope scope=read(area.getPersistentData()); PerimeterProject project=project(level,scope);
-            if (project.active()==null || project.activeStage()!=scope.stage()
+            if (!project.executionSupported() || project.active()==null || project.activeStage()!=scope.stage()
                     || !project.active().digest().equals(scope.stageDigest()) || !project.active().areaId().equals(area.getUUID())
                     || !NativeConstructionGuard.matchesProjectSnapshot(area,project)
                     || !ConstructionEditLedger.get(level).matchesProjectLease(project)
