@@ -301,6 +301,7 @@ public final class NativePerimeterProjects {
         for (Mob candidate : candidates) {
             if (!idleReplacement(candidate) || PerimeterProjectLink.reserved(candidate) || NativeConstructionGuard.hasProtectedReceipt(candidate)
                     || WorkersBridge.hasActiveBuildArea(candidate) || NativeConstructionGuard.currentArea(candidate) != null
+                    || candidate.getPersistentData().contains(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
                     || NativeConstructionGuard.commissionProblem(candidate) != null
                     || !ledger.canRetainHandLifecycle(candidate.getPersistentData(),candidate.getUUID())) continue;
             if (ledger.replaceDeadBuilder(project,candidate.getUUID())) return;
