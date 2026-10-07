@@ -1,8 +1,9 @@
-Warning: truncated output (original token count: 36547)
-Total output lines: 1353
+Warning: truncated output (original token count: 36570)
+Total output lines: 1354
 
 ## 4.53.0-alpha.2 - Perimeter travel and material recovery
 
+- Keep the exact blocking block and coordinates when stepped ground review refuses a site.
 - Fix native builders reusing a gate approach pad after reaching it, including fallback when no standing site or complete path is found. Existing claim, collision, loaded-chunk and reservation checks remain in force.
 - Fix depleted-material batches keeping the previous block target. Workers now selects from its freshly prepared queue and makes its normal finite supply requests.
 - A real 25-chunk stepped/gated fixture completed all 3,831 blocks from finite chest supplies, with one 64-emerald commission and actual mid-section and between-section world restarts. This is focused evidence on the tested layout, not a guarantee for every terrain or modpack.
@@ -265,7 +266,351 @@ Total output lines: 1353
 
 ## 4.50.5 — Safe arrivals for hired units
 - Core Guards, recruits, heroes and workers avoid damaging floors, fire, freezing powder snow, portals and fluid-filled spawn spaces.
-- Placement checks the unit's full body, footing…20547 tokens truncated…without rewards after three active minutes of blocked deployment.
+- Placement checks the unit's full body, footing, loaded chunks and world border. Starter Core Guards also remain fully inside their faction's claim.
+- A stale pending guard record no longer blocks delivery for another valid core record at the same location. Failed placements preserve the free guard grant and do not charge for a hire.
+
+## 4.50.4 — More useful items
+- Aimed spellbook projectiles pass through friendly troops, players and other ineligible entities, while still stopping at blocks and damaging only siege enemies.
+- Forge Embers prioritize damaged gear in the other hand, then the most worn equipped armor piece. Repair remains 25% of maximum durability, with the cap raised from 80 to 400 points. Failed repairs do not consume a charge.
+- Owl Seals no longer attempt to refresh permanent enemy outlines.
+- Removed Tidehook fishing rods, Harvest hoes and Deep Breath underwater draughts from new loot boxes and the creative catalog. Poseidon's higher-tier combat tridents remain available. Reward stack counts and box prices are unchanged.
+- New provisions, ammunition and potions use their ordinary actions without the weaker alternate sneak-use blessings. Existing saved blessed supplies and retired gear remain usable; no registry entries or saved items are deleted.
+
+## 4.50.3 — Starter Core Guard
+- A faction's first usable Siege Core grants one free native hired shieldman named Core Guard, with an iron sword, shield, basic armor and eight bread. Native ownership, unit limits, hold-position behavior and normal commands remain in control.
+- The lifetime faction grant survives saves, core relocation and the guard's death. No replacement guards or recurring supplies are generated.
+- Placement delivery waits until the next block tick. Blocked spawns, rejected hiring and unavailable placers preserve the grant; open the owned core to retry. Existing factions can receive their one guard by opening their core after updating.
+- The starter guard does not debit personal funds or the Treasury. Later hires and native ongoing upkeep retain their normal rules.
+
+## 4.50.2 — Larger battles, gentler opening enemies
+- Preserve full army sizes, defender/equipment scaling, staged squads and population caps.
+- Newly spawned invading NPCs in waves 1-4 have 40%, 30%, 20% and 10% less health and deal the same percentage less attributed damage, including melee and arrows. Wave five onward retains existing strength and scaling; reductions never repeat at later endless-siege chapters.
+- Enemy heroes cannot join the first three waves. Existing spawned mobs and already queued wave budgets are preserved.
+- New `gentleOpeningWaves` server setting defaults to true, including on existing configurations. Disable it to restore the previous opening balance for future spawns and hero planning.
+
+## 4.50.1 — Commissioned builder jobs
+- Hired wall builders keep their assigned blueprint when starting work or returning from a supply trip, instead of switching to another nearby construction site.
+- Wall approach paths now wait for Workers' asynchronous pathfinder to finish. Stale, blocked and timed-out results are discarded safely.
+- Workers still controls materials, construction, sleep and owner commands. Wall prices and saved blueprints are unchanged.
+
+## 4.50.0 — Olympian armory and aimed spellbooks
+- Replaced bulky weapon cuboids with original pixel skins using vanilla handheld, bow and crossbow models and draw stages.
+- Creative spellbooks now fire aimed lightning, fireballs and ice bolts; holding Undertow channels a water stream. Projectiles stop at blocks, spare players/allies and never damage terrain.
+- Restored hero names after native spawning and repaired untouched generic names on saved heroes while preserving player renames.
+- Aligned new starter camp entrances with the sanctuary approach and later perimeter; allowed safe single-file access through existing offset gates before the outer avenue is built; positioned two sentries beside the saved enemy core.
+- Switched new faction standards, shields and map identities to vanilla banner compositions.
+- Removed Forge Stock, building blocks, ladders, scaffolding and tribute materials from new loot rolls and the creative catalog. Existing saved items remain usable; box prices stay 16/48/96 emeralds.
+- Reserved separate space for decree descriptions and purchase status.
+
+## 4.49.11 — Camp construction safety
+- Native camp construction waits when a guard or visiting living entity occupies an unfinished blueprint cell. Active construction crew keeps its native movement to avoid self-blocking.
+- Removed the obsolete future-rebrand startup announcement and stopped identifying the current config as a legacy file.
+- No changes to combat, loot prices, dependencies or saved items.
+
+## 4.49.10 — Held items and readable tooltips
+
+- All 128 Olympian weapon models use third-person transforms anchored to their actual grips, with matching left/right hands and stable bow/crossbow draw states.
+- Relic, spellbook, spawn-egg and supply descriptions separate activation, effect and cooldown information.
+- Long Siege item descriptions wrap to the GUI width while retaining colors, enchantments and attribute information.
+- New Olympian loot lore uses upright text. Item powers, prices, saves and dependency requirements are unchanged.
+
+## 4.49.9 — Doors and Olympian casting
+
+- Siege raiders can open nearby wooden doors along their path with Recruits' asynchronous navigation. Opened doors stay open for following troops; iron doors still need breaching.
+- Door checks are bounded, server-owned and respect foreign claims. Friendly recruits retain their own door behavior.
+- Storm, fire and tide casts have original branching bolts, flame plumes and curling wave geometry, distinct arm poses and release sounds.
+- Existing spell timing, damage, cooldowns, friendly-fire rules, reduced-flash settings and particle limits remain intact.
+
+## 4.49.8
+- Stuck raiders reject unsafe or unreachable random fallback destinations and try the wider route before giving up.
+- Cached detours are discarded when their landing becomes blocked, flooded or unloaded.
+- Tempest, Inferno and Undertow spellbooks now have distinct lightning, fire and water artwork from Hungry22's Weekly Dot pack, with the original author notice and source credit included.
+
+## 4.49.7
+- Commissioned wall builders can route to reachable ground beside a buried blueprint marker or unreachable work cell. Native materials, work hours and owner commands remain in control.
+- Stuck recovery no longer teleports raiders into the core approach area or onto much higher roofs.
+- Reachable floor beside a core is used even before the breach phase completes, rather than routing to the solid core block.
+- Raiders no longer treat thin roofs as cave terrain or abandon a reachable indoor route for cave recovery.
+- Diplomacy sends one notification for a two-way change; active-siege repairs are silent and unchanged relations are not rewritten.
+
+# 4.49.6 — Clearer camp courtyards
+
+- New camps leave the central sanctuary clear instead of placing the campfire in the core's preferred spot.
+- Starter pavilions sit farther back and apart; supplies, the banner and forge occupy the side courtyards in every camp orientation.
+- Core placement requires an unobstructed ring around the sanctuary and keeps that space clear of later construction.
+- Existing camp positions and capture progress are preserved.
+
+# 4.49.5 — Blessed supplies and Curios
+
+- Optional Curios 5.14.1+ support: wear Forge Ember, Owl Seal or Sun Laurel in the charm slot for a passive defense or health bonus. Equipping never spends charges; no new required dependency.
+- Blessed supplies now carry usable powers, including Rampart absorption, Forge resistance, Moon Sight, Deep Breath and safe-descent blessings. Sneak-use in air to activate; tooltips show the exact cost, effects and durations. Ordinary use, crafting and placement stay available.
+- All supply blessings share a ten-second cooldown. Ineffective uses spend nothing; stronger existing effects stay intact. The power stays with the item through saving and inventory transfers.
+- Reward-eligible siege raiders killed by the defending faction have a 2.5% chance to drop a sealed box (2% Common, 0.5% Uncommon). Creative kills, untracked spawns, canceled drops and disabled mob loot do not award boxes. Wave rewards remain separate.
+- Loot-box prices remain 16/48/96 emeralds. Update the server and every client together.
+
+# 4.49.4 — Olympian utility relics
+
+- Added three real consumable relics with separate item IDs, 3D models and activation effects: Hephaestus' Forge Ember repairs equipment in the other hand; Athena's Owl Seal outlines nearby siege enemies; Apollo's Sun Laurel removes five combat afflictions while preserving beneficial effects.
+- Every sealed box includes one relic stack alongside its enchanted equipment and provisions. Rare/Epic boxes supply two uses; lower tiers supply one. Total reward stacks and box prices (16/48/96 emeralds) stay the same.
+- Added stone bricks, scaffolding, ladders, fire-resistance and water-breathing supplies. Extra steak is replaced by building stone; the guaranteed food reward remains.
+- Infinity Sunbows receive ordinary arrows whenever the ammunition category rolls. All new rewards are in the Creative catalog.
+- Relics are server-authoritative, have 10-second cooldowns, and are spent only when their action succeeds. No terrain edits, PvP targeting or new dependencies.
+
+# 4.49.3 — Olympian weapon presentation
+
+- Refined Olympian blades with bright cutting edges, slimmer grips and distinct deity guards; caster staves now have eight different head designs.
+- Cleaner metal, inlay and grip materials replace noisy full-face building textures across all 128 weapon model states.
+- Inventory models fit within their slots, including long staves and spears. Bow and crossbow draw states share the same framing so icons do not jump while loading.
+- Held-item alignment, draw timing, hero casting, enchantments and weapon stats are unchanged.
+
+## 4.49.2 — Weapon animation timing
+
+- Olympian bow and crossbow skins follow Minecraft's draw-stage timing, including Quick Charge. Crossbows no longer look fully drawn before their loading animation reaches its final stage.
+- Includes the Command Center navigation and balance improvements from 4.49.1.
+
+## 4.49.1 — Command Center navigation
+
+- Shared Treasury funds and your personal purse stay visible on every page. Select the Treasury balance to manage funds.
+- Narrow windows show readable tabs with previous/next controls instead of squeezing every label. Ctrl+Tab, Ctrl+Shift+Tab and scrolling over the tab bar switch pages.
+- Page headings have separate title and description lines. Intel sections support keyboard focus and retain their individual scroll positions.
+- Treasury and Intel scroll only under the pointer. Intel skips painting off-screen archive cards.
+
+## 4.49.0 — Olympian creative catalog
+
+- The Siege Overhaul creative tab includes every registered mod item, all loot-box tiers, named Olympian rewards, hero equipment and faction banners.
+- The Olympian Arts reference book explains all twenty hero powers and the distinction between hero abilities and held equipment.
+- Added Creative-only Tempest, Inferno and Undertow spellbooks with a one-second cast, saved cooldowns and existing casting effects. Only visible siege enemies are affected; no terrain damage.
+- Commissioned walls enable the native Workers 2 projection for plans up to 1,024 blocks and report the shovel marker coordinates. Larger plans retain manual projection to avoid rendering the entire wall every frame.
+- Spawn eggs check placement, finish outfitting before insertion, and preserve the egg on failed or cancelled spawns. Spawned units retain native Recruits hiring and commands.
+
+# 4.48.1 beta
+
+- Olympian crossbows now show a rocket when loaded with fireworks and a bolt when loaded with arrows.
+- Charging no longer shows a loaded bolt before the weapon is ready.
+- Crossbow strings remain attached to the bow tips throughout the draw.
+- Ammo, enchantments, prices and combat behavior are unchanged.
+
+# 4.48.0 beta
+
+- Tempest, Inferno and Undertow now have a visible one-second casting wind-up, a release pose and expanding tidal or fire rings. A cast stops if its target dies, disappears or becomes friendly.
+- Added client settings for casting poses, particle density, effect distance, sound volume and reduced flashes.
+- Hero weapons and tagged Olympian loot now use original 3D warblade, spear, staff, bow, crossbow and tool designs. Existing item stats, enchantments and saved items are preserved; ordinary equipment keeps its normal appearance.
+- Bow and crossbow skins show their draw stages. Vanilla tridents, shields and armor keep their existing renderers.
+- Server and clients must update together. Minecraft 1.20.1 Forge, Java 17 and companion requirements are unchanged.
+
+# 4.47.27 beta
+
+- Camp scouting now has a four-minute active-time limit for each search pass. Slow or unavailable terrain can no longer keep preparation paused for hours; after the natural and enabled earthworks searches fail, preparation begins for the existing camp-less assault.
+- The last selected camp site is checked before the candidate limit ends a pass. Searches never select beyond their 200-site budget, and their time limit survives saving and reloading.
+- Site safety, protected claims, reversible terrain work and the full preparation period still apply.
+
+# 4.47.26 beta
+
+- Enemy bridge builders stop construction when the army captures your Siege Core, freeing them to hold the occupied territory. Unfinished crossings retain their saved progress, material costs and deadlines.
+
+# 4.47.25 beta
+
+- Marching troops gain a temporary 20% base movement-speed bonus while unengaged and more than 64 blocks from the objective, including troops following native formation orders. Combat, occupation, passengers and working crews use their normal pace.
+- Ordinary infantry can build checked temporary crossings even far from the target. Dismounted melee recruits, archers and flankers share the same finite bridge job system.
+- Crossing searches run every five seconds and rotate through the army instead of repeatedly checking only the first troops. Saved material/attempt limits, safe shores, excluded claims and tracked cleanup still apply; only one crossing job runs per raid.
+
+# 4.47.24 beta
+
+- Enemy camps attempt checked sanctuary placement immediately when established, before the crew spawns. Players can capture the enemy core during preparation to stop the assault, using the same occupation and claim checks. Unsafe sites still wait for safe placement.
+
+- Player perimeter walls follow actual surface height instead of clamping to the core and queuing work inside hills. Water, unsupported ground and sections without clear nearby standing space inside the claim are skipped and reported. Existing commissions are not rewritten.
+
+- Camp terrain checks accept dry sand, red sand, gravel and clay, so beaches are no longer rejected simply for their ground material. Water, lava, protected claims and structures remain excluded.
+- Expanded local camp searches now check a balanced grid around the scout position. All candidates keep their terrain footprint inside the loaded search neighborhood instead of drifting far in one direction.
+- Gentle beach earthworks use the existing bounded, reversible terrain plan and preserve original blocks across saves.
+
+# 4.47.23 beta
+
+- Enemy camp builders spawn on checked surface ground instead of nearby underground air pockets.
+- Fallback builders choose reachable work positions with their native navigation. Partial paths no longer redirect them toward blocked pockets.
+- Fallback construction waits for the builder to reach safe footing before placing nearby blocks, preventing work from starting while the builder is still inside a planned wall.
+- Standing checks reject hazardous ground, blocked headroom and pending construction through the worker's body, while preserving finite jobs and supplies.
+
+# 4.47.22 beta
+
+- New enemy core sites require a checked, three-wide walking route from the main camp avenue through the starter palisade to the sanctuary. Placement waits when no safe route is available.
+- Three-wide stone steps lead onto the raised core platform. Saved route reservations keep later buildings, supply barrels and terrain work from blocking the approach.
+- Existing cores and capture progress retain their saved positions and state.
+
+# 4.47.21 beta
+
+- Camp builders preserve the planned facing, slab height and other block properties through construction and world reloads. Both native Workers jobs and fallback construction use the same saved states.
+- Starter pavilions gain sloped roofs and slab ridges in their host's stone palette, aligned with the courtyard entrance.
+- Construction rejects malformed block states. Cleanup preserves later player edits that change a tracked block's orientation; old camp saves retain their existing restoration behavior.
+
+# 4.47.20 beta
+
+- Commissioned wall builders that remain trapped below the surface now recover to a checked nearby standing position. Recovery waits for sustained lack of movement and respects ownership, the active job, follow/hold commands, combat, fleeing and leashes. It never digs terrain or changes supplies.
+- Starting camps replace the flat red tents with courtyard-facing Olympian pavilions: stone plinths, six columns, stepped roofs, lit entrances and host-specific materials.
+- Pavilion sites validate the whole building, clear interiors, shallow foundations and three-wide approaches before queuing construction. Existing camps and paid wall jobs keep their saved state.
+
+# 4.47.19 beta
+
+- Every sealed loot box now guarantees a named, enchanted Olympian armory piece plus provisions. Twelve patron identities …11570 tokens truncated…b the same way any native Workers 2 job does, instead of forcing our raider night-shift goal onto them. The raider goal only fires when the worker has a raid team tag and an active enemy camp, so installing it on your builder actually disabled their AI. v4.23.1 uses a player-safe attachment that sets ownership and work state and leaves every native goal in place, so the builder walks to the buildarea, pulls blocks from your storagearea, and places them like any Workers 2 build.
+- Removed the raider gear provisioning path from the player builder attachment. Your builder keeps whatever tools and armor you already gave it.
+- The confirmation message now tells you exactly how many blocks of the chosen material to load into your storage area, so you can stock the right amount before the builder starts.
+
+# 4.23.0 beta
+
+- Fortify Perimeter now reuses the storage area you already built. Instead of dropping a new supply barrel next to the builder, the job discovers a Workers 2 storagearea inside your claim that belongs to you and hands it to the builder as the source of blocks. If no owned storagearea sits within 64 blocks of the builder, the commission is refused with instructions on where to place one.
+- The buildarea for the wall is now created under your player UUID as well, so ownership matches your existing Workers 2 setup and the builder can access the storagearea without extra configuration.
+- Removed the auto-placed barrel and its cleanup path. Nothing new is placed in the world when you commission Fortify Perimeter beyond the wall blocks themselves.
+- Siege crew kits give a clear reason when a deployment is rejected instead of the generic "blocked" message. You now see the exact coordinate and block name of the cell that fails, which cell has fluid or missing headroom, and which of the anchor points has non-solid ground. Sturdy ground is only checked at the center and four corners now, so replaceable ground cover like grass and snow no longer forces a false rejection.
+
+# 4.22.1 beta
+
+- Complete the Fortify Perimeter feature shipped in 4.22.0. The v4.22.0 tag was published with the new class file but without the Territory tab buttons, the menu action ids, or the version bump, so the feature was dead code. This release wires the three material buttons at the bottom of the Territory tab (Stone Bricks, Cobblestone, Oak Planks), routes menu ids 70 to 72 into TerritoryFortification.commission, and bumps the mod version.
+- No new behavior beyond what 4.22.0 was intended to ship: 1200 emerald commission, 3-block walls along claim edges, 5-block corner pillars, materials pulled from a supply barrel the job drops next to your Villager Recruits builder.
+
+# 4.22.0 beta
+
+- New Territory job: Fortify Perimeter. Commissions a Villager Recruits Builder standing near your Siege Core to wall off the outer edge of your Recruits claim in stone bricks, cobblestone, or oak planks. Three material buttons live at the bottom of the Territory tab.
+- Walls are 3 blocks tall along every chunk edge that borders unclaimed land, with 5-block corner pillars at exterior chunk corners.
+- Costs 1,200 emeralds to commission (bank first, then inventory). The material itself comes from the storage barrel the job drops next to your builder. Fill the barrel with your chosen block and the builder walks the perimeter placing them; leave it empty or run it dry and the builder waits until you refill.
+- Never overwrites existing solid blocks, so a wall that runs into your castle just skips those cells and continues on the other side.
+- Requires both Villager Recruits and Workers 2. Uses the same buildarea, blueprint, and storagearea system the mod already uses for siege camps, so behavior is consistent with what a native Workers 2 job would do.
+
+# 4.21.3 beta
+
+- Raiders now reliably climb the temporary ladders they build against walls. Previously the goal frequently failed to attach because ground pathfinding cannot end a path on the ladder's air block, so raiders would stall a few blocks from the ladder. The goal now paths to the solid stand-on square adjacent to the ladder base and only ascends after touching a ladder anywhere in the column, not just the exact block coordinates.
+- Widen the touching gate on the way up so slightly off-grid raiders keep climbing instead of dropping back to the ground.
+- No changes to placement rules, ladder counts, save data or dependencies.
+
+# 4.21.2 beta
+
+- Fix the in-game configuration editor saving list settings as one string, which could reject the change or corrupt the setting type. String lists now use a readable comma-separated editor; blank input produces an empty list and the prior bracketed display remains accepted during upgrades.
+- Increase list-field input capacity while preserving boolean, enum, string and numeric editing behavior. No gameplay balance, save data or dependency changes.
+- Automated regression coverage; no interactive Minecraft playtesting.
+
+# 4.21.1 beta
+
+- Make the Siege Core HUD size itself from the actual Minecraft-scaled viewport. Wide, tall, short and narrow aspect ratios now select detailed or compact cards from their usable geometry, while unusually small modded/resizable windows uniformly scale the complete HUD and its mouse hitboxes instead of collapsing sections together.
+- Let the command panel grow farther on larger resolutions, use adaptive tab/card/control gaps, ellipsize genuinely clipped labels, and replace the cramped compact Bank columns with a readable summary plus complete hover details.
+- Show whether Army offers are affordable at a glance and explain exact emerald shortfalls in hover text. Creative players can use the siege deployment buttons without carrying emeralds.
+- Require siege kits to be used on the top face of the center ground block, retain the item after every failed attempt, and add restrained purchase/deployment sound and particle feedback.
+- Save format, prices, faction-bank payment order, dependencies and existing worlds remain unchanged.
+
+# 4.21.0 beta
+
+- Reworked the Siege Core command center into fixed header, tab, status, content, Army-action, and footer bands so controls no longer overlap at any supported Minecraft GUI scale.
+- Added a true compact Army layout for large GUI scales: portrait, name, role, price, and Hire action remain readable while detailed kit and ability text moves to the existing hover tooltip.
+- Catapult and ballista purchases now issue one-use deployment kits. Right-click the top of a clear flat 3x3 area to place the engine and its friendly Siege Engineer; failed placements keep the kit for another attempt.
+- Added an always-visible Leave Feedback action that opens the Siege Overhaul CurseForge comments page through Minecraft's external-link confirmation screen.
+- Added responsive compact layouts for Loot, Bank, Territory, tabs, status ribbon, and footer controls. Save data and existing worlds remain compatible; matching client/server versions are required.
+
+# 4.20.1 beta
+
+- Nightcaller's temporary Shadow Wolves now expire at their saved deadline instead of accumulating permanently. Cleanup also handles already-saved summons and wolves with disabled AI.
+- Summoned wolves no longer masquerade as hired recruit heroes. Ordinary wolves and player pets without the summon deadline are untouched.
+- No changes to prices, hero abilities, required companions or save format. Automated regression coverage; no interactive gameplay playtesting.
+
+# 4.11.7 beta
+
+- New ordinary core recruits receive simple first names such as Bobby and Fernan.
+- Core-hired workers receive one-time job supplies: farmers get a diamond hoe, water bucket and wheat seeds; lumberjacks get a diamond axe and saplings; miners get diamond mining tools, torches and cobblestone; builders get diamond tools and starter blocks; cooks get fuel and raw food. All receive eight bread; couriers retain cargo space.
+- Native equipment slots and existing items are preserved. Kits do not refill after reload; full inventories reject preparation before charging. Work areas, routes, recipes and project-specific building materials still require normal Workers setup.
+
+# 4.11.6 beta
+
+- Commanders and breachers can engage defenders after reaching the existing objective area instead of repeatedly clearing their combat targets. Their approach remains focused on the core when the existing ignore-defenders option is enabled.
+- Preserve target range, ally/dead-target checks, other troop roles, difficulty, rewards and dependencies. Clarify the configuration description.
+
+# 4.11.5 beta
+
+- Dismounted siege engineers cancel their siege-issued vehicle travel command before returning on foot, preventing native walking orders from repeatedly overriding the return route.
+- Restore the original firing setting and preserve unrelated movement orders. Failed cancellation retains ownership for a later retry; no vehicle reset or teleport is performed.
+
+# 4.11.4 beta
+
+- Isolated marching soldiers and lone squad survivors can regroup with nearby troops of the same role instead of keeping a permanent one-person formation.
+- Preserve intact squad membership, the six-unit squad limit, proximity checks and combat/engineer exclusions. No difficulty, reward or dependency changes.
+
+# 4.11.3 beta
+
+- Endless siege boss bars show the absolute wave and its retreat checkpoint instead of impossible totals such as wave 10/5.
+- Active retreat votes show accepted retreat ballots, the strict-majority target, continue ballots and remaining seconds. Displaying the tally never changes votes or the deadline.
+- Preserve difficulty, rewards, active-enemy limits, legacy finite sieges and the core-occupation progress bar.
+
+# 4.11.2 beta
+
+- Later waves can reuse unoccupied siege-owned artillery after its previous crew is confirmed killed. Replacement crews deploy at the War Gate and walk to their equipment, without teleporting or increasing the fleet limit. Player-mounted equipment is excluded from reuse and cleanup.
+- Assault paths now recover after ten seconds without approaching their objective, while retaining short obstacle detours and combat behavior.
+- Camp builders try eight bounded upgrade sites when a preferred site is obstructed, preserving player blocks, camp claims and external claim exclusions.
+- Reopening the core or reconnecting restores uncast active retreat-vote links. Bank transactions report the actual transferred amount and balance; practice sieges show zero upcoming bank rewards. Loot-box contents stay hidden.
+
+# 4.11.1 beta
+
+- Credit a cleared wave before checking enemy-core victory, so simultaneous last-enemy defeat and core capture cannot lose the wave reward.
+- Preserve once-only payouts across checkpoint votes, countdowns and reloads; preparation, remaining reinforcements and occupied player cores cannot award a cleared wave.
+
+# 4.11.0 beta
+
+- Siege Core campaigns continue beyond five waves. Every fifth cleared wave offers a sixty-second, one-ballot-per-member retreat vote; strict majority accepts retreat, otherwise the siege continues. Old vote buttons cannot affect later checkpoints.
+- Every survived, reward-eligible wave deposits emeralds once into the faction bank. Payouts increase each five-wave chapter. Enemy counts grow through staged reinforcements under existing active limits; health and damage gradually escalate.
+- Capture the enemy command core at its War Gate by outnumbering its defenders for the existing recapture duration to win early.
+- Persistent faction bank supports member deposits and leader withdrawals. Default daily interest is 1% per real 24-hour day, including up to 365 days of bounded catch-up; configurable, with fractional interest retained and a 1-billion-emerald ledger limit.
+- Core services now use three compact tabs: Army & Heroes, Loot & Buffs, Bank & Faction. Added five-minute Speed I, Strength I and Resistance I blessings for 16/24/32 personal emeralds. Existing effects are preserved. Loot boxes retain 16/48/96 prices and mystery reveals.
+- Rebuilt the physical core as a glowing crystal command pedestal with restrained magical particles.
+- Attack formations now operate throughout the approach, rather than only inside defender claims. Existing combat, ladder and collision releases remain.
+- Known new enemy siege corpses convert their contents into normal dropped loot after two minutes; fully empty corpses are removed after one minute. Nonempty player and unclassified legacy corpses are preserved. Cleanup is bounded and configurable; failed drop creation retains the corpse and rolls back new drops.
+- Saves and mandatory companion dependencies preserved. New network protocol requires matching client/server versions. No interactive Minecraft playtesting.
+
+# 4.10.6 beta
+
+- Siege captains and commanders now relinquish native patrol regroup/hold/retreat orders to the siege assault controller, including after reload. Camp guards and player-owned leaders are excluded.
+- Siege engineers prioritize driving into their established firing position before native firing/reloading. Arrival accounts for native vehicle stopping tolerance, clears latched steering, and restores the previous ranged setting; dismounted operators regain their firing setting.
+
+- Optional Epic Knights armor outfits for new core hires, heroes, and siege faction uniforms. Coordinated dye colors preserve identities; missing or disabled outfit pieces fall back to vanilla.
+- Optional ewewukek Musket Mod: one-third of newly hired ordinary crossbowmen receive a personal musket and 32 cartridges when the native Recruits musket API passes compatibility checks.
+- Existing equipment, player armor, worker jobs, hiring and loot-box prices remain unchanged. No new mandatory dependencies.
+
+# 4.10.5 beta
+
+- Ordinary soldiers hired at Siege Cores now receive randomized personal names and named role-appropriate weapons.
+- New core hires arrive in iron and chainmail armor with coordinated randomized trim colors, eight bread, and thirty-two arrows for ranged roles. Shieldmen receive shields.
+- Existing soldiers, worker jobs, named heroes, hiring prices, ownership and unit limits are unchanged. Equipment is assigned once and uses the native inventory.
+
+# 4.10.4 beta
+
+- Fail closed when an installed optional claim provider throws: claim-aware placement no longer proceeds after silently disabling protection.
+- Keep failed-provider protection active on subsequent placement checks and show the failure in claim diagnostics. Repair the provider and restart the server to clear the failure.
+- No save format or mandatory dependency changes.
+
+## 4.10.3 beta
+
+- Add optional henkelmax Corpse compatibility: camp earthworks and gate assembly reject overlapping recovery bodies; native builders pause and resume the same blueprint jobs when bodies are removed.
+- Protect fallback camp placement, native cell preparation and supply-barrel sites from overlapping corpses. No corpse inventory, owner, decay or NPC death behavior is changed.
+- Corpse remains optional. Minecraft 1.20.1 Forge / Java 17 and the four required companion mods are unchanged.
+
+## 4.10.2 beta
+
+- Reject failed War Gate installation candidates and try other sites, restoring camp and fortification job queues after each rejected placement.
+- Mark successful gate assembly and its terrain-restoration ledger for saving immediately, including callers that cannot start native worker jobs afterward.
+- Reject malformed saved gate coordinates and invalid or missing block IDs safely; guard gate readiness, status, road preparation, repair and cleanup against invalid coordinate entries.
+- Gate cleanup no longer restores old terrain over a later player/mod replacement. Original soil still restores after the gate is removed.
+- Preserve current loot prices, odds, companions and save format. No interactive Minecraft playtest.
+
+## 4.10.1 beta
+
+- Keep loot-box purchase chat generic so it no longer reveals the prize before the mystery animation. Rewards are still delivered immediately and safely if the menu closes; prices and odds are unchanged.
+- Resolve siege-controller APIs before mounting engineers. Verify both native controller and passenger attachment before activating control; failed native attachment dismounts the crew so deployment can retry rather than leaving a stranded passenger.
+- Add regression coverage for all twelve loot-box outcomes and engineer attachment success, missing APIs/controllers, exceptions, mismatched vehicles, refused mounts and retries. No interactive Minecraft playtest.
+
+## 4.8.0 beta
+
+- Enemy builders receive a one-time veteran kit: Protection III / Unbreaking III diamond armor, diamond tools with Efficiency III, four golden apples and food. At least 60 health, +20% movement speed and knockback resistance; existing damage is preserved and equipment is never replenished each tick. Undelivered supplies remain stored until backpack space opens.
+- Siege builders work through the night using native Workers building and storage jobs. Nearby village bells no longer stop this enemy crew; fleeing still takes priority. Morale recovers gradually while assigned to an active camp job. Player workers are unaffected.
+- War Gates require a three-wide stone-brick road to the camp with clear headroom, shallow terrain cuts/fills and gradual steps. Planning rejects roads through water, player structures or steep drops. Builders receive the finite road materials; road completion is part of gate readiness. New camp walls leave the road entrance open.
+- Saved gates attempt a road retrofit after the current job finishes. Road and terrain snapshots survive saves and restore on siege cleanup. The gate approach is protected from player block edits while active.
+
+## 4.7.0 beta
+
+- Fix engineer-only waves when the War Gate has no buildable site: search all four sides, prioritize the gate over camp upgrades, retain its ticking chunks, keep artillery off its pad, delay the assault/support until infantry can deploy, report missing gate blocks, and withdraw without rewards after three active minutes of blocked deployment.
 
 - Fix builders stalling on flowers and connected fence/wall/stair states. Clear only small plants within camp jobs, snapshot both tall-plant halves, and preserve native finite supplies and solid-obstruction pauses.
 
