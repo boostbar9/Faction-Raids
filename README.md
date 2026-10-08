@@ -85,11 +85,22 @@ Open each bag when ready. If your inventory fills, undelivered contents remain i
 
 1. Install The Siege Overhaul and **all four required companion mods** below.
 2. Open your starter bags.
-3. Create or join a Villager Recruits faction and claim land.
+3. Create or join a Villager Recruits faction and claim land. Your first claim must be a 5x5 **Claim Area**: as faction leader in the Overworld, open the claim map (**M** by default), right-click a chunk within four chunks of you and choose **Claim Area**. **Claim Chunk** only adds a chunk touching an existing claim.
 4. Place your Siege Core inside your faction's **Overworld claim**.
 5. Hire troops, assign your workers their normal work areas, and prepare your defenses.
 
 Use the **Warlord's Codex** for concise siege guidance, status, and access to the native faction and claim interfaces.
+
+### Claiming and Friendly Fire
+
+Claiming and faction team settings come from Villager Recruits. Its claim map reports why a claim option is unavailable:
+
+- **Must touch your claim:** use **Claim Area** for your first claim; **Claim Chunk** only extends an existing one.
+- **Inside an enemy buffer zone:** new claims must stay more than three chunks from another faction's claim, including a raider war camp. Move further away or wait until the camp is gone. Recruits does not make this distance configurable.
+- **Too far away:** stand within four chunks of the selected chunk.
+- **Not enough payment items / no permission:** only the faction leader can claim an area, and the currency (emeralds by default) must be in your own inventory, not the Siege Core Treasury. Costs are `ClaimingCost` and `ChunkCost` in the world's `serverconfig/recruits-server.toml`.
+
+Friendly fire between members of the same faction is controlled by Recruits. In the same file, under Global Faction/Team Settings, keep `GlobalTeamSetting = true` and set `GlobalTeamFriendlyFireSetting = false`, then restart the world or server. These are the Recruits defaults.
 
 ## Building System Candidate
 
