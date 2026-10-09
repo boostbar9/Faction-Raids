@@ -33,6 +33,7 @@ final class ConstructionEditLedger extends SavedData {
     private boolean invalid;
     private int totalCells;
     private UUID generation = UUID.randomUUID();
+    private com.devfarinsky.siegeoverhaul.core.PerimeterBuilderCrew crew = new com.devfarinsky.siegeoverhaul.core.PerimeterBuilderCrew(generation);
 
     static ConstructionEditLedger get(ServerLevel level) {
         return level.getDataStorage().computeIfAbsent(ConstructionEditLedger::load,
@@ -173,6 +174,10 @@ final class ConstructionEditLedger extends SavedData {
         return !invalid && matchesProjectReservation(project) && assignments.canRebind(project, previous, area);
     }
     boolean replaceDeadBuilder(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID replacement) {
+        if (crewMember(project, replacement))
+            return transferCrewCoordinator(project, assignedBuilder(project), replacement,
+                    com.devfarinsky.siegeoverhaul.core.PerimeterBuilderAssignments.Cause.DEATH);
+        if (knownCrewMember(project, replacement)) return false;
         String proof = projectBuilderDestructionReceipt(project);
         if (proof == null || edited(project.header().projectId()) || project.active() == null) return false;
         UUID id = project.header().projectId(); Site site = sites.get(id);
@@ -181,6 +186,119 @@ final class ConstructionEditLedger extends SavedData {
             sites.put(id, new Site(site.cells(), site.edited(), false, site.completeReservation(), null));
             validatedLeases.remove(id); setDirty(); return true;
         } catch (RuntimeException refusal) { return false; }
+    }
+
+    /** Current and historical coordinators are cleanup identities only; assignedBuilder alone grants the role. */
+    boolean knownProjectBuilder(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        if (invalid || project == null || worker == null) return false;
+        try { return assignments.known(project, worker); }
+        catch (IllegalArgumentException conflictingIdentity) { return false; }
+    }
+    boolean knownTerminalBuilder(com.devfarinsky.siegeoverhaul.core.PerimeterTerminalReceipt terminal, UUID worker) {
+        if (invalid || terminal == null || worker == null || !sameGeneration(terminal.cleanup().ledgerGeneration())) return false;
+        try { return assignments.known(terminal, worker); }
+        catch (IllegalArgumentException conflictingIdentity) { return false; }
+    }
+
+    /**
+     * Caller authenticates the loaded helper's owner/native inventory and the old coordinator's actual absence/dismissal.
+     * This changes one role, not the paid manifest; absence never creates a destruction receipt.
+     */
+    boolean transferCrewCoordinator(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID expectedOld, UUID newHelper,
+                                    com.devfarinsky.siegeoverhaul.core.PerimeterBuilderAssignments.Cause cause) {
+        if (invalid || project == null || project.payment() == null || project.active() == null || cause == null
+                || !matchesProjectIdentity(project) || edited(project.header().projectId()) || !crewMember(project, newHelper)) return false;
+        boolean death = cause == com.devfarinsky.siegeoverhaul.core.PerimeterBuilderAssignments.Cause.DEATH;
+        String proof = death ? projectBuilderDestructionReceipt(project) : null;
+        if (death ? proof == null : !matchesProjectReservation(project)) return false;
+        int stage = projectLeaseIndex(project.header().projectId());
+        if (stage < 0 || stage >= project.stages().size()) return false;
+        UUID area = project.stages().get(stage).areaId();
+        boolean current = stage == project.activeStage() && projectLeases.matches(project.header().projectId(),
+                project.header().generation(), project.manifestHash(), stage, area, project.active().layout().reservation());
+        boolean previous = stage == project.activeStage() - 1 && retired(area)
+                && project.state() == com.devfarinsky.siegeoverhaul.core.PerimeterProject.State.WAITING_FOR_NEXT_STAGE;
+        if (!current && !previous) return false;
+        try {
+            if (!assignedBuilder(project).equals(expectedOld)) return false;
+            // Validate both copies before publishing either half of the role handoff.
+            var nextAssignments = com.devfarinsky.siegeoverhaul.core.PerimeterBuilderAssignments.load(assignments.save());
+            var nextCrew = com.devfarinsky.siegeoverhaul.core.PerimeterBuilderCrew.load(crew.save(), generation);
+            if (death) nextAssignments.replace(project, expectedOld, newHelper, area, proof);
+            else nextAssignments.transfer(project, expectedOld, newHelper, area, cause, generation);
+            if (!nextCrew.retire(project, newHelper)) return false;
+            nextCrew.verifyAssignments(nextAssignments); nextAssignments.verifyTransferReceipts(generation);
+            assignments = nextAssignments; crew = nextCrew;
+            if (death) {
+                UUID id = project.header().projectId(); Site site = sites.get(id);
+                sites.put(id, new Site(site.cells(), site.edited(), false, site.completeReservation(), null));
+            }
+            validatedLeases.remove(project.header().projectId()); setDirty(); return true;
+        } catch (IllegalArgumentException conflictingIdentity) { return false; }
+    }
+
+    /** Membership is only a selector; native placement still requires the exact live project/worker authorities. */
+    Set<UUID> crewMembers(com.devfarinsky.siegeoverhaul.core.PerimeterProject project) {
+        if (invalid || project == null) throw new IllegalStateException("Construction crew history is unavailable");
+        return crew.active(project);
+    }
+    boolean crewMember(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        if (invalid || project == null || worker == null) return false;
+        try { return crew.active(project, worker); }
+        catch (IllegalArgumentException conflictingIdentity) { return false; }
+    }
+    /** Includes retired helpers for delayed cleanup; grants no work or inventory authority on its own. */
+    boolean knownCrewMember(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        if (invalid || project == null || worker == null) return false;
+        try { return crew.known(project, worker); }
+        catch (IllegalArgumentException conflictingIdentity) { return false; }
+    }
+    boolean knownTerminalCrewMember(com.devfarinsky.siegeoverhaul.core.PerimeterTerminalReceipt terminal, UUID worker) {
+        if (invalid || terminal == null || worker == null || !sameGeneration(terminal.cleanup().ledgerGeneration())) return false;
+        try { return crew.known(terminal, worker); }
+        catch (IllegalArgumentException conflictingIdentity) { return false; }
+    }
+    /** Caller additionally authenticates exact owner, idle native worker state and retained inventory provenance. */
+    boolean enlistCrew(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        if (worker == null || worker.equals(new UUID(0, 0)) || !matchesProjectLease(project) || !matchesProjectReservation(project)
+                || project.payment() == null || project.state() != com.devfarinsky.siegeoverhaul.core.PerimeterProject.State.RUNNING) return false;
+        try {
+            if (assignments.known(project, worker) || !crew.enlist(project, worker)) return false;
+            setDirty(); return true;
+        } catch (IllegalArgumentException conflictingIdentity) { return false; }
+    }
+    /** Revocation is intentionally possible during pause/cancellation and after reservation release. */
+    boolean retireCrew(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        if (invalid || project == null || worker == null) return false;
+        try {
+            if (!crew.retire(project, worker)) return false;
+            setDirty(); return true;
+        } catch (IllegalArgumentException conflictingIdentity) { return false; }
+    }
+    /** An authenticated helper death only retires that helper; it never poisons the site's coordinator/reservation. */
+    boolean markCrewBuilderDestroyed(com.devfarinsky.siegeoverhaul.core.PerimeterProject project,
+                                     UUID worker, UUID area, UUID ledgerGeneration) {
+        if (!sameGeneration(ledgerGeneration) || !matchesProjectIdentity(project) || !crewMember(project, worker)) return false;
+        int stage = projectLeaseIndex(project.header().projectId());
+        if (stage < 0 || stage >= project.stages().size() || !project.stages().get(stage).areaId().equals(area)
+                || stage != project.activeStage() && (stage != project.activeStage() - 1 || !retired(area))) return false;
+        try {
+            if (!crew.destroyed(project, worker, area, stage)) return false;
+            setDirty(); return true;
+        } catch (IllegalArgumentException conflictingIdentity) { return false; }
+    }
+    boolean crewBuilderDestroyed(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        return crewBuilderDestructionReceipt(project, worker) != null;
+    }
+    String crewBuilderDestructionReceipt(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        if (invalid || project == null || worker == null) return null;
+        try { return crew.destructionReceipt(project, worker); }
+        catch (IllegalArgumentException conflictingIdentity) { return null; }
+    }
+    String terminalCrewBuilderDestructionReceipt(com.devfarinsky.siegeoverhaul.core.PerimeterTerminalReceipt terminal, UUID worker) {
+        if (!knownTerminalCrewMember(terminal, worker)) return null;
+        try { return crew.destructionReceipt(terminal, worker); }
+        catch (IllegalArgumentException conflictingIdentity) { return null; }
     }
 
     private static Set<Long> packed(Set<BlockPos> positions) {
@@ -311,7 +429,7 @@ final class ConstructionEditLedger extends SavedData {
         var ledger = new ConstructionEditLedger();
         // NBT getters coerce wrong types to empty/false. Never let damaged history
         // erase edit, destruction or retirement evidence while retaining authority.
-        if (!keys(root, Set.of("Sites", "Retired", "Generation", "Invalid"), Set.of("ProjectLeases", "HandLifecycles", "BuilderAssignments"))
+        if (!keys(root, Set.of("Sites", "Retired", "Generation", "Invalid"), Set.of("ProjectLeases", "HandLifecycles", "BuilderAssignments", "BuilderCrew"))
                 || !compoundList(root, "Sites") || !compoundList(root, "Retired")
                 || !identity(root, "Generation") || !canonicalBoolean(root, "Invalid")
                 || root.getBoolean("Invalid")) {
@@ -321,6 +439,8 @@ final class ConstructionEditLedger extends SavedData {
         ListTag jobs = (ListTag) root.get("Sites"), retiredJobs = (ListTag) root.get("Retired");
         if ((long) jobs.size() + retiredJobs.size() > MAX_JOBS) { ledger.invalid = true; return ledger; }
         ledger.generation = root.getUUID("Generation");
+        // Old saves have no helper field. Bind their empty crew to the restored, not constructor-random generation.
+        ledger.crew = new com.devfarinsky.siegeoverhaul.core.PerimeterBuilderCrew(ledger.generation);
         for (Tag entry : jobs) {
             CompoundTag tag = (CompoundTag) entry;
             // Missing/zero ReservationVersion is the explicitly supported old
@@ -394,6 +514,14 @@ final class ConstructionEditLedger extends SavedData {
             try {
                 if (!root.contains("BuilderAssignments", Tag.TAG_COMPOUND)) throw new IllegalArgumentException();
                 ledger.assignments = com.devfarinsky.siegeoverhaul.core.PerimeterBuilderAssignments.load(root.getCompound("BuilderAssignments"));
+                ledger.assignments.verifyTransferReceipts(ledger.generation);
+            } catch (RuntimeException malformed) { ledger.invalid = true; }
+        }
+        if (!ledger.invalid && root.contains("BuilderCrew")) {
+            try {
+                if (!root.contains("BuilderCrew", Tag.TAG_COMPOUND)) throw new IllegalArgumentException();
+                ledger.crew = com.devfarinsky.siegeoverhaul.core.PerimeterBuilderCrew.load(root.getCompound("BuilderCrew"), ledger.generation);
+                ledger.crew.verifyAssignments(ledger.assignments);
             } catch (RuntimeException malformed) { ledger.invalid = true; }
         }
         return ledger;
@@ -441,6 +569,7 @@ final class ConstructionEditLedger extends SavedData {
         handLifecycles.values().forEach(receipt -> hands.add(receipt.save()));
         root.put("HandLifecycles", hands);
         root.put("BuilderAssignments", assignments.save());
+        root.put("BuilderCrew", crew.save());
         return root;
     }
 }

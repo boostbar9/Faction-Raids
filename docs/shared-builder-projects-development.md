@@ -4,7 +4,7 @@ This work continues experimental 4.53.0-alpha.3 (`2d817d7397a6bdb792dd67913b08d4
 
 ## Current implementation boundary
 
-The first reviewable increment carries the stable wither-rose recovery exclusion into the alpha source and introduces testable crew-membership and transient work-claim primitives. **Helpers are not admitted by gameplay yet.** The primitives do not authorize native placement, consume materials, charge a commission, or change the paid blueprint. Passing their tests is not native crew gameplay evidence.
+The first reviewable increment carries the stable wither-rose recovery exclusion into the alpha source and introduces testable crew-membership and transient work-claim primitives. **The current draft integrates helper admission and native scheduling, but is not release-ready or natively verified.** The primitives themselves do not authorize native placement, consume materials, charge a commission, or change the paid blueprint. Passing their tests is not native crew gameplay evidence. Runtime integration is under review, including stage-scoped cleanup provenance and explicit coordinator transfer; do not ship this intermediate checkpoint.
 
 `PerimeterBuilderCrew` retains at most three active helper identities alongside the existing coordinator. Membership is bound to ledger generation, project ID/generation/hash and original coordinator, with admission-stage checks. Retired selectors remain cleanup-only history; they cannot silently regain authority. The immutable manifest and `PerimeterBuilderAssignments` replacement chain remain unchanged.
 

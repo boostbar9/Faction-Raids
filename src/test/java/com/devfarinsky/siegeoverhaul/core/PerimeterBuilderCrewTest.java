@@ -205,6 +205,66 @@ class PerimeterBuilderCrewTest extends MinecraftTestSupport {
         assertThrows(IllegalArgumentException.class, () -> PerimeterBuilderCrew.load(emptyMembers, ledgerGeneration));
     }
 
+    @Test void destructionProofRetiresOnlyTheAuthenticatedHelperAndSurvivesReload() {
+        var project = running(); var crew = new PerimeterBuilderCrew(ledgerGeneration);
+        UUID dead = UUID.randomUUID(), active = UUID.randomUUID();
+        assertTrue(crew.enlist(project, dead)); assertTrue(crew.enlist(project, active));
+        assertFalse(crew.destroyed(project, dead, UUID.randomUUID(), project.activeStage()));
+        assertFalse(crew.destroyed(project, dead, project.active().areaId(), -1));
+        assertFalse(crew.destroyed(project, UUID.randomUUID(), project.active().areaId(), project.activeStage()));
+        assertTrue(crew.destroyed(project, dead, project.active().areaId(), project.activeStage()));
+        assertFalse(crew.destroyed(project, dead, project.active().areaId(), project.activeStage()));
+        String proof = crew.destructionReceipt(project, dead); assertNotNull(proof);
+        var loaded = PerimeterBuilderCrew.load(crew.save(), ledgerGeneration);
+        assertEquals(proof, loaded.destructionReceipt(project, dead)); assertEquals(Set.of(active), loaded.active(project));
+        assertTrue(loaded.known(project, dead)); assertFalse(loaded.enlist(project, dead)); assertNull(loaded.destructionReceipt(project, active));
+    }
+
+    @Test void changedDestructionScopeAndReactivationAreRejectedDuringLoading() {
+        var project = running(); var crew = new PerimeterBuilderCrew(ledgerGeneration); UUID helper = UUID.randomUUID();
+        assertTrue(crew.enlist(project, helper));
+        assertTrue(crew.destroyed(project, helper, project.active().areaId(), project.activeStage()));
+        for (String field : new String[]{"Worker", "Active", "Stage", "Area", "Receipt", "Generation", "Hash", "Original", "LedgerGeneration"}) {
+            CompoundTag changed = crew.save(); CompoundTag member = memberRecord(changed), proof = member.getCompound("Destruction");
+            switch (field) {
+                case "Worker" -> member.putUUID(field, UUID.randomUUID());
+                case "Active" -> member.putBoolean(field, true);
+                case "Stage" -> proof.putInt(field, project.activeStage() + 1);
+                case "Area" -> proof.putUUID(field, UUID.randomUUID());
+                case "Receipt" -> proof.putString(field, "a".repeat(64));
+                case "Generation" -> projectRecord(changed).putLong(field, project.header().generation() + 1);
+                case "Hash" -> projectRecord(changed).putString(field, "b".repeat(64));
+                case "Original" -> projectRecord(changed).putUUID(field, UUID.randomUUID());
+                case "LedgerGeneration" -> changed.putUUID(field, UUID.randomUUID());
+                default -> fail("Missing mutation fixture");
+            }
+            UUID expected = changed.getUUID("LedgerGeneration");
+            assertThrows(IllegalArgumentException.class, () -> PerimeterBuilderCrew.load(changed, expected), field);
+        }
+        CompoundTag wrongType = crew.save(); memberRecord(wrongType).putString("Destruction", "not a proof");
+        assertThrows(IllegalArgumentException.class, () -> PerimeterBuilderCrew.load(wrongType, ledgerGeneration));
+        for (String field : new String[]{"Stage", "Area", "Receipt"}) {
+            CompoundTag missing = crew.save(); memberRecord(missing).getCompound("Destruction").remove(field);
+            assertThrows(IllegalArgumentException.class, () -> PerimeterBuilderCrew.load(missing, ledgerGeneration), field);
+        }
+    }
+
+    @Test void terminalLookupPreservesCleanupEvidenceWithExactLedgerIdentity() {
+        var project = running(); var crew = new PerimeterBuilderCrew(ledgerGeneration); UUID helper = UUID.randomUUID();
+        assertTrue(crew.enlist(project, helper));
+        assertTrue(crew.destroyed(project, helper, project.active().areaId(), project.activeStage()));
+        var canceled = project.cancel(project.check(), "Cancel fixture");
+        var proof = new PerimeterTerminalReceipt.CleanupProof(canceled.header().projectId(), canceled.header().generation(), canceled.manifestHash(),
+                canceled.revision(), canceled.state(), canceled.header().owner(), canceled.header().builder(), ledgerGeneration,
+                canceled.stages().stream().map(PerimeterProject.Stage::areaId).toList(), "1".repeat(64), "2".repeat(64), "3".repeat(64));
+        var terminal = PerimeterTerminalReceipt.compact(canceled, proof);
+        var loaded = PerimeterBuilderCrew.load(crew.save(), ledgerGeneration);
+        assertTrue(loaded.known(terminal, helper)); assertFalse(loaded.known(terminal, project.header().builder()));
+        assertEquals(loaded.destructionReceipt(project, helper), loaded.destructionReceipt(terminal, helper));
+        var otherGeneration = new PerimeterBuilderCrew(UUID.randomUUID());
+        assertTrue(otherGeneration.enlist(project, helper)); assertFalse(otherGeneration.known(terminal, helper));
+    }
+
     private CompoundTag oneMemberSnapshot() {
         var crew = new PerimeterBuilderCrew(ledgerGeneration);
         assertTrue(crew.enlist(running(), UUID.randomUUID()));

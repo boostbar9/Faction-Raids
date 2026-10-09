@@ -39,6 +39,27 @@ public final class NativePerimeterProjects {
         catch (RuntimeException unavailable) { return false; }
     }
 
+    /** Worker participation is separate from the coordinator used to seal native markers. */
+    public static boolean participatingBuilder(Mob worker, PerimeterProject project) {
+        if (assignedBuilder(worker, project)) return true;
+        if (worker == null || project == null || !(worker.level() instanceof ServerLevel level)) return false;
+        try { return ConstructionEditLedger.get(level).crewMember(project, worker.getUUID()); }
+        catch (RuntimeException unavailable) { return false; }
+    }
+
+    public static boolean participantLinkMatches(Mob worker, PerimeterProject project) {
+        return participatingBuilder(worker, project) && PerimeterProjectLink.matches(worker, project, worker.getUUID());
+    }
+
+    private static boolean knownParticipantLinkMatches(Mob worker, PerimeterProject project) {
+        if (worker == null || !(worker.level() instanceof ServerLevel level)) return false;
+        try {
+            return (ConstructionEditLedger.get(level.getServer().overworld()).assignedBuilder(project).equals(worker.getUUID())
+                    || ConstructionEditLedger.get(level.getServer().overworld()).knownCrewMember(project, worker.getUUID()))
+                    && PerimeterProjectLink.matches(worker, project, worker.getUUID());
+        } catch (RuntimeException unavailable) { return false; }
+    }
+
     /** Fresh component-wide access authority, independent of the current native recipe's bounds. */
     public static Set<BlockPos> gateDetourPads(Mob builder, Entity area) {
         if (builder == null || area == null || !(builder.level() instanceof ServerLevel level)
@@ -272,6 +293,7 @@ public final class NativePerimeterProjects {
                 if(!WorkersBridge.assignBuildAreaDirectly(builder,area)) {pause(core,project,"Paused: native section reassignment could not be verified.",dirty);return;}
             }catch(ReflectiveOperationException unavailable){pause(core,project,"Paused: native builder API is unavailable.",dirty);return;}
         }
+        NativePerimeterCrew.advance(level, owner, project, protectedArea);
         pause(core,project,"",dirty);
     }
 
@@ -352,6 +374,7 @@ public final class NativePerimeterProjects {
             pause(core,project,"Paused: builder assignment changed before section cleanup.",dirty);return;
         }
         if(!NativeConstructionGuard.readyForRetirement(builder))return;
+        if(!NativePerimeterCrew.retireStage(level, project, attempt.area())) return;
         if(!NativeConstructionGuard.retireBuilderAssociation(builder,attempt.area())) {
             pause(core,project,"Paused: completed section cannot be detached safely.",dirty);return;
         }
@@ -396,6 +419,7 @@ public final class NativePerimeterProjects {
             // Detach only references whose immutable IDs belong to this commission, including a transferred worker.
             for(var stage:project.stages())if(!NativeConstructionGuard.retireBuilderAssociation(builder,stage.areaId()))return;
         }
+        for (var stage : project.stages()) if (!NativePerimeterCrew.retireStage(level, project, stage.areaId())) return;
         for(var attempt:journal.attempts()) {
             Entity marker=level.getEntity(attempt.area());
             if(marker instanceof ProtectedBuildArea protectedArea)protectedArea.removeAuthorized();
@@ -454,10 +478,17 @@ public final class NativePerimeterProjects {
             var snapshot=PerimeterProjectAuthority.snapshot(level.getServer().overworld(),link.core());
             var project=snapshot.get(link.id());
             if(project!=null) {
-                if(!projectLinkMatches(worker,project) || !ledger.matchesProjectIdentity(project)
+                if(!knownParticipantLinkMatches(worker,project) || !ledger.matchesProjectIdentity(project)
                         || !NativeConstructionGuard.retirementReceiptMatches(worker.getPersistentData(),
                         project.stages().stream().map(PerimeterProject.Stage::areaId).toList(),ledger.generation()))
                     return NativeConstructionGuard.pauseStorage(worker,"Paused: whole-perimeter worker or ledger identity needs recovery review");
+                if (!assignedBuilder(worker, project) && !ledger.crewMember(project, worker.getUUID())) {
+                    if (!NativeConstructionGuard.readyForRetirement(worker)) return true;
+                    for (var stage : project.stages())
+                        if (!NativeConstructionGuard.retireBuilderAssociation(worker, stage.areaId())) return false;
+                    PerimeterProjectLink.clear(worker, link.id(), link.generation(), link.hash());
+                    return true;
+                }
                 if(project.state()==PerimeterProject.State.CANCELED || project.state()==PerimeterProject.State.COMPLETE) {
                     if(!currentAreaWithin(worker,project.stages().stream().map(PerimeterProject.Stage::areaId).toList())) {
                         NativeConstructionGuard.pauseStorage(worker,"Paused: another native assignment must finish before old perimeter cleanup");return true;
@@ -482,7 +513,8 @@ public final class NativePerimeterProjects {
             }
             var terminal=snapshot.terminal(link.id());
             if(terminal==null || terminal.generation()!=link.generation() || !terminal.manifestHash().equals(link.hash())
-                    || !terminal.coreKey().equals(link.core()) || !ledger.assignedTerminalBuilder(terminal).equals(worker.getUUID())
+                    || !terminal.coreKey().equals(link.core()) || !(ledger.assignedTerminalBuilder(terminal).equals(worker.getUUID())
+                        || ledger.knownTerminalCrewMember(terminal, worker.getUUID()))
                     || !ledger.sameGeneration(terminal.cleanup().ledgerGeneration())
                     || !NativeConstructionGuard.retirementReceiptMatches(worker.getPersistentData(),
                     terminal.stages().stream().map(PerimeterTerminalReceipt.Stage::areaId).toList(),terminal.cleanup().ledgerGeneration()))
