@@ -89,6 +89,8 @@ public final class BuilderGroundRecovery {
             for (BlockPos p : BlockPos.betweenClosed((int)Math.floor(body.minX), (int)Math.floor(body.minY),
                     (int)Math.floor(body.minZ), (int)Math.floor(body.maxX), (int)Math.floor(body.maxY), (int)Math.floor(body.maxZ))) {
                 if (!level.hasChunkAt(p) || !level.getFluidState(p).isEmpty()
+                        // A wither rose is a camp-clearable flower with no collision, but unsafe to stand in.
+                        || level.getBlockState(p).is(Blocks.WITHER_ROSE)
                         || (!level.getBlockState(p).isAir()
                             && !com.devfarinsky.siegeoverhaul.camp.CampVegetation.plant(level.getBlockState(p)))) {
                     clear = false; break;

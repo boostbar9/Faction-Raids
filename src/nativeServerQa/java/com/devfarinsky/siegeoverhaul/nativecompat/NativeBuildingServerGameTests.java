@@ -282,6 +282,9 @@ public final class NativeBuildingServerGameTests {
         NativeInventoryAuthorityServerContracts.verify(helper, owner, outsider, builder, authorityReport);
         check("offline-native-inventory-authority-and-loss-recovery");
         builder.discard();
+        REPORT.put("builderRecovery", com.devfarinsky.siegeoverhaul.core.NativeBuilderRecoveryServerContracts
+                .verify(level, helper.absolutePos(new BlockPos(8, 1, 8))));
+        check("native-builder-recovery-vegetation-safety");
     }
 
     private static ProtectedBuildArea newArea(ServerLevel level, FakePlayer owner, BuilderEntity builder,

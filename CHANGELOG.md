@@ -1,3 +1,9 @@
+## 4.52.11 — Safer builder recovery around wither roses
+
+- Keep emergency surface recovery from moving a stuck commissioned builder into wither roses, including roses touching its upper body. The builder chooses another safe nearby spot or stays put when none is available.
+- Preserve harmless flowers and tall grass as standing space. Recovery still respects native work breaks, loaded terrain, collision checks and the existing observation delay, without clearing blocks or changing paid jobs and materials.
+- Update the server and all clients together, and back up your world before updating.
+
 ## 4.52.10 — Keep Olympian loot sealed
 
 - Remove the possible-item browser and reward models from the Loot tab. Each chest now keeps its exact equipment pool mysterious until the purchased box is opened.
