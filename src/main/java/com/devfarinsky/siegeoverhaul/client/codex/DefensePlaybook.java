@@ -23,7 +23,7 @@ public final class DefensePlaybook {
     public static final List<Tip> TIPS = List.of(
             // === Setup ===
             new Tip("Setup","Claim land, place a Siege Core",
-                    "You need the Recruits mod. Create or join a faction and claim at least one chunk in the Overworld. Place a single Siege Core anywhere inside your claim. Every raid that spawns for your faction will march on that core."),
+                    "You need the Recruits mod. Create or join a faction. In the Overworld, the faction leader opens the claim map (M by default), right-clicks a chunk within four chunks of them and picks Claim Area for the first 5x5 claim. Claim Chunk only extends an existing claim. Carry the claim cost in your own inventory, not the Siege Core Treasury. The entire 5x5 area must clear other factions' claims and their three-chunk buffer. Place a single Siege Core anywhere inside your claim. Every raid that spawns for your faction will march on that core."),
             new Tip("Setup","Open the Command Center",
                     "Right-click the Siege Core to open the Command Center. That's the tabbed UI for hiring, banking, checking your roster, improving territory and planning defenses, and reading intel. Press Escape or click the X in the corner to close."),
             // === Economy ===
