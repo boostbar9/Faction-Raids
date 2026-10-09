@@ -1,0 +1,385 @@
+# One-use exact-artifact publisher. Keep this workflow off main.
+name: Publish tested 4.52.11 release to CurseForge
+
+on:
+  push:
+    branches: [publish/curseforge-v4.52.11]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  issues: read
+
+concurrency:
+  group: curseforge-1364352-v4.52.11
+  cancel-in-progress: false
+
+env:
+  VERSION: '4.52.11'
+  PULL_REQUEST_NUMBER: '292'
+  REVIEW_EVIDENCE_SHA256: '84f5a1f295bd47a2f1a99ec89e70ca3b129bce4eff48ef1fde2c2a1293763605'
+  REVIEWED_SOURCE_SHA: '751dcab465e4d6775c447defb46d16689f4955e2'
+  MERGED_SOURCE_SHA: '8ac69877fa3de87d2122ead0ec9f0d24b260ed18'
+  SOURCE_TREE_SHA: '74ac2a3908dee0142c305111a52dc791bd64407e'
+  REVIEWED_BUILD_RUN_ID: '37867008068'
+  REVIEWED_JAR_ARTIFACT_ID: '11589070430'
+  REVIEWED_REGRESSION_ARTIFACT_ID: '11588482233'
+  BUILD_RUN_ID: '37867400698'
+  JAR_ARTIFACT_ID: '11588404357'
+  REGRESSION_ARTIFACT_ID: '11588658721'
+  NATIVE_RUN_ID: '37867007996'
+  NATIVE_ARTIFACT_ID: '11588054510'
+  NATIVE_CHECKOUT_SHA: 'a6e2cdb9c8ce5a3c6f143cbc05f9360d5b6d5429'
+  ARTIFACT_SHA256: '950e33f620452d5a9801b75cde4de46ae3ace40bcdb8515916fec1082c226dda'
+  REGRESSION_TEST_COUNT: '1560'
+  REGRESSION_SUITE_COUNT: '258'
+  REGRESSION_SUITE_SHA256: 'c3ec70762ecdf7ba3c79b919173cecc179abb6e3591ce24b70b72288b94169cf'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prevent duplicate or ambiguous uploads
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.parse, urllib.request
+
+          BASE = 'https://api.github.com/repos/boostbar9/Faction-Raids/'
+          HEADERS = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                     'Accept': 'application/vnd.github+json'}
+
+          def get(path):
+              with urllib.request.urlopen(urllib.request.Request(BASE + path, headers=HEADERS), timeout=30) as response:
+                  return json.load(response)
+
+          current = int(os.environ['GITHUB_RUN_ID'])
+          current_attempt = int(os.environ.get('GITHUB_RUN_ATTEMPT', '1'))
+          inspect = [(current, attempt) for attempt in range(1, current_attempt)]
+          query = urllib.parse.urlencode({'branch': 'publish/curseforge-v4.52.11', 'event': 'push', 'per_page': 100})
+          history = get('actions/workflows/publish-curseforge-v4.52.11.yml/runs?' + query)
+          assert history['total_count'] == len(history['workflow_runs']), 'Publisher history is truncated'
+          for run in history['workflow_runs']:
+              if run['id'] != current:
+                  inspect.extend((run['id'], attempt) for attempt in range(1, run['run_attempt'] + 1))
+          for run_id, attempt in inspect:
+              jobs = get(f'actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100')
+              assert jobs['total_count'] == len(jobs['jobs']), 'Publisher job history is truncated'
+              uploads = [step for job in jobs['jobs'] for step in job.get('steps', [])
+                         if step.get('name') == 'Publish to CurseForge']
+              if not uploads:
+                  raise RuntimeError(f'Prior publisher attempt {run_id}/{attempt} has ambiguous upload history')
+              for step in uploads:
+                  if step.get('conclusion') != 'skipped':
+                      raise RuntimeError(f'Prior upload may have reached CurseForge: {run_id}/{attempt} {step}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('publish=true\n')
+          print('No prior upload attempt exists for 4.52.11.')
+          PY
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Check out exact merged source without credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.MERGED_SOURCE_SHA }}
+          persist-credentials: false
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Verify immutable source, reviews, runs and artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, urllib.request
+
+          BASE = 'https://api.github.com/repos/boostbar9/Faction-Raids/'
+          HEADERS = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                     'Accept': 'application/vnd.github+json'}
+
+          def get(path):
+              with urllib.request.urlopen(urllib.request.Request(BASE + path, headers=HEADERS), timeout=30) as response:
+                  return json.load(response)
+
+          reviewed, merged, tree = (os.environ[k] for k in
+              ('REVIEWED_SOURCE_SHA', 'MERGED_SOURCE_SHA', 'SOURCE_TREE_SHA'))
+          assert get('branches/main')['commit']['sha'] == merged, 'Main advanced after release build'
+          pr = get('pulls/' + os.environ['PULL_REQUEST_NUMBER'])
+          assert pr['merged'] and pr['merge_commit_sha'] == merged and pr['head']['sha'] == reviewed
+          for sha in (reviewed, merged, os.environ['NATIVE_CHECKOUT_SHA']):
+              assert get('git/commits/' + sha)['tree']['sha'] == tree, sha
+          threads_query = '''query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){pageInfo{hasNextPage}nodes{isResolved}}}}}'''
+          request = urllib.request.Request('https://api.github.com/graphql',
+              data=json.dumps({'query': threads_query, 'variables': {'owner': 'boostbar9', 'repo': 'Faction-Raids',
+                  'number': int(os.environ['PULL_REQUEST_NUMBER'])}}).encode(), headers={**HEADERS, 'Content-Type': 'application/json'})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              threads = json.load(response)['data']['repository']['pullRequest']['reviewThreads']
+          assert not threads['pageInfo']['hasNextPage'] and all(node['isResolved'] for node in threads['nodes'])
+          review = get('contents/docs/release-4.52.11-review.txt?ref=' + os.environ['GITHUB_SHA'])
+          import base64
+          review_bytes = base64.b64decode(review['content'])
+          assert hashlib.sha256(review_bytes).hexdigest() == os.environ['REVIEW_EVIDENCE_SHA256']
+          review = review_bytes.decode()
+          assert 'Reviewed head: ' + reviewed in review and 'Reviewed tree: ' + tree in review
+          assert 'It is not a human review' in review
+          assert 'Decision: APPROVE the reviewed code and final-head verification. No unresolved review findings.' in review
+          open('verified-review.txt', 'wb').write(review_bytes)
+
+          expected_runs = {
+              os.environ['REVIEWED_BUILD_RUN_ID']: ('Build', '.github/workflows/build.yml', reviewed, 'pull_request'),
+              os.environ['BUILD_RUN_ID']: ('Build', '.github/workflows/build.yml', merged, 'push'),
+              os.environ['NATIVE_RUN_ID']: ('Native Building Server QA', '.github/workflows/native-building-server-qa.yml', reviewed, 'pull_request'),
+          }
+          artifacts = {
+              os.environ['REVIEWED_BUILD_RUN_ID']: {
+                  'Faction-Raids-Forge-1.20.1': int(os.environ['REVIEWED_JAR_ARTIFACT_ID']),
+                  'regression-test-results': int(os.environ['REVIEWED_REGRESSION_ARTIFACT_ID'])},
+              os.environ['BUILD_RUN_ID']: {
+                  'Faction-Raids-Forge-1.20.1': int(os.environ['JAR_ARTIFACT_ID']),
+                  'regression-test-results': int(os.environ['REGRESSION_ARTIFACT_ID'])},
+              os.environ['NATIVE_RUN_ID']: {
+                  'native-building-server-qa-' + os.environ['NATIVE_RUN_ID'] + '-1': int(os.environ['NATIVE_ARTIFACT_ID'])},
+          }
+          receipt = {'runs': {}, 'artifacts': {}}
+          for run_id, (name, path, source, event) in expected_runs.items():
+              run = get('actions/runs/' + run_id)
+              assert (run['name'], run['path'], run['head_sha'], run['event'], run['run_attempt']) == (name, path, source, event, 1)
+              assert run['status'] == 'completed' and run['conclusion'] == 'success'
+              listing = get('actions/runs/' + run_id + '/artifacts?per_page=100')
+              assert listing['total_count'] == len(listing['artifacts'])
+              for artifact_name, artifact_id in artifacts[run_id].items():
+                  found = [item for item in listing['artifacts'] if item['name'] == artifact_name]
+                  assert len(found) == 1 and found[0]['id'] == artifact_id and not found[0]['expired']
+              receipt['runs'][run_id] = {'name': name, 'source': source, 'event': event}
+              receipt['artifacts'][run_id] = artifacts[run_id]
+          receipt.update({'reviewed_source': reviewed, 'merged_source': merged, 'source_tree': tree,
+                          'pull_request': int(os.environ['PULL_REQUEST_NUMBER']),
+                          'review_evidence_sha256': os.environ['REVIEW_EVIDENCE_SHA256']})
+          open('verified-source.json', 'w').write(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
+          print('Verified final review state, exact main and all successful pinned runs/artifacts.')
+          PY
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download exact merged-main tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.JAR_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: dist
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download merged-main regression results
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.REGRESSION_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: regression
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download reviewed PR build evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.REVIEWED_JAR_ARTIFACT_ID }},${{ env.REVIEWED_REGRESSION_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.REVIEWED_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: reviewed
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download native server evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.NATIVE_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.NATIVE_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: native
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Verify tested bytes, dependencies, regressions and native recovery
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os, tomllib, xml.etree.ElementTree as ET, zipfile
+
+          def suites(root):
+              counts = {}; totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0)
+              for report in Path(root).rglob('TEST-*.xml'):
+                  suite = ET.parse(report).getroot(); name = suite.get('name')
+                  assert suite.tag == 'testsuite' and name and name not in counts
+                  counts[name] = int(suite.get('tests'))
+                  cases = suite.findall('testcase'); assert len(cases) == counts[name]
+                  assert all(case.find(child) is None for case in cases for child in ('failure', 'error', 'skipped'))
+                  for key in totals: totals[key] += int(suite.get(key))
+              return counts, totals
+
+          jar = Path('dist/siegeoverhaul-4.52.11.jar')
+          assert sorted(Path('dist').glob('*.jar')) == [jar]
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          assert digest == os.environ['ARTIFACT_SHA256']
+          with zipfile.ZipFile(jar) as archive:
+              assert archive.testzip() is None and len(archive.namelist()) == len(set(archive.namelist()))
+              names = set(archive.namelist())
+              assert 'com/devfarinsky/siegeoverhaul/core/BuilderGroundRecovery.class' in names
+              assert not any('NativeBuildingServerGameTests' in name or 'NativeBuilderRecoveryServerContracts' in name or '/test/' in name for name in names)
+              metadata = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+          assert metadata['mods'][0]['modId'] == 'siegeoverhaul'
+          assert metadata['mods'][0]['version'] == os.environ['VERSION']
+          assert metadata['mods'][0]['displayTest'] == 'MATCH_VERSION'
+          dependencies = {dep['modId']: dep for dep in metadata['dependencies']['siegeoverhaul']}
+          expected = {
+              'forge': (True, '[47,)', 'NONE'), 'minecraft': (True, '[1.20.1,1.21)', 'NONE'),
+              'recruits': (True, '[1.15.2,)', 'AFTER'), 'workers': (True, '[2.0.3,)', 'AFTER'),
+              'smallships': (True, '[0,)', 'AFTER'), 'siegeweapons': (True, '[0,)', 'AFTER'),
+              'ftbchunks': (False, '[0,)', 'AFTER'), 'openpartiesandclaims': (False, '[0,)', 'AFTER'),
+              'corpse': (False, '[0,)', 'AFTER'), 'magistuarmory': (False, '[0,)', 'AFTER'),
+              'musketmod': (False, '[0,)', 'AFTER'), 'curios': (False, '[5.14.1,6)', 'AFTER')}
+          assert set(dependencies) == set(expected)
+          for mod, contract in expected.items():
+              dep = dependencies[mod]
+              assert (dep['mandatory'], dep['versionRange'], dep['ordering']) == contract and dep['side'] == 'BOTH'
+
+          counts, totals = suites('regression')
+          reviewed_counts, reviewed_totals = suites('reviewed')
+          assert counts == reviewed_counts and totals == reviewed_totals
+          assert totals == {'tests': int(os.environ['REGRESSION_TEST_COUNT']), 'failures': 0, 'errors': 0, 'skipped': 0}
+          assert len(counts) == int(os.environ['REGRESSION_SUITE_COUNT'])
+          suite_digest = hashlib.sha256(json.dumps(counts, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+          assert suite_digest == os.environ['REGRESSION_SUITE_SHA256']
+
+          reviewed_jar = Path('reviewed/siegeoverhaul-4.52.11.jar')
+          with zipfile.ZipFile(jar) as main_zip, zipfile.ZipFile(reviewed_jar) as reviewed_zip:
+              assert set(main_zip.namelist()) == set(reviewed_zip.namelist())
+              for name in main_zip.namelist():
+                  if name != 'META-INF/MANIFEST.MF': assert main_zip.read(name) == reviewed_zip.read(name), name
+
+          native = json.loads(Path('native/result.json').read_text())
+          assert native['status'] == 'passed' and native['testsExecuted'] == 1
+          assert native['physicalDistribution'] == 'DEDICATED_SERVER' and native['logicalSide'] == 'SERVER'
+          assert native['serverClass'] == 'net.minecraft.gametest.framework.GameTestServer'
+          assert native['connectedPlayers'] == 0
+          assert native['fixtureActor'] == 'net.minecraftforge.common.util.FakePlayer; no authenticated network client'
+          assert 'real multiplayer connection/authentication remains unverified' in native['limitation']
+          assert Path('native/source-commit.txt').read_text().strip() == os.environ['NATIVE_CHECKOUT_SHA']
+          expected_checks = [
+              'physical-dedicated-classloading', 'real-native-factories-and-queues',
+              'sealed-native-packets-and-move-overloads', 'native-nbt-roundtrip-and-defensive-copies',
+              'unloaded-blueprint-remains-unloaded', 'clearance-and-world-saveddata-disk-roundtrip',
+              'fakeplayer-direct-handler-authorization-and-cancel',
+              'offline-native-inventory-authority-and-loss-recovery', 'native-builder-recovery-vegetation-safety']
+          assert native['checks'] == expected_checks
+          assert Path('native/server-console.log').read_text().count('SIEGE_NATIVE_SERVER_QA_COMPLETED tests=1 checks=9') == 1
+          recovery = native['builderRecovery']
+          for case in ['airControl', 'allFeetRosesRejected', 'nearestFeetRoseRejected', 'upperBodyRoseRejected',
+                       'poppyControl', 'tallGrassControl', 'sunflowerControl', 'workerUnmoved']:
+              assert recovery[case] == 'passed', case
+          assert 'no timed teleport, native AI construction or authenticated multiplayer claim' in recovery['scope']
+          expected_versions = {'minecraft': '1.20.1', 'forge': '47.4.16', 'siegeoverhaul': '4.52.11',
+              'workers': '2.0.3', 'recruits': '1.15.2', 'smallships': '2.0.0-b1.4', 'siegeweapons': '0.2.5'}
+          assert native['loadedModVersions'] == expected_versions
+          for mod in ['workers', 'recruits', 'smallships', 'siegeweapons']:
+              assert len(native['loadedCompanionArtifacts'][mod]['sha256']) == 64
+          assert counts['com.devfarinsky.siegeoverhaul.core.BuilderGroundRecoveryTest'] == 12
+          evidence = {'sha256': digest, **totals, 'suites': len(counts),
+                      'suite_manifest_sha256': suite_digest, 'native_run': int(os.environ['NATIVE_RUN_ID']),
+                      'native_checks': len(expected_checks), 'builder_recovery': recovery,
+                      'native_limitations': native['limitation']}
+          Path('verified-release.json').write_text(json.dumps(evidence, sort_keys=True, indent=2) + '\n')
+          print('Verified exact JAR, dependency contract,', totals['tests'], 'tests and direct native recovery evidence.')
+          PY
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Recheck main and exact JAR immediately before upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, urllib.request
+          headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'}
+          with urllib.request.urlopen(urllib.request.Request(
+                  'https://api.github.com/repos/boostbar9/Faction-Raids/branches/main', headers=headers), timeout=30) as response:
+              assert json.load(response)['commit']['sha'] == os.environ['MERGED_SOURCE_SHA'], 'Main advanced before upload'
+          assert hashlib.sha256(open('dist/siegeoverhaul-4.52.11.jar', 'rb').read()).hexdigest() == os.environ['ARTIFACT_SHA256']
+          print('Main and tested bytes are unchanged immediately before upload.')
+          PY
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          curseforge-retry-attempts: 1
+          files: dist/siegeoverhaul-4.52.11.jar
+          name: The Siege Overhaul v4.52.11 - Safer Builder Recovery
+          version: v4.52.11
+          version-type: release
+          changelog: |
+            Emergency builder recovery now avoids wither roses, so its safe-destination search will not choose those damaging plants. Harmless flowers and tall vegetation remain valid destinations when the existing safety checks pass.
+
+            Worker schedules, supplies, claims, paid jobs and dependency requirements are unchanged. This update does not include the experimental replacement-builder changes.
+
+            Back up your world and install 4.52.11 on the server and all clients.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            ftb-chunks-forge(optional)
+            open-parties-and-claims(optional)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+            curios(optional)
+            epic-knights-addon(optional)
+          fail-mode: fail
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Record accepted upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.parse import urlsplit
+          import json, os, re
+          source = json.loads(Path('verified-source.json').read_text())
+          release = json.loads(Path('verified-release.json').read_text())
+          file_id, url = os.environ['RELEASE_FILE_ID'], os.environ['RELEASE_URL']
+          assert re.fullmatch(r'[1-9][0-9]*', file_id)
+          parsed = urlsplit(url)
+          assert parsed.scheme == 'https' and parsed.hostname in ('curseforge.com', 'www.curseforge.com')
+          assert parsed.path.rstrip('/') == '/minecraft/mc-mods/siege-overhaul/files/' + file_id
+          receipt = {**release, **source, 'version': os.environ['VERSION'], 'project': 1364352,
+                     'file_id': file_id, 'url': url, 'status': 'accepted_upload',
+                     'public_availability': 'not_yet_verified', 'publisher_run': int(os.environ['GITHUB_RUN_ID']),
+                     'publisher_attempt': int(os.environ.get('GITHUB_RUN_ATTEMPT', '1'))}
+          Path('curseforge-4.52.11-receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
+          print(json.dumps(receipt, sort_keys=True))
+          PY
+
+      - if: always() && steps.guard.outputs.publish == 'true'
+        name: Preserve publication verification receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: curseforge-4.52.11-receipts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            verified-source.json
+            verified-review.txt
+            verified-release.json
+            curseforge-4.52.11-receipt.json
+          if-no-files-found: error
+          retention-days: 90
+
