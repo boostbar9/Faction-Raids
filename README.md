@@ -85,11 +85,24 @@ Open each bag when ready. If your inventory fills, undelivered contents remain i
 
 1. Install The Siege Overhaul and **all four required companion mods** below.
 2. Open your starter bags.
-3. Create or join a Villager Recruits faction and claim land.
+3. Create or join a Villager Recruits faction and claim land. Your first claim must be a 5x5 **Claim Area**: as faction leader in the Overworld, open the claim map (**M** by default), right-click a chunk within four chunks of you and choose **Claim Area**. **Claim Chunk** only adds a chunk touching an existing claim.
 4. Place your Siege Core inside your faction's **Overworld claim**.
 5. Hire troops, assign your workers their normal work areas, and prepare your defenses.
 
 Use the **Warlord's Codex** for concise siege guidance, status, and access to the native faction and claim interfaces.
+
+### Claiming and Friendly Fire
+
+The following guidance matches Villager Recruits 1.15.2 source at [`cff03e08`](https://github.com/talhanation/recruits/tree/cff03e085d65653406a8b6ddcdd0ebff615c3e48). Server settings and other installed mods can add restrictions. Its claim map reports why a claim option is unavailable:
+
+- **Must touch your claim:** use **Claim Area** for your first claim; **Claim Chunk** only extends an existing one.
+- **Inside an enemy buffer zone:** every chunk of a new 5x5 area must clear foreign claims and their three-chunk buffer, including raider war-camp claims. The buffer extends three chunks along both map axes, including diagonals; moving only the center outside it is not enough. Choose another clear area. This distance is hard-coded in the checked Recruits source.
+- **Too far away:** the selected center must be within four chunks of your current chunk along each map axis.
+- **Not enough payment items / no permission:** only the faction leader can claim an area, and the currency (emeralds by default) must be in your own inventory, not the Siege Core Treasury. Base costs are `ClaimingCost` and `ChunkCost` in the world's `serverconfig/recruits-server.toml`; `CascadeThePriceOfClaims` can increase the price of later claim areas. Follow the price shown by the claim map.
+
+For a server-wide same-faction friendly-fire default, ask the server owner to configure Recruits. In the same file, under Global Faction/Team Settings, keep `GlobalTeamSetting = true` and set `GlobalTeamFriendlyFireSetting = false`, then restart the world or server. These are the Recruits defaults and apply to all factions, not just your own. This setting does not promise protection from every modded damage source.
+
+A warning about nearby villages or towers needs its exact text, the screen/action used, and the installed Siege Overhaul/Recruits version filenames before diagnosis. Do not assume it is the buffer-zone message or that Village Expansion is installed. The newer report tracked in [issue #198](https://github.com/boostbar9/Faction-Raids/issues/198#issuecomment-5944379078) explicitly excludes that addon; the separate addon investigation is not a fix for that report. Do not disable claim protections or bypass paid claim rejection to work around an unidentified warning.
 
 ## Building System Candidate
 
