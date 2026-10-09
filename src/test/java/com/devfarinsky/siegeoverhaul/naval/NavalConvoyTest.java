@@ -121,6 +121,34 @@ class NavalConvoyTest extends MinecraftTestSupport {
         assertTrue(NavalConvoy.landUnboarded(level,mob,new BlockPos(3,64,3),BlockPos.ZERO));
         verify(mob).teleportTo(anyDouble(),eq(64.0),anyDouble());
     }
+    @Test void trackingLegacyOrOwnedShipsDoesNotPermitSteering() {
+        Entity ship = mock(Entity.class); CompoundTag tag = new CompoundTag();
+        when(ship.getPersistentData()).thenReturn(tag);
+        Mob crew = raider();
+        when(ship.getPassengers()).thenReturn(List.of(crew));
+        tag.putString(ModConstants.Tags.NAVAL_TEAM, "team:test");
+        assertFalse(NavalConvoy.mayControl(ship, "team:test"));
+        tag.putBoolean(ModConstants.Tags.NAVAL_DISPOSABLE, true);
+        assertTrue(NavalConvoy.mayControl(ship, "team:test"));
+        assertFalse(NavalConvoy.mayControl(ship, "team:other"));
+    }
+    @Test void playerOrUnrelatedNestedPassengerRetainsControlOfRaiderVessel() {
+        Entity ship = mock(Entity.class), seat = mock(Entity.class);
+        CompoundTag tag = new CompoundTag(); tag.putBoolean(ModConstants.Tags.NAVAL_DISPOSABLE, true);
+        tag.putString(ModConstants.Tags.NAVAL_TEAM, "team:test");
+        when(ship.getPersistentData()).thenReturn(tag);
+        Mob crew = raider();
+        when(ship.getPassengers()).thenReturn(List.of(crew, seat));
+        var player = mock(net.minecraft.world.entity.player.Player.class);
+        when(seat.getPassengers()).thenReturn(List.of(player));
+        assertFalse(NavalConvoy.mayControl(ship, "team:test"));
+        Mob civilian = mock(Mob.class); when(civilian.getPersistentData()).thenReturn(new CompoundTag());
+        when(seat.getPassengers()).thenReturn(List.of(civilian));
+        assertFalse(NavalConvoy.mayControl(ship, "team:test"));
+        Mob nestedCrew = raider();
+        when(seat.getPassengers()).thenReturn(List.of(nestedCrew));
+        assertTrue(NavalConvoy.mayControl(ship, "team:test"));
+    }
     private static Mob raider() {
         Mob mob=mock(Mob.class);CompoundTag tag=new CompoundTag();tag.putString(ModConstants.Tags.RAID_TEAM,"team:test");
         when(mob.getPersistentData()).thenReturn(tag);when(mob.isAlive()).thenReturn(true);
