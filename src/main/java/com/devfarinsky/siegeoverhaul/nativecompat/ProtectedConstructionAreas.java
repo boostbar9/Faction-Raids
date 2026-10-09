@@ -34,6 +34,8 @@ public final class ProtectedConstructionAreas {
         return createStage(owner,builder,project,null);
     }
     static Entity createStage(ServerPlayer owner,Mob builder,com.devfarinsky.siegeoverhaul.core.PerimeterProject project,BlockPos originalMarker) {
+        if (project == null || !project.executionSupported())
+            throw new IllegalArgumentException(com.devfarinsky.siegeoverhaul.core.PerimeterProject.GATE_EXECUTION_BLOCKER);
         var stage=project.active();if(stage==null)throw new IllegalArgumentException("No native section remains");
         var layout=stage.layout();
         var blueprint=com.devfarinsky.siegeoverhaul.core.TerritoryFortification.blueprint(layout.targets(),layout.min(),layout.max());
