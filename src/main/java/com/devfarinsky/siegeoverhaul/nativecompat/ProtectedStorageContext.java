@@ -46,7 +46,7 @@ final class ProtectedStorageContext {
                 || !area.canWorkHere(worker) || owned && !java.util.Objects.equals(WorkersBridge.readWorkerOwner(worker), WorkersBridge.readOwner(area)))
             throw new IllegalStateException("Storage owner or native permission changed");
         if (!owned && !java.util.Objects.equals(WorkersBridge.readWorkerOwner(worker), WorkersBridge.readOwner(area))
-                && !NativeConstructionGuard.sharedStorageFactionMatches(worker))
+                && !EarthworksInventoryAccess.sharedStorageFactionMatches(worker))
             throw new IllegalStateException("Shared upkeep storage requires current worker faction membership");
         AABB current = area.getArea();
         if (current == null || area.area != null && !current.equals(area.area))
