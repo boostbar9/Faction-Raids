@@ -90,15 +90,19 @@ public final class NativeBuilderRecoveryServerContracts {
 
     private static void fillBody(ServerLevel level,BlockPos feet,BlockState lower,BlockState upper) {
         for (int x=-4;x<=4;x++) for (int z=-4;z<=4;z++) {
-            level.setBlock(feet.offset(x,0,z),lower,2);
-            level.setBlock(feet.offset(x,1,z),upper,2);
+            // Construct the complete paired-plant scene before neighbor shape validation.
+            // This is explicit QA setup, never a production placement bypass.
+            level.setBlock(feet.offset(x,0,z),lower,Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
+            level.setBlock(feet.offset(x,1,z),upper,Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
         }
         // Neighbor shape updates can remove plants on invalid footing. Verify the real scene,
         // so an accidentally emptied fixture cannot masquerade as a harmless-plant success.
         for (int x=-4;x<=4;x++) for (int z=-4;z<=4;z++) {
             BlockPos p=feet.offset(x,0,z);
-            require(level.getBlockState(p).equals(lower),"Lower recovery fixture changed at "+p);
-            require(level.getBlockState(p.above()).equals(upper),"Upper recovery fixture changed at "+p.above());
+            require(level.getBlockState(p).equals(lower),"Lower recovery fixture changed at "+p+": expected "+lower+", got "+level.getBlockState(p));
+            require(level.getBlockState(p.above()).equals(upper),"Upper recovery fixture changed at "+p.above()+": expected "+upper+", got "+level.getBlockState(p.above()));
+            require(lower.isAir() || lower.canSurvive(level,p),"Lower plant cannot survive the completed fixture: "+lower);
+            require(upper.isAir() || upper.canSurvive(level,p.above()),"Upper plant cannot survive the completed fixture: "+upper);
         }
     }
 
