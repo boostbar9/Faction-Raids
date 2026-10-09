@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.DoublePlantBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
@@ -42,7 +43,7 @@ public final class NativeBuilderRecoveryServerContracts {
         Map<String,Object> report=new LinkedHashMap<>();
         try {
             for (int x=-4;x<=4;x++) for (int z=-4;z<=4;z++)
-                level.setBlock(feet.offset(x,-1,z),Blocks.STONE.defaultBlockState(),2);
+                level.setBlock(feet.offset(x,-1,z),Blocks.DIRT.defaultBlockState(),2);
             fillBody(level,feet,Blocks.AIR.defaultBlockState(),Blocks.AIR.defaultBlockState());
             require(feet.equals(BuilderGroundRecovery.findSurface(level,builder)),"Actual clear platform not admitted");
             report.put("airControl","passed");
@@ -54,12 +55,14 @@ public final class NativeBuilderRecoveryServerContracts {
 
             fillBody(level,feet,Blocks.AIR.defaultBlockState(),Blocks.AIR.defaultBlockState());
             level.setBlock(feet,Blocks.WITHER_ROSE.defaultBlockState(),2);
+            require(level.getBlockState(feet).is(Blocks.WITHER_ROSE),"Nearest-foot fixture disappeared");
             requireNearestSafeNeighbor(level,builder,feet);
             report.put("nearestFeetRoseRejected","passed");
 
             level.setBlock(feet,Blocks.AIR.defaultBlockState(),2);
             // Explicit synthetic head-cell fixture; no claim that a floating rose grows naturally.
-            level.setBlock(feet.above(),Blocks.WITHER_ROSE.defaultBlockState(),2);
+            level.setBlock(feet.above(),Blocks.WITHER_ROSE.defaultBlockState(),
+                    Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
             require(level.getBlockState(feet.above()).is(Blocks.WITHER_ROSE),"Upper-body fixture disappeared");
             requireNearestSafeNeighbor(level,builder,feet);
             report.put("upperBodyRoseRejected","passed");
@@ -89,6 +92,13 @@ public final class NativeBuilderRecoveryServerContracts {
         for (int x=-4;x<=4;x++) for (int z=-4;z<=4;z++) {
             level.setBlock(feet.offset(x,0,z),lower,2);
             level.setBlock(feet.offset(x,1,z),upper,2);
+        }
+        // Neighbor shape updates can remove plants on invalid footing. Verify the real scene,
+        // so an accidentally emptied fixture cannot masquerade as a harmless-plant success.
+        for (int x=-4;x<=4;x++) for (int z=-4;z<=4;z++) {
+            BlockPos p=feet.offset(x,0,z);
+            require(level.getBlockState(p).equals(lower),"Lower recovery fixture changed at "+p);
+            require(level.getBlockState(p.above()).equals(upper),"Upper recovery fixture changed at "+p.above());
         }
     }
 
