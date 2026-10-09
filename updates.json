@@ -27,10 +27,11 @@
     "4.52.7": "Sizeable Foliage 1.2.1 Very Short Grass no longer blocks protected wall and perimeter builds. Larger plants, crops, containers and water remain protected. Back up your world and update the server and all clients together.",
     "4.52.8": "Saved building plans no longer expire after two minutes. Enemy-core capture boundaries and eligibility are clearer; Loot shows possible native items; Civilians shows a read-only resident roster. Fresh building safety/cost checks remain. Back up your world and update server and all clients together for protocol 22.",
     "4.52.9": "Commissioned builders wait until they reach native horizontal working range on checked safe footing before dispatching block work. Bounded approach points help native pathfinding. Existing vertical reach, claims, supplies and paid jobs are preserved. Back up your world and update the server and all clients together.",
-    "4.52.10": "The Loot tab keeps possible Olympian equipment hidden until you open your box. Sealed chest cards retain their rarity promises and 16/48/96-emerald prices; loot pools, odds, rewards and the reveal sequence are unchanged. Back up your world and update the server and all clients together."
+    "4.52.10": "The Loot tab keeps possible Olympian equipment hidden until you open your box. Sealed chest cards retain their rarity promises and 16/48/96-emerald prices; loot pools, odds, rewards and the reveal sequence are unchanged. Back up your world and update the server and all clients together.",
+    "4.52.11": "Emergency builder recovery avoids wither roses while harmless flowers and tall vegetation remain eligible on checked safe ground. Native schedules, supplies, claims and paid jobs are unchanged. This stable update does not include experimental replacement-builder changes. Back up your world and update the server and all clients together."
   },
   "promos": {
-    "1.20.1-latest": "4.52.10",
-    "1.20.1-recommended": "4.52.10"
+    "1.20.1-latest": "4.52.11",
+    "1.20.1-recommended": "4.52.11"
   }
 }
