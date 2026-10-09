@@ -1,0 +1,28 @@
+Independent automated code-review attestation: Siege Overhaul PR #292
+Recorded: 2026-10-09 UTC
+Repository: https://github.com/boostbar9/Faction-Raids
+Pull request: https://github.com/boostbar9/Faction-Raids/pull/292
+Reviewed head: 751dcab465e4d6775c447defb46d16689f4955e2
+Reviewed tree: 74ac2a3908dee0142c305111a52dc791bd64407e
+Base: 9c6fd28089eb6cf9cecf48ec1dc25b4538af8463
+Decision: APPROVE the reviewed code and final-head verification. No unresolved review findings.
+
+Reviewer identity and scope
+This is an independent AI-assisted review performed separately from implementation. It is not a human review, a GitHub human approval, or an assertion of interactive multiplayer playtesting. The reviewer inspected the entire PR, relevant repository guidance, neighboring recovery tests, the job/owner call site, native work/sleep scheduling gates, and each subsequent test-fixture correction. No production code was edited by this reviewer.
+
+Production assessment
+The only production behavior change explicitly rejects WITHER_ROSE in every occupied destination body cell before the broad camp-vegetation admission predicate. This correctly excludes the collision-free hazardous flower while preserving harmless single and double plants. Loaded-chunk, fluid, collision, border, height, support, sky and distance selection checks remain intact. The observation delay and native sleep/work interruptions remain intact. Existing job/owner validation, claims and build permissions, material/payment accounting, and job persistence are unchanged. Recovery does not gain block-clearing or inventory-changing operations.
+
+Findings disposition
+The first native fixture was rejected because STONE could not sustain its flowers and its empty-collision assertion could also pass for air. A subsequent fixture was still rejected because paired-plant transitions caused a retained-state assertion failure. Final code uses DIRT support and explicitly labeled QA-only paired-scene initialization, then verifies the exact lower and upper block states and real canSurvive result for every non-air plant. The isolated synthetic upper-body rose is explicitly labeled and verified present. Production placement and recovery checks are not bypassed or relaxed. Both fixture findings are resolved by the reviewed final code and passing final native run.
+
+Independently verified final evidence
+Build: https://github.com/boostbar9/Faction-Raids/actions/runs/37867008068
+Job: 113616015728. GitHub reports success; logs show Java 17 setup, ./gradlew clean build, and BUILD SUCCESSFUL. Independently parsed the downloaded final PR regression XML: 258 suites, 1,560 tests, zero failures, zero errors, zero skipped.
+Native server: https://github.com/boostbar9/Faction-Raids/actions/runs/37867007996
+Job: 113616016867. GitHub reports success for runtime execution and evidence verification. Logs show all nine contract markers and SIEGE_NATIVE_SERVER_QA_COMPLETED tests=1 checks=9. Independently inspected the downloaded result.json: passed, one GameTest, nine contracts; air control, all-feet roses, nearest-foot rose, upper-body rose, poppy, tall grass, sunflower and worker-unmoved all passed.
+The native source receipt and both workflow checkout logs identify integration commit a6e2cdb9c8ce5a3c6f143cbc05f9360d5b6d5429, which integrates the exact reviewed head into the stated base. Reviewed checkout and integration commit have tree 74ac2a3908dee0142c305111a52dc791bd64407e. Diff whitespace checks pass.
+
+Evidence limits and release boundary
+Native coverage consists of direct destination queries with a real Workers entity and vanilla block states in a loaded Forge GameTest world on the physical dedicated-server distribution. There are no authenticated connected players. The upper-body rose is a synthetic cell-coverage fixture. This evidence does not establish timed teleport behavior, native AI construction, production commissioning, rendering, full server restart, or authenticated multiplayer behavior. Unrelated optional native workflows being skipped are not counted as passed coverage.
+This approval applies to the exact reviewed head/tree. The publisher must separately verify merged-main Build success, exact tree equivalence, release JAR identity and metadata, and artifact provenance before publishing. This receipt does not itself claim that a release was published or publicly available.
