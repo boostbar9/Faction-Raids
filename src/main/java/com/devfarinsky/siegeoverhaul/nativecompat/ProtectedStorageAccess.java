@@ -28,6 +28,8 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
     private String phase;
     private ProtectedStorageContext.Source selected;
     private boolean closeOutstanding;
+    private EarthworksSupplyDemand.Transfer earthworksTransfer;
+    private EarthworksSupplyDemand.DepositTransfer earthworksDeposit;
 
     private ProtectedStorageAccess(BuilderEntity worker, AbstractChestGoal delegate, Kind kind, Session session) {
         super(worker,delegate,session);this.chest=delegate;this.kind=kind;
@@ -132,6 +134,28 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
                     && !ProtectedInventoryCleanup.outstanding(worker.getPersistentData());
         } catch(RuntimeException | LinkageError unavailable) { return false; }
     }
+    /** No fresh wrapper can replace retained cancellation evidence; all native inventory families stay guarded. */
+    static boolean retainedEarthworksWrappers(BuilderEntity worker,EarthworksJobLedger.Job job) {
+        if(worker.goalSelector==null)return false;
+        var goals=worker.goalSelector.getAvailableGoals();if(goals.size()>128)return false;
+        var found=java.util.EnumSet.noneOf(Kind.class);
+        Set<ProtectedInventoryGoal> adapters=java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        Set<Session> sessions=java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for(var wrapped:goals){
+            Goal goal=wrapped.getGoal();if(!family(goal))continue;
+            if(!(goal instanceof ProtectedInventoryGoal adapter)||adapter.worker!=worker||adapter.session.worker!=worker
+                    ||adapter.legacyLifecycleActive()||!adapter.retainedEarthworksMatches(job)
+                    ||!delegateOwnedBy(adapter.delegate,worker)||kind(adapter.delegate)!=kind(adapter)||!found.add(kind(adapter)))return false;
+            adapters.add(adapter);sessions.add(adapter.session);
+        }
+        if(sessions.size()!=1)return false; // Exactly the shared session admitted by install(), including upkeep exclusion.
+        for(Session session:sessions){
+            if(session.orphanedCleanup()||session.pending.size()>128||!session.retainedMembers(adapters))return false;
+            for(var pending:session.pending)if(pending==null||!adapters.contains(pending)||pending.session!=session)return false;
+        }
+        return found.size()==Kind.values().length;
+    }
+
     private static boolean delegateOwnedBy(Goal goal,BuilderEntity worker) {
         if(goal instanceof AbstractChestGoal chest)return chest.worker==worker;
         if(goal instanceof RecruitUpkeepPosGoal upkeep)return upkeep.recruit==worker;
@@ -194,14 +218,16 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
     @Override String beforeStart(){return null;}
     @Override void afterStart(){scannedArea=null;scannedBounds=null;selected=null;closeOutstanding=false;}
     @Override String beforeTick() {
-        phase=phase(); selected=null;
+        phase=phase(); selected=null; earthworksTransfer=null; earthworksDeposit=null;
         String requests=ProtectedTransferCapacity.requestsProblem(worker);if(requests!=null)return requests;
+        if(kind==Kind.NEEDED && EarthworksInventoryAccess.selected(worker) && EarthworksSupplyDemand.reconcileAvailable(worker))
+            return "Waiting: the exact requested item is already present; finishing native storage cleanup";
         if(phase.equals("SELECT_STORAGE")||phase.startsWith("ERROR_")||phase.equals("DONE"))return null;
         AABB bounds=ProtectedStorageContext.storage(worker,chest.storageArea,true);
-        if(phase.equals("MOVE_TO_STORAGE"))return NativeConstructionGuard.storageProblem(worker,Set.of(chest.storageArea.blockPosition()));
+        if(phase.equals("MOVE_TO_STORAGE"))return EarthworksInventoryAccess.problem(worker,Set.of(chest.storageArea.blockPosition()));
         if(phase.equals("SCAN_STORAGE")) {
             Set<BlockPos> reads=ProtectedStorageContext.scan(worker,chest.storageArea,true);
-            String authority=NativeConstructionGuard.storageProblem(worker,reads);if(authority!=null)return authority;
+            String authority=EarthworksInventoryAccess.problem(worker,reads);if(authority!=null)return authority;
             // Prevalidate all containers the original scan may expose to live native predicates.
             var level=ProtectedStorageContext.level(worker);
             for(BlockPos pos:BlockPos.betweenClosedStream(bounds).map(BlockPos::immutable).toList())
@@ -219,19 +245,23 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
             return "Paused: native chest target escaped the current storage area";
         var level=ProtectedStorageContext.level(worker);
         Set<BlockPos> reads=ProtectedStorageContext.envelope(level,new AABB(chest.chestPos,chest.chestPos),1,1);
-        String authority=NativeConstructionGuard.storageProblem(worker,reads);if(authority!=null)return authority;
+        String authority=EarthworksInventoryAccess.problem(worker,reads);if(authority!=null)return authority;
         if(phase.equals("MOVE_TO_CHEST"))return null;
         Container cached=phase.equals("CHECK_CHEST")?chest.storageArea.storageMap.get(chest.chestPos):chest.container;
         if(cached==null && phase.equals("CHECK_CHEST"))return null; // Original native missing-container retry has no transfer.
         if(cached==null || chest.storageArea.storageMap.get(chest.chestPos)!=cached)
             return "Paused: native cached container selection changed";
         selected=ProtectedStorageContext.source(level,cached,chest.chestPos);
-        authority=NativeConstructionGuard.storageProblem(worker,selected.cells());if(authority!=null)return authority;
+        authority=EarthworksInventoryAccess.problem(worker,selected.cells());if(authority!=null)return authority;
         if(phase.equals("TAKE_NEEDED_ITEMS")) {
             String capacity=ProtectedTransferCapacity.problem(worker,cached);if(capacity!=null)return capacity;
+            if(EarthworksInventoryAccess.selected(worker))
+                earthworksTransfer=EarthworksSupplyDemand.beforeTransfer(worker,cached,selected.cells());
             writes=List.of(cached);
         } else if(phase.equals("DEPOSIT")) {
             String deposit=ProtectedTransferCapacity.depositProblem(worker,cached);if(deposit!=null)return deposit;
+            if(EarthworksInventoryAccess.selected(worker))
+                earthworksDeposit=EarthworksSupplyDemand.beforeDeposit(worker,cached,selected.cells());
             writes=List.of(cached);
         }
         return null;
@@ -254,6 +284,8 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
                     || chest.storageArea!=scannedArea || scannedArea.storageMap.get(selected.pos())!=selected.container())
                 throw new IllegalStateException("Native transfer replaced its source");
             if(!phase().startsWith("CLOSE_CHEST_"))throw new IllegalStateException("Unsupported native transfer transition");
+            if(earthworksTransfer!=null)EarthworksSupplyDemand.afterTransfer(worker,earthworksTransfer);
+            if(earthworksDeposit!=null)EarthworksSupplyDemand.afterDeposit(worker,selected.container(),earthworksDeposit);
         }
     }
     @Override String cleanup() {

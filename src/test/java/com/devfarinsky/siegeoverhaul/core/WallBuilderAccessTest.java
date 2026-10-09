@@ -24,9 +24,9 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
         var cave=mock(Path.class);when(cave.canReach()).thenReturn(true);
         when(cave.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(0,60,0));
-        when(nav.getPath()).thenReturn(cave);
         var surface=mock(Path.class);when(surface.canReach()).thenReturn(true);
         when(surface.getTarget()).thenReturn(new BlockPos(1,64,0));when(surface.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(1,64,0));
+        when(nav.getPath()).thenReturn(cave, surface);
         when(nav.createPath(anySet(),eq(0))).thenReturn(surface);
         goal.route(level,new BlockPos(0,60,0),20);
         verify(nav).stop();verify(nav).moveTo(1,64,0,0.8);
@@ -57,12 +57,12 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         var path=mock(Path.class);when(path.canReach()).thenReturn(true);
         when(path.getTarget()).thenReturn(new BlockPos(1,64,0));when(path.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(1,64,0));
         when(nav.createPath(anySet(),eq(0))).thenReturn(path);
-        when(nav.moveTo(1,64,0,0.8)).thenReturn(true);
         goal.route(level,new BlockPos(0,60,0),20);
         clearInvocations(nav);
         doReturn(Blocks.MAGMA_BLOCK.defaultBlockState()).when(level).getBlockState(new BlockPos(1,63,0));
         when(level.getGameTime()).thenReturn(10L);
         goal.route(level,new BlockPos(0,60,0),20);
+        verify(nav,never()).moveTo(any(Path.class),anyDouble());
         verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
     }
     @Test void selfRecoveryDoesNotMistakeAnUnreservedFootCellForClearBodySpace() throws Exception {
@@ -160,8 +160,11 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
     private void terrain() {
         when(worker.getNavigation()).thenReturn(nav);
         when(worker.getX()).thenReturn(20.5);
+        when(worker.getZ()).thenReturn(0.5);
+        when(worker.getBbWidth()).thenReturn(.6f);
         when(worker.position()).thenReturn(new Vec3(20.5,64,0.5));
         when(worker.getBoundingBox()).thenReturn(new AABB(20.2,64,0.2,20.8,65.8,0.8));
+        when(nav.moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(true);
         when(level.hasChunkAt(any())).thenReturn(true);
         when(level.getMinBuildHeight()).thenReturn(-64); when(level.getMaxBuildHeight()).thenReturn(320);
         when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(64);
@@ -180,7 +183,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         assertTrue(sites.stream().allMatch(p -> p.getY()==64 && p.distSqr(new BlockPos(0,64,0))<16));
         Path path=mock(Path.class); when(path.canReach()).thenReturn(true);
         when(path.getTarget()).thenReturn(new BlockPos(1,64,0));when(path.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(1,64,0));
-        when(nav.createPath(anySet(),eq(0))).thenReturn(path); when(nav.moveTo(1,64,0,0.8)).thenReturn(true);
+        when(nav.createPath(anySet(),eq(0))).thenReturn(path);
         goal.route(level,marker,20); verify(nav).moveTo(1,64,0,0.8);
         when(level.getGameTime()).thenReturn(10L);goal.route(level,marker,20);
         verify(nav,times(1)).createPath(anySet(),eq(0));
@@ -229,6 +232,110 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         verifyNoInteractions(nav);
         goal.route(level,target,20);
         verify(nav).createPath(anySet(),eq(0));
+    }
+    @Test void nativeBlockWorkCanRouteToUnreservedFullReachStandingSpace() throws Exception {
+        terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
+        var reserved=new java.util.HashSet<Long>();var target=new BlockPos(0,64,0);
+        for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++)
+            if(dx*dx+dz*dz<16)reserved.add(target.offset(dx,0,dz).atY(0).asLong());
+        var field=WallBuilderAccess.class.getDeclaredField("reservedColumns");field.setAccessible(true);
+        field.set(goal,reserved);
+        var fullReachSite=new BlockPos(5,64,0);
+        var path=mock(Path.class);when(path.canReach()).thenReturn(true);
+        when(path.getEndNode()).thenReturn(new Node(fullReachSite.getX(),fullReachSite.getY(),fullReachSite.getZ()));
+        when(nav.createPath(anySet(),eq(0))).thenReturn(path);
+        goal.route(level,target,40);
+        verify(nav).createPath(argThat((java.util.Set<BlockPos> sites)->sites.contains(fullReachSite)
+                && sites.stream().noneMatch(p->p.distSqr(target.atY(p.getY()))>=40)
+                && sites.stream().noneMatch(p->reserved.contains(p.atY(0).asLong()))),eq(0));
+        verify(nav).moveTo(fullReachSite.getX(),fullReachSite.getY(),fullReachSite.getZ(),0.8);
+        verify(level,never()).setBlock(any(),any(),anyInt());
+        verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+    }
+    @Test void routeCandidatesLeaveFractionalArrivalInsideNativeReach() throws Exception {
+        BlockPos target = new BlockPos(132,64,18), badEndpoint = new BlockPos(133,65,24),
+                goodEndpoint = new BlockPos(133,65,23);
+        assertFalse(WallBuilderAccess.nativeHorizontalReach(133.59527792344093,24.8661684726071,target,40));
+        assertFalse(WallBuilderAccess.navigationArrivalWithinNativeReach(badEndpoint,target,40,.6f));
+        assertTrue(WallBuilderAccess.navigationArrivalWithinNativeReach(goodEndpoint,target,40,.6f));
+        terrain(); var goal=new WallBuilderAccess(worker,new NativeGoal());
+        when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(65);
+        doAnswer(i -> ((BlockPos)i.getArgument(0)).getY()<65
+                ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState()).when(level).getBlockState(any());
+        var path=mock(Path.class);when(path.canReach()).thenReturn(true);
+        when(path.getEndNode()).thenReturn(new Node(goodEndpoint.getX(),goodEndpoint.getY(),goodEndpoint.getZ()));
+        when(nav.createPath(anySet(),eq(0))).thenReturn(path);
+        goal.route(level,target,40);
+        verify(nav).createPath(argThat((java.util.Set<BlockPos> sites)->!sites.contains(badEndpoint)
+                && sites.contains(goodEndpoint)),eq(0));
+    }
+    @Test void reachablePathEndpointOutsideContinuousReachIsReplaced() throws Exception {
+        terrain(); var goal=new WallBuilderAccess(worker,new NativeGoal());
+        BlockPos target = new BlockPos(132,64,18), badEndpoint = new BlockPos(133,65,24),
+                goodEndpoint = new BlockPos(133,65,23);
+        when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(65);
+        doAnswer(i -> ((BlockPos)i.getArgument(0)).getY()<65
+                ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState()).when(level).getBlockState(any());
+        var bad=mock(Path.class);when(bad.canReach()).thenReturn(true);
+        when(bad.isDone()).thenReturn(true);
+        when(bad.getEndNode()).thenReturn(new Node(badEndpoint.getX(),badEndpoint.getY(),badEndpoint.getZ()));
+        var replacement=mock(Path.class);when(replacement.canReach()).thenReturn(true);
+        when(replacement.getEndNode()).thenReturn(new Node(goodEndpoint.getX(),goodEndpoint.getY(),goodEndpoint.getZ()));
+        when(nav.getPath()).thenReturn(bad, replacement);
+        when(nav.createPath(anySet(),eq(0))).thenReturn(replacement);
+        goal.route(level,target,40);
+        verify(nav).stop();
+        verify(nav).createPath(argThat((java.util.Set<BlockPos> sites)->!sites.contains(badEndpoint)
+                && sites.contains(goodEndpoint)),eq(0));
+        verify(nav).moveTo(goodEndpoint.getX(),goodEndpoint.getY(),goodEndpoint.getZ(),0.8);
+    }
+    @Test void fractionalArrivalFailureRetriesOnCadenceUntilInwardEndpointRoutes() throws Exception {
+        terrain(); var goal=new WallBuilderAccess(worker,new NativeGoal());
+        BlockPos target = new BlockPos(132,64,18), badEndpoint = new BlockPos(133,65,24),
+                goodEndpoint = new BlockPos(133,65,23);
+        when(worker.getX()).thenReturn(133.59527792344093); when(worker.getZ()).thenReturn(24.8661684726071);
+        when(worker.position()).thenReturn(new Vec3(133.59527792344093,65,24.8661684726071));
+        when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(65);
+        doAnswer(i -> ((BlockPos)i.getArgument(0)).getY()<65
+                ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState()).when(level).getBlockState(any());
+        var completed=mock(Path.class); when(completed.canReach()).thenReturn(true); when(completed.isDone()).thenReturn(true);
+        when(completed.getEndNode()).thenReturn(new Node(badEndpoint.getX(),badEndpoint.getY(),badEndpoint.getZ()));
+        when(nav.getPath()).thenReturn(completed, null, null);
+        var sameBad=mock(Path.class); when(sameBad.canReach()).thenReturn(true);
+        when(sameBad.getEndNode()).thenReturn(new Node(badEndpoint.getX(),badEndpoint.getY(),badEndpoint.getZ()));
+        var inward=mock(Path.class); when(inward.canReach()).thenReturn(true);
+        when(inward.getEndNode()).thenReturn(new Node(goodEndpoint.getX(),goodEndpoint.getY(),goodEndpoint.getZ()));
+        when(nav.createPath(anySet(),eq(0))).thenReturn(sameBad, sameBad, inward);
+        when(level.getGameTime()).thenReturn(0L); goal.route(level,target,40);
+        when(level.getGameTime()).thenReturn(40L); goal.route(level,target,40);
+        when(level.getGameTime()).thenReturn(80L); goal.route(level,target,40);
+        verify(nav).stop();
+        verify(nav,times(3)).createPath(argThat((java.util.Set<BlockPos> sites)->!sites.contains(badEndpoint)
+                && sites.contains(goodEndpoint)),eq(0));
+        verify(nav,never()).moveTo(badEndpoint.getX(),badEndpoint.getY(),badEndpoint.getZ(),0.8);
+        verify(nav).moveTo(goodEndpoint.getX(),goodEndpoint.getY(),goodEndpoint.getZ(),0.8);
+        verify(nav,never()).moveTo(any(Path.class),anyDouble());
+    }
+    @Test void falsePathInstallClearsNoOpCompletedArrivalWithoutCoordinateFallback() throws Exception {
+        terrain(); var goal=new WallBuilderAccess(worker,new NativeGoal());
+        BlockPos target = new BlockPos(132,64,18), badEndpoint = new BlockPos(133,65,24),
+                goodEndpoint = new BlockPos(133,65,23);
+        when(worker.getX()).thenReturn(133.59527792344093); when(worker.getZ()).thenReturn(24.8661684726071);
+        when(worker.position()).thenReturn(new Vec3(133.59527792344093,65,24.8661684726071));
+        when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(65);
+        doAnswer(i -> ((BlockPos)i.getArgument(0)).getY()<65
+                ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState()).when(level).getBlockState(any());
+        var completed=mock(Path.class); when(completed.canReach()).thenReturn(true); when(completed.isDone()).thenReturn(true);
+        when(completed.getEndNode()).thenReturn(new Node(badEndpoint.getX(),badEndpoint.getY(),badEndpoint.getZ()));
+        when(nav.getPath()).thenReturn(completed);
+        var replacement=mock(Path.class); when(replacement.canReach()).thenReturn(true);
+        when(replacement.getEndNode()).thenReturn(new Node(goodEndpoint.getX(),goodEndpoint.getY(),goodEndpoint.getZ()));
+        when(nav.createPath(anySet(),eq(0))).thenReturn(replacement);
+        when(nav.moveTo(goodEndpoint.getX(),goodEndpoint.getY(),goodEndpoint.getZ(),0.8)).thenReturn(false);
+        goal.route(level,target,40);
+        verify(nav,times(2)).stop();
+        verify(nav).moveTo(goodEndpoint.getX(),goodEndpoint.getY(),goodEndpoint.getZ(),0.8);
+        verify(nav,never()).moveTo(any(Path.class),anyDouble());
     }
     @Test void nativeSleepSupplyAndOwnerCommandsRemainAuthoritative() throws Exception {
         NativeGoal original=mock(NativeGoal.class);when(original.getFlags()).thenReturn(EnumSet.of(Goal.Flag.MOVE));
@@ -397,10 +504,9 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         verify(nav, never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
         verify(path, never()).getTarget();
         when(path.isProcessed()).thenReturn(true); when(path.canReach()).thenReturn(true);
-        when(path.getTarget()).thenReturn(endpoint);when(path.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(1,64,0)); when(nav.moveTo(1,64,0,0.8)).thenReturn(true);
+        when(path.getTarget()).thenReturn(endpoint);when(path.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(1,64,0));
         when(level.getGameTime()).thenReturn(50L); goal.route(level,target,20);
         verify(nav).moveTo(1,64,0,0.8); verify(nav,times(1)).createPath(anySet(),eq(0));
-        verify(nav,never()).moveTo(any(Path.class),anyDouble());
     }
     @Test void staleStoppedTimedOutAndUnsafeDelayedRoutesCannotBeInstalled() throws Exception {
         for (int scenario = 0; scenario < 5; scenario++) {
@@ -439,7 +545,6 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         when(nav.createPath(anySet(),eq(0))).thenReturn(path);
         goal.route(level,new BlockPos(-2,60,-2),20);
         verify(nav).moveTo(-1,64,-2,0.8);
-        verify(nav,never()).moveTo(any(Path.class),anyDouble());
     }
 
     @Test void nativeMultiTargetProbeUsesReachedGroundInsteadOfItsUnreachableRoofLabel() throws Exception {
@@ -479,7 +584,6 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
             verify(nav).createPath(argThat((java.util.Set<BlockPos> sites)->sites.contains(roof)&&sites.contains(ground)),eq(0));
             verify(nav).moveTo(132,65,3,0.8);
             verify(nav,never()).moveTo(128,70,3,0.8);
-            verify(nav,never()).moveTo(any(Path.class),anyDouble());
             verify(level,never()).setBlock(any(),any(),anyInt());
             verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
         }
@@ -510,6 +614,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
             when(probe.getTarget()).thenReturn(new BlockPos(1,64,0));when(probe.getEndNode()).thenReturn(end);
             when(nav.createPath(anySet(),eq(0))).thenReturn(probe);
             goal.route(level,new BlockPos(0,64,0),20);
+            verify(nav,never()).moveTo(any(Path.class),anyDouble());
             verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
         }
     }
@@ -533,6 +638,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
                 case 3 -> when(probe.getEndNode()).thenReturn(new Node(10,64,0));
             }
             when(level.getGameTime()).thenReturn(10L);goal.route(level,BlockPos.ZERO.atY(64),20);
+            verify(nav,never()).moveTo(any(Path.class),anyDouble());
             verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
         }
     }
@@ -553,7 +659,6 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
                 when(pending.getEndNode()).thenReturn(partial.getEndNode());
             }
             when(nav.createPath(anySet(), eq(0))).thenReturn(probe);
-            when(nav.moveTo(26, 64, 0, .8)).thenReturn(true);
             var goal = new WallBuilderAccess(worker, new NativeGoal());
             when(level.getGameTime()).thenReturn(0L); goal.route(level, target, 40);
             if (delayed) {
@@ -564,7 +669,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
             verify(nav).moveTo(endpoint.getX(), endpoint.getY(), endpoint.getZ(), .8);
             verify(nav, never()).moveTo(any(Path.class), anyDouble());
             var movement = mock(Path.class);
-            when(movement.canReach()).thenReturn(true); when(movement.getEndNode()).thenReturn(partial.getEndNode());
+            when(movement.canReach()).thenReturn(false); when(movement.getEndNode()).thenReturn(new Node(25, 64, 0));
             when(nav.getPath()).thenReturn(movement);
             clearInvocations(nav);
             when(level.getGameTime()).thenReturn(20L); goal.route(level, target, 40);
@@ -588,6 +693,125 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
                         new BlockPos(80, 64, 0))), 32f, 0, 1f, 1);
     }
 
+    @Test void compiledGatePadsWorkForImmediateAndDelayedDirectFailures() throws Exception {
+        for (boolean delayed : new boolean[]{false, true}) {
+            reset(worker, level, nav);
+            var goal = cornerRoute();
+            var direct = mock(DelayedPath.class);
+            when(direct.isProcessed()).thenReturn(!delayed);
+            when(direct.getNodeCount()).thenReturn(16); when(direct.getEndNode()).thenReturn(new Node(136, 65, 5));
+            var gate = mock(Path.class); when(gate.canReach()).thenReturn(true);
+            when(gate.getEndNode()).thenReturn(new Node(167, 65, -2));
+            when(nav.createPath(anySet(), eq(0))).thenReturn(direct, gate);
+            try (var projects = mockStatic(com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.class)) {
+                projects.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.gateDetourPads(worker, worker.currentBuildArea))
+                        .thenReturn(compiledPads());
+                goal.route(level, new BlockPos(129, 66, 0), 40);
+                if (delayed) {
+                    verify(nav, never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+                    when(direct.isProcessed()).thenReturn(true); when(level.getGameTime()).thenReturn(10L);
+                    goal.route(level, new BlockPos(129, 66, 0), 40);
+                }
+                verify(nav).moveTo(167, 65, -2, .8);
+                verify(nav, never()).moveTo(136, 65, 5, .8);
+                verify(nav, never()).moveTo(any(Path.class), anyDouble());
+                verify(level, never()).setBlock(any(), any(), anyInt());
+                verify(worker, never()).teleportTo(anyDouble(), anyDouble(), anyDouble());
+            }
+        }
+    }
+
+    @Test void savedGateAuthorityIsRecheckedBeforeConsumingDelayedDetour() throws Exception {
+        var goal = cornerRoute();
+        var gate = mock(DelayedPath.class); when(gate.canReach()).thenReturn(true);
+        when(gate.getEndNode()).thenReturn(new Node(167, 65, -2));
+        when(nav.createPath(anySet(), eq(0))).thenReturn(mock(Path.class), gate);
+        try (var projects = mockStatic(com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.class)) {
+            projects.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.gateDetourPads(worker, worker.currentBuildArea))
+                    .thenReturn(compiledPads());
+            goal.route(level, new BlockPos(129, 66, 0), 40);
+            projects.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.gateDetourPads(worker, worker.currentBuildArea))
+                    .thenReturn(java.util.Set.of());
+            when(gate.isProcessed()).thenReturn(true); when(level.getGameTime()).thenReturn(10L);
+            goal.route(level, new BlockPos(129, 66, 0), 40);
+            verify(nav, never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+        }
+    }
+
+    @Test void unchangedSavedGateAuthorityAllowsDelayedDetourMovement() throws Exception {
+        var goal = cornerRoute();
+        var gate = mock(DelayedPath.class); when(gate.canReach()).thenReturn(true);
+        when(gate.getEndNode()).thenReturn(new Node(167, 65, -2));
+        when(nav.createPath(anySet(), eq(0))).thenReturn(mock(Path.class), gate);
+        try (var projects = mockStatic(com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.class)) {
+            projects.when(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.gateDetourPads(worker, worker.currentBuildArea))
+                    .thenReturn(compiledPads());
+            goal.route(level, new BlockPos(129, 66, 0), 40);
+            verify(nav, never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+            when(gate.isProcessed()).thenReturn(true); when(level.getGameTime()).thenReturn(10L);
+            goal.route(level, new BlockPos(129, 66, 0), 40);
+            verify(nav).moveTo(167, 65, -2, .8);
+            projects.verify(() -> com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.gateDetourPads(worker, worker.currentBuildArea), times(2));
+        }
+    }
+
+    @Test void expiredDirectProbeCannotStartAGateDetour() throws Exception {
+        var goal = cornerRoute(); var direct = mock(DelayedPath.class);
+        when(nav.createPath(anySet(), eq(0))).thenReturn(direct);
+        goal.route(level, new BlockPos(129, 66, 0), 40);
+        when(direct.isProcessed()).thenReturn(true); when(level.getGameTime()).thenReturn(101L);
+        goal.route(level, new BlockPos(129, 66, 0), 40);
+        verify(nav, times(1)).createPath(anySet(), eq(0));
+        verify(nav, never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+    }
+
+    private WallBuilderAccess cornerRoute() throws Exception {
+        terrain();
+        when(worker.getX()).thenReturn(133.60858837120912); when(worker.getZ()).thenReturn(5.953259447731189);
+        when(worker.position()).thenReturn(new Vec3(133.60858837120912, 65, 5.953259447731189));
+        when(worker.getBoundingBox()).thenReturn(new AABB(133.3085883712091,65,5.653259447731189,
+                133.90858837120913,66.8,6.253259447731189));
+        when(level.getHeight(any(), anyInt(), anyInt())).thenReturn(65);
+        doAnswer(i -> ((BlockPos)i.getArgument(0)).getY()<65
+                ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState()).when(level).getBlockState(any());
+        var project = PerimeterGateProjectFixture.stepped();
+        var columns = project.targets().keySet().stream().map(BlockPos::of).map(p -> p.atY(0).asLong())
+                .collect(java.util.stream.Collectors.toSet());
+        for (var gate : project.gateContract().gates()) {
+            assertEquals(Blocks.OAK_PLANKS.defaultBlockState(), project.targets().get(gate.outerCenter().above(3).asLong()));
+            assertTrue(columns.contains(gate.outerCenter().atY(0).asLong()), "Overhead deck keeps real gate columns reserved");
+        }
+        var goal = new WallBuilderAccess(worker, new NativeGoal());
+        var field = WallBuilderAccess.class.getDeclaredField("reservedColumns"); field.setAccessible(true);
+        field.set(goal, columns);
+        worker.currentBuildArea = mock(Area.class);
+        field = WallBuilderAccess.class.getDeclaredField("reservedArea"); field.setAccessible(true);
+        field.set(goal, worker.currentBuildArea);
+        return goal;
+    }
+
+    private static java.util.Set<BlockPos> compiledPads() {
+        return PerimeterGateProjectFixture.stepped().gateContract().gates().stream()
+                .map(g -> g.outerCenter().relative(g.facing(), 2)).collect(java.util.stream.Collectors.toSet());
+    }
+
+    @Test void processedPartialMovementEndpointMustStillBeGenuineProgress() throws Exception {
+        terrain(); var target = new BlockPos(80, 64, 0);
+        Path partial = nativeLimitedProbe();
+        when(nav.createPath(anySet(), eq(0))).thenReturn(partial);
+        var goal = new WallBuilderAccess(worker, new NativeGoal());
+        when(level.getGameTime()).thenReturn(0L); goal.route(level, target, 40);
+        verify(nav).moveTo(26, 64, 0, .8);
+        var nonProgress = mock(Path.class);
+        when(nonProgress.canReach()).thenReturn(false);
+        when(nonProgress.getEndNode()).thenReturn(new Node(19, 64, 0));
+        when(nav.getPath()).thenReturn(nonProgress);
+        clearInvocations(nav);
+        when(level.getGameTime()).thenReturn(20L); goal.route(level, target, 40);
+        verify(nav).stop();
+        verify(nav, never()).moveTo(any(Path.class), anyDouble());
+    }
+
     @Test void partialApproachRejectsUnsafeUnloadedReservedAndNonprogressingEndpoints() throws Exception {
         for (int scenario = 0; scenario < 6; scenario++) {
             reset(nav); terrain();
@@ -608,6 +832,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
                 case 5 -> when(partial.getNodeCount()).thenReturn(1);
             }
             goal.route(level, new BlockPos(80, 64, 0), 40);
+            verify(nav, never()).moveTo(any(Path.class), anyDouble());
             verify(nav, never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
         }
     }
@@ -624,6 +849,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
             when(level.getGameTime()).thenReturn(10L);
             if (!recovery) when(nav.createPath(anySet(), eq(0))).thenReturn(null);
             goal.route(level, new BlockPos(recovery ? 80 : 0, 64, 0), 40, recovery);
+            verify(nav, never()).moveTo(any(Path.class), anyDouble());
             verify(nav, never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
         }
     }
