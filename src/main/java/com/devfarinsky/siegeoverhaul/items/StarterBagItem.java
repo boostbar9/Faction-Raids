@@ -51,7 +51,7 @@ public final class StarterBagItem extends Item {
 
     /**
      * v4.18.0 written-book setup guide. Uses vanilla WRITTEN_BOOK so it opens
-     * cleanly in every client with no extra assets. Kept short: three pages,
+     * cleanly in every client with no extra assets. Kept short: five pages,
      * one topic each. Longer lore lives in the in-game Intel tab.
      */
     static ItemStack setupGuide() {
@@ -61,7 +61,11 @@ public final class StarterBagItem extends Item {
         tag.putString("author", "The Siege Overhaul");
         ListTag pages = new ListTag();
         pages.add(net.minecraft.nbt.StringTag.valueOf(
-                "\"Welcome, commander.\\n\\n1) Make a faction:\\n /faction create <name>\\n\\n2) Claim your land:\\n Stand where you want your keep and use\\n /claim create\\n\\nEmeralds for both come from your Faction Starter Bag.\""));
+                "\"Welcome, commander.\\n\\n1) Make a faction:\\nOpen the Recruits\\nfaction screen (U by\\ndefault). Choose\\nCreate Faction.\\n\\nKeys can be changed in\\nOptions > Controls.\""));
+        pages.add(net.minecraft.nbt.StringTag.valueOf(
+                "\"2) Claim your land:\\nAs faction leader in\\nthe Overworld, open\\nthe map (M by default).\\n\\nRight-click a chunk\\nwithin four chunks of\\nyou. Use Claim Area\\nfor the first 5x5 claim.\\n\\nClaim Chunk extends\\nan existing claim.\""));
+        pages.add(net.minecraft.nbt.StringTag.valueOf(
+                "\"Claim checks:\\nThe entire 5x5 area\\nmust clear other\\nfactions and their\\nthree-chunk buffer.\\n\\nFollow the map's price\\nand warning. Pay from\\nyour inventory, not the\\nSiege Core Treasury.\\n\\nServer settings can\\nchange costs.\""));
         pages.add(net.minecraft.nbt.StringTag.valueOf(
                 "\"3) Place the Siege Core inside your claim. This is your command center.\\n\\n4) Right-click the core. Treasury stores shared funds; Building has defense plans.\\n\\n5) Hire your first shieldman and archer from the Army tab.\""));
         pages.add(net.minecraft.nbt.StringTag.valueOf(

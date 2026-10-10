@@ -6,11 +6,64 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.*;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 class StarterBagTest extends MinecraftTestSupport {
+    /** Content/NBT contracts only; these do not prove book rendering or native claiming. */
+    @Test void setupGuideUsesNativeScreensInsteadOfUnsupportedCommands() {
+        ItemStack book = StarterBagItem.setupGuide();
+        assertTrue(book.is(Items.WRITTEN_BOOK));
+        CompoundTag tag = book.getOrCreateTag();
+        assertEquals("Faction Setup Guide", tag.getString("title"));
+        assertEquals("The Siege Overhaul", tag.getString("author"));
+        assertEquals(0, tag.getInt("generation"));
+        var pages = tag.getList("pages", Tag.TAG_STRING);
+        assertEquals(5, pages.size());
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; i < pages.size(); i++) {
+            Component page = Component.Serializer.fromJson(pages.getString(i));
+            assertNotNull(page, "Every page must be valid vanilla book component JSON");
+            text.append(page.getString()).append('\n');
+        }
+        String guide = text.toString().replaceAll("\\s+", " ");
+        assertTrue(guide.contains("U by default"));
+        assertTrue(guide.contains("Create Faction"));
+        assertTrue(guide.contains("Options > Controls"));
+        assertTrue(guide.contains("faction leader in the Overworld"));
+        assertTrue(guide.contains("M by default"));
+        assertTrue(guide.contains("Claim Area for the first 5x5 claim"));
+        assertTrue(guide.contains("Claim Chunk extends an existing claim"));
+        assertTrue(guide.contains("entire 5x5 area"));
+        assertTrue(guide.contains("three-chunk buffer"));
+        assertTrue(guide.contains("inventory, not the Siege Core Treasury"));
+        assertFalse(guide.contains("/faction create"));
+        assertFalse(guide.contains("/claim create"));
+    }
+
+    @Test void setupGuidePagesSurviveSavedBagOverflowWithoutChangingOtherContents() {
+        ItemStack book = StarterBagItem.setupGuide();
+        CompoundTag original = book.save(new CompoundTag());
+        ItemStack emeralds = new ItemStack(Items.EMERALD, 32);
+        var saved = StarterBagItem.save(List.of(book, emeralds));
+        ItemStack restored = ItemStack.of(saved.getCompound(0));
+        Inventory inv = new Inventory(mock(Player.class));
+        for (int i = 0; i < 36; i++) inv.setItem(i, new ItemStack(Items.COBBLESTONE, 64));
+        StarterBagItem.insert(inv, restored);
+        assertEquals(original, restored.save(new CompoundTag()));
+        inv.setItem(6, ItemStack.EMPTY);
+        StarterBagItem.insert(inv, restored);
+        assertTrue(restored.isEmpty());
+        assertEquals(original, inv.getItem(6).save(new CompoundTag()));
+        ItemStack savedCurrency = ItemStack.of(saved.getCompound(1));
+        assertTrue(savedCurrency.is(Items.EMERALD));
+        assertEquals(32, savedCurrency.getCount());
+        assertEquals(32, emeralds.getCount());
+    }
+
     @Test void buildingBagIsAShelterBudget() throws Exception {
         var contents=StarterBagItem.survivalContents();
         // v4.18.0 slimmed the shelter kit: stone bricks were 256, now 96.

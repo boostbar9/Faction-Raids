@@ -158,7 +158,7 @@ class NativeHudSourceContracts(unittest.TestCase):
 
     def test_exact_named_matrix_has_all_pages_plans_states_and_native_inspection(self):
         expected = verify.expected_screenshots()
-        self.assertEqual(len(expected), 118 + len(verify.CAPTURE_PREFIXES) * len(verify.CAPTURE_STATES))
+        self.assertEqual(len(expected), 128 + len(verify.CAPTURE_PREFIXES) * len(verify.CAPTURE_STATES))
         for prefix in verify.MATRICES:
             for page in verify.PAGES:
                 self.assertIn(f'{prefix}-{page}.png', expected)
@@ -197,6 +197,10 @@ class NativeHudReceiptVerifier(unittest.TestCase):
                     'viewport': {'framebufferWidth': size[0], 'framebufferHeight': size[1], 'guiWidth': size[0] // scale,
                                  'guiHeight': size[1] // scale, 'requestedGuiScale': scale},
                     'widgets': [{'label': 'Synthetic button', 'x': 1, 'y': 1, 'width': 10, 'height': 10, 'active': True, 'focused': True}]}
+            if '-starter-book-' in name:
+                view['screenClass'] = 'net.minecraft.client.gui.screens.inventory.BookViewScreen'
+                view['starterBook'] = {'page': int(name.removesuffix('.png').rsplit('-', 1)[1]),
+                                       'pageCount': 5, 'textWidth': 114, 'wrappedLines': 13}
             if '-capture-' in name:
                 state = name.removesuffix('.png').split('-capture-')[1]
                 expected = {'idle': 'OUTSIDE', 'wall': 'BLOCKED', 'height': 'HEIGHT', 'creative': 'CREATIVE'}.get(state, 'COUNTED')
@@ -237,6 +241,18 @@ class NativeHudReceiptVerifier(unittest.TestCase):
 
     def test_complete_synthetic_receipt_parses_without_claiming_runtime(self):
         self.assertEqual(self.run_verifier()['status'], 'passed')
+
+    def test_starter_book_clipping_wrong_page_and_wrong_screen_fail(self):
+        view = next(v for v in self.data['views'] if '-starter-book-' in v['screenshot'])
+        view['starterBook']['wrappedLines'] = 15
+        with self.assertRaises(AssertionError): self.run_verifier()
+        view['starterBook']['wrappedLines'] = 13
+        page = view['starterBook']['page']
+        view['starterBook']['page'] = 0
+        with self.assertRaises(AssertionError): self.run_verifier()
+        view['starterBook']['page'] = page
+        view['screenClass'] = 'synthetic.ReplacementScreen'
+        with self.assertRaises(AssertionError): self.run_verifier()
 
     def test_available_or_falsely_active_unimplemented_upgrade_fails(self):
         view = next(view for view in self.data['views'] if view['screenshot'].endswith('-territory.png'))
