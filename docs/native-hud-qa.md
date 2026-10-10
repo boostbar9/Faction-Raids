@@ -135,3 +135,14 @@ Physical GPUs, every shader/resource pack, localization, screen readers, real pa
 flows, authority, rollback, native construction work and dedicated-server sessions
 remain separate acceptance requirements. No successful run is claimed until a
 linked workflow for the exact source has passed and its screenshots are reviewed.
+
+## Starter setup book
+
+The HUD fixture also opens the production Faction Setup Guide NBT in vanilla
+`BookViewScreen` at the existing 960x720 GUI scales 2 and 3. It captures all five
+pages, checks native 114-pixel text wrapping against the 128-pixel page body,
+and exercises Page Down, Page Up and Escape through the screen's key handler.
+The receipt identifies each displayed page and its wrapped line count. These
+are client display checks, not OS keyboard injection for the book and not proof
+of faction creation, claim/payment success, starter-bag delivery or migration
+of books already saved in player inventories.

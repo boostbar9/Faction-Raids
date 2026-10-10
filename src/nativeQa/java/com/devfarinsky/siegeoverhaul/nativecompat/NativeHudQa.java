@@ -24,6 +24,7 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.BookViewScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -169,6 +170,7 @@ public final class NativeHudQa {
             stateMatrix(prefix);
             keyboardAndScroll(prefix);
             secondaryMatrix(prefix);
+            starterBookMatrix(prefix);
             inspectionMatrix(prefix);
         }
         // The 960px fixture exercises compact cards at both scales. A genuinely
@@ -444,6 +446,42 @@ public final class NativeHudQa {
             click("Done"); require(mc().screen instanceof SiegeOverhaulConfigScreen, "Hero visuals Done lost settings parent");
             click("Done"); require(mc().screen == null, "Settings Done did not return to game");
             check("Settings and Hero visuals return through visible Done controls at " + prefix);
+        });
+    }
+
+    /** Actual vanilla book display; no faction, claim, inventory or server mutations. */
+    private static void starterBookMatrix(String prefix) {
+        add(prefix + " starter book open", () -> {
+            var factory = com.devfarinsky.siegeoverhaul.items.StarterBagItem.class.getDeclaredMethod("setupGuide");
+            factory.setAccessible(true);
+            var book = (ItemStack) factory.invoke(null);
+            var access = BookViewScreen.BookAccess.fromItem(book);
+            require(access.getPageCount() == 5, "Unexpected setup-guide page count");
+            for (int page = 0; page < access.getPageCount(); page++) {
+                int lines = mc().font.split(access.getPage(page), 114).size();
+                require(lines * 9 <= 128, "Starter book page " + (page + 1) + " clips: " + lines + " lines");
+            }
+            fixture = "QA SAMPLE: production setup-guide NBT in vanilla BookViewScreen; not claiming gameplay";
+            mc().setScreen(new BookViewScreen(access));
+            check("Production starter book page JSON and native 114px wrapping fit all five pages at " + prefix);
+        });
+        for (int page = 0; page < 5; page++) {
+            final int expectedPage = page;
+            add(prefix + " starter book page " + (page + 1), () -> {
+                require((Integer) field(BookViewScreen.class, "currentPage") == expectedPage,
+                        "Vanilla book navigation did not reach page " + (expectedPage + 1));
+                capture(prefix + "-starter-book-" + (expectedPage + 1));
+            });
+            if (page < 4) add(prefix + " starter book next " + page,
+                    () -> require(mc().screen.keyPressed(GLFW.GLFW_KEY_PAGE_DOWN, 0, 0), "Book Page Down not consumed"));
+        }
+        add(prefix + " starter book previous", () -> {
+            require(mc().screen.keyPressed(GLFW.GLFW_KEY_PAGE_UP, 0, 0), "Book Page Up not consumed");
+            require((Integer) field(BookViewScreen.class, "currentPage") == 3, "Book Page Up lost position");
+            check("Vanilla book Page Down and Page Up navigation at " + prefix);
+            require(mc().screen.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0), "Book Escape not consumed");
+            require(mc().screen == null, "Book Escape did not close screen");
+            check("Vanilla book Escape closes at " + prefix);
         });
     }
 
@@ -725,6 +763,12 @@ public final class NativeHudQa {
                 require(clientInspection().getStructureNBT().getList("blocks", 10).size() == 15,
                         "Actual synchronized native inspection blueprint differs from its labeled sample");
                 view.put("nativeBlueprintSampleBlocks", 15);
+            }
+            if (mc.screen instanceof BookViewScreen) {
+                var access = (BookViewScreen.BookAccess) field(BookViewScreen.class, "bookAccess");
+                int page = (Integer) field(BookViewScreen.class, "currentPage");
+                view.put("starterBook", Map.of("page", page + 1, "pageCount", access.getPageCount(),
+                        "wrappedLines", mc.font.split(access.getPage(page), 114).size(), "textWidth", 114));
             }
             view.put("nonblankSamples", changed);
             if (mc.screen instanceof CoreHireScreen) {

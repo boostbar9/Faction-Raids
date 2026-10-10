@@ -29,6 +29,7 @@ def expected_screenshots():
         names.extend(f'{prefix}-plan-{plan}.png' for plan in PLANS)
     for prefix in MATRICES[:2]:
         names.extend(f'{prefix}-{state}.png' for state in STATES)
+        names.extend(f'{prefix}-starter-book-{page}.png' for page in range(1, 6))
     names.extend(['roomy-scale1-native-inspection.png', 'resized-intel-preserved.png'])
     names.extend(f'{prefix}-capture-{state}.png' for prefix in CAPTURE_PREFIXES for state in CAPTURE_STATES)
     return set(names)
@@ -63,6 +64,12 @@ def verify(root):
         assert (width, height) == size == (viewport['framebufferWidth'], viewport['framebufferHeight']), name
         assert (viewport['guiWidth'], viewport['guiHeight']) == (width // scale, height // scale), name
         assert viewport['requestedGuiScale'] == scale and view['nonblankSamples'] > 50, name
+        if '-starter-book-' in name:
+            assert view['screenClass'] == 'net.minecraft.client.gui.screens.inventory.BookViewScreen', name
+            book = view['starterBook']
+            assert book['page'] == int(name.removesuffix('.png').rsplit('-', 1)[1]), name
+            assert book['pageCount'] == 5 and book['textWidth'] == 114, name
+            assert 0 < book['wrappedLines'] <= 14, name
         capture = '-capture-' in name
         assert view['fixture'] and (view['widgets'] or capture), name
         if capture:
