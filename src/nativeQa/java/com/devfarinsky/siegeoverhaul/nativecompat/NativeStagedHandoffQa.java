@@ -468,6 +468,9 @@ public final class NativeStagedHandoffQa {
                 if (reloadKind.equals("canceled")) { canceledRestart = true; advance(now, 13); } else advance(now, 12);
             }
             case 12 -> {
+                if (SHARED_CREW && now - lastSampleTick >= 140) {
+                    lastSampleTick = now; sample(level, owner, "shared-reload-progress");
+                }
                 require(now - stageTick < 2400, "Production did not resume within two minutes after actual reload and restored Survival permission");
                 if (project == null || project.state() != PerimeterProject.State.RUNNING || placed(level) <= stopped.placed()) return Action.NONE;
                 if (SHARED_CREW && reloadKind.equals("mid-stage") && CREW_PLACEMENTS.entrySet().stream()
@@ -1054,7 +1057,7 @@ public final class NativeStagedHandoffQa {
         result.put("nativeBuildError", String.valueOf(goal.errorMessage));
         result.put("nativeRemaining", builder.currentBuildArea == null ? -1 : builder.currentBuildArea.stackToPlace.size());
         result.put("storageState", String.valueOf(storageGoal.state)); result.put("storageChestTarget", String.valueOf(storageGoal.chestPos));
-        result.put("requestedSupplies", WorkersConstructionView.requests(builder));
+        result.put("requestedSupplies", passiveRequestedSupplies(builder));
         result.put("cleanupJournal", builder.getPersistentData().getCompound(ProtectedInventoryCleanup.KEY).toString());
         result.put("closedLifecycleTicks", stableTicks);
         result.put("usingItem", builder.isUsingItem());
@@ -1081,7 +1084,10 @@ public final class NativeStagedHandoffQa {
         result.put("mainHandSameObjectAsSlot5", builder.getMainHandItem() == builder.getInventory().getItem(5));
         result.put("chestCobble", chestStock(level, Items.COBBLESTONE)); result.put("chestOak", chestStock(level, Items.OAK_PLANKS));
         result.put("builderCobble", allWorkerStock(level, Items.COBBLESTONE)); result.put("builderOak", allWorkerStock(level, Items.OAK_PLANKS));
-        if (SHARED_CREW) result.put("sharedCrewPlacementCounts", crewCounts());
+        if (SHARED_CREW) {
+            result.put("sharedCrewPlacementCounts", crewCounts());
+            result.put("sharedCrewDiagnostics", crewDiagnostics(level));
+        }
         result.put("looseCobble", dropped(level, Items.COBBLESTONE)); result.put("looseOak", dropped(level, Items.OAK_PLANKS));
         result.put("placedCobble", fixture.plan().blocks().keySet().stream().filter(p -> level.getBlockState(BlockPos.of(p)).is(Blocks.COBBLESTONE)).count());
         result.put("placedOak", fixture.plan().blocks().keySet().stream().filter(p -> level.getBlockState(BlockPos.of(p)).is(Blocks.OAK_PLANKS)).count());
@@ -1135,6 +1141,177 @@ public final class NativeStagedHandoffQa {
         }
         return result;
     }
+    /** Passive, bounded server-thread snapshots. Never dispatch a goal, renew a claim or drain cleanup. */
+    private static List<Map<String, Object>> crewDiagnostics(ServerLevel level) {
+        var members = new ArrayList<Map<String, Object>>();
+        var project = projectId == null ? null : project(level);
+        var ledger = ConstructionEditLedger.get(level);
+        for (UUID id : CREW_PLACEMENTS.keySet().stream().limit(4).toList()) {
+            var member = new LinkedHashMap<String, Object>(); members.add(member); member.put("worker", id.toString());
+            try {
+                if (project != null) {
+                    member.put("assignedCoordinator", ledger.assignedBuilder(project).equals(id));
+                    member.put("activeMember", ledger.crewMember(project, id));
+                    member.put("pendingMember", ledger.pendingCrewMember(project, id));
+                    member.put("knownMember", ledger.knownCrewMember(project, id));
+                }
+                var entity = level.getEntity(id); member.put("loaded", entity != null);
+                if (!(entity instanceof BuilderEntity worker)) continue;
+                var data = worker.getPersistentData(); var goal = CREW_GOALS.get(id); var storage = CREW_STORAGE.get(id);
+                var area = worker.currentBuildArea;
+                member.put("alive", worker.isAlive()); member.put("position", worker.position().toString());
+                member.put("tickCount", worker.tickCount); member.put("followState", worker.getFollowState());
+                member.put("sleeping", worker.needsToSleep()); member.put("noAi", worker.isNoAi());
+                member.put("owner", String.valueOf(WorkersBridge.readWorkerOwner(worker)));
+                member.put("usingItem", worker.isUsingItem()); member.put("combatTarget", String.valueOf(worker.getTarget()));
+                member.put("passenger", worker.isPassenger()); member.put("leashed", worker.isLeashed());
+                member.put("projectSelector", data.getCompound(com.devfarinsky.siegeoverhaul.core.PerimeterProjectLink.KEY).toString());
+                member.put("childReceipt", String.valueOf(data.get("SiegeProtectedAreaReceipt")));
+                member.put("childGeneration", String.valueOf(data.get("SiegeProtectedLedgerGeneration")));
+                member.put("handLifecycle", data.getCompound(ProtectedBuilderHandLifecycle.KEY).toString());
+                member.put("handLifecycleMatches", ProtectedBuilderHandLifecycle.matches(data, id, ledger));
+                member.put("handReceiptValid", NativeConstructionGuard.validHandReceipt(data, ledger));
+                member.put("handPending", ProtectedBuilderHandMirror.pending(data));
+                member.put("handReviewNeeded", ProtectedBuilderHandMirror.reviewNeeded(data));
+                member.put("cleanupJournal", data.getCompound(ProtectedInventoryCleanup.KEY).toString());
+                member.put("workerGuardStatus", NativeConstructionGuard.status(worker));
+                member.put("requestedSupplies", passiveRequestedSupplies(worker));
+                member.put("mainHand", stack(worker.getMainHandItem())); member.put("offHand", stack(worker.getOffhandItem()));
+                member.put("mainHandSameObjectAsSlot5", worker.getMainHandItem() == worker.getInventory().getItem(5));
+                member.put("currentArea", area == null ? "null" : area.getUUID().toString());
+                member.put("currentAreaIsLoadedObject", area != null && level.getEntity(area.getUUID()) == area);
+                member.put("currentAreaRemoved", area != null && area.isRemoved());
+                member.put("storageState", storage == null ? "missing" : String.valueOf(storage.state));
+                member.put("storageTarget", storage == null ? "missing" : String.valueOf(storage.chestPos));
+                member.put("nativeGoalWorkerMatches", goal != null && goal.builderEntity == worker);
+                member.put("wrappedNativeGoalMatches", goal != null &&
+                        com.devfarinsky.siegeoverhaul.core.WallBuilderAccess.protectedNativeGoal(worker) == goal);
+                member.put("nativeState", goal == null ? "missing" : String.valueOf(goal.state));
+                member.put("nativeTarget", goal == null ? "missing" : String.valueOf(goal.blockPos));
+                member.put("nativeError", goal == null ? "missing" : String.valueOf(goal.errorMessage));
+                member.put("navigationDone", worker.getNavigation().isDone());
+                var path = worker.getNavigation().getPath();
+                if (path != null) member.put("path", Map.of("target", String.valueOf(path.getTarget()),
+                        "canReach", path.canReach(), "next", path.getNextNodeIndex(), "nodes", path.getNodeCount()));
+                var wrappedGoals = new ArrayList<Map<String, Object>>();
+                for (var wrapped : worker.goalSelector.getAvailableGoals()) {
+                    if (wrappedGoals.size() >= 32) break;
+                    var wrappedGoal = wrapped.getGoal();
+                    var state = new LinkedHashMap<String, Object>();
+                    state.put("class", wrappedGoal.getClass().getSimpleName()); state.put("running", wrapped.isRunning());
+                    state.put("priority", wrapped.getPriority()); state.put("flags", String.valueOf(wrappedGoal.getFlags()));
+                    if (wrappedGoal instanceof com.devfarinsky.siegeoverhaul.core.WallBuilderAccess) {
+                        for (String name : List.of("lastTarget", "destination", "nextSearch", "nextRoute", "pendingUntil", "approachTarget"))
+                            state.put(name, String.valueOf(diagnosticField(wrappedGoal.getClass(), wrappedGoal, name)));
+                        Object pendingPath = diagnosticField(wrappedGoal.getClass(), wrappedGoal, "pendingPath");
+                        state.put("pendingPathClass", pendingPath == null ? "null" : pendingPath.getClass().getName());
+                    }
+                    wrappedGoals.add(state);
+                }
+                member.put("goals", wrappedGoals);
+                if (goal != null && area instanceof ProtectedBuildArea protectedArea) {
+                    var receipt = area.getPersistentData().getCompound("SiegeProtectedConstructionV1");
+                    var accepted = AcceptedConstructionPlan.load(receipt);
+                    var completed = java.util.Arrays.stream(receipt.getLongArray("Completed")).boxed()
+                            .collect(java.util.stream.Collectors.toSet());
+                    member.put("areaGuardStatus", NativeConstructionGuard.status(area));
+                    member.put("acceptedCount", accepted.cells.size()); member.put("completedCount", completed.size());
+                    member.put("rawQueueProblem", String.valueOf(NativeConstructionGuard.nativeStacksProblem(area, goal, accepted)));
+                    member.put("sharedQueueCount", area.stackToPlace == null ? -1 : area.stackToPlace.size());
+                    member.put("privateQueueCount", goal.stackToPlace == null ? -1 : goal.stackToPlace.size());
+                    member.put("placementQueueAliased", goal.stackToPlace == (Object) area.stackToPlace
+                            || goal.stackToPlace == (Object) area.stackToPlaceMultiBlock || goal.stackToPlace == area.stackToBreak
+                            || goal.stackToPlace == area.stackToFree || goal.stackToPlace == goal.stackToBreak || goal.stackToPlace == goal.stackToFree);
+                    var pendingCells = new java.util.HashSet<BlockPos>(); int duplicateShared = 0, changedShared = 0;
+                    member.put("queueInspectionLimit", SECTION_TARGET_CAP + 1);
+                    member.put("queueInspectionTruncated", area.stackToPlace != null && area.stackToPlace.size() > SECTION_TARGET_CAP + 1
+                            || goal.stackToPlace != null && goal.stackToPlace.size() > SECTION_TARGET_CAP + 1);
+                    if (area.stackToPlace != null) for (var cell : area.stackToPlace.stream().limit(SECTION_TARGET_CAP + 1).toList()) {
+                        if (cell == null || cell.getPos() == null) { changedShared++; continue; }
+                        if (!pendingCells.add(cell.getPos())) duplicateShared++;
+                        if (!java.util.Objects.equals(cell.getState(), accepted.cells.get(cell.getPos()))) changedShared++;
+                    }
+                    member.put("duplicateSharedPositions", duplicateShared); member.put("changedSharedEntries", changedShared);
+                    var privateCells = new ArrayList<BlockPos>();
+                    if (goal.stackToPlace != null) privateCells.addAll(goal.stackToPlace.stream().limit(SECTION_TARGET_CAP + 1).toList());
+                    member.put("duplicatePrivatePositions", privateCells.size() - new java.util.HashSet<>(privateCells).size());
+                    if (goal.blockPos != null && !privateCells.contains(goal.blockPos)) privateCells.add(goal.blockPos);
+                    var rejections = new ArrayList<Map<String, Object>>(); int rejectedCount = 0;
+                    for (BlockPos cell : privateCells) {
+                        BlockState expected = cell == null ? null : accepted.cells.get(cell);
+                        boolean loaded = cell != null && level.hasChunkAt(cell);
+                        BlockState actual = loaded ? level.getBlockState(cell) : null;
+                        boolean exact = expected != null && expected.equals(actual);
+                        if (cell != null && expected != null && loaded && actual != null
+                                && (pendingCells.contains(cell) && !completed.contains(cell.asLong()) || exact)) continue;
+                        rejectedCount++;
+                        if (rejections.size() < 16) rejections.add(Map.of("cell", String.valueOf(cell), "loaded", loaded,
+                                "expected", String.valueOf(expected), "actual", String.valueOf(actual),
+                                "pending", pendingCells.contains(cell), "completed", cell != null && completed.contains(cell.asLong())));
+                    }
+                    member.put("schedulerRejectedCellCount", rejectedCount); member.put("schedulerRejectedCells", rejections);
+                    member.put("privateQueueTail", privateCells.stream().skip(Math.max(0, privateCells.size() - 8)).map(String::valueOf).toList());
+                    member.put("claims", crewClaimDiagnostics(worker, protectedArea));
+                }
+            } catch (ReflectiveOperationException | RuntimeException unavailable) { member.put("diagnosticError", unavailable.toString()); }
+        }
+        return members;
+    }
+
+    private static List<Map<String, Object>> passiveRequestedSupplies(BuilderEntity worker) {
+        var requests = new ArrayList<Map<String, Object>>();
+        try {
+            for (var request : worker.neededItems.stream().limit(8).toList()) {
+                Object key = diagnosticField(request.getClass(), request, "cachedMatchKey");
+                requests.add(Map.of("count", request.count, "required", request.required,
+                        "sourceKey", passiveRequestKey(request.sourceKey), "cachedMatchKey", passiveRequestKey(key),
+                        "matchKeyResolved", diagnosticField(request.getClass(), request, "matchKeyResolved")));
+            }
+        } catch (ReflectiveOperationException | RuntimeException unavailable) { requests.add(Map.of("diagnosticError", unavailable.toString())); }
+        return requests;
+    }
+    private static String passiveRequestKey(Object value) {
+        if (value == null) return "null";
+        if (value instanceof Item item) return String.valueOf(ForgeRegistries.ITEMS.getKey(item));
+        if (value instanceof UUID || value instanceof String || value instanceof ResourceLocation) return value.toString();
+        return "uninspected:" + value.getClass().getName();
+    }
+
+    /** Reflective inspection is test-only and read-only; never calls claim/tick/renew/release. */
+    private static Map<String, Object> crewClaimDiagnostics(BuilderEntity worker, ProtectedBuildArea area)
+            throws ReflectiveOperationException {
+        var result = new LinkedHashMap<String, Object>();
+        var sessions = (Map<?, ?>) diagnosticField(NativeCrewWorkClaims.class, null, "SESSIONS");
+        var held = (Map<?, ?>) diagnosticField(NativeCrewWorkClaims.class, null, "HELD");
+        var closed = (Set<?>) diagnosticField(NativeCrewWorkClaims.class, null, "CLOSED");
+        Object session = sessions.get(area), member = held.get(worker);
+        result.put("closed", closed.contains(area)); result.put("sessionPresent", session != null);
+        result.put("heldPresent", member != null);
+        if (member != null) {
+            var token = (SharedConstructionWorkClaims.Token) diagnosticField(member.getClass(), member, "token");
+            result.put("heldTarget", BlockPos.of(token.target()).toShortString());
+            result.put("heldSessionMatches", diagnosticField(member.getClass(), member, "session") == session);
+            result.put("heldGoalMatches", ((java.lang.ref.WeakReference<?>) diagnosticField(member.getClass(), member, "goal")).get() == CREW_GOALS.get(worker.getUUID()));
+        }
+        if (session != null) {
+            Object claims = diagnosticField(session.getClass(), session, "claims");
+            result.put("lastGameTick", diagnosticField(claims.getClass(), claims, "lastGameTick"));
+            var leases = (Map<?, ?>) diagnosticField(claims.getClass(), claims, "workers");
+            var entries = new ArrayList<Map<String, Object>>();
+            for (var lease : leases.entrySet().stream().limit(4).toList()) {
+                Object value = lease.getValue();
+                var token = (SharedConstructionWorkClaims.Token) diagnosticField(value.getClass(), value, "token");
+                entries.add(Map.of("worker", String.valueOf(lease.getKey()), "target", BlockPos.of(token.target()).toShortString(),
+                        "renewedAt", diagnosticField(value.getClass(), value, "renewedAt")));
+            }
+            result.put("leases", entries);
+        }
+        return result;
+    }
+    private static Object diagnosticField(Class<?> type, Object instance, String name) throws ReflectiveOperationException {
+        var field = type.getDeclaredField(name); field.setAccessible(true); return field.get(instance);
+    }
+
     private static Map<String, Object> stack(ItemStack stack) {
         return Map.of("item", String.valueOf(ForgeRegistries.ITEMS.getKey(stack.getItem())), "count", stack.getCount(),
                 "tag", stack.hasTag() ? stack.getTag().toString() : "");

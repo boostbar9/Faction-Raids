@@ -160,7 +160,7 @@ class PerimeterPendingCrewReplayTest extends MinecraftTestSupport {
                 f -> f.workerData.getCompound(ProtectedBuilderHandLifecycle.KEY).putUUID("Generation", UUID.randomUUID()),
                 f -> f.areaData.getCompound(SNAPSHOT).putUUID("Owner", UUID.randomUUID()),
                 f -> {
-                    var foreign = mock(ProtectedBuildArea.class); when(foreign.getUUID()).thenReturn(UUID.randomUUID());
+                    var foreign = f.fixtureMock(ProtectedBuildArea.class); when(foreign.getUUID()).thenReturn(UUID.randomUUID());
                     f.worker.currentBuildArea = foreign;
                 });
         for (Prefix prefix : List.of(Prefix.NATIVE_ASSIGNMENT, Prefix.ACTIVE))
@@ -236,7 +236,7 @@ class PerimeterPendingCrewReplayTest extends MinecraftTestSupport {
                 f -> f.workerData.getCompound(PerimeterProjectLink.KEY).putString("Hash", "b".repeat(64)),
                 f -> f.workerData.getCompound(ProtectedBuilderHandLifecycle.KEY).putUUID("Generation", UUID.randomUUID()),
                 f -> {
-                    var foreign = mock(ProtectedBuildArea.class); when(foreign.getUUID()).thenReturn(UUID.randomUUID());
+                    var foreign = f.fixtureMock(ProtectedBuildArea.class); when(foreign.getUUID()).thenReturn(UUID.randomUUID());
                     f.worker.currentBuildArea = foreign;
                 });
         for (var conflict : conflicts) try (var f = new Fixture()) {
@@ -254,11 +254,12 @@ class PerimeterPendingCrewReplayTest extends MinecraftTestSupport {
         CompoundTag core = new CompoundTag(), workerData = new CompoundTag(), areaData = new CompoundTag();
         ConstructionEditLedger ledger = new ConstructionEditLedger();
         final RaidSavedData data = new RaidSavedData();
-        final MinecraftServer server = mock(MinecraftServer.class);
-        final ServerLevel level = mock(ServerLevel.class);
-        final ServerPlayer owner = mock(ServerPlayer.class);
-        final BuilderEntity worker = mock(BuilderEntity.class);
-        final ProtectedBuildArea area = mock(ProtectedBuildArea.class);
+        final List<Object> ownedMocks = new ArrayList<>();
+        final MinecraftServer server = fixtureMock(MinecraftServer.class);
+        final ServerLevel level = fixtureMock(ServerLevel.class);
+        final ServerPlayer owner = fixtureMock(ServerPlayer.class);
+        final BuilderEntity worker = fixtureMock(BuilderEntity.class);
+        final ProtectedBuildArea area = fixtureMock(ProtectedBuildArea.class);
         final UUID helperId = UUID.randomUUID();
         final SimpleContainer inventory = new SimpleContainer(12);
         final List<CompoundTag> materialsBefore;
@@ -294,7 +295,7 @@ class PerimeterPendingCrewReplayTest extends MinecraftTestSupport {
             when(worker.getUUID()).thenReturn(helperId); when(worker.level()).thenReturn(level); when(worker.isAlive()).thenReturn(true);
             when(worker.getPersistentData()).thenAnswer(call -> workerData); when(worker.getUseItem()).thenReturn(ItemStack.EMPTY);
             when(worker.getInventory()).thenReturn(inventory); when(worker.getMainHandItem()).thenAnswer(call -> mainHand);
-            var selector = mock(GoalSelector.class); when(selector.getAvailableGoals()).thenReturn(Set.of());
+            var selector = fixtureMock(GoalSelector.class); when(selector.getAvailableGoals()).thenReturn(Set.of());
             var field = Mob.class.getDeclaredField("goalSelector"); field.setAccessible(true); field.set(worker, selector);
             worker.neededItems = new ArrayList<>();
             inventory.setItem(5, new ItemStack(Items.COBBLESTONE, 23));
@@ -411,9 +412,26 @@ class PerimeterPendingCrewReplayTest extends MinecraftTestSupport {
             verify(level, never()).setBlock(any(), any(), anyInt()); verify(level, never()).setBlock(any(), any(), anyInt(), anyInt());
             verify(level, never()).destroyBlock(any(), anyBoolean());
         }
+        private <T> T fixtureMock(Class<T> type) {
+            T value = mock(type); ownedMocks.add(value); return value;
+        }
         @Override public void close() {
-            PerimeterProjectAuthority.stopped(server);
-            runtime.close(); hooks.close(); storage.close(); workers.close(); ledgers.close(); saves.close();
+            try {
+                // End this synthetic world's real snapshot-cache lifecycle while storage shutdown
+                // is still mocked. Closing static Mockito scopes alone does not end these caches.
+                NativeConstructionGuard.serverStopped(server);
+            } finally {
+                try {
+                    runtime.close(); hooks.close(); storage.close(); workers.close(); ledgers.close(); saves.close();
+                } finally {
+                    // Answers intentionally capture this fixture (including its mocks and NBT).
+                    // Remove each owned inline-mock interceptor so Mockito's weak-key registry
+                    // cannot retain that self-referencing graph across the 56 scenario fixtures.
+                    // Do not clear unrelated mocks or change the suite's heap/fork configuration.
+                    ownedMocks.forEach(mock -> framework().clearInlineMock(mock));
+                    ownedMocks.clear();
+                }
+            }
         }
     }
 }
