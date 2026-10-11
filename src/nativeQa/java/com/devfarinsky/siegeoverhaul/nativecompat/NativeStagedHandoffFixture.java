@@ -191,7 +191,7 @@ final class NativeStagedHandoffFixture {
     }
 
     /** A second exactly owned hire, with tools/food only. The original finite chest is untouched. */
-    static BuilderEntity spawnSharedHelper(ServerLevel level, ServerPlayer owner) {
+    static BuilderEntity spawnSharedHelper(ServerLevel level, ServerPlayer owner) throws ReflectiveOperationException {
         require(WORLD.equals(level.getServer().getWorldData().getLevelName()) && level.getServer().isSameThread(),
                 "Refusing shared helper outside isolated fixture");
         var type = ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("workers", "builder"));
