@@ -2,6 +2,7 @@
 import hashlib
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -285,11 +286,38 @@ public class BudgetHarness {public static void main(String[] a){EntityDataSerial
 
 
 class PartitionPreflightSourceTests(unittest.TestCase):
+    def assert_single_native_resource_root(self, build):
+        # JavaBasePlugin already registers src/<sourceSet>/resources. Replacement
+        # keeps one exact root; additive srcDir would repeat that convention.
+        blocks = re.findall(r'\bnativeQa \{\n(.*?)\n        \}', build, re.DOTALL)
+        self.assertEqual(len(blocks), 1)
+        registrations = re.findall(r'\bresources\.(?:srcDir|srcDirs|setSrcDirs)\b[^\n]*', blocks[0])
+        self.assertEqual(registrations, ["resources.setSrcDirs(['src/nativeQa/resources'])"])
+        self.assertEqual(build.count("'src/nativeQa/resources'"), 1)
+        self.assertNotIn('sourceSets.nativeQa.resources', build)
+        self.assertNotIn('processNativeQaResources', build)
+        self.assertNotIn('duplicatesStrategy', build)
+
     def test_pin_is_unchanged_and_qa_resource_is_unshipped(self):
         self.assertEqual(hashlib.sha256(PINS.read_bytes()).hexdigest(), PIN_SHA256)
         build=(ROOT/'build.gradle').read_text()
-        self.assertIn("resources.srcDir 'src/nativeQa/resources'",build)
+        self.assert_single_native_resource_root(build)
         self.assertNotIn('from sourceSets.nativeQa',build)
+
+    def test_resource_source_contract_rejects_additive_duplicate_foreign_and_suppressed_inputs(self):
+        build = (ROOT/'build.gradle').read_text()
+        exact = "resources.setSrcDirs(['src/nativeQa/resources'])"
+        mutants = {
+            'additive-default-root': build.replace(exact, "resources.srcDir 'src/nativeQa/resources'"),
+            'repeated-registration': build.replace(exact, exact + '\n            ' + exact),
+            'duplicate-root-list': build.replace(exact, "resources.setSrcDirs(['src/nativeQa/resources', 'src/nativeQa/resources'])"),
+            'extra-root': build.replace(exact, "resources.setSrcDirs(['src/nativeQa/resources', 'src/main/resources'])"),
+            'outside-additive-root': build + "\nsourceSets.nativeQa.resources.srcDir 'src/nativeQa/resources'\n",
+            'duplicate-suppression': build + "\ntasks.named('processNativeQaResources') { duplicatesStrategy = DuplicatesStrategy.EXCLUDE }\n",
+        }
+        for name, mutant in mutants.items():
+            with self.subTest(name=name), self.assertRaises(AssertionError):
+                self.assert_single_native_resource_root(mutant)
     def test_driver_is_world_free_and_calls_real_budget_before_fixed_cap(self):
         source=DRIVER.read_text()
         for forbidden in ('createFreshLevel(','.loadLevel(','.setup(','.commission(','.forceChunk(','.changeDimension(','.setBlock(','.tick(','.setItem(','.reconcileWorker('): self.assertNotIn(forbidden,source)

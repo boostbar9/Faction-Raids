@@ -269,7 +269,7 @@ if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)
     sourceSets {
         nativeQa {
             java.srcDir 'src/nativeQa/java'
-            resources.srcDir 'src/nativeQa/resources'
+            resources.setSrcDirs(['src/nativeQa/resources'])
             compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
             runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
         }
