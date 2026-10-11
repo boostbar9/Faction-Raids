@@ -299,7 +299,7 @@ class CancelSourceContracts(unittest.TestCase):
         self.assertEqual(workflow.count('-PnativeActiveHelperCase=cancel-while-absent'),2)
         self.assertLess(workflow.index('scripts/verify-native-helper-api.py'),workflow.index(' runClient'))
         gradle=self.text('build.gradle');self.assertIn("getOrElse('same-stage-disk')",gradle)
-        self.assertIn("activeHelperCase in ['same-stage-disk', 'cancel-while-absent']",gradle)
+        self.assertIn("activeHelperCase in ['same-stage-disk', 'cancel-while-absent', 'later-stage-disk']",gradle)
     def test_both_terminal_eligibility_and_pending_census_use_same_proof(self):
         java=self.text('src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeActiveHelperQa.java')
         self.assertEqual(java.count('handProvenance(worker, ledger)'),2)

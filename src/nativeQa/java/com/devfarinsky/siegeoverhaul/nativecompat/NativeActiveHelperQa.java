@@ -64,7 +64,8 @@ import java.util.*;
 public final class NativeActiveHelperQa {
     private static final boolean ENABLED = Boolean.getBoolean("siegeoverhaul.nativeQa")
             && Boolean.getBoolean("siegeoverhaul.nativeQa.activeHelper")
-            && "staged-handoff".equals(System.getProperty("siegeoverhaul.nativeQa.mode"));
+            && "staged-handoff".equals(System.getProperty("siegeoverhaul.nativeQa.mode"))
+            && !"later-stage-disk".equals(System.getProperty("siegeoverhaul.nativeQa.activeHelperCase"));
     private static final String CASE = System.getProperty("siegeoverhaul.nativeQa.activeHelperCase", "same-stage-disk");
     private static final boolean CANCELED_ABSENT = "cancel-while-absent".equals(CASE);
     private static final long SECOND = 1_000_000_000L, LIMIT_SECONDS = 600;
