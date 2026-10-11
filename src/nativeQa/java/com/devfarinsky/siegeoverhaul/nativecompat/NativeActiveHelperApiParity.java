@@ -27,7 +27,8 @@ final class NativeActiveHelperApiParity {
             "com.talhanation.recruits.entities.AbstractChunkLoaderEntity", "com.talhanation.recruits.entities.BowmanEntity",
             "com.talhanation.recruits.entities.AbstractRecruitEntity", "com.talhanation.recruits.entities.AbstractInventoryEntity",
             "com.talhanation.recruits.pathfinding.AsyncPathfinderMob", "net.minecraft.world.entity.PathfinderMob",
-            "net.minecraft.world.entity.Mob", "net.minecraft.world.entity.LivingEntity", "net.minecraft.world.entity.Entity");
+            "net.minecraft.world.entity.Mob", "net.minecraft.world.entity.LivingEntity", "net.minecraft.world.entity.Entity",
+            "net.minecraftforge.common.capabilities.CapabilityProvider");
 
     private NativeActiveHelperApiParity() {}
 
@@ -84,17 +85,21 @@ final class NativeActiveHelperApiParity {
                 throw new IllegalStateException("Loaded class parity failed: " + name + "; CodeSource=" + location, failure);
             }
         }
-        require(classes.size() >= 60 && classes.size() <= 256 && classes.keySet().containsAll(CHAIN)
+        require(classes.size() >= 60 && classes.size() <= 256 && classes.keySet().containsAll(CHAIN.subList(0, CHAIN.size() - 1))
                 && classes.containsKey("com.talhanation.recruits.inventory.RecruitSimpleContainer"), "Incomplete loaded class closure");
-        var actualChain = new ArrayList<String>();
-        for (Class<?> type = BuilderEntity.class; type != Object.class; type = type.getSuperclass()) actualChain.add(type.getName());
-        require(actualChain.equals(CHAIN), "Loaded worker inheritance changed");
+        var actualChain = Inheritance.verify(BuilderEntity.class, CHAIN);
+        // Entity's captured declaration names this Forge tail. The exact Forge commit
+        // 8dffec4dbca95bf710f74620438b388e0fa3c570 declares CapabilityProvider -> Object.
+        // Its raw entry is authenticated by the already reviewed whole-supplier hash.
+        var entityProof = (Map<?, ?>) classes.get(Entity.class.getName());
+        var tail = TailResource.verify(Entity.class.getSuperclass(), Path.of((String) entityProof.get("provider")),
+                (String) entityProof.get("supplierSha256"));
         require(owner("changeDimension", ServerLevel.class, ITeleporter.class) == Entity.class
                 && owner("restoreFrom", Entity.class) == Entity.class
                 && owner("removeAfterChangingDimensions") == net.minecraft.world.entity.Mob.class,
                 "Loaded transfer method owner changed");
         return Map.of("passed", true, "gateSha256", hash(gate), "contractSha256", CONTRACT, "classes", classes,
-                "superclassChain", actualChain, "codeSourceUrls", codeSourceUrls,
+                "superclassChain", actualChain, "codeSourceUrls", codeSourceUrls, "forgeSuperclassTail", tail,
                 "scope", "Exact loaded providers and raw class resources; transformed method bodies are not observed");
     }
 
@@ -109,6 +114,61 @@ final class NativeActiveHelperApiParity {
         URL location = domain == null || domain.getCodeSource() == null ? null : domain.getCodeSource().getLocation();
         require(location != null, "Missing loaded provider URL: " + type.getName());
         return location;
+    }
+
+    /** No prefix-only acceptance: every superclass through Object's direct child is exact. */
+    static final class Inheritance {
+        private Inheritance() {}
+        static List<String> verify(Class<?> leaf, List<String> CHAIN) {
+            var actualChain = new ArrayList<String>();
+            for (Class<?> type = leaf; type != null && type != Object.class; type = type.getSuperclass()) {
+                require(actualChain.size() < 64, "Loaded inheritance exceeded bounded depth; actual=" + actualChain);
+                actualChain.add(type.getName());
+            }
+            require(actualChain.equals(CHAIN), "Loaded worker inheritance changed; expected=" + CHAIN + "; actual=" + actualChain);
+            return List.copyOf(actualChain);
+        }
+    }
+
+    /** Additional raw-resource attestation under an existing exact whole-JAR pin. */
+    static final class TailResource {
+        private TailResource() {}
+        static Map<String, String> verify(Class<?> type, Path expected, String expectedHash) throws Exception {
+            URL location = codeSource(type);
+            try {
+                Path source = ProviderLocation.resolve(location, expected);
+                require(expectedHash != null && expectedHash.equals(hash(source)), "Changed Forge tail supplier");
+                String resource = type.getName().replace('.', '/') + ".class";
+                byte[] entryBytes;
+                try (var jar = new java.util.zip.ZipFile(source.toFile())) {
+                    var entries = jar.entries(); java.util.zip.ZipEntry match = null;
+                    while (entries.hasMoreElements()) {
+                        var entry = entries.nextElement(); String name = entry.getName();
+                        require(!(name.startsWith("META-INF/versions/") && name.endsWith("/" + resource)),
+                                "Versioned Forge tail entry is ambiguous: " + name);
+                        if (name.equals(resource)) {
+                            require(match == null && !entry.isDirectory(), "Duplicate/malformed Forge tail entry"); match = entry;
+                        }
+                    }
+                    require(match != null, "Missing Forge tail entry: " + resource);
+                    try (var input = jar.getInputStream(match)) { entryBytes = input.readNBytes(8 * 1024 * 1024 + 1); }
+                }
+                require(entryBytes.length > 0 && entryBytes.length <= 8 * 1024 * 1024, "Oversized/empty Forge tail entry");
+                byte[] loadedBytes;
+                try (var input = type.getResourceAsStream("/" + resource)) {
+                    require(input != null, "Missing raw Forge tail class resource"); loadedBytes = input.readNBytes(8 * 1024 * 1024 + 1);
+                }
+                require(loadedBytes.length > 0 && loadedBytes.length <= 8 * 1024 * 1024
+                        && java.util.Arrays.equals(entryBytes, loadedBytes), "Changed raw Forge tail class resource");
+                require(expectedHash.equals(hash(source)), "Forge tail supplier changed during attestation");
+                return Map.of("name", type.getName(), "provider", source.toString(), "supplierSha256", expectedHash,
+                        "rawResourceSha256", hash(loadedBytes), "codeSourceUrl", location.toExternalForm(),
+                        "scope", "Raw resource equals unique entry in reviewed whole-JAR supplier; transformed method bodies are not observed");
+            } catch (Exception | AssertionError | LinkageError failure) {
+                throw new IllegalStateException("Forge superclass tail parity failed: " + type.getName()
+                        + "; CodeSource=" + location + "; expected=" + expected, failure);
+            }
+        }
     }
 
     /** JDK-only resolver, exercised directly by the source-extracted Java regression harness. */
