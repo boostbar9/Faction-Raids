@@ -59,23 +59,30 @@ final class NativeActiveHelperApiParity {
         }
         require(suppliers.size() == 3, "Unexpected native supplier closure");
         var classes = new LinkedHashMap<String, Object>();
+        var codeSourceUrls = new LinkedHashMap<String, String>();
         for (var value : receipt.getAsJsonArray("classes")) {
             var item = value.getAsJsonObject(); String name = item.get("name").getAsString();
             Class<?> type = Class.forName(name, false, BuilderEntity.class.getClassLoader());
-            Path source = supplier(type);
             String expected = item.get("supplierCanonicalPath").getAsString();
-            require(source.toString().equals(expected) && suppliers.get(expected) != null
-                    && suppliers.get(expected).equals(item.get("supplierSha256").getAsString()), "Wrong loaded class provider: " + name);
-            String resource = "/" + name.replace('.', '/') + ".class";
-            byte[] bytes;
-            try (var input = type.getResourceAsStream(resource)) {
-                require(input != null, "Missing raw loaded class resource: " + name);
-                bytes = input.readNBytes(8 * 1024 * 1024 + 1);
+            URL location = codeSource(type);
+            try {
+                Path source = ProviderLocation.resolve(location, Path.of(expected));
+                codeSourceUrls.put(name, location.toExternalForm());
+                require(source.toString().equals(expected) && suppliers.get(expected) != null
+                        && suppliers.get(expected).equals(item.get("supplierSha256").getAsString()), "Wrong loaded class provider: " + name + "; CodeSource=" + location);
+                String resource = "/" + name.replace('.', '/') + ".class";
+                byte[] bytes;
+                try (var input = type.getResourceAsStream(resource)) {
+                    require(input != null, "Missing raw loaded class resource: " + name + "; CodeSource=" + location);
+                    bytes = input.readNBytes(8 * 1024 * 1024 + 1);
+                }
+                require(bytes.length > 0 && bytes.length <= 8 * 1024 * 1024
+                        && hash(bytes).equals(item.get("classSha256").getAsString()), "Changed raw class resource: " + name + "; CodeSource=" + location);
+                require(classes.put(name, Map.of("provider", source.toString(), "supplierSha256", suppliers.get(expected),
+                        "rawResourceSha256", hash(bytes))) == null, "Duplicate class identity");
+            } catch (Exception | AssertionError | LinkageError failure) {
+                throw new IllegalStateException("Loaded class parity failed: " + name + "; CodeSource=" + location, failure);
             }
-            require(bytes.length > 0 && bytes.length <= 8 * 1024 * 1024
-                    && hash(bytes).equals(item.get("classSha256").getAsString()), "Changed raw class resource: " + name);
-            require(classes.put(name, Map.of("provider", source.toString(), "supplierSha256", suppliers.get(expected),
-                    "rawResourceSha256", hash(bytes))) == null, "Duplicate class identity");
         }
         require(classes.size() >= 60 && classes.size() <= 256 && classes.keySet().containsAll(CHAIN)
                 && classes.containsKey("com.talhanation.recruits.inventory.RecruitSimpleContainer"), "Incomplete loaded class closure");
@@ -87,7 +94,7 @@ final class NativeActiveHelperApiParity {
                 && owner("removeAfterChangingDimensions") == net.minecraft.world.entity.Mob.class,
                 "Loaded transfer method owner changed");
         return Map.of("passed", true, "gateSha256", hash(gate), "contractSha256", CONTRACT, "classes", classes,
-                "superclassChain", actualChain,
+                "superclassChain", actualChain, "codeSourceUrls", codeSourceUrls,
                 "scope", "Exact loaded providers and raw class resources; transformed method bodies are not observed");
     }
 
@@ -97,20 +104,69 @@ final class NativeActiveHelperApiParity {
         throw new NoSuchMethodException(method);
     }
 
-    private static Path supplier(Class<?> type) throws Exception {
+    private static URL codeSource(Class<?> type) {
         var domain = type.getProtectionDomain();
         URL location = domain == null || domain.getCodeSource() == null ? null : domain.getCodeSource().getLocation();
         require(location != null, "Missing loaded provider URL: " + type.getName());
-        Path result;
-        if ("file".equals(location.getProtocol())) result = Path.of(location.toURI());
-        else if ("jar".equals(location.getProtocol())) result = Path.of(((JarURLConnection) location.openConnection()).getJarFileURL().toURI());
-        else if ("union".equals(location.getProtocol())) {
-            String path = location.toURI().getPath(); int separator = path.lastIndexOf('#');
-            require(separator > 0 && path.substring(separator + 1).matches("[0-9]+!/?"), "Unreviewed union provider URL: " + location);
-            result = Path.of(path.substring(0, separator));
-        } else throw new AssertionError("Unreviewed loaded provider protocol: " + location);
-        require(result.isAbsolute() && result.equals(result.toRealPath()) && Files.isRegularFile(result), "Unverified loaded provider file");
-        return result;
+        return location;
+    }
+
+    /** JDK-only resolver, exercised directly by the source-extracted Java regression harness. */
+    static final class ProviderLocation {
+        private ProviderLocation() {}
+
+        static Path resolve(URL location, Path expected) throws Exception {
+            try {
+                check(location != null && location.toExternalForm().length() <= 8192, "Missing/bounded provider URL");
+                check(expected != null && expected.isAbsolute() && expected.equals(expected.toRealPath())
+                        && Files.isRegularFile(expected) && expected.toString().endsWith(".jar")
+                        && expected.toString().indexOf('#') < 0 && expected.toString().indexOf('!') < 0,
+                        "Unverified or ambiguous expected supplier file");
+                var uri = location.toURI();
+                cleanUri(uri);
+                Path result;
+                if ("file".equals(uri.getScheme())) result = Path.of(uri);
+                else if ("jar".equals(uri.getScheme())) {
+                    var connection = (JarURLConnection) location.openConnection(); // Metadata only; never connect or read a URL.
+                    check(connection.getEntryName() == null || connection.getEntryName().isEmpty(), "Non-root JAR provider");
+                    var file = connection.getJarFileURL().toURI(); cleanUri(file);
+                    check("file".equals(file.getScheme()), "Non-file JAR provider"); result = Path.of(file);
+                } else if ("union".equals(uri.getScheme())) {
+                    // SecureJarHandler makeKey appends #index to an existing UnionPath key.
+                    // Resolve only a bounded index chain attached to the exact reviewed gate path;
+                    // never strip arbitrary hashes from a guessed filename or search another JAR.
+                    String base = expected.toUri().getPath(), path = uri.getPath();
+                    check(path != null && path.startsWith(base), "Wrong union supplier prefix");
+                    String suffix = path.substring(base.length());
+                    check(suffix.matches("(?:#(?:0|[1-9][0-9]{0,9})){1,8}!/?"), "Unreviewed union index/root shape");
+                    String indices = suffix.substring(0, suffix.indexOf('!'));
+                    String literal = base;
+                    for (String index : indices.substring(1).split("#")) {
+                        check(Long.parseLong(index) <= Integer.MAX_VALUE, "Union index exceeds native integer range");
+                        literal += "#" + index;
+                        // A real filename (or symlink, or uncertain status) with a numeric suffix
+                        // makes this textual interpretation ambiguous. Do not silently choose.
+                        check(Files.notExists(Path.of(literal), java.nio.file.LinkOption.NOFOLLOW_LINKS),
+                                "Numeric-hash filename makes union supplier ambiguous");
+                    }
+                    result = expected;
+                } else throw new IllegalArgumentException("Unreviewed loaded provider protocol");
+                check(result.equals(expected) && result.isAbsolute() && result.equals(result.toRealPath())
+                        && Files.isRegularFile(result), "Provider is not the exact reviewed canonical supplier");
+                return result;
+            } catch (Exception | AssertionError problem) {
+                throw new IllegalStateException("Loaded provider rejected: CodeSource=" + location
+                        + "; expected=" + expected + "; " + problem.getMessage(), problem);
+            }
+        }
+
+        private static void cleanUri(java.net.URI uri) {
+            check(uri.getRawAuthority() == null && uri.getRawQuery() == null && uri.getRawFragment() == null,
+                    "Provider authority, query or fragment is unsupported");
+            String raw = uri.getRawSchemeSpecificPart().toLowerCase(java.util.Locale.ROOT);
+            check(!raw.matches(".*%(?:2f|5c|2e|25|21).*"), "Encoded provider separator/traversal is unsupported");
+        }
+        private static void check(boolean okay, String why) { if (!okay) throw new IllegalArgumentException(why); }
     }
 
     private static String hash(Path path) throws Exception {
