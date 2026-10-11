@@ -1,0 +1,56 @@
+// First prerequisite for the separately opted-in helper lifecycle fixtures.
+// This mode resolves the actual client runtime but deliberately cannot launch it.
+if (providers.gradleProperty('nativeActiveHelperApiQa').map { it.toBoolean() }.getOrElse(false)) {
+    if (!providers.gradleProperty('nativeQa').getOrElse('false').toBoolean()
+            || providers.gradleProperty('nativeQaMode').getOrElse('') != 'staged-handoff'
+            || !providers.gradleProperty('nativeSharedCrewQa').getOrElse('false').toBoolean()) {
+        throw new GradleException('Active helper API capture requires nativeQa staged-handoff shared-crew preparation')
+    }
+    tasks.named('runClient').configure {
+        doFirst { throw new GradleException('API capture is prepare-only; reviewed exact transfer/ticket semantics and a separate fixture are required before gameplay') }
+    }
+    tasks.register('prepareNativeActiveHelperApiEvidence') {
+        group = 'verification'
+        description = 'Export the exact prepared client runtime for read-only transfer/ticket API disassembly; never launch Minecraft.'
+        dependsOn 'prepareNativeQaClient'
+        doLast {
+            def clientRun = tasks.named('runClient').get()
+            def runtimeFiles = files(clientRun.minecraftArtifacts, clientRun.runtimeClasspathArtifacts,
+                    clientRun.runConfig.get().allSources.collect { it.runtimeClasspath })
+                    .files.collect { it.canonicalFile }.unique().sort { it.absolutePath }
+            if (runtimeFiles.isEmpty() || runtimeFiles.size() > 1024) throw new GradleException('Unexpected native runtime entry count')
+            def coordinates = [:].withDefault { new TreeSet<String>() }
+            // Only configurations already resolved by the real client preparation are inspected.
+            configurations.findAll { it.canBeResolved && it.state.toString() == 'RESOLVED' }.each { configuration ->
+                configuration.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+                    coordinates[artifact.file.canonicalPath].add(artifact.moduleVersion.id.toString())
+                }
+            }
+            def hashFile = { File file ->
+                def digest = java.security.MessageDigest.getInstance('SHA-256')
+                file.withInputStream { input ->
+                    byte[] buffer = new byte[65536]
+                    int count
+                    while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count)
+                }
+                java.util.HexFormat.of().formatHex(digest.digest())
+            }
+            def entries = runtimeFiles.collect { file ->
+                def value = [path: file.absolutePath, kind: file.isFile() ? 'file' : file.isDirectory() ? 'directory' : 'absent',
+                             coordinates: coordinates[file.absolutePath].toList()]
+                if (file.isFile()) value.sha256 = hashFile(file)
+                value
+            }
+            def report = [formatVersion: 1, purpose: 'Prepared runClient runtime only; no gameplay or semantic approval',
+                          minecraftVersion: minecraft_version, forgeVersion: forge_version,
+                          mappingChannel: mapping_channel, mappingVersion: mapping_version,
+                          gradleVersion: gradle.gradleVersion, javaVersion: System.getProperty('java.version'),
+                          entries: entries]
+            def output = project.file('build/native-active-helper-api/evidence/resolved-runtime.json')
+            output.parentFile.mkdirs()
+            if (output.exists()) throw new GradleException('Refusing to replace an existing resolved-runtime receipt')
+            output.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(report)) + '\n'
+            logger.lifecycle("Exported ${entries.size()} exact prepared runtime entries; gameplay remains disabled.")
+        }
+    }
+}

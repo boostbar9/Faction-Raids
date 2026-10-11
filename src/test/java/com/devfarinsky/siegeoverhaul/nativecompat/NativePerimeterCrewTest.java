@@ -49,6 +49,10 @@ class NativePerimeterCrewTest extends MinecraftTestSupport {
             when(area.getUUID()).thenReturn(project.active().areaId());
             when(ledger.matchesProjectLease(project)).thenReturn(true);
             when(ledger.reservedCrewMembers(project)).thenAnswer(call -> Set.copyOf(reserved));
+            when(ledger.suspendCrew(project, helperId)).thenAnswer(call -> reserved.remove(helperId));
+            projects.when(() -> NativePerimeterProjects.sealCrewHistory(level, project)).thenReturn(true);
+            projects.when(() -> NativePerimeterProjects.cleanupAssociationsMatch(eq(helper), any(), any(), any())).thenReturn(true);
+            when(ledger.workerCleanupAreas(project, helperId)).thenReturn(Set.of(project.active().areaId()));
             when(ledger.canRetainHandLifecycle(helperData, helperId)).thenReturn(true);
             when(ledger.enlistCrew(project, helperId)).thenAnswer(call -> reserved.add(helperId));
             ledgers.when(() -> ConstructionEditLedger.get(level)).thenReturn(ledger);
@@ -88,12 +92,13 @@ class NativePerimeterCrewTest extends MinecraftTestSupport {
         }
     }
 
-    @Test void unloadedHelperRevokesOnlyWorkAuthorityAndNeverBecomesDeathEvidence() {
+    @Test void unloadedHelperSuspendsOnlyWorkAuthorityAndNeverBecomesDeathEvidence() {
         try (var f = new Fixture()) {
             f.reserved.add(f.helperId); when(f.level.getEntity(f.helperId)).thenReturn(null);
             when(f.ledger.knownCrewMember(f.project, f.helperId)).thenReturn(true);
             NativePerimeterCrew.advance(f.level, f.owner, f.project, f.area);
-            verify(f.ledger).retireCrew(f.project, f.helperId);
+            verify(f.ledger).suspendCrew(f.project, f.helperId);
+            verify(f.ledger, never()).retireCrew(any(), any());
             verify(f.ledger, never()).markCrewBuilderDestroyed(any(), any(), any(), any());
             verify(f.ledger, never()).projectBuilderDestroyed(any(), any(), any(), any());
         }

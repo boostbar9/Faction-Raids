@@ -30,6 +30,12 @@ public final class PerimeterBuilderAssignments {
             throw new IllegalArgumentException("Assignment history conflicts with terminal project");
         return entry.history().get(entry.history().size()-1).to();
     }
+    /** Identity-bound history lookup for cross-file validation without a live project snapshot. */
+    public boolean known(UUID id, long generation, String hash, UUID original, UUID worker) {
+        builder(id, generation, hash, original); // Authenticate the complete retained project identity.
+        Entry entry = entries.get(id);
+        return original.equals(worker) || entry != null && entry.history().stream().anyMatch(h -> h.to().equals(worker));
+    }
     /** Retained identity only: previous coordinators must never regain work authority. */
     public boolean known(PerimeterProject project, UUID worker) {
         builder(project); // Verify the full paid identity and stage history first.

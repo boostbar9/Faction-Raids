@@ -304,6 +304,112 @@ final class ConstructionEditLedger extends SavedData {
         } catch (RuntimeException conflictingIdentity) { return null; }
     }
 
+    /** Freeze legacy cleanup before project progress; no work grant is inferred from this prefix. */
+    boolean crewHistoryNeedsSealing(UUID worker) { return !invalid && crew.hasUnsealedLegacy(worker); }
+    boolean hasUnsealedCrewHistory(com.devfarinsky.siegeoverhaul.core.PerimeterProject project) {
+        if (invalid) throw new IllegalStateException("Construction crew history is unavailable");
+        return crew.hasUnsealedLegacy(project);
+    }
+    boolean sealCrewHistory(com.devfarinsky.siegeoverhaul.core.PerimeterProject project) { return sealCrewHistory(project, project.activeStage()); }
+    boolean sealCrewHistory(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, int boundary) {
+        if (!matchesProjectIdentity(project)) return false;
+        try { if (crew.sealLegacy(project, boundary)) setDirty(); return true; }
+        catch (IllegalArgumentException conflict) { return false; }
+    }
+    boolean hasUnsealedCrewHistory(com.devfarinsky.siegeoverhaul.core.PerimeterTerminalReceipt terminal) {
+        if (invalid) throw new IllegalStateException("Construction crew history is unavailable");
+        return crew.hasUnsealedLegacy(terminal);
+    }
+    boolean sealCrewHistory(com.devfarinsky.siegeoverhaul.core.PerimeterTerminalReceipt terminal, int boundary) {
+        if (invalid || !sameGeneration(terminal.cleanup().ledgerGeneration())) return false;
+        try { if (crew.sealLegacy(terminal, boundary)) setDirty(); return true; }
+        catch (IllegalArgumentException conflict) { return false; }
+    }
+    boolean suspendCrew(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        if (invalid || project == null || worker == null) return false;
+        try { if (!crew.suspend(project, worker)) return false; setDirty(); return true; }
+        catch (IllegalArgumentException conflict) { return false; }
+    }
+    Set<UUID> suspendedCrewMembers(com.devfarinsky.siegeoverhaul.core.PerimeterProject project) {
+        if (invalid || project == null) throw new IllegalStateException("Construction crew history is unavailable");
+        return crew.suspended(project);
+    }
+    Set<UUID> knownCrewMembers(com.devfarinsky.siegeoverhaul.core.PerimeterProject project) {
+        if (invalid || project == null) throw new IllegalStateException("Construction crew history is unavailable");
+        return crew.members(project);
+    }
+    boolean suspendedCrewMember(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        if (invalid || project == null || worker == null) return false;
+        try { return crew.suspended(project, worker); } catch (IllegalArgumentException conflict) { return false; }
+    }
+    boolean rejoiningCrewMember(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        if (invalid || project == null || worker == null) return false;
+        try { return crew.rejoining(project, worker); } catch (IllegalArgumentException conflict) { return false; }
+    }
+    int crewRejoinStage(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        if (invalid || project == null || worker == null) return -1;
+        try { return crew.rejoinStage(project, worker); } catch (IllegalArgumentException conflict) { return -1; }
+    }
+    /** Stage intent precedes worker-side writes; final activation is a separate operation. */
+    boolean beginCrewStage(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        if (worker == null || !matchesProjectLease(project) || !matchesProjectReservation(project)) return false;
+        try {
+            if (assignments.known(project, worker) || !crew.beginStage(project, worker)) return false;
+            setDirty(); return true;
+        } catch (IllegalArgumentException conflict) { return false; }
+    }
+    boolean crewStageGranted(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        if (invalid || project == null || worker == null) return false;
+        try { return crew.stageGranted(project, worker); } catch (IllegalArgumentException conflict) { return false; }
+    }
+    UUID unresolvedCrewProject(UUID worker) {
+        if (invalid) throw new IllegalStateException("Construction crew history is unavailable");
+        return crew.unresolvedProject(worker);
+    }
+    boolean resolveCrewAssociation(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        if (invalid || project == null || worker == null) return false;
+        try { if (!crew.resolve(project, worker)) return false; setDirty(); return true; }
+        catch (IllegalArgumentException conflict) { return false; }
+    }
+    boolean resolveCrewAssociation(com.devfarinsky.siegeoverhaul.core.PerimeterTerminalReceipt terminal, UUID worker) {
+        if (!knownTerminalCrewMember(terminal, worker)) return false;
+        try { if (!crew.resolve(terminal, worker)) return false; setDirty(); return true; }
+        catch (IllegalArgumentException conflict) { return false; }
+    }
+    /** Exact per-worker cleanup, including a helper later promoted to coordinator. Never a work lease. */
+    Set<UUID> workerCleanupAreas(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        if (invalid || project == null || worker == null) throw new IllegalStateException("Construction cleanup identity unavailable");
+        Set<UUID> result = new HashSet<>();
+        for (var stage : project.stages())
+            if (assignments.areaKnown(project, worker, stage.areaId()) || crew.areaKnown(project, worker, stage.areaId())) result.add(stage.areaId());
+        return Set.copyOf(result);
+    }
+    Set<UUID> workerCleanupAreas(com.devfarinsky.siegeoverhaul.core.PerimeterTerminalReceipt terminal, UUID worker) {
+        if (invalid || terminal == null || worker == null || !sameGeneration(terminal.cleanup().ledgerGeneration()))
+            throw new IllegalStateException("Terminal construction cleanup identity unavailable");
+        Set<UUID> result = new HashSet<>();
+        for (var stage : terminal.stages())
+            if (assignments.areaKnown(terminal, worker, stage.areaId()) || crew.areaKnown(terminal, worker, stage.areaId())) result.add(stage.areaId());
+        return Set.copyOf(result);
+    }
+    /** Actual destruction of a suspended/rejoining actor may concern an older explicitly granted child. */
+    boolean markHistoricalCrewBuilderDestroyed(com.devfarinsky.siegeoverhaul.core.PerimeterProject project,
+                                               UUID worker, UUID area, UUID expectedGeneration) {
+        if (!sameGeneration(expectedGeneration) || !matchesProjectIdentity(project)
+                || !(suspendedCrewMember(project, worker) || rejoiningCrewMember(project, worker))
+                || !crewMemberAreaKnown(project, worker, area)) return false;
+        int stage = project.stages().stream().filter(s -> s.areaId().equals(area)).mapToInt(s -> s.index()).findFirst().orElse(-1);
+        try { if (!crew.destroyed(project, worker, area, stage)) return false; setDirty(); return true; }
+        catch (IllegalArgumentException conflict) { return false; }
+    }
+    boolean markHistoricalCrewBuilderDestroyed(com.devfarinsky.siegeoverhaul.core.PerimeterTerminalReceipt terminal,
+                                               UUID worker, UUID area, UUID expectedGeneration) {
+        if (!sameGeneration(expectedGeneration) || !terminalCrewMemberAreaKnown(terminal, worker, area)) return false;
+        int stage = terminal.stages().stream().filter(s -> s.areaId().equals(area)).mapToInt(s -> s.index()).findFirst().orElse(-1);
+        try { if (!crew.destroyed(terminal, worker, area, stage)) return false; setDirty(); return true; }
+        catch (IllegalArgumentException conflict) { return false; }
+    }
+
     /** Membership is only a selector; native placement still requires the exact live project/worker authorities. */
     Set<UUID> crewMembers(com.devfarinsky.siegeoverhaul.core.PerimeterProject project) {
         if (invalid || project == null) throw new IllegalStateException("Construction crew history is unavailable");
@@ -327,6 +433,14 @@ final class ConstructionEditLedger extends SavedData {
         if (invalid || worker == null) return null;
         try { return crew.pendingProject(worker); }
         catch (IllegalArgumentException conflictingIdentity) { return null; }
+    }
+    /** Fresh checks must pass first; migration grants only the saved original admission stage. */
+    boolean preparePendingCrewAdmission(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {
+        if (worker == null || !matchesProjectLease(project) || !matchesProjectReservation(project)) return false;
+        try {
+            if (assignments.known(project, worker) || !crew.preparePendingAdmission(project, worker)) return false;
+            setDirty(); return true;
+        } catch (IllegalArgumentException conflictingIdentity) { return false; }
     }
     /** Called last, only after exact worker hooks, receipts and native area assignment have been verified. */
     boolean activateCrewMember(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID worker) {

@@ -29,10 +29,11 @@ class ConstructionCrewLedgerTest extends MinecraftTestSupport {
 
     private Fixture running() { return running(new ConstructionEditLedger(), 0); }
 
-    private Fixture running(ConstructionEditLedger ledger, int chunkX) {
+    private Fixture running(ConstructionEditLedger ledger, int chunkX) { return running(ledger, chunkX, 500); }
+    private Fixture running(ConstructionEditLedger ledger, int chunkX, int capacity) {
         Set<ChunkPos> territory = Set.of(new ChunkPos(chunkX, 0));
         var plan = PerimeterBlueprint.create(territory, (x, z) -> PerimeterBlueprint.Surface.ready(65), PerimeterBlueprint.Palette.COBBLESTONE);
-        var layout = PerimeterStageLayout.partition(plan, stage -> stage.targets().size() <= 500 ? null : "Fixture stage capacity");
+        var layout = PerimeterStageLayout.partition(plan, stage -> stage.targets().size() <= capacity ? null : "Fixture stage capacity");
         var header = PerimeterProject.Header.newCommission(UUID.randomUUID(), 1, UUID.randomUUID(), UUID.randomUUID(),
                 "team:crew", new BlockPos(chunkX * 16 + 8, 65, 8), "crew", 1, "a".repeat(64), territory);
         Map<Long, BlockState> before = new HashMap<>(), clearance = new HashMap<>();
@@ -464,6 +465,133 @@ class ConstructionCrewLedgerTest extends MinecraftTestSupport {
         assertFalse(loaded.leaseProjectStage(canceled)); assertFalse(loaded.matchesProjectLease(canceled));
         assertTrue(loaded.edited(p.header().projectId())); assertTrue(loaded.retired(area));
         assertEquals(before, loaded.save(new CompoundTag())); assertFalse(loaded.isDirty());
+    }
+
+    @Test void coreSideMigrationFenceSurvivesNewerStageProgressWithAnOlderUnsealedCrewSave() {
+        var f = running(new ConstructionEditLedger(), 0, 100); var p = f.project(); UUID helper = UUID.randomUUID();
+        assertTrue(enlist(f.ledger(), p, helper));
+        var legacyLedger = f.ledger().save(new CompoundTag()); var legacyCrew = legacyLedger.getCompound("BuilderCrew");
+        legacyCrew.putInt("Version", 2);
+        var member = legacyCrew.getList("Projects", Tag.TAG_COMPOUND).getCompound(0).getList("Members", Tag.TAG_COMPOUND).getCompound(0);
+        for (String key : new String[]{"Suspended", "RejoinStage", "GrantedStages", "LegacyEnd", "Resolved"}) member.remove(key);
+        final ConstructionEditLedger[] active = {ConstructionEditLedger.load(legacyLedger)};
+        var data = new com.devfarinsky.siegeoverhaul.RaidSavedData(); data.siegeCores.put(p.header().coreKey(), f.core());
+        var server = org.mockito.Mockito.mock(net.minecraft.server.MinecraftServer.class);
+        var level = org.mockito.Mockito.mock(net.minecraft.server.level.ServerLevel.class);
+        org.mockito.Mockito.when(level.getServer()).thenReturn(server);
+        org.mockito.Mockito.when(server.overworld()).thenReturn(level);
+        try (var ledgers = org.mockito.Mockito.mockStatic(ConstructionEditLedger.class, org.mockito.Mockito.CALLS_REAL_METHODS);
+             var saves = org.mockito.Mockito.mockStatic(com.devfarinsky.siegeoverhaul.RaidSavedData.class)) {
+            ledgers.when(() -> ConstructionEditLedger.get(level)).thenAnswer(call -> active[0]);
+            saves.when(() -> com.devfarinsky.siegeoverhaul.RaidSavedData.get(server)).thenReturn(data);
+            assertTrue(NativePerimeterProjects.sealCrewHistory(level, p));
+            assertEquals(0, f.core().getCompound("SiegeCrewLegacySealsV1").getCompound(p.header().projectId().toString()).getInt("End"));
+            for (int i = 0; i < 3; i++) {
+                var verified = p.verifyStage(p.check(), p.expectedStageReceipt());
+                PerimeterProjectStore.replace(f.core(), p.check(), verified, () -> {});
+                active[0].retire(p.active().areaId(), true);
+                var next = verified.retireVerifiedStage(verified.check()); PerimeterProjectStore.replace(f.core(), verified.check(), next, () -> {});
+                assertTrue(active[0].leaseProjectStage(next)); p = PerimeterProjectStore.replace(f.core(), next.check(), next.activate(next.check()), () -> {});
+            }
+            var newerLease = active[0].save(new CompoundTag()); newerLease.put("BuilderCrew", legacyCrew.copy());
+            active[0] = ConstructionEditLedger.load(newerLease);
+            assertTrue(active[0].hasUnsealedCrewHistory(p));
+            assertTrue(NativePerimeterProjects.sealCrewHistory(level, p));
+            assertEquals(Set.of(p.stages().get(0).areaId()), active[0].workerCleanupAreas(p, helper));
+            assertFalse(active[0].crewStageGranted(p, helper));
+            var sealed = active[0].save(new CompoundTag()); assertTrue(NativePerimeterProjects.sealCrewHistory(level, p));
+            assertEquals(sealed, active[0].save(new CompoundTag()));
+            active[0] = ConstructionEditLedger.load(newerLease);
+            f.core().getCompound("SiegeCrewLegacySealsV1").getCompound(p.header().projectId().toString()).putUUID("Ledger", UUID.randomUUID());
+            var before = active[0].save(new CompoundTag()); assertFalse(NativePerimeterProjects.sealCrewHistory(level, p));
+            assertEquals(before, active[0].save(new CompoundTag()));
+        } finally { org.mockito.Mockito.clearInvocations(server, level); }
+    }
+
+    @Test void suspendedRejoinIntentCannotWorkOrPromoteUntilFinalActivationAndSurvivesReload() {
+        var f = running(); var ledger = f.ledger(); var p = f.project(); UUID helper = UUID.randomUUID();
+        assertTrue(enlist(ledger, p, helper)); var manifest = p.save(); var bank = f.core().getLong("BankEmeralds");
+        assertTrue(ledger.suspendCrew(p, helper)); assertTrue(ledger.suspendedCrewMember(p, helper));
+        assertTrue(ledger.crewMembers(p).isEmpty()); assertTrue(ledger.reservedCrewMembers(p).isEmpty());
+        assertFalse(ledger.crewStageGranted(p, helper)); assertFalse(ledger.canTransferCrewCoordinator(p,
+                p.header().builder(), helper, PerimeterBuilderAssignments.Cause.UNAVAILABLE));
+        ledger = ConstructionEditLedger.load(ledger.save(new CompoundTag()));
+        assertTrue(ledger.beginCrewStage(p, helper)); assertTrue(ledger.rejoiningCrewMember(p, helper));
+        assertEquals(p.activeStage(), ledger.crewRejoinStage(p, helper)); assertFalse(ledger.crewMember(p, helper));
+        var intent = ledger.save(new CompoundTag()); assertTrue(ledger.beginCrewStage(p, helper)); assertEquals(intent, ledger.save(new CompoundTag()));
+        assertFalse(ledger.cancelPendingCrewMember(p, helper)); assertFalse(ledger.canTransferCrewCoordinator(p,
+                p.header().builder(), helper, PerimeterBuilderAssignments.Cause.UNAVAILABLE));
+        ledger = ConstructionEditLedger.load(intent); assertTrue(ledger.activateCrewMember(p, helper)); assertTrue(ledger.crewStageGranted(p, helper));
+        assertEquals(manifest, p.save()); assertEquals(bank, f.core().getLong("BankEmeralds"));
+    }
+
+    @Test void historicalSuspendedDeathNeedsItsExactGrantedAreaAndNeverTheCurrentLease() {
+        var f = running(new ConstructionEditLedger(), 0, 100); var ledger = f.ledger(); var p = f.project(); UUID helper = UUID.randomUUID();
+        assertTrue(enlist(ledger, p, helper)); UUID first = p.active().areaId(); assertTrue(ledger.suspendCrew(p, helper));
+        for (int i = 0; i < 3; i++) {
+            var verified = p.verifyStage(p.check(), p.expectedStageReceipt()); ledger.retire(p.active().areaId(), true);
+            var next = verified.retireVerifiedStage(verified.check()); assertTrue(ledger.leaseProjectStage(next)); p = next.activate(next.check());
+        }
+        assertFalse(ledger.markCrewBuilderDestroyed(p, helper, first, ledger.generation()));
+        assertFalse(ledger.markHistoricalCrewBuilderDestroyed(p, helper, p.active().areaId(), ledger.generation()));
+        assertFalse(ledger.markHistoricalCrewBuilderDestroyed(p, helper, first, UUID.randomUUID()));
+        assertTrue(ledger.markHistoricalCrewBuilderDestroyed(p, helper, first, ledger.generation()));
+        var loaded = ConstructionEditLedger.load(ledger.save(new CompoundTag()));
+        assertNotNull(loaded.crewBuilderDestructionReceipt(p, helper)); assertNull(loaded.projectBuilderDestructionReceipt(p));
+        assertTrue(loaded.matchesProjectLease(p)); assertFalse(loaded.beginCrewStage(p, helper));
+        assertEquals(Set.of(first), loaded.workerCleanupAreas(p, helper));
+    }
+
+    @Test void resolvedTerminalHelperCanJoinAnotherProjectButRetainsTheOriginalCleanupTombstone() {
+        var f = running(); var ledger = f.ledger(); var p = f.project(); UUID helper = UUID.randomUUID();
+        assertTrue(enlist(ledger, p, helper)); assertTrue(ledger.suspendCrew(p, helper));
+        var other = running(ledger, 3); assertFalse(enlist(ledger, other.project(), helper));
+        var canceled = p.cancel(p.check(), "Owner canceled");
+        assertTrue(ledger.resolveCrewAssociation(canceled, helper)); assertNull(ledger.unresolvedCrewProject(helper));
+        assertTrue(ledger.knownCrewMember(p, helper)); assertEquals(Set.of(p.active().areaId()), ledger.workerCleanupAreas(canceled, helper));
+        assertFalse(ledger.beginCrewStage(p, helper)); assertFalse(enlist(ledger, p, helper));
+        assertTrue(enlist(ledger, other.project(), helper));
+        var loaded = ConstructionEditLedger.load(ledger.save(new CompoundTag()));
+        assertEquals(other.project().header().projectId(), loaded.unresolvedCrewProject(helper));
+        assertTrue(loaded.crewStageGranted(other.project(), helper)); assertFalse(loaded.crewStageGranted(p, helper));
+    }
+
+    @Test void aSuspendedCoordinatorConflictInvalidatesRatherThanDiscardingEitherHistory() {
+        var f = running(); var ledger = f.ledger(); var p = f.project(); UUID helper = UUID.randomUUID();
+        assertTrue(enlist(ledger, p, helper)); assertTrue(ledger.transferCrewCoordinator(p, p.header().builder(), helper,
+                PerimeterBuilderAssignments.Cause.UNAVAILABLE));
+        var saved = ledger.save(new CompoundTag());
+        var member = saved.getCompound("BuilderCrew").getList("Projects", Tag.TAG_COMPOUND).getCompound(0)
+                .getList("Members", Tag.TAG_COMPOUND).getCompound(0);
+        member.putBoolean("Suspended", true); member.putInt("RetiredStage", -1);
+        var loaded = ConstructionEditLedger.load(saved); assertFalse(loaded.sameGeneration(ledger.generation()));
+        assertFalse(loaded.suspendedCrewMember(p, helper)); assertFalse(loaded.beginCrewStage(p, helper));
+    }
+
+    @Test void everyHistoricalCoordinatorRejectsResumableCrewStateAndLiveReadmission() {
+        var f = running(); var ledger = f.ledger(); var p = f.project(); UUID first = UUID.randomUUID(), latest = UUID.randomUUID();
+        assertTrue(enlist(ledger, p, first)); assertTrue(enlist(ledger, p, latest));
+        assertTrue(ledger.transferCrewCoordinator(p, p.header().builder(), first, PerimeterBuilderAssignments.Cause.UNAVAILABLE));
+        assertTrue(ledger.transferCrewCoordinator(p, first, latest, PerimeterBuilderAssignments.Cause.DISMISSED));
+        var authentic = ledger.save(new CompoundTag());
+        assertTrue(ConstructionEditLedger.load(authentic).sameGeneration(ledger.generation()));
+        for (UUID identity : new UUID[]{p.header().builder(), first, latest}) {
+            assertFalse(ledger.enlistCrew(p, identity)); assertFalse(ledger.beginCrewStage(p, identity));
+            assertFalse(ledger.preparePendingCrewAdmission(p, identity)); assertFalse(ledger.activateCrewMember(p, identity));
+        }
+        assertEquals(authentic, ledger.save(new CompoundTag()));
+        for (UUID identity : new UUID[]{first, latest}) for (String state : new String[]{"ACTIVE", "SUSPENDED", "REJOIN_PENDING"}) {
+            var damaged = authentic.copy();
+            for (Tag raw : crewProject(damaged).getList("Members", Tag.TAG_COMPOUND)) {
+                var record = (CompoundTag) raw; if (!identity.equals(record.getUUID("Worker"))) continue;
+                record.putBoolean("Active", !state.equals("SUSPENDED")); record.putBoolean("Ready", true);
+                record.putBoolean("Suspended", state.equals("SUSPENDED")); record.putBoolean("Resolved", false);
+                record.putInt("RetiredStage", -1); record.putInt("RejoinStage", state.equals("REJOIN_PENDING") ? p.activeStage() : -1);
+            }
+            var rejected = ConstructionEditLedger.load(damaged);
+            assertFalse(rejected.sameGeneration(ledger.generation()), identity + " / " + state);
+            assertFalse(rejected.crewStageGranted(p, identity)); assertFalse(rejected.beginCrewStage(p, identity));
+        }
     }
 
     private boolean enlist(ConstructionEditLedger ledger, PerimeterProject project, UUID worker) {

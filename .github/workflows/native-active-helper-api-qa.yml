@@ -1,0 +1,69 @@
+name: Native Active Helper API Evidence (Prepare Only)
+
+# Explicit prerequisite capture. This workflow NEVER launches a fixture or authorizes transfer.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [release/4.53.0-alpha.3]
+    types: [opened, reopened, synchronize, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-active-helper-api-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  capture-api:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.number == 295 &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.base.ref == 'release/4.53.0-alpha.3' &&
+       contains(github.event.pull_request.labels.*.name, 'native-active-helper-api-qa'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Check out exact source without retained credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up read-only Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+      - name: Prepare fresh defaults and evidence identities without a world
+        run: |
+          set -euo pipefail
+          test ! -e build/native-handoff-qa/client
+          test ! -e build/native-active-helper-api
+          python3 scripts/prepare-native-client-defaults.py --mode staged-handoff --smallships-version 2.0.0-b1.4
+          mkdir -p build/native-active-helper-api/evidence
+          git rev-parse HEAD > build/native-active-helper-api/evidence/source-commit.txt
+          git rev-parse HEAD^{tree} > build/native-active-helper-api/evidence/source-tree.txt
+          java -version 2> build/native-active-helper-api/evidence/java-version.txt
+          javap -version > build/native-active-helper-api/evidence/javap-version.txt
+      - name: Compile and export the exact prepared client runtime without launching Minecraft
+        run: |
+          set -euo pipefail
+          timeout --signal=KILL 1800s ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=staged-handoff -PnativeSharedCrewQa=true -PnativeActiveHelperApiQa=true prepareNativeActiveHelperApiEvidence 2>&1 | tee build/native-active-helper-api/evidence/prepare-console.log
+      - name: Capture exact transfer, forced-ticket, unload and worker inheritance bytecode for review
+        run: |
+          set -euo pipefail
+          python3 scripts/capture-native-helper-api.py build/native-active-helper-api/evidence/resolved-runtime.json build/native-active-helper-api/evidence/api-capture
+          test ! -e build/native-handoff-qa/client/saves
+          test ! -e build/native-handoff-qa/evidence/result.json
+      - name: Upload text evidence only, never JARs or worlds
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-active-helper-api-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/native-active-helper-api/evidence/
+          if-no-files-found: error
+          retention-days: 7

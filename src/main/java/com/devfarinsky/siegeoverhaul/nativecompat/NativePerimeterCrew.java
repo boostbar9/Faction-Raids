@@ -28,11 +28,19 @@ final class NativePerimeterCrew {
                 || project.payment() == null || project.active() == null) return;
         var ledger = ConstructionEditLedger.get(level);
         if (!ledger.matchesProjectLease(project) || !NativeConstructionGuard.matchesProjectSnapshot(area, project)) return;
+        if (!reconcileAvailability(level, project)) return;
+        // Existing suspended identities are considered before any fresh hire; no new membership is minted.
+        for (UUID id : ledger.suspendedCrewMembers(project)) {
+            if (ledger.reservedCrewMembers(project).size() >= PerimeterBuilderCrew.MAX_HELPERS) break;
+            if (level.getEntity(id) instanceof Mob helper && helper.isAlive() && workCommand(helper)
+                    && project.header().owner().equals(WorkersBridge.readWorkerOwner(helper)))
+                NativeConstructionGuard.resumeCrewMember(owner, helper, area, project);
+        }
         for (UUID id : ledger.reservedCrewMembers(project)) {
             Entity found = level.getEntity(id);
             if (!(found instanceof Mob helper)) {
-                // Revoke work authority, retaining cleanup-only history. This is not a death receipt.
-                if (!ledger.pendingCrewMember(project, id)) ledger.retireCrew(project, id);
+                // Revoke work authority while retaining resumable identity. This is not a death receipt.
+                if (!ledger.pendingCrewMember(project, id)) ledger.suspendCrew(project, id);
                 continue; // An incomplete admission remains replayable/withdrawable after the actor reloads.
             }
             if (!helper.isAlive() || !project.header().owner().equals(WorkersBridge.readWorkerOwner(helper))) {
@@ -55,6 +63,7 @@ final class NativePerimeterCrew {
         for (Mob helper : candidates) {
             if (ledger.reservedCrewMembers(project).size() >= PerimeterBuilderCrew.MAX_HELPERS) break;
             if (NativePerimeterProjects.assignedBuilder(helper, project) || ledger.knownCrewMember(project, helper.getUUID())
+                    || ledger.unresolvedCrewProject(helper.getUUID()) != null
                     || !NativePerimeterProjects.idleReplacement(helper) || PerimeterProjectLink.reserved(helper)
                     || NativeConstructionGuard.hasProtectedReceipt(helper) || WorkersBridge.hasActiveBuildArea(helper)
                     || helper.getPersistentData().contains(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
@@ -89,11 +98,11 @@ final class NativePerimeterCrew {
                     || !ledger.canTransferCrewCoordinator(project, prior, id, cause)
                     || NativeConstructionGuard.continuationProblem(helper, project) != null
                     || !NativeConstructionGuard.readyForRetirement(helper)) continue;
-            Entity current = NativeConstructionGuard.currentArea(helper);
-            if (current != null && project.stages().stream().noneMatch(stage -> stage.areaId().equals(current.getUUID()))) continue;
+            var allowed = ledger.workerCleanupAreas(project, id);
+            if (!NativePerimeterProjects.cleanupAssociationsMatch(helper, allowed, project.header().owner(), ledger.generation())) continue;
             boolean detached = true;
-            for (var stage : project.stages())
-                if (!NativeConstructionGuard.retireBuilderAssociation(helper, stage.areaId())) { detached = false; break; }
+            for (UUID stage : allowed)
+                if (!NativeConstructionGuard.retireBuilderAssociation(helper, stage)) { detached = false; break; }
             if (detached && ledger.transferCrewCoordinator(project, prior, id, cause)) return true;
         }
         return false;
@@ -103,7 +112,29 @@ final class NativePerimeterCrew {
         return worker != null && (!project.header().owner().equals(WorkersBridge.readWorkerOwner(worker)) || !workCommand(worker));
     }
 
-    private static boolean workCommand(Mob worker) {
+    /** Absence is not proof of death, dismissal, or cleanup, including at stage/terminal boundaries. */
+    static boolean reconcileAvailability(ServerLevel level, PerimeterProject project) {
+        if (!NativePerimeterProjects.sealCrewHistory(level, project)) return false;
+        var ledger = ConstructionEditLedger.get(level);
+        var retained = new java.util.HashSet<>(ledger.reservedCrewMembers(project));
+        retained.addAll(ledger.suspendedCrewMembers(project));
+        for (UUID id : retained) {
+            if (ledger.pendingCrewMember(project, id)) continue;
+            Entity found = level.getEntity(id);
+            if (!(found instanceof Mob helper) || !helper.isAlive()) { ledger.suspendCrew(project, id); continue; }
+            UUID owner = WorkersBridge.readWorkerOwner(helper); Integer command = readCommand(helper);
+            if (owner == null || command == null) { NativeConstructionGuard.releaseCrewWork(helper); ledger.suspendCrew(project, id); continue; }
+            if (!project.header().owner().equals(owner) || command != 0 && command != 6) {
+                NativeConstructionGuard.releaseCrewWork(helper); ledger.retireCrew(project, id);
+            }
+        }
+        return true;
+    }
+    private static Integer readCommand(Mob worker) {
+        try { return ((Number) worker.getClass().getMethod("getFollowState").invoke(worker)).intValue(); }
+        catch (ReflectiveOperationException | RuntimeException unavailable) { return null; }
+    }
+    static boolean workCommand(Mob worker) {
         try {
             int command = ((Number) worker.getClass().getMethod("getFollowState").invoke(worker)).intValue();
             return command == 0 || command == 6;
@@ -114,7 +145,7 @@ final class NativePerimeterCrew {
         var ledger = ConstructionEditLedger.get(level);
         for (UUID id : ledger.crewMembers(project)) {
             if (!(level.getEntity(id) instanceof com.talhanation.workers.entities.BuilderEntity helper)) {
-                ledger.retireCrew(project, id); continue;
+                ledger.suspendCrew(project, id); continue;
             }
             if (!NativePerimeterProjects.participantLinkMatches(helper, project)
                     || !project.header().owner().equals(WorkersBridge.readWorkerOwner(helper))) return false;
@@ -133,7 +164,8 @@ final class NativePerimeterCrew {
     private static boolean withdrawPending(ServerLevel level, PerimeterProject project, Mob helper) {
         var ledger = ConstructionEditLedger.get(level);
         if (!ledger.pendingCrewMember(project, helper.getUUID()) || helper.level() != level) return false;
-        var stages = project.stages().stream().map(PerimeterProject.Stage::areaId).toList();
+        var stages = ledger.workerCleanupAreas(project, helper.getUUID());
+        if (!NativePerimeterProjects.cleanupAssociationsMatch(helper, stages, project.header().owner(), ledger.generation())) return false;
         UUID receipt = NativeConstructionGuard.protectedReceiptArea(helper);
         Entity current = NativeConstructionGuard.currentArea(helper);
         boolean ownReceipt = receipt != null && stages.contains(receipt);
@@ -155,6 +187,7 @@ final class NativePerimeterCrew {
     /** Every loaded member drains its own inventory lifecycle; missing members are not assumed cleaned. */
     static boolean retireStage(ServerLevel level, PerimeterProject project, UUID area) {
         var ledger = ConstructionEditLedger.get(level);
+        if (!reconcileAvailability(level, project)) return false;
         for (UUID id : ledger.reservedCrewMembers(project)) {
             Entity found = level.getEntity(id);
             if (!(found instanceof Mob helper) || !helper.isAlive()) return false;
@@ -162,12 +195,17 @@ final class NativePerimeterCrew {
                 if (!withdrawPending(level, project, helper)) return false;
                 continue;
             }
-            if (!NativePerimeterProjects.participantLinkMatches(helper, project)) return false;
+            boolean rejoining = ledger.rejoiningCrewMember(project, id);
+            if (!(NativePerimeterProjects.participantLinkMatches(helper, project)
+                    || rejoining && PerimeterProjectLink.matches(helper, project, id))) return false;
+            if (!NativePerimeterProjects.cleanupAssociationsMatch(helper, ledger.workerCleanupAreas(project, id),
+                    project.header().owner(), ledger.generation())) return false;
             if (!area.equals(NativeConstructionGuard.protectedReceiptArea(helper))) continue;
             Entity current = NativeConstructionGuard.currentArea(helper);
             if (current != null && !current.getUUID().equals(area)) return false;
             if (!NativeConstructionGuard.readyForRetirement(helper)
                     || !NativeConstructionGuard.retireBuilderAssociation(helper, area)) return false;
+            if (rejoining) ledger.suspendCrew(project, id);
         }
         return true;
     }

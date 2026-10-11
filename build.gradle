@@ -352,3 +352,6 @@ if (providers.gradleProperty('nativeServerQa').map { it.toBoolean() }.getOrElse(
 
 // Separate, opt-in first-slice grading QA; never included in the shipped JAR.
 apply from: 'gradle/native-earthworks-qa.gradle'
+
+// Opt-in prepare-only transfer/ticket API evidence; no gameplay or shipped dependency.
+apply from: 'gradle/native-active-helper-api-qa.gradle'

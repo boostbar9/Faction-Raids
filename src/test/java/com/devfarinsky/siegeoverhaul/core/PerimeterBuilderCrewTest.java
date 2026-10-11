@@ -64,7 +64,8 @@ class PerimeterBuilderCrewTest extends MinecraftTestSupport {
         var first = running(); var second = running(); var crew = new PerimeterBuilderCrew(ledgerGeneration); UUID a = UUID.randomUUID();
         assertNotEquals(first.header().projectId(), second.header().projectId());
         assertTrue(enlist(crew, first, a)); assertFalse(enlist(crew, second, a));
-        assertTrue(crew.retire(first, a)); assertTrue(enlist(crew, second, a));
+        assertTrue(crew.retire(first, a)); assertFalse(enlist(crew, second, a));
+        assertTrue(crew.resolve(first, a)); assertTrue(enlist(crew, second, a));
         assertTrue(crew.known(first, a)); assertEquals(Set.of(a), crew.active(second));
     }
 
@@ -92,6 +93,7 @@ class PerimeterBuilderCrewTest extends MinecraftTestSupport {
         oversized.getList("Projects", Tag.TAG_COMPOUND).getCompound(0).getList("Members", Tag.TAG_COMPOUND)
                 .getCompound(0).putInt("AdmittedStage", PerimeterStageLayout.MAX_STAGES);
         assertThrows(IllegalArgumentException.class, () -> PerimeterBuilderCrew.load(oversized, ledgerGeneration));
+        memberRecord(ahead).putLongArray("GrantedStages", new long[]{1L << (project.activeStage() + 1), 0, 0, 0});
         var restored = PerimeterBuilderCrew.load(ahead, ledgerGeneration);
         assertThrows(IllegalArgumentException.class, () -> restored.active(project));
     }
@@ -159,6 +161,7 @@ class PerimeterBuilderCrewTest extends MinecraftTestSupport {
         CompoundTag saved = oneMemberSnapshot();
         CompoundTag template = projectRecord(saved).copy();
         template.getList("Members", Tag.TAG_COMPOUND).getCompound(0).putBoolean("Active", false);
+        template.getList("Members", Tag.TAG_COMPOUND).getCompound(0).putBoolean("Resolved", true);
         ListTag projects = new ListTag(); saved.put("Projects", projects);
         for (int i = 0; i < PerimeterBuilderCrew.MAX_PROJECTS; i++) {
             CompoundTag entry = template.copy(); entry.putUUID("Project", UUID.randomUUID()); projects.add(entry);
@@ -189,7 +192,7 @@ class PerimeterBuilderCrewTest extends MinecraftTestSupport {
         assertRequiredFields(saved, Function.identity(), Set.of("Version", "LedgerGeneration", "Projects"));
         assertRequiredFields(saved, PerimeterBuilderCrewTest::projectRecord,
                 Set.of("Project", "Generation", "Hash", "Original", "Members"));
-        assertRequiredFields(saved, PerimeterBuilderCrewTest::memberRecord, Set.of("Worker", "Active", "Ready", "Withdrawn", "RetiredStage", "AdmittedStage"));
+        assertRequiredFields(saved, PerimeterBuilderCrewTest::memberRecord, Set.of("Worker", "Active", "Ready", "Withdrawn", "RetiredStage", "AdmittedStage", "Suspended", "RejoinStage", "GrantedStages", "LegacyEnd", "Resolved"));
     }
 
     @Test void wrongListElementTypesAndEmptyMemberHistoryAreRejected() {
@@ -313,7 +316,7 @@ class PerimeterBuilderCrewTest extends MinecraftTestSupport {
 
     @Test void legacyMembershipLoadsReadyAndNewReadinessFieldsAreStrict() {
         var p = running(); var crew = new PerimeterBuilderCrew(ledgerGeneration); UUID worker = UUID.randomUUID(); assertTrue(enlist(crew, p, worker));
-        var legacy = crew.save(); legacy.putInt("Version", 1); memberRecord(legacy).remove("Ready"); memberRecord(legacy).remove("Withdrawn"); memberRecord(legacy).remove("RetiredStage");
+        var legacy = legacy(crew.save(), 1);
         assertTrue(PerimeterBuilderCrew.load(legacy, ledgerGeneration).active(p, worker));
         for (String field : new String[]{"Ready", "Withdrawn"}) {
             var malformed = crew.save(); memberRecord(malformed).putByte(field, (byte) 2);
@@ -346,6 +349,170 @@ class PerimeterBuilderCrewTest extends MinecraftTestSupport {
         var loaded = PerimeterBuilderCrew.load(crew.save(), ledgerGeneration);
         assertTrue(loaded.areaKnown(second, helper, zero)); assertFalse(loaded.areaKnown(second, helper, second.active().areaId()));
         assertTrue(loaded.known(second, helper));
+    }
+
+    @Test void suspensionRejoinAndRepeatedReloadHaveBoundedIdempotentHistory() {
+        var p = running(); var crew = new PerimeterBuilderCrew(ledgerGeneration); UUID id = UUID.randomUUID();
+        assertTrue(enlist(crew, p, id)); var paid = p.save();
+        for (int i = 0; i < 80; i++) {
+            assertTrue(crew.suspend(p, id)); assertEquals(p.header().projectId(), crew.unresolvedProject(id));
+            assertTrue(crew.reserved(p).isEmpty()); assertFalse(crew.active(p, id)); assertFalse(crew.stageGranted(p, id));
+            crew = PerimeterBuilderCrew.load(crew.save(), ledgerGeneration);
+            assertTrue(crew.beginStage(p, id)); assertTrue(crew.rejoining(p, id)); assertEquals(p.activeStage(), crew.rejoinStage(p, id));
+            var intent = crew.save(); assertTrue(crew.beginStage(p, id)); assertEquals(intent, crew.save());
+            assertFalse(crew.active(p, id)); assertFalse(crew.cancelPending(p, id));
+            crew = PerimeterBuilderCrew.load(crew.save(), ledgerGeneration);
+            assertTrue(crew.activate(p, id)); assertTrue(crew.stageGranted(p, id));
+            var active = crew.save(); assertTrue(crew.activate(p, id)); assertEquals(active, crew.save());
+        }
+        assertEquals(1, projectRecord(crew.save()).getList("Members", Tag.TAG_COMPOUND).size());
+        assertArrayEquals(new long[]{1, 0, 0, 0}, memberRecord(crew.save()).getLongArray("GrantedStages"));
+        assertEquals(paid, p.save());
+    }
+
+    @Test void skippedStagesNeverEnterCleanupScopeAndHistoricalActiveIsNotCurrentWork() {
+        var p = manyStages(); var crew = new PerimeterBuilderCrew(ledgerGeneration); UUID id = UUID.randomUUID();
+        assertTrue(enlist(crew, p, id)); UUID zero = p.active().areaId();
+        p = next(p); assertTrue(crew.active(p, id)); assertFalse(crew.stageGranted(p, id));
+        assertFalse(crew.areaKnown(p, id, p.active().areaId()));
+        assertTrue(crew.suspend(p, id)); p = next(next(p)); assertEquals(3, p.activeStage());
+        assertTrue(crew.beginStage(p, id)); assertFalse(crew.stageGranted(p, id)); assertTrue(crew.activate(p, id));
+        assertTrue(crew.areaKnown(p, id, zero)); assertTrue(crew.areaKnown(p, id, p.active().areaId()));
+        assertFalse(crew.areaKnown(p, id, p.stages().get(1).areaId())); assertFalse(crew.areaKnown(p, id, p.stages().get(2).areaId()));
+        assertArrayEquals(new long[]{9, 0, 0, 0}, memberRecord(crew.save()).getLongArray("GrantedStages"));
+    }
+
+    @Test void suspendedMemberWaitsForCapacityWithoutDisplacingAnotherMember() {
+        var p = running(); var crew = new PerimeterBuilderCrew(ledgerGeneration); UUID old = UUID.randomUUID();
+        assertTrue(enlist(crew, p, old)); assertTrue(crew.suspend(p, old)); UUID spare = UUID.randomUUID();
+        assertTrue(enlist(crew, p, spare)); assertTrue(enlist(crew, p, UUID.randomUUID())); assertTrue(enlist(crew, p, UUID.randomUUID()));
+        var before = crew.save(); assertFalse(crew.beginStage(p, old)); assertEquals(before, crew.save());
+        assertTrue(crew.suspend(p, spare)); assertTrue(crew.beginStage(p, old)); assertTrue(crew.activate(p, old));
+        assertEquals(3, crew.active(p).size());
+    }
+
+    @Test void terminalResolutionReleasesCrossProjectAssociationButNeverRecyclesOldIdentity() {
+        var p = running(); var other = running(); var crew = new PerimeterBuilderCrew(ledgerGeneration); UUID id = UUID.randomUUID();
+        assertTrue(enlist(crew, p, id)); assertTrue(crew.suspend(p, id)); assertFalse(enlist(crew, other, id));
+        var canceled = p.cancel(p.check(), "Canceled");
+        assertFalse(crew.beginStage(canceled, id)); assertTrue(crew.resolve(canceled, id)); assertNull(crew.unresolvedProject(id));
+        assertTrue(crew.areaKnown(canceled, id, p.active().areaId()));
+        var resolved = crew.save(); assertTrue(crew.resolve(canceled, id)); assertEquals(resolved, crew.save());
+        crew = PerimeterBuilderCrew.load(resolved, ledgerGeneration);
+        assertFalse(crew.beginStage(p, id)); assertFalse(enlist(crew, p, id)); assertTrue(enlist(crew, other, id));
+    }
+
+    @Test void historicalSuspendedDestructionUsesOnlyItsExplicitOldGrant() {
+        var p = manyStages(); var crew = new PerimeterBuilderCrew(ledgerGeneration); UUID id = UUID.randomUUID();
+        assertTrue(enlist(crew, p, id)); UUID old = p.active().areaId(); assertTrue(crew.suspend(p, id));
+        p = next(next(next(p)));
+        assertFalse(crew.destroyed(p, id, p.active().areaId(), p.activeStage()));
+        assertTrue(crew.destroyed(p, id, old, 0)); assertNotNull(crew.destructionReceipt(p, id));
+        crew = PerimeterBuilderCrew.load(crew.save(), ledgerGeneration);
+        assertFalse(crew.beginStage(p, id)); assertFalse(crew.active(p, id)); assertTrue(crew.areaKnown(p, id, old));
+    }
+
+    @Test void legacyPrefixSealsOnceAndRemainsCleanupOnlyAcrossStageProgress() {
+        var p = manyStages(); var crew = new PerimeterBuilderCrew(ledgerGeneration); UUID id = UUID.randomUUID();
+        assertTrue(enlist(crew, p, id)); crew = PerimeterBuilderCrew.load(legacy(crew.save(), 2), ledgerGeneration);
+        assertTrue(crew.hasUnsealedLegacy(p)); assertTrue(crew.active(p, id)); assertFalse(crew.stageGranted(p, id));
+        assertTrue(crew.sealLegacy(p)); assertFalse(crew.hasUnsealedLegacy(p));
+        p = next(next(next(p))); assertFalse(crew.sealLegacy(p));
+        assertEquals(0, memberRecord(crew.save()).getInt("LegacyEnd"));
+        assertFalse(crew.areaKnown(p, id, p.stages().get(1).areaId()));
+        assertTrue(crew.suspend(p, id)); assertTrue(crew.beginStage(p, id)); assertTrue(crew.activate(p, id));
+        assertTrue(crew.areaKnown(p, id, p.stages().get(0).areaId())); assertTrue(crew.areaKnown(p, id, p.active().areaId()));
+        assertFalse(crew.areaKnown(p, id, p.stages().get(2).areaId()));
+        assertDoesNotThrow(() -> PerimeterBuilderCrew.load(legacy(oneMemberSnapshot(), 1), ledgerGeneration));
+    }
+
+    @Test void legacyPendingAdmissionMigratesOnlyItsExactOriginalStageAndActivatesLast() {
+        var p = manyStages(); var crew = new PerimeterBuilderCrew(ledgerGeneration); UUID id = UUID.randomUUID();
+        assertTrue(crew.enlist(p, id)); var legacy = legacy(crew.save(), 2);
+        var loaded = PerimeterBuilderCrew.load(legacy, ledgerGeneration);
+        loaded = PerimeterBuilderCrew.load(loaded.save(), ledgerGeneration);
+        assertTrue(loaded.pending(p, id)); assertFalse(loaded.activate(p, id)); assertFalse(loaded.beginStage(p, id));
+        assertTrue(loaded.preparePendingAdmission(p, id));
+        assertTrue(loaded.pending(p, id)); assertFalse(loaded.active(p, id)); assertFalse(loaded.stageGranted(p, id));
+        assertFalse(loaded.rejoining(p, id)); assertEquals(-1, loaded.rejoinStage(p, id));
+        var intent = loaded.save(); assertTrue(loaded.preparePendingAdmission(p, id)); assertEquals(intent, loaded.save());
+        loaded = PerimeterBuilderCrew.load(intent, ledgerGeneration);
+        assertTrue(loaded.activate(p, id)); assertTrue(loaded.stageGranted(p, id));
+        var later = next(p); var stale = PerimeterBuilderCrew.load(legacy, ledgerGeneration); var before = stale.save();
+        assertFalse(stale.preparePendingAdmission(later, id)); assertFalse(stale.activate(later, id));
+        assertEquals(before, stale.save()); assertTrue(stale.sealLegacy(later));
+        assertTrue(stale.areaKnown(later, id, p.active().areaId())); assertFalse(stale.areaKnown(later, id, later.active().areaId()));
+        assertFalse(stale.preparePendingAdmission(later, id));
+    }
+
+    @Test void legacyInactiveIdentityNeverBecomesSuspendedAndUnboundLegacyRoundTrips() {
+        var p = running(); var crew = new PerimeterBuilderCrew(ledgerGeneration); UUID id = UUID.randomUUID();
+        assertTrue(enlist(crew, p, id)); assertTrue(crew.retire(p, id));
+        for (int version : new int[]{1, 2}) {
+            var loaded = PerimeterBuilderCrew.load(legacy(crew.save(), version), ledgerGeneration);
+            loaded = PerimeterBuilderCrew.load(loaded.save(), ledgerGeneration);
+            assertFalse(loaded.suspended(p, id)); assertFalse(loaded.suspend(p, id)); assertFalse(loaded.beginStage(p, id));
+            assertTrue(loaded.areaKnown(p, id, p.active().areaId()));
+        }
+    }
+
+    @Test void refusedLegacyBoundaryDoesNotPartiallySealEarlierMembers() {
+        var p = manyStages(); var crew = new PerimeterBuilderCrew(ledgerGeneration);
+        assertTrue(enlist(crew, p, UUID.randomUUID())); p = next(p); assertTrue(enlist(crew, p, UUID.randomUUID()));
+        var loaded = PerimeterBuilderCrew.load(legacy(crew.save(), 2), ledgerGeneration); var before = loaded.save(); var later = p;
+        assertThrows(IllegalArgumentException.class, () -> loaded.sealLegacy(later, 0));
+        assertEquals(before, loaded.save());
+    }
+
+    @Test void freshPendingCodecRejectsCleanupAuthorityPastTheOriginalAdmissionStage() {
+        var p = manyStages(); var crew = new PerimeterBuilderCrew(ledgerGeneration); UUID id = UUID.randomUUID();
+        assertTrue(crew.enlist(p, id));
+        for (String field : new String[]{"GrantedStages", "LegacyEnd"}) {
+            var bad = crew.save(); var m = memberRecord(bad);
+            if (field.equals("GrantedStages")) m.putLongArray(field, new long[]{3L, 0L, 0L, 0L});
+            else m.putInt(field, 1);
+            assertThrows(IllegalArgumentException.class, () -> PerimeterBuilderCrew.load(bad, ledgerGeneration), field);
+        }
+        var old = PerimeterBuilderCrew.load(legacy(crew.save(), 2), ledgerGeneration);
+        assertTrue(PerimeterBuilderCrew.load(old.save(), ledgerGeneration).pending(p, id));
+        assertTrue(old.sealLegacy(p));
+        var sealed = PerimeterBuilderCrew.load(old.save(), ledgerGeneration);
+        assertTrue(sealed.pending(p, id)); assertTrue(sealed.preparePendingAdmission(p, id));
+        assertTrue(PerimeterBuilderCrew.load(sealed.save(), ledgerGeneration).pending(p, id));
+    }
+
+    @Test void malformedNewLifecycleAndBitmapFieldsFailClosed() {
+        for (String field : new String[]{"Suspended", "Resolved", "RejoinStage", "GrantedStages", "LegacyEnd"}) {
+            var bad = oneMemberSnapshot(); var m = memberRecord(bad);
+            switch (field) {
+                case "Suspended", "Resolved" -> m.putBoolean(field, true);
+                case "RejoinStage" -> m.putInt(field, 2);
+                case "GrantedStages" -> m.putLongArray(field, new long[]{1});
+                case "LegacyEnd" -> m.putInt(field, -3);
+            }
+            assertThrows(IllegalArgumentException.class, () -> PerimeterBuilderCrew.load(bad, ledgerGeneration), field);
+        }
+    }
+
+    private static CompoundTag legacy(CompoundTag saved, int version) {
+        saved.putInt("Version", version);
+        for (Tag raw : saved.getList("Projects", Tag.TAG_COMPOUND))
+            for (Tag item : ((CompoundTag) raw).getList("Members", Tag.TAG_COMPOUND)) {
+                var m = (CompoundTag) item;
+                for (String key : new String[]{"Suspended", "RejoinStage", "GrantedStages", "LegacyEnd", "Resolved"}) m.remove(key);
+                if (version == 1) for (String key : new String[]{"Ready", "Withdrawn", "RetiredStage"}) m.remove(key);
+            }
+        return saved;
+    }
+    private PerimeterProject manyStages() {
+        var p = PerimeterProjectTest.project();
+        var layout = PerimeterStageLayout.partition(p.plan(), stage -> stage.targets().size() <= 100 ? null : "Small test stage");
+        var paid = PerimeterProject.prepare(p.header(), p.plan(), layout, p.before(), p.clearanceBefore()).paid(false);
+        return paid.activate(paid.check());
+    }
+    private static PerimeterProject next(PerimeterProject p) {
+        var verified = p.verifyStage(p.check(), p.expectedStageReceipt());
+        var waiting = verified.retireVerifiedStage(verified.check()); return waiting.activate(waiting.check());
     }
 
     private boolean enlist(PerimeterBuilderCrew crew, PerimeterProject project, UUID worker) {

@@ -93,6 +93,8 @@ class NativeCrewContinuationTest extends MinecraftTestSupport {
 
         /** Only the outer snapshot-match boundary is stubbed by resume tests, not resume itself. */
         void prepareResume() {
+            when(ledger.crewStageGranted(project, builder)).thenReturn(true);
+            when(ledger.workerCleanupAreas(project, builder)).thenReturn(Set.of(project.active().areaId()));
             when(owner.getUUID()).thenReturn(project.header().owner());
             when(area.level()).thenReturn(level); when(area.getUUID()).thenReturn(project.active().areaId());
             when(area.getPersistentData()).thenReturn(areaData);
