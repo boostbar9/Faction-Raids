@@ -118,6 +118,7 @@ public final class NativeActiveHelperQa {
     private static Map<String, List<Integer>> canceledStock;
     private static long terminalObservedBrackets;
     private static boolean terminalResolvedObserved;
+    private static volatile boolean canceledEvidenceSealed;
     private record Observation(BuilderEntity worker, UUID area, long tick, Set<Long> pending,
                                int cobble, int oak, int chestCobble, int chestOak, String state, boolean authorized, Entity receiptArea, Map<Long, BlockState> canceledTargets) {}
     private NativeActiveHelperQa() {}
@@ -180,7 +181,7 @@ public final class NativeActiveHelperQa {
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void serverTick(TickEvent.ServerTickEvent event) {
-        if (!ENABLED || finished || failure != null || event.phase != TickEvent.Phase.END || directory == null || ownerId == null) return;
+        if (!ENABLED || !observesNativeLifecycle() || failure != null || event.phase != TickEvent.Phase.END || directory == null || ownerId == null) return;
         try {
             var server = event.getServer(); var level = server.overworld();
             long tick = level.getGameTime();
@@ -492,10 +493,32 @@ public final class NativeActiveHelperQa {
                 REPORT.put("retainedPlacedBlocks", fixture.plan().blocks().size() - pending(level).size());
                 REPORT.put("paidFee", 64); REPORT.put("wholePlanCompleted", false); REPORT.put("finalMaterials", materialCensus(server, owner));
                 REPORT.put("auxiliaryIsolationFinal", NativeStagedHandoffFixture.auxiliaryIsolationSnapshot(level, fixture));
-                move(tick, Phase.FINISHED); action = Action.DONE;
+                move(tick, Phase.FINISHED); sealCanceledEvidence(server, tick); action = Action.DONE;
             }
             default -> throw new AssertionError("Unexpected canceled-absent phase");
         }
+    }
+
+    /** Case C's declared successful server-END cut; client shutdown can arrive on a later tick. */
+    private static boolean observesNativeLifecycle() {
+        return !finished && !(CANCELED_ABSENT && canceledEvidenceSealed);
+    }
+    private static void sealCanceledEvidence(MinecraftServer server, long tick) {
+        require(CANCELED_ABSENT && server.isSameThread() && phase == Phase.FINISHED && phaseAt == tick
+                && !canceledEvidenceSealed && failure == null && observation == null && !settledEndPending
+                && PENDING_LOADS.isEmpty() && RAW_LOADS.isEmpty() && terminalResolvedObserved
+                && Boolean.TRUE.equals(REPORT.get("boundedScenarioVerified")), "Cannot seal an incomplete canceled-helper observation");
+        transit.assertNoTickets(server);
+        require(EVENTS.stream().filter(value -> "terminal-native-bracket".equals(value.get("kind"))).count() == terminalObservedBrackets
+                && Objects.equals(REPORT.get("terminalObservedBrackets"), terminalObservedBrackets), "Final canceled observation counter differs");
+        REPORT.put("events", EVENTS.stream().map(Map::copyOf).toList());
+        REPORT.put("nativeWork", WORK.stream().map(Map::copyOf).toList());
+        REPORT.put("nativeWorkerJoins", JOINS.stream().map(Map::copyOf).toList());
+        require(REPORT.get("activeHelperTransitEvents") instanceof List<?>, "Missing final native transit evidence");
+        REPORT.put("activeHelperTransitEvents", List.copyOf((List<?>) REPORT.get("activeHelperTransitEvents")));
+        // The separate owned-ticket audit stays live: finish/stop must still record exact cleanup/zero checks.
+        // No game observation or native transfer callback may append after this successful server cut.
+        canceledEvidenceSealed = true;
     }
 
     private static void requireSettledNow(long tick) {
@@ -724,7 +747,7 @@ public final class NativeActiveHelperQa {
 
     @SubscribeEvent(priority = EventPriority.HIGHEST, receiveCanceled = true)
     public static void joined(EntityJoinLevelEvent event) {
-        if (!ENABLED || finished || fixture == null || event.getLevel().isClientSide()) return;
+        if (!ENABLED || !observesNativeLifecycle() || fixture == null || event.getLevel().isClientSide()) return;
         try {
             if (transit != null) transit.onJoin(event);
             if (!(event.getEntity() instanceof BuilderEntity worker) || !PLACEMENTS.containsKey(worker.getUUID())) return;
@@ -744,7 +767,7 @@ public final class NativeActiveHelperQa {
 
     @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
     public static void joinedAfterProduction(EntityJoinLevelEvent event) {
-        if (!ENABLED || finished || transit == null || event.getLevel().isClientSide()) return;
+        if (!ENABLED || !observesNativeLifecycle() || transit == null || event.getLevel().isClientSide()) return;
         try {
             transit.onJoined(event);
             if (!(event.getEntity() instanceof BuilderEntity worker) || !PLACEMENTS.containsKey(worker.getUUID())) return;
@@ -764,7 +787,7 @@ public final class NativeActiveHelperQa {
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void left(EntityLeaveLevelEvent event) {
-        if (!ENABLED || finished || transit == null || event.getLevel().isClientSide()) return;
+        if (!ENABLED || !observesNativeLifecycle() || transit == null || event.getLevel().isClientSide()) return;
         try { transit.onLeave(event); } catch (Throwable problem) { fail(problem); }
     }
 
@@ -773,7 +796,7 @@ public final class NativeActiveHelperQa {
         if (!ENABLED || transit == null) return;
         try {
             transit.cleanup(event.getServer()); transit.assertNoTickets(event.getServer());
-            if (phase != Phase.RELOADING || failure != null) return;
+            if (!observesNativeLifecycle() || phase != Phase.RELOADING || failure != null) return;
             var level = event.getServer().overworld(); flush(level);
             require(offline != null && WORKERS.get(helper).getRemovalReason() == Entity.RemovalReason.UNLOADED_TO_CHUNK,
                     "Saved while helper lacked confirmed offline custody");
@@ -787,7 +810,7 @@ public final class NativeActiveHelperQa {
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void started(ServerStartedEvent event) {
-        if (!ENABLED || phase != Phase.RELOADING || !stopObserved) return;
+        if (!ENABLED || !observesNativeLifecycle() || phase != Phase.RELOADING || !stopObserved) return;
         try {
             loadedAuthority = authority(event.getServer());
             loadedLedger = ConstructionEditLedger.get(event.getServer().overworld()).save(new CompoundTag()).copy();
@@ -798,7 +821,7 @@ public final class NativeActiveHelperQa {
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void living(LivingEvent.LivingTickEvent event) {
-        if (!ENABLED || finished || failure != null || accepted == null
+        if (!ENABLED || !observesNativeLifecycle() || failure != null || accepted == null
                 || !(event.getEntity().level() instanceof ServerLevel level) || level != level.getServer().overworld()) return;
         try {
             if (!footprintReady(level)) {
@@ -1155,6 +1178,7 @@ public final class NativeActiveHelperQa {
     }
     private static void move(long tick, Phase next) { phase = next; phaseAt = tick; record("phase", Map.of("phase", next.name(), "gameTime", tick)); }
     private static void record(String kind, Map<String, ?> data) {
+        require(!CANCELED_ABSENT || !canceledEvidenceSealed, "Attempted observation append after canceled evidence seal");
         require(EVENTS.size() < 4096, "Bounded evidence event capacity exceeded");
         var value = new LinkedHashMap<String, Object>(); value.put("sequence", ++sequence); value.put("kind", kind); value.put("phase", phase.name()); value.putAll(data); EVENTS.add(value);
     }
@@ -1180,6 +1204,7 @@ public final class NativeActiveHelperQa {
             }
             return;
         }
+        if (CANCELED_ABSENT && failure == null && !canceledEvidenceSealed) fail(new AssertionError("Client finish preceded canceled server evidence seal"));
         finished = true;
         try {
             if (mc.level != null && evidence != null) screenshot(mc, failure == null ? "04-helper-lifecycle-complete.png" : "failure-active-helper.png");
