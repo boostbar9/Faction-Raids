@@ -27,3 +27,11 @@ Transient work claims are separate from durable completion. Claims fence a singl
 Full Java 17 regression Build on the exact final source; tests for persistence, ownership, stale selectors, duplicate claims/charges, sleep/work/supply, interruptions and cleanup. Actual native fixtures must demonstrate distinct concurrent placements, finite inventory conservation, one original fee, death/replacement, reload ordering, cancellation and shared completion. Audit exact loaded Workers bytecode; the published runtime's prefetch differs from pinned public source.
 
 Native source reference: Workers `29d26e1df6475fc8d043dc5d455f67b2fd1e9982`. Source review is not gameplay proof. No release may be described as enabling shared crews until integration and native acceptance pass. Publish only an independently reviewed exact tested artifact, preserving experimental release classification.
+
+The opt-in shared-crew native QA now requires a first-section death with real
+nonempty cargo after both workers resume from reload. Exact native new-drop
+identity/count evidence and unchanged other stores must precede exclusion of the
+original dying actor's retained inventory. Missing/extra/aliased drops fail finite
+conservation without compensation. This covers the pinned baseline companions,
+not corpse addons; it does not claim a runtime pass until the exact candidate
+produces verified gameplay evidence.

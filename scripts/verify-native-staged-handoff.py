@@ -1,9 +1,192 @@
 #!/usr/bin/env python3
 """Fail closed unless a real bounded representative native lifecycle produced all evidence."""
 import json
+import hashlib
 import os
 import sys
 from pathlib import Path
+
+
+def load_evidence_json(path):
+    """Reject duplicate records rather than silently accepting the last JSON value."""
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            assert key not in result, ('Duplicate evidence key', key)
+            result[key] = value
+        return result
+
+    def reject_constant(value):
+        raise AssertionError(('Nonfinite evidence value', value))
+
+    return json.loads(path.read_text(), object_pairs_hook=unique_object, parse_constant=reject_constant)
+
+
+def verify_native_bytecode_audit(audit, shared_crew):
+    assert audit.get('status') == 'passed' and audit.get('noVendorJarsUploaded') is True, audit
+    artifacts = audit.get('artifacts')
+    assert isinstance(artifacts, dict) and set(artifacts) == {'recruits', 'workers'}, audit
+    expected_extra = {
+        'recruits': {'com.talhanation.recruits.entities.AbstractChunkLoaderEntity',
+                     'com.talhanation.recruits.pathfinding.AsyncPathfinderMob'},
+        'workers': {'com.talhanation.workers.entities.BuilderEntity'},
+    }
+    captured = set()
+    for mod, artifact in artifacts.items():
+        assert isinstance(artifact, dict), artifact
+        classes = artifact.get('classes')
+        assert isinstance(classes, list), artifact
+        names = []
+        for record in classes:
+            assert isinstance(record, dict) and isinstance(record.get('class'), str), record
+            names.append(record['class'])
+        assert len(names) == len(set(names)) and captured.isdisjoint(names), artifact
+        captured.update(names)
+        if shared_crew:
+            assert expected_extra[mod].issubset(names), artifact
+    assert len(captured) == (25 if shared_crew else 22), audit
+
+
+def verify_final_materials(final, shared_crew):
+    """Count actual owner pickups alongside construction, live workers and loose items."""
+    assert isinstance(final, dict), final
+    for material, initial in [('Cobble', 352), ('Oak', 220)]:
+        counts = []
+        for store in ['placed', 'chest', 'builder', 'loose', 'owner']:
+            key = store + material
+            value = final.get(key, 0) if store == 'owner' and not shared_crew else final.get(key)
+            assert type(value) is int and value >= 0, (key, final)
+            counts.append(value)
+        assert sum(counts) == initial, (material, final)
+
+
+def verify_shared_crew_death_cargo(data, ids, first_reload_tick):
+    """Accept only the single, exact native transfer captured at coordinator death.
+
+    NBT strings are bounded review diagnostics, not parsed inventory/debit proof.
+    The authoritative proof is the exact item-entity delta with other stores fixed.
+    """
+    from collections import Counter
+    from uuid import UUID
+
+    proof = data.get('sharedCrewDeathCargo')
+    keys = {'worker', 'helper', 'gameTime', 'stage', 'projectState', 'closedLifecycles',
+            'dropsEnabled', 'originalAliveBefore', 'originalAliveAfter', 'verified', 'before',
+            'newDrops', 'looseBefore', 'looseAfter', 'remainingStoresBefore', 'remainingStoresAfter',
+            'originalCargoBefore', 'originalCargoAfter', 'accountingExclusion', 'baselineScope',
+            'aliasedDropStacks'}
+    assert isinstance(proof, dict) and set(proof) == keys, proof
+    succession = data.get('sharedCrewSuccession')
+    assert isinstance(succession, dict), succession
+    assert proof.get('worker') == succession.get('deadCoordinator') == ids[0], proof
+    assert proof.get('helper') == succession.get('survivingHelper') == ids[1], proof
+    death_tick, resume_tick = succession.get('deathGameTime'), succession.get('resumeGameTime')
+    assert type(first_reload_tick) is int and first_reload_tick >= 0, first_reload_tick
+    assert type(death_tick) is int and type(resume_tick) is int, succession
+    assert type(proof.get('gameTime')) is int and proof.get('gameTime') == death_tick, proof
+    assert first_reload_tick < death_tick < resume_tick, proof
+    assert type(proof.get('stage')) is int and proof.get('stage') == 0, proof
+    assert proof.get('projectState') == 'RUNNING', proof
+    for key in ['closedLifecycles', 'dropsEnabled', 'originalAliveBefore', 'verified']:
+        assert proof.get(key) is True, (key, proof)
+    for key in ['originalAliveAfter', 'aliasedDropStacks']:
+        assert proof.get(key) is False, (key, proof)
+    assert proof.get('accountingExclusion') == 'exact dying original after verified native drop transfer', proof
+    assert proof.get('baselineScope') == 'Pinned baseline companions only; corpse addons not exercised', proof
+    assert succession.get('extraCommission') is False and succession.get('newBuilderSpawnedAfterDeath') is False, succession
+    handoff = succession.get('deathHandoff')
+    assert isinstance(handoff, dict) and set(handoff) == {'from', 'to', 'area', 'cause', 'receipt', 'projectGeneration', 'ledgerGeneration'}, handoff
+    assert handoff.get('from') == ids[0] and handoff.get('to') == ids[1], handoff
+    assert handoff.get('area') == data['stageLayout'][0]['area'] and handoff.get('cause') == 'DEATH', handoff
+    generation = handoff.get('projectGeneration')
+    assert type(generation) is int and generation > 0, handoff
+    ledger_generation = handoff.get('ledgerGeneration')
+    assert isinstance(ledger_generation, str), handoff
+    try:
+        canonical_generation = str(UUID(ledger_generation))
+    except ValueError:
+        raise AssertionError(handoff) from None
+    assert canonical_generation == ledger_generation, handoff
+    receipt_input = ':'.join(['perimeter-builder-destroyed-v1', data['projectId'], str(generation),
+                              data['manifestHash'], ids[0], handoff['area'], ledger_generation])
+    assert handoff.get('receipt') == hashlib.sha256(receipt_input.encode('utf-8')).hexdigest(), handoff
+
+    before = proof.get('before')
+    assert isinstance(before, dict) and set(before) == {'cobble', 'oak'}, before
+    assert all(type(value) is int and value >= 0 for value in before.values()), before
+    assert before['cobble'] <= 352 and before['oak'] <= 220 and sum(before.values()) > 0, before
+    store_keys = {'chestCobble', 'chestOak', 'helperCobble', 'helperOak', 'ownerCobble', 'ownerOak',
+                  'placedCobble', 'placedOak'}
+    for key in ['remainingStoresBefore', 'remainingStoresAfter']:
+        stores = proof.get(key)
+        assert isinstance(stores, dict) and set(stores) == store_keys, (key, stores)
+        assert all(type(value) is int and value >= 0 for value in stores.values()), (key, stores)
+    assert proof['remainingStoresBefore'] == proof['remainingStoresAfter'], proof
+
+    def diagnostic(value):
+        return isinstance(value, str) and 0 < len(value) <= 16384
+
+    for key in ['originalCargoBefore', 'originalCargoAfter']:
+        cargo = proof.get(key)
+        assert isinstance(cargo, dict) and set(cargo) == {'slots', 'main', 'off'}, (key, cargo)
+        slots = cargo.get('slots')
+        assert isinstance(slots, list) and len(slots) <= 128, (key, cargo)
+        assert all(diagnostic(value) for value in slots), (key, cargo)
+        assert diagnostic(cargo.get('main')) and diagnostic(cargo.get('off')), (key, cargo)
+
+    def drop_snapshot(key):
+        rows = proof.get(key)
+        assert isinstance(rows, list), (key, rows)
+        snapshot = {}
+        for row in rows:
+            assert isinstance(row, dict) and set(row) == {'uuid', 'material', 'count', 'stack', 'tag'}, (key, row)
+            identity = row.get('uuid')
+            assert isinstance(identity, str), (key, row)
+            try:
+                canonical = str(UUID(identity))
+            except ValueError:
+                raise AssertionError((key, row)) from None
+            assert canonical == identity and identity not in snapshot and identity not in ids, (key, row)
+            material = row.get('material')
+            assert isinstance(material, str) and material in {'minecraft:cobblestone', 'minecraft:oak_planks'}, (key, row)
+            assert type(row.get('count')) is int and 1 <= row['count'] <= 64, (key, row)
+            assert diagnostic(row.get('stack')) and row.get('tag') == '', (key, row)
+            snapshot[identity] = row
+        return snapshot
+
+    loose_before = drop_snapshot('looseBefore')
+    loose_after = drop_snapshot('looseAfter')
+    new_drops = drop_snapshot('newDrops')
+    assert all(loose_after.get(identity) == row for identity, row in loose_before.items()), proof
+    assert set(new_drops).isdisjoint(loose_before), proof
+    assert new_drops == {identity: row for identity, row in loose_after.items() if identity not in loose_before}, proof
+    dropped = Counter()
+    for row in new_drops.values():
+        dropped[row['material']] += row['count']
+    assert dropped['minecraft:cobblestone'] == before['cobble'], proof
+    assert dropped['minecraft:oak_planks'] == before['oak'], proof
+    for name, material, initial in [('cobble', 'minecraft:cobblestone', 352), ('oak', 'minecraft:oak_planks', 220)]:
+        suffix = name.title()
+        remaining = sum(proof['remainingStoresBefore'][store + suffix] for store in ['chest', 'helper', 'owner', 'placed'])
+        loose_start = sum(row['count'] for row in loose_before.values() if row['material'] == material)
+        loose_end = sum(row['count'] for row in loose_after.values() if row['material'] == material)
+        assert before[name] + remaining + loose_start == initial, (material, proof)
+        assert remaining + loose_end == initial, (material, proof)
+
+    # A generic earlier contribution cannot substitute for each worker resuming after reopen.
+    events = data.get('sharedCrewEvents')
+    assert isinstance(events, list), events
+    resumed = set()
+    for event in events:
+        assert isinstance(event, dict), event
+        tick = event.get('gameTime')
+        assert type(tick) is int and tick >= 0, event
+        if event.get('kind') == 'native-placement' and event.get('cells') and first_reload_tick < tick < death_tick:
+            assert event.get('builder') in ids, event
+            assert type(event.get('stage')) is int and event.get('stage') == 0, event
+            resumed.add(event.get('builder'))
+    assert resumed == set(ids), (proof, resumed)
+
 
 def verify_shared_crew(data, root):
     """Validate recorded native evidence. Synthetic unit fixtures test rejection, not gameplay."""
@@ -31,10 +214,29 @@ def verify_shared_crew(data, root):
     survivor_after_death = False
     death = data['sharedCrewSuccession']
     first_reload_tick = next(restart['gameTime'] for restart in data['restarts'] if restart['kind'] == 'mid-stage')
+    verify_shared_crew_death_cargo(data, ids, first_reload_tick)
     for event in data['sharedCrewEvents']:
         worker = event['builder']
         assert worker in ids and event['area'] == stages[event['stage']]['area'], event
         assert event['gameTime'] >= data['commissionGameTime'], event
+        for name in ['cobble', 'oak', 'chestCobble', 'chestOak', 'looseCobble', 'looseOak', 'ownerCobble', 'ownerOak']:
+            for suffix in ['Before', 'After']:
+                value = event.get(name + suffix)
+                assert type(value) is int and value >= 0, (name + suffix, event)
+        for key in ['ownerPresentBefore', 'ownerPresentAfter', 'verifiedDeathDropPickup']:
+            assert type(event.get(key)) is bool, (key, event)
+        pickup = event['verifiedDeathDropPickup']
+        loose_decreases = {name: event['loose' + name.title() + 'Before'] - event['loose' + name.title() + 'After']
+                           for name in ['cobble', 'oak']}
+        if pickup:
+            assert event['kind'] in ['native-placement', 'native-loose-pickup'], event
+            assert worker == ids[1] and event['gameTime'] > death['deathGameTime'], event
+            assert event['ownerPresentBefore'] is True and event['ownerPresentAfter'] is True, event
+            assert all(value >= 0 for value in loose_decreases.values()) and any(value > 0 for value in loose_decreases.values()), event
+            for name in ['chestCobble', 'chestOak', 'ownerCobble', 'ownerOak']:
+                assert event[name + 'Before'] == event[name + 'After'], event
+        else:
+            assert all(value == 0 for value in loose_decreases.values()), event
         cells = event['cells']
         changes = Counter(cell['material'] for cell in cells)
         if event['kind'] == 'native-placement':
@@ -56,7 +258,7 @@ def verify_shared_crew(data, root):
                     assert inward in [1, 5] and cell['material'] == 'minecraft:cobblestone', cell
                 observed.add(cell['packed'])
             for name, material in [('cobble', 'minecraft:cobblestone'), ('oak', 'minecraft:oak_planks')]:
-                assert event[name + 'Before'] - event[name + 'After'] == changes[material], event
+                assert event[name + 'Before'] + loose_decreases[name] - event[name + 'After'] == changes[material], event
                 chest = 'chest' + name.title()
                 assert event[chest + 'Before'] == event[chest + 'After'], event
             counts[worker] += len(cells)
@@ -66,8 +268,8 @@ def verify_shared_crew(data, root):
                 survivor_after_death = True
             if first_reload_tick < event['gameTime'] < death['deathGameTime']:
                 resumed.add(worker)
-        else:
-            assert event['kind'] == 'native-supply-withdrawal' and not cells, event
+        elif event['kind'] == 'native-supply-withdrawal':
+            assert not pickup and not cells, event
             increases = []
             for name in ['cobble', 'oak']:
                 chest = 'chest' + name.title()
@@ -76,8 +278,10 @@ def verify_shared_crew(data, root):
                 increases.append(change)
             assert any(change > 0 for change in increases), event
             supplied.add(worker)
-        for name in ['cobble', 'oak', 'chestCobble', 'chestOak']:
-            assert event[name + 'Before'] >= 0 and event[name + 'After'] >= 0, event
+        else:
+            assert event['kind'] == 'native-loose-pickup' and pickup and not cells, event
+            for name in ['cobble', 'oak']:
+                assert event[name + 'Before'] + loose_decreases[name] == event[name + 'After'], event
     assert survivor_after_death, death
     assert set(counts) == supplied == resumed == set(ids), (counts, supplied, resumed)
     assert dict(counts) == data['sharedCrewPlacementCounts'], counts
@@ -102,10 +306,9 @@ def verify_shared_crew(data, root):
 
 def main():
     root = Path(sys.argv[1]) if len(sys.argv) == 2 else Path('build/native-handoff-qa/evidence')
-    data = json.loads((root / 'result.json').read_text())
-    audit = json.loads((root / 'native-bytecode-audit.json').read_text())
-    assert audit['status'] == 'passed' and audit['noVendorJarsUploaded'], audit
-    assert sum(len(value['classes']) for value in audit['artifacts'].values()) == 22, audit
+    data = load_evidence_json(root / 'result.json')
+    audit = load_evidence_json(root / 'native-bytecode-audit.json')
+    verify_native_bytecode_audit(audit, os.environ.get('SHARED_CREW_QA') == 'true')
     assert data['mode'] == 'staged-handoff' and data['status'] == 'passed', data
     if os.environ.get('BUILDER_REPLACEMENT_QA') == 'true':
         assert data.get('builderReplacementRequested') is True, data
@@ -193,8 +396,7 @@ def main():
     assert bank['expectedFinalBalance'] == 1936 + bank['interestCredits'] + bank['taxCredits'], bank
     assert final['treasury'] == bank['expectedFinalBalance'] and final['placed'] == data['retainedPlacedBlocks'], final
     assert len(data['treasuryObserverContracts']) == 10, data
-    assert final['placedCobble'] + final['chestCobble'] + final['builderCobble'] + final['looseCobble'] == 352, final
-    assert final['placedOak'] + final['chestOak'] + final['builderOak'] + final['looseOak'] == 220, final
+    verify_final_materials(final, os.environ.get('SHARED_CREW_QA') == 'true')
     print('Representative native first-section completion, handoff, next-section placement and durable cancellation verified. Whole-plan completion was not attempted. Between-stage restart verified:', data['betweenStageRestartVerified'])
 
 if __name__ == '__main__':

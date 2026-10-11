@@ -71,28 +71,52 @@ The required evidence, all stored in the existing `result.json`, is:
   event targets must equal all retained world targets, with no duplicate credit.
 - Native finite-chest supply withdrawals by both builders, with matching chest
   and per-builder stock deltas. Conservation includes both actors and loose items.
+  After the exact original-coordinator death transfer is verified, native loose
+  pickup by the surviving helper is observed separately. It requires matching
+  loose-item decrease and worker material increase/debit, unchanged chest and
+  owner stock, and ordinary production receipts for any same-tick placement.
+  Pickup never substitutes for either worker's required original chest withdrawal.
 - Actual partial-stage interruption through the owner's ordinary Spectator
   permission pause, save/close/reopen, and exact pre-AI loaded construction cargo
   for **both** builders. Both must resume actual distinct placement afterward.
-- Actual lethal damage to the original coordinator only after its construction
-  cargo is empty and native inventory cleanup is closed. The already-enlisted
-  helper survives; no third builder is spawned. Production must promote it and
-  resume real placement within one minute, preserving the original paid header,
-  manifest and materials without another commission.
+- Actual lethal damage to the original coordinator in the still-running first
+  section, after both builders have resumed from reload and both native hand and
+  inventory-cleanup lifecycles are closed. Its construction cargo must be nonempty:
+  the test records exact before/after slot and hand values and the actual new native
+  drop UUIDs, stack values and material counts. The synchronous drop delta must
+  equal every carried construction item, with all existing drops, chest stock,
+  helper/owner stock and placed targets unchanged. Duplicate drop identities or
+  aliased drop-stack objects fail. Only after that transfer is proved may accounting
+  omit the exact dying coordinator's retained native inventory; real loose items,
+  live-worker inventory and owner inventory remain counted. No material is moved,
+  cleared, manufactured or compensated by the fixture. Missing or extra death
+  drops are a native compatibility failure, never a tolerated loss/duplication.
+  The already-enlisted helper survives; no third builder is spawned. Production
+  must remove the original actor, persist exactly one authenticated `DEATH`
+  handoff for that original/helper/stage/ledger identity, and resume real placement
+  within one minute. An `UNAVAILABLE` or `DISMISSED` transfer is insufficient.
+  The original paid header, manifest and materials survive without another commission.
 - The existing native first-section completion, second-section placement,
   authenticated menu cancellation and canceled reload. Between-section reload
   remains separately reported when its clean ordinary boundary is observed.
 - Exact checked-out source commit/tree, loaded companion hashes, the unchanged
-  native-bytecode audit, and original framebuffer/source evidence files. The
-  verifier requires the recorded source identities to match those evidence files.
+  native-bytecode audit (plus shared-mode worker/inheritance death/drop classes),
+  and original framebuffer/source evidence files. The verifier requires the recorded source identities to match those evidence files.
 
 `verify-native-staged-handoff.py` requires these additional contracts when
 `SHARED_CREW_QA=true`. Its independent coordinate/material oracle rejects targets
 outside the fixture's approved hollow skin/deck, duplicate credits, material
 mismatches, a missing contributor, unmatched withdrawals, lost cargo, a missing
-post-reload contributor, changed source identity, a new replacement hire, or an
-extra commission. Python contract tests use explicitly synthetic records to test
+post-reload contributor, changed source identity, a new replacement hire, an
+extra commission, or missing/malformed/zero-cargo death-transfer evidence. Exact
+new-drop counts and unchanged other stores reject alias duplicates, missing or
+extra drops and unjustified dying-inventory exclusion. Python contract tests use explicitly synthetic records to test
 acceptance and rejection; they do not constitute native gameplay evidence.
+
+Death-cargo coverage uses only the pinned baseline companions. Corpse addons are
+**not exercised**. Captured native inheritance bytecode supplements the exact
+synchronous runtime transfer proof; it does not independently establish every
+Minecraft superclass or runtime-mixin equipment-drop path.
 
 Sleep is deliberately **not exercised**: this world stays at noon, and the test
 does not force a native sleep state. The permission-pause/reload is a shared
