@@ -35,11 +35,19 @@ ROOT_CLASSES = (
     'com.talhanation.recruits.entities.AbstractChunkLoaderEntity',
     'com.talhanation.recruits.entities.AbstractInventoryEntity',
     'com.talhanation.recruits.entities.AbstractRecruitEntity',
+    'com.talhanation.recruits.entities.BowmanEntity',
+    'com.talhanation.recruits.inventory.RecruitSimpleContainer',
     'com.talhanation.workers.entities.AbstractWorkerEntity',
     'com.talhanation.workers.entities.BuilderEntity',
 )
 MAX_CLASSES = 256
 MAX_CLASS_BYTES = 8 * 1024 * 1024
+MAX_MANIFEST_BYTES = 2 * 1024 * 1024
+MAX_DISASSEMBLY_BYTES = 4 * 1024 * 1024
+MAX_RUNTIME_FILE_BYTES = 512 * 1024 * 1024
+MAX_RUNTIME_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
+MAX_JAR_ENTRIES = 200000
+MAX_JAR_MANIFEST_BYTES = 65536
 PINNED = dict(minecraftVersion='1.20.1', forgeVersion='47.4.16', mappingChannel='official', mappingVersion='1.20.1')
 
 
@@ -59,7 +67,9 @@ def parse_unique(raw):
                 raise ValueError(f'Duplicate JSON key: {key}')
             result[key] = value
         return result
-    return json.loads(raw, object_pairs_hook=pairs)
+    def reject_constant(value):
+        raise ValueError(f'Non-finite JSON value: {value}')
+    return json.loads(raw, object_pairs_hook=pairs, parse_constant=reject_constant)
 
 
 def load_unique(path):
@@ -75,17 +85,25 @@ def disassemble(jar, name):
     return result.stdout
 
 
-def capture(manifest_path, output, runner=disassemble):
-    manifest_path = manifest_path.resolve(strict=True)
+def inspect_runtime(manifest_path):
+    """Revalidate the exported runtime without searching any cache or executing classes."""
+    if manifest_path.absolute() != manifest_path.resolve(strict=True):
+        raise ValueError('Runtime manifest path is not canonical')
+    if manifest_path.stat().st_size > MAX_MANIFEST_BYTES:
+        raise ValueError('Runtime manifest exceeds bounded input')
     manifest_bytes = manifest_path.read_bytes()
+    if len(manifest_bytes) > MAX_MANIFEST_BYTES:
+        raise ValueError('Runtime manifest exceeds bounded input')
     manifest_hash = hashlib.sha256(manifest_bytes).hexdigest()
     manifest = parse_unique(manifest_bytes)
-    if manifest.get('formatVersion') != 1 or any(manifest.get(k) != v for k, v in PINNED.items()):
+    if (not isinstance(manifest, dict) or type(manifest.get('formatVersion')) is not int
+            or manifest.get('formatVersion') != 1 or any(manifest.get(k) != v for k, v in PINNED.items())):
         raise ValueError('Prepared runtime is not the reviewed Minecraft/Forge/mapping version')
     entries = manifest.get('entries')
     if not isinstance(entries, list) or not 1 <= len(entries) <= 1024:
         raise ValueError('Unexpected runtime entry count')
     paths, suppliers, artifacts = set(), {}, {}
+    total_bytes = 0
     roots = {name.replace('.', '/') for name in ROOT_CLASSES}
 
     def wanted(entry):
@@ -120,6 +138,10 @@ def capture(manifest_path, output, runner=disassemble):
             continue
         if not path.is_file() or not re.fullmatch('[0-9a-f]{64}', str(entry.get('sha256', ''))):
             raise ValueError('Runtime artifact or hash missing')
+        artifact_bytes = path.stat().st_size
+        total_bytes += artifact_bytes
+        if artifact_bytes > MAX_RUNTIME_FILE_BYTES or total_bytes > MAX_RUNTIME_TOTAL_BYTES:
+            raise ValueError('Prepared runtime artifacts exceed bounded input')
         if file_hash(path) != entry['sha256']:
             raise ValueError('Runtime artifact changed after preparation')
         if not zipfile.is_zipfile(path):
@@ -127,15 +149,21 @@ def capture(manifest_path, output, runner=disassemble):
                 raise ValueError('Prepared JAR is not readable ZIP bytecode')
             continue
         with zipfile.ZipFile(path) as jar:
+            if len(jar.infolist()) > MAX_JAR_ENTRIES:
+                raise ValueError('Prepared JAR class index exceeds bounded input')
             if any((versioned := re.fullmatch(r'META-INF/versions/[^/]+/(.+)', info.filename))
                    and wanted(versioned.group(1)) for info in jar.infolist()):
                 raise ValueError('Multi-release variant of a required native class is not supported')
             matches = [info for info in jar.infolist() if wanted(info.filename)]
             if not matches:
                 continue
-            manifest_text = jar.read('META-INF/MANIFEST.MF').decode('utf-8', errors='replace') if 'META-INF/MANIFEST.MF' in jar.namelist() else ''
+            manifest_text = ''
+            if 'META-INF/MANIFEST.MF' in jar.namelist():
+                if jar.getinfo('META-INF/MANIFEST.MF').file_size > MAX_JAR_MANIFEST_BYTES:
+                    raise ValueError('Native supplier manifest exceeds bounded input')
+                manifest_text = jar.read('META-INF/MANIFEST.MF').decode('utf-8', errors='strict')
             artifacts[raw] = dict(path=raw, fileName=path.name, sha256=entry['sha256'],
-                                  resolvedCoordinates=coordinates, jarManifest=manifest_text[:65536])
+                                  resolvedCoordinates=coordinates, jarManifest=manifest_text)
             for info in matches:
                 name = info.filename[:-6].replace('/', '.')
                 if not re.fullmatch(r'[A-Za-z0-9_.$]+', name):
@@ -144,13 +172,21 @@ def capture(manifest_path, output, runner=disassemble):
                     raise ValueError(f'Ambiguous required class supplier: {name}: {suppliers[name][0]} and {path}')
                 if info.file_size <= 0 or info.file_size > MAX_CLASS_BYTES:
                     raise ValueError(f'Unexpected class size: {name}')
+                if len(suppliers) >= MAX_CLASSES:
+                    raise ValueError('Required class closure exceeds bounded audit')
                 bytecode = jar.read(info)
                 suppliers[name] = (path, hashlib.sha256(bytecode).hexdigest())
     missing = (set(ROOT_CLASSES) | {'net.minecraft.world.entity.Entity$RemovalReason'}) - set(suppliers)
     if missing:
         raise ValueError('Prepared runtime lacks a required transfer, removal, ticket or inherited worker class: ' + ', '.join(sorted(missing)))
-    if len(suppliers) > MAX_CLASSES:
-        raise ValueError('Required class closure exceeds bounded audit')
+    if file_hash(manifest_path) != manifest_hash:
+        raise ValueError('Prepared runtime manifest changed during inspection')
+    return manifest_hash, suppliers, artifacts
+
+
+def capture(manifest_path, output, runner=disassemble):
+    manifest_path = manifest_path.absolute()
+    manifest_hash, suppliers, artifacts = inspect_runtime(manifest_path)
     if output.absolute() != output.resolve():
         raise ValueError('Refusing a symlinked evidence output path')
     output.mkdir(parents=True, exist_ok=False)
@@ -161,10 +197,10 @@ def capture(manifest_path, output, runner=disassemble):
         text = runner(jar, name)
         if not isinstance(text, str) or not text.strip() or name not in text or 'descriptor:' not in text:
             raise ValueError(f'Incomplete disassembly/signatures: {name}')
-        if len(text.encode()) > 4 * 1024 * 1024:
+        if len(text.encode('utf-8')) > MAX_DISASSEMBLY_BYTES:
             raise ValueError('Disassembly exceeds bounded output')
         file = bytecode_dir / (name + '.javap.txt')
-        file.write_text(text)
+        file.write_text(text, encoding='utf-8', newline='\n')
         classes.append(dict(name=name, supplier=str(jar), classSha256=class_hash,
                             disassemblyFile=str(file.relative_to(output)), disassemblySha256=file_hash(file)))
     if any(file_hash(Path(path)) != artifact['sha256'] for path, artifact in artifacts.items()):

@@ -94,6 +94,14 @@ class NativeClientDefaultsTest(unittest.TestCase):
         self.assertFalse(marker['smallshipsGameplayValuesChanged'])
         self.assertFalse(self.game.exists())
 
+    def test_active_helper_has_a_distinct_fresh_directory(self):
+        directory = self.prepare('active-helper')
+        self.assertEqual(directory, self.root / 'build/native-helper-qa/client')
+        marker = json.loads((directory / setup.MARKER).read_text())
+        self.assertEqual(marker['qaMode'], 'active-helper')
+        self.assertFalse((self.root / 'build/native-handoff-qa/client').exists())
+        self.assertFalse((directory / 'saves').exists())
+
     def test_hud_uses_only_its_explicit_isolated_directory(self):
         directory = self.prepare('hud')
         self.assertEqual(directory, self.root / 'build/native-hud-qa/client')

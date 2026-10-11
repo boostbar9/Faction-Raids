@@ -1,9 +1,11 @@
-# Native active-helper lifecycle QA: exact-API prerequisite
+# Native active-helper lifecycle QA
 
 This is a separate opt-in workstream. Existing shared handoff/death/cancellation
-acceptance and its source-specific evidence remain separate. No active-helper
-dimension-transit, coordinator-first disk reload, or whole-site two-worker
-eviction pass is claimed by this tooling increment.
+acceptance and its source-specific evidence remain separate. The local implementation adds a separately opted-in same-stage helper transit and
+coordinator-first disk scenario. No native pass is claimed until its exact hosted
+source, reviewed API gate, loaded-provider parity and runtime oracle all pass.
+Whole-site eviction, stage-skipped return and cancellation while absent remain
+explicitly uncovered.
 
 ## Prepare-only capture
 
@@ -55,19 +57,20 @@ by the prepared build; resolved coordinates and supplying manifests are retained
 for independent identity review. Those fields alone do not authenticate the
 actual Forge supplier as 47.4.16.
 
-## Mandatory next gate before a lifecycle fixture launches
+## Reviewed gate before a lifecycle fixture launches
 
-Independent review must inspect the captured exact Forge 47.4.16 control flow,
+Independent review inspected the captured exact Forge 47.4.16 control flow,
 including destination insertion before source removal, cancellation/null
 behavior, one native reposition callback with portal creation disabled,
 `CHANGED_DIMENSION` versus finalized `UNLOADED_TO_CHUNK`, and the exact
 `ForgeChunkManager.forceChunk` UUID-owner overload's persistent add/remove and
-ticking/reinstatement semantics. Reviewed signatures and class/disassembly pins
-must become a fail-closed prelaunch gate. Runtime supplying artifacts must match
+ticking/reinstatement semantics. The reviewed signatures and class/disassembly pins are enforced by the separate
+fail-closed prelaunch gate described below. Runtime supplying artifacts must match
 that gate before the transfer stimulus is used.
 
-Only then should separately opted-in fixtures implement supported dimension
-transit and whole-site disk eviction. The lifecycle fixture must keep one exact
+Separately opted-in fixtures may then exercise supported dimension transit and
+whole-site disk eviction. The implemented increment below covers only the first
+same-stage and coordinator-first disk scenario. The lifecycle fixture must keep one exact
 custody record per worker UUID, check uniqueness after transfer settles rather
 than inside join callbacks, account for every persistent holding-dimension
 ticket and prove zero remaining tickets before absence/save, capture pre-AI
@@ -81,3 +84,107 @@ complex scenarios rather than weakening the required evidence.
 Pure Python capture tests use deliberately fake class payloads and a fake
 disassembler. They prove boundary rejection and output accounting only, not
 Forge semantics, compilation or native gameplay.
+
+
+## Separately opted-in first gameplay increment
+
+`Native Active Helper Same-Stage Disk QA` runs only with its own
+`native-active-helper-qa` label on same-repository PR #295 into
+`release/4.53.0-alpha.3`. This initial gameplay workflow has no manual-dispatch
+route. It has read-only repository permissions, no publisher or credentials,
+and a fresh `build/native-helper-qa/client` world. The existing representative
+shared death/handoff acceptance runs independently and is excluded only when
+`nativeActiveHelperQa=true` selects this different driver.
+
+Preparation uses both `nativeActiveHelperQa=true` and the prepare-only
+`nativeActiveHelperApiQa=true`. After preparation, `verify-native-helper-api.py`
+creates a new fail-closed gate from the independently reviewed supplier/class/
+method contract. The game invocation omits the prepare-only property; its Gradle
+`doFirst` revalidates that exact receipt read-only. Raw unreviewed capture cannot
+launch this driver. At client startup, before world creation, the driver checks
+actual loaded class providers, raw resource hashes and the full worker superclass
+chain against the gate. This is provider/raw-resource parity, not inspection of
+transformed method bodies. Unsupported provider URL shapes fail closed.
+
+The prepared Forge 47.4.16, Minecraft 1.20.1, official mappings, Workers 2.0.3 and
+Recruits 1.15.2 bytes are cryptographically pinned under
+`scripts/native-api/helper-lifecycle-1.20.1-47.4.16.json`. BowmanEntity and
+RecruitSimpleContainer are newly recorded raw class hashes under the same already
+reviewed Recruits JAR pin; the older supplemental audit never claimed raw hashes.
+The hash-bound independent review text accompanies that contract.
+
+The first bounded scenario uses the same paid 572-target hollow plan, finite 352
+cobblestone/220 oak and synthetic 139-target first section. It requires both
+original workers to withdraw from the finite chest and place native blocks
+before any absence. It then observes:
+
+1. A naturally closed helper at ordinary END: canonical BeforeItemSlot=-1,
+   empty native requests, closed hand/storage/cleanup state, no sleep/use/combat/
+   liquid/riding/leash, and five grounded observations with zero fall distance.
+   The predicate is diagnostic and bounded; no request clearing or forced goal
+   transition makes a window happen.
+2. One native dimension transfer to a synthetic sealed breathable stone holding
+   room in the existing Nether, at feet (8,160,8), prepared before commission.
+   Its chunk is held only by the exact audited Forge UUID-owner ticking tuple.
+   The clear return landing at (137,65,9) is baselined before commission. Neither
+   site intersects protected targets or reservations.
+3. Before/raw HIGHEST/production LOWEST/settled cargo and receipt comparison,
+   non-destructive CHANGED_DIMENSION source removal, one exact registered live
+   destination UUID after the call and again at a later ordinary END. Source
+   equipment cleared by native removal is never counted again. Production alone
+   handles hand rebind and saved membership. The Overworld controller must
+   suspend the absent member while its coordinator makes new native progress.
+4. Same-stage native return and genuine same-helper placement. A second transfer
+   removes the holding ticket, waits for unavailable holding chunk/lookup plus
+   finalized UNLOADED_TO_CHUNK, and records exact offline cargo. Missing lookup
+   alone is insufficient. The eviction wait is at most 1800 ticks; finalization
+   after first unavailable observation is at most 200 ticks.
+5. A real close/reopen with the owner saved in non-op Survival. The coordinator
+   must actually disk-join first and place again while the helper remains
+   disk-unloaded and all QA tickets are zero. Only then may the exact holding
+   ticket load the helper. Its later `loadedFromDisk=true` join must match the
+   finalized offline cargo. A separate non-disk native return must rebind and
+   place again through the real production path.
+6. Authenticated real core-menu cancellation with both workers loaded, exact
+   terminal/cleanup identity, retained unfinished work and 100 stable END ticks.
+   This does not cover cancellation while absent.
+
+All transfers use the one reviewed reposition callback with `false`; there is no
+manual entity reconstruction, membership edit or target/inventory repair. The
+fresh world alone has `RecruitsChunkLoading=false` installed through
+`defaultconfigs/recruits-server.toml` before creation; inherited chunk-loader
+state must already be empty. The fixture never rewrites an existing server
+configuration. Owner Survival and the original coordinator stay ordinary; only
+the actual close/reopen disconnect interrupts the owner.
+
+Every persistent ticket add has a recorded absent preflight and pending intent
+before the native call. Even a partial throwing add owns a bounded cleanup
+obligation. Cleanup removes only that known tuple and preserves the current
+unrelated census. Any original-census divergence still fails permanently after
+safe owned removal. Zero tickets are required before disk absence, save and
+finish. The disposable world must never be reused after a failed operation.
+
+Every accepted placement is bracketed around one real native LivingTick and
+requires its exact material debit and production completion receipt. Per-worker
+contributions, original chest withdrawals, full cross-dimension/offline stock,
+claim identity, immutable project/payment, Treasury credits, holding geometry and
+same-claim auxiliary isolation are checked without invoking production
+continuation or reconciliation methods. The exact observed authenticated pending load-only main-hand mirror is counted
+once only while raw slot/hand values match and no third alias exists. Every cargo
+slot is independently counted; an unequal or unobserved split fails. Production
+must clear pending, restore object identity and record a rebind for each nonempty
+split. QA never invokes that repair. Full inventory NBT strings are comparison
+evidence; the verifier uses explicit counted material/debit fields for stock
+arithmetic. Original source quantities are never restored or compensated.
+
+The whole game process has a fixed 600-second cap. A natural eligibility window,
+full entity-ready destination, genuine eviction or first-stage continuation that
+cannot be observed in this budget is a failure, not permission to lengthen it.
+If this combined small scenario proves infeasible, split the scenario under
+review rather than relaxing the required production evidence.
+
+Local checks are source-17 parsing and Python oracle/source-contract tests. They
+do not compile Forge types or prove engine behavior. The fresh hosted build,
+loaded parity, exact native run, strict verifier and independent evidence review
+remain required. The baseline report-correction screenshot and prior shared
+acceptance remain source-specific separate evidence.

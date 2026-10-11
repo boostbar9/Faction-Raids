@@ -147,6 +147,34 @@ class HelperApiCaptureTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unique and canonical'):
             self.capture()
 
+    def test_approved_supplemental_roots_are_required_in_new_captures(self):
+        expected = {'com.talhanation.recruits.entities.BowmanEntity',
+                    'com.talhanation.recruits.inventory.RecruitSimpleContainer'}
+        self.assertTrue(expected.issubset(set(CAPTURE.ROOT_CLASSES)))
+        for missing in expected:
+            self.write_jar(self.jar, [n for n in self.names if n != missing])
+            self.manifest['entries'] = [self.entry(self.jar)]
+            with self.subTest(missing=missing), self.assertRaisesRegex(ValueError, 'lacks a required'):
+                self.capture()
+
+    def test_manifest_runtime_class_index_and_disassembly_limits_fail_closed(self):
+        for limit in ('MAX_MANIFEST_BYTES', 'MAX_RUNTIME_FILE_BYTES', 'MAX_RUNTIME_TOTAL_BYTES',
+                      'MAX_JAR_ENTRIES', 'MAX_JAR_MANIFEST_BYTES', 'MAX_CLASSES'):
+            with self.subTest(limit=limit), patch.object(CAPTURE, limit, 1), self.assertRaisesRegex(ValueError, 'bounded'):
+                self.capture(lambda *args: self.fail('Reject bounded input before disassembly'))
+        with patch.object(CAPTURE, 'MAX_DISASSEMBLY_BYTES', 1), self.assertRaisesRegex(ValueError, 'bounded output'):
+            self.capture()
+        self.assertFalse((self.output / 'capture.json').exists())
+
+    def test_nonobject_or_boolean_version_and_nonfinite_json_fail(self):
+        for value in ([], None, {'formatVersion': True, **CAPTURE.PINNED, 'entries': self.manifest['entries']}):
+            self.manifest_path.write_text(json.dumps(value))
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'version'):
+                CAPTURE.capture(self.manifest_path, self.output)
+        for value in ('NaN', 'Infinity', '-Infinity'):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'Non-finite'):
+                CAPTURE.parse_unique('{"value":' + value + '}')
+
     def test_prepare_only_workflow_never_launches_gameplay_and_gradle_blocks_accidental_launch(self):
         workflow = (ROOT / '.github/workflows/native-active-helper-api-qa.yml').read_text()
         gradle = (ROOT / 'gradle/native-active-helper-api-qa.gradle').read_text()

@@ -229,6 +229,8 @@ tasks.named('test', Test).configure {
 if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)) {
     def nativeQaMode = providers.gradleProperty('nativeQaMode').getOrElse('baseline')
     def sharedCrewQa = providers.gradleProperty('nativeSharedCrewQa').map { it.toBoolean() }.getOrElse(false)
+    def activeHelperQa = providers.gradleProperty('nativeActiveHelperQa').map { it.toBoolean() }.getOrElse(false)
+    if (activeHelperQa && (!sharedCrewQa || nativeQaMode != 'staged-handoff')) throw new GradleException('Active helper QA requires its separate staged-handoff shared-crew opt-in')
     if (sharedCrewQa && nativeQaMode != 'staged-handoff') throw new GradleException('Shared crew QA requires staged-handoff mode')
     if (sharedCrewQa && providers.gradleProperty('nativeBuilderReplacementQa').getOrElse('false').toBoolean()) throw new GradleException('Shared crew and builder replacement QA are separate scenarios')
     def sizeableFoliageQa = providers.gradleProperty('nativeQaSizeableFoliage').map { it.toBoolean() }.getOrElse(false)
@@ -246,6 +248,7 @@ if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)
                              'staged-unload': 'build/native-unload-qa/client',
                              'staged-handoff': 'build/native-handoff-qa/client',
                              'hud': 'build/native-hud-qa/client'][nativeQaMode]
+    if (activeHelperQa) nativeQaDirectory = 'build/native-helper-qa/client'
     configurations { nativeQaCompanions }
     dependencies {
         nativeQaCompanions fg.deobf('curse.maven:workers-567450:8351157')
@@ -274,6 +277,8 @@ if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)
         property 'siegeoverhaul.nativeQa', 'true'
         property 'siegeoverhaul.nativeQa.mode', nativeQaMode
         property 'siegeoverhaul.nativeQa.sharedCrew', sharedCrewQa.toString()
+        property 'siegeoverhaul.nativeQa.activeHelper', activeHelperQa.toString()
+        if (activeHelperQa) property 'siegeoverhaul.nativeQa.helperApiGate', project.file('build/native-helper-qa/evidence/api-gate/gate.json').absolutePath
         property 'siegeoverhaul.nativeQa.builderReplacement', providers.gradleProperty('nativeBuilderReplacementQa').getOrElse('false')
         property 'siegeoverhaul.nativeQa.sizeableFoliage', sizeableFoliageQa.toString()
         property 'siegeoverhaul.nativeQa.directory', project.file(nativeQaDirectory).absolutePath
@@ -355,3 +360,5 @@ apply from: 'gradle/native-earthworks-qa.gradle'
 
 // Opt-in prepare-only transfer/ticket API evidence; no gameplay or shipped dependency.
 apply from: 'gradle/native-active-helper-api-qa.gradle'
+
+apply from: 'gradle/native-active-helper-qa.gradle'

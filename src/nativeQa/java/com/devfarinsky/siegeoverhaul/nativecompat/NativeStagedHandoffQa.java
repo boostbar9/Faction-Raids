@@ -90,6 +90,7 @@ import java.util.concurrent.CompletableFuture;
 @Mod.EventBusSubscriber(modid = SiegeOverhaul.MOD_ID, value = Dist.CLIENT)
 public final class NativeStagedHandoffQa {
     private static final boolean ENABLED = Boolean.getBoolean("siegeoverhaul.nativeQa")
+            && !Boolean.getBoolean("siegeoverhaul.nativeQa.activeHelper")
             && "staged-handoff".equals(System.getProperty("siegeoverhaul.nativeQa.mode"));
     private static final boolean REPLACE_BUILDER = Boolean.getBoolean("siegeoverhaul.nativeQa.builderReplacement");
     private static final boolean SHARED_CREW = Boolean.getBoolean("siegeoverhaul.nativeQa.sharedCrew");
