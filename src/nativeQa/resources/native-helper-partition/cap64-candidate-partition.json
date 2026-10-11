@@ -1,0 +1,4030 @@
+{
+  "formatVersion": 1,
+  "provenance": "Regenerated after workspace rollback; original document bytes unavailable",
+  "sourceCommit": "c1770b21345fad8c4fdbb7d8d19d1b2c09f488b5",
+  "sourceTree": "55cf5a5c3a8ccdb966ff1be012cdb78221d33e1b",
+  "unavailablePriorCandidateSha256": "22bf70c320089535f1b5e36cf5c6d035d7bf77febea25789f5c4563679b693c0",
+  "nativeSerializerExecuted": false,
+  "commissionPerformed": false,
+  "targetCount": 572,
+  "clearanceCount": 748,
+  "columns": 220,
+  "candidate": {
+    "cap": 64,
+    "layoutDigest": "1f25c389bc6c477295a33c74a73648f5aed71f64ab16d3da1dde5425b1837fe8",
+    "stages": [
+      {
+        "index": 0,
+        "columns": [
+          35184372088832,
+          35184372092928,
+          35184372097024,
+          35184372101120,
+          35184372105216,
+          35184372109312
+        ],
+        "targets": [
+          {
+            "cell": 35184372088897,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372088898,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372088899,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372088900,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372088901,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372092993,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372092994,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372092995,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372092996,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372092997,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372097089,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372097090,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372097091,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372097092,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372097093,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372101185,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372101186,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372101187,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372101188,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372101189,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372105281,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372105282,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372105283,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372105284,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372105285,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372109377,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372109378,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372109379,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372109380,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372109381,
+            "material": "minecraft:cobblestone"
+          }
+        ],
+        "clearance": [
+          35184372088902,
+          35184372092998,
+          35184372097094,
+          35184372101190,
+          35184372105286,
+          35184372109382
+        ],
+        "targetCount": 30,
+        "clearanceCount": 6,
+        "reservationCount": 36,
+        "materials": {
+          "minecraft:cobblestone": 24,
+          "minecraft:oak_planks": 6
+        },
+        "min": [
+          128,
+          65,
+          0
+        ],
+        "max": [
+          128,
+          70,
+          5
+        ],
+        "layoutStageDigest": "876817a2a3e8b3d3113b84787cb89e687a9ffa6d7254c6fe36a7ea5aab907fb9"
+      },
+      {
+        "index": 1,
+        "columns": [
+          35184372113408,
+          35184372117504,
+          35184372121600,
+          35184372125696,
+          35184372129792,
+          35184372133888,
+          35184372137984
+        ],
+        "targets": [
+          {
+            "cell": 35184372113473,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372113474,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372113475,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372113476,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372113477,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372117569,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372117570,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372117571,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372117572,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372117573,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372121665,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372121666,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372121667,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372121668,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372121669,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372125761,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372125762,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372125763,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372125764,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372125765,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372129857,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372129858,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372129859,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372129860,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372129861,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372133953,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372133954,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372133955,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372133956,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372133957,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372138049,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372138050,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372138051,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372138052,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372138053,
+            "material": "minecraft:cobblestone"
+          }
+        ],
+        "clearance": [
+          35184372113478,
+          35184372117574,
+          35184372121670,
+          35184372125766,
+          35184372129862,
+          35184372133958,
+          35184372138054
+        ],
+        "targetCount": 35,
+        "clearanceCount": 7,
+        "reservationCount": 42,
+        "materials": {
+          "minecraft:cobblestone": 28,
+          "minecraft:oak_planks": 7
+        },
+        "min": [
+          128,
+          65,
+          6
+        ],
+        "max": [
+          128,
+          70,
+          12
+        ],
+        "layoutStageDigest": "d5abb261743c1d9b757db2760a2c34e3d112d83b26ef2e38c3bd70c3f3cfc014"
+      },
+      {
+        "index": 2,
+        "columns": [
+          35184372142080,
+          35184372146176,
+          35184372150272,
+          35459249995776,
+          35459249999872,
+          35459250003968,
+          35459250008064,
+          35459250012160,
+          35459250016256,
+          35459250020352,
+          35459250024448,
+          35459250028544,
+          35459250032640,
+          35459250036736
+        ],
+        "targets": [
+          {
+            "cell": 35184372142145,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372142146,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372142147,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372142148,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372142149,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372146241,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372146242,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372146243,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372146244,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372146245,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372150337,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372150338,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372150339,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35184372150340,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35184372150341,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35459249995841,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35459249995842,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35459249995843,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35459249995844,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35459249995845,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35459249999940,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35459250004036,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35459250008132,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35459250012228,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35459250016324,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35459250020420,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35459250024516,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35459250028612,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35459250032708,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35459250036804,
+            "material": "minecraft:oak_planks"
+          }
+        ],
+        "clearance": [
+          35184372142150,
+          35184372146246,
+          35184372150342,
+          35459249995846,
+          35459249999937,
+          35459249999938,
+          35459249999939,
+          35459249999941,
+          35459249999942,
+          35459250004033,
+          35459250004034,
+          35459250004035,
+          35459250004037,
+          35459250004038,
+          35459250008129,
+          35459250008130,
+          35459250008131,
+          35459250008133,
+          35459250008134,
+          35459250012225,
+          35459250012226,
+          35459250012227,
+          35459250012229,
+          35459250012230,
+          35459250016321,
+          35459250016322,
+          35459250016323,
+          35459250016325,
+          35459250016326,
+          35459250020417,
+          35459250020418,
+          35459250020419,
+          35459250020421,
+          35459250020422,
+          35459250024513,
+          35459250024514,
+          35459250024515,
+          35459250024517,
+          35459250024518,
+          35459250028609,
+          35459250028610,
+          35459250028611,
+          35459250028613,
+          35459250028614,
+          35459250032705,
+          35459250032706,
+          35459250032707,
+          35459250032709,
+          35459250032710,
+          35459250036801,
+          35459250036802,
+          35459250036803,
+          35459250036805,
+          35459250036806
+        ],
+        "targetCount": 30,
+        "clearanceCount": 54,
+        "reservationCount": 84,
+        "materials": {
+          "minecraft:cobblestone": 16,
+          "minecraft:oak_planks": 14
+        },
+        "min": [
+          128,
+          65,
+          0
+        ],
+        "max": [
+          129,
+          70,
+          15
+        ],
+        "layoutStageDigest": "139f537bed115522dabfb318721e298b465f96d101e26c7a721b1b2eb0413f47"
+      },
+      {
+        "index": 3,
+        "columns": [
+          35459250040832,
+          35459250044928,
+          35459250049024,
+          35459250053120,
+          35459250057216,
+          35734127902720,
+          35734127906816,
+          35734127910912,
+          35734127915008,
+          35734127919104,
+          35734127923200,
+          35734127927296,
+          35734127931392,
+          35734127935488,
+          35734127939584,
+          35734127943680,
+          35734127947776,
+          35734127951872,
+          35734127955968,
+          35734127960064,
+          35734127964160,
+          36009005809664,
+          36009005813760,
+          36009005817856,
+          36009005821952,
+          36009005826048,
+          36009005830144,
+          36009005834240
+        ],
+        "targets": [
+          {
+            "cell": 35459250040900,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35459250044996,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35459250049092,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35459250053188,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35459250057281,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35459250057282,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35459250057283,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35459250057284,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35459250057285,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35734127902785,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35734127902786,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35734127902787,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35734127902788,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127902789,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35734127906884,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127910980,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127915076,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127919172,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127923268,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127927364,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127931460,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127935556,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127939652,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127943748,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127947844,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127951940,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127956036,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127960132,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127964225,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35734127964226,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35734127964227,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 35734127964228,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 35734127964229,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36009005809729,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36009005809730,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36009005809731,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36009005809732,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36009005809733,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36009005813828,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36009005817924,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36009005822020,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36009005826116,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36009005830212,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36009005834308,
+            "material": "minecraft:oak_planks"
+          }
+        ],
+        "clearance": [
+          35459250040897,
+          35459250040898,
+          35459250040899,
+          35459250040901,
+          35459250040902,
+          35459250044993,
+          35459250044994,
+          35459250044995,
+          35459250044997,
+          35459250044998,
+          35459250049089,
+          35459250049090,
+          35459250049091,
+          35459250049093,
+          35459250049094,
+          35459250053185,
+          35459250053186,
+          35459250053187,
+          35459250053189,
+          35459250053190,
+          35459250057286,
+          35734127902790,
+          35734127906881,
+          35734127906882,
+          35734127906883,
+          35734127906885,
+          35734127906886,
+          35734127910977,
+          35734127910978,
+          35734127910979,
+          35734127910981,
+          35734127910982,
+          35734127915073,
+          35734127915074,
+          35734127915075,
+          35734127915077,
+          35734127915078,
+          35734127919169,
+          35734127919170,
+          35734127919171,
+          35734127919173,
+          35734127919174,
+          35734127923265,
+          35734127923266,
+          35734127923267,
+          35734127923269,
+          35734127923270,
+          35734127927361,
+          35734127927362,
+          35734127927363,
+          35734127927365,
+          35734127927366,
+          35734127931457,
+          35734127931458,
+          35734127931459,
+          35734127931461,
+          35734127931462,
+          35734127935553,
+          35734127935554,
+          35734127935555,
+          35734127935557,
+          35734127935558,
+          35734127939649,
+          35734127939650,
+          35734127939651,
+          35734127939653,
+          35734127939654,
+          35734127943745,
+          35734127943746,
+          35734127943747,
+          35734127943749,
+          35734127943750,
+          35734127947841,
+          35734127947842,
+          35734127947843,
+          35734127947845,
+          35734127947846,
+          35734127951937,
+          35734127951938,
+          35734127951939,
+          35734127951941,
+          35734127951942,
+          35734127956033,
+          35734127956034,
+          35734127956035,
+          35734127956037,
+          35734127956038,
+          35734127960129,
+          35734127960130,
+          35734127960131,
+          35734127960133,
+          35734127960134,
+          35734127964230,
+          36009005809734,
+          36009005813825,
+          36009005813826,
+          36009005813827,
+          36009005813829,
+          36009005813830,
+          36009005817921,
+          36009005817922,
+          36009005817923,
+          36009005817925,
+          36009005817926,
+          36009005822017,
+          36009005822018,
+          36009005822019,
+          36009005822021,
+          36009005822022,
+          36009005826113,
+          36009005826114,
+          36009005826115,
+          36009005826117,
+          36009005826118,
+          36009005830209,
+          36009005830210,
+          36009005830211,
+          36009005830213,
+          36009005830214,
+          36009005834305,
+          36009005834306,
+          36009005834307,
+          36009005834309,
+          36009005834310
+        ],
+        "targetCount": 44,
+        "clearanceCount": 124,
+        "reservationCount": 168,
+        "materials": {
+          "minecraft:cobblestone": 16,
+          "minecraft:oak_planks": 28
+        },
+        "min": [
+          129,
+          65,
+          0
+        ],
+        "max": [
+          131,
+          70,
+          15
+        ],
+        "layoutStageDigest": "a7c4753cc836fc3481e4df3b20c807b7d7ec7918a30ee603aa6a8772f59c663b"
+      },
+      {
+        "index": 4,
+        "columns": [
+          36009005838336,
+          36009005842432,
+          36009005846528,
+          36009005850624,
+          36009005854720,
+          36009005858816,
+          36009005862912,
+          36009005867008,
+          36009005871104,
+          36283883716608,
+          36283883720704,
+          36283883724800,
+          36283883728896
+        ],
+        "targets": [
+          {
+            "cell": 36009005838404,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36009005842500,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36009005846596,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36009005850692,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36009005854788,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36009005858884,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36009005862980,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36009005867076,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36009005871169,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36009005871170,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36009005871171,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36009005871172,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36009005871173,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883716673,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883716674,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883716675,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883716676,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36283883716677,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883720772,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36283883724868,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36283883728964,
+            "material": "minecraft:oak_planks"
+          }
+        ],
+        "clearance": [
+          36009005838401,
+          36009005838402,
+          36009005838403,
+          36009005838405,
+          36009005838406,
+          36009005842497,
+          36009005842498,
+          36009005842499,
+          36009005842501,
+          36009005842502,
+          36009005846593,
+          36009005846594,
+          36009005846595,
+          36009005846597,
+          36009005846598,
+          36009005850689,
+          36009005850690,
+          36009005850691,
+          36009005850693,
+          36009005850694,
+          36009005854785,
+          36009005854786,
+          36009005854787,
+          36009005854789,
+          36009005854790,
+          36009005858881,
+          36009005858882,
+          36009005858883,
+          36009005858885,
+          36009005858886,
+          36009005862977,
+          36009005862978,
+          36009005862979,
+          36009005862981,
+          36009005862982,
+          36009005867073,
+          36009005867074,
+          36009005867075,
+          36009005867077,
+          36009005867078,
+          36009005871174,
+          36283883716678,
+          36283883720769,
+          36283883720770,
+          36283883720771,
+          36283883720773,
+          36283883720774,
+          36283883724865,
+          36283883724866,
+          36283883724867,
+          36283883724869,
+          36283883724870,
+          36283883728961,
+          36283883728962,
+          36283883728963,
+          36283883728965,
+          36283883728966
+        ],
+        "targetCount": 21,
+        "clearanceCount": 57,
+        "reservationCount": 78,
+        "materials": {
+          "minecraft:cobblestone": 8,
+          "minecraft:oak_planks": 13
+        },
+        "min": [
+          131,
+          65,
+          0
+        ],
+        "max": [
+          132,
+          70,
+          15
+        ],
+        "layoutStageDigest": "c3dc48731fff0902a08959515914e24d565fce36a125d8f5d47752d5ba6bf3d3"
+      },
+      {
+        "index": 5,
+        "columns": [
+          36283883732992,
+          36283883737088,
+          36283883741184,
+          36283883745280,
+          36283883749376,
+          36283883753472,
+          36283883757568,
+          36283883761664,
+          36283883765760,
+          36283883769856,
+          36283883773952,
+          36283883778048,
+          36558761623552,
+          36558761627648
+        ],
+        "targets": [
+          {
+            "cell": 36283883733057,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883733058,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883733059,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883733060,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36283883733061,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883737153,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883737154,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883737155,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883737156,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36283883737157,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883741249,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883741250,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883741251,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883741252,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36283883741253,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883745345,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883745346,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883745347,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883745348,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36283883745349,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883749441,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883749442,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883749443,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883749444,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36283883749445,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883753537,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883753538,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883753539,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883753540,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36283883753541,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883757633,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883757634,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883757635,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883757636,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36283883757637,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883761729,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883761730,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883761731,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883761732,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36283883761733,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883765828,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36283883769924,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36283883774020,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36283883778113,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883778114,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883778115,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36283883778116,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36283883778117,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761623617,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761623618,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761623619,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761623620,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36558761623621,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761627716,
+            "material": "minecraft:oak_planks"
+          }
+        ],
+        "clearance": [
+          36283883733062,
+          36283883737158,
+          36283883741254,
+          36283883745350,
+          36283883749446,
+          36283883753542,
+          36283883757638,
+          36283883761734,
+          36283883765825,
+          36283883765826,
+          36283883765827,
+          36283883765829,
+          36283883765830,
+          36283883769921,
+          36283883769922,
+          36283883769923,
+          36283883769925,
+          36283883769926,
+          36283883774017,
+          36283883774018,
+          36283883774019,
+          36283883774021,
+          36283883774022,
+          36283883778118,
+          36558761623622,
+          36558761627713,
+          36558761627714,
+          36558761627715,
+          36558761627717,
+          36558761627718
+        ],
+        "targetCount": 54,
+        "clearanceCount": 30,
+        "reservationCount": 84,
+        "materials": {
+          "minecraft:cobblestone": 40,
+          "minecraft:oak_planks": 14
+        },
+        "min": [
+          132,
+          65,
+          0
+        ],
+        "max": [
+          133,
+          70,
+          15
+        ],
+        "layoutStageDigest": "496b6326f84dd6e39e97d1bc266843c03ae175321d7343c0f6f3f36ae392621b"
+      },
+      {
+        "index": 6,
+        "columns": [
+          36558761631744,
+          36558761635840,
+          36558761639936,
+          36558761668608,
+          36558761672704,
+          36558761676800,
+          36558761680896,
+          36558761684992,
+          36833639530496,
+          36833639534592,
+          36833639538688,
+          36833639542784,
+          36833639546880,
+          36833639575552
+        ],
+        "targets": [
+          {
+            "cell": 36558761631812,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36558761635908,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36558761640001,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761640002,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761640003,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761640004,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36558761640005,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761668673,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761668674,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761668675,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761668676,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36558761668677,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761672772,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36558761676868,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36558761680964,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36558761685057,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761685058,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761685059,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36558761685060,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36558761685061,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36833639530561,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36833639530562,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36833639530563,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36833639530564,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36833639530565,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36833639534660,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36833639538756,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36833639542852,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36833639546945,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36833639546946,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36833639546947,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36833639546948,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36833639546949,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36833639575617,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36833639575618,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36833639575619,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36833639575620,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36833639575621,
+            "material": "minecraft:cobblestone"
+          }
+        ],
+        "clearance": [
+          36558761631809,
+          36558761631810,
+          36558761631811,
+          36558761631813,
+          36558761631814,
+          36558761635905,
+          36558761635906,
+          36558761635907,
+          36558761635909,
+          36558761635910,
+          36558761640006,
+          36558761668678,
+          36558761672769,
+          36558761672770,
+          36558761672771,
+          36558761672773,
+          36558761672774,
+          36558761676865,
+          36558761676866,
+          36558761676867,
+          36558761676869,
+          36558761676870,
+          36558761680961,
+          36558761680962,
+          36558761680963,
+          36558761680965,
+          36558761680966,
+          36558761685062,
+          36833639530566,
+          36833639534657,
+          36833639534658,
+          36833639534659,
+          36833639534661,
+          36833639534662,
+          36833639538753,
+          36833639538754,
+          36833639538755,
+          36833639538757,
+          36833639538758,
+          36833639542849,
+          36833639542850,
+          36833639542851,
+          36833639542853,
+          36833639542854,
+          36833639546950,
+          36833639575622
+        ],
+        "targetCount": 38,
+        "clearanceCount": 46,
+        "reservationCount": 84,
+        "materials": {
+          "minecraft:cobblestone": 24,
+          "minecraft:oak_planks": 14
+        },
+        "min": [
+          133,
+          65,
+          0
+        ],
+        "max": [
+          134,
+          70,
+          15
+        ],
+        "layoutStageDigest": "216e59b3ee00108a3ca38db1e78dbd6bcb64d852550af39d24f7e4ae236517a8"
+      },
+      {
+        "index": 7,
+        "columns": [
+          36833639579648,
+          36833639583744,
+          36833639587840,
+          36833639591936,
+          37108517437440,
+          37108517441536,
+          37108517445632,
+          37108517449728,
+          37108517453824,
+          37108517482496,
+          37108517486592,
+          37108517490688,
+          37108517494784,
+          37108517498880
+        ],
+        "targets": [
+          {
+            "cell": 36833639579716,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36833639583812,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36833639587908,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36833639592001,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36833639592002,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36833639592003,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 36833639592004,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 36833639592005,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517437505,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517437506,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517437507,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517437508,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37108517437509,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517441604,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37108517445700,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37108517449796,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37108517453889,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517453890,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517453891,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517453892,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37108517453893,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517482561,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517482562,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517482563,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517482564,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37108517482565,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517486660,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37108517490756,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37108517494852,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37108517498945,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517498946,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517498947,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37108517498948,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37108517498949,
+            "material": "minecraft:cobblestone"
+          }
+        ],
+        "clearance": [
+          36833639579713,
+          36833639579714,
+          36833639579715,
+          36833639579717,
+          36833639579718,
+          36833639583809,
+          36833639583810,
+          36833639583811,
+          36833639583813,
+          36833639583814,
+          36833639587905,
+          36833639587906,
+          36833639587907,
+          36833639587909,
+          36833639587910,
+          36833639592006,
+          37108517437510,
+          37108517441601,
+          37108517441602,
+          37108517441603,
+          37108517441605,
+          37108517441606,
+          37108517445697,
+          37108517445698,
+          37108517445699,
+          37108517445701,
+          37108517445702,
+          37108517449793,
+          37108517449794,
+          37108517449795,
+          37108517449797,
+          37108517449798,
+          37108517453894,
+          37108517482566,
+          37108517486657,
+          37108517486658,
+          37108517486659,
+          37108517486661,
+          37108517486662,
+          37108517490753,
+          37108517490754,
+          37108517490755,
+          37108517490757,
+          37108517490758,
+          37108517494849,
+          37108517494850,
+          37108517494851,
+          37108517494853,
+          37108517494854,
+          37108517498950
+        ],
+        "targetCount": 34,
+        "clearanceCount": 50,
+        "reservationCount": 84,
+        "materials": {
+          "minecraft:cobblestone": 20,
+          "minecraft:oak_planks": 14
+        },
+        "min": [
+          134,
+          65,
+          0
+        ],
+        "max": [
+          135,
+          70,
+          15
+        ],
+        "layoutStageDigest": "34acb403facda574f695ec23eceb03f4783aa6e4923bd01ccc4cb82a117bb584"
+      },
+      {
+        "index": 8,
+        "columns": [
+          37383395344384,
+          37383395348480,
+          37383395352576,
+          37383395356672,
+          37383395360768,
+          37383395389440,
+          37383395393536,
+          37383395397632,
+          37383395401728,
+          37383395405824,
+          37658273251328,
+          37658273255424,
+          37658273259520
+        ],
+        "targets": [
+          {
+            "cell": 37383395344449,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37383395344450,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37383395344451,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37383395344452,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37383395344453,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37383395348548,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37383395352644,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37383395356740,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37383395360833,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37383395360834,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37383395360835,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37383395360836,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37383395360837,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37383395389505,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37383395389506,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37383395389507,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37383395389508,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37383395389509,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37383395393604,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37383395397700,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37383395401796,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37383395405889,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37383395405890,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37383395405891,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37383395405892,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37383395405893,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273251393,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273251394,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273251395,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273251396,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37658273251397,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273255492,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37658273259588,
+            "material": "minecraft:oak_planks"
+          }
+        ],
+        "clearance": [
+          37383395344454,
+          37383395348545,
+          37383395348546,
+          37383395348547,
+          37383395348549,
+          37383395348550,
+          37383395352641,
+          37383395352642,
+          37383395352643,
+          37383395352645,
+          37383395352646,
+          37383395356737,
+          37383395356738,
+          37383395356739,
+          37383395356741,
+          37383395356742,
+          37383395360838,
+          37383395389510,
+          37383395393601,
+          37383395393602,
+          37383395393603,
+          37383395393605,
+          37383395393606,
+          37383395397697,
+          37383395397698,
+          37383395397699,
+          37383395397701,
+          37383395397702,
+          37383395401793,
+          37383395401794,
+          37383395401795,
+          37383395401797,
+          37383395401798,
+          37383395405894,
+          37658273251398,
+          37658273255489,
+          37658273255490,
+          37658273255491,
+          37658273255493,
+          37658273255494,
+          37658273259585,
+          37658273259586,
+          37658273259587,
+          37658273259589,
+          37658273259590
+        ],
+        "targetCount": 33,
+        "clearanceCount": 45,
+        "reservationCount": 78,
+        "materials": {
+          "minecraft:cobblestone": 20,
+          "minecraft:oak_planks": 13
+        },
+        "min": [
+          136,
+          65,
+          0
+        ],
+        "max": [
+          137,
+          70,
+          15
+        ],
+        "layoutStageDigest": "389aebf1c2c4abf596207f90d6d495cf7afd9105d5ed97c08ec1fcf7e19083d7"
+      },
+      {
+        "index": 9,
+        "columns": [
+          37658273263616,
+          37658273267712,
+          37658273296384,
+          37658273300480,
+          37658273304576,
+          37658273308672,
+          37658273312768,
+          37933151158272,
+          37933151162368,
+          37933151166464,
+          37933151170560,
+          37933151174656,
+          37933151203328,
+          37933151207424
+        ],
+        "targets": [
+          {
+            "cell": 37658273263684,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37658273267777,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273267778,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273267779,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273267780,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37658273267781,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273296449,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273296450,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273296451,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273296452,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37658273296453,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273300548,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37658273304644,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37658273308740,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37658273312833,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273312834,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273312835,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37658273312836,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37658273312837,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151158337,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151158338,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151158339,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151158340,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37933151158341,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151162436,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37933151166532,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37933151170628,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37933151174721,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151174722,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151174723,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151174724,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37933151174725,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151203393,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151203394,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151203395,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151203396,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37933151203397,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151207492,
+            "material": "minecraft:oak_planks"
+          }
+        ],
+        "clearance": [
+          37658273263681,
+          37658273263682,
+          37658273263683,
+          37658273263685,
+          37658273263686,
+          37658273267782,
+          37658273296454,
+          37658273300545,
+          37658273300546,
+          37658273300547,
+          37658273300549,
+          37658273300550,
+          37658273304641,
+          37658273304642,
+          37658273304643,
+          37658273304645,
+          37658273304646,
+          37658273308737,
+          37658273308738,
+          37658273308739,
+          37658273308741,
+          37658273308742,
+          37658273312838,
+          37933151158342,
+          37933151162433,
+          37933151162434,
+          37933151162435,
+          37933151162437,
+          37933151162438,
+          37933151166529,
+          37933151166530,
+          37933151166531,
+          37933151166533,
+          37933151166534,
+          37933151170625,
+          37933151170626,
+          37933151170627,
+          37933151170629,
+          37933151170630,
+          37933151174726,
+          37933151203398,
+          37933151207489,
+          37933151207490,
+          37933151207491,
+          37933151207493,
+          37933151207494
+        ],
+        "targetCount": 38,
+        "clearanceCount": 46,
+        "reservationCount": 84,
+        "materials": {
+          "minecraft:cobblestone": 24,
+          "minecraft:oak_planks": 14
+        },
+        "min": [
+          137,
+          65,
+          0
+        ],
+        "max": [
+          138,
+          70,
+          15
+        ],
+        "layoutStageDigest": "d6b40fd137707aebd02ab117ccd77a5857277b27399623fd16c26c017d5b1b27"
+      },
+      {
+        "index": 10,
+        "columns": [
+          37933151211520,
+          37933151215616,
+          37933151219712,
+          38208029065216,
+          38208029069312,
+          38208029073408,
+          38208029077504,
+          38208029081600,
+          38208029085696,
+          38208029089792,
+          38208029093888,
+          38208029097984,
+          38208029102080,
+          38208029106176
+        ],
+        "targets": [
+          {
+            "cell": 37933151211588,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37933151215684,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37933151219777,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151219778,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151219779,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 37933151219780,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 37933151219781,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029065281,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029065282,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029065283,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029065284,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029065285,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029069380,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029073476,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029077572,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029081665,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029081666,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029081667,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029081668,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029081669,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029085761,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029085762,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029085763,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029085764,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029085765,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029089857,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029089858,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029089859,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029089860,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029089861,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029093953,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029093954,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029093955,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029093956,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029093957,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029098049,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029098050,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029098051,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029098052,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029098053,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029102145,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029102146,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029102147,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029102148,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029102149,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029106241,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029106242,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029106243,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029106244,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029106245,
+            "material": "minecraft:cobblestone"
+          }
+        ],
+        "clearance": [
+          37933151211585,
+          37933151211586,
+          37933151211587,
+          37933151211589,
+          37933151211590,
+          37933151215681,
+          37933151215682,
+          37933151215683,
+          37933151215685,
+          37933151215686,
+          37933151219782,
+          38208029065286,
+          38208029069377,
+          38208029069378,
+          38208029069379,
+          38208029069381,
+          38208029069382,
+          38208029073473,
+          38208029073474,
+          38208029073475,
+          38208029073477,
+          38208029073478,
+          38208029077569,
+          38208029077570,
+          38208029077571,
+          38208029077573,
+          38208029077574,
+          38208029081670,
+          38208029085766,
+          38208029089862,
+          38208029093958,
+          38208029098054,
+          38208029102150,
+          38208029106246
+        ],
+        "targetCount": 50,
+        "clearanceCount": 34,
+        "reservationCount": 84,
+        "materials": {
+          "minecraft:cobblestone": 36,
+          "minecraft:oak_planks": 14
+        },
+        "min": [
+          138,
+          65,
+          0
+        ],
+        "max": [
+          139,
+          70,
+          15
+        ],
+        "layoutStageDigest": "01236509717aa6b4f5e568ac1cb37ddf72a2be845af604657a10dfd36724fe3c"
+      },
+      {
+        "index": 11,
+        "columns": [
+          38208029110272,
+          38208029114368,
+          38208029118464,
+          38208029122560,
+          38208029126656,
+          38482906972160,
+          38482906976256,
+          38482906980352,
+          38482906984448,
+          38482906988544,
+          38482906992640,
+          38482906996736,
+          38482907000832,
+          38482907004928
+        ],
+        "targets": [
+          {
+            "cell": 38208029110337,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029110338,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029110339,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029110340,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029110341,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029114436,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029118532,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029122628,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029126721,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029126722,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029126723,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38208029126724,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38208029126725,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38482906972225,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38482906972226,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38482906972227,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38482906972228,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38482906972229,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38482906976324,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38482906980420,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38482906984516,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38482906988612,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38482906992708,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38482906996804,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38482907000900,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38482907004996,
+            "material": "minecraft:oak_planks"
+          }
+        ],
+        "clearance": [
+          38208029110342,
+          38208029114433,
+          38208029114434,
+          38208029114435,
+          38208029114437,
+          38208029114438,
+          38208029118529,
+          38208029118530,
+          38208029118531,
+          38208029118533,
+          38208029118534,
+          38208029122625,
+          38208029122626,
+          38208029122627,
+          38208029122629,
+          38208029122630,
+          38208029126726,
+          38482906972230,
+          38482906976321,
+          38482906976322,
+          38482906976323,
+          38482906976325,
+          38482906976326,
+          38482906980417,
+          38482906980418,
+          38482906980419,
+          38482906980421,
+          38482906980422,
+          38482906984513,
+          38482906984514,
+          38482906984515,
+          38482906984517,
+          38482906984518,
+          38482906988609,
+          38482906988610,
+          38482906988611,
+          38482906988613,
+          38482906988614,
+          38482906992705,
+          38482906992706,
+          38482906992707,
+          38482906992709,
+          38482906992710,
+          38482906996801,
+          38482906996802,
+          38482906996803,
+          38482906996805,
+          38482906996806,
+          38482907000897,
+          38482907000898,
+          38482907000899,
+          38482907000901,
+          38482907000902,
+          38482907004993,
+          38482907004994,
+          38482907004995,
+          38482907004997,
+          38482907004998
+        ],
+        "targetCount": 26,
+        "clearanceCount": 58,
+        "reservationCount": 84,
+        "materials": {
+          "minecraft:cobblestone": 12,
+          "minecraft:oak_planks": 14
+        },
+        "min": [
+          139,
+          65,
+          0
+        ],
+        "max": [
+          140,
+          70,
+          15
+        ],
+        "layoutStageDigest": "32704d89e6e62da99aaa382e918c121af142226aeffad2d8091578e9d68bf540"
+      },
+      {
+        "index": 12,
+        "columns": [
+          38482907009024,
+          38482907013120,
+          38482907017216,
+          38482907021312,
+          38482907025408,
+          38482907029504,
+          38482907033600,
+          38757784879104,
+          38757784883200,
+          38757784887296,
+          38757784891392,
+          38757784895488,
+          38757784899584,
+          38757784903680,
+          38757784907776,
+          38757784911872,
+          38757784915968,
+          38757784920064,
+          38757784924160,
+          38757784928256,
+          38757784932352,
+          38757784936448,
+          38757784940544,
+          39032662786048,
+          39032662790144,
+          39032662794240,
+          39032662798336
+        ],
+        "targets": [
+          {
+            "cell": 38482907009092,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38482907013188,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38482907017284,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38482907021380,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38482907025476,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38482907029572,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38482907033665,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38482907033666,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38482907033667,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38482907033668,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38482907033669,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38757784879169,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38757784879170,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38757784879171,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38757784879172,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784879173,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38757784883268,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784887364,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784891460,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784895556,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784899652,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784903748,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784907844,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784911940,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784916036,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784920132,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784924228,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784928324,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784932420,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784936516,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784940609,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38757784940610,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38757784940611,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 38757784940612,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 38757784940613,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39032662786113,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39032662786114,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39032662786115,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39032662786116,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39032662786117,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39032662790212,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39032662794308,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39032662798404,
+            "material": "minecraft:oak_planks"
+          }
+        ],
+        "clearance": [
+          38482907009089,
+          38482907009090,
+          38482907009091,
+          38482907009093,
+          38482907009094,
+          38482907013185,
+          38482907013186,
+          38482907013187,
+          38482907013189,
+          38482907013190,
+          38482907017281,
+          38482907017282,
+          38482907017283,
+          38482907017285,
+          38482907017286,
+          38482907021377,
+          38482907021378,
+          38482907021379,
+          38482907021381,
+          38482907021382,
+          38482907025473,
+          38482907025474,
+          38482907025475,
+          38482907025477,
+          38482907025478,
+          38482907029569,
+          38482907029570,
+          38482907029571,
+          38482907029573,
+          38482907029574,
+          38482907033670,
+          38757784879174,
+          38757784883265,
+          38757784883266,
+          38757784883267,
+          38757784883269,
+          38757784883270,
+          38757784887361,
+          38757784887362,
+          38757784887363,
+          38757784887365,
+          38757784887366,
+          38757784891457,
+          38757784891458,
+          38757784891459,
+          38757784891461,
+          38757784891462,
+          38757784895553,
+          38757784895554,
+          38757784895555,
+          38757784895557,
+          38757784895558,
+          38757784899649,
+          38757784899650,
+          38757784899651,
+          38757784899653,
+          38757784899654,
+          38757784903745,
+          38757784903746,
+          38757784903747,
+          38757784903749,
+          38757784903750,
+          38757784907841,
+          38757784907842,
+          38757784907843,
+          38757784907845,
+          38757784907846,
+          38757784911937,
+          38757784911938,
+          38757784911939,
+          38757784911941,
+          38757784911942,
+          38757784916033,
+          38757784916034,
+          38757784916035,
+          38757784916037,
+          38757784916038,
+          38757784920129,
+          38757784920130,
+          38757784920131,
+          38757784920133,
+          38757784920134,
+          38757784924225,
+          38757784924226,
+          38757784924227,
+          38757784924229,
+          38757784924230,
+          38757784928321,
+          38757784928322,
+          38757784928323,
+          38757784928325,
+          38757784928326,
+          38757784932417,
+          38757784932418,
+          38757784932419,
+          38757784932421,
+          38757784932422,
+          38757784936513,
+          38757784936514,
+          38757784936515,
+          38757784936517,
+          38757784936518,
+          38757784940614,
+          39032662786118,
+          39032662790209,
+          39032662790210,
+          39032662790211,
+          39032662790213,
+          39032662790214,
+          39032662794305,
+          39032662794306,
+          39032662794307,
+          39032662794309,
+          39032662794310,
+          39032662798401,
+          39032662798402,
+          39032662798403,
+          39032662798405,
+          39032662798406
+        ],
+        "targetCount": 43,
+        "clearanceCount": 119,
+        "reservationCount": 162,
+        "materials": {
+          "minecraft:cobblestone": 16,
+          "minecraft:oak_planks": 27
+        },
+        "min": [
+          140,
+          65,
+          0
+        ],
+        "max": [
+          142,
+          70,
+          15
+        ],
+        "layoutStageDigest": "63c53594a5b7b695738da019db2f3579506a2c068e517cb612116003930ca19a"
+      },
+      {
+        "index": 13,
+        "columns": [
+          39032662802432,
+          39032662806528,
+          39032662810624,
+          39032662814720,
+          39032662818816,
+          39032662822912,
+          39032662827008,
+          39032662831104,
+          39032662835200,
+          39032662839296,
+          39032662843392,
+          39032662847488,
+          39307540692992,
+          39307540697088
+        ],
+        "targets": [
+          {
+            "cell": 39032662802500,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39032662806596,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39032662810692,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39032662814788,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39032662818884,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39032662822980,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39032662827076,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39032662831172,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39032662835268,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39032662839364,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39032662843460,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39032662847553,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39032662847554,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39032662847555,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39032662847556,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39032662847557,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540693057,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540693058,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540693059,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540693060,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540693061,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540697153,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540697154,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540697155,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540697156,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540697157,
+            "material": "minecraft:cobblestone"
+          }
+        ],
+        "clearance": [
+          39032662802497,
+          39032662802498,
+          39032662802499,
+          39032662802501,
+          39032662802502,
+          39032662806593,
+          39032662806594,
+          39032662806595,
+          39032662806597,
+          39032662806598,
+          39032662810689,
+          39032662810690,
+          39032662810691,
+          39032662810693,
+          39032662810694,
+          39032662814785,
+          39032662814786,
+          39032662814787,
+          39032662814789,
+          39032662814790,
+          39032662818881,
+          39032662818882,
+          39032662818883,
+          39032662818885,
+          39032662818886,
+          39032662822977,
+          39032662822978,
+          39032662822979,
+          39032662822981,
+          39032662822982,
+          39032662827073,
+          39032662827074,
+          39032662827075,
+          39032662827077,
+          39032662827078,
+          39032662831169,
+          39032662831170,
+          39032662831171,
+          39032662831173,
+          39032662831174,
+          39032662835265,
+          39032662835266,
+          39032662835267,
+          39032662835269,
+          39032662835270,
+          39032662839361,
+          39032662839362,
+          39032662839363,
+          39032662839365,
+          39032662839366,
+          39032662843457,
+          39032662843458,
+          39032662843459,
+          39032662843461,
+          39032662843462,
+          39032662847558,
+          39307540693062,
+          39307540697158
+        ],
+        "targetCount": 26,
+        "clearanceCount": 58,
+        "reservationCount": 84,
+        "materials": {
+          "minecraft:cobblestone": 12,
+          "minecraft:oak_planks": 14
+        },
+        "min": [
+          142,
+          65,
+          0
+        ],
+        "max": [
+          143,
+          70,
+          15
+        ],
+        "layoutStageDigest": "86853f2424a6782b91415a2ee4027d2594cce11be2586ee6914aef925e7de538"
+      },
+      {
+        "index": 14,
+        "columns": [
+          39307540701184,
+          39307540705280,
+          39307540709376,
+          39307540713472,
+          39307540717568,
+          39307540721664,
+          39307540725760
+        ],
+        "targets": [
+          {
+            "cell": 39307540701249,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540701250,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540701251,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540701252,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540701253,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540705345,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540705346,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540705347,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540705348,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540705349,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540709441,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540709442,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540709443,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540709444,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540709445,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540713537,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540713538,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540713539,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540713540,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540713541,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540717633,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540717634,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540717635,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540717636,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540717637,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540721729,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540721730,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540721731,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540721732,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540721733,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540725825,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540725826,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540725827,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540725828,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540725829,
+            "material": "minecraft:cobblestone"
+          }
+        ],
+        "clearance": [
+          39307540701254,
+          39307540705350,
+          39307540709446,
+          39307540713542,
+          39307540717638,
+          39307540721734,
+          39307540725830
+        ],
+        "targetCount": 35,
+        "clearanceCount": 7,
+        "reservationCount": 42,
+        "materials": {
+          "minecraft:cobblestone": 28,
+          "minecraft:oak_planks": 7
+        },
+        "min": [
+          143,
+          65,
+          2
+        ],
+        "max": [
+          143,
+          70,
+          8
+        ],
+        "layoutStageDigest": "aeead4c61a39b95d137461a3064ccb1cb24fe0cd70a169e3d1f5b71083805c86"
+      },
+      {
+        "index": 15,
+        "columns": [
+          39307540729856,
+          39307540733952,
+          39307540738048,
+          39307540742144,
+          39307540746240,
+          39307540750336,
+          39307540754432
+        ],
+        "targets": [
+          {
+            "cell": 39307540729921,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540729922,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540729923,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540729924,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540729925,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540734017,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540734018,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540734019,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540734020,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540734021,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540738113,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540738114,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540738115,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540738116,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540738117,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540742209,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540742210,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540742211,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540742212,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540742213,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540746305,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540746306,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540746307,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540746308,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540746309,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540750401,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540750402,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540750403,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540750404,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540750405,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540754497,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540754498,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540754499,
+            "material": "minecraft:cobblestone"
+          },
+          {
+            "cell": 39307540754500,
+            "material": "minecraft:oak_planks"
+          },
+          {
+            "cell": 39307540754501,
+            "material": "minecraft:cobblestone"
+          }
+        ],
+        "clearance": [
+          39307540729926,
+          39307540734022,
+          39307540738118,
+          39307540742214,
+          39307540746310,
+          39307540750406,
+          39307540754502
+        ],
+        "targetCount": 35,
+        "clearanceCount": 7,
+        "reservationCount": 42,
+        "materials": {
+          "minecraft:cobblestone": 28,
+          "minecraft:oak_planks": 7
+        },
+        "min": [
+          143,
+          65,
+          9
+        ],
+        "max": [
+          143,
+          70,
+          15
+        ],
+        "layoutStageDigest": "0e07540073f66a25b9861f4dd2e9bf82b535014885f4ed0a9cc4172344dd97c5"
+      }
+    ],
+    "validatorCalls": [
+      {
+        "index": 0,
+        "columnCount": 220,
+        "targetCount": 572,
+        "layoutStageDigest": "7b2c5765e5b40dd3c0c16eee07f67b1369f6ca5125f145c207b301be765aecbf",
+        "capAccepts": false
+      },
+      {
+        "index": 0,
+        "columnCount": 110,
+        "targetCount": 286,
+        "layoutStageDigest": "2cbd6f4550aac8de4bd74f2f1f756980936d95e2a5ee7c473c29ff2aae1739f5",
+        "capAccepts": false
+      },
+      {
+        "index": 0,
+        "columnCount": 55,
+        "targetCount": 139,
+        "layoutStageDigest": "39475dbb9b47f2c9dfffb99e31a6130b7a94e39b29587a7a88484ad29d236846",
+        "capAccepts": false
+      },
+      {
+        "index": 0,
+        "columnCount": 27,
+        "targetCount": 95,
+        "layoutStageDigest": "ed45aa3f766a267fffcbd8f95ade099ed18f238ef82c3b530601492d7ebe7b0e",
+        "capAccepts": false
+      },
+      {
+        "index": 0,
+        "columnCount": 13,
+        "targetCount": 65,
+        "layoutStageDigest": "749e28dda25df2961092848bf1b69f7d27dab132b36ddd3e68e42578e515fa33",
+        "capAccepts": false
+      },
+      {
+        "index": 0,
+        "columnCount": 6,
+        "targetCount": 30,
+        "layoutStageDigest": "876817a2a3e8b3d3113b84787cb89e687a9ffa6d7254c6fe36a7ea5aab907fb9",
+        "capAccepts": true
+      },
+      {
+        "index": 0,
+        "columnCount": 13,
+        "targetCount": 65,
+        "layoutStageDigest": "749e28dda25df2961092848bf1b69f7d27dab132b36ddd3e68e42578e515fa33",
+        "capAccepts": false
+      },
+      {
+        "index": 1,
+        "columnCount": 7,
+        "targetCount": 35,
+        "layoutStageDigest": "d5abb261743c1d9b757db2760a2c34e3d112d83b26ef2e38c3bd70c3f3cfc014",
+        "capAccepts": true
+      },
+      {
+        "index": 1,
+        "columnCount": 21,
+        "targetCount": 65,
+        "layoutStageDigest": "a0bb6eb15c43e9a15ae472be404dd6757101cc9becf51ebe209abf80d8b47702",
+        "capAccepts": false
+      },
+      {
+        "index": 2,
+        "columnCount": 14,
+        "targetCount": 30,
+        "layoutStageDigest": "139f537bed115522dabfb318721e298b465f96d101e26c7a721b1b2eb0413f47",
+        "capAccepts": true
+      },
+      {
+        "index": 2,
+        "columnCount": 42,
+        "targetCount": 74,
+        "layoutStageDigest": "04374ce44e2e889d83af727750c483e6bcdc89f439f36e9898261add24035ed0",
+        "capAccepts": false
+      },
+      {
+        "index": 3,
+        "columnCount": 28,
+        "targetCount": 44,
+        "layoutStageDigest": "a7c4753cc836fc3481e4df3b20c807b7d7ec7918a30ee603aa6a8772f59c663b",
+        "capAccepts": true
+      },
+      {
+        "index": 3,
+        "columnCount": 83,
+        "targetCount": 191,
+        "layoutStageDigest": "c0f5cfabc0b924d0d0bd9df112f8f5232f94cfe1d12e1ec9ca4c93a53f785a37",
+        "capAccepts": false
+      },
+      {
+        "index": 4,
+        "columnCount": 55,
+        "targetCount": 147,
+        "layoutStageDigest": "08ed9d41592852ba394ea1f823340258208a59c35430c7837eeb95907a4bc849",
+        "capAccepts": false
+      },
+      {
+        "index": 4,
+        "columnCount": 27,
+        "targetCount": 75,
+        "layoutStageDigest": "126be12d7aa16a4bd8c0f9ab3e4d3b0dcc24756d95bccfbf2243bc463096a126",
+        "capAccepts": false
+      },
+      {
+        "index": 4,
+        "columnCount": 13,
+        "targetCount": 21,
+        "layoutStageDigest": "c3dc48731fff0902a08959515914e24d565fce36a125d8f5d47752d5ba6bf3d3",
+        "capAccepts": true
+      },
+      {
+        "index": 4,
+        "columnCount": 27,
+        "targetCount": 75,
+        "layoutStageDigest": "126be12d7aa16a4bd8c0f9ab3e4d3b0dcc24756d95bccfbf2243bc463096a126",
+        "capAccepts": false
+      },
+      {
+        "index": 5,
+        "columnCount": 14,
+        "targetCount": 54,
+        "layoutStageDigest": "496b6326f84dd6e39e97d1bc266843c03ae175321d7343c0f6f3f36ae392621b",
+        "capAccepts": true
+      },
+      {
+        "index": 5,
+        "columnCount": 42,
+        "targetCount": 126,
+        "layoutStageDigest": "ad6cfd7ed19369f0538f5b8ea7d67aa796335da14ef0c35b33c6e4d31dc3fa85",
+        "capAccepts": false
+      },
+      {
+        "index": 6,
+        "columnCount": 28,
+        "targetCount": 72,
+        "layoutStageDigest": "86d60783acc40fafc89402abca7342233e8bf4aa56fe685ca41fdec0a29a1160",
+        "capAccepts": false
+      },
+      {
+        "index": 6,
+        "columnCount": 14,
+        "targetCount": 38,
+        "layoutStageDigest": "216e59b3ee00108a3ca38db1e78dbd6bcb64d852550af39d24f7e4ae236517a8",
+        "capAccepts": true
+      },
+      {
+        "index": 6,
+        "columnCount": 28,
+        "targetCount": 72,
+        "layoutStageDigest": "86d60783acc40fafc89402abca7342233e8bf4aa56fe685ca41fdec0a29a1160",
+        "capAccepts": false
+      },
+      {
+        "index": 7,
+        "columnCount": 14,
+        "targetCount": 34,
+        "layoutStageDigest": "34acb403facda574f695ec23eceb03f4783aa6e4923bd01ccc4cb82a117bb584",
+        "capAccepts": true
+      },
+      {
+        "index": 7,
+        "columnCount": 124,
+        "targetCount": 320,
+        "layoutStageDigest": "aba760dbc898f30ac03ac8ac5bc05460baae879cd6a16ef13879833a0f482f50",
+        "capAccepts": false
+      },
+      {
+        "index": 8,
+        "columnCount": 110,
+        "targetCount": 286,
+        "layoutStageDigest": "5367ecd6a8db9d6d1245e4b948e1687c23dd8ce62308a4ca5e6ff41771d87cb8",
+        "capAccepts": false
+      },
+      {
+        "index": 8,
+        "columnCount": 55,
+        "targetCount": 147,
+        "layoutStageDigest": "81cfd2f0941f6afd91230240ae652232de1097cb57419267c700c8824deea921",
+        "capAccepts": false
+      },
+      {
+        "index": 8,
+        "columnCount": 27,
+        "targetCount": 71,
+        "layoutStageDigest": "9e8e4f4a5ce0d6e23f567ee19db0819fcb88e3b5e0f68211283daf6f045674b4",
+        "capAccepts": false
+      },
+      {
+        "index": 8,
+        "columnCount": 13,
+        "targetCount": 33,
+        "layoutStageDigest": "389aebf1c2c4abf596207f90d6d495cf7afd9105d5ed97c08ec1fcf7e19083d7",
+        "capAccepts": true
+      },
+      {
+        "index": 8,
+        "columnCount": 27,
+        "targetCount": 71,
+        "layoutStageDigest": "9e8e4f4a5ce0d6e23f567ee19db0819fcb88e3b5e0f68211283daf6f045674b4",
+        "capAccepts": false
+      },
+      {
+        "index": 9,
+        "columnCount": 14,
+        "targetCount": 38,
+        "layoutStageDigest": "d6b40fd137707aebd02ab117ccd77a5857277b27399623fd16c26c017d5b1b27",
+        "capAccepts": true
+      },
+      {
+        "index": 9,
+        "columnCount": 42,
+        "targetCount": 114,
+        "layoutStageDigest": "0f07fdc45767aea28a2f39c5bb3195f10389ace6717a32ad6629f81bd989c00f",
+        "capAccepts": false
+      },
+      {
+        "index": 10,
+        "columnCount": 28,
+        "targetCount": 76,
+        "layoutStageDigest": "9ee1951917e52a08c866ddf1d06ad945c75be3a98fee1f2ba984138ae5ae87f3",
+        "capAccepts": false
+      },
+      {
+        "index": 10,
+        "columnCount": 14,
+        "targetCount": 50,
+        "layoutStageDigest": "01236509717aa6b4f5e568ac1cb37ddf72a2be845af604657a10dfd36724fe3c",
+        "capAccepts": true
+      },
+      {
+        "index": 10,
+        "columnCount": 28,
+        "targetCount": 76,
+        "layoutStageDigest": "9ee1951917e52a08c866ddf1d06ad945c75be3a98fee1f2ba984138ae5ae87f3",
+        "capAccepts": false
+      },
+      {
+        "index": 11,
+        "columnCount": 14,
+        "targetCount": 26,
+        "layoutStageDigest": "32704d89e6e62da99aaa382e918c121af142226aeffad2d8091578e9d68bf540",
+        "capAccepts": true
+      },
+      {
+        "index": 11,
+        "columnCount": 69,
+        "targetCount": 165,
+        "layoutStageDigest": "0aae7eef97d46caa2d7c894874c49f1c229867b26e54a48c7e7479d5c5218ba0",
+        "capAccepts": false
+      },
+      {
+        "index": 12,
+        "columnCount": 55,
+        "targetCount": 139,
+        "layoutStageDigest": "7ddf6d9406b39e468f6ca51d92049792b29adbf020e9611c3e82e2a8ac3349c9",
+        "capAccepts": false
+      },
+      {
+        "index": 12,
+        "columnCount": 27,
+        "targetCount": 43,
+        "layoutStageDigest": "63c53594a5b7b695738da019db2f3579506a2c068e517cb612116003930ca19a",
+        "capAccepts": true
+      },
+      {
+        "index": 12,
+        "columnCount": 55,
+        "targetCount": 139,
+        "layoutStageDigest": "7ddf6d9406b39e468f6ca51d92049792b29adbf020e9611c3e82e2a8ac3349c9",
+        "capAccepts": false
+      },
+      {
+        "index": 13,
+        "columnCount": 28,
+        "targetCount": 96,
+        "layoutStageDigest": "9a483a110d4c8b02f9a94c33fb8f8b6ca8b3d22f06d83714dc3db244068180bf",
+        "capAccepts": false
+      },
+      {
+        "index": 13,
+        "columnCount": 14,
+        "targetCount": 26,
+        "layoutStageDigest": "86853f2424a6782b91415a2ee4027d2594cce11be2586ee6914aef925e7de538",
+        "capAccepts": true
+      },
+      {
+        "index": 13,
+        "columnCount": 28,
+        "targetCount": 96,
+        "layoutStageDigest": "9a483a110d4c8b02f9a94c33fb8f8b6ca8b3d22f06d83714dc3db244068180bf",
+        "capAccepts": false
+      },
+      {
+        "index": 14,
+        "columnCount": 14,
+        "targetCount": 70,
+        "layoutStageDigest": "ca3dde5981afeb1ebaa721d4f6be8177c977f4b4a12f6a03c101de8d4e7c0565",
+        "capAccepts": false
+      },
+      {
+        "index": 14,
+        "columnCount": 7,
+        "targetCount": 35,
+        "layoutStageDigest": "aeead4c61a39b95d137461a3064ccb1cb24fe0cd70a169e3d1f5b71083805c86",
+        "capAccepts": true
+      },
+      {
+        "index": 14,
+        "columnCount": 14,
+        "targetCount": 70,
+        "layoutStageDigest": "ca3dde5981afeb1ebaa721d4f6be8177c977f4b4a12f6a03c101de8d4e7c0565",
+        "capAccepts": false
+      },
+      {
+        "index": 15,
+        "columnCount": 7,
+        "targetCount": 35,
+        "layoutStageDigest": "0e07540073f66a25b9861f4dd2e9bf82b535014885f4ed0a9cc4172344dd97c5",
+        "capAccepts": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,92 @@
+name: Native Helper Cap-64 Partition Preflight (No World)
+
+# Explicitly opted-in native registry/serializer preflight. Never commissions Case L.
+on:
+  pull_request:
+    branches: [release/4.53.0-alpha.3]
+    types: [opened, reopened, synchronize, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-helper-partition-preflight-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  partition-preflight:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 295 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == 'release/4.53.0-alpha.3' &&
+      contains(github.event.pull_request.labels.*.name, 'native-helper-partition-preflight-qa')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+      - name: Install headless display dependencies
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y xvfb xauth mesa-utils libgl1-mesa-dri libglx-mesa0 libopenal1
+      - name: Fresh world-free defaults and source identities
+        run: |
+          set -euo pipefail
+          test ! -e build/native-helper-partition-qa
+          test ! -e build/native-active-helper-api
+          python3 scripts/prepare-native-client-defaults.py --mode helper-partition-preflight --smallships-version 2.0.0-b1.4
+          printf 'onboardAccessibility:false\ntutorialStep:none\nmaxFps:30\nvsync:false\n' > build/native-helper-partition-qa/client/options.txt
+          mkdir -p build/native-helper-partition-qa/evidence build/native-active-helper-api/evidence
+          for directory in build/native-helper-partition-qa/evidence build/native-active-helper-api/evidence; do
+            git rev-parse HEAD > "$directory/source-commit.txt"
+            git rev-parse HEAD^{tree} > "$directory/source-tree.txt"
+            java -version 2> "$directory/java-version.txt"
+            javap -version > "$directory/javap-version.txt"
+          done
+      - name: Prepare exact native runtime with client launch blocked
+        run: |
+          set -euo pipefail
+          timeout --signal=KILL 1800s ./gradlew --no-daemon --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=helper-partition-preflight -PnativeActiveHelperApiQa=true prepareNativeActiveHelperApiEvidence 2>&1 | tee build/native-helper-partition-qa/evidence/prepare-console.log
+      - name: Verify unchanged reviewed native API supplier gate
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-native-helper-api.py build/native-active-helper-api/evidence/resolved-runtime.json build/native-helper-partition-qa/evidence/api-gate
+          test ! -e build/native-helper-partition-qa/client/saves
+      - name: Bounded title-screen native codec preflight without a world
+        env:
+          LIBGL_ALWAYS_SOFTWARE: 'true'
+          GALLIUM_DRIVER: llvmpipe
+          ALSOFT_DRIVERS: 'null'
+        run: |
+          set -euo pipefail
+          timeout --signal=KILL 600s xvfb-run -a -s '-screen 0 1280x720x24' bash -c '
+            set -euo pipefail
+            glxinfo -B | tee build/native-helper-partition-qa/evidence/opengl.txt
+            ./gradlew --no-daemon --offline --console=plain --max-workers=2 -PnativeQa=true -PnativeQaMode=helper-partition-preflight runClient
+          ' 2>&1 | tee build/native-helper-partition-qa/evidence/client-console.log
+      - name: Verify exact partition and world-free evidence
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-native-helper-partition.py build/native-helper-partition-qa/evidence build/native-active-helper-api/evidence/resolved-runtime.json
+      - name: Preserve text logs only
+        if: always()
+        run: |
+          mkdir -p build/native-helper-partition-qa/evidence/logs
+          if [ -d build/native-helper-partition-qa/client/logs ]; then cp build/native-helper-partition-qa/client/logs/*.log build/native-helper-partition-qa/evidence/logs/ || true; fi
+          if [ -d build/native-helper-partition-qa/client/crash-reports ]; then cp build/native-helper-partition-qa/client/crash-reports/*.txt build/native-helper-partition-qa/evidence/logs/ || true; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-helper-partition-preflight-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/native-helper-partition-qa/evidence/
+            build/native-active-helper-api/evidence/
+          if-no-files-found: error
+          retention-days: 7

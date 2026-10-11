@@ -1,0 +1,25 @@
+// Title-screen-only native serializer proof. This mode cannot enable a gameplay driver.
+if (providers.gradleProperty('nativeQaMode').getOrElse('') == 'helper-partition-preflight') {
+    if (!providers.gradleProperty('nativeQa').getOrElse('false').toBoolean()
+            || providers.gradleProperty('nativeActiveHelperQa').getOrElse('false').toBoolean()
+            || providers.gradleProperty('nativeSharedCrewQa').getOrElse('false').toBoolean()
+            || providers.gradleProperty('nativeBuilderReplacementQa').getOrElse('false').toBoolean()
+            || providers.gradleProperty('nativeActiveHelperCase').isPresent()) {
+        throw new GradleException('World-free partition preflight requires its isolated nativeQa mode only')
+    }
+    tasks.matching { it.name == 'runClient' }.configureEach {
+        doFirst {
+            def client = project.file('build/native-helper-partition-qa/client')
+            if (new File(client, 'saves').exists()
+                    || project.file('build/native-helper-partition-qa/evidence/result.json').exists()) {
+                throw new GradleException('Partition preflight requires a fresh world-free directory and result')
+            }
+            // Same immutable API contract and exact prepared-runtime receipt as the accepted modes.
+            project.exec {
+                commandLine 'python3', project.file('scripts/verify-native-helper-api.py').absolutePath,
+                        project.file('build/native-active-helper-api/evidence/resolved-runtime.json').absolutePath,
+                        '--verify-receipt', project.file('build/native-helper-partition-qa/evidence/api-gate/gate.json').absolutePath
+            }
+        }
+    }
+}

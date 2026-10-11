@@ -22,6 +22,7 @@ GAME_DIRECTORIES = {
     'staged-perimeter': 'build/native-staged-qa/client',
     'staged-unload': 'build/native-unload-qa/client',
     'staged-handoff': 'build/native-handoff-qa/client',
+    'helper-partition-preflight': 'build/native-helper-partition-qa/client',
     'active-helper': 'build/native-helper-qa/client',
     'hud': 'build/native-hud-qa/client',
 }

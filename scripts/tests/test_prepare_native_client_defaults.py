@@ -102,6 +102,30 @@ class NativeClientDefaultsTest(unittest.TestCase):
         self.assertFalse((self.root / 'build/native-handoff-qa/client').exists())
         self.assertFalse((directory / 'saves').exists())
 
+    def test_partition_preflight_has_no_alias_to_an_accepted_gameplay_directory(self):
+        expected = {
+            'baseline': 'build/native-qa/client',
+            'perimeter-completion': 'build/native-perimeter-qa/client',
+            'territory-perimeter': 'build/native-territory-qa/client',
+            'camp-spawn': 'build/native-camp-qa/client',
+            'camp-lifecycle': 'build/native-camp-lifecycle-qa/client',
+            'staged-perimeter': 'build/native-staged-qa/client',
+            'staged-unload': 'build/native-unload-qa/client',
+            'staged-handoff': 'build/native-handoff-qa/client',
+            'active-helper': 'build/native-helper-qa/client',
+            'hud': 'build/native-hud-qa/client',
+            'helper-partition-preflight': 'build/native-helper-partition-qa/client',
+        }
+        self.assertEqual(setup.GAME_DIRECTORIES, expected)
+        directory = self.prepare('helper-partition-preflight')
+        self.assertEqual(directory, self.root / expected['helper-partition-preflight'])
+        self.assertFalse((directory / 'saves').exists())
+        for mode, path in expected.items():
+            if mode != 'helper-partition-preflight': self.assertFalse((self.root / path).exists())
+        for unknown in ('helper-partition', 'case-l', 'helper-partition-preflight/../active-helper'):
+            with self.subTest(unknown=unknown), self.assertRaisesRegex(ValueError, 'Unsupported native QA mode'):
+                self.prepare(unknown)
+
     def test_hud_uses_only_its_explicit_isolated_directory(self):
         directory = self.prepare('hud')
         self.assertEqual(directory, self.root / 'build/native-hud-qa/client')

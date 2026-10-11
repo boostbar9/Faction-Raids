@@ -1,10 +1,12 @@
 // First prerequisite for the separately opted-in helper lifecycle fixtures.
 // This mode resolves the actual client runtime but deliberately cannot launch it.
 if (providers.gradleProperty('nativeActiveHelperApiQa').map { it.toBoolean() }.getOrElse(false)) {
-    if (!providers.gradleProperty('nativeQa').getOrElse('false').toBoolean()
-            || providers.gradleProperty('nativeQaMode').getOrElse('') != 'staged-handoff'
-            || !providers.gradleProperty('nativeSharedCrewQa').getOrElse('false').toBoolean()) {
-        throw new GradleException('Active helper API capture requires nativeQa staged-handoff shared-crew preparation')
+    def captureMode = providers.gradleProperty('nativeQaMode').getOrElse('')
+    def captureShared = providers.gradleProperty('nativeSharedCrewQa').getOrElse('false').toBoolean()
+    def knownCaptureMode = captureMode == 'staged-handoff' && captureShared
+            || captureMode == 'helper-partition-preflight' && !captureShared
+    if (!providers.gradleProperty('nativeQa').getOrElse('false').toBoolean() || !knownCaptureMode) {
+        throw new GradleException('Active helper API capture requires shared staged-handoff or world-free partition preflight preparation')
     }
     // ForgeGradle adds runClient after script evaluation; include that future task.
     tasks.matching { it.name == 'runClient' }.configureEach {
