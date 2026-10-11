@@ -190,6 +190,34 @@ final class NativeStagedHandoffFixture {
                 Map.copyOf(nonPlan), List.copyOf(parked));
     }
 
+    /** A second exactly owned hire, with tools/food only. The original finite chest is untouched. */
+    static BuilderEntity spawnSharedHelper(ServerLevel level, ServerPlayer owner) {
+        require(WORLD.equals(level.getServer().getWorldData().getLevelName()) && level.getServer().isSameThread(),
+                "Refusing shared helper outside isolated fixture");
+        var type = ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("workers", "builder"));
+        require(type != null, "Shared helper registry unavailable");
+        var raw = type.create(level);
+        require(raw instanceof BuilderEntity, "Shared helper type changed");
+        BuilderEntity helper = (BuilderEntity) raw;
+        helper.moveTo(137.5, 65, 9.5, 0, 0);
+        helper.finalizeSpawn(level, level.getCurrentDifficultyAt(helper.blockPosition()), MobSpawnType.COMMAND, null, null);
+        WorkersBridge.enablePlayerJob(helper, owner.getUUID()); helper.setPersistenceRequired();
+        helper.setNoAi(true); // Fixture preparation only; released together with the coordinator.
+        require(helper.getInventory().countItem(Items.COBBLESTONE) == 0
+                && helper.getInventory().countItem(Items.OAK_PLANKS) == 0
+                && !helper.getMainHandItem().is(Items.COBBLESTONE) && !helper.getMainHandItem().is(Items.OAK_PLANKS)
+                && !helper.getOffhandItem().is(Items.COBBLESTONE) && !helper.getOffhandItem().is(Items.OAK_PLANKS),
+                "Shared helper must not create any additional construction supply");
+        helper.getInventory().setItem(6, new ItemStack(Items.BREAD, 64));
+        helper.getInventory().setItem(7, new ItemStack(Items.DIAMOND_PICKAXE));
+        helper.getInventory().setItem(8, new ItemStack(Items.DIAMOND_AXE));
+        helper.getInventory().setItem(9, new ItemStack(Items.DIAMOND_SHOVEL));
+        helper.getInventory().setChanged();
+        require(owner.getUUID().equals(WorkersBridge.readWorkerOwner(helper)) && level.addFreshEntity(helper),
+                "Shared helper exact ownership/spawn failed");
+        return helper;
+    }
+
     record HollowOracle(Map<Long, String> targets, Set<Long> clearance, Set<Long> cavities,
                         Set<Long> headroom, int columns, int skinColumns) {}
 

@@ -92,7 +92,23 @@ public final class NativeStagedHandoffQa {
     private static final boolean ENABLED = Boolean.getBoolean("siegeoverhaul.nativeQa")
             && "staged-handoff".equals(System.getProperty("siegeoverhaul.nativeQa.mode"));
     private static final boolean REPLACE_BUILDER = Boolean.getBoolean("siegeoverhaul.nativeQa.builderReplacement");
-    private static final int SECTION_TARGET_CAP = REPLACE_BUILDER ? 192 : 96;
+    private static final boolean SHARED_CREW = Boolean.getBoolean("siegeoverhaul.nativeQa.sharedCrew");
+    private static final int SECTION_TARGET_CAP = REPLACE_BUILDER || SHARED_CREW ? 192 : 96;
+    private static UUID originalCoordinator, sharedHelper;
+    private static boolean sharedDeathRequested, sharedPromotionVerified, sharedReloadVerified;
+    private static long sharedDeathTick, sharedDeathPlaced;
+    private static final Map<UUID, BuilderWorkGoal> CREW_GOALS = new LinkedHashMap<>();
+    private static final Map<UUID, GetNeededItemsFromStorage> CREW_STORAGE = new LinkedHashMap<>();
+    private static final Map<UUID, Set<Long>> CREW_PLACEMENTS = new LinkedHashMap<>();
+    private static final List<Map<String, Object>> CREW_EVENTS = new ArrayList<>();
+    private static final Set<UUID> CREW_SUPPLIED = new java.util.HashSet<>();
+    private static final Map<UUID, Cargo> LOADED_CREW = new LinkedHashMap<>();
+    private static Map<UUID, Integer> crewBeforeReload = Map.of();
+    private static WorkObservation workObservation;
+    private record Cargo(List<CompoundTag> slots, CompoundTag main, CompoundTag off) {}
+    private record WorkObservation(BuilderEntity worker, UUID area, int stage, long gameTime,
+                                   Set<Long> pending, int cobble, int oak, int chestCobble, int chestOak,
+                                   boolean participating, String nativeState) {}
     private static boolean replacementSpawned, replacementVerified;
     private static long replacementTick, replacementPlaced;
     private static UUID deadBuilder;
@@ -132,7 +148,7 @@ public final class NativeStagedHandoffQa {
                                 List<CompoundTag> cargo, CompoundTag main, CompoundTag off,
                                 CompoundTag authority, CompoundTag recipe, UUID ledgerGeneration,
                                 Set<Long> pendingCells, long placed, long gameTime, long passiveCredits,
-                                PerimeterProject.State state, int activeStage) {}
+                                PerimeterProject.State state, int activeStage, Map<UUID, Cargo> crewCargo) {}
     private enum Action { NONE, OPEN_CORE, CANCEL_MENU, CAPTURE_COMMISSION, RELOAD, CAPTURE_FINAL, DONE }
     private NativeStagedHandoffQa() {}
 
@@ -220,6 +236,17 @@ public final class NativeStagedHandoffQa {
         switch (stage) {
             case 0 -> {
                 fixture = NativeStagedHandoffFixture.setup(level, owner);
+                if (SHARED_CREW) {
+                    originalCoordinator = fixture.builderId();
+                    rememberCrew(builder(level));
+                    var helper = NativeStagedHandoffFixture.spawnSharedHelper(level, owner);
+                    sharedHelper = helper.getUUID(); rememberCrew(helper);
+                    require(level.getEntitiesOfClass(BuilderEntity.class, NativeStagedHandoffFixture.BOUNDS,
+                            worker -> owner.getUUID().equals(WorkersBridge.readWorkerOwner(worker))).size() == 2,
+                            "Shared fixture must have exactly two eligible owned builders");
+                    REPORT.put("sharedCrewBuilders", List.of(originalCoordinator.toString(), sharedHelper.toString()));
+                    conservation(level, owner);
+                }
                 coreKey = SiegeCore.key(owner); liveBuildGoal = fixture.buildGoal(); liveStorageGoal = fixture.storageGoal();
                 verifyCurrentTerritory(level, NativeStagedHandoffFixture.TERRITORY);
                 require(balance(owner) == 0, "Fresh Treasury was not empty");
@@ -240,20 +267,20 @@ public final class NativeStagedHandoffQa {
                 var prepared = PerimeterConstruction.prepare(owner, NativeStagedHandoffFixture.CORE, 1);
                 require(prepared.ready() && prepared.quote() != null, "Production full-plan quote rejected: " + prepared.problem());
                 require(prepared.builder() == builder(level),"Production selected another fixture builder");
-                if (!REPLACE_BUILDER) require(prepared.plan().blocks().equals(fixture.plan().blocks())
+                if (!REPLACE_BUILDER && !SHARED_CREW) require(prepared.plan().blocks().equals(fixture.plan().blocks())
                         && prepared.plan().clearance().equals(fixture.plan().clearance()), "Production quote changed the complete 572-target one-claim plan");
-                // The replacement variant tests retained legacy geometry through the public protected server admission.
+                // Opt-in replacement/shared variants test explicit legacy geometry through protected public admission.
                 // It never substitutes a legacy fallback in production's new-plan quote path.
-                var testedPlan=REPLACE_BUILDER?fixture.plan():prepared.plan();
+                var testedPlan=REPLACE_BUILDER || SHARED_CREW?fixture.plan():prepared.plan();
                 var quote=prepared.quote();
                 Map<Long,BlockState> baseline=new LinkedHashMap<>(),headroom=new LinkedHashMap<>();
-                if (REPLACE_BUILDER) {
+                if (REPLACE_BUILDER || SHARED_CREW) {
                     testedPlan.blocks().keySet().forEach(cell->baseline.put(cell,level.getBlockState(BlockPos.of(cell))));
                     testedPlan.clearance().forEach(cell->headroom.put(cell,level.getBlockState(BlockPos.of(cell))));
-                    REPORT.put("replacementGeometry","explicit legacy hollow plan; production new gated quote remains unchanged");
+                    REPORT.put(SHARED_CREW ? "sharedCrewGeometry" : "replacementGeometry","explicit legacy hollow plan; production new gated quote remains unchanged");
                     REPORT.put("commissionPath","Explicit legacy whole-plan public direct server commission with unchanged native protection and one payment");
                 } else {baseline.putAll(quote.before());headroom.putAll(quote.clearance());}
-                var testedGates=REPLACE_BUILDER?null:quote.gateContract();
+                var testedGates=REPLACE_BUILDER || SHARED_CREW?null:quote.gateContract();
                 REPORT.put("productionQuoteStageCount", prepared.quote().layout().stages().size());
                 // Deliberately QA-only partition pressure. Always run the unchanged actual native serializer validator too.
                 reviewedLayout = PerimeterStageLayout.partition(testedPlan, part -> {
@@ -267,6 +294,8 @@ public final class NativeStagedHandoffQa {
                         testedGates, quote.core(), 1, prepared.claimIdentity(), owner.getUUID(), prepared.builder().getUUID());
                 require(balance(owner) == 2000 && placed(level) == 0 && areaCount(level) == 0 && PerimeterProjectStore.all(core(owner)).isEmpty(),
                         "Full quote/synthetic review charged, placed blocks or started a project");
+                require(!SHARED_CREW || prepared.builder().getUUID().equals(originalCoordinator),
+                        "Fixture coordinator differs from the real reviewed builder");
                 require(NativePerimeterProjects.start(owner, prepared.builder(), quote.core(), 1, testedPlan, reviewedLayout,
                         baseline, headroom, testedGates, prepared.territory(), fingerprint), "Public direct server commission failed");
                 var projects = PerimeterProjectStore.all(core(owner));
@@ -284,9 +313,11 @@ public final class NativeStagedHandoffQa {
                 require(core(owner) == treasury && treasury.contains("BankInterestAt", net.minecraft.nbt.Tag.TAG_LONG)
                         && treasury.getLong("BankInterestAt") == interestAt, "Commission replaced the authoritative Treasury clock");
                 treasuryObserver = new NativeQaTreasury(core(owner), bankRate(core(owner)), now, 2000, 64, residents.getCompound("Residents").size());
-                builder(level).setNoAi(false); // Last fixture mutation of the tested worker. All work/movement now belongs to native AI.
+                builder(level).setNoAi(false); // End fixture AI hold. Subsequent work belongs to native AI.
+                if (SHARED_CREW) ((BuilderEntity) level.getEntity(sharedHelper)).setNoAi(false);
                 constructionStarted = lastProgress = System.nanoTime(); placedBefore = 0;
                 REPORT.put("projectId", projectId.toString()); REPORT.put("manifestHash", acceptedProject.manifestHash());
+                if (SHARED_CREW) REPORT.put("commissionGameTime", now);
                 REPORT.put("reviewFingerprint", fingerprint); REPORT.put("originalMarker", originalMarker.toShortString());
                 REPORT.put("parkedUnrelatedStarterNpcIds", fixture.parkedAuxiliaries());
                 REPORT.put("reviewedStageCount", reviewedLayout.stages().size());
@@ -301,6 +332,7 @@ public final class NativeStagedHandoffQa {
                 sample(level, owner, "direct-server-commission"); advance(now, 5); return Action.CAPTURE_COMMISSION;
             }
             case 5 -> {
+                if (SHARED_CREW && advanceSharedCrew(level, owner, project, now)) return Action.NONE;
                 if (REPLACE_BUILDER && !replacementVerified) {
                     if (replacementSpawned) {
                         require(now-replacementTick<1200,"Confirmed-death replacement failed to resume within one minute");
@@ -338,14 +370,16 @@ public final class NativeStagedHandoffQa {
                 if (!midRestart && (!REPLACE_BUILDER || replacementVerified) && project.state() == PerimeterProject.State.RUNNING && project.activeStage() == 0) {
                     long stagePlaced = stagePlaced(level, 0);
                     if (stagePlaced >= 8 && stagePlaced < project.active().layout().targets().size()
-                            && stableTicks >= 40 && now - lastStableTick <= 1 && closed(builder(level))) {
+                            && stableTicks >= 40 && now - lastStableTick <= 1 && closed(builder(level))
+                            && (!SHARED_CREW || bothContributed() && closed((BuilderEntity) level.getEntity(sharedHelper)))) {
                         REPORT.put("partialRestartClosedLifecycle", Map.of("consecutiveServerTicks", stableTicks, "minimumTicks", 40,
                                 "cleanupJournalEmpty", true, "activeHandUse", false, "storageRunningProblemAbsent", true));
                         beginRestart(level, owner, "mid-stage"); return Action.NONE;
                     }
                 }
                 if (project.state() == PerimeterProject.State.RUNNING && project.activeStage() == 1 && stagePlaced(level, 1) > 0) {
-                    require(midRestart && project.receipts().size() == 1 && stagePlaced(level, 0) == acceptedProject.stages().get(0).layout().targets().size(),
+                    require((!SHARED_CREW || sharedPromotionVerified && sharedReloadVerified)
+                            && midRestart && project.receipts().size() == 1 && stagePlaced(level, 0) == acceptedProject.stages().get(0).layout().targets().size(),
                             "Native next-section work lacks first-section completion and the actual partial first-stage restart");
                     verifyActiveStage(level, project);
                     var journal = PerimeterStageJournal.get(core(owner), project);
@@ -407,6 +441,13 @@ public final class NativeStagedHandoffQa {
                 require(chestValues(level).equals(stopped.chests()) && loadedCargo != null && loadedCargo.equals(stopped.cargo())
                         && materialValue(loadedMain).equals(materialValue(stopped.main())) && materialValue(loadedOff).equals(materialValue(stopped.off())),
                         "Native exact chest withdrawals or pre-AI loaded cargo/equipment changed across reload");
+                if (SHARED_CREW) {
+                    require(LOADED_CREW.equals(stopped.crewCargo()), "Exact construction cargo for every surviving crew member changed on reload");
+                    REPORT.put("sharedCrewCargoReload-" + reloadKind, Map.of("stopped", cargoEvidence(stopped.crewCargo()),
+                            "loaded", cargoEvidence(LOADED_CREW)));
+                    if (reloadKind.equals("mid-stage")) require(LOADED_CREW.keySet().equals(Set.of(originalCoordinator, sharedHelper)),
+                            "Shared partial restart did not reload both original builders");
+                }
                 require(ConstructionEditLedger.get(level).sameGeneration(stopped.ledgerGeneration()), "Durable ledger generation changed across reload");
                 verifyCurrentTerritory(level, NativeStagedHandoffFixture.TERRITORY);
                 if (reloadKind.equals("canceled")) verifyCancellation(level, owner);
@@ -429,6 +470,9 @@ public final class NativeStagedHandoffQa {
             case 12 -> {
                 require(now - stageTick < 2400, "Production did not resume within two minutes after actual reload and restored Survival permission");
                 if (project == null || project.state() != PerimeterProject.State.RUNNING || placed(level) <= stopped.placed()) return Action.NONE;
+                if (SHARED_CREW && reloadKind.equals("mid-stage") && CREW_PLACEMENTS.entrySet().stream()
+                        .anyMatch(entry -> entry.getValue().size() <= crewBeforeReload.getOrDefault(entry.getKey(), 0))) return Action.NONE;
+                if (SHARED_CREW && reloadKind.equals("mid-stage")) sharedReloadVerified = true;
                 verifyActiveStage(level, project); conservation(level, owner);
                 require(!ProtectedBuilderHandMirror.pending(builder(level).getPersistentData())
                         && !ProtectedBuilderHandMirror.reviewNeeded(builder(level).getPersistentData()), "Native hand reload repair is unresolved after resumed work");
@@ -453,6 +497,7 @@ public final class NativeStagedHandoffQa {
             }
             case 14 -> {
                 require(!REPLACE_BUILDER || replacementVerified,"Replacement construction evidence missing");
+                if (SHARED_CREW) finishSharedCrew(level);
                 require(SHOTS.contains("04-canceled-after-reopen.png"), "Missing actual canceled-world framebuffer");
                 verifyCancellation(level, owner); return Action.DONE;
             }
@@ -484,6 +529,180 @@ public final class NativeStagedHandoffQa {
         liveBuildGoal=goal;liveStorageGoal=storage;
         require(level.addFreshEntity(next),"Replacement hire could not enter fixture world");
         replacementSpawned=true;replacementTick=now;stableTicks=0;
+    }
+
+    private static void rememberCrew(BuilderEntity worker) {
+        CREW_GOALS.put(worker.getUUID(), worker.goalSelector.getAvailableGoals().stream().map(g -> g.getGoal())
+                .filter(BuilderWorkGoal.class::isInstance).map(BuilderWorkGoal.class::cast).findFirst().orElseThrow());
+        CREW_STORAGE.put(worker.getUUID(), worker.goalSelector.getAvailableGoals().stream().map(g -> g.getGoal())
+                .filter(GetNeededItemsFromStorage.class::isInstance).map(GetNeededItemsFromStorage.class::cast).findFirst().orElseThrow());
+        CREW_PLACEMENTS.computeIfAbsent(worker.getUUID(), ignored -> new java.util.HashSet<>());
+    }
+    private static Cargo cargo(BuilderEntity worker) {
+        return new Cargo(constructionValues(worker.getInventory()), materialValue(worker.getMainHandItem().save(new CompoundTag())),
+                materialValue(worker.getOffhandItem().save(new CompoundTag())));
+    }
+    private static Map<String, Object> cargoEvidence(Map<UUID, Cargo> cargo) {
+        var result = new LinkedHashMap<String, Object>();
+        cargo.forEach((id, value) -> result.put(id.toString(), Map.of("slots", value.slots().stream().map(CompoundTag::toString).toList(),
+                "main", value.main().toString(), "off", value.off().toString())));
+        return result;
+    }
+    private static Map<UUID, Cargo> crewCargo(ServerLevel level) {
+        var result = new LinkedHashMap<UUID, Cargo>();
+        for (UUID id : CREW_PLACEMENTS.keySet()) if (level.getEntity(id) instanceof BuilderEntity worker && worker.isAlive())
+            result.put(id, cargo(worker));
+        return Map.copyOf(result);
+    }
+    private static int allWorkerStock(ServerLevel level, Item material) {
+        if (!SHARED_CREW) return workerStock(builder(level), material);
+        int total = 0;
+        for (UUID id : CREW_PLACEMENTS.keySet()) if (level.getEntity(id) instanceof BuilderEntity worker)
+            total += workerStock(worker, material);
+        return total;
+    }
+    private static Map<String, Integer> crewCounts() {
+        var counts = new LinkedHashMap<String, Integer>();
+        CREW_PLACEMENTS.forEach((id, cells) -> counts.put(id.toString(), cells.size())); return counts;
+    }
+    private static boolean bothContributed() {
+        return CREW_PLACEMENTS.size() == 2 && CREW_PLACEMENTS.values().stream().allMatch(cells -> !cells.isEmpty());
+    }
+
+    /**
+     * Read-only attribution bracket: the actual LivingTick boundary before a builder's AI, closed
+     * by the next living entity's boundary or the ordinary server END tick. This fixture has only
+     * two construction actors; every credited exact world change must have that actor's matching
+     * material debit and the production guard's native Completed receipt. No goal is invoked here.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void observeCrewLivingTick(net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent event) {
+        if (!ENABLED || !SHARED_CREW || finished || fixture == null || projectId == null
+                || !(event.getEntity().level() instanceof ServerLevel level) || level != level.getServer().overworld()) return;
+        try {
+            flushWorkObservation(level);
+            if (!(event.getEntity() instanceof BuilderEntity worker) || !worker.isAlive()
+                    || !CREW_PLACEMENTS.containsKey(worker.getUUID())) return;
+            var project = project(level);
+            if (project == null || project.active() == null) return;
+            workObservation = new WorkObservation(worker, project.active().areaId(), project.activeStage(), level.getGameTime(),
+                    pendingCells(level), workerStock(worker, Items.COBBLESTONE), workerStock(worker, Items.OAK_PLANKS),
+                    chestStock(level, Items.COBBLESTONE), chestStock(level, Items.OAK_PLANKS),
+                    NativePerimeterProjects.participantLinkMatches(worker, project)
+                            && project.header().owner().equals(WorkersBridge.readWorkerOwner(worker)),
+                    String.valueOf(CREW_GOALS.get(worker.getUUID()).state));
+        } catch (Throwable problem) { observerFailure = problem; }
+    }
+    private static void flushWorkObservation(ServerLevel level) {
+        WorkObservation before = workObservation; workObservation = null;
+        if (before == null) return;
+        require(before.worker().level() == level && before.gameTime() == level.getGameTime(),
+                "Shared native observation crossed a world/tick boundary");
+        Set<Long> afterPending = pendingCells(level);
+        require(before.pending().containsAll(afterPending), "Native shared work removed an already placed block");
+        var changed = new java.util.HashSet<>(before.pending()); changed.removeAll(afterPending);
+        var worker = before.worker();
+        int cobbleAfter = workerStock(worker, Items.COBBLESTONE), oakAfter = workerStock(worker, Items.OAK_PLANKS);
+        int chestCobbleAfter = chestStock(level, Items.COBBLESTONE), chestOakAfter = chestStock(level, Items.OAK_PLANKS);
+        long cobblePlaced = changed.stream().filter(cell -> fixture.plan().blocks().get(cell).equals("minecraft:cobblestone")).count();
+        long oakPlaced = changed.size() - cobblePlaced;
+        if (!changed.isEmpty()) {
+            require(before.participating() && worker.isAlive() && !worker.isNoAi()
+                    && before.nativeState().equals("PLACE_BLOCKS"), "Unattributed/non-native shared placement");
+            require(before.cobble() - cobbleAfter == cobblePlaced && before.oak() - oakAfter == oakPlaced
+                    && before.chestCobble() == chestCobbleAfter && before.chestOak() == chestOakAfter,
+                    "Exact per-builder placement material debit was not observed");
+            require(level.getEntity(before.area()) instanceof ProtectedBuildArea, "Placement lost its authenticated native area");
+            var completed = java.util.Arrays.stream(level.getEntity(before.area()).getPersistentData()
+                    .getCompound("SiegeProtectedConstructionV1").getLongArray("Completed")).boxed()
+                    .collect(java.util.stream.Collectors.toSet());
+            for (long cell : changed) {
+                require(acceptedProject.stages().get(before.stage()).layout().targets().containsKey(cell)
+                        && completed.contains(cell) && CREW_PLACEMENTS.values().stream().noneMatch(cells -> cells.contains(cell)),
+                        "Duplicate or unreceipted shared target placement");
+                CREW_PLACEMENTS.get(worker.getUUID()).add(cell);
+            }
+        }
+        boolean withdrawn = cobbleAfter > before.cobble() || oakAfter > before.oak();
+        if (withdrawn) {
+            require(changed.isEmpty() && before.chestCobble() - chestCobbleAfter == cobbleAfter - before.cobble()
+                    && before.chestOak() - chestOakAfter == oakAfter - before.oak(), "Shared supply withdrawal lacks exact finite-chest evidence");
+            CREW_SUPPLIED.add(worker.getUUID());
+        }
+        if (!changed.isEmpty() || withdrawn) {
+            var record = new LinkedHashMap<String, Object>();
+            record.put("builder", worker.getUUID().toString()); record.put("area", before.area().toString());
+            record.put("stage", before.stage()); record.put("gameTime", before.gameTime());
+            record.put("nativeStateBefore", before.nativeState()); record.put("kind", withdrawn ? "native-supply-withdrawal" : "native-placement");
+            record.put("cells", changed.stream().sorted().map(cell -> Map.of("packed", cell,
+                    "position", BlockPos.of(cell).toShortString(), "material", fixture.plan().blocks().get(cell))).toList());
+            record.put("cobbleBefore", before.cobble()); record.put("cobbleAfter", cobbleAfter);
+            record.put("oakBefore", before.oak()); record.put("oakAfter", oakAfter);
+            record.put("chestCobbleBefore", before.chestCobble()); record.put("chestCobbleAfter", chestCobbleAfter);
+            record.put("chestOakBefore", before.chestOak()); record.put("chestOakAfter", chestOakAfter);
+            CREW_EVENTS.add(record);
+        }
+    }
+
+    private static boolean advanceSharedCrew(ServerLevel level, ServerPlayer owner, PerimeterProject project, long now) {
+        if (sharedPromotionVerified) return false;
+        require(project != null && project.activeStage() == 0, "Shared acceptance advanced before coordinator succession evidence");
+        var helper = level.getEntity(sharedHelper);
+        require(helper instanceof BuilderEntity && helper.isAlive(), "Original enlisted helper did not survive");
+        var ledger = ConstructionEditLedger.get(level);
+        if (sharedDeathRequested) {
+            require(now - sharedDeathTick < 1200, "Surviving shared helper did not resume within one minute of coordinator death");
+            if (level.getEntity(originalCoordinator) != null || !ledger.assignedBuilder(project).equals(sharedHelper)
+                    || !NativePerimeterProjects.participantLinkMatches((BuilderEntity) helper, project)
+                    || placed(level) <= sharedDeathPlaced) return true;
+            require(project.header().builder().equals(originalCoordinator) && ledger.knownCrewMember(project, sharedHelper),
+                    "Succession rewrote the paid original identity or invented a replacement hire");
+            verifyActiveStage(level, project); conservation(level, owner); observeTreasury(level, core(owner));
+            REPORT.put("sharedCrewSuccession", Map.of("deadCoordinator", originalCoordinator.toString(), "survivingHelper", sharedHelper.toString(),
+                    "placedBefore", sharedDeathPlaced, "placedAfter", placed(level), "deathGameTime", sharedDeathTick,
+                    "resumeGameTime", now, "manifestHash", project.manifestHash(), "extraCommission", false,
+                    "newBuilderSpawnedAfterDeath", false));
+            sharedPromotionVerified = true; lastProgress = System.nanoTime();
+            check("Already-enlisted surviving helper became coordinator after actual original-builder death; normal native placement resumed the identical paid project");
+            return false;
+        }
+        if (!ledger.crewMembers(project).equals(Set.of(sharedHelper))) return false;
+        require(ledger.assignedBuilder(project).equals(originalCoordinator)
+                && NativePerimeterProjects.participantLinkMatches((BuilderEntity) helper, project), "Wrong native shared crew admission");
+        if (!REPORT.containsKey("sharedCrewAdmission")) REPORT.put("sharedCrewAdmission", Map.of("coordinator", originalCoordinator.toString(),
+                "helper", sharedHelper.toString(), "owner", owner.getUUID().toString(), "project", projectId.toString(),
+                "manifestHash", project.manifestHash(), "area", project.active().areaId().toString(), "gameTime", now));
+        BuilderEntity original = builder(level);
+        if (!midRestart || !sharedReloadVerified || !bothContributed() || workerStock(original, Items.COBBLESTONE) != 0
+                || workerStock(original, Items.OAK_PLANKS) != 0 || ProtectedBuilderHandMirror.activeUse(original)
+                || ProtectedStorageAccess.runningProblem(original) != null
+                || !ProtectedInventoryCleanup.read(original.getPersistentData()).isEmpty()) return false;
+        flushWorkObservation(level); conservation(level, owner);
+        sharedDeathPlaced = placed(level); sharedDeathTick = now;
+        require(original.hurt(level.damageSources().generic(), Float.MAX_VALUE) && !original.isAlive(),
+                "Original coordinator did not die from actual lethal damage");
+        sharedDeathRequested = true;
+        BuilderEntity survivor = (BuilderEntity) helper;
+        fixture = new NativeStagedHandoffFixture.Fixture(sharedHelper, fixture.storageIds(), fixture.claimIds(), fixture.plan(), fixture.oracle(),
+                CREW_GOALS.get(sharedHelper), CREW_STORAGE.get(sharedHelper), fixture.nonPlanCells(), fixture.parkedAuxiliaries());
+        liveBuildGoal = CREW_GOALS.get(sharedHelper); liveStorageGoal = CREW_STORAGE.get(sharedHelper);
+        require(survivor.isAlive() && !survivor.isNoAi(), "Surviving helper lost ordinary native AI");
+        return true;
+    }
+    private static void finishSharedCrew(ServerLevel level) {
+        flushWorkObservation(level);
+        require(observerFailure == null, "Shared observer failed: " + observerFailure);
+        require(sharedReloadVerified && sharedPromotionVerified && bothContributed()
+                && CREW_SUPPLIED.equals(Set.of(originalCoordinator, sharedHelper)), "Shared acceptance lacks native contribution/supply/reload/succession evidence");
+        long unique = CREW_PLACEMENTS.values().stream().flatMap(Set::stream).distinct().count();
+        require(unique == placed(level) && CREW_PLACEMENTS.values().stream().mapToInt(Set::size).sum() == unique,
+                "Observed native actor placements do not equal retained exact world targets");
+        REPORT.put("sharedCrewEvents", CREW_EVENTS); REPORT.put("sharedCrewPlacementCounts", crewCounts());
+        REPORT.put("sharedCrewDistinctTargets", unique); REPORT.put("sharedCrewPartialReloadVerified", sharedReloadVerified);
+        REPORT.put("sharedCrewInterruption", "Owner's ordinary Spectator permission pause interrupted both native workers; exact per-worker cargo loaded before AI and both resumed real placement");
+        REPORT.put("sharedCrewSleepCoverage", "Not exercised: fixture remains at noon; no forced sleeping or native state changes");
+        REPORT.put("sharedCrewAttribution", "Read-only actual LivingTick-to-next-living-tick/server-END brackets; exact world transition plus actor material debit plus native guard Completed receipt");
+        REPORT.put("sharedCrewVerified", true);
     }
 
     private static boolean cancelThroughMenu(Minecraft mc) {
@@ -591,23 +810,33 @@ public final class NativeStagedHandoffQa {
     /** Read-only ordinary server-tick observation; never manually run or stop native goals. */
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void serverTick(TickEvent.ServerTickEvent event) {
-        if (!ENABLED || finished || fixture == null || event.phase != TickEvent.Phase.END || stage != 5 || midRestart) return;
+        if (!ENABLED || finished || fixture == null || event.phase != TickEvent.Phase.END) return;
+        if (SHARED_CREW) try { flushWorkObservation(event.getServer().overworld()); }
+        catch (Throwable problem) { observerFailure = problem; }
+        if (stage != 5 || midRestart) return;
         try {
             var level = event.getServer().overworld(); long now = level.getGameTime();
-            if (level.getEntity(fixture.builderId()) instanceof BuilderEntity worker && closed(worker)) {
+            if (level.getEntity(fixture.builderId()) instanceof BuilderEntity worker && closed(worker)
+                    && (!SHARED_CREW || level.getEntity(sharedHelper) instanceof BuilderEntity helper && closed(helper))) {
                 stableTicks = lastStableTick == now - 1 ? stableTicks + 1 : 1; lastStableTick = now;
             } else { stableTicks = 0; lastStableTick = -1; }
         } catch (Throwable problem) { observerFailure = problem; }
     }
     private static boolean closed(BuilderEntity worker) {
-        return !worker.isNoAi() && workerStock(worker, Items.COBBLESTONE) >= 32
+        BuilderWorkGoal goal = SHARED_CREW && worker != null ? CREW_GOALS.get(worker.getUUID()) : liveBuildGoal;
+        return worker != null && !worker.isNoAi() && workerStock(worker, Items.COBBLESTONE) >= (SHARED_CREW ? 16 : 32)
                 && worker.neededItems != null && worker.neededItems.isEmpty()
                 && !ProtectedBuilderHandMirror.activeUse(worker) && ProtectedStorageAccess.runningProblem(worker) == null
                 && ProtectedInventoryCleanup.read(worker.getPersistentData()).isEmpty()
-                && liveBuildGoal != null && liveBuildGoal.getClass() == BuilderWorkGoal.class
-                && "PLACE_BLOCKS".equals(String.valueOf(liveBuildGoal.state));
+                && goal != null && goal.getClass() == BuilderWorkGoal.class
+                && "PLACE_BLOCKS".equals(String.valueOf(goal.state));
     }
     private static void beginRestart(ServerLevel level, ServerPlayer owner, String kind) {
+        if (SHARED_CREW) {
+            flushWorkObservation(level); LOADED_CREW.clear();
+            var counts = new LinkedHashMap<UUID, Integer>();
+            CREW_PLACEMENTS.forEach((id, cells) -> counts.put(id, cells.size())); crewBeforeReload = Map.copyOf(counts);
+        }
         reloadKind = kind; pauseStarted = System.nanoTime(); owner.setGameMode(GameType.SPECTATOR);
         pausedGeometry = geometry(level); stopped = null; stoppingFailure = null; loadFailure = null; loadedAuthority = null;
         loadedCargo = null; loadedMain = null; loadedOff = null;
@@ -618,6 +847,10 @@ public final class NativeStagedHandoffQa {
         if (!ENABLED || fixture == null || event.getLevel().isClientSide()) return;
         if (event.getEntity() instanceof ProtectedBuildArea area) AREA_JOINS.add(Map.of("area", area.getUUID().toString(),
                 "marker", area.blockPosition().toShortString(), "loadedFromDisk", event.loadedFromDisk()));
+        if (SHARED_CREW && event.getEntity() instanceof BuilderEntity member && CREW_PLACEMENTS.containsKey(member.getUUID())) {
+            rememberCrew(member);
+            if (restartRequested && stopped != null) LOADED_CREW.put(member.getUUID(), cargo(member));
+        }
         if (!(event.getEntity() instanceof BuilderEntity worker) || !worker.getUUID().equals(fixture.builderId())) return;
         liveBuildGoal = worker.goalSelector.getAvailableGoals().stream().map(g -> g.getGoal()).filter(BuilderWorkGoal.class::isInstance)
                 .map(BuilderWorkGoal.class::cast).findFirst().orElse(null);
@@ -632,7 +865,8 @@ public final class NativeStagedHandoffQa {
     public static void serverStopping(ServerStoppingEvent event) {
         if (!ENABLED || !restartRequested || stopped != null || fixture == null) return;
         try {
-            ServerLevel level = event.getServer().overworld(); var project = project(level); var worker = builder(level);
+            ServerLevel level = event.getServer().overworld(); if (SHARED_CREW) flushWorkObservation(level);
+            var project = project(level); var worker = builder(level);
             require(geometry(level).equals(pausedGeometry), "Final shutdown changed paused project geometry");
             var terminal = PerimeterProjectAuthority.snapshot(level, coreKey).terminal(projectId);
             require(project != null || terminal != null && terminal.state() == PerimeterProject.State.CANCELED, "Shutdown lost live/terminal authority");
@@ -641,7 +875,7 @@ public final class NativeStagedHandoffQa {
                     ? area.getPersistentData().getCompound("SiegeProtectedConstructionV1").copy() : new CompoundTag();
             stopped = new StopSnapshot(geometry(level), chestValues(level), constructionValues(worker.getInventory()), worker.getMainHandItem().save(new CompoundTag()),
                     worker.getOffhandItem().save(new CompoundTag()), authority(core), recipe, ConstructionEditLedger.get(level).generation(), pendingCells(level),
-                    placed(level), level.getGameTime(), treasuryObserver.passiveCredits(), project == null ? terminal.state() : project.state(), project == null ? terminal.activeStage() : project.activeStage());
+                    placed(level), level.getGameTime(), treasuryObserver.passiveCredits(), project == null ? terminal.state() : project.state(), project == null ? terminal.activeStage() : project.activeStage(), SHARED_CREW ? crewCargo(level) : Map.of());
             REPORT.put("authority-" + reloadKind + "-final-stop", stopped.authority().toString());
         } catch (Throwable problem) { stoppingFailure = problem; }
     }
@@ -757,7 +991,7 @@ public final class NativeStagedHandoffQa {
         for (Item material : List.of(Items.COBBLESTONE, Items.OAK_PLANKS)) {
             int supplied = material == Items.COBBLESTONE ? NativeStagedHandoffFixture.COBBLE : NativeStagedHandoffFixture.OAK;
             long built = fixture.plan().blocks().keySet().stream().filter(p -> level.getBlockState(BlockPos.of(p)).getBlock().asItem() == material).count();
-            long total = built + chestStock(level, material) + workerStock(builder(level), material)
+            long total = built + chestStock(level, material) + allWorkerStock(level, material)
                     + (owner == null ? 0 : count(owner.getInventory(), material)) + dropped(level, material);
             require(total == supplied, "Finite native stock mismatch for " + material + ": supplied=" + supplied + ", accounted=" + total);
         }
@@ -846,7 +1080,8 @@ public final class NativeStagedHandoffQa {
         result.put("mainHand", stack(builder.getMainHandItem())); result.put("offHand", stack(builder.getOffhandItem()));
         result.put("mainHandSameObjectAsSlot5", builder.getMainHandItem() == builder.getInventory().getItem(5));
         result.put("chestCobble", chestStock(level, Items.COBBLESTONE)); result.put("chestOak", chestStock(level, Items.OAK_PLANKS));
-        result.put("builderCobble", workerStock(builder, Items.COBBLESTONE)); result.put("builderOak", workerStock(builder, Items.OAK_PLANKS));
+        result.put("builderCobble", allWorkerStock(level, Items.COBBLESTONE)); result.put("builderOak", allWorkerStock(level, Items.OAK_PLANKS));
+        if (SHARED_CREW) result.put("sharedCrewPlacementCounts", crewCounts());
         result.put("looseCobble", dropped(level, Items.COBBLESTONE)); result.put("looseOak", dropped(level, Items.OAK_PLANKS));
         result.put("placedCobble", fixture.plan().blocks().keySet().stream().filter(p -> level.getBlockState(BlockPos.of(p)).is(Blocks.COBBLESTONE)).count());
         result.put("placedOak", fixture.plan().blocks().keySet().stream().filter(p -> level.getBlockState(BlockPos.of(p)).is(Blocks.OAK_PLANKS)).count());
@@ -943,7 +1178,7 @@ public final class NativeStagedHandoffQa {
         REPORT.put("legacySolidRecords", "Not recompiled or reinterpreted by QA; unchanged production saved-plan semantics remain authoritative");
         REPORT.put("syntheticPartition", true); REPORT.put("qaSectionTargetCap", SECTION_TARGET_CAP);
         REPORT.put("commissionPath", "Public NativePerimeterProjects.start direct server commission; no normal review-menu/plan-use packet coverage in this mode");
-        REPORT.put("scope", "Complete 572-target one-claim plan, exact finite 352 cobblestone plus 220 oak, one native builder, unchanged native goals/ticks/materials. QA-only bounded target partition uses unchanged native blueprint serializer checks. Actual partial first-stage save/close/reopen, native first-section completion and controller handoff at the original shovel site, native next-section placement, authenticated real core-menu cancellation, and canceled close/reopen. Between-stage close/reopen only when its ordinary spectator pause boundary is cleanly observed.");
+        REPORT.put("scope", "Complete 572-target one-claim plan, exact finite 352 cobblestone plus 220 oak, " + (SHARED_CREW ? "two exactly owned native builders" : "one native builder") + ", unchanged native goals/ticks/materials. QA-only bounded target partition uses unchanged native blueprint serializer checks. Actual partial first-stage save/close/reopen, native first-section completion and controller handoff at the original shovel site, native next-section placement, authenticated real core-menu cancellation, and canceled close/reopen. Between-stage close/reopen only when its ordinary spectator pause boundary is cleanly observed.");
         REPORT.put("notCovered", List.of("Whole-plan completion", "Migration or reinterpretation of existing accepted solid records", "Naturally occurring production partition sizes", "Normal commission review-menu and plan-use packet path", "Dedicated-client networking", "Unloaded-owner absence", "Uneven/disjoint/holed territory or other material palettes", "Storage farther than native reach", "Arbitrary shader/GPU combinations"));
         var mods = new LinkedHashMap<String, String>(); var artifacts = new LinkedHashMap<String, Object>();
         for (String id : List.of("minecraft", "forge", "siegeoverhaul", "workers", "recruits", "smallships", "siegeweapons")) {
@@ -955,6 +1190,14 @@ public final class NativeStagedHandoffQa {
             }
         }
         require("2.0.3".equals(mods.get("workers")) && "1.15.2".equals(mods.get("recruits")), "Unreviewed native API versions");
+        require(!(SHARED_CREW && REPLACE_BUILDER), "Shared crew and replacement are separate acceptance scenarios");
+        REPORT.put("sharedCrewRequested", SHARED_CREW);
+        if (SHARED_CREW) {
+            REPORT.put("sharedCrewEvents", CREW_EVENTS); // Retain partial evidence in a failing run too.
+            REPORT.put("sourceCommit", Files.readString(evidence.resolve("source-commit.txt")).trim());
+            REPORT.put("sourceTree", Files.readString(evidence.resolve("source-tree.txt")).trim());
+            REPORT.put("sharedCrewScope", "Two exact-owner builders; one unchanged finite chest; explicit legacy hollow fixture geometry and synthetic partition; normal native ticks; read-only per-living-tick world/material observation; both builders interrupt/reload/resume before coordinator death; surviving enlisted helper continues immutable paid project. No forced sleep, target writes, native goal calls, receipt creation or speed changes.");
+        }
         REPORT.put("builderReplacementRequested", REPLACE_BUILDER);
         REPORT.put("loadedModVersions", mods); REPORT.put("loadedCompanionArtifacts", artifacts);
         REPORT.put("nativeApiClasses", Map.of("builder", BuilderEntity.class.getName(), "buildGoal", BuilderWorkGoal.class.getName(),

@@ -52,6 +52,40 @@ public final class PerimeterBuilderAssignments {
                 || entry != null && entry.history().stream().anyMatch(h -> h.to().equals(worker));
     }
 
+    /** Both sides of a same-stage handoff may clean their own receipts, but only the latest owns the role. */
+    public boolean areaKnown(PerimeterProject project, UUID worker, UUID area) {
+        if (!known(project, worker) || area == null) return false;
+        var stage = project.stages().stream().filter(s -> s.areaId().equals(area)).findFirst();
+        return stage.isPresent() && stage.get().index() <= project.activeStage()
+                && roleAtStage(entries.get(project.header().projectId()), project.header().builder(), worker, stage.get().index(),
+                    id -> stageIndex(project, id));
+    }
+    public boolean areaKnown(PerimeterTerminalReceipt terminal, UUID worker, UUID area) {
+        if (!known(terminal, worker) || area == null) return false;
+        var stage = terminal.stages().stream().filter(s -> s.areaId().equals(area)).findFirst();
+        return stage.isPresent() && stage.get().index() <= terminal.activeStage()
+                && roleAtStage(entries.get(terminal.projectId()), terminal.builder(), worker, stage.get().index(),
+                    id -> terminal.stages().stream().filter(s -> s.areaId().equals(id)).findFirst().orElseThrow(PerimeterBuilderAssignments::malformed).index());
+    }
+    public UUID admissionArea(PerimeterProject project, UUID worker) {
+        if (!known(project, worker)) return null;
+        return project.header().builder().equals(worker) ? project.stages().get(0).areaId()
+                : entries.get(project.header().projectId()).history().stream().filter(h -> h.to().equals(worker)).findFirst().orElseThrow().area();
+    }
+    public UUID admissionArea(PerimeterTerminalReceipt terminal, UUID worker) {
+        if (!known(terminal, worker)) return null;
+        return terminal.builder().equals(worker) ? terminal.stages().get(0).areaId()
+                : entries.get(terminal.projectId()).history().stream().filter(h -> h.to().equals(worker)).findFirst().orElseThrow().area();
+    }
+    private static boolean roleAtStage(Entry entry, UUID original, UUID worker, int stage, java.util.function.ToIntFunction<UUID> stageIndex) {
+        int first = original.equals(worker) ? 0 : Integer.MAX_VALUE, last = Integer.MAX_VALUE;
+        if (entry != null) for (Handoff handoff : entry.history()) {
+            if (handoff.to().equals(worker)) first = stageIndex.applyAsInt(handoff.area());
+            if (handoff.from().equals(worker)) last = stageIndex.applyAsInt(handoff.area());
+        }
+        return stage >= first && stage <= last;
+    }
+
     public UUID builderForArea(PerimeterProject project, UUID area) {
         Entry entry=entries.get(project.header().projectId());
         if (entry == null) return project.header().builder();

@@ -680,6 +680,10 @@ public final class WallBuilderAccess extends Goal {
         if (!(worker.level() instanceof ServerLevel level) || marker==null) return false;
         boolean obstructs=targets.stream().anyMatch(cell->worker.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(BlockPos.of(cell))));
         if (!obstructs) return true;
+        try {
+            if (!Boolean.FALSE.equals(worker.getClass().getMethod("needsToSleep").invoke(worker))
+                    || !Boolean.TRUE.equals(worker.getClass().getMethod("shouldWork").invoke(worker))) return false;
+        } catch (ReflectiveOperationException | RuntimeException unavailable) { return false; }
         if (worker.isPassenger() || worker.isLeashed() || worker.getTarget()!=null
                 || NativeConstructionGuard.currentArea(worker)!=null) return false;
         Set<Long> columns=new java.util.HashSet<>();

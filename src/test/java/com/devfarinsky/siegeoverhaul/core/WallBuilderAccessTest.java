@@ -43,6 +43,18 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),new BlockPos(22,64,0)));
         verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
     }
+    @Test void nextSectionNeverWalksAnObstructingSleeperOrOffDutyWorker() {
+        terrain(); when(worker.level()).thenReturn(level);
+        long target = new BlockPos(20, 64, 0).asLong();
+        when(worker.needsToSleep()).thenReturn(true);
+        assertFalse(WallBuilderAccess.clearNextSection(worker, Set.of(target), Set.of(target), new BlockPos(22, 64, 0)));
+        when(worker.needsToSleep()).thenReturn(false); when(worker.shouldWork()).thenReturn(false);
+        assertFalse(WallBuilderAccess.clearNextSection(worker, Set.of(target), Set.of(target), new BlockPos(22, 64, 0)));
+        when(worker.getBoundingBox()).thenReturn(new AABB(22.2,64,.2,22.8,65.8,.8));
+        assertTrue(WallBuilderAccess.clearNextSection(worker, Set.of(target), Set.of(target), new BlockPos(22, 64, 0)));
+        verify(nav, never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+    }
+
     @Test void reachableNativeCaveEndpointIsStoppedAndReplacedWithSurfaceApproach() throws Exception {
         terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
         var cave=mock(Path.class);when(cave.canReach()).thenReturn(true);
@@ -156,6 +168,8 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         public boolean isFleeing;
         public java.util.UUID getOwnerUUID() { return null; }
         public int getFollowState() { return 6; }
+        public boolean needsToSleep() { return false; }
+        public boolean shouldWork() { return true; }
         protected Builder(EntityType<? extends Mob> type, Level level) { super(type, level); }
     }
     public abstract static class Area extends Entity {
@@ -181,6 +195,7 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
     private final ServerLevel level = mock(ServerLevel.class);
     private final PathNavigation nav = mock(PathNavigation.class);
     private void terrain() {
+        when(worker.shouldWork()).thenReturn(true); when(worker.needsToSleep()).thenReturn(false);
         when(worker.getNavigation()).thenReturn(nav);
         when(worker.getX()).thenReturn(20.5);
         when(worker.getZ()).thenReturn(0.5);

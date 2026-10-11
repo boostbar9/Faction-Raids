@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 public final class PerimeterBuilderCrew {
     public static final int MAX_PROJECTS = 64, MAX_HELPERS = 3, MAX_HISTORY = 64;
     private record Destruction(int stage, UUID area, String receipt) {}
-    private record Member(int admittedStage, boolean active, Destruction destruction) {}
+    private record Member(int admittedStage, boolean active, boolean ready, boolean withdrawn, Integer retiredStage, Destruction destruction) {}
     private record Entry(long generation, String hash, UUID original, Map<UUID, Member> members) {}
     private final UUID ledgerGeneration;
     private final Map<UUID, Entry> entries = new LinkedHashMap<>();
@@ -31,7 +31,7 @@ public final class PerimeterBuilderCrew {
     public Set<UUID> active(PerimeterProject project) {
         Entry entry = entry(project);
         return entry == null ? Set.of() : entry.members().entrySet().stream()
-                .filter(member -> member.getValue().active()).map(Map.Entry::getKey).collect(Collectors.toUnmodifiableSet());
+                .filter(member -> member.getValue().active() && member.getValue().ready()).map(Map.Entry::getKey).collect(Collectors.toUnmodifiableSet());
     }
 
     public boolean known(PerimeterProject project, UUID worker) {
@@ -41,13 +41,87 @@ public final class PerimeterBuilderCrew {
 
     public boolean active(PerimeterProject project, UUID worker) {
         Entry entry = entry(project);
-        return entry != null && entry.members().containsKey(worker) && entry.members().get(worker).active();
+        return entry != null && entry.members().containsKey(worker) && entry.members().get(worker).active() && entry.members().get(worker).ready();
+    }
+
+    public Set<UUID> pending(PerimeterProject project) {
+        Entry entry = entry(project);
+        return entry == null ? Set.of() : entry.members().entrySet().stream()
+                .filter(member -> member.getValue().active() && !member.getValue().ready()).map(Map.Entry::getKey).collect(Collectors.toUnmodifiableSet());
+    }
+    public Set<UUID> reserved(PerimeterProject project) {
+        Entry entry = entry(project);
+        return entry == null ? Set.of() : entry.members().entrySet().stream()
+                .filter(member -> member.getValue().active()).map(Map.Entry::getKey).collect(Collectors.toUnmodifiableSet());
+    }
+    public boolean pending(PerimeterProject project, UUID worker) {
+        Entry entry = entry(project); Member member = entry == null ? null : entry.members().get(worker);
+        return member != null && member.active() && !member.ready();
+    }
+    /** Read-only lookup for destructive removal before the worker-side selector has been saved. */
+    public UUID pendingProject(UUID worker) {
+        if (worker == null) return null;
+        UUID found = null;
+        for (var entry : entries.entrySet()) {
+            Member member = entry.getValue().members().get(worker);
+            if (member == null || !member.active() || member.ready()) continue;
+            if (found != null) throw malformed();
+            found = entry.getKey();
+        }
+        return found;
+    }
+
+    /** Final admission step after the caller verifies every worker-side hook, receipt and native assignment. */
+    public boolean activate(PerimeterProject project, UUID worker) {
+        Entry entry = entry(project); Member member = entry == null ? null : entry.members().get(worker);
+        if (member == null || !member.active() || project.payment() == null || project.state() != PerimeterProject.State.RUNNING
+                || !member.ready() && member.admittedStage() != project.activeStage()) return false;
+        if (member.ready()) return true;
+        Map<UUID, Member> members = new LinkedHashMap<>(entry.members());
+        members.put(worker, new Member(member.admittedStage(), true, true, false, null, null));
+        entries.put(project.header().projectId(), new Entry(entry.generation(), entry.hash(), entry.original(), Map.copyOf(members)));
+        return true;
+    }
+    /** Caller proves a loaded pending worker has no project/native/hand association. Absence is never that proof. */
+    public boolean cancelPending(PerimeterProject project, UUID worker) {
+        Entry entry = entry(project); Member member = entry == null ? null : entry.members().get(worker);
+        if (member == null || member.ready() || member.withdrawn() || member.destruction() != null) return false;
+        Map<UUID, Member> members = new LinkedHashMap<>(entry.members());
+        members.put(worker, new Member(member.admittedStage(), false, false, true, member.admittedStage(), null));
+        entries.put(project.header().projectId(), new Entry(entry.generation(), entry.hash(), entry.original(), Map.copyOf(members)));
+        return true;
     }
 
     /** Geometry-free retained identity is cleanup authority only, never admission or placement authority. */
     public boolean known(PerimeterTerminalReceipt terminal, UUID worker) {
         Entry entry = entry(terminal);
         return entry != null && entry.members().containsKey(worker);
+    }
+
+    public boolean areaKnown(PerimeterProject project, UUID worker, UUID area) {
+        Entry entry = entry(project); Member member = entry == null ? null : entry.members().get(worker);
+        if (member == null || area == null) return false;
+        return project.stages().stream().anyMatch(stage -> stage.areaId().equals(area)
+                && knownStage(member, stage.index(), project.activeStage()));
+    }
+    public boolean areaKnown(PerimeterTerminalReceipt terminal, UUID worker, UUID area) {
+        Entry entry = entry(terminal); Member member = entry == null ? null : entry.members().get(worker);
+        if (member == null || area == null) return false;
+        return terminal.stages().stream().anyMatch(stage -> stage.areaId().equals(area)
+                && knownStage(member, stage.index(), terminal.activeStage()));
+    }
+    public UUID admissionArea(PerimeterProject project, UUID worker) {
+        Entry entry = entry(project); Member member = entry == null ? null : entry.members().get(worker);
+        return member == null || member.withdrawn() ? null : project.stages().get(member.admittedStage()).areaId();
+    }
+    public UUID admissionArea(PerimeterTerminalReceipt terminal, UUID worker) {
+        Entry entry = entry(terminal); Member member = entry == null ? null : entry.members().get(worker);
+        return member == null || member.withdrawn() ? null : terminal.stages().get(member.admittedStage()).areaId();
+    }
+    private static boolean knownStage(Member member, int stage, int progress) {
+        return !member.withdrawn() && stage >= member.admittedStage() && stage <= progress
+                && (member.retiredStage() == null || stage <= member.retiredStage())
+                && (member.destruction() == null || stage <= member.destruction().stage());
     }
 
     /** Cross-file coordinator history cannot also authorize the same active helper identity. */
@@ -60,7 +134,7 @@ public final class PerimeterBuilderCrew {
         });
     }
 
-    /** Caller authenticates an idle, loaded, exactly owned worker before saving membership. */
+    /** Caller authenticates an idle, loaded, exactly owned worker before saving a pending admission intent. */
     public boolean enlist(PerimeterProject project, UUID worker) {
         requireIdentity(worker);
         if (project.payment() == null || project.active() == null
@@ -73,7 +147,7 @@ public final class PerimeterBuilderCrew {
         if (members.containsKey(worker) || members.size() >= MAX_HISTORY
                 || members.values().stream().filter(Member::active).count() >= MAX_HELPERS) return false;
         if (entries.values().stream().anyMatch(e -> e.members().containsKey(worker) && e.members().get(worker).active())) return false;
-        members.put(worker, new Member(project.activeStage(), true, null));
+        members.put(worker, new Member(project.activeStage(), true, false, false, null, null));
         entries.put(project.header().projectId(), new Entry(project.header().generation(), project.manifestHash(),
                 project.header().builder(), Map.copyOf(members)));
         return true;
@@ -84,7 +158,7 @@ public final class PerimeterBuilderCrew {
         Entry old = entry(project);
         if (old == null || !old.members().containsKey(worker) || !old.members().get(worker).active()) return false;
         Map<UUID, Member> members = new LinkedHashMap<>(old.members());
-        members.put(worker, new Member(old.members().get(worker).admittedStage(), false, old.members().get(worker).destruction()));
+        members.put(worker, new Member(old.members().get(worker).admittedStage(), false, old.members().get(worker).ready(), old.members().get(worker).withdrawn(), Math.min(project.activeStage(), project.stages().size() - 1), old.members().get(worker).destruction()));
         entries.put(project.header().projectId(), new Entry(old.generation(), old.hash(), old.original(), Map.copyOf(members)));
         return true;
     }
@@ -93,13 +167,14 @@ public final class PerimeterBuilderCrew {
     public boolean destroyed(PerimeterProject project, UUID worker, UUID area, int stage) {
         Entry old = entry(project);
         if (old == null || !old.members().containsKey(worker) || !old.members().get(worker).active()
+                || !old.members().get(worker).ready() && stage != old.members().get(worker).admittedStage()
                 || stage < old.members().get(worker).admittedStage() || stage >= project.stages().size()
                 || stage != project.activeStage() && stage != project.activeStage() - 1
                 || !project.stages().get(stage).areaId().equals(area)) return false;
         Member member = old.members().get(worker);
         String receipt = destructionReceipt(project.header().projectId(), old, worker, member.admittedStage(), stage, area);
         Map<UUID, Member> members = new LinkedHashMap<>(old.members());
-        members.put(worker, new Member(member.admittedStage(), false, new Destruction(stage, area, receipt)));
+        members.put(worker, new Member(member.admittedStage(), false, member.ready(), false, stage, new Destruction(stage, area, receipt)));
         entries.put(project.header().projectId(), new Entry(old.generation(), old.hash(), old.original(), Map.copyOf(members)));
         return true;
     }
@@ -123,7 +198,9 @@ public final class PerimeterBuilderCrew {
         if (entry != null && (entry.generation() != terminal.generation() || !entry.hash().equals(terminal.manifestHash())
                 || !entry.original().equals(terminal.builder()) || terminal.payment() == null
                 || entry.members().values().stream().anyMatch(member -> member.admittedStage() >= terminal.totalStageCount()
-                    || member.admittedStage() > terminal.activeStage() || member.destruction() != null
+                    || member.admittedStage() > terminal.activeStage()
+                    || member.retiredStage() != null && (member.retiredStage() >= terminal.totalStageCount() || member.retiredStage() > terminal.activeStage())
+                    || member.destruction() != null
                     && (member.destruction().stage() >= terminal.totalStageCount()
                     || member.destruction().stage() > terminal.activeStage()
                     || !terminal.stages().get(member.destruction().stage()).areaId().equals(member.destruction().area())))))
@@ -137,7 +214,9 @@ public final class PerimeterBuilderCrew {
         if (entry != null && (entry.generation() != project.header().generation()
                 || !entry.hash().equals(project.manifestHash()) || !entry.original().equals(project.header().builder())
                 || entry.members().values().stream().anyMatch(member -> member.admittedStage() >= project.stages().size()
-                    || member.admittedStage() > project.activeStage() || member.destruction() != null
+                    || member.admittedStage() > project.activeStage()
+                    || member.retiredStage() != null && (member.retiredStage() >= project.stages().size() || member.retiredStage() > project.activeStage())
+                    || member.destruction() != null
                     && (member.destruction().stage() >= project.stages().size()
                     || member.destruction().stage() > project.activeStage()
                     || !project.stages().get(member.destruction().stage()).areaId().equals(member.destruction().area())))))
@@ -147,7 +226,7 @@ public final class PerimeterBuilderCrew {
 
     public CompoundTag save() {
         CompoundTag root = new CompoundTag();
-        root.putInt("Version", 1); root.putUUID("LedgerGeneration", ledgerGeneration); ListTag projects = new ListTag();
+        root.putInt("Version", 2); root.putUUID("LedgerGeneration", ledgerGeneration); ListTag projects = new ListTag();
         entries.forEach((id, entry) -> {
             CompoundTag project = new CompoundTag();
             project.putUUID("Project", id); project.putLong("Generation", entry.generation());
@@ -155,7 +234,9 @@ public final class PerimeterBuilderCrew {
             ListTag members = new ListTag();
             entry.members().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(member -> {
                 CompoundTag tag = new CompoundTag(); tag.putUUID("Worker", member.getKey());
-                tag.putBoolean("Active", member.getValue().active()); tag.putInt("AdmittedStage", member.getValue().admittedStage());
+                tag.putBoolean("Active", member.getValue().active()); tag.putBoolean("Ready", member.getValue().ready());
+                tag.putBoolean("Withdrawn", member.getValue().withdrawn()); tag.putInt("AdmittedStage", member.getValue().admittedStage());
+                tag.putInt("RetiredStage", member.getValue().retiredStage() == null ? -1 : member.getValue().retiredStage());
                 if (member.getValue().destruction() != null) {
                     Destruction destroyed = member.getValue().destruction(); CompoundTag proof = new CompoundTag();
                     proof.putInt("Stage", destroyed.stage()); proof.putUUID("Area", destroyed.area());
@@ -171,7 +252,8 @@ public final class PerimeterBuilderCrew {
     public static PerimeterBuilderCrew load(CompoundTag root, UUID expectedGeneration) {
         if (root == null || !root.getAllKeys().equals(Set.of("Version", "LedgerGeneration", "Projects"))
                 || !uuid(root, "LedgerGeneration") || !root.getUUID("LedgerGeneration").equals(expectedGeneration)
-                || !root.contains("Version", Tag.TAG_INT) || root.getInt("Version") != 1) throw malformed();
+                || !root.contains("Version", Tag.TAG_INT) || root.getInt("Version") != 1 && root.getInt("Version") != 2) throw malformed();
+        int version = root.getInt("Version");
         ListTag projects = compounds(root, "Projects");
         if (projects.size() > MAX_PROJECTS) throw malformed();
         PerimeterBuilderCrew crew = new PerimeterBuilderCrew(expectedGeneration);
@@ -187,8 +269,9 @@ public final class PerimeterBuilderCrew {
             Map<UUID, Member> members = new LinkedHashMap<>(); int active = 0;
             for (Tag saved : savedMembers) {
                 CompoundTag member = (CompoundTag) saved;
-                if (!member.getAllKeys().containsAll(Set.of("Worker", "Active", "AdmittedStage"))
-                        || member.getAllKeys().stream().anyMatch(key -> !Set.of("Worker", "Active", "AdmittedStage", "Destruction").contains(key))
+                Set<String> required = version == 1 ? Set.of("Worker", "Active", "AdmittedStage") : Set.of("Worker", "Active", "Ready", "Withdrawn", "RetiredStage", "AdmittedStage");
+                if (!member.getAllKeys().containsAll(required)
+                        || member.getAllKeys().stream().anyMatch(key -> !required.contains(key) && !key.equals("Destruction"))
                         || !uuid(member, "Worker")
                         || !member.contains("AdmittedStage", Tag.TAG_INT) || member.getInt("AdmittedStage") < 0
                         || member.getInt("AdmittedStage") >= PerimeterStageLayout.MAX_STAGES
@@ -196,20 +279,36 @@ public final class PerimeterBuilderCrew {
                         || member.getByte("Active") != 0 && member.getByte("Active") != 1
                         || member.getUUID("Worker").equals(project.getUUID("Original"))) throw malformed();
                 boolean enabled = member.getBoolean("Active"); UUID worker = member.getUUID("Worker");
+                boolean ready = version == 1 || member.getBoolean("Ready"), withdrawn = version != 1 && member.getBoolean("Withdrawn");
+                if (version == 2 && (!canonicalBoolean(member, "Ready") || !canonicalBoolean(member, "Withdrawn"))
+                        || withdrawn && (enabled || ready)) throw malformed();
+                Integer retiredStage = null;
+                if (version == 2) {
+                    if (!member.contains("RetiredStage", Tag.TAG_INT)) throw malformed();
+                    int savedRetirement = member.getInt("RetiredStage");
+                    if (savedRetirement < -1 || savedRetirement >= PerimeterStageLayout.MAX_STAGES
+                            || enabled && savedRetirement != -1
+                            || savedRetirement >= 0 && savedRetirement < member.getInt("AdmittedStage")) throw malformed();
+                    if (savedRetirement >= 0) retiredStage = savedRetirement;
+                }
+                if (withdrawn && (retiredStage == null || retiredStage != member.getInt("AdmittedStage"))) throw malformed();
                 Destruction destruction = null;
                 if (member.contains("Destruction")) {
                     CompoundTag proof = member.getCompound("Destruction");
-                    if (enabled || !member.contains("Destruction", Tag.TAG_COMPOUND)
+                    if (enabled || withdrawn || !member.contains("Destruction", Tag.TAG_COMPOUND)
                             || !proof.getAllKeys().equals(Set.of("Stage", "Area", "Receipt")) || !uuid(proof, "Area")
                             || !proof.contains("Stage", Tag.TAG_INT) || proof.getInt("Stage") < member.getInt("AdmittedStage")
+                            || !ready && proof.getInt("Stage") != member.getInt("AdmittedStage")
                             || proof.getInt("Stage") >= PerimeterStageLayout.MAX_STAGES
                             || !proof.contains("Receipt", Tag.TAG_STRING) || !proof.getString("Receipt").matches("[0-9a-f]{64}")) throw malformed();
                     destruction = new Destruction(proof.getInt("Stage"), proof.getUUID("Area"), proof.getString("Receipt"));
+                    if (retiredStage != null && retiredStage != destruction.stage()) throw malformed();
+                    retiredStage = destruction.stage();
                     Entry identity = new Entry(project.getLong("Generation"), project.getString("Hash"), project.getUUID("Original"), Map.of());
                     if (!destruction.receipt().equals(crew.destructionReceipt(project.getUUID("Project"), identity, worker,
                             member.getInt("AdmittedStage"), destruction.stage(), destruction.area()))) throw malformed();
                 }
-                if (members.putIfAbsent(worker, new Member(member.getInt("AdmittedStage"), enabled, destruction)) != null
+                if (members.putIfAbsent(worker, new Member(member.getInt("AdmittedStage"), enabled, ready, withdrawn, retiredStage, destruction)) != null
                         || enabled && (++active > MAX_HELPERS || !activeWorkers.add(worker))) throw malformed();
             }
             if (crew.entries.putIfAbsent(project.getUUID("Project"), new Entry(project.getLong("Generation"),
@@ -227,6 +326,9 @@ public final class PerimeterBuilderCrew {
         } catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
     }
 
+    private static boolean canonicalBoolean(CompoundTag tag, String key) {
+        return tag.contains(key, Tag.TAG_BYTE) && (tag.getByte(key) == 0 || tag.getByte(key) == 1);
+    }
     private static ListTag compounds(CompoundTag parent, String key) {
         if (!parent.contains(key, Tag.TAG_LIST)) throw malformed();
         ListTag list = (ListTag) parent.get(key);

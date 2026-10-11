@@ -54,7 +54,7 @@ public final class NativePerimeterProjects {
     private static boolean knownParticipantLinkMatches(Mob worker, PerimeterProject project) {
         if (worker == null || !(worker.level() instanceof ServerLevel level)) return false;
         try {
-            return (ConstructionEditLedger.get(level.getServer().overworld()).assignedBuilder(project).equals(worker.getUUID())
+            return (ConstructionEditLedger.get(level.getServer().overworld()).knownProjectBuilder(project, worker.getUUID())
                     || ConstructionEditLedger.get(level.getServer().overworld()).knownCrewMember(project, worker.getUUID()))
                     && PerimeterProjectLink.matches(worker, project, worker.getUUID());
         } catch (RuntimeException unavailable) { return false; }
@@ -201,6 +201,13 @@ public final class NativePerimeterProjects {
         if(!ledger.matchesProjectIdentity(project)) {pause(core,project,"Paused: complete reservation or edit history differs from the reviewed perimeter.",dirty);return;}
         var owner=level.getServer().getPlayerList().getPlayer(project.header().owner());
         Entity found=level.getEntity(ledger.assignedBuilder(project));Mob builder=found instanceof Mob mob?mob:null;
+        var cause = ledger.projectBuilderDestructionReceipt(project) != null ? PerimeterBuilderAssignments.Cause.DEATH
+                : builder == null ? PerimeterBuilderAssignments.Cause.UNAVAILABLE
+                : NativePerimeterCrew.dismissed(builder, project) ? PerimeterBuilderAssignments.Cause.DISMISSED : null;
+        if (cause != null && NativePerimeterCrew.promote(level, owner, project, cause)) {
+            found = level.getEntity(ledger.assignedBuilder(project)); builder = found instanceof Mob mob ? mob : null;
+        }
+        // A brand-new unassigned hire still requires the original authenticated death path.
         // Authenticated destruction differs from an unloaded worker. Only confirmed death opens an assignment.
         if (builder == null && ledger.projectBuilderDestructionReceipt(project) != null) {
             tryReplaceDeadBuilder(level, owner, project, ledger);
@@ -247,12 +254,15 @@ public final class NativePerimeterProjects {
             if(NativeConstructionGuard.currentArea(builder)!=null || WorkersBridge.hasActiveBuildArea(builder)) {
                 pause(core,project,"Waiting: reserved builder has another native assignment.",dirty);return;
             }
-            problem=NativeConstructionGuard.commissionProblem(builder);
-            if(problem!=null) {pause(core,project,"Waiting: builder is finishing native supplies or item use.",dirty);return;}
+            problem=NativeConstructionGuard.continuationProblem(builder, project);
+            if(problem!=null) {pause(core,project,"Waiting: builder is finishing native inventory cleanup or item use.",dirty);return;}
             problem=unstartedStageProblem(level,owner,project);
             if(problem!=null) {pause(core,project,problem,dirty);return;}
             if (!WallBuilderAccess.clearNextSection(builder,project.active().layout().targets().keySet(),project.reservation(),first.marker())) {
                 pause(core,project,"Waiting: assigned builder is walking out of the next section before native admission.",dirty);return;
+            }
+            if (!NativePerimeterCrew.clearNextSection(level, project, first.marker())) {
+                pause(core, project, "Waiting: shared builders must leave the next section before native admission.", dirty); return;
             }
             Entity area;
             try {area=ProtectedConstructionAreas.createStage(owner,builder,project,first.marker());}
@@ -285,8 +295,8 @@ public final class NativePerimeterProjects {
         Entity current=NativeConstructionGuard.currentArea(builder);
         if(current!=null && current!=area) {pause(core,project,"Paused: reserved builder has another native assignment.",dirty);return;}
         if(current==null) {
-            problem=NativeConstructionGuard.commissionProblem(builder);
-            if(problem!=null) {pause(core,project,"Waiting: builder is finishing native supplies or item use.",dirty);return;}
+            problem=NativeConstructionGuard.continuationProblem(builder, project);
+            if(problem!=null) {pause(core,project,"Waiting: builder is finishing native inventory cleanup or item use.",dirty);return;}
             try {
                 PlayerFortificationJobs.link(builder,area,owner.getUUID());WallBuilderAccess.install(builder);
                 WorkersBridge.enablePlayerJob(builder,owner.getUUID());
@@ -357,7 +367,8 @@ public final class NativePerimeterProjects {
         }
         if(area!=null) {
             if(!retirementMarkerMatches(area,project,attempt,journal.at(0).marker())
-                    || !NativeConstructionGuard.matchesProjectSnapshot(area,project)) {
+                    || !(NativeConstructionGuard.matchesProjectSnapshot(area,project)
+                        || NativeConstructionGuard.matchesVerifiedCleanupSnapshot(area,project))) {
                 pause(core,project,"Paused: completed native marker differs from its verification receipt.",dirty);return;
             }
         }
@@ -482,7 +493,8 @@ public final class NativePerimeterProjects {
                         || !NativeConstructionGuard.retirementReceiptMatches(worker.getPersistentData(),
                         project.stages().stream().map(PerimeterProject.Stage::areaId).toList(),ledger.generation()))
                     return NativeConstructionGuard.pauseStorage(worker,"Paused: whole-perimeter worker or ledger identity needs recovery review");
-                if (!assignedBuilder(worker, project) && !ledger.crewMember(project, worker.getUUID())) {
+                if (!assignedBuilder(worker, project) && !ledger.crewMember(project, worker.getUUID())
+                        && !ledger.pendingCrewMember(project, worker.getUUID())) {
                     if (!NativeConstructionGuard.readyForRetirement(worker)) return true;
                     for (var stage : project.stages())
                         if (!NativeConstructionGuard.retireBuilderAssociation(worker, stage.areaId())) return false;
@@ -513,7 +525,7 @@ public final class NativePerimeterProjects {
             }
             var terminal=snapshot.terminal(link.id());
             if(terminal==null || terminal.generation()!=link.generation() || !terminal.manifestHash().equals(link.hash())
-                    || !terminal.coreKey().equals(link.core()) || !(ledger.assignedTerminalBuilder(terminal).equals(worker.getUUID())
+                    || !terminal.coreKey().equals(link.core()) || !(ledger.knownTerminalBuilder(terminal, worker.getUUID())
                         || ledger.knownTerminalCrewMember(terminal, worker.getUUID()))
                     || !ledger.sameGeneration(terminal.cleanup().ledgerGeneration())
                     || !NativeConstructionGuard.retirementReceiptMatches(worker.getPersistentData(),
@@ -541,7 +553,9 @@ public final class NativePerimeterProjects {
             var stage=project.stages().get(attempt.stage());var h=project.header();
             if(!attempt.area().equals(stage.areaId()) || !marker.getUUID().equals(stage.areaId())
                     || !attempt.marker().equals(fixedMarker) || !marker.blockPosition().equals(fixedMarker)
-                    || !ConstructionEditLedger.get((ServerLevel)marker.level()).builderForArea(project,attempt.area()).equals(area.reservedBuilderId()) || !h.owner().equals(WorkersBridge.readOwner(marker)))return false;
+                    || !(ConstructionEditLedger.get((ServerLevel)marker.level()).builderForArea(project,attempt.area()).equals(area.reservedBuilderId())
+                        || NativeConstructionGuard.matchesVerifiedCleanupSnapshot(marker, project))
+                    || !h.owner().equals(WorkersBridge.readOwner(marker)))return false;
             var scope=PerimeterProjectAuthority.read(marker.getPersistentData());
             return scope.projectId().equals(h.projectId()) && scope.generation()==h.generation()
                     && scope.manifestHash().equals(project.manifestHash()) && scope.coreKey().equals(h.coreKey())

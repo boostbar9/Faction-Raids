@@ -228,6 +228,9 @@ tasks.named('test', Test).configure {
 // Opt-in native framebuffer/fixture QA. This source set is never part of jar.
 if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)) {
     def nativeQaMode = providers.gradleProperty('nativeQaMode').getOrElse('baseline')
+    def sharedCrewQa = providers.gradleProperty('nativeSharedCrewQa').map { it.toBoolean() }.getOrElse(false)
+    if (sharedCrewQa && nativeQaMode != 'staged-handoff') throw new GradleException('Shared crew QA requires staged-handoff mode')
+    if (sharedCrewQa && providers.gradleProperty('nativeBuilderReplacementQa').getOrElse('false').toBoolean()) throw new GradleException('Shared crew and builder replacement QA are separate scenarios')
     def sizeableFoliageQa = providers.gradleProperty('nativeQaSizeableFoliage').map { it.toBoolean() }.getOrElse(false)
     if (sizeableFoliageQa && nativeQaMode != 'baseline') throw new GradleException('Sizeable Foliage QA requires baseline nativeQaMode')
     if (sizeableFoliageQa) {
@@ -270,6 +273,7 @@ if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)
         property 'mixin.env.refMapRemappingFile', project.file('build/createSrgToMcp/output.srg').absolutePath
         property 'siegeoverhaul.nativeQa', 'true'
         property 'siegeoverhaul.nativeQa.mode', nativeQaMode
+        property 'siegeoverhaul.nativeQa.sharedCrew', sharedCrewQa.toString()
         property 'siegeoverhaul.nativeQa.builderReplacement', providers.gradleProperty('nativeBuilderReplacementQa').getOrElse('false')
         property 'siegeoverhaul.nativeQa.sizeableFoliage', sizeableFoliageQa.toString()
         property 'siegeoverhaul.nativeQa.directory', project.file(nativeQaDirectory).absolutePath

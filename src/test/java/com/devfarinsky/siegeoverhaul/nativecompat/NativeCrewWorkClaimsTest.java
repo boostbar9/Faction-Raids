@@ -270,7 +270,8 @@ class NativeCrewWorkClaimsTest extends MinecraftTestSupport {
         assertFalse(old.prepare(worker), "The same closed entity object cannot revive");
 
         var reloaded = new Fixture(FIRST);
-        when(reloaded.area.getUUID()).thenReturn(old.area.getUUID());
+        UUID persistedAreaId = old.area.getUUID();
+        when(reloaded.area.getUUID()).thenReturn(persistedAreaId);
         worker.builder.currentBuildArea = reloaded.area;
         when(worker.builder.level()).thenReturn(reloaded.level);
         when(worker.builder.getCommandSenderWorld()).thenReturn(reloaded.level);
