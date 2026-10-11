@@ -295,7 +295,8 @@ class PerimeterHistoricalMarkerCleanupTest extends MinecraftTestSupport {
             bridge.when(() -> WorkersBridge.readOwner(area)).thenReturn(header.owner());
             entities.put(area.getUUID(), area);
 
-            world.putAll(layout.targets()); playerEdit = BlockPos.of(layout.targets().keySet().iterator().next());
+            layout.targets().keySet().forEach(pos -> world.put(pos, prepared.targets().get(pos)));
+            playerEdit = BlockPos.of(layout.targets().keySet().iterator().next());
             world.put(playerEdit.asLong(), Blocks.GOLD_BLOCK.defaultBlockState()); ledger.record(playerEdit);
             project = PerimeterProjectStore.replace(core, beforeCancellation.check(),
                     beforeCancellation.cancel(beforeCancellation.check(), "Owner canceled after editing a completed section"), () -> {});
