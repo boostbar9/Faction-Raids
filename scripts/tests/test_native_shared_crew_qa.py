@@ -14,6 +14,23 @@ SPEC.loader.exec_module(VERIFIER)
 IDS = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222']
 DROP_IDS = ['44444444-4444-4444-8444-444444444444', '55555555-5555-4555-8555-555555555555',
             '66666666-6666-4666-8666-666666666666', '77777777-7777-4777-8777-777777777777']
+AUX_IDS = ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+           'cccccccc-cccc-4ccc-8ccc-cccccccccccc']
+
+
+def isolation_proof(tick):
+    actors, cells = [], []
+    for identity, (x, z) in zip(AUX_IDS, [(134, 6), (137, 6), (134, 9)]):
+        actors.append(dict(uuid=identity, type='minecraft:villager', feet=[x, 48, z],
+                           bounds=[x + .2, 48, z + .2, x + .8, 49.95, z + .8],
+                           alive=True, noAi=True, sameClaim=True, clearOfWorkEnvelope=True))
+        for dx in range(-1, 2):
+            for dz in range(-1, 2):
+                cells.append(dict(position=[x + dx, 64, z + dz], block='minecraft:stone'))
+                for dy in range(-1, 3):
+                    cells.append(dict(position=[x + dx, 48 + dy, z + dz],
+                                      block='minecraft:air' if dx == dz == 0 and dy in (0, 1) else 'minecraft:stone'))
+    return dict(gameTime=tick, feetY=48, planMinY=65, standingVerticalRange=12, auxiliaries=actors, baseline=cells)
 
 
 def death_handoff():
@@ -78,7 +95,7 @@ def evidence():
               record(IDS[0], 'native-placement', 16), record(IDS[1], 'native-placement', 17, z=1),
               record(IDS[0], 'native-placement', 31, z=2), record(IDS[1], 'native-placement', 32, z=3),
               record(IDS[1], 'native-placement', 51, z=4)]
-    return dict(sharedCrewRequested=True, sharedCrewVerified=True, builderReplacementRequested=False,
+    result = dict(sharedCrewRequested=True, sharedCrewVerified=True, builderReplacementRequested=False,
                 sharedCrewBuilders=IDS, sourceCommit='a' * 40, sourceTree='b' * 40,
                 projectId='project', manifestHash='c' * 64, commissionGameTime=10,
                 sharedCrewAdmission=dict(coordinator=IDS[0], helper=IDS[1], project='project',
@@ -91,9 +108,89 @@ def evidence():
                 sharedCrewDeathCargo=death_cargo(),
                 sharedCrewPartialReloadVerified=True,
                 **{'sharedCrewCargoReload-mid-stage': dict(stopped=cargo, loaded=copy.deepcopy(cargo))},
-                restarts=[dict(kind='mid-stage', gameTime=30)],
+                restarts=[dict(kind='mid-stage', gameTime=30), dict(kind='canceled', gameTime=60)],
                 sharedCrewInterruption='Spectator pause', sharedCrewSleepCoverage='Not exercised: fixed noon',
                 sharedCrewAttribution='LivingTick observer', sharedCrewGeometry='explicit legacy hollow fixture')
+    result['parkedUnrelatedStarterNpcIds'] = AUX_IDS
+    survivor_cargo = {IDS[1]: copy.deepcopy(cargo[IDS[1]])}
+    result['sharedCrewCargoReload-canceled'] = dict(stopped=survivor_cargo, loaded=copy.deepcopy(survivor_cargo))
+    for name, tick in [('initial', 5), ('mid-stage', 30), ('canceled', 60), ('final', 70)]:
+        result['sharedCrewAuxiliaryIsolation-' + name] = isolation_proof(tick)
+    return result
+
+
+class AuxiliaryIsolationEvidenceTest(unittest.TestCase):
+    def verify(self, data):
+        VERIFIER.verify_shared_crew_auxiliary_isolation(data, IDS)
+
+    def test_exact_same_claim_sealed_cells_persist_across_reload_and_final(self):
+        self.verify(evidence())
+
+    def test_missing_duplicate_or_participant_identity_fails(self):
+        for change in ('missing', 'duplicate', 'participant'):
+            data = evidence()
+            if change == 'missing':
+                del data['sharedCrewAuxiliaryIsolation-canceled']
+            elif change == 'duplicate':
+                data['parkedUnrelatedStarterNpcIds'] = AUX_IDS + [AUX_IDS[0]]
+            else:
+                data['parkedUnrelatedStarterNpcIds'] = [IDS[0]] + AUX_IDS[1:]
+            with self.subTest(change=change), self.assertRaises(AssertionError):
+                self.verify(data)
+
+    def test_escaped_or_changed_actor_fails_even_when_all_snapshots_agree(self):
+        for field, value in [('feet', [133, 65, 6]), ('alive', False), ('noAi', False),
+                             ('sameClaim', False), ('clearOfWorkEnvelope', False),
+                             ('bounds', [134.2, 48, 6.2, 134.8, 54, 6.8])]:
+            data = evidence()
+            for name in ['initial', 'mid-stage', 'canceled', 'final']:
+                data['sharedCrewAuxiliaryIsolation-' + name]['auxiliaries'][0][field] = value
+            with self.subTest(field=field), self.assertRaises(AssertionError):
+                self.verify(data)
+
+    def test_missing_floor_roof_breathing_space_or_ground_cap_fails(self):
+        for position, replacement in [([134, 47, 6], 'minecraft:air'), ([134, 50, 6], 'minecraft:air'),
+                                      ([134, 48, 6], 'minecraft:stone'), ([134, 64, 6], 'minecraft:air')]:
+            data = evidence()
+            for name in ['initial', 'mid-stage', 'canceled', 'final']:
+                for cell in data['sharedCrewAuxiliaryIsolation-' + name]['baseline']:
+                    if cell['position'] == position:
+                        cell['block'] = replacement
+            with self.subTest(position=position), self.assertRaises(AssertionError):
+                self.verify(data)
+
+    def test_changed_reload_body_or_setup_after_commission_fails(self):
+        data = evidence(); data['sharedCrewAuxiliaryIsolation-mid-stage']['auxiliaries'][0]['bounds'][0] += .01
+        with self.assertRaises(AssertionError):
+            self.verify(data)
+        data = evidence(); data['sharedCrewAuxiliaryIsolation-initial']['gameTime'] = data['commissionGameTime']
+        with self.assertRaises(AssertionError):
+            self.verify(data)
+
+    def test_optional_between_stage_reload_requires_its_own_snapshot(self):
+        data = evidence(); data['restarts'].append(dict(kind='between-stages', gameTime=55))
+        with self.assertRaises(AssertionError):
+            self.verify(data)
+        data['sharedCrewAuxiliaryIsolation-between-stages'] = isolation_proof(55)
+        self.verify(data)
+
+    def test_setup_only_same_claim_cells_preserve_ground_and_use_passive_checks(self):
+        fixture = (REPO / 'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeStagedHandoffFixture.java').read_text()
+        qa = (REPO / 'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeStagedHandoffQa.java').read_text()
+        setup = fixture.split('static Fixture setup(', 1)[1].split('static Map<String, Object> auxiliaryIsolationSnapshot', 1)[0]
+        isolation = setup.split('if (Boolean.getBoolean("siegeoverhaul.nativeQa.sharedCrew"))', 1)[1].split('} else if', 1)[0]
+        self.assertIn('new BlockPos(134 + (i % 2) * 3, 48, 6 + (i / 2) * 3)', isolation)
+        self.assertIn('i < 4', isolation)
+        self.assertIn('CLAIM_CHUNK.equals(new ChunkPos(cell))', isolation)
+        self.assertIn('feet.offset(dx, 16, dz)', isolation)
+        self.assertIn('isolationCells.put(cap, level.getBlockState(cap))', isolation)
+        self.assertLess(setup.index('isolated.put(mob.getUUID(), feet)'), setup.index('type.create(level)'))
+        passive = fixture.split('static Map<String, Object> auxiliaryIsolationSnapshot', 1)[1].split('static BuilderEntity spawnSharedHelper', 1)[0]
+        for forbidden in ['.moveTo(', '.teleportTo(', '.setBlock(', '.setNoAi(', '.discard(', '.setDeltaMovement(']:
+            self.assertNotIn(forbidden, passive)
+        self.assertIn('"sharedCrewAuxiliaryIsolation-initial"', qa.split('case 0 ->', 1)[1].split('case 1 ->', 1)[0])
+        self.assertIn('"sharedCrewAuxiliaryIsolation-" + reloadKind', qa)
+        self.assertIn('"sharedCrewAuxiliaryIsolation-final"', qa)
 
 
 class SharedCrewEvidenceTest(unittest.TestCase):

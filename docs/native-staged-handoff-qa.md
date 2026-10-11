@@ -132,6 +132,30 @@ Death-cargo coverage uses only the pinned baseline companions. Corpse addons are
 synchronous runtime transfer proof; it does not independently establish every
 Minecraft superclass or runtime-mixin equipment-drop path.
 
+Shared-mode setup also isolates all unrelated starter NPCs **before commission**
+in at most four sealed, breathable same-claim holding cells at feet Y48. Their
+stone shells occupy Y47–50; unchanged stone ground caps remain at Y64. This is
+labeled artificial fixture setup, not a production civilian or navigation change.
+The actual reviewed wall starts at Y65, and native standing searches extend at
+most twelve blocks vertically. The cells are outside all target, mining, reserved
+clearance and standing envelopes, with no ground entrance and no overhead
+heightmap change. Exact auxiliary IDs, positions, bodies, shell/air/ground-cap
+baselines and nonintersection checks must survive the partial, optional
+between-stage and canceled reloads and final verification. Observers only check;
+they never rescue or relocate a commissioned actor. The original parked-ID list
+is retained, and the finite materials and acceptance time limits are unchanged.
+
+This corrects a demonstrated setup interference in native runs `38152323781`
+and `38157092230`: outside-claim NoAI civilian parking did not disable the
+production civilian-return hook. Two villagers returned to their saved cells at
+(133.5,65,6.5) and (133.5,65,7.5); the helper repeatedly pushed against the first
+while retaining the last floor target. The coordinator safely waited for that
+claim. Successful run `38155836811` happened to route around the same bodies.
+Those failures are retained as navigation/fixture-interference evidence, not
+reclassified as a helper unload or reporting-identity failure. This scenario
+does not establish general navigation around stationary crowds or a bounded
+progress-aware claim handoff policy.
+
 Sleep is deliberately **not exercised**: this world stays at noon, and the test
 does not force a native sleep state. The permission-pause/reload is a shared
 interruption test, not evidence of individual dismissal, sleep, unloaded-chunk

@@ -239,6 +239,8 @@ public final class NativeStagedHandoffQa {
             case 0 -> {
                 fixture = NativeStagedHandoffFixture.setup(level, owner);
                 if (SHARED_CREW) {
+                    require(projectId == null, "Auxiliary isolation must precede commission");
+                    REPORT.put("sharedCrewAuxiliaryIsolation-initial", NativeStagedHandoffFixture.auxiliaryIsolationSnapshot(level, fixture));
                     originalCoordinator = fixture.builderId();
                     rememberCrew(builder(level));
                     var helper = NativeStagedHandoffFixture.spawnSharedHelper(level, owner);
@@ -455,6 +457,7 @@ public final class NativeStagedHandoffQa {
                     require(LOADED_CREW.equals(stopped.crewCargo()), "Exact construction cargo for every surviving crew member changed on reload");
                     REPORT.put("sharedCrewCargoReload-" + reloadKind, Map.of("stopped", cargoEvidence(stopped.crewCargo()),
                             "loaded", cargoEvidence(LOADED_CREW)));
+                    REPORT.put("sharedCrewAuxiliaryIsolation-" + reloadKind, NativeStagedHandoffFixture.auxiliaryIsolationSnapshot(level, fixture));
                     if (reloadKind.equals("mid-stage")) require(LOADED_CREW.keySet().equals(Set.of(originalCoordinator, sharedHelper)),
                             "Shared partial restart did not reload both original builders");
                 }
@@ -538,7 +541,7 @@ public final class NativeStagedHandoffQa {
         var goal=next.goalSelector.getAvailableGoals().stream().map(g->g.getGoal()).filter(BuilderWorkGoal.class::isInstance).map(BuilderWorkGoal.class::cast).findFirst().orElseThrow();
         var storage=next.goalSelector.getAvailableGoals().stream().map(g->g.getGoal()).filter(GetNeededItemsFromStorage.class::isInstance).map(GetNeededItemsFromStorage.class::cast).findFirst().orElseThrow();
         fixture=new NativeStagedHandoffFixture.Fixture(next.getUUID(),fixture.storageIds(),fixture.claimIds(),fixture.plan(),fixture.oracle(),
-                goal,storage,fixture.nonPlanCells(),fixture.parkedAuxiliaries());
+                goal,storage,fixture.nonPlanCells(),fixture.parkedAuxiliaries(),fixture.isolatedAuxiliaries(),fixture.isolationCells());
         liveBuildGoal=goal;liveStorageGoal=storage;
         require(level.addFreshEntity(next),"Replacement hire could not enter fixture world");
         replacementSpawned=true;replacementTick=now;stableTicks=0;
@@ -731,7 +734,8 @@ public final class NativeStagedHandoffQa {
         verifyNativeDeathCargo(level, owner, original, survivor, project, now);
         sharedDeathRequested = true;
         fixture = new NativeStagedHandoffFixture.Fixture(sharedHelper, fixture.storageIds(), fixture.claimIds(), fixture.plan(), fixture.oracle(),
-                CREW_GOALS.get(sharedHelper), CREW_STORAGE.get(sharedHelper), fixture.nonPlanCells(), fixture.parkedAuxiliaries());
+                CREW_GOALS.get(sharedHelper), CREW_STORAGE.get(sharedHelper), fixture.nonPlanCells(), fixture.parkedAuxiliaries(),
+                fixture.isolatedAuxiliaries(), fixture.isolationCells());
         liveBuildGoal = CREW_GOALS.get(sharedHelper); liveStorageGoal = CREW_STORAGE.get(sharedHelper);
         require(survivor.isAlive() && !survivor.isNoAi(), "Surviving helper lost ordinary native AI");
         return true;
@@ -871,6 +875,7 @@ public final class NativeStagedHandoffQa {
 
     private static void finishSharedCrew(ServerLevel level) {
         flushWorkObservation(level);
+        REPORT.put("sharedCrewAuxiliaryIsolation-final", NativeStagedHandoffFixture.auxiliaryIsolationSnapshot(level, fixture));
         require(observerFailure == null, "Shared observer failed: " + observerFailure);
         require(sharedReloadVerified && sharedPromotionVerified && sharedDeathDropsVerified && bothContributed()
                 && CREW_SUPPLIED.equals(Set.of(originalCoordinator, sharedHelper)), "Shared acceptance lacks native contribution/supply/reload/succession evidence");
@@ -1167,6 +1172,7 @@ public final class NativeStagedHandoffQa {
     }
 
     private static void conservation(ServerLevel level, ServerPlayer owner) {
+        if (SHARED_CREW) NativeStagedHandoffFixture.auxiliaryIsolationSnapshot(level, fixture);
         NativeStagedHandoffFixture.assertHollowAir(level, fixture.oracle());
         for (Item material : List.of(Items.COBBLESTONE, Items.OAK_PLANKS)) {
             int supplied = material == Items.COBBLESTONE ? NativeStagedHandoffFixture.COBBLE : NativeStagedHandoffFixture.OAK;

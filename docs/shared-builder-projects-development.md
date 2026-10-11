@@ -42,3 +42,21 @@ full-cargo safety after recovery of two complete kits: all nine cargo slots were
 occupied, so the 55-oak request paused without withdrawing any of the 220 chest
 oak. The lean helper setup does not change that production guard or rearrange
 post-commission inventory.
+## Shared native fixture isolation
+
+Native runs `38152323781` and `38157092230` exposed the same setup obstruction:
+NoAI starter civilians parked outside the claim were returned by `CoreCivilians`
+to their saved west-courtyard positions. The helper's body overlapped the first
+returned villager while its valid target claim renewed; the other worker waited
+on that last floor target. Run `38155836811` routed past the same villagers, so
+its success did not demonstrate that the intermittent obstruction was fixed.
+
+Shared-mode QA now prepares at most four sealed same-claim holding cells at
+feet Y48, before creating or commissioning either participant. Stone shells at
+Y47–50, breathable interiors and the unchanged Y64 ground caps are captured in
+the non-plan baseline. The setup avoids both civilian return and overhead
+heightmap effects. Passive checks retain exact auxiliary IDs/positions/bodies
+and the complete baseline across reloads and final acceptance. No live rescue,
+inventory/receipt change, claim relaxation or time-limit extension is allowed.
+General stationary-crowd navigation and progress-aware claim turnover remain
+outside this representative fixture's coverage.

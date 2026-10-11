@@ -188,6 +188,79 @@ def verify_shared_crew_death_cargo(data, ids, first_reload_tick):
     assert resumed == set(ids), (proof, resumed)
 
 
+def verify_shared_crew_auxiliary_isolation(data, ids):
+    """Independent fixed-fixture geometry: all unrelated bodies remain sealed below work."""
+    import math
+    from uuid import UUID
+
+    parked = data.get('parkedUnrelatedStarterNpcIds')
+    assert isinstance(parked, list) and 1 <= len(parked) <= 4 and len(set(parked)) == len(parked), parked
+    assert set(parked).isdisjoint(ids + [data['sharedCrewAdmission']['owner']]), parked
+    for identity in parked:
+        assert isinstance(identity, str) and str(UUID(identity)) == identity, identity
+    names = ['initial', 'mid-stage', 'canceled', 'final']
+    if any(r.get('kind') == 'between-stages' for r in data['restarts']):
+        names.insert(-2, 'between-stages')
+    initial = None
+    for name in names:
+        proof = data.get('sharedCrewAuxiliaryIsolation-' + name)
+        assert isinstance(proof, dict) and set(proof) == {'gameTime', 'feetY', 'planMinY',
+                'standingVerticalRange', 'auxiliaries', 'baseline'}, (name, proof)
+        assert type(proof['gameTime']) is int and proof['gameTime'] >= 0, proof
+        assert all(type(proof[k]) is int for k in ['feetY', 'planMinY', 'standingVerticalRange']), proof
+        assert (proof['feetY'], proof['planMinY'], proof['standingVerticalRange']) == (48, 65, 12), proof
+        if name == 'initial':
+            assert proof['gameTime'] < data['commissionGameTime'], proof
+        else:
+            assert proof['gameTime'] >= data['commissionGameTime'], proof
+            if name != 'final':
+                restart = next((r for r in data['restarts'] if r.get('kind') == name), None)
+                assert restart is not None and type(restart.get('gameTime')) is int, (name, restart)
+                assert proof['gameTime'] >= restart['gameTime'], (name, proof)
+        actors = proof['auxiliaries']
+        assert isinstance(actors, list) and len(actors) == len(parked), proof
+        observed, centers, expected = set(), set(), {}
+        for actor in actors:
+            assert isinstance(actor, dict) and set(actor) == {'uuid', 'type', 'feet', 'bounds', 'alive',
+                    'noAi', 'sameClaim', 'clearOfWorkEnvelope'}, actor
+            assert actor['uuid'] in parked and actor['uuid'] not in observed, actor
+            observed.add(actor['uuid'])
+            assert isinstance(actor['type'], str) and actor['type'] not in {'workers:builder', 'minecraft:player'}, actor
+            assert all(actor[k] is True for k in ['alive', 'noAi', 'sameClaim', 'clearOfWorkEnvelope']), actor
+            feet = actor['feet']
+            assert isinstance(feet, list) and len(feet) == 3 and all(type(v) is int for v in feet), actor
+            x, y, z = feet
+            assert x in (134, 137) and y == 48 and z in (6, 9) and tuple(feet) not in centers, actor
+            centers.add(tuple(feet))
+            box = actor['bounds']
+            assert isinstance(box, list) and len(box) == 6 and all(type(v) in (int, float) and math.isfinite(v) for v in box), actor
+            assert x <= box[0] < box[3] <= x + 1 and box[1] == 48 < box[4] <= 50 and z <= box[2] < box[5] <= z + 1, actor
+            for dx in range(-1, 2):
+                for dz in range(-1, 2):
+                    expected[(x + dx, 64, z + dz)] = 'minecraft:stone'
+                    for dy in range(-1, 3):
+                        expected[(x + dx, y + dy, z + dz)] = ('minecraft:air' if dx == dz == 0 and dy in (0, 1)
+                                                             else 'minecraft:stone')
+        assert observed == set(parked), proof
+        baseline = proof['baseline']
+        assert isinstance(baseline, list) and len(baseline) == len(expected) == 45 * len(parked), proof
+        actual = {}
+        for cell in baseline:
+            assert isinstance(cell, dict) and set(cell) == {'position', 'block'}, cell
+            position = cell['position']
+            assert isinstance(position, list) and len(position) == 3 and all(type(v) is int for v in position), cell
+            assert tuple(position) not in actual, cell
+            actual[tuple(position)] = cell['block']
+        assert actual == expected, proof
+        stable = {key: value for key, value in proof.items() if key != 'gameTime'}
+        if initial is None:
+            initial = stable
+        else:
+            assert stable == initial, (name, 'Auxiliary identity/body/baseline changed')
+    final_tick = data['sharedCrewAuxiliaryIsolation-final']['gameTime']
+    assert all(final_tick >= data['sharedCrewAuxiliaryIsolation-' + name]['gameTime'] for name in names), data
+
+
 def verify_shared_crew(data, root):
     """Validate recorded native evidence. Synthetic unit fixtures test rejection, not gameplay."""
     import re
@@ -200,6 +273,7 @@ def verify_shared_crew(data, root):
     assert len(ids) == len(set(ids)) == 2, ids
     for worker in ids:
         assert str(UUID(worker)) == worker, worker
+    verify_shared_crew_auxiliary_isolation(data, ids)
     for key, filename in [('sourceCommit', 'source-commit.txt'), ('sourceTree', 'source-tree.txt')]:
         assert re.fullmatch('[0-9a-f]{40}', data[key]), key
         assert data[key] == (root / filename).read_text().strip(), key
