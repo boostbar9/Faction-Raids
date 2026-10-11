@@ -65,11 +65,15 @@ public final class NativeActiveHelperQa {
     private static final boolean ENABLED = Boolean.getBoolean("siegeoverhaul.nativeQa")
             && Boolean.getBoolean("siegeoverhaul.nativeQa.activeHelper")
             && "staged-handoff".equals(System.getProperty("siegeoverhaul.nativeQa.mode"));
+    private static final String CASE = System.getProperty("siegeoverhaul.nativeQa.activeHelperCase", "same-stage-disk");
+    private static final boolean CANCELED_ABSENT = "cancel-while-absent".equals(CASE);
     private static final long SECOND = 1_000_000_000L, LIMIT_SECONDS = 600;
     private static final String CONFIG = "[Recruits]\nRecruitsChunkLoading = false\n";
     private enum Phase { SETUP, COMMISSION, BOTH_WORK, FIRST_OUT, FIRST_ABSENCE, FIRST_RETURN,
         FIRST_RESUME, SECOND_OUT, SECOND_SETTLE, EVICT, RELOADING, COORDINATOR_FIRST, LOAD_HELPER, DISK_RETURN,
-        DISK_RESUME, CANCEL_MENU, CANCEL_WAIT, STABLE_CANCELED, FINISHED }
+        DISK_RESUME, CANCEL_MENU, CANCEL_WAIT, STABLE_CANCELED,
+        C_OUT, C_SETTLE, C_EVICT, C_ABSENT, C_CANCEL_MENU, C_CANCEL_WAIT, C_OFFLINE_STABLE,
+        C_LOAD, C_CLEANUP, C_RETURN, C_RETURN_SETTLE, C_FINAL_STABLE, FINISHED }
     private enum Action { NONE, RELOAD, OPEN_CORE, CANCEL, DONE }
     private static final Map<String, Object> REPORT = new LinkedHashMap<>();
     private static final List<Map<String, Object>> EVENTS = new ArrayList<>(), WORK = new ArrayList<>(), JOINS = new ArrayList<>();
@@ -107,8 +111,15 @@ public final class NativeActiveHelperQa {
     private static Set<Long> canceledGeometry;
     private static boolean stopObserved, startObserved, sameStageVerified, diskVerified, cancelSent;
     private static Observation observation;
+    private static ProtectedBuilderHandLifecycle.Receipt terminalOriginalHand;
+    private static NativeActiveHelperTransit.Inventory terminalOffline;
+    private static long canceledAuthorityAt = -1, finalizedOfflineAt = -1;
+    private static Map<Long, BlockState> canceledWorld;
+    private static Map<String, List<Integer>> canceledStock;
+    private static long terminalObservedBrackets;
+    private static boolean terminalResolvedObserved;
     private record Observation(BuilderEntity worker, UUID area, long tick, Set<Long> pending,
-                               int cobble, int oak, int chestCobble, int chestOak, String state, boolean authorized) {}
+                               int cobble, int oak, int chestCobble, int chestOak, String state, boolean authorized, Entity receiptArea, Map<Long, BlockState> canceledTargets) {}
     private NativeActiveHelperQa() {}
 
     @SubscribeEvent
@@ -174,7 +185,7 @@ public final class NativeActiveHelperQa {
             var server = event.getServer(); var level = server.overworld();
             long tick = level.getGameTime();
             if (phaseAt == 0) phaseAt = tick;
-            require(tick - phaseAt <= (phase == Phase.EVICT ? 1800 : 1200), "Bounded helper phase timed out: " + phase);
+            require(tick - phaseAt <= (phase == Phase.EVICT || phase == Phase.C_EVICT ? 1800 : 1200), "Bounded helper phase timed out: " + phase);
             // Close every old-server native tick bracket before any reopen wait. A requested
             // disconnect can leave ordinary ticks between the END stimulus and actual stop.
             if (observation != null) { require(footprintReady(level), "Open native bracket lost its resident footprint"); flush(level); }
@@ -193,7 +204,9 @@ public final class NativeActiveHelperQa {
                     && owner.mayBuild() && owner.serverLevel() == level, "Lost real non-op Survival authority");
             if (accepted != null) {
                 treasury.observe(core(server), bankRate(core(server)), tick);
+                if (CANCELED_ABSENT) observeCanceledAuthority(server, level);
                 verifyImmutable(level); conservation(server, owner); verifyClaims(level);
+                if (CANCELED_ABSENT && canceledAuthorityAt >= 0) assertCanceledFreeze(server, level);
             }
             updateGrounded();
             step(server, level, owner, tick);
@@ -202,6 +215,7 @@ public final class NativeActiveHelperQa {
 
     private static void step(MinecraftServer server, ServerLevel level, ServerPlayer owner, long tick) throws Exception {
         PerimeterProject project = accepted == null ? null : project(level);
+        if (CANCELED_ABSENT && phase.name().startsWith("C_")) { stepCanceledAbsent(server, level, owner, tick, project); return; }
         switch (phase) {
             case SETUP -> {
                 require(!RecruitsServerConfig.RecruitsChunkLoading.get(), "Fresh worker chunk-loading config is not disabled");
@@ -222,7 +236,13 @@ public final class NativeActiveHelperQa {
             case BOTH_WORK -> {
                 requireFirstStage(project);
                 if (!bothContributed() || SUPPLIED.size() != 2 || !eligible(WORKERS.get(helper), tick)) return;
-                transit.ensureHoldingTicket(server); move(tick, Phase.FIRST_OUT);
+                if (CANCELED_ABSENT) {
+                    terminalOriginalHand = ProtectedBuilderHandLifecycle.read(WORKERS.get(helper).getPersistentData().getCompound(ProtectedBuilderHandLifecycle.KEY));
+                    REPORT.put("originalHelperHandReceipt", terminalOriginalHand.save().toString());
+                    REPORT.put("originalHelperHandReceiptId", terminalOriginalHand.receipt().toString());
+                    REPORT.put("coordinatorFirstDiskOrderVerified", false); REPORT.put("sameStageReturnVerified", false);
+                    transit.ensureHoldingTicket(server); move(tick, Phase.C_OUT);
+                } else { transit.ensureHoldingTicket(server); move(tick, Phase.FIRST_OUT); }
             }
             case FIRST_OUT -> {
                 requireFirstStage(project);
@@ -363,6 +383,228 @@ public final class NativeActiveHelperQa {
         }
     }
 
+    /** Separate case: no server reopen, later stage, or post-return work is accepted here. */
+    private static void stepCanceledAbsent(MinecraftServer server, ServerLevel level, ServerPlayer owner, long tick,
+                                           PerimeterProject project) throws Exception {
+        switch (phase) {
+            case C_OUT -> {
+                requireFirstStage(project);
+                if (!transit.holdingReady(server) || !eligible(WORKERS.get(helper), tick)) return;
+                helperBefore = placements(helper); coordinatorBefore = placements(coordinator);
+                boundary(server, "c-before-outbound");
+                transfer(WORKERS.get(helper), transit.holdingLevel(server), transit.holdingFeet()); move(tick, Phase.C_SETTLE);
+            }
+            case C_SETTLE -> {
+                requireFirstStage(project); requireSettledNow(tick);
+                transit.releaseHoldingTicket(server); transit.assertNoTickets(server);
+                record("c-outbound-ticket-released", Map.of("gameTime", tick, "transferGameTime", transferredAt,
+                        "settledGameTime", settledAt, "nanoTime", System.nanoTime()));
+                move(tick, Phase.C_EVICT);
+            }
+            case C_EVICT -> {
+                requireFirstStage(project); transit.assertNoTickets(server);
+                require(level.getEntity(helper) == null, "Outbound helper still has live build-site custody");
+                var holding = transit.holdingLevel(server); var member = WORKERS.get(helper);
+                if (holding.hasChunkAt(transit.holdingFeet()) || holding.getEntity(helper) != null) return;
+                for (var world : server.getAllLevels()) require(world.getEntity(helper) == null, "Helper still registered outside unavailable holding chunk");
+                if (unavailableAt < 0) unavailableAt = tick;
+                require(tick - unavailableAt <= 200, "Absent cancellation helper removal did not finalize");
+                if (!member.isRemoved()) return;
+                require(member.getRemovalReason() == Entity.RemovalReason.UNLOADED_TO_CHUNK
+                        && !member.getRemovalReason().shouldDestroy() && member.getRemovalReason().shouldSave(), "Missing genuine helper disk eviction");
+                // The normal controller observes missing ACTIVE members on its own 20-tick sweep.
+                // Do not demand that durable transition two ticks after transfer, and never reset either bound.
+                if (!ConstructionEditLedger.get(level).suspendedCrewMember(project, helper)) return;
+                assertSuspended(level, project);
+                terminalOffline = NativeActiveHelperTransit.inventory(member); offline = terminalOffline;
+                require(terminalOffline.beforeItemSlot() == -1 && !ProtectedBuilderHandMirror.pending(terminalOffline.persistent())
+                        && terminalOriginalHand.equals(ProtectedBuilderHandLifecycle.read(terminalOffline.persistent().getCompound(ProtectedBuilderHandLifecycle.KEY)))
+                        && accepted.active().areaId().equals(NativeConstructionGuard.protectedReceiptArea(member))
+                        && PerimeterProjectLink.matches(member, project, helper), "Finalized disk actor lost its exact original stale provenance");
+                finalizedOfflineAt = tick; coordinatorBefore = placements(coordinator);
+                REPORT.put("finalizedOfflineInventory", inventoryEvidence(terminalOffline)); REPORT.put("helperDiskEvictionVerified", true);
+                REPORT.put("offlineRemovalProof", Map.of("reason", "UNLOADED_TO_CHUNK", "shouldDestroy", false, "shouldSave", true,
+                        "chunkAvailable", false, "registered", false, "allDimensionsAbsent", true, "gameTime", tick, "unavailableAt", unavailableAt));
+                boundary(server, "c-disk-unloaded"); move(tick, Phase.C_ABSENT);
+            }
+            case C_ABSENT -> {
+                requireFirstStage(project); assertHelperOffline(server); assertSuspended(level, project);
+                if (tick - finalizedOfflineAt < 100 || placements(coordinator) <= coordinatorBefore || !eligible(WORKERS.get(coordinator), tick)) return;
+                boundary(server, "c-absent-progress"); move(tick, Phase.C_CANCEL_MENU); action = Action.OPEN_CORE;
+            }
+            case C_CANCEL_MENU -> {
+                requireFirstStage(project); assertHelperOffline(server);
+                if (!(owner.containerMenu instanceof CoreHireMenu menu)) return;
+                require(menu.stillValid(owner), "Canceled-absent core menu is not authenticated");
+                if (!eligible(WORKERS.get(coordinator), tick)) return;
+                move(tick, Phase.C_CANCEL_WAIT); action = Action.CANCEL;
+            }
+            case C_CANCEL_WAIT -> {
+                assertHelperOffline(server); if (!cancelSent || canceledAuthorityAt < 0) return;
+                var terminal = PerimeterProjectAuthority.snapshot(level, coreKey).terminal(projectId); if (terminal == null) return;
+                verifyCanceledTerminal(level); requireTerminalState(NativeTerminalHelperProof.State.STALE_UNRESOLVED);
+                canceledReceipt = terminal.save(); boundary(server, "c-compacted-while-absent"); move(tick, Phase.C_OFFLINE_STABLE);
+            }
+            case C_OFFLINE_STABLE -> {
+                assertHelperOffline(server); verifyCanceledTerminal(level); requireTerminalState(NativeTerminalHelperProof.State.STALE_UNRESOLVED);
+                if (tick - phaseAt < 100) return;
+                REPORT.put("canceledOfflineStableTicks", tick - phaseAt); boundary(server, "c-canceled-offline-stable");
+                transit.ensureHoldingTicket(server); move(tick, Phase.C_LOAD);
+            }
+            case C_LOAD -> {
+                verifyCanceledTerminal(level);
+                if (!transit.holdingReady(server) || !(transit.holdingLevel(server).getEntity(helper) instanceof BuilderEntity member)) return;
+                require(DISK_JOINS.size() == 1 && DISK_JOINS.containsKey(helper) && sameInventory(terminalOffline, DISK_JOINS.get(helper)),
+                        "Canceled helper disk admission changed exact finalized custody or actor order");
+                NativeActiveHelperTransit.assertUnique(server, helper, member); WORKERS.put(helper, member); offline = null;
+                var proof = terminalProof(member); require(proof.valid(), "Loaded terminal actor provenance failed: " + proof.reason());
+                boundary(server, "c-terminal-disk-join"); move(tick, Phase.C_CLEANUP);
+            }
+            case C_CLEANUP -> {
+                verifyCanceledTerminal(level);
+                var proof = terminalProof(WORKERS.get(helper)); require(proof.valid(), "Terminal cleanup changed unauthorized state: " + proof.reason());
+                if (proof.state() != NativeTerminalHelperProof.State.DETACHED_RESOLVED || !eligible(WORKERS.get(helper), tick)) return;
+                terminalResolvedObserved = true; boundary(server, "c-cleanup-resolved-in-holding"); move(tick, Phase.C_RETURN);
+            }
+            case C_RETURN -> {
+                verifyCanceledTerminal(level); requireTerminalState(NativeTerminalHelperProof.State.DETACHED_RESOLVED);
+                if (!eligible(WORKERS.get(helper), tick) || !transit.returnReady(level, WORKERS.get(helper))) return;
+                boundary(server, "c-before-detached-return"); transfer(WORKERS.get(helper), level, transit.returnFeet());
+                move(tick, Phase.C_RETURN_SETTLE);
+            }
+            case C_RETURN_SETTLE -> {
+                verifyCanceledTerminal(level); requireSettledNow(tick); requireTerminalState(NativeTerminalHelperProof.State.DETACHED_RESOLVED);
+                transit.releaseHoldingTicket(server); transit.assertNoTickets(server);
+                record("c-return-ticket-released", Map.of("gameTime", tick, "transferGameTime", transferredAt,
+                        "settledGameTime", settledAt, "nanoTime", System.nanoTime()));
+                boundary(server, "c-detached-return-settled"); move(tick, Phase.C_FINAL_STABLE);
+            }
+            case C_FINAL_STABLE -> {
+                verifyCanceledTerminal(level); requireTerminalState(NativeTerminalHelperProof.State.DETACHED_RESOLVED); transit.assertNoTickets(server);
+                require(level.getEntity(helper) == WORKERS.get(helper) && level.getEntity(coordinator) == WORKERS.get(coordinator), "Original canceled actors are not both loaded");
+                if (tick - phaseAt < 100) return;
+                require(terminalResolvedObserved && PENDING_LOADS.isEmpty() && RAW_LOADS.isEmpty() && terminalObservedBrackets >= 100
+                        && bothContributed() && SUPPLIED.size() == 2 && !pending(level).isEmpty(), "Incomplete terminal cleanup-only proof");
+                verifyCanceled(level); boundary(server, "c-final-loaded-stable");
+                REPORT.put("cancellationStableTicks", tick - phaseAt); REPORT.put("terminalObservedBrackets", terminalObservedBrackets);
+                REPORT.put("canceledWhileAbsentVerified", true); REPORT.put("terminalCleanupOnlyReturnVerified", true);
+                REPORT.put("boundedScenarioVerified", true); REPORT.put("placementCounts", counts());
+                REPORT.put("retainedPlacedBlocks", fixture.plan().blocks().size() - pending(level).size());
+                REPORT.put("paidFee", 64); REPORT.put("wholePlanCompleted", false); REPORT.put("finalMaterials", materialCensus(server, owner));
+                REPORT.put("auxiliaryIsolationFinal", NativeStagedHandoffFixture.auxiliaryIsolationSnapshot(level, fixture));
+                move(tick, Phase.FINISHED); action = Action.DONE;
+            }
+            default -> throw new AssertionError("Unexpected canceled-absent phase");
+        }
+    }
+
+    private static void requireSettledNow(long tick) {
+        require(!settledEndPending && settledAt > transferredAt && settledAt == tick, "Ticket release lacks later ordinary END custody");
+    }
+    private static void assertHelperOffline(MinecraftServer server) {
+        transit.assertNoTickets(server);
+        require(terminalOffline != null && !transit.holdingLevel(server).hasChunkAt(transit.holdingFeet()), "Canceled helper absence was not native disk eviction");
+        for (var level : server.getAllLevels()) require(level.getEntity(helper) == null, "Absent helper joined before the approved load boundary");
+        var actor = WORKERS.get(helper);
+        require(actor.isRemoved() && actor.getRemovalReason() == Entity.RemovalReason.UNLOADED_TO_CHUNK
+                && terminalOffline.equals(NativeActiveHelperTransit.inventory(actor)), "Finalized offline actor or custody changed");
+    }
+    private static NativeTerminalHelperProof.Proof terminalProof(BuilderEntity worker) {
+        var level = worker.getServer().overworld();
+        return NativeTerminalHelperProof.inspect(worker, accepted, PerimeterProjectAuthority.snapshot(level, coreKey).terminal(projectId),
+                ConstructionEditLedger.get(level), helper, ownerId, ledgerGeneration, terminalOriginalHand, terminalOffline);
+    }
+    private static void requireTerminalState(NativeTerminalHelperProof.State expected) {
+        var proof = terminalProof(WORKERS.get(helper)); require(proof.valid() && proof.state() == expected,
+                "Terminal helper expected " + expected + ": " + proof.reason());
+    }
+    private static boolean handProvenance(BuilderEntity worker, ConstructionEditLedger ledger) {
+        if (CANCELED_ABSENT && worker.getUUID().equals(helper) && accepted != null
+                && PerimeterProjectAuthority.snapshot(worker.getServer().overworld(), coreKey).terminal(projectId) != null)
+            return terminalProof(worker).valid();
+        return ProtectedBuilderHandLifecycle.matches(worker.getPersistentData(), worker.getUUID(), ledger)
+                && NativeConstructionGuard.validHandReceipt(worker.getPersistentData(), ledger);
+    }
+
+    /** Called before every later native participant bracket and at END, even after active-project compaction. */
+    private static void observeCanceledAuthority(MinecraftServer server, ServerLevel level) {
+        var snapshot = PerimeterProjectAuthority.snapshot(level, coreKey); var live = snapshot.get(projectId); var terminal = snapshot.terminal(projectId);
+        if (live != null && live.state() != PerimeterProject.State.CANCELED) {
+            require(canceledAuthorityAt < 0, "Canceled project recreated or resumed"); return;
+        }
+        require(live != null || terminal != null && terminal.state() == PerimeterProject.State.CANCELED, "Project vanished without exact canceled authority");
+        if (canceledAuthorityAt >= 0) return;
+        require(cancelSent && phase == Phase.C_CANCEL_WAIT && terminalOffline != null, "Cancellation did not follow the authenticated absent request");
+        canceledAuthorityAt = level.getGameTime(); canceledWorld = worldTargets(level); canceledStock = constructionStock(server);
+        REPORT.put("canceledAuthorityGameTime", canceledAuthorityAt);
+        record("c-authoritative-canceled", Map.of("gameTime", canceledAuthorityAt, "source", terminal == null ? "active-canceled" : "compact-terminal",
+                "authority", terminal == null ? live.save().toString() : terminal.save().toString(), "placementCounts", counts(),
+                "pendingTargets", pending(level).size(), "stock", canceledStock, "targetStates", targetEvidence(canceledWorld),
+                "materials", materialCensus(server, server.getPlayerList().getPlayer(ownerId))));
+    }
+    private static Map<Long, BlockState> worldTargets(ServerLevel level) {
+        require(footprintReady(level), "Terminal world census would load chunks"); var result = new LinkedHashMap<Long, BlockState>();
+        for (long cell : fixture.plan().blocks().keySet()) result.put(cell, level.getBlockState(BlockPos.of(cell))); return Map.copyOf(result);
+    }
+    private static Map<String, String> targetEvidence(Map<Long, BlockState> states) {
+        var result = new TreeMap<String, String>(); states.forEach((cell, state) -> result.put(cell.toString(), state.toString())); return Map.copyOf(result);
+    }
+    private static Map<String, List<Integer>> constructionStock(MinecraftServer server) {
+        var value = new LinkedHashMap<String, List<Integer>>();
+        value.put("chest", List.of(chestStock(server.overworld(), Items.COBBLESTONE), chestStock(server.overworld(), Items.OAK_PLANKS)));
+        for (UUID id : List.of(coordinator, helper)) {
+            var worker = WORKERS.get(id); int cobble, oak;
+            if (worker.isRemoved()) {
+                require(id.equals(helper) && terminalOffline != null && worker.getRemovalReason() == Entity.RemovalReason.UNLOADED_TO_CHUNK, "Unproven offline terminal stock");
+                cobble = savedMaterial(terminalOffline, Items.COBBLESTONE); oak = savedMaterial(terminalOffline, Items.OAK_PLANKS);
+            } else { cobble = workerStock(worker, Items.COBBLESTONE); oak = workerStock(worker, Items.OAK_PLANKS); }
+            value.put(id.toString(), List.of(cobble, oak));
+        }
+        return Map.copyOf(value);
+    }
+    private static int savedMaterial(NativeActiveHelperTransit.Inventory value, Item item) {
+        return value.slots().stream().map(ItemStack::of).filter(stack -> stack.is(item)).mapToInt(ItemStack::getCount).sum();
+    }
+    private static void assertCanceledFreeze(MinecraftServer server, ServerLevel level) {
+        require(canceledWorld != null && canceledStock != null, "Canceled authority was not frozen");
+        CanceledObservation.verify(canceledWorld, worldTargets(level), canceledStock, constructionStock(server));
+    }
+    /** Dependency-free decision used by executed negative regressions; never reconciles or repairs. */
+    static final class CanceledObservation {
+        static boolean mayWork(boolean running, boolean participant, boolean owner) { return running && participant && owner; }
+        static void verifyBracket(boolean authorized, int changes, boolean supply, Map<?, ?> beforeWorld, Map<?, ?> afterWorld,
+                                  Map<?, ?> beforeStock, Map<?, ?> afterStock) {
+            require(!authorized && changes == 0 && !supply, "Canceled participant retained work authority or mutated stock");
+            verify(beforeWorld, afterWorld, beforeStock, afterStock);
+        }
+        static void verify(Map<?, ?> beforeWorld, Map<?, ?> afterWorld, Map<?, ?> beforeStock, Map<?, ?> afterStock) {
+            require(beforeWorld.equals(afterWorld) && beforeStock.equals(afterStock), "Canceled work or individual material custody changed");
+        }
+    }
+    private static void verifyCanceledTerminal(ServerLevel level) {
+        var snapshot = PerimeterProjectAuthority.snapshot(level, coreKey); var terminal = snapshot.terminal(projectId); var ledger = ConstructionEditLedger.get(level);
+        require(snapshot.get(projectId) == null && terminal != null && terminal.state() == PerimeterProject.State.CANCELED
+                && terminal.projectId().equals(projectId) && terminal.generation() == accepted.header().generation()
+                && terminal.manifestHash().equals(accepted.manifestHash()) && terminal.coreKey().equals(coreKey)
+                && terminal.owner().equals(ownerId) && terminal.builder().equals(coordinator) && terminal.activeStage() == 0 && terminal.verifiedStages() == 0
+                && terminal.totalTargetCount() == 572 && terminal.claimChunkCount() == 1 && terminal.payment().equals(accepted.payment())
+                && terminal.stages().equals(accepted.stages().stream().map(part -> new PerimeterTerminalReceipt.Stage(part.index(), part.areaId(), part.digest(), part.layout().targets().size())).toList())
+                && ledger.sameGeneration(terminal.cleanup().ledgerGeneration()), "Canceled-absent terminal identity/payment differs");
+        require(PerimeterProjectStore.all(core(level.getServer())).isEmpty() && !ledger.contains(projectId)
+                && accepted.stages().stream().noneMatch(part -> ledger.contains(part.areaId()))
+                && PerimeterStageJournal.get(core(level.getServer()), accepted) == null
+                && level.getEntitiesOfClass(ProtectedBuildArea.class, NativeStagedHandoffFixture.BOUNDS, Entity::isAlive).isEmpty(), "Compaction retained active reservations, journal or markers");
+        require(canceledReceipt == null || canceledReceipt.equals(terminal.save()), "Compact terminal receipt changed after observation");
+        var worker = WORKERS.get(coordinator);
+        require(level.getEntity(coordinator) == worker && worker.currentBuildArea == null && !WorkersBridge.hasActiveBuildArea(worker)
+                && !PerimeterProjectLink.reserved(worker) && !worker.getPersistentData().contains("SiegeProtectedAreaReceipt")
+                && !worker.getPersistentData().contains(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
+                && !worker.getPersistentData().contains("SiegeProtectedLedgerGeneration")
+                && !worker.getPersistentData().contains("SiegePlayerFortificationOwner") && worker.neededItems.isEmpty()
+                && ProtectedInventoryCleanup.read(worker.getPersistentData()).isEmpty()
+                && ledger.unresolvedCrewProject(coordinator) == null, "Canceled coordinator was not detached");
+    }
+
     private static void commission(ServerLevel level, ServerPlayer owner) throws Exception {
         var core = core(level.getServer()); long beforeClock = core.getLong("BankInterestAt");
         FactionBank.credit(core, 2000); RaidSavedData.get(owner.server).setDirty();
@@ -398,6 +640,13 @@ public final class NativeActiveHelperQa {
         REPORT.put("firstStageMaterials", accepted.active().layout().targets().entrySet().stream().collect(java.util.stream.Collectors.toMap(
                 entry -> entry.getKey().toString(), Map.Entry::getValue)));
         REPORT.put("acceptedProject", accepted.save().toString()); REPORT.put("ledgerGeneration", ledgerGeneration.toString());
+        if (CANCELED_ABSENT) {
+            REPORT.put("projectGeneration", accepted.header().generation()); REPORT.put("coreKey", coreKey);
+            REPORT.put("expectedCanceledSummary", Map.of("state", "CANCELED", "activeStage", 0, "verifiedStages", 0,
+                    "targetCount", 572, "claimChunks", 1, "feeVersion", accepted.header().feeVersion(),
+                    "quotedPrice", accepted.header().quotedPrice(), "payment", accepted.payment().toString(),
+                    "stages", accepted.stages().stream().map(part -> part.index() + ":" + part.areaId() + ":" + part.digest() + ":" + part.layout().targets().size()).toList()));
+        }
         REPORT.put("materialCounts", Map.of("minecraft:cobblestone", 352, "minecraft:oak_planks", 220));
         REPORT.put("syntheticPartition", true); REPORT.put("qaSectionTargetCap", 192);
         REPORT.put("commissionPath", "Explicit legacy 572-target plan through public protected admission and one real Treasury debit");
@@ -445,8 +694,7 @@ public final class NativeActiveHelperQa {
         if (PENDING_LOADS.containsKey(worker)) reasons.add("observed native load mirror not yet restored");
         if (GROUNDED.getOrDefault(worker.getUUID(), 0) < 5) reasons.add("five ordinary grounded END observations required");
         var ledger = ConstructionEditLedger.get(worker.getServer().overworld());
-        if (!ProtectedBuilderHandLifecycle.matches(worker.getPersistentData(), worker.getUUID(), ledger)
-                || !NativeConstructionGuard.validHandReceipt(worker.getPersistentData(), ledger)) reasons.add("exact protected hand provenance");
+        if (!handProvenance(worker, ledger)) reasons.add("exact protected hand provenance");
         if (tick != lastEligibility && (tick % 20 == 0 || reasons.isEmpty())) {
             lastEligibility = tick;
             record("eligibility", Map.of("worker", worker.getUUID().toString(), "beforeItemSlot", worker.getBeforeItemSlot(),
@@ -559,12 +807,16 @@ public final class NativeActiveHelperQa {
             flush(level);
             if (!(event.getEntity() instanceof BuilderEntity worker) || !PLACEMENTS.containsKey(worker.getUUID()) || !worker.isAlive()) return;
             PerimeterProject project = project(level);
-            if (project == null || project.active() == null) return;
-            observation = new Observation(worker, project.active().areaId(), level.getGameTime(), pending(level),
+            if (CANCELED_ABSENT) observeCanceledAuthority(level.getServer(), level);
+            if ((project == null || project.active() == null) && !CANCELED_ABSENT) return;
+            UUID observedArea = project == null || project.active() == null ? accepted.stages().get(0).areaId() : project.active().areaId();
+            observation = new Observation(worker, observedArea, level.getGameTime(), pending(level),
                     workerStock(worker, Items.COBBLESTONE), workerStock(worker, Items.OAK_PLANKS),
                     chestStock(level, Items.COBBLESTONE), chestStock(level, Items.OAK_PLANKS), String.valueOf(GOALS.get(worker.getUUID()).state),
-                    NativePerimeterProjects.participantLinkMatches(worker, project)
-                            && project.header().owner().equals(WorkersBridge.readWorkerOwner(worker)));
+                    project != null && CanceledObservation.mayWork(!CANCELED_ABSENT || project.state() == PerimeterProject.State.RUNNING,
+                            NativePerimeterProjects.participantLinkMatches(worker, project),
+                            project.header().owner().equals(WorkersBridge.readWorkerOwner(worker))), level.getEntity(observedArea),
+                    CANCELED_ABSENT && canceledAuthorityAt >= 0 ? worldTargets(level) : Map.of());
         } catch (Throwable problem) { fail(problem); }
     }
 
@@ -582,8 +834,9 @@ public final class NativeActiveHelperQa {
             require(before.authorized() && before.worker().isAlive() && !before.worker().isNoAi() && before.state().equals("PLACE_BLOCKS")
                     && before.cobble() - cobble == builtCobble && before.oak() - oak == builtOak
                     && chestCobble == before.chestCobble() && chestOak == before.chestOak(), "Unattributed native placement/debit");
-            require(level.getEntity(before.area()) instanceof ProtectedBuildArea, "Placement lost native receipt");
-            var completed = Arrays.stream(level.getEntity(before.area()).getPersistentData().getCompound("SiegeProtectedConstructionV1")
+            Entity receipt = CANCELED_ABSENT ? before.receiptArea() : level.getEntity(before.area());
+            require(receipt instanceof ProtectedBuildArea && receipt.getUUID().equals(before.area()), "Placement lost native receipt");
+            var completed = Arrays.stream(receipt.getPersistentData().getCompound("SiegeProtectedConstructionV1")
                     .getLongArray("Completed")).boxed().collect(java.util.stream.Collectors.toSet());
             for (long cell : changed) {
                 require(accepted.stages().get(0).layout().targets().containsKey(cell) && completed.contains(cell)
@@ -599,6 +852,16 @@ public final class NativeActiveHelperQa {
         }
         if (changed.isEmpty() && !supply) require(cobble == before.cobble() && oak == before.oak()
                 && chestCobble == before.chestCobble() && chestOak == before.chestOak(), "Unexplained material change outside native supply/placement");
+        if (CANCELED_ABSENT && canceledAuthorityAt >= 0) {
+            CanceledObservation.verifyBracket(before.authorized(), changed.size(), supply, before.canceledTargets(), worldTargets(level),
+                    Map.of("stock", List.of(before.cobble(), before.oak(), before.chestCobble(), before.chestOak())),
+                    Map.of("stock", List.of(cobble, oak, chestCobble, chestOak)));
+            terminalObservedBrackets++;
+            require(terminalObservedBrackets < 10000, "Bounded terminal bracket capacity exceeded");
+            record("terminal-native-bracket", Map.of("worker", before.worker().getUUID().toString(), "gameTime", before.tick(),
+                    "authorized", false, "changedTargets", 0, "targetStatesUnchanged", true, "before", List.of(before.cobble(), before.oak(), before.chestCobble(), before.chestOak()),
+                    "after", List.of(cobble, oak, chestCobble, chestOak)));
+        }
         if (!changed.isEmpty() || supply) {
             var work = new LinkedHashMap<String, Object>(); work.put("sequence", ++sequence);
             work.put("worker", before.worker().getUUID().toString()); work.put("gameTime", before.tick()); work.put("area", before.area().toString());
@@ -619,6 +882,7 @@ public final class NativeActiveHelperQa {
                 "Unsafe active helper game directory");
         evidence = directory.getParent().resolve("evidence"); Files.createDirectories(evidence);
         require(!Files.exists(directory.resolve("saves").resolve(NativeStagedHandoffFixture.WORLD)), "Refusing an existing helper world");
+        require(CASE.equals("same-stage-disk") || CANCELED_ABSENT, "Unknown active helper case");
         Path defaults = directory.resolve("defaultconfigs");
         require(!Files.isSymbolicLink(defaults), "Symlinked fresh default config directory"); Files.createDirectories(defaults);
         // Synthetic precommission world setup only. Never edit an existing world's server config.
@@ -626,13 +890,17 @@ public final class NativeActiveHelperQa {
         REPORT.put("loadedApiParity", NativeActiveHelperApiParity.verify(evidence));
         REPORT.put("sourceCommit", Files.readString(evidence.resolve("source-commit.txt")).trim());
         REPORT.put("sourceTree", Files.readString(evidence.resolve("source-tree.txt")).trim());
-        REPORT.put("startedUtc", Instant.now().toString()); REPORT.put("mode", "active-helper-same-stage-disk");
+        REPORT.put("startedUtc", Instant.now().toString()); REPORT.put("mode", CANCELED_ABSENT ? "active-helper-cancel-while-absent" : "active-helper-same-stage-disk");
         REPORT.put("formatVersion", 1); REPORT.put("totalLimitSeconds", LIMIT_SECONDS);
         REPORT.put("phaseLimitTicks", 1200); REPORT.put("evictionLimitTicks", 1800); REPORT.put("finalizationLimitTicks", 200);
         REPORT.put("stableGroundedEndTicks", 5); REPORT.put("absenceObservationTicks", 100);
         REPORT.put("scope", "Separately opted-in synthetic helper dimension transit and genuine disk eviction; same-stage return, real coordinator-first reopen and later helper disk join, native rebind/placement, loaded-worker cancellation");
         REPORT.put("notCovered", List.of("Stage-skipped return", "Cancellation while helper is absent", "Whole-site chunk eviction",
                 "Whole-project completion", "Dedicated-client networking", "Normal review-menu commission", "Arbitrary add-ons or transformed-method equivalence"));
+        if (CANCELED_ABSENT) {
+            REPORT.put("scope", "Separate fresh-world paid helper cancellation during genuine disk absence, compact unresolved terminal, later exact cleanup-only load and native return");
+            REPORT.put("notCovered", List.of("Same-stage working return", "Coordinator-first whole-server reopen", "Stage-skipped return", "Whole-site eviction", "Sleep", "Post-DONE succession", "Whole-project completion", "Dedicated-client networking"));
+        }
         REPORT.put("stageSkippedReturnVerified", false); REPORT.put("canceledWhileAbsentVerified", false);
         REPORT.put("wholeSiteEvictionVerified", false); REPORT.put("ownerMode", "non-op Survival");
         REPORT.put("nativeWorkerChunkLoading", false); REPORT.put("configurationScope", "Fresh disposable world defaultconfigs only");
@@ -664,9 +932,11 @@ public final class NativeActiveHelperQa {
                     && project.layout().equals(layout) && project.targets().equals(accepted.targets())
                     && project.clearanceBefore().equals(accepted.clearanceBefore()) && project.payment().equals(accepted.payment())
                     && ConstructionEditLedger.get(level).assignedBuilder(project).equals(coordinator), "Immutable paid project or assigned coordinator changed");
-            if (phase != Phase.CANCEL_WAIT) requireFirstStage(project);
+            if (CANCELED_ABSENT && canceledAuthorityAt >= 0) require(project.state() == PerimeterProject.State.CANCELED
+                    && project.activeStage() == 0 && project.receipts().isEmpty(), "Canceled authority changed");
+            else if (phase != Phase.CANCEL_WAIT) requireFirstStage(project);
             else require(project.activeStage() == 0 && project.receipts().isEmpty(), "Cancellation advanced first stage");
-        } else require(phase == Phase.CANCEL_WAIT || phase == Phase.STABLE_CANCELED || phase == Phase.FINISHED,
+        } else require(CANCELED_ABSENT && canceledAuthorityAt >= 0 || phase == Phase.CANCEL_WAIT || phase == Phase.STABLE_CANCELED || phase == Phase.FINISHED,
                 "Project disappeared before authenticated cancellation");
         for (var entry : fixture.nonPlanCells().entrySet()) require(level.getBlockState(entry.getKey()).equals(entry.getValue()),
                 "Native work modified a non-plan cell: " + entry.getKey());
@@ -808,8 +1078,7 @@ public final class NativeActiveHelperQa {
             if (ProtectedBuilderHandMirror.pending(worker.getPersistentData())) {
                 var ledger = ConstructionEditLedger.get(worker.getServer().overworld());
                 require(worker.getBeforeItemSlot() == -1 && !ProtectedBuilderHandMirror.activeUse(worker)
-                        && ProtectedBuilderHandLifecycle.matches(worker.getPersistentData(), worker.getUUID(), ledger)
-                        && NativeConstructionGuard.validHandReceipt(worker.getPersistentData(), ledger)
+                        && handProvenance(worker, ledger)
                         && ProtectedBuilderHandMirror.sameValue(slot, main) && slot.getCount() >= 0
                         && slot.getCount() <= Math.min(worker.getInventory().getMaxStackSize(), slot.getMaxStackSize()),
                         "Pending load mirror lacks exact canonical provenance/value proof");
@@ -872,6 +1141,15 @@ public final class NativeActiveHelperQa {
             data.put("projectState", project.state().name()); data.put("stage", project.activeStage());
             data.put("helperActive", ledger.crewMember(project, helper)); data.put("helperGranted", ledger.crewStageGranted(project, helper));
             data.put("helperSuspended", ledger.suspendedCrewMember(project, helper)); data.put("helperRejoining", ledger.rejoiningCrewMember(project, helper));
+        }
+        if (CANCELED_ABSENT && PerimeterProjectAuthority.snapshot(level, coreKey).terminal(projectId) != null) {
+            var proof = terminalProof(WORKERS.get(helper)); require(proof.valid(), "Terminal boundary provenance failed: " + proof.reason());
+            data.put("terminalProof", proof.evidence()); data.put("terminalProofState", proof.state().name());
+            data.put("terminalReceipt", PerimeterProjectAuthority.snapshot(level, coreKey).terminal(projectId).save().toString());
+            data.put("stock", constructionStock(server)); data.put("targetStates", targetEvidence(worldTargets(level))); data.put("terminalReservationsAbsent", !ledger.contains(projectId)
+                    && accepted.stages().stream().noneMatch(part -> ledger.contains(part.areaId())));
+            data.put("terminalMarkersAbsent", level.getEntitiesOfClass(ProtectedBuildArea.class, NativeStagedHandoffFixture.BOUNDS, Entity::isAlive).isEmpty());
+            data.put("helperUnresolved", String.valueOf(ledger.unresolvedCrewProject(helper)));
         }
         record(kind, data);
     }

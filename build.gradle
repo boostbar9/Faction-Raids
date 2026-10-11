@@ -230,6 +230,9 @@ if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)
     def nativeQaMode = providers.gradleProperty('nativeQaMode').getOrElse('baseline')
     def sharedCrewQa = providers.gradleProperty('nativeSharedCrewQa').map { it.toBoolean() }.getOrElse(false)
     def activeHelperQa = providers.gradleProperty('nativeActiveHelperQa').map { it.toBoolean() }.getOrElse(false)
+    def activeHelperCase = providers.gradleProperty('nativeActiveHelperCase').getOrElse('same-stage-disk')
+    if (!(activeHelperCase in ['same-stage-disk', 'cancel-while-absent'])
+            || providers.gradleProperty('nativeActiveHelperCase').isPresent() && !activeHelperQa) throw new GradleException('Unsupported or non-opted-in active helper case')
     if (activeHelperQa && (!sharedCrewQa || nativeQaMode != 'staged-handoff')) throw new GradleException('Active helper QA requires its separate staged-handoff shared-crew opt-in')
     if (sharedCrewQa && nativeQaMode != 'staged-handoff') throw new GradleException('Shared crew QA requires staged-handoff mode')
     if (sharedCrewQa && providers.gradleProperty('nativeBuilderReplacementQa').getOrElse('false').toBoolean()) throw new GradleException('Shared crew and builder replacement QA are separate scenarios')
@@ -278,6 +281,7 @@ if (providers.gradleProperty('nativeQa').map { it.toBoolean() }.getOrElse(false)
         property 'siegeoverhaul.nativeQa.mode', nativeQaMode
         property 'siegeoverhaul.nativeQa.sharedCrew', sharedCrewQa.toString()
         property 'siegeoverhaul.nativeQa.activeHelper', activeHelperQa.toString()
+        if (activeHelperQa) property 'siegeoverhaul.nativeQa.activeHelperCase', activeHelperCase
         if (activeHelperQa) property 'siegeoverhaul.nativeQa.helperApiGate', project.file('build/native-helper-qa/evidence/api-gate/gate.json').absolutePath
         property 'siegeoverhaul.nativeQa.builderReplacement', providers.gradleProperty('nativeBuilderReplacementQa').getOrElse('false')
         property 'siegeoverhaul.nativeQa.sizeableFoliage', sizeableFoliageQa.toString()

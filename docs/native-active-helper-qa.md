@@ -188,3 +188,71 @@ do not compile Forge types or prove engine behavior. The fresh hosted build,
 loaded parity, exact native run, strict verifier and independent evidence review
 remain required. The baseline report-correction screenshot and prior shared
 acceptance remain source-specific separate evidence.
+
+## Separate Case C: cancellation while the helper is disk-absent
+
+The independently selected `cancel-while-absent` case uses the same fresh-world
+572 targets, 139-target first section, finite 352 cobblestone/220 oak and single
+64-emerald fee. Its read-only, same-repository alpha PR route is the
+`native-absent-helper-cancel-qa` label on PR 295. The workflow adds
+`-PnativeActiveHelperCase=cancel-while-absent` during preparation and launch and
+uses `scripts/verify-native-absent-helper-cancel.py`. With no case property the
+accepted `same-stage-disk` scenario and its separate oracle remain the default.
+Unknown cases and a case selected without the active-helper opt-in fail closed.
+This new case requires its own hosted compile, native run and artifact review;
+implementation or synthetic test success does not establish gameplay acceptance.
+
+After both original workers withdraw and place naturally, the helper transfers
+once to the reviewed holding room. The existing ticket stays held through unique
+registered custody at the following ordinary END, then is removed and verified
+zero. Missing lookup alone does not qualify: the actor must finalize
+`UNLOADED_TO_CHUNK`, the holding chunk must be unavailable, all dimensions must
+lack the helper UUID and its exact finalized inventory/receipts are frozen.
+Only then do the 100 absent ticks and new coordinator-placement observation begin.
+The owner remains ordinary non-op Survival and uses the real authenticated core
+menu to cancel the exact paid project. There is no server restart in this case.
+
+The first server-authoritative CANCELED or compact-terminal observation freezes
+all 572 target block states and individual source/coordinator/offline-helper
+material custody. Native worker bracketing continues after the active project and
+marker disappear. No later withdrawal, placement, claim or authority is accepted,
+even when the total stock would still balance. Earlier legitimate work retains
+its exact recorded marker completion receipt. The compact receipt must preserve
+project, owner, manifest, generation, payment and full stage summary while the
+reservations, markers and stage journal are gone. The absent helper must remain
+known, suspended, unresolved and historically granted only A0, without a fresh
+admission, rejoin or destruction receipt.
+
+After 100 stable canceled offline ticks, the same exact ticket tuple loads the
+helper from disk. Its raw HIGHEST values must match the finalized actor snapshot;
+production LOWEST may add only the existing hand-refresh-pending flag. The same
+read-only terminal proof is used for transfer eligibility and the narrowly
+observed pending-load hand mirror census. It validates the original helper and
+current owner, paid terminal and ledger identity, original immutable A0 hand
+receipt in actor and ledger, exact historical cleanup scope and member state.
+The stale-unresolved state requires every original association channel. The
+resolved state requires all work selectors, native associations, requests and
+cleanup operations cleared by ordinary production. No arbitrary equal stack or
+unobserved split becomes exempt from accounting. A real recorded load pair,
+unchanged values, no third-slot alias and subsequent canonical identity/rebind
+remain mandatory. Same-tick hand restoration and terminal cleanup are valid;
+the fixture does not force an artificial intermediate state.
+
+Cleanup can occur in the holding dimension because production authenticates the
+Overworld ledger there. The fully detached original UUID then returns through the
+supported native transfer, again with exact raw/LOWEST/synchronous/later-END
+custody. The existing ticket is released after that later-END proof. Both actors
+must stay loaded and detached for 100 further ordinary ticks with unchanged
+terminal receipt, target states and individual finite stock. The oracle requires
+exactly two transfers, two balanced ticket cycles and three helper admissions
+(non-disk outbound, disk holding join, non-disk return), with no coordinator disk
+join. Failure paths preserve failure and remove only the owned pending tuple.
+
+All established caps remain: 600 seconds total, 1200 ordinary-phase ticks, 1800
+eviction ticks, 200 removal-finalization ticks and five naturally grounded END
+observations before transfer. No coordinator pause, forced goal/placement,
+request clearing, stock compensation, membership edit or postcommission world
+setup is permitted. Later-stage return, whole-site eviction, actual sleep,
+post-DONE succession and complete-perimeter construction remain separate gates.
+The real cancellation-request screenshot does not by itself prove visible
+cancel-control rendering or the server-authoritative transition.
