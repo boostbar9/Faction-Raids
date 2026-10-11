@@ -201,7 +201,10 @@ class PerimeterRetirementLifecycleTest extends MinecraftTestSupport {
             var authority=mockStatic(PerimeterProjectAuthority.class);var storage=mockStatic(ProtectedStorageAccess.class);
             var goals=mockStatic(WallBuilderAccess.class);var runtime=mockStatic(WorkersConstructionRuntime.class)) {
             configure(f,workers,ledgers,authority,storage,goals,runtime);
-            assertTrue(NativePerimeterProjects.reconcileWorker(f.worker()));
+            // A conflicting live assignment permits neither cleanup completion nor a tick-only
+            // historical-cleanup deferral. Neither path may drain or detach the unrelated job.
+            assertFalse(NativePerimeterProjects.reconcileWorker(f.worker()));
+            assertFalse(NativePerimeterProjects.reconcileWorkerBeforeTick(f.worker()));
             assertSame(unrelated,f.worker().currentBuildArea);assertEquals(p.active().areaId(),f.data().getUUID(AREA));
             assertTrue(PerimeterProjectLink.reserved(f.worker()));
             storage.verify(()->ProtectedStorageAccess.drainCleanup(any()),never());

@@ -414,6 +414,8 @@ class PerimeterSuspendedCrewReplayTest extends MinecraftTestSupport {
             when(f.helper.mob.isUsingItem()).thenReturn(true);
             int detached = f.helper.detachments; var before = f.ledger.save(new CompoundTag());
             assertFalse(NativePerimeterProjects.reconcileWorker(f.helper.mob), "Cleanup completion still waits: " + state);
+            assertFalse(NativeEarthworksJobs.selected(f.helper.mob), "The separate healthy world ledger has no NEW job");
+            assertTrue(NativeConstructionGuard.cleanupWaitMayTick(f.helper.mob), "Exact retained hand permits a guarded wait");
             var event = new net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent(f.helper.mob);
             com.devfarinsky.siegeoverhaul.RaidEvents.onCampWorkerTick(event);
             assertFalse(event.isCanceled(), "Ordinary use must be able to finish: " + state);
@@ -498,6 +500,12 @@ class PerimeterSuspendedCrewReplayTest extends MinecraftTestSupport {
                 project = PerimeterProjectStore.consumeOnce(core, project.header().projectId(), project.manifestHash(), 64, false, () -> {}).project();
                 replace(project.activate(project.check())); original = project;
                 when(level.getServer()).thenReturn(server); when(server.overworld()).thenReturn(level);
+                // The separate NEW-job guard must observe a healthy, empty world ledger. An
+                // unavailable earthworks ledger deliberately fails closed before perimeter ticks.
+                var earthworksStorage = fixtureMock(net.minecraft.world.level.storage.DimensionDataStorage.class);
+                when(level.getDataStorage()).thenReturn(earthworksStorage);
+                when(earthworksStorage.<EarthworksJobLedger>computeIfAbsent(any(), any(), eq("siege_earthworks_jobs_v1")))
+                        .thenReturn(new EarthworksJobLedger());
                 when(server.isSameThread()).thenReturn(true); when(server.getTickCount()).thenReturn(20);
                 when(server.getAllLevels()).thenReturn(List.of(level));
                 when(level.hasChunkAt(any())).thenReturn(true); when(level.areEntitiesLoaded(anyLong())).thenReturn(true);

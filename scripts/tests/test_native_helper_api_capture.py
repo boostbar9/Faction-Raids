@@ -166,7 +166,8 @@ class HelperApiCaptureTest(unittest.TestCase):
         self.assertIn("dependsOn 'prepareNativeQaClient'", gradle)
         self.assertIn('clientRun.minecraftArtifacts, clientRun.runtimeClasspathArtifacts', gradle)
         self.assertIn('clientRun.runConfig.get().allSources.collect { it.runtimeClasspath }', gradle)
-        self.assertIn("tasks.named('runClient').configure", gradle)
+        self.assertIn("tasks.matching { it.name == 'runClient' }.configureEach", gradle)
+        self.assertNotIn("tasks.named('runClient').configure", gradle)
         self.assertIn("doFirst { throw new GradleException('API capture is prepare-only", gradle)
 
 

@@ -231,6 +231,9 @@ class NativeCrewContinuationTest extends MinecraftTestSupport {
         try (var f = new Fixture(); var guards = mockStatic(NativeConstructionGuard.class, CALLS_REAL_METHODS)) {
             f.prepareResume(); when(f.ledger.crewMember(f.project, f.builder)).thenReturn(false);
             when(f.ledger.pendingCrewMember(f.project, f.builder)).thenReturn(true);
+            // A real pending record cannot satisfy the ACTIVE-only current-stage grant query.
+            when(f.ledger.crewStageGranted(f.project, f.builder)).thenReturn(false);
+            assertNotNull(NativeConstructionGuard.commissionProblem(f.worker));
             guards.when(() -> NativeConstructionGuard.matchesProjectSnapshot(f.area, f.project)).thenReturn(true);
             var before = f.data.copy();
             assertFalse(NativeConstructionGuard.resumeCrewMember(f.owner, f.worker, f.area, f.project));

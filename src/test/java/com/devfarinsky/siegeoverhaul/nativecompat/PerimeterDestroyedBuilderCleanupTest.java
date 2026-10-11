@@ -182,8 +182,10 @@ class PerimeterDestroyedBuilderCleanupTest extends MinecraftTestSupport {
                 assertNotNull(NativeConstructionGuard.commissionProblem(restored.worker()),"No new commission may reuse the stale worker");
                 assertNotNull(PerimeterProjectAuthority.problem(f.level,restored.worker(),f.area,false,false));
                 assertFalse(ProtectedStorageAccess.drainCleanup(restored.worker()));
-                // Reconciliation may allow ordinary living ticks while protected work stays blocked.
-                assertTrue(NativePerimeterProjects.reconcileWorker(restored.worker()));
+                // Cleanup completion is separate from the guarded living-tick deferral. An orphaned
+                // persisted cleanup/review journal is unsafe in both paths, not ordinary item use.
+                assertFalse(NativePerimeterProjects.reconcileWorker(restored.worker()));
+                assertFalse(NativePerimeterProjects.reconcileWorkerBeforeTick(restored.worker()));
                 assertFalse(NativeConstructionGuard.retireBuilderAssociation(restored.worker(),f.project.active().areaId()));
                 assertFalse(NativeConstructionGuard.beforeNativeTick(restored.worker(),mock(Goal.class)));
                 for(var wrapped:restored.goals()) {

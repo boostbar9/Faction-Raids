@@ -6,7 +6,8 @@ if (providers.gradleProperty('nativeActiveHelperApiQa').map { it.toBoolean() }.g
             || !providers.gradleProperty('nativeSharedCrewQa').getOrElse('false').toBoolean()) {
         throw new GradleException('Active helper API capture requires nativeQa staged-handoff shared-crew preparation')
     }
-    tasks.named('runClient').configure {
+    // ForgeGradle adds runClient after script evaluation; include that future task.
+    tasks.matching { it.name == 'runClient' }.configureEach {
         doFirst { throw new GradleException('API capture is prepare-only; reviewed exact transfer/ticket semantics and a separate fixture are required before gameplay') }
     }
     tasks.register('prepareNativeActiveHelperApiEvidence') {
