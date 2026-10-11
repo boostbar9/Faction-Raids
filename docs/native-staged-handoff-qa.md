@@ -57,6 +57,20 @@ paid direct-server commission; production discovers and enlists the helper.
 Nothing adds construction stock, sets target blocks, invokes native goals,
 accelerates AI, teleports a working builder, or manufactures completion receipts.
 
+The shared helper starts with one 64-bread stack and otherwise empty cargo,
+asserted before it enters the world or any commission. The coordinator retains
+its normal pickaxe/axe/shovel kit. This deliberately constrained helper kit is
+appropriate only for this reviewed clear-terrain fixture: helpers do not mine,
+and a promoted survivor can naturally collect the coordinator's dropped tools.
+The report records the exact initial helper cargo and scope. No cargo is removed,
+rearranged or replenished by QA after commission.
+
+The earlier native run `38154872840` remains valid safety evidence: recovery of
+both complete fixture kits occupied all nine survivor cargo slots. Production
+correctly held the 55-oak request with zero empty slots and left all 220 chest oak
+untouched. That full-cargo pause was not a cleanup failure and is not disabled or
+reclassified by this scenario adjustment.
+
 The required evidence, all stored in the existing `result.json`, is:
 
 - Exact coordinator/helper/owner/project/area identities and the unchanged paid

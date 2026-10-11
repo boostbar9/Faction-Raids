@@ -519,6 +519,27 @@ class SharedCrewEvidenceTest(unittest.TestCase):
         self.assertNotIn('pull-requests: write', workflow)
         self.assertEqual(2, workflow.count('-PnativeSharedCrewQa=$SHARED_CREW_QA'))
 
+    def test_shared_helper_starts_with_bread_only_without_post_commission_cargo_edits(self):
+        fixture = (REPO / 'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeStagedHandoffFixture.java').read_text()
+        helper = fixture.split('static BuilderEntity spawnSharedHelper', 1)[1].split('record HollowOracle', 1)[0]
+        self.assertIn('getContainerSize() <= 128', helper)
+        self.assertIn('for (int slot = 6; slot < helper.getInventory().getContainerSize(); slot++)', helper)
+        self.assertIn('getItem(slot).isEmpty()', helper)
+        self.assertEqual(helper.count('.setItem('), 1)
+        self.assertIn('setItem(6, new ItemStack(Items.BREAD, 64))', helper)
+        self.assertNotIn('Items.DIAMOND_', helper)
+        self.assertNotRegex(helper, r'\.clearContent\(|\.removeItem\(|\.setCount\(|\.shrink\(')
+        self.assertLess(helper.index('getItem(slot).isEmpty()'), helper.index('.setItem('))
+        self.assertLess(helper.index('.setItem('), helper.index('level.addFreshEntity(helper)'))
+        coordinator = fixture.split('static BuilderEntity spawnSharedHelper', 1)[0]
+        for item in ['DIAMOND_PICKAXE', 'DIAMOND_AXE', 'DIAMOND_SHOVEL']:
+            self.assertIn('new ItemStack(Items.' + item + ')', coordinator)
+        java = (REPO / 'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeStagedHandoffQa.java').read_text()
+        initial = java.split('case 0 -> {', 1)[1].split('case 1 -> {', 1)[0]
+        self.assertIn('"sharedCrewInitialHelperKit"', initial)
+        self.assertIn('"beforeCommission", projectId == null', initial)
+        self.assertIn('"cargo", initialHelperCargo', initial)
+
     def test_observer_does_not_run_goals_or_write_targets(self):
         java = (REPO / 'src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeStagedHandoffQa.java').read_text()
         observer = java.split('public static void observeCrewLivingTick', 1)[1].split('private static boolean advanceSharedCrew', 1)[0]

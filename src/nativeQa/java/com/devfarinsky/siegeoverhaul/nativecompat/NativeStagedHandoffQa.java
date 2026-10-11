@@ -243,6 +243,14 @@ public final class NativeStagedHandoffQa {
                     rememberCrew(builder(level));
                     var helper = NativeStagedHandoffFixture.spawnSharedHelper(level, owner);
                     sharedHelper = helper.getUUID(); rememberCrew(helper);
+                    var initialHelperCargo = new ArrayList<Map<String, Object>>();
+                    for (int slot = 6; slot < helper.getInventory().getContainerSize(); slot++) {
+                        var value = new LinkedHashMap<>(stack(helper.getInventory().getItem(slot)));
+                        value.put("slot", slot); initialHelperCargo.add(value);
+                    }
+                    REPORT.put("sharedCrewInitialHelperKit", Map.of("worker", sharedHelper.toString(),
+                            "scope", "Bread-only helper on reviewed clear terrain; coordinator retains its normal tools",
+                            "beforeCommission", projectId == null, "cargo", initialHelperCargo));
                     require(level.getEntitiesOfClass(BuilderEntity.class, NativeStagedHandoffFixture.BOUNDS,
                             worker -> owner.getUUID().equals(WorkersBridge.readWorkerOwner(worker))).size() == 2,
                             "Shared fixture must have exactly two eligible owned builders");

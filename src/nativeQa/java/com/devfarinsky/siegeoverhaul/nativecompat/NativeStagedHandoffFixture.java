@@ -190,7 +190,10 @@ final class NativeStagedHandoffFixture {
                 Map.copyOf(nonPlan), List.copyOf(parked));
     }
 
-    /** A second exactly owned hire, with tools/food only. The original finite chest is untouched. */
+    /** Bread-only initial helper on reviewed clear terrain; helpers do not perform native mining.
+     * The coordinator keeps its normal tool kit, which its successor may recover through native drops.
+     * Never rearrange cargo after either worker has entered the commissioned scenario.
+     */
     static BuilderEntity spawnSharedHelper(ServerLevel level, ServerPlayer owner) throws ReflectiveOperationException {
         require(WORLD.equals(level.getServer().getWorldData().getLevelName()) && level.getServer().isSameThread(),
                 "Refusing shared helper outside isolated fixture");
@@ -208,10 +211,11 @@ final class NativeStagedHandoffFixture {
                 && !helper.getMainHandItem().is(Items.COBBLESTONE) && !helper.getMainHandItem().is(Items.OAK_PLANKS)
                 && !helper.getOffhandItem().is(Items.COBBLESTONE) && !helper.getOffhandItem().is(Items.OAK_PLANKS),
                 "Shared helper must not create any additional construction supply");
+        require(helper.getInventory().getContainerSize() >= 10 && helper.getInventory().getContainerSize() <= 128,
+                "Shared helper cargo inventory is outside the bounded fixture contract");
+        for (int slot = 6; slot < helper.getInventory().getContainerSize(); slot++)
+            require(helper.getInventory().getItem(slot).isEmpty(), "Shared helper has unexpected initial cargo in slot " + slot);
         helper.getInventory().setItem(6, new ItemStack(Items.BREAD, 64));
-        helper.getInventory().setItem(7, new ItemStack(Items.DIAMOND_PICKAXE));
-        helper.getInventory().setItem(8, new ItemStack(Items.DIAMOND_AXE));
-        helper.getInventory().setItem(9, new ItemStack(Items.DIAMOND_SHOVEL));
         helper.getInventory().setChanged();
         require(owner.getUUID().equals(WorkersBridge.readWorkerOwner(helper)) && level.addFreshEntity(helper),
                 "Shared helper exact ownership/spawn failed");

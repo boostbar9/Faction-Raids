@@ -35,3 +35,10 @@ original dying actor's retained inventory. Missing/extra/aliased drops fail fini
 conservation without compensation. This covers the pinned baseline companions,
 not corpse addons; it does not claim a runtime pass until the exact candidate
 produces verified gameplay evidence.
+
+The shared native helper's initial QA kit is bread only on reviewed clear terrain;
+the coordinator retains its normal tools. Run `38154872840` demonstrated correct
+full-cargo safety after recovery of two complete kits: all nine cargo slots were
+occupied, so the 55-oak request paused without withdrawing any of the 220 chest
+oak. The lean helper setup does not change that production guard or rearrange
+post-commission inventory.
