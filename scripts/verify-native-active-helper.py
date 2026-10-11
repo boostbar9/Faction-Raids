@@ -135,6 +135,34 @@ def verify_tickets(data):
     require(state == 'zero' and cycles == 3 and data.get('finalOwnedTicketCount') == 0, 'Missing three exact add/remove cycles or final zero')
 
 
+
+def verify_eviction_release(data, helper):
+    events = data['events']
+    settled = [e for e in events if e.get('kind') == 'ordinary-end-settled-custody']
+    releases = [e for e in events if e.get('kind') == 'eviction-ticket-released-after-settled']
+    evicts = [e for e in events if e.get('kind') == 'phase' and e.get('phase') == 'EVICT']
+    before = [e for e in events if e.get('kind') == 'before-disk-transfer']
+    transfers = [e for e in data['activeHelperTransitEvents'] if e.get('kind') == 'transfer-settled']
+    removes = [e for e in data['activeHelperTicketEvents'] if e.get('kind') == 'remove-pending']
+    removed = [e for e in data['activeHelperTicketEvents'] if e.get('kind') == 'remove-return']
+    require(len(settled) == len(transfers) == 4 and len(releases) == len(evicts) == len(before) == 1
+            and len(removes) == len(removed) == 3, 'Missing exact settled-before-eviction release evidence')
+    end, release, evict = settled[2], releases[0], evicts[0]
+    start_tick = integer(before[0].get('gameTime')); end_tick = integer(end.get('gameTime'))
+    require(end.get('worker') == release.get('worker') == helper and end.get('dimension') == 'minecraft:the_nether'
+            and end.get('phase') == release.get('phase') == 'SECOND_SETTLE'
+            and integer(end.get('transferGameTime')) == integer(release.get('transferGameTime')) == start_tick < end_tick
+            and integer(release.get('settledGameTime')) == integer(release.get('gameTime')) == integer(evict.get('gameTime')) == end_tick,
+            'Eviction clock/release precedes the later ordinary END custody proof')
+    require(before[0]['sequence'] < end['sequence'] < release['sequence'] < evict['sequence'], 'Eviction phase precedes settled release')
+    require(100 <= integer(data.get('offlineRemovalProof', {}).get('gameTime')) - end_tick <= 1800,
+            'Finalized unload lacks the fixed post-release absence window')
+    call_ns, end_ns, pending_ns, removed_ns, release_ns = [integer(e.get('nanoTime'),1) for e in (transfers[2],end,removes[1],removed[1],release)]
+    require(call_ns < end_ns < pending_ns < removed_ns < release_ns, 'Holding ticket was released before settled custody')
+    require(any(e.get('kind') == 'zero-owned-verified' and removed_ns < integer(e.get('nanoTime'),1) < release_ns
+                for e in data['activeHelperTicketEvents']), 'Eviction starts without post-removal zero-ticket proof')
+
+
 def verify_absence_work(work, bounds, helper):
     for left, right in [('before-first-transfer','first-native-return'),('before-disk-transfer','disk-native-return')]:
         require(not any(w['worker'] == helper and bounds[left]['sequence'] < w['sequence'] < bounds[right]['sequence'] for w in work), 'Absent helper supplied or placed native work')
@@ -247,7 +275,7 @@ def verify_report(data):
     verify_absence_work(work, bounds, helper)
     for name,key in [('cobble','placedCobble'),('oak','placedOak')]:
         require(data.get('finalMaterials',{}).get(name,{}).get('built') == sum(w[key] for w in work if w['kind']=='native-placement'), 'Final built material differs from native receipts')
-    verify_transfers(data, helper, owner); verify_mirrors(data); verify_tickets(data); materials(data.get('finalMaterials'))
+    verify_transfers(data, helper, owner); verify_mirrors(data); verify_tickets(data); verify_eviction_release(data, helper); materials(data.get('finalMaterials'))
     initial, final = data.get('auxiliaryIsolationInitial'), data.get('auxiliaryIsolationFinal')
     require(isinstance(initial, dict) and isinstance(final, dict)
             and {k:v for k,v in initial.items() if k != 'gameTime'} == {k:v for k,v in final.items() if k != 'gameTime'}

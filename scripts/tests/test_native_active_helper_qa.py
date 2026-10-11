@@ -62,7 +62,10 @@ def fixture():
     join(H,False,'minecraft:overworld'); event('first-native-return',111,suspended=True)
     event('ordinary-end-settled-custody',112,boundary=False); work(H); event('same-stage-resumed',120,active=True)
     event('before-disk-transfer',120,active=True)
-    join(H,False,'minecraft:the_nether'); event('ordinary-end-settled-custody',121,boundary=False)
+    join(H,False,'minecraft:the_nether')
+    event('ordinary-end-settled-custody',121,boundary=False,worker=H,dimension='minecraft:the_nether',phase='SECOND_SETTLE',transferGameTime=120,nanoTime=320)
+    event('eviction-ticket-released-after-settled',121,boundary=False,worker=H,phase='SECOND_SETTLE',transferGameTime=120,settledGameTime=121,nanoTime=360)
+    event('phase',121,boundary=False,phase='EVICT')
     event('genuine-helper-disk-unload',500,suspended=True)
     event('actual-server-stop',501,boundary=False,authority='paid',ledger='saved',coordinator=inv(),offlineHelper=inv())
     event('actual-server-reopen-before-ticks',501,boundary=False,authority='paid',ledger='saved')
@@ -76,11 +79,11 @@ def fixture():
     data.update(placementCounts=counts,retainedPlacedBlocks=sum(counts.values()),finalMaterials=census(),finalizedOfflineInventory=inv(),
                 offlineRemovalProof=dict(reason='UNLOADED_TO_CHUNK',shouldDestroy=False,shouldSave=True,chunkAvailable=False,registered=False,gameTime=500,unavailableAt=499))
     events=[]; ordinal=0
-    for source,destination in [('minecraft:overworld','minecraft:the_nether'),('minecraft:the_nether','minecraft:overworld')]*2:
+    for transfer_index,(source,destination) in enumerate([('minecraft:overworld','minecraft:the_nether'),('minecraft:the_nether','minecraft:overworld')]*2):
         for kind in ['transfer-before','join-high','join-low','dimension-source-leave','transfer-settled']:
             ordinal+=1
             event=dict(ordinal=ordinal,kind=kind,uuid=H,owner=O,dimension=source if kind in ('transfer-before','dimension-source-leave') else destination,
-                       alive=True,removed=False,neededItems=0,followState=6,inventory=inv())
+                       alive=True,removed=False,neededItems=0,followState=6,inventory=inv(),nanoTime=[100,200,300,500][transfer_index]+(ordinal-1)%5+1)
             if kind in ('join-low','transfer-settled'): event['inventory']['persistent']='{SiegeProtectedHandRefreshPending:1b}'
             if kind.startswith('join-'): event.update(loadedFromDisk=False,canceled=False)
             if kind=='dimension-source-leave': event['sourceInventoryResampled']=False
@@ -89,11 +92,12 @@ def fixture():
     ticket_key='minecraft:the_nether/siegeoverhaul/0/TickingEntities/'+T
     baseline={'minecraft:overworld/Forced':'[L;]','minecraft:the_nether/Forced':'[L;]','minecraft:the_end/Forced':'[L;]'}
     tickets=[]; ordinal=0
-    for _ in range(3):
+    for cycle in range(3):
         for kind in ['zero-owned-verified','add-pending','add-return','remove-pending','remove-return','zero-owned-verified']:
             ordinal+=1; census=baseline.copy()
             if kind in ('add-return','remove-pending'): census[ticket_key]='[I;0,0,0,7]'
-            event=dict(ordinal=ordinal,kind=kind,owner=T,dimension='minecraft:the_nether',mod='siegeoverhaul',chunkX=0,chunkZ=0,ticking=True,census=census)
+            event=dict(ordinal=ordinal,kind=kind,owner=T,dimension='minecraft:the_nether',mod='siegeoverhaul',chunkX=0,chunkZ=0,ticking=True,census=census,
+                       nanoTime=[[50,51,52,210,211,212],[249,250,251,330,340,350],[449,450,451,510,511,512]][cycle][(ordinal-1)%6])
             if kind in ('add-return','remove-return'): event['nativeReturn']=True
             tickets.append(event)
     data.update(activeHelperTicketOwner=T,activeHelperTicketEvents=tickets,finalOwnedTicketCount=0)
@@ -150,6 +154,21 @@ class HelperOracleTests(unittest.TestCase):
     def test_canceled_join_or_missing_registered_custody_fails(self):
         self.reject(lambda d:d['activeHelperTransitEvents'][1].update(canceled=True))
         self.reject(lambda d:d['activeHelperTransitEvents'].pop(4))
+    def test_eviction_requires_post_settled_release_and_clock(self):
+        self.reject(lambda d:next(e for e in d['events'] if e['kind']=='eviction-ticket-released-after-settled').update(gameTime=120))
+        self.reject(lambda d:next(e for e in d['events'] if e['kind']=='eviction-ticket-released-after-settled').update(settledGameTime=120))
+        self.reject(lambda d:[e for e in d['events'] if e['kind']=='ordinary-end-settled-custody'][2].update(gameTime=120))
+        self.reject(lambda d:[e for e in d['activeHelperTicketEvents'] if e['kind']=='remove-pending'][1].update(nanoTime=310))
+        self.reject(lambda d:next(e for e in d['events'] if e.get('phase')=='EVICT').update(gameTime=120))
+        self.reject(lambda d:d['offlineRemovalProof'].update(gameTime=220,unavailableAt=219))
+    def test_eviction_custody_cannot_use_wrong_actor_phase_or_dimension(self):
+        for change in ({'worker':C},{'phase':'SECOND_OUT'},{'dimension':'minecraft:overworld'}):
+            with self.subTest(change=change):
+                self.reject(lambda d:[e for e in d['events'] if e['kind']=='ordinary-end-settled-custody'][2].update(change))
+    def test_eviction_requires_new_release_and_zero_ticket_proof(self):
+        self.reject(lambda d:d['events'].remove(next(e for e in d['events'] if e['kind']=='eviction-ticket-released-after-settled')))
+        self.reject(lambda d:d['activeHelperTicketEvents'].__setitem__(11,{**d['activeHelperTicketEvents'][11],'nanoTime':370}))
+        self.reject(lambda d:next(e for e in d['events'] if e['kind']=='eviction-ticket-released-after-settled').update(sequence=1))
     def test_load_mirror_must_be_observed_exact_and_restored(self):
         self.reject(lambda d:d['events'].remove(next(e for e in d['events'] if e['kind']=='load-mirror-armed')))
         self.reject(lambda d:next(e for e in d['events'] if e['kind']=='load-mirror-restored').update(mainAliasesSlot5=False))
@@ -240,6 +259,16 @@ class HelperSourceContracts(unittest.TestCase):
         self.assertIn('observed.slots().equals(pending.armed().slots())',java)
         self.assertIn('main == slot && ProtectedBuilderHandMirror.rebindCount',java)
         self.assertNotIn('ProtectedBuilderHandMirror.restore(',java)
+    def test_second_out_retains_same_ticket_until_later_end_proof(self):
+        java=self.text('src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeActiveHelperQa.java')
+        second=java.split('case SECOND_OUT ->',1)[1].split('case SECOND_SETTLE ->',1)[0]
+        self.assertIn('move(tick, Phase.SECOND_SETTLE)',second)
+        self.assertNotIn('releaseHoldingTicket',second)
+        self.assertNotIn('absenceAt =',second)
+        end=java.split('if (settledEndPending) {',1)[1].split('ServerPlayer owner',1)[0]
+        self.assertLess(end.index('tick > transferredAt'),end.index('transit.assertSettled('))
+        self.assertLess(end.index('transit.assertSettled('),end.index('settledAt = tick'))
+        self.assertIn('requireFirstStage(project); beginEviction(server, tick)',java)
     def test_provider_parity_includes_resources_and_inheritance_not_transformed_claim(self):
         java=self.text('src/nativeQa/java/com/devfarinsky/siegeoverhaul/nativecompat/NativeActiveHelperApiParity.java')
         for needed in ('getProtectionDomain()', 'getCodeSource()', 'getResourceAsStream(resource)', 'Class.forName(name, false',

@@ -68,7 +68,7 @@ public final class NativeActiveHelperQa {
     private static final long SECOND = 1_000_000_000L, LIMIT_SECONDS = 600;
     private static final String CONFIG = "[Recruits]\nRecruitsChunkLoading = false\n";
     private enum Phase { SETUP, COMMISSION, BOTH_WORK, FIRST_OUT, FIRST_ABSENCE, FIRST_RETURN,
-        FIRST_RESUME, SECOND_OUT, EVICT, RELOADING, COORDINATOR_FIRST, LOAD_HELPER, DISK_RETURN,
+        FIRST_RESUME, SECOND_OUT, SECOND_SETTLE, EVICT, RELOADING, COORDINATOR_FIRST, LOAD_HELPER, DISK_RETURN,
         DISK_RESUME, CANCEL_MENU, CANCEL_WAIT, STABLE_CANCELED, FINISHED }
     private enum Action { NONE, RELOAD, OPEN_CORE, CANCEL, DONE }
     private static final Map<String, Object> REPORT = new LinkedHashMap<>();
@@ -90,6 +90,7 @@ public final class NativeActiveHelperQa {
     private static long started, phaseAt, sequence, absenceAt, coordinatorBefore, helperBefore, lastEligibility = -1, unavailableAt = -1;
     private static BuilderEntity transferredSource, transferredDestination;
     private static boolean settledEndPending;
+    private static long transferredAt = -1, settledAt = -1;
     private static volatile boolean finishCleanupScheduled, finishCleanupReady;
     private static final List<String> SHOTS = new ArrayList<>();
     private static Path directory, evidence;
@@ -181,8 +182,10 @@ public final class NativeActiveHelperQa {
                     || level.getEntity(coordinator) != WORKERS.get(coordinator) || !footprintReady(level))) return;
             if (accepted != null) require(footprintReady(level), "Observation footprint became unavailable outside actual reopen");
             if (settledEndPending) {
-                transit.assertSettled(transferredSource, transferredDestination); settledEndPending = false;
-                record("ordinary-end-settled-custody", Map.of("worker", helper.toString(), "dimension", transferredDestination.level().dimension().location().toString()));
+                require(tick > transferredAt, "Settled custody requires a later ordinary END");
+                transit.assertSettled(transferredSource, transferredDestination); settledEndPending = false; settledAt = tick;
+                record("ordinary-end-settled-custody", Map.of("worker", helper.toString(), "dimension", transferredDestination.level().dimension().location().toString(),
+                        "gameTime", tick, "transferGameTime", transferredAt, "nanoTime", System.nanoTime()));
             }
             ServerPlayer owner = server.getPlayerList().getPlayer(ownerId);
             if (owner == null) { require(phase == Phase.RELOADING || phase == Phase.SETUP, "Owner disappeared outside real reopen"); return; }
@@ -258,7 +261,12 @@ public final class NativeActiveHelperQa {
                 if (!transit.holdingReady(server) || !eligible(WORKERS.get(helper), tick)) return;
                 boundary(server, "before-disk-transfer");
                 transfer(WORKERS.get(helper), transit.holdingLevel(server), transit.holdingFeet());
-                transit.releaseHoldingTicket(server); absenceAt = tick; move(tick, Phase.EVICT);
+                // Keep the existing ticket until the next ordinary END has proved custody.
+                // Releasing here can natively untrack the new entity before that required proof.
+                move(tick, Phase.SECOND_SETTLE);
+            }
+            case SECOND_SETTLE -> {
+                requireFirstStage(project); beginEviction(server, tick);
             }
             case EVICT -> {
                 requireFirstStage(project); transit.assertNoTickets(server);
@@ -397,11 +405,24 @@ public final class NativeActiveHelperQa {
     }
 
     private static void transfer(BuilderEntity original, ServerLevel destination, BlockPos feet) throws Exception {
+        require(!settledEndPending, "Previous transfer lacks ordinary END custody");
         if (original.level() == destination.getServer().overworld()) assertActive(destination.getServer().overworld(), project(destination.getServer().overworld()));
         var next = transit.transfer(original, destination, feet);
         transferredSource = original; transferredDestination = next; settledEndPending = true;
+        transferredAt = destination.getServer().overworld().getGameTime(); settledAt = -1;
         WORKERS.put(helper, next); GROUNDED.put(helper, 0);
         require(GOALS.containsKey(helper) && GOALS.get(helper).builderEntity == next, "Native replacement goal was not observed at join");
+    }
+
+    /** Exact existing ticket only; the eviction clock starts after settled custody and verified removal. */
+    private static void beginEviction(MinecraftServer server, long tick) {
+        require(phase == Phase.SECOND_SETTLE && !settledEndPending && settledAt > transferredAt && settledAt == tick,
+                "Eviction release lacks this later ordinary END custody proof");
+        transit.releaseHoldingTicket(server); transit.assertNoTickets(server);
+        absenceAt = tick;
+        record("eviction-ticket-released-after-settled", Map.of("worker", helper.toString(), "gameTime", tick,
+                "transferGameTime", transferredAt, "settledGameTime", settledAt, "nanoTime", System.nanoTime()));
+        move(tick, Phase.EVICT);
     }
 
     private static void remember(BuilderEntity worker) {
