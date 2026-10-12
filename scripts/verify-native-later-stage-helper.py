@@ -34,6 +34,253 @@ BOUNDARIES = ['l-commission', 'l-before-outbound', 'l-outbound-settled', 'l-fina
  'l-return-settled', 'l-helper-a2-active', 'l-helper-a2-placement', 'l-authoritative-canceled',
  'l-compacted-loaded', 'l-final-stable']
 MATERIALS = P.MATERIALS
+RETURN_WAIT_STATUS = "Waiting: the whole-perimeter controller must assign its exact native section"
+
+
+NEEDED_CLASS = 'com.talhanation.workers.world.NeededItem'
+GOAL_CLASS = 'com.talhanation.workers.entities.ai.BuilderWorkGoal'
+WORKER_CLASS = 'com.talhanation.workers.entities.BuilderEntity'
+NATIVE_PACKAGE = 'com.devfarinsky.siegeoverhaul.nativecompat.'
+KINDS = ['NEEDED','DEPOSIT','POSITION_UPKEEP','ENTITY_UPKEEP']
+DELEGATES = ['com.talhanation.workers.entities.ai.GetNeededItemsFromStorage',
+ 'com.talhanation.workers.entities.ai.DepositItemsToStorage',
+ 'com.talhanation.recruits.entities.ai.RecruitUpkeepPosGoal',
+ 'com.talhanation.workers.entities.ai.RecruitStorageUpkeepGoal']
+WORKERS_HASH = '374cecc6a284df757839fe14efd24aa310ca3df044ff657af9a2c7d2a94f6452'
+
+
+class ReferenceRoles:
+    """Global identity roles; owned objects cannot migrate between native instances.
+
+    Matchers may be native shared singletons, and the two Item references are
+    process-wide singletons. Neither exception permits reuse in another role.
+    Catalog names alone do not attest arbitrary loader/Item class hierarchies;
+    the native observer supplies typed-loader and exact static-Item provenance.
+    """
+    def __init__(self,catalog,loader):
+        self.catalog=catalog;self.roles={};self.items={};self.matchers={}
+        self.claim(loader,'loader')
+    def claim(self,ref,role,owner=None):
+        reference(self.catalog,ref);value=(role,owner)
+        require(ref not in self.roles or self.roles[ref]==value,'Global reference role/actor/load ownership changed')
+        self.roles[ref]=value
+    def requests(self,value,owner):
+        self.claim(value['listRef'],'request-list',owner)
+        for r in value['records']:
+            self.claim(r['requestRef'],'request',owner)
+            self.claim(r['matcherRef'],'matcher')
+            metadata=tuple(r[k] for k in ('matcherClass','matcherHidden','matcherSynthetic','matcherFinal','matcherNestHost','matcherLoaderRef'))
+            require(r['matcherRef'] not in self.matchers or self.matchers[r['matcherRef']]==metadata,'Native matcher provenance changed')
+            self.matchers[r['matcherRef']]=metadata
+            if r['cacheRef']:
+                key=r['cacheRegistryKey'];self.claim(r['cacheRef'],'item',key)
+                require(key not in self.items or self.items[key]==r['cacheRef'],'Material singleton has multiple reference identities')
+                self.items[key]=r['cacheRef']
+    def storage(self,value,owner):
+        for field,role in [('workerRef','worker'),('sessionRef','session')]:self.claim(value[field],role,owner)
+        for w in value['wrappers']:
+            for field,role in [('wrappedRef','wrapped'),('wrapperRef','wrapper'),('delegateRef','delegate')]:
+                self.claim(w[field],role,(owner,w['kind']))
+
+
+
+def request_catalog(data):
+    rows=data.get('requestReferenceCatalog')
+    require(isinstance(rows,list) and 1<=len(rows)<=65536,'Missing bounded collision-free request reference catalog')
+    catalog={}
+    for n,row in enumerate(rows,1):
+        require(isinstance(row,dict) and type(row.get('id')) is int and row['id']==n,'Missing/nonsequential/duplicate reference ID')
+        name=row.get('class');require(isinstance(name,str) and 1<=len(name)<=1024,'Malformed reference class')
+        require(set(row)==({'id','class','workerUuid'} if name==WORKER_CLASS else {'id','class'}),'Malformed reference entry')
+        if name==WORKER_CLASS:require(row['workerUuid'] in data['workers'],'Foreign catalog actor')
+        catalog[n]=row
+    metadata=data.get('requestFieldContract')
+    require(isinstance(metadata,dict) and set(metadata)=={'neededItemClass','neededItemLoaderRef','builderWorkGoalClass','builderWorkGoalLoaderRef','fields'},'Missing exact native request field contract')
+    require(metadata['neededItemClass']==NEEDED_CLASS and metadata['builderWorkGoalClass']==GOAL_CLASS,'Foreign native request class contract')
+    loader=integer(metadata['neededItemLoaderRef'],1,len(rows));require(metadata['builderWorkGoalLoaderRef']==loader and type(metadata['builderWorkGoalLoaderRef']) is int,'Request/work defining loader differs')
+    fields=[dict(owner='com.talhanation.workers.entities.AbstractWorkerEntity',name='neededItems',type='java.util.List',modifiers=1,synthetic=False)]
+    fields += [dict(owner=NEEDED_CLASS,name=n,type=t,modifiers=m,synthetic=False) for n,t,m in [('matcher','java.util.function.Predicate',17),('count','int',1),('required','boolean',17),('sourceKey','java.lang.Object',17),('cachedMatchKey','java.lang.Object',2),('matchKeyResolved','boolean',2)]]
+    exact(metadata['fields'],fields,'Changed exact request field metadata')
+    return catalog,loader
+
+
+def reference(catalog,value,name=None,actor=None):
+    value=integer(value,1,len(catalog));row=catalog[value]
+    if name is not None:require(row['class']==name,'Reference class/role alias')
+    if actor is not None:require(row.get('workerUuid')==actor,'Reference belongs to a foreign native worker')
+    return value
+
+
+def request_snapshot(value,catalog,loader):
+    require(isinstance(value,dict) and set(value)=={'listRef','listClass','count','records'} and value['listClass']=='java.util.ArrayList','Malformed or custom request list')
+    reference(catalog,value['listRef'],'java.util.ArrayList')
+    rows=value['records'];require(isinstance(rows,list) and len(rows)==integer(value['count'],0,8),'Request count/raw records differ')
+    seen=set()
+    for r in rows:
+        keys={'requestRef','matcherRef','matcherClass','matcherHidden','matcherSynthetic','matcherFinal','matcherNestHost','matcherLoaderRef','count','required','sourceRef','cacheResolved','cacheRef','cacheRegistryKey'}
+        require(isinstance(r,dict) and set(r)==keys,'Malformed native request record')
+        rid=reference(catalog,r['requestRef'],NEEDED_CLASS);require(rid not in seen,'Duplicate native request identity');seen.add(rid)
+        name=r['matcherClass'];reference(catalog,r['matcherRef'],name)
+        require(name!=NEEDED_CLASS and isinstance(name,str) and r['matcherHidden'] is True and r['matcherSynthetic'] is True and r['matcherFinal'] is True and r['matcherNestHost']==GOAL_CLASS,'Untrusted matcher shape/nest provenance')
+        require(type(r['matcherLoaderRef']) is int and r['matcherLoaderRef']==loader,'Foreign matcher loader')
+        integer(r['count'],1,64);require(r['required'] is True and type(r['sourceRef']) is int and r['sourceRef']==0,'Unsupported native request value/source')
+        require(type(r['cacheResolved']) is bool and type(r['cacheRef']) is int,'Malformed cache observation')
+        if r['cacheRef']==0:require(r['cacheRegistryKey'] is None,'Null cache has invented item identity')
+        else:
+            require(r['cacheResolved'] is True,'Unresolved matcher has cached material')
+            reference(catalog,r['cacheRef'])
+            require(r['cacheRegistryKey'] in MATERIALS,'Missing native item registry key')
+            require(r['cacheRef'] not in (value['listRef'],rid,r['matcherRef'],loader),'Cache aliases non-item reference')
+    return value
+
+
+def storage_snapshot(value,catalog,actor,closed_required=False):
+    keys={'workerRef','sessionRef','sessionWorkerRef','wrappers','pending','owners','upkeepOwnerRef','draining','cleanupJournalPresent','cleanupJournal','closed'}
+    require(isinstance(value,dict) and set(value)==keys,'Missing exact native inventory lifecycle snapshot')
+    worker=reference(catalog,value['workerRef'],WORKER_CLASS,actor)
+    session=reference(catalog,value['sessionRef'],NATIVE_PACKAGE+'ProtectedInventoryGoal$Session')
+    require(type(value['sessionWorkerRef']) is int and value['sessionWorkerRef']==worker,'Foreign inventory session worker')
+    rows=value['wrappers'];require(isinstance(rows,list) and len(rows)==4,'Missing/extra inventory wrapper')
+    unique={worker,session};members={}
+    for i,w in enumerate(rows):
+        keys={'kind','wrappedRef','wrapperRef','delegateRef','sessionRef','workerRef','delegateWorkerRef','wrapperClass','delegateClass','wrappedRunning','started','protectedLifecycle','stopFailed'}
+        require(isinstance(w,dict) and set(w)==keys and w['kind']==KINDS[i],'Missing/duplicate/reordered inventory kind')
+        wrapper=NATIVE_PACKAGE+('ProtectedStorageAccess' if i<2 else 'ProtectedUpkeepAccess')
+        require(w['wrapperClass']==wrapper and w['delegateClass']==DELEGATES[i],'Wrong protected wrapper/native delegate')
+        for k,cls in [('wrappedRef','net.minecraft.world.entity.ai.goal.WrappedGoal'),('wrapperRef',wrapper),('delegateRef',DELEGATES[i])]:
+            rid=reference(catalog,w[k],cls);require(rid not in unique,'Aliased wrapper/delegate/session reference');unique.add(rid)
+        require(all(type(w[k]) is int and w[k]==expected for k,expected in [('workerRef',worker),('delegateWorkerRef',worker),('sessionRef',session)]),'Foreign native delegate/session ownership')
+        require(all(type(w[k]) is bool for k in ('wrappedRunning','started','protectedLifecycle','stopFailed')),'Malformed inventory lifecycle flags')
+        members[w['wrapperRef']]=w
+    pending,owners,journal=value['pending'],value['owners'],value['cleanupJournal']
+    require(isinstance(pending,list) and len(pending)<=4 and all(type(n) is int for n in pending) and len(set(pending))==len(pending),'Malformed pending inventory members')
+    require(isinstance(owners,dict) and set(owners)<=set(KINDS) and all(type(n) is int for n in owners.values()),'Malformed inventory owner map')
+    upkeep=0
+    for kind,rid in owners.items():
+        require(rid in members and members[rid]['kind']==kind and members[rid]['protectedLifecycle'],'Foreign inventory lifecycle owner')
+        if kind.endswith('UPKEEP'):require(upkeep==0,'Multiple upkeep owners');upkeep=rid
+    require(type(value['upkeepOwnerRef']) is int and value['upkeepOwnerRef']==upkeep,'Foreign upkeep owner')
+    for rid in pending:require(rid in members and owners.get(members[rid]['kind'])==rid and not members[rid]['started'] and members[rid]['protectedLifecycle'],'Foreign/started pending lifecycle')
+    for w in rows:
+        require(not w['started'] or w['protectedLifecycle'],'Started lifecycle lacks ownership')
+        require(not w['protectedLifecycle'] or owners.get(w['kind'])==w['wrapperRef'],'Lifecycle lacks exact session owner')
+    require(type(value['draining']) is bool and type(value['cleanupJournalPresent']) is bool and isinstance(journal,dict) and set(journal)<=set(owners),'Malformed cleanup journal/draining flag')
+    require(all(type(n) is int and n in (1,2) for n in journal.values()) and (value['cleanupJournalPresent'] or not journal),'Malformed cleanup states')
+    closed=not (value['draining'] or pending or owners or upkeep or value['cleanupJournalPresent'] or journal or any(w[k] for w in rows for k in ('wrappedRunning','started','protectedLifecycle','stopFailed')))
+    require(value['closed'] is closed and (not closed_required or closed),'Dormant requests do not establish closed inventory lifecycles')
+    return (worker,session,tuple(tuple(w[k] for k in ('kind','wrappedRef','wrapperRef','delegateRef','sessionRef','workerRef','delegateWorkerRef','wrapperClass','delegateClass')) for w in rows))
+
+
+def storage_persistence(value,raw_inventory):
+    persistent=compound(inventory(raw_inventory)['persistent']);key='SiegeProtectedInventoryCleanup'
+    require(value['cleanupJournalPresent']==(key in persistent),'Lifecycle journal presence differs from raw worker persistence')
+    expected={}
+    if key in persistent:
+        journal=compound(persistent[key]);require(journal.get('Version')=='1' and set(journal)<={'Version',*KINDS},'Malformed raw native cleanup journal')
+        expected={k:number(v,minimum=1,maximum=2) for k,v in journal.items() if k!='Version'}
+    exact(value['cleanupJournal'],expected,'Lifecycle journal differs from raw worker persistence')
+
+
+def verify_request_observations(data,bounds,original,stages):
+    catalog,loader=request_catalog(data);ids=data['workers'];cut=bounds['l-authoritative-canceled'];final=bounds['l-final-stable']
+    frozen=data.get('canceledRequests');storage=data.get('canceledInventoryWork')
+    require(isinstance(frozen,dict) and set(frozen)==set(ids) and isinstance(storage,dict) and set(storage)==set(ids),'Missing exact cancellation request/lifecycle cut')
+    states={};identities={};frames=set();frame_ticks=set();roles=ReferenceRoles(catalog,loader)
+    def epoch(actor,seq):return sum(j['sequence']<seq for j in data['nativeWorkerJoins']) if actor==ids[1] else 0
+    def observe(actor,seq,value):
+        request_snapshot(value,catalog,loader);key=(actor,epoch(actor,seq))
+        roles.requests(value,key)
+        if key in states:exact(value,states[key],'Native request changed outside a recorded frame')
+        else:require(value['count']==0,'Native request appeared without observed authorization');states[key]=value
+        return key
+    for e in data['events']:
+        kind=e.get('kind');seq=e['sequence']
+        if kind=='native-request-frame':
+            actor=e.get('worker');require(actor in ids and bounds['l-commission']['sequence']<seq<cut['sequence'],'Request frame outside original paid running interval')
+            stamp=(actor,integer(e.get('gameTime')));require(stamp not in frame_ticks,'Repeated native request frame in one ordinary tick');frame_ticks.add(stamp)
+            key=observe(actor,seq,e.get('before'));after=request_snapshot(e.get('after'),catalog,loader)
+            roles.requests(after,key)
+            require(after['listRef']==e['before']['listRef'],'Native request list replaced inside frame')
+            require(type(e.get('authorized')) is bool and isinstance(e.get('nativeStateBefore'),str) and isinstance(e.get('nativeStateAfter'),str),'Missing request native-state observation')
+            require((e.get('inventoryWorkBefore') is not None)==(e.get('inventoryWorkAfter') is not None)==e['authorized'],'Native request authorization/storage presence differs')
+            if e['authorized'] or e['before']!=after or e.get('inventoryWorkBefore') is not None:
+                require(e['authorized'] is True,'Request/lifecycle admission lacks native authorization')
+                stage=integer(e.get('stage'),0,2);area=nbt_uuid(stages[stage]['Area']);require(e.get('area')==area,'Request admitted for foreign stage')
+                stage_start=bounds['l-commission' if stage==0 else f'l-stage-{stage-1}-retired']
+                stage_end=bounds[f'l-stage-{stage}-verified' if stage<2 else 'l-authoritative-canceled']
+                require(stage_start['sequence']<seq<stage_end['sequence'] and stage_start['gameTime']<=e['gameTime']<=stage_end['gameTime'],'Request authority contradicts observed stage/receipt chronology')
+                if actor==ids[1]:require(stage in (0,2) and (seq<bounds['l-before-outbound']['sequence'] if stage==0 else seq>bounds['l-helper-a2-active']['sequence']),'Absent/inactive helper request admission')
+                auth=e.get('authority');require(isinstance(auth,dict) and set(auth)=={'workerInventory','ledgerSnapshot','projectSnapshot','currentArea','owner'} and auth['owner']==data['owner'] and auth['currentArea']==area,'Missing exact request authority')
+                project_snapshot(auth['projectSnapshot'],original,stages,{('RUNNING',stage,stage)})
+                crew=compound(compound(auth['ledgerSnapshot'])['BuilderCrew']);entries=snbt_list(crew['Projects']);grants=[0]
+                if entries and longs(snbt_list(entries[0]['Members'])[0]['GrantedStages'])==[5,0,0,0]:grants=[0,2]
+                ledger,member=ledger_snapshot(auth['ledgerSnapshot'],data,stages,grants,commission=actor==ids[0] and stage==0)
+                lease=snbt_list(compound(ledger['ProjectLeases'])['Projects'])[0];require(lease['Active']==str(stage) and lease['Retired']=='0b','Request uses retired/foreign stage lease')
+                inv=inventory(auth['workerInventory']);persistent=compound(inv['persistent'])
+                require('SiegeProtectedHandReviewRequired' not in persistent,'Hand-review flag forbids authorized native requests')
+                hand=compound(persistent.get('SiegeProtectedHandLifecycle'))
+                require(set(hand)=={'Version','Receipt','Builder','Owner','Area','Generation'} and hand['Version']=='1','Malformed request hand provenance')
+                for field in ('Receipt','Builder','Owner','Area','Generation'):
+                    value=nbt_uuid(hand[field]);uid(value);require(value!=str(uuid.UUID(int=0)),'Zero request hand identity')
+                matches=[h for h in snbt_list(ledger['HandLifecycles']) if nbt_uuid(h.get('Builder'))==actor]
+                require(nbt_uuid(hand['Builder'])==actor and nbt_uuid(hand['Generation'])==data['ledgerGeneration'] and matches==[hand],'Request hand differs from its unique native ledger receipt')
+                prior=[w for w in data['nativeWork'] if w['worker']==actor and w['sequence']<seq]
+                expected_stock=prior[-1]['after'][:2] if prior else [0,0]
+                require(inventory_stock(inv)==expected_stock,'Request authority raw cargo differs from finite native work chain')
+                same_frame=[w for w in data['nativeWork'] if w['worker']==actor and w['gameTime']==e['gameTime']]
+                require(len(same_frame)<=1,'Multiple native work frames in one actor tick')
+                if same_frame:
+                    w=same_frame[0]
+                    require(seq<w['sequence'] and e['stage']==w['stage'] and e['area']==w['area'] and e['nativeStateBefore']==w['nativeState'],'Request/work bracket identity or ordering differs')
+                    exact(auth,w['authority'],'Request/work raw authority differs within the same native bracket')
+                if actor==ids[1]:associations(inv['persistent'],data,area,True)
+                else:
+                    for field,expected in [('SiegeProtectedAreaReceipt',area),('SiegeProtectedLedgerGeneration',data['ledgerGeneration']),('SiegePlayerFortificationAreaId',area),('SiegePlayerFortificationOwner',data['owner'])]:require(nbt_uuid(persistent.get(field))==expected,'Coordinator request links differ')
+                    whole=compound(persistent.get('SiegeWholePerimeter'))
+                    require(set(whole)=={'Version','Project','Generation','Hash','Core','LedgerGeneration'} and whole['Version']=='1' and whole['Project']==original['Project'] and whole['Generation']==original['Generation'] and whole['Hash']==original['Hash'] and whole['Core']==original['CoreKey'] and nbt_uuid(whole['LedgerGeneration'])==data['ledgerGeneration'],'Coordinator request whole identity differs')
+                    require(C.HAND not in persistent,'Pending coordinator request authority')
+                require(number(persistent.get('SiegePlayerFortificationPos'),'L')==marker_position(bounds),'Request selector targets foreign native marker')
+                if actor==ids[1]:require(member['Active']=='1b' and member['Suspended']=='0b' and member['RejoinStage']=='-1' and member['Resolved']=='0b','Historical provenance used for request work')
+            states[key]=after;frames.add(key)
+            before_storage=e.get('inventoryWorkBefore');after_storage=e.get('inventoryWorkAfter')
+            require((before_storage is None)==(after_storage is None),'Half native lifecycle frame')
+            if before_storage is not None:
+                roles.storage(before_storage,key);roles.storage(after_storage,key)
+                identity=storage_snapshot(before_storage,catalog,actor);storage_persistence(before_storage,e['authority']['workerInventory'])
+                require(storage_snapshot(after_storage,catalog,actor)==identity,'Native wrapper changed within observed frame')
+                require(key not in identities or identities[key]==identity,'Native wrapper replaced during paid work');identities[key]=identity
+        elif kind in BOUNDARIES:
+            for actor,w in e['workers'].items():
+                value=w.get('nativeRequests');key=observe(actor,seq,value)
+                require(type(w.get('neededItemCount')) is int and w['neededItemCount']==value['count'],'Request summary differs from exact raw records')
+                if seq>=cut['sequence']:
+                    exact(value,frozen[actor],'Request changed after first authoritative cancellation')
+                    roles.storage(w.get('inventoryWork'),key);roles.storage(storage[actor],key)
+                    now=storage_snapshot(w.get('inventoryWork'),catalog,actor,kind in ('l-compacted-loaded','l-final-stable'))
+                    storage_persistence(w['inventoryWork'],w['inventory'])
+                    require(key in frames and key in identities and now==identities[key],'Canceled wrapper lacks observed paid provenance')
+                    require(storage_snapshot(storage[actor],catalog,actor)==now,'Canceled wrapper identity changed')
+                    if seq==cut['sequence']:exact(w['inventoryWork'],storage[actor],'Lifecycle cut differs from authoritative cancellation')
+        elif kind=='terminal-native-bracket':
+            actor=e.get('worker');require(actor in ids and cut['sequence']<seq<final['sequence'],'Unbounded terminal request frame')
+            for field in ('requestsBefore','requestsAfter'):
+                observe(actor,seq,e.get(field));exact(e[field],frozen[actor],'Dormant native request mutated after cancellation')
+            stable=e.get('phase')=='L_FINAL_STABLE'
+            for field in ('inventoryWorkBefore','inventoryWorkAfter'):
+                roles.storage(e.get(field),(actor,epoch(actor,seq)))
+                require(storage_snapshot(e.get(field),catalog,actor,stable)==storage_snapshot(storage[actor],catalog,actor),'Postcancel lifecycle identity replaced')
+    for actor in ids:
+        request_snapshot(frozen[actor],catalog,loader);storage_snapshot(storage[actor],catalog,actor)
+    # Closure is required at every ordinary bracket after the actual stable-phase transition.
+    stable=next(e for e in data['events'] if e.get('kind')=='phase' and e.get('phase')=='L_FINAL_STABLE')
+    compact=bounds['l-compacted-loaded']
+    require(compact['sequence']<stable['sequence']<final['sequence'] and compact['gameTime']==stable['gameTime'] and final['gameTime']-stable['gameTime']>=100,'Missing full 100-tick continuously closed terminal window')
+    for e in data['events']:
+        if e.get('kind')=='terminal-native-bracket':
+            require(e.get('phase')==('L_FINAL_STABLE' if e['sequence']>stable['sequence'] else 'L_CANCEL_WAIT'),'Terminal bracket contradicts actual stable-phase transition')
+        if e.get('kind')=='terminal-native-bracket' and e['sequence']>stable['sequence']:
+            for field in ('inventoryWorkBefore','inventoryWorkAfter'):storage_snapshot(e[field],catalog,e['worker'],True)
+    return True
 
 
 def snbt_list(text, maximum=4096):
@@ -268,11 +515,12 @@ def rebind_count(persistent):
     return number(compound(persistent).get(C.REBINDS,'0'),minimum=0,maximum=2**31-1)
 
 
-def closed_worker(worker, expected_owner, allow_pending=False):
+def closed_worker(worker, expected_owner, allow_pending=False, terminal_requests=None):
     inv=inventory(worker.get('inventory'));inventory_stock(inv);p=compound(inv['persistent'])
     require(worker.get('owner')==expected_owner and worker.get('removed') is False,'Closed worker has foreign owner or is removed')
     require(worker.get('beforeItemSlot')==inv['beforeItemSlot']==-1 and type(worker.get('beforeItemSlot')) is int,'Closed worker retained borrowed hand')
-    require(type(worker.get('neededItemCount')) is int and worker['neededItemCount']==0,'Closed worker retained native material request')
+    require(type(worker.get('neededItemCount')) is int and worker['neededItemCount']==(0 if terminal_requests is None else terminal_requests['count']),'Closed worker retained unproved native material request')
+    if terminal_requests is not None:exact(worker.get('nativeRequests'),terminal_requests,'Terminal request differs from validated frozen observation')
     pending=pending_flag(inv['persistent'])
     require(worker.get('handPending') is pending and (allow_pending or not pending),'Raw pending hand conflicts with closed-worker evidence')
     require(type(worker.get('mainAliasesSlot5')) is bool and (pending or worker['mainAliasesSlot5'] is True),'Closed nonpending hand lacks canonical identity')
@@ -430,8 +678,8 @@ def verify_boundaries(data,bounds,original,stages,partition,target,work):
             if terminal is None:terminal=current
             else:require(terminal==current,'Terminal receipt changed')
             require(b.get('terminalMarkersAbsent') is True and b.get('terminalReservationsAbsent') is True,'Incomplete native terminal cleanup')
-            for w in workers.values():
-                closed_worker(w,data['owner'])
+            for actor,w in workers.items():
+                closed_worker(w,data['owner'],terminal_requests=data['canceledRequests'][actor])
                 require(w.get('dimension')=='minecraft:overworld' and w.get('currentArea') is None,'Terminal worker is not loaded and detached in the build dimension')
                 require(not set(compound(w['inventory']['persistent'])).intersection(C.ASSOCIATIONS),'Terminal worker retained work/storage selectors')
         else:
@@ -489,6 +737,12 @@ def verify_mirrors(data):
         require(int(compound(raw['persistent']).get(C.REBINDS,'0'))==old,'Wrong saved mirror counter')
         candidates=[expected]
         if i==1:candidates.append({k:v for k,v in expected.items() if k not in C.ASSOCIATIONS-{'SiegeWholePerimeter'}})
+        if i==2:
+            if 'SiegeConstructionPause' in actual:
+                require(join.get('dimension')=='minecraft:overworld' and end.get('phase')=='L_RETURN_SETTLE','Waiting status observed outside detached return restoration')
+            associations(after['persistent'],data,None,False)
+            require(not set(actual).intersection(C.ASSOCIATIONS-{'SiegeWholePerimeter'}),'Return restoration acquired premature child authority')
+            candidates.append(expected|{'SiegeConstructionPause':json.dumps(RETURN_WAIT_STATUS)})
         require(actual in candidates,'Restoration changed unrelated persistent data/partial associations')
 
 
@@ -569,6 +823,8 @@ def verify_custody_chain(data,bounds):
     if bounds['l-return-settled']['workers'][helper]['currentArea'] is not None:
         keys={'SiegeProtectedAreaReceipt','SiegeProtectedLedgerGeneration','SiegePlayerFortificationAreaId','SiegePlayerFortificationOwner','SiegePlayerFortificationPos'}
         require(not set(first).intersection(keys),'Return restoration was not detached before activation')
+        if 'SiegeConstructionPause' in first:
+            require(first.pop('SiegeConstructionPause')==json.dumps(RETURN_WAIT_STATUS),'Activation removed an unobserved return status')
         first.update({key:last[key] for key in keys})
     require(last==first,'Settled return changed persistent data outside exact A2 activation bindings')
     for kind in ('l-before-outbound','l-holding-cleanup-ready','l-before-native-return'):
@@ -585,7 +841,10 @@ def verify_helper_persistent_observations(data,bounds,stages):
     helper=data['workers'][1];dirty='SiegeProtectedStorageDirtyWrites';cleanup='SiegeProtectedInventoryCleanup'
     restored=[e for e in data['events'] if e.get('kind')=='load-mirror-restored'][2]
     base=compound(restored['after']['persistent']);original=compound(data['acceptedProject'])
-    require(cleanup not in base and 'SiegeConstructionPause' not in base,'Returned helper did not close its prior operation')
+    require(cleanup not in base,'Returned helper did not close its prior operation')
+    if 'SiegeConstructionPause' in base:
+        require(base.pop('SiegeConstructionPause')==json.dumps(RETURN_WAIT_STATUS),'Returned helper retained a foreign wait status')
+        require(restored.get('phase')=='L_RETURN_SETTLE','Waiting status escaped its exact restoration phase')
     initial_dirty=number(base.get(dirty,'0'),minimum=0,maximum=2**31-1)
     active=base|{'SiegeProtectedAreaReceipt':stages[2]['Area'],
         'SiegeProtectedLedgerGeneration':compound(data['originalHelperHandReceipt'])['Generation'],
@@ -607,6 +866,12 @@ def verify_helper_persistent_observations(data,bounds,stages):
             expected.append(value)
         require(actual in expected,'A2/terminal persistent data changed outside authenticated operation and association deltas')
     for e in work:check(e['authority']['workerInventory']['persistent'],e['sequence'],[active],e['kind']=='native-supply')
+    # A request/lifecycle-only frame has the same raw work authority even when
+    # no material event is emitted. It grants no extra dirty-counter allowance.
+    for e in data['events']:
+        if e.get('kind')=='native-request-frame' and e.get('authorized') is True and e['worker']==helper and e['stage']==2:
+            supply=any(w['worker']==helper and w['gameTime']==e['gameTime'] for w in supplies)
+            check(e['authority']['workerInventory']['persistent'],e['sequence'],[active],supply)
     for kind in ('l-helper-a2-active','l-helper-a2-placement','l-authoritative-canceled','l-compacted-loaded','l-final-stable'):
         b=bounds[kind]
         # A live canceled cut can precede, follow, or occur between exact native
@@ -664,6 +929,7 @@ def verify_report(data):
     require([e.get('phase') for e in phases]==expected_phases,'Missing/repeated/unapproved phase transition or timeout reset')
     for a,b in zip(phases,phases[1:]):
         require(0<=integer(b.get('gameTime'))-integer(a.get('gameTime'))<=(1800 if a.get('phase')=='L_EVICT' else 1200),'Phase exceeded unchanged timeout')
+    verify_request_observations(data,bounds,original,stages)
     trace=verify_work(data,bounds,original,stages,partition)
     terminal=verify_boundaries(data,bounds,original,stages,partition,target,trace)
     for k in ('l-holding-disk-join','l-holding-cleanup-ready','l-before-native-return'):verify_helper_proof(data,bounds[k],stages)
@@ -711,6 +977,12 @@ def verify_runtime(data,evidence,runtime_manifest):
     expected={c['name']:{'provider':c['supplierCanonicalPath'],'supplierSha256':c['supplierSha256'],'rawResourceSha256':c['classSha256']} for c in gate['classes']}
     require(parity.get('classes')==expected,'Loaded runtime class/provider closure differs')
     P.verify_attestations(data,gate,hashlib.sha256(gate_path.read_bytes()).hexdigest())
+    proof=data.get('requestClassParity');supplier=expected[WORKER_CLASS]
+    require(isinstance(proof,dict) and set(proof)==P.PROOF_KEYS and proof['name']==NEEDED_CLASS and proof['scope']==P.RESOURCE_SCOPE,'Missing exact NeededItem raw-resource proof')
+    require(proof['provider']==supplier['provider'] and proof['supplierSha256']==supplier['supplierSha256']==WORKERS_HASH,'NeededItem supplier differs from reviewed Workers')
+    BASE.GATE.require_hash(proof['rawResourceSha256'],'newly measured NeededItem resource')
+    P.verify_provider_url(proof['codeSourceUrl'],proof['provider'])
+    P.verify_raw_entries([proof],proof['provider'],proof['supplierSha256'])
     for name in data['screenshots']:
         image=evidence/name;require(image.is_file() and image.stat().st_size>4096 and image.read_bytes()[:8]==b'\x89PNG\r\n\x1a\n','Missing actual PNG evidence')
 

@@ -1,8 +1,8 @@
 # Native later-stage helper QA (Case L)
 
 This separately opted-in, fresh-world QA case is pending hosted/native acceptance.
-Its source and decision/oracle tests do not establish that the timing window is
-reachable. It is not shipped in the production JAR.
+The first native attempt reached genuine disk absence and A2 placement, then
+failed a QA terminal-request assumption. A complete accepted run is still required. It is not shipped in the production JAR.
 
 ## Exact scope
 
@@ -90,3 +90,56 @@ oracle mutations; a Java 17 full build and exact native run remain required.
 Whole-site eviction, sleep, post-DONE behavior, whole-project completion,
 server-reopen ordering, dedicated-client networking, arbitrary addons and normal
 review-menu commissioning are outside this case.
+
+## Dormant native requests at cancellation
+
+Run 38182894683 preserved 25 unfinished A0 targets at finalized disk removal,
+observed 979 genuine offline ticks, naturally completed A0/A1, activated the same
+helper at A2, and recorded its A2 placement. It failed at the compact canceled
+boundary because the coordinator retained one native request. Production
+`readyForRetirement` and `drainCleanup` deliberately preserve dormant requests
+while closing admitted inventory callbacks. The failed artifact remains rejected;
+it did not complete the final stable window.
+
+The Case L observer now records the exact native ArrayList and ordered request,
+matcher and cache identities before/after ordinary native frames. It reads public
+values and validated private cache fields without invoking request matchers,
+`getMatchKey`, `matches`, `isSameRequest` or `toString`. Hidden/synthetic/final
+matcher provenance must be the exact native BuilderWorkGoal nest and loader.
+NeededItem's unique raw resource is newly measured under the already pinned
+Workers supplier; this does not attest transformed method bodies. An unresolved
+matcher stays explicitly unresolved. Resolved-null and a cache identical to the native cobblestone or oak-planks
+Item are distinct observations, never inferred matcher results. Other resolved
+keys are unsupported evidence. The observer never reverse-hashes an arbitrary
+Item or calls its equality, hash, or string methods.
+
+At the first authoritative canceled cut, both complete ordered request snapshots
+are frozen, including an empty list. Every later native bracket and settled END
+must retain the same list, objects, order, counts, required/source values and cache
+state. The independent oracle binds nonempty requests to preceding authorized
+native frames rather than accepting a summary count. Helper transfer eligibility
+still requires no pending requests.
+
+The reader supports only exact native GoalSelector objects and a directly read,
+private-final availableGoals field containing exact JDK LinkedHashSet. It rejects
+other shapes before collection callbacks and records the observed class on
+failure. Immutable Minecraft 1.20.1 source context supports this expectation;
+actual pinned Forge runtime compatibility remains a hosted check.
+
+Separate passive snapshots authenticate all four protected inventory wrappers,
+exact native delegates, worker ownership and their one shared session. Cleanup
+may settle naturally inside the existing phase clock; final acceptance requires
+no running, started, failed, owned, pending or draining lifecycle and no cleanup
+journal. The final 100-tick window requires continuous closure, unchanged request
+identities and unchanged individual stock/world state. Observation never invokes
+cleanup, starts a goal, supplies inventory or removes requests.
+
+The native detached return may add only the exact status `Waiting: the
+whole-perimeter controller must assign its exact native section` at the third
+load restoration. The raw-to-LOWEST join still adds only HAND_PENDING. The exact
+waiting status is removed by authenticated A2 activation; arbitrary status,
+extra tags, early selectors or retained active-stage status fail the oracle.
+
+Source/decision regressions do not close the remaining hosted Java 17 and native
+acceptance gates. An unobserved zero-material callback dirty-counter change also
+remains an evidence limitation, not permission to widen persistent-state deltas.

@@ -128,10 +128,17 @@ public final class NativeLaterStageHelperQa {
     private static Map<String, Object> serializerContract;
     private static JsonObject candidate;
     private static Observation observation;
+    private static NativeLaterStageTerminalObservation requestObserver;
+    private static final Map<BuilderEntity, NativeLaterStageTerminalObservation.RequestSnapshot> LAST_REQUESTS = new IdentityHashMap<>();
+    private static final Map<BuilderEntity, NativeLaterStageTerminalObservation.StorageSnapshot> STORAGE_IDENTITIES = new IdentityHashMap<>();
+    private static final Set<BuilderEntity> RECORDED_STORAGE = Collections.newSetFromMap(new IdentityHashMap<>());
+    private static final Map<UUID, NativeLaterStageTerminalObservation.RequestSnapshot> CANCELED_REQUESTS = new LinkedHashMap<>();
+    private static final Map<UUID, NativeLaterStageTerminalObservation.StorageSnapshot> CANCELED_STORAGE = new LinkedHashMap<>();
     private record Observation(BuilderEntity worker, UUID area, int stage, String digest, long tick, Set<Long> pending,
             int cobble, int oak, int chestCobble, int chestOak, String state, boolean authorized,
             Entity receiptArea, Map<Long, BlockState> canceledTargets, String projectSnapshot,
-            Map<String, Object> authority) {}
+            Map<String, Object> authority, NativeLaterStageTerminalObservation.RequestSnapshot requests,
+            NativeLaterStageTerminalObservation.StorageSnapshot inventoryWork) {}
     private NativeLaterStageHelperQa() {}
 
     @SubscribeEvent
@@ -208,6 +215,7 @@ public final class NativeLaterStageHelperQa {
             fail(problem);
             try { if (accepted != null && !evidenceSealed && footprintReady(event.getServer().overworld())) boundary(event.getServer(), "failure-passive-state"); }
             catch (Throwable diagnostic) { REPORT.put("failureSnapshotProblem", diagnostic.toString()); }
+            if (requestObserver != null) REPORT.put("requestReferenceCatalog", requestObserver.referenceEvidence());
             try { if (transit != null) transit.cleanup(event.getServer()); }
             catch (Throwable cleanup) { REPORT.put("ticketCleanupFailure", cleanup.toString()); }
         }
@@ -340,11 +348,11 @@ public final class NativeLaterStageHelperQa {
             case L_CANCEL_WAIT -> {
                 if (!cancelSent || canceledAuthorityAt < 0) return;
                 if (PerimeterProjectAuthority.snapshot(level, coreKey).terminal(projectId) == null) return;
-                verifyCanceled(level); canceledReceipt = PerimeterProjectAuthority.snapshot(level, coreKey).terminal(projectId).save();
+                if (!verifyCanceled(level)) return; canceledReceipt = PerimeterProjectAuthority.snapshot(level, coreKey).terminal(projectId).save();
                 boundary(server, "l-compacted-loaded"); move(tick, Phase.L_FINAL_STABLE);
             }
             case L_FINAL_STABLE -> {
-                verifyCanceled(level); transit.assertNoTickets(server);
+                require(verifyCanceled(level), "Closed terminal inventory lifecycle resumed"); transit.assertNoTickets(server);
                 if (tick - phaseAt < 100) return;
                 require(helperActiveObserved && helperPlacedA2 && PENDING_LOADS.isEmpty() && RAW_LOADS.isEmpty()
                         && terminalObservedBrackets >= 200 && JOINS.size() == 3 && bothContributed(), "Incomplete later-stage proof");
@@ -354,6 +362,7 @@ public final class NativeLaterStageHelperQa {
                 REPORT.put("placementCounts", counts()); REPORT.put("retainedPlacedBlocks", 572 - pending(level).size());
                 REPORT.put("paidFee", 64); REPORT.put("wholePlanCompleted", false); REPORT.put("finalMaterials", materialCensus(server, owner));
                 REPORT.put("auxiliaryIsolationFinal", NativeStagedHandoffFixture.auxiliaryIsolationSnapshot(level, fixture));
+                REPORT.put("requestReferenceCatalog", requestObserver.referenceEvidence());
                 move(tick, Phase.FINISHED); sealCanceledEvidence(server, tick); action = Action.DONE;
             }
             case FINISHED -> { }
@@ -417,6 +426,7 @@ public final class NativeLaterStageHelperQa {
         if (live != null) require(live.activeStage() == 2 && live.receipts().size() == 2, "Canceled outside fixed unfinished A2");
         else require(terminal.activeStage() == 2 && terminal.verifiedStages() == 2, "Compacted outside fixed unfinished A2");
         canceledAuthorityAt = level.getGameTime(); canceledWorld = worldTargets(level); canceledStock = constructionStock(server);
+        freezeCanceledRequests();
         REPORT.put("canceledAuthorityGameTime", canceledAuthorityAt); boundary(server, "l-authoritative-canceled");
     }
     private static Map<Long, BlockState> worldTargets(ServerLevel level) {
@@ -442,9 +452,35 @@ public final class NativeLaterStageHelperQa {
     private static int savedMaterial(NativeActiveHelperTransit.Inventory value, Item item) {
         return value.slots().stream().map(ItemStack::of).filter(stack -> stack.is(item)).mapToInt(ItemStack::getCount).sum();
     }
+    private static void freezeCanceledRequests() {
+        require(CANCELED_REQUESTS.isEmpty() && CANCELED_STORAGE.isEmpty(), "Canceled requests were already frozen");
+        var requests = new LinkedHashMap<String, Object>(); var storage = new LinkedHashMap<String, Object>();
+        for (var worker : WORKERS.values()) {
+            var now = requestObserver.requests(worker); var prior = LAST_REQUESTS.get(worker);
+            require(prior != null && NativeLaterStageTerminalObservation.sameRequests(prior, now),
+                    "Canceled request lacks its exact preceding native observation");
+            var currentStorage = requestObserver.storage(worker); var priorStorage = STORAGE_IDENTITIES.get(worker);
+            require(priorStorage != null && RECORDED_STORAGE.contains(worker)
+                    && NativeLaterStageTerminalObservation.sameStorageIdentity(priorStorage, currentStorage),
+                    "Canceled storage lacks its original observed wrappers");
+            CANCELED_REQUESTS.put(worker.getUUID(), now); CANCELED_STORAGE.put(worker.getUUID(), currentStorage);
+            requests.put(worker.getUUID().toString(), now.evidence()); storage.put(worker.getUUID().toString(), currentStorage.evidence());
+        }
+        REPORT.put("canceledRequests", Map.copyOf(requests)); REPORT.put("canceledInventoryWork", Map.copyOf(storage));
+    }
+    private static void verifyCanceledRequests(BuilderEntity worker, boolean closedRequired) {
+        var requests = CANCELED_REQUESTS.get(worker.getUUID()); var storage = CANCELED_STORAGE.get(worker.getUUID());
+        require(requests != null && storage != null && NativeLaterStageTerminalObservation.sameRequests(requests, requestObserver.requests(worker)),
+                "Canceled native request identity or values changed");
+        var now = requestObserver.storage(worker);
+        require(NativeLaterStageTerminalObservation.sameStorageIdentity(storage, now), "Canceled inventory wrapper identity changed");
+        require(!closedRequired || NativeLaterStageTerminalObservation.closed(now), "Closed terminal inventory lifecycle resumed");
+    }
+
     private static void assertCanceledFreeze(MinecraftServer server, ServerLevel level) {
         require(canceledWorld != null && canceledStock != null, "Canceled authority was not frozen");
         CanceledObservation.verify(canceledWorld, worldTargets(level), canceledStock, constructionStock(server));
+        for (var worker : WORKERS.values()) verifyCanceledRequests(worker, phase == Phase.L_FINAL_STABLE);
     }
     /** Dependency-free decision used by executed negative regressions; never reconciles or repairs. */
     static final class CanceledObservation {
@@ -650,6 +686,20 @@ public final class NativeLaterStageHelperQa {
             var project = project(level); int index = project == null ? 2 : project.activeStage();
             require(index >= 0 && index <= 2, "Native observation escaped fixed A2 ceiling"); var stage = accepted.stages().get(index);
             boolean authorized = workAuthority(level, worker, project);
+            var requests = requestObserver.requests(worker);
+            var previousRequests = LAST_REQUESTS.get(worker);
+            require(previousRequests == null ? ((Number) requests.evidence().get("count")).intValue() == 0
+                    : NativeLaterStageTerminalObservation.sameRequests(previousRequests, requests), "Native request changed outside its observed frame");
+            NativeLaterStageTerminalObservation.StorageSnapshot inventoryWork = null;
+            if (authorized || canceledAuthorityAt >= 0) {
+                inventoryWork = requestObserver.storage(worker);
+                var previousStorage = STORAGE_IDENTITIES.get(worker);
+                if (previousStorage == null) {
+                    require(canceledAuthorityAt < 0 && authorized, "Terminal wrappers lack an observed original native owner");
+                    STORAGE_IDENTITIES.put(worker, inventoryWork);
+                } else require(NativeLaterStageTerminalObservation.sameStorageIdentity(previousStorage, inventoryWork), "Native inventory wrapper identities changed");
+            }
+            if (canceledAuthorityAt >= 0) verifyCanceledRequests(worker, phase == Phase.L_FINAL_STABLE);
             if (worker.getUUID().equals(helper) && index == 2 && authorized && !helperActiveObserved) {
                 require(settledAt > transferredAt && !settledEndPending && phase == Phase.L_REJOIN,
                         "A2 activation preceded settled native return observation");
@@ -662,7 +712,7 @@ public final class NativeLaterStageHelperQa {
             observation = new Observation(worker, stage.areaId(), index, stage.digest(), level.getGameTime(), pending(level),
                     workerStock(worker, Items.COBBLESTONE), workerStock(worker, Items.OAK_PLANKS), chestStock(level, Items.COBBLESTONE), chestStock(level, Items.OAK_PLANKS),
                     String.valueOf(GOALS.get(worker.getUUID()).state), authorized, level.getEntity(stage.areaId()),
-                    canceledAuthorityAt >= 0 ? worldTargets(level) : Map.of(), project == null ? null : project.save().toString(), auth);
+                    canceledAuthorityAt >= 0 ? worldTargets(level) : Map.of(), project == null ? null : project.save().toString(), auth, requests, inventoryWork);
         } catch (Throwable problem) { fail(problem); }
     }
 
@@ -676,6 +726,25 @@ public final class NativeLaterStageHelperQa {
         int chestCobble = chestStock(level, Items.COBBLESTONE), chestOak = chestStock(level, Items.OAK_PLANKS);
         long builtCobble = changed.stream().filter(cell -> fixture.plan().blocks().get(cell).equals("minecraft:cobblestone")).count();
         long builtOak = changed.size() - builtCobble;
+        var afterRequests = requestObserver.requests(before.worker());
+        var afterInventoryWork = before.inventoryWork() == null ? null : requestObserver.storage(before.worker());
+        boolean requestsChanged = !NativeLaterStageTerminalObservation.sameRequests(before.requests(), afterRequests);
+        require(!requestsChanged || before.authorized() && canceledAuthorityAt < 0, "Unauthorized native request mutation");
+        if (afterInventoryWork != null) require(NativeLaterStageTerminalObservation.sameStorageIdentity(
+                STORAGE_IDENTITIES.get(before.worker()), afterInventoryWork), "Native inventory wrappers changed during a frame");
+        if (canceledAuthorityAt >= 0) verifyCanceledRequests(before.worker(), phase == Phase.L_FINAL_STABLE);
+        if (!LAST_REQUESTS.containsKey(before.worker()) || requestsChanged || afterInventoryWork != null && !RECORDED_STORAGE.contains(before.worker())) {
+            var requestFrame = new LinkedHashMap<String, Object>();
+            requestFrame.put("worker", before.worker().getUUID().toString()); requestFrame.put("gameTime", before.tick());
+            requestFrame.put("stage", before.stage()); requestFrame.put("area", before.area().toString()); requestFrame.put("authorized", before.authorized());
+            requestFrame.put("nativeStateBefore", before.state()); requestFrame.put("nativeStateAfter", String.valueOf(GOALS.get(before.worker().getUUID()).state));
+            requestFrame.put("authority", before.authority()); requestFrame.put("before", before.requests().evidence()); requestFrame.put("after", afterRequests.evidence());
+            requestFrame.put("inventoryWorkBefore", before.inventoryWork() == null ? null : before.inventoryWork().evidence());
+            requestFrame.put("inventoryWorkAfter", afterInventoryWork == null ? null : afterInventoryWork.evidence());
+            record("native-request-frame", requestFrame);
+            if (afterInventoryWork != null) RECORDED_STORAGE.add(before.worker());
+        }
+        LAST_REQUESTS.put(before.worker(), afterRequests);
         if (!changed.isEmpty()) {
             require(before.authorized() && before.worker().isAlive() && !before.worker().isNoAi() && before.state().equals("PLACE_BLOCKS")
                     && before.cobble() - cobble == builtCobble && before.oak() - oak == builtOak
@@ -703,9 +772,15 @@ public final class NativeLaterStageHelperQa {
                     Map.of("stock", List.of(cobble, oak, chestCobble, chestOak)));
             terminalObservedBrackets++;
             require(terminalObservedBrackets < 10000, "Bounded terminal bracket capacity exceeded");
-            record("terminal-native-bracket", Map.of("worker", before.worker().getUUID().toString(), "gameTime", before.tick(),
-                    "authorized", false, "changedTargets", 0, "targetStatesUnchanged", true, "before", List.of(before.cobble(), before.oak(), before.chestCobble(), before.chestOak()),
-                    "after", List.of(cobble, oak, chestCobble, chestOak)));
+            var terminalFrame = new LinkedHashMap<String, Object>();
+            terminalFrame.put("worker", before.worker().getUUID().toString()); terminalFrame.put("gameTime", before.tick());
+            terminalFrame.put("authorized", false); terminalFrame.put("changedTargets", 0); terminalFrame.put("targetStatesUnchanged", true);
+            terminalFrame.put("before", List.of(before.cobble(), before.oak(), before.chestCobble(), before.chestOak()));
+            terminalFrame.put("after", List.of(cobble, oak, chestCobble, chestOak));
+            terminalFrame.put("requestsBefore", before.requests().evidence()); terminalFrame.put("requestsAfter", afterRequests.evidence());
+            require(before.inventoryWork() != null && afterInventoryWork != null, "Missing canceled native lifecycle observation");
+            terminalFrame.put("inventoryWorkBefore", before.inventoryWork().evidence()); terminalFrame.put("inventoryWorkAfter", afterInventoryWork.evidence());
+            record("terminal-native-bracket", terminalFrame);
         }
         if (!changed.isEmpty() || supply) {
             var work = new LinkedHashMap<String, Object>(); work.put("sequence", ++sequence);
@@ -740,7 +815,7 @@ public final class NativeLaterStageHelperQa {
         // Synthetic precommission world setup only. Never edit an existing world's server config.
         Files.writeString(defaults.resolve("recruits-server.toml"), CONFIG, java.nio.file.StandardOpenOption.CREATE_NEW);
         var parity = NativeActiveHelperApiParity.verify(evidence); REPORT.put("loadedApiParity", parity);
-        attestSerializer(parity); candidate = readPins();
+        attestSerializer(parity); attestRequests(parity); candidate = readPins();
         REPORT.put("sourceCommit", Files.readString(evidence.resolve("source-commit.txt")).trim());
         REPORT.put("sourceTree", Files.readString(evidence.resolve("source-tree.txt")).trim());
         REPORT.put("startedUtc", Instant.now().toString()); REPORT.put("mode", "active-helper-later-stage-disk");
@@ -801,7 +876,7 @@ public final class NativeLaterStageHelperQa {
                 "Original worker died or lost exact ownership");
     }
 
-    private static void verifyCanceled(ServerLevel level) {
+    private static boolean verifyCanceled(ServerLevel level) {
         var snapshot = PerimeterProjectAuthority.snapshot(level, coreKey); var terminal = snapshot.terminal(projectId);
         var ledger = ConstructionEditLedger.get(level);
         require(snapshot.get(projectId) == null && terminal != null && terminal.state() == PerimeterProject.State.CANCELED
@@ -828,7 +903,6 @@ public final class NativeLaterStageHelperQa {
                 && !worker.getPersistentData().contains("SiegeProtectedLedgerGeneration")
                 && !worker.getPersistentData().contains("SiegePlayerFortificationOwner")
                 && !worker.getPersistentData().contains(com.devfarinsky.siegeoverhaul.ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID)
-                && ProtectedInventoryCleanup.read(worker.getPersistentData()).isEmpty() && worker.neededItems.isEmpty()
                 && ledger.unresolvedCrewProject(worker.getUUID()) == null, "Loaded cancellation left worker scope or cleanup");
         require(stagePending(level, 0) == 0 && stagePending(level, 1) == 0 && stagePending(level, 2) > 0
                 && stagePending(level, 2) < 30 && stagePlacements(helper, 2) > 0
@@ -836,6 +910,7 @@ public final class NativeLaterStageHelperQa {
         for (int index = 3; index < accepted.stages().size(); index++) require(stagePending(level, index)
                 == accepted.stages().get(index).layout().targets().size(), "A later section was built");
         assertCanceledFreeze(level.getServer(), level);
+        return WORKERS.values().stream().allMatch(worker -> NativeLaterStageTerminalObservation.closed(requestObserver.storage(worker)));
     }
 
     private static void conservation(MinecraftServer server, ServerPlayer owner) { materialCensus(server, owner); }
@@ -1000,7 +1075,10 @@ public final class NativeLaterStageHelperQa {
             value.put("currentArea", worker.currentBuildArea == null ? null : worker.currentBuildArea.getUUID().toString());
             value.put("owner", String.valueOf(WorkersBridge.readWorkerOwner(worker)));
             value.put("position", List.of(worker.getX(), worker.getY(), worker.getZ())); value.put("beforeItemSlot", worker.getBeforeItemSlot());
-            value.put("neededItemCount", worker.neededItems == null ? -1 : worker.neededItems.size());
+            var requests = requestObserver.requests(worker);
+            value.put("neededItemCount", requests.count());
+            value.put("nativeRequests", requests.evidence());
+            if (canceledAuthorityAt >= 0) value.put("inventoryWork", requestObserver.storage(worker).evidence());
  workers.put(worker.getUUID().toString(), value);
         }
         var data = new LinkedHashMap<String, Object>(); data.put("workers", workers); data.put("placementCounts", counts());
@@ -1060,7 +1138,10 @@ public final class NativeLaterStageHelperQa {
                 server.execute(() -> {
                     try { transit.cleanup(server); transit.assertNoTickets(server); REPORT.put("finalOwnedTicketCount", 0); }
                     catch (Throwable problem) { fail(problem); REPORT.put("ticketCleanupFailure", problem.toString()); }
-                    finally { finishCleanupReady = true; }
+                    finally {
+                        if (!evidenceSealed && requestObserver != null) REPORT.put("requestReferenceCatalog", requestObserver.referenceEvidence());
+                        finishCleanupReady = true;
+                    }
                 });
             }
             return;
@@ -1088,6 +1169,20 @@ public final class NativeLaterStageHelperQa {
                 && PIN.equals(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes))),
                 "Changed or oversized cap-64 candidate resource");
         return JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8)).getAsJsonObject();
+    }
+
+    private static void attestRequests(Map<String, Object> parity) throws Exception {
+        var classes = (Map<?, ?>) parity.get("classes");
+        var supplier = (Map<?, ?>) classes.get(BuilderEntity.class.getName());
+        require(supplier != null && "374cecc6a284df757839fe14efd24aa310ca3df044ff657af9a2c7d2a94f6452".equals(supplier.get("supplierSha256")),
+                "Dormant request observer lost the reviewed Workers supplier");
+        require(com.talhanation.workers.world.NeededItem.class.getClassLoader() == BuilderWorkGoal.class.getClassLoader()
+                && BuilderWorkGoal.class.getClassLoader() == BuilderEntity.class.getClassLoader(),
+                "Native request and work goal loaders differ");
+        REPORT.put("requestClassParity", NativeActiveHelperApiParity.TailResource.verify(com.talhanation.workers.world.NeededItem.class,
+                Path.of((String) supplier.get("provider")), (String) supplier.get("supplierSha256")));
+        requestObserver = new NativeLaterStageTerminalObservation();
+        REPORT.put("requestFieldContract", requestObserver.metadata());
     }
 
     private static void attestSerializer(Map<String, Object> parity) throws Exception {
