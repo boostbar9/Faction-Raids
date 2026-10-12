@@ -1,0 +1,19 @@
+// Separate gameplay opt-in. The prepare-only API mode remains independently hard-blocked.
+if (providers.gradleProperty('nativeActiveHelperQa').map { it.toBoolean() }.getOrElse(false)) {
+    if (!providers.gradleProperty('nativeQa').getOrElse('false').toBoolean()
+            || providers.gradleProperty('nativeQaMode').getOrElse('') != 'staged-handoff'
+            || !providers.gradleProperty('nativeSharedCrewQa').getOrElse('false').toBoolean()) {
+        throw new GradleException('Active helper gameplay requires the explicit shared staged-handoff QA source set')
+    }
+    tasks.matching { it.name == 'runClient' }.configureEach {
+        doFirst {
+            // Replay is read-only and rehashes this prepared runtime, reviewed contract and
+            // every captured class/body. A raw capture never authorizes a game launch.
+            project.exec {
+                commandLine 'python3', project.file('scripts/verify-native-helper-api.py').absolutePath,
+                        project.file('build/native-active-helper-api/evidence/resolved-runtime.json').absolutePath,
+                        '--verify-receipt', project.file('build/native-helper-qa/evidence/api-gate/gate.json').absolutePath
+            }
+        }
+    }
+}

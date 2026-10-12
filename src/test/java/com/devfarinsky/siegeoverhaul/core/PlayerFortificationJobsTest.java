@@ -4,6 +4,7 @@ import com.devfarinsky.siegeoverhaul.MinecraftTestSupport;
 import com.devfarinsky.siegeoverhaul.ModConstants;
 import com.devfarinsky.siegeoverhaul.RecruitsBridge;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
+import com.devfarinsky.siegeoverhaul.nativecompat.ProtectedBuildArea;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Entity;
@@ -18,6 +19,79 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class PlayerFortificationJobsTest extends MinecraftTestSupport {
+    @Test void helperLinkOnlyWritesWorkerIdentityPositionAndMisses() {
+        Mob helper = mock(Mob.class);
+        ProtectedBuildArea area = mock(ProtectedBuildArea.class);
+        CompoundTag workerTag = new CompoundTag(), areaTag = new CompoundTag();
+        UUID owner = UUID.randomUUID(), areaId = UUID.randomUUID(), coordinator = UUID.randomUUID();
+        BlockPos position = new BlockPos(80, 70, -16);
+        workerTag.putUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID, UUID.randomUUID());
+        workerTag.putUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER, UUID.randomUUID());
+        workerTag.putLong(ModConstants.Tags.PLAYER_FORTIFICATION_POS, BlockPos.ZERO.asLong());
+        workerTag.putInt(ModConstants.Tags.PLAYER_FORTIFICATION_MISSES, 4);
+        workerTag.putString("UnrelatedWorkerData", "preserved");
+        areaTag.putBoolean(ModConstants.Tags.PLAYER_FORTIFICATION_AREA, true);
+        areaTag.putUUID(ModConstants.Tags.PLAYER_FORTIFICATION_BUILDER, coordinator);
+        areaTag.putUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER, owner);
+        areaTag.putString(ModConstants.Tags.CAMP_AREA_TEAM, "team:untouched");
+        CompoundTag originalAreaTag = areaTag.copy();
+        CompoundTag expectedWorkerTag = workerTag.copy();
+        expectedWorkerTag.putUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID, areaId);
+        expectedWorkerTag.putUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER, owner);
+        expectedWorkerTag.putLong(ModConstants.Tags.PLAYER_FORTIFICATION_POS, position.asLong());
+        expectedWorkerTag.remove(ModConstants.Tags.PLAYER_FORTIFICATION_MISSES);
+        when(helper.getPersistentData()).thenReturn(workerTag);
+        when(area.getPersistentData()).thenReturn(areaTag);
+        when(area.getUUID()).thenReturn(areaId);
+        when(area.blockPosition()).thenReturn(position);
+
+        PlayerFortificationJobs.linkWorker(helper, area, owner);
+
+        assertEquals(expectedWorkerTag, workerTag);
+        assertEquals(originalAreaTag, areaTag);
+        // Identity and position reads are the entire marker contract: its
+        // coordinator, protected seal and native recipe are never accessed.
+        verify(area).getUUID();
+        verify(area).blockPosition();
+        verifyNoMoreInteractions(area);
+        verify(helper).getPersistentData();
+        verifyNoMoreInteractions(helper);
+    }
+
+    @Test void linkingEitherSideIgnoresNullArgumentsWithoutMutatingEitherEntity() {
+        Mob builder = mock(Mob.class);
+        Entity area = mock(Entity.class);
+        UUID owner = UUID.randomUUID();
+
+        assertDoesNotThrow(() -> {
+            PlayerFortificationJobs.linkWorker(null, area, owner);
+            PlayerFortificationJobs.linkWorker(builder, null, owner);
+            PlayerFortificationJobs.linkWorker(builder, area, null);
+            PlayerFortificationJobs.link(null, area, owner);
+            PlayerFortificationJobs.link(builder, null, owner);
+            PlayerFortificationJobs.link(builder, area, null);
+        });
+
+        verifyNoInteractions(builder, area);
+    }
+
+    @Test void helperAssociationDoesNotGrantCoordinatorRecoveryAuthority() throws Exception {
+        try (JobFixture f = new JobFixture()) {
+            UUID coordinator = UUID.randomUUID();
+            CompoundTag areaTag = f.area.getPersistentData();
+            areaTag.putUUID(ModConstants.Tags.PLAYER_FORTIFICATION_BUILDER, coordinator);
+            CompoundTag originalAreaTag = areaTag.copy();
+            PlayerFortificationJobs.linkWorker(f.builder, f.area, f.owner);
+
+            PlayerFortificationJobs.tick(f.level, f.builder);
+
+            assertFalse(f.workerTag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
+            assertEquals(originalAreaTag, areaTag);
+            f.bridge.verify(() -> WorkersBridge.enablePlayerJob(any(), any()), never());
+            f.bridge.verify(() -> WorkersBridge.assignBuildAreaDirectly(any(), any()), never());
+        }
+    }
+
     @Test void areaJoinCannotLinkTransferredAreaToFormerOwner() {
         try (JobFixture f = new JobFixture()) {
             when(f.level.getEntity(f.builder.getUUID())).thenReturn(f.builder);
@@ -263,15 +337,18 @@ class PlayerFortificationJobsTest extends MinecraftTestSupport {
         when(builder.getUUID()).thenReturn(builderId); when(area.getUUID()).thenReturn(areaId);
         when(area.blockPosition()).thenReturn(new BlockPos(80,70,-16));
         areaTag.putString(ModConstants.Tags.CAMP_AREA_TEAM,"team:legacy");
+        workerTag.putInt(ModConstants.Tags.PLAYER_FORTIFICATION_MISSES,4);
 
         PlayerFortificationJobs.link(builder,area,owner);
 
         assertFalse(areaTag.contains(ModConstants.Tags.CAMP_AREA_TEAM));
         assertTrue(areaTag.getBoolean(ModConstants.Tags.PLAYER_FORTIFICATION_AREA));
         assertEquals(builderId,areaTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_BUILDER));
+        assertEquals(owner,areaTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER));
         assertEquals(areaId,workerTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID));
         assertEquals(owner,workerTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER));
         assertEquals(area.blockPosition(),BlockPos.of(workerTag.getLong(ModConstants.Tags.PLAYER_FORTIFICATION_POS)));
+        assertFalse(workerTag.contains(ModConstants.Tags.PLAYER_FORTIFICATION_MISSES));
     }
 
     @Test void failedCommissionOnlyClearsItsOwnSavedAssociation() {

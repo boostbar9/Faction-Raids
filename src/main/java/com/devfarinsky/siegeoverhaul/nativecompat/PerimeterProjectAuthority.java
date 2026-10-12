@@ -78,11 +78,13 @@ final class PerimeterProjectAuthority {
         if (!tracked(area)) return null;
         try {
             Scope scope=read(area.getPersistentData()); PerimeterProject project=project(level,scope);
+            // A corrupt crew record is never equivalent to an empty crew.
+            ConstructionEditLedger.get(level).crewMembers(project);
             if (!project.executionSupported()) return PerimeterProject.GATE_EXECUTION_BLOCKER;
             var stage=project.active();
             if (stage==null || stage.index()!=scope.stage() || !stage.digest().equals(scope.stageDigest())
                     || !stage.areaId().equals(area.getUUID()) || builder==null
-                    || !NativePerimeterProjects.assignedBuilder(builder,project)
+                    || !NativePerimeterProjects.participatingBuilder(builder,project)
                     || !project.header().owner().equals(WorkersBridge.readWorkerOwner(builder))
                     || !project.header().owner().equals(WorkersBridge.readOwner(area)))
                 return "Paused: whole-perimeter stage ownership or identity changed";

@@ -88,6 +88,49 @@ class BuilderGroundRecoveryTest extends MinecraftTestSupport {
         doReturn(Blocks.MAGMA_BLOCK.defaultBlockState()).when(level).getBlockState(any());
         assertNull(BuilderGroundRecovery.findSurface(level,worker));
     }
+    @Test void collisionFreeWitherRosesAreNeverRecoveryDestinations() {
+        setup();
+        assertTrue(Blocks.WITHER_ROSE.defaultBlockState().getCollisionShape(
+                net.minecraft.world.level.EmptyBlockGetter.INSTANCE, BlockPos.ZERO).isEmpty());
+        doAnswer(i -> ((BlockPos)i.getArgument(0)).getY()<64
+                ? Blocks.STONE.defaultBlockState():Blocks.WITHER_ROSE.defaultBlockState())
+                .when(level).getBlockState(any());
+        assertNull(BuilderGroundRecovery.findSurface(level,worker));
+        pass(0);pass(40);pass(80);pass(120);
+        verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+        verify(worker.getNavigation(),never()).stop();
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
+    @Test void witherRoseInAnyOccupiedBodyCellRejectsTheClosestColumn() {
+        setup();
+        doAnswer(i -> {
+            BlockPos p=i.getArgument(0);
+            if (p.getY()<64) return Blocks.STONE.defaultBlockState();
+            return p.equals(new BlockPos(0,65,0))
+                    ? Blocks.WITHER_ROSE.defaultBlockState():Blocks.AIR.defaultBlockState();
+        }).when(level).getBlockState(any());
+        BlockPos destination=BuilderGroundRecovery.findSurface(level,worker);
+        assertNotNull(destination);
+        assertNotEquals(new BlockPos(0,64,0),destination);
+        assertEquals(64,destination.getY());
+        assertEquals(1,Math.abs(destination.getX())+Math.abs(destination.getZ()));
+    }
+    @Test void harmlessSingleAndDoubleCellVegetationStillAllowsSurfaceRecovery() {
+        setup();
+        for (var plant : java.util.List.of(Blocks.GRASS,Blocks.FERN,Blocks.DEAD_BUSH,
+                Blocks.POPPY,Blocks.DANDELION,Blocks.TALL_GRASS,Blocks.LARGE_FERN,Blocks.SUNFLOWER)) {
+            var lower=plant.defaultBlockState();
+            var upper=lower.hasProperty(net.minecraft.world.level.block.DoublePlantBlock.HALF)
+                    ? lower.setValue(net.minecraft.world.level.block.DoublePlantBlock.HALF,
+                            net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER)
+                    : Blocks.AIR.defaultBlockState();
+            doAnswer(i -> {
+                int y=((BlockPos)i.getArgument(0)).getY();
+                return y<64 ? Blocks.STONE.defaultBlockState():y==64 ? lower:upper;
+            }).when(level).getBlockState(any());
+            assertEquals(new BlockPos(0,64,0),BuilderGroundRecovery.findSurface(level,worker),plant.toString());
+        }
+    }
     @Test void leashedCombatAndMountedWorkersStayWhereTheyAre() {
         setup();when(worker.isLeashed()).thenReturn(true);pass(0);pass(40);pass(80);pass(120);
         verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());

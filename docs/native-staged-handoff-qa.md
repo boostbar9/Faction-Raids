@@ -34,3 +34,134 @@ The `Native Hollow Representative Stage Handoff QA` workflow supports manual dis
 `result.json` explicitly identifies the synthetic partition and direct server commission. It records all 572 targets through the full authority at commission and handoff, exact stage IDs/digests, actual native area joins and physical marker positions, restart snapshots, cancellation receipt, stock totals, passive Treasury accounting and four raw framebuffers. `verify-native-staged-handoff.py` verifies these alongside the exact loaded native bytecode audit. A passed result requires the real partial first-stage restart and canceled restart; it separately reports `betweenStageRestartVerified`.
 
 This mode does not prove full-plan completion, production partition sizing, normal commission-menu/use-packet behavior, actual chunk unload, dedicated-client networking, other palettes/terrain, distant storage or arbitrary graphics configurations. Existing accepted solid records are neither recompiled nor reinterpreted by this QA; their unchanged saved production geometry remains authoritative. This fresh-world mode does not claim legacy-record compatibility testing. Keep those coverage claims separate. Source compilation or a passing evidence-parser syntax check is not live Minecraft acceptance.
+
+## Separate shared-crew acceptance option
+
+`-PnativeSharedCrewQa=true` is a default-off option for `staged-handoff` only. It is
+mutually exclusive with `-PnativeBuilderReplacementQa=true`: replacement remains
+its original single-builder/new-hire scenario. For same-repository pull requests,
+use the `native-shared-crew-qa` label with the exact base
+`release/4.53.0-alpha.3`. The workflow retains read-only repository permissions and
+uses no additional secrets. Manual dispatch offers a separate `shared_crew`
+boolean, default false. Both compilation preparation and the offline client launch
+receive the same option; the ten-minute client and nine-minute construction caps
+remain unchanged.
+
+This is an explicitly synthetic, representative **legacy hollow fixture**, not a
+new gated-plan geometry test. It retains the original independent 572-target
+oracle and uses the same lossless QA-only 192-target section cap as replacement
+acceptance. It creates exactly two native builders owned by the real survival
+owner, plus **one** original chest containing 352 cobblestone and 220 oak planks.
+The second builder receives tools and food only. Both fixture AI holds end at the
+paid direct-server commission; production discovers and enlists the helper.
+Nothing adds construction stock, sets target blocks, invokes native goals,
+accelerates AI, teleports a working builder, or manufactures completion receipts.
+
+The shared helper starts with one 64-bread stack and otherwise empty cargo,
+asserted before it enters the world or any commission. The coordinator retains
+its normal pickaxe/axe/shovel kit. This deliberately constrained helper kit is
+appropriate only for this reviewed clear-terrain fixture: helpers do not mine,
+and a promoted survivor can naturally collect the coordinator's dropped tools.
+The report records the exact initial helper cargo and scope. No cargo is removed,
+rearranged or replenished by QA after commission.
+
+The earlier native run `38154872840` remains valid safety evidence: recovery of
+both complete fixture kits occupied all nine survivor cargo slots. Production
+correctly held the 55-oak request with zero empty slots and left all 220 chest oak
+untouched. That full-cargo pause was not a cleanup failure and is not disabled or
+reclassified by this scenario adjustment.
+
+The required evidence, all stored in the existing `result.json`, is:
+
+- Exact coordinator/helper/owner/project/area identities and the unchanged paid
+  manifest; one 64-emerald commission using the existing Treasury observer.
+- Distinct real placements by both builders on that shared project. A read-only
+  Forge `LivingTickEvent` observation starts before a tested builder's actual AI
+  and ends before the next living entity's tick or at ordinary server END. Each
+  credited target must change to the exact accepted block, consume the same
+  actor's matching material, and appear in the production guard's `Completed`
+  receipt. Events include actor, area, stage, game time, packed and readable
+  target positions, material, per-actor stock and finite-chest stock. Final unique
+  event targets must equal all retained world targets, with no duplicate credit.
+- Native finite-chest supply withdrawals by both builders, with matching chest
+  and per-builder stock deltas. Conservation includes both actors and loose items.
+  After the exact original-coordinator death transfer is verified, native loose
+  pickup by the surviving helper is observed separately. It requires matching
+  loose-item decrease and worker material increase/debit, unchanged chest and
+  owner stock, and ordinary production receipts for any same-tick placement.
+  Pickup never substitutes for either worker's required original chest withdrawal.
+- Actual partial-stage interruption through the owner's ordinary Spectator
+  permission pause, save/close/reopen, and exact pre-AI loaded construction cargo
+  for **both** builders. Both must resume actual distinct placement afterward.
+- Actual lethal damage to the original coordinator in the still-running first
+  section, after both builders have resumed from reload and both native hand and
+  inventory-cleanup lifecycles are closed. Its construction cargo must be nonempty:
+  the test records exact before/after slot and hand values and the actual new native
+  drop UUIDs, stack values and material counts. The synchronous drop delta must
+  equal every carried construction item, with all existing drops, chest stock,
+  helper/owner stock and placed targets unchanged. Duplicate drop identities or
+  aliased drop-stack objects fail. Only after that transfer is proved may accounting
+  omit the exact dying coordinator's retained native inventory; real loose items,
+  live-worker inventory and owner inventory remain counted. No material is moved,
+  cleared, manufactured or compensated by the fixture. Missing or extra death
+  drops are a native compatibility failure, never a tolerated loss/duplication.
+  The already-enlisted helper survives; no third builder is spawned. Production
+  must remove the original actor, persist exactly one authenticated `DEATH`
+  handoff for that original/helper/stage/ledger identity, and resume real placement
+  within one minute. An `UNAVAILABLE` or `DISMISSED` transfer is insufficient.
+  The original paid header, manifest and materials survive without another commission.
+- The existing native first-section completion, second-section placement,
+  authenticated menu cancellation and canceled reload. Between-section reload
+  remains separately reported when its clean ordinary boundary is observed.
+- Exact checked-out source commit/tree, loaded companion hashes, the unchanged
+  native-bytecode audit (plus shared-mode worker/inheritance death/drop classes),
+  and original framebuffer/source evidence files. The verifier requires the recorded source identities to match those evidence files.
+
+`verify-native-staged-handoff.py` requires these additional contracts when
+`SHARED_CREW_QA=true`. Its independent coordinate/material oracle rejects targets
+outside the fixture's approved hollow skin/deck, duplicate credits, material
+mismatches, a missing contributor, unmatched withdrawals, lost cargo, a missing
+post-reload contributor, changed source identity, a new replacement hire, an
+extra commission, or missing/malformed/zero-cargo death-transfer evidence. Exact
+new-drop counts and unchanged other stores reject alias duplicates, missing or
+extra drops and unjustified dying-inventory exclusion. Python contract tests use explicitly synthetic records to test
+acceptance and rejection; they do not constitute native gameplay evidence.
+
+Death-cargo coverage uses only the pinned baseline companions. Corpse addons are
+**not exercised**. Captured native inheritance bytecode supplements the exact
+synchronous runtime transfer proof; it does not independently establish every
+Minecraft superclass or runtime-mixin equipment-drop path.
+
+Shared-mode setup also isolates all unrelated starter NPCs **before commission**
+in at most four sealed, breathable same-claim holding cells at feet Y48. Their
+stone shells occupy Y47–50; unchanged stone ground caps remain at Y64. This is
+labeled artificial fixture setup, not a production civilian or navigation change.
+The actual reviewed wall starts at Y65, and native standing searches extend at
+most twelve blocks vertically. The cells are outside all target, mining, reserved
+clearance and standing envelopes, with no ground entrance and no overhead
+heightmap change. Exact auxiliary IDs, positions, bodies, shell/air/ground-cap
+baselines and nonintersection checks must survive the partial, optional
+between-stage and canceled reloads and final verification. Observers only check;
+they never rescue or relocate a commissioned actor. The original parked-ID list
+is retained, and the finite materials and acceptance time limits are unchanged.
+
+This corrects a demonstrated setup interference in native runs `38152323781`
+and `38157092230`: outside-claim NoAI civilian parking did not disable the
+production civilian-return hook. Two villagers returned to their saved cells at
+(133.5,65,6.5) and (133.5,65,7.5); the helper repeatedly pushed against the first
+while retaining the last floor target. The coordinator safely waited for that
+claim. Successful run `38155836811` happened to route around the same bodies.
+Those failures are retained as navigation/fixture-interference evidence, not
+reclassified as a helper unload or reporting-identity failure. This scenario
+does not establish general navigation around stationary crowds or a bounded
+progress-aware claim handoff policy.
+
+Sleep is deliberately **not exercised**: this world stays at noon, and the test
+does not force a native sleep state. The permission-pause/reload is a shared
+interruption test, not evidence of individual dismissal, sleep, unloaded-chunk
+succession or every helper-rejoin path. The original limitations still apply,
+including no whole-perimeter completion, normal commission packet, production
+partition-sizing, gated-geometry, distant-storage or dedicated-client-networking
+claim. A checked-in harness or passing Python tests are not an actual client
+pass; the exact integrated source must compile and produce verified runtime
+artifacts before shared-crew acceptance can be claimed.

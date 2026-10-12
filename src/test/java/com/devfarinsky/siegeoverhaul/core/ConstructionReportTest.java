@@ -3,12 +3,15 @@ package com.devfarinsky.siegeoverhaul.core;
 import com.devfarinsky.siegeoverhaul.MinecraftTestSupport;
 import com.devfarinsky.siegeoverhaul.ModConstants;
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
+import com.devfarinsky.siegeoverhaul.compat.WorkersConstructionView;
+import com.devfarinsky.siegeoverhaul.nativecompat.ProtectedConstructionActions;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.AABB;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -135,6 +138,60 @@ class ConstructionReportTest extends MinecraftTestSupport {
             assertTrue(report.stream().allMatch(ConstructionReport.Job::complete));
             assertTrue(report.stream().noneMatch(ConstructionReport.Job::cancelable));
             assertTrue(report.stream().allMatch(job -> job.sectionText().contains("64 emeralds paid once")));
+        }
+    }
+
+    @Test void projectSnapshotUsesValidatedSuccessorForProgressActivityAndSupplies() {
+        var paid = PerimeterProjectTest.project().paid(false);
+        var first = paid.activate(paid.check());
+        var verified = first.verifyStage(first.check(), first.expectedStageReceipt());
+        var waiting = verified.retireVerifiedStage(verified.check());
+        var project = waiting.activate(waiting.check());
+        var frozen = project.save();
+        var level = mock(ServerLevel.class); var player = mock(ServerPlayer.class);
+        var original = mock(Mob.class); var successor = mock(Mob.class); var area = mock(Entity.class);
+        var snapshot = mock(PerimeterProjectStore.Snapshot.class);
+        when(player.serverLevel()).thenReturn(level);
+        when(player.getServer()).thenReturn(mock(net.minecraft.server.MinecraftServer.class));
+        when(player.getUUID()).thenReturn(project.header().owner());
+        when(player.getBoundingBox()).thenReturn(new AABB(BlockPos.ZERO));
+        when(snapshot.projects()).thenReturn(List.of(project)); when(snapshot.terminals()).thenReturn(List.of());
+        when(level.getEntity(project.active().areaId())).thenReturn(area);
+        when(level.getEntity(project.header().builder())).thenReturn(original);
+        when(original.isAlive()).thenReturn(false);
+        int current = project.active().layout().targets().size(), placed = project.completedTargetCount() + 3;
+        try (var cores = mockStatic(SiegeCore.class);
+             var read = mockStatic(ProtectedConstructionActions.class);
+             var view = mockStatic(WorkersConstructionView.class)) {
+            cores.when(() -> SiegeCore.key(player)).thenReturn(project.header().coreKey());
+            read.when(() -> ProtectedConstructionActions.projectsForReport(player)).thenReturn(snapshot);
+            read.when(() -> ProtectedConstructionActions.projectBuilderForReport(level, project)).thenReturn(successor);
+            read.when(() -> ProtectedConstructionActions.validProjectProgress(area, successor, project)).thenReturn(true);
+            view.when(() -> WorkersConstructionView.progress(area, current))
+                    .thenReturn(new WorkersConstructionView.Progress(current, current - 3));
+            view.when(() -> WorkersConstructionView.activity(successor, area)).thenReturn("Working / travelling");
+            view.when(() -> WorkersConstructionView.requests(successor)).thenReturn(List.of("12 x Cobblestone"));
+            var report = ConstructionReport.snapshot(player);
+            assertEquals(1, report.size());
+            assertEquals(placed + " / " + project.targets().size() + " blocks placed", report.get(0).progressText());
+            assertEquals("Working / travelling", report.get(0).activity());
+            assertEquals("12 x Cobblestone", report.get(0).supplies());
+            assertFalse(report.get(0).complete()); assertTrue(report.get(0).cancelable());
+            verify(level, never()).getEntity(project.header().builder());
+            view.verify(() -> WorkersConstructionView.progress(area, current));
+            view.verify(() -> WorkersConstructionView.activity(successor, area));
+            view.verify(() -> WorkersConstructionView.requests(successor));
+            view.verifyNoMoreInteractions();
+
+            // A loaded successor alone cannot authorize a stale/foreign marker or failed native proof.
+            read.when(() -> ProtectedConstructionActions.validProjectProgress(area, successor, project)).thenReturn(false);
+            var unknown = ConstructionReport.snapshot(player).get(0);
+            assertEquals(-1, unknown.percent()); assertTrue(unknown.progressText().contains("rest unknown"));
+            assertTrue(unknown.activity().contains("Current section unavailable")); assertEquals("", unknown.supplies());
+            view.verifyNoMoreInteractions();
+            assertEquals(frozen, project.save());
+            verify(level, never()).getBlockState(any()); verify(level, never()).setBlock(any(), any(), anyInt());
+            verifyNoInteractions(original);
         }
     }
 

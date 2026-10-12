@@ -61,7 +61,8 @@ final class NativeStagedHandoffFixture {
 
     record Fixture(UUID builderId, List<UUID> storageIds, List<UUID> claimIds, PerimeterBlueprint.Plan plan, HollowOracle oracle,
                    BuilderWorkGoal buildGoal, GetNeededItemsFromStorage storageGoal,
-                   Map<BlockPos, BlockState> nonPlanCells, List<String> parkedAuxiliaries) {}
+                   Map<BlockPos, BlockState> nonPlanCells, List<String> parkedAuxiliaries,
+                   Map<UUID, BlockPos> isolatedAuxiliaries, Map<BlockPos, BlockState> isolationCells) {}
 
     private NativeStagedHandoffFixture() {}
 
@@ -104,12 +105,39 @@ final class NativeStagedHandoffFixture {
                 && SiegeCore.point(owner.server, SiegeCore.key(owner)) != null, "Production core placement failed");
         ((CoreBlocks.CoreBlock) CoreBlocks.CORE.get()).tick(level.getBlockState(CORE), level, CORE, level.random);
         List<String> parked = new ArrayList<>();
+        Map<UUID, BlockPos> isolated = new LinkedHashMap<>();
+        Map<BlockPos, BlockState> isolationCells = new LinkedHashMap<>();
         int i = 0;
         for (Mob mob : level.getEntitiesOfClass(Mob.class, new AABB(CORE).inflate(16))) {
             // Keep replacement-fixture civilians inside their claim: native faction
             // recovery otherwise returns outside parked NoAI actors into the west
             // construction approach. Only pre-review unrelated fixture actors move.
-            if (Boolean.getBoolean("siegeoverhaul.nativeQa.builderReplacement"))
+            if (Boolean.getBoolean("siegeoverhaul.nativeQa.sharedCrew")) {
+                // Setup-only isolation: NoAI does not disable CoreCivilians' outside-claim
+                // recovery. A sealed same-claim cell avoids both that return and ground
+                // route collisions, without overhead blocks changing the heightmap.
+                require(i < 4 && mob.getBbWidth() <= .8F && mob.getBbHeight() <= 2F,
+                        "Unexpected auxiliary count/dimensions for isolated fixture parking");
+                BlockPos feet = new BlockPos(134 + (i % 2) * 3, 48, 6 + (i / 2) * 3);
+                for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+                    BlockPos cap = feet.offset(dx, 16, dz);
+                    require(level.getBlockState(cap).is(Blocks.STONE), "Auxiliary cell lacks sealed ground separation");
+                    isolationCells.put(cap, level.getBlockState(cap));
+                    for (int dy = -1; dy <= 2; dy++) {
+                        BlockPos cell = feet.offset(dx, dy, dz);
+                        require(level.hasChunkAt(cell) && CLAIM_CHUNK.equals(new ChunkPos(cell))
+                                && level.getBlockState(cell).isAir(), "Auxiliary holding cell is not clear same-claim fixture space");
+                        BlockState state = dx == 0 && dz == 0 && (dy == 0 || dy == 1)
+                                ? Blocks.AIR.defaultBlockState() : Blocks.STONE.defaultBlockState();
+                        level.setBlock(cell, state, 3); isolationCells.put(cell, state);
+                    }
+                }
+                mob.moveTo(feet.getX() + .5, feet.getY(), feet.getZ() + .5, 0, 0);
+                mob.setDeltaMovement(0, 0, 0);
+                require(SiegeCore.claimed(level, feet, SiegeCore.key(owner)) && level.noCollision(mob),
+                        "Auxiliary cell is not safe inside its original claim");
+                isolated.put(mob.getUUID(), feet);
+            } else if (Boolean.getBoolean("siegeoverhaul.nativeQa.builderReplacement"))
                 mob.moveTo(136.5+i%3,65,10.5-i/3,0,0);
             else mob.moveTo(107.5 + i % 5 * 2, 65, -20.5 + i / 5 * 2, 0, 0);
             mob.getNavigation().stop(); mob.setNoAi(true); parked.add(mob.getUUID().toString()); i++;
@@ -186,8 +214,86 @@ final class NativeStagedHandoffFixture {
                 BlockPos cell = new BlockPos(x, y, z);
                 if (!plan.blocks().containsKey(cell.asLong())) nonPlan.put(cell, level.getBlockState(cell));
             }
+        for (var entry : isolationCells.entrySet()) {
+            require(!plan.blocks().containsKey(entry.getKey().asLong()) && !plan.clearance().contains(entry.getKey().asLong()),
+                    "Auxiliary setup overlaps reviewed targets or reserved clearance");
+            nonPlan.put(entry.getKey(), entry.getValue());
+        }
         return new Fixture(builder.getUUID(), List.of(storage.getUUID()), List.of(claim.getUUID()), plan, oracle, buildGoal, storageGoal,
-                Map.copyOf(nonPlan), List.copyOf(parked));
+                Map.copyOf(nonPlan), List.copyOf(parked), Map.copyOf(isolated), Map.copyOf(isolationCells));
+    }
+
+    /** Passive checks only: never relocate an auxiliary after the setup/commission boundary. */
+    static Map<String, Object> auxiliaryIsolationSnapshot(ServerLevel level, Fixture fixture) {
+        require(!fixture.isolatedAuxiliaries().isEmpty() && fixture.isolatedAuxiliaries().size() <= 4
+                && fixture.parkedAuxiliaries().size() == fixture.isolatedAuxiliaries().size()
+                && fixture.isolatedAuxiliaries().keySet().stream().map(UUID::toString).collect(java.util.stream.Collectors.toSet())
+                    .equals(Set.copyOf(fixture.parkedAuxiliaries())), "Auxiliary isolation identities changed");
+        // Native standing searches are at most six columns out and twelve blocks down/up.
+        var workEnvelope = new AABB(fixture.plan().min(), fixture.plan().max().offset(1, 1, 1)).inflate(8, 12, 8);
+        var actors = new ArrayList<Map<String, Object>>();
+        for (var entry : fixture.isolatedAuxiliaries().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            require(level.getEntity(entry.getKey()) instanceof Mob, "Isolated auxiliary is unloaded or missing");
+            Mob mob = (Mob) level.getEntity(entry.getKey()); BlockPos feet = entry.getValue();
+            AABB body = mob.getBoundingBox();
+            require(mob.isAlive() && mob.isNoAi() && mob.level() == level
+                    && mob.position().distanceToSqr(Vec3.atBottomCenterOf(feet)) < 1.0E-12
+                    && body.minY == 48 && body.maxY <= 50 && body.minX >= feet.getX() && body.maxX <= feet.getX() + 1
+                    && body.minZ >= feet.getZ() && body.maxZ <= feet.getZ() + 1 && !body.intersects(workEnvelope)
+                    && SiegeCore.claimed(level, feet, "team:" + FACTION) && level.noCollision(mob)
+                    && level.getBlockState(feet).isAir() && level.getBlockState(feet.above()).isAir()
+                    && level.getBlockState(feet.below()).is(Blocks.STONE), "Auxiliary escaped its safe isolated cell");
+            actors.add(Map.of("uuid", mob.getUUID().toString(), "type", String.valueOf(ForgeRegistries.ENTITY_TYPES.getKey(mob.getType())),
+                    "feet", List.of(feet.getX(), feet.getY(), feet.getZ()),
+                    "bounds", List.of(body.minX, body.minY, body.minZ, body.maxX, body.maxY, body.maxZ), "alive", true, "noAi", true,
+                    "sameClaim", true, "clearOfWorkEnvelope", true));
+        }
+        var cells = new ArrayList<Map<String, Object>>();
+        require(fixture.isolationCells().size() == fixture.isolatedAuxiliaries().size() * 45, "Auxiliary baseline size changed");
+        for (var entry : fixture.isolationCells().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            BlockPos pos = entry.getKey();
+            require(level.hasChunkAt(pos) && level.getBlockState(pos).equals(entry.getValue())
+                    && !fixture.plan().blocks().containsKey(pos.asLong()) && !fixture.plan().clearance().contains(pos.asLong()),
+                    "Auxiliary shell/air/ground-cap baseline changed");
+            if (pos.getY() < 64) require(pos.getY() < fixture.plan().min().getY() - 14,
+                    "Auxiliary holding cell enters the native standing envelope");
+            cells.add(Map.of("position", List.of(pos.getX(), pos.getY(), pos.getZ()),
+                    "block", String.valueOf(ForgeRegistries.BLOCKS.getKey(entry.getValue().getBlock()))));
+        }
+        return Map.of("gameTime", level.getGameTime(), "feetY", 48, "planMinY", fixture.plan().min().getY(),
+                "standingVerticalRange", 12, "auxiliaries", actors, "baseline", cells);
+    }
+
+    /** Bread-only initial helper on reviewed clear terrain; helpers do not perform native mining.
+     * The coordinator keeps its normal tool kit, which its successor may recover through native drops.
+     * Never rearrange cargo after either worker has entered the commissioned scenario.
+     */
+    static BuilderEntity spawnSharedHelper(ServerLevel level, ServerPlayer owner) throws ReflectiveOperationException {
+        require(WORLD.equals(level.getServer().getWorldData().getLevelName()) && level.getServer().isSameThread(),
+                "Refusing shared helper outside isolated fixture");
+        var type = ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("workers", "builder"));
+        require(type != null, "Shared helper registry unavailable");
+        var raw = type.create(level);
+        require(raw instanceof BuilderEntity, "Shared helper type changed");
+        BuilderEntity helper = (BuilderEntity) raw;
+        helper.moveTo(137.5, 65, 9.5, 0, 0);
+        helper.finalizeSpawn(level, level.getCurrentDifficultyAt(helper.blockPosition()), MobSpawnType.COMMAND, null, null);
+        WorkersBridge.enablePlayerJob(helper, owner.getUUID()); helper.setPersistenceRequired();
+        helper.setNoAi(true); // Fixture preparation only; released together with the coordinator.
+        require(helper.getInventory().countItem(Items.COBBLESTONE) == 0
+                && helper.getInventory().countItem(Items.OAK_PLANKS) == 0
+                && !helper.getMainHandItem().is(Items.COBBLESTONE) && !helper.getMainHandItem().is(Items.OAK_PLANKS)
+                && !helper.getOffhandItem().is(Items.COBBLESTONE) && !helper.getOffhandItem().is(Items.OAK_PLANKS),
+                "Shared helper must not create any additional construction supply");
+        require(helper.getInventory().getContainerSize() >= 10 && helper.getInventory().getContainerSize() <= 128,
+                "Shared helper cargo inventory is outside the bounded fixture contract");
+        for (int slot = 6; slot < helper.getInventory().getContainerSize(); slot++)
+            require(helper.getInventory().getItem(slot).isEmpty(), "Shared helper has unexpected initial cargo in slot " + slot);
+        helper.getInventory().setItem(6, new ItemStack(Items.BREAD, 64));
+        helper.getInventory().setChanged();
+        require(owner.getUUID().equals(WorkersBridge.readWorkerOwner(helper)) && level.addFreshEntity(helper),
+                "Shared helper exact ownership/spawn failed");
+        return helper;
     }
 
     record HollowOracle(Map<Long, String> targets, Set<Long> clearance, Set<Long> cavities,

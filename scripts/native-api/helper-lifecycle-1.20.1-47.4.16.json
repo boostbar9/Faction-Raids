@@ -1,0 +1,1041 @@
+{
+  "formatVersion": 1,
+  "reviewDate": "2026-10-11",
+  "scope": "Bounded dimension-transfer/holding-ticket fixture semantics only; raw prepared JARs, not transformed loaded bytecode",
+  "gameplayAccepted": false,
+  "sourceCommit": "06525b74da9d42caf096459990273cf3be3ff16d",
+  "sourceTree": "34b5d27023b13f868fff5a94a234f9ef0a8b33a6",
+  "captureZipSha256": "d34a0f8d1f0bfd003e01397bff1c13cefaa3ce6360ebb93058c1461ba244cc0d",
+  "runtimeManifestSha256": "dac543ffad892623307c791ce460a128bca28dcfb93d361e2ed0b99a0112fbdb",
+  "artifacts": [
+    {
+      "fileName": "recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "jarManifest": "Manifest-Version: 1.0\r\nMixinConfigs: mixins.recruits.json\r\nClass-Path: corelib-1.20.1-1.1.3_mapped_official_1.20.1-api.jar\r\n\r\n",
+      "path": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "resolvedCoordinates": [
+        "curse.maven:recruits-523860:8339846_mapped_official_1.20.1"
+      ],
+      "sha256": "ddc93dd2d6ea0d97aef9b6a7a84dbe5a62e02978da3c37fe2c4e99f8c6581a99"
+    },
+    {
+      "fileName": "workers-567450-8351157_mapped_official_1.20.1.jar",
+      "jarManifest": "Manifest-Version: 1.0\r\nMixinConfigs: mixins.workers.json\r\nClass-Path: corelib-1.20.1-1.1.3_mapped_official_1.20.1-api.jar\r\n\r\n",
+      "path": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/workers-567450/8351157_mapped_official_1.20.1/workers-567450-8351157_mapped_official_1.20.1.jar",
+      "resolvedCoordinates": [
+        "curse.maven:workers-567450:8351157_mapped_official_1.20.1"
+      ],
+      "sha256": "374cecc6a284df757839fe14efd24aa310ca3df044ff657af9a2c7d2a94f6452"
+    },
+    {
+      "fileName": "forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "jarManifest": "Manifest-Version: 1.0\r\nTimestamp: 2026-01-20T21:34:12+0000\r\nGitCommit: 8dffec4d\r\nGit-Branch: 1.20.1\r\nFML-System-Mods: forge\r\n\r\nName: net/minecraftforge/fml/javafmlmod/\r\nSpecification-Title: Mod Language Provider\r\nSpecification-Vendor: Forge Development LLC\r\nSpecification-Version: 1\r\nImplementation-Title: FML Java Mod\r\nImplementation-Version: 47.4\r\nImplementation-Vendor: Forge\r\n\r\nName: net/minecraftforge/fml/loading/\r\nSpecification-Title: Launcher\r\nSpecification-Vendor: Forge Development LLC\r\nSpecification-Version: 1\r\nImplementation-Title: FML Launcher\r\nImplementation-Version: 47.4\r\nImplementation-Vendor: Forge\r\n\r\nName: net/minecraftforge/fml/mclanguageprovider/\r\nSpecification-Title: Mod Language Provider\r\nSpecification-Vendor: Forge Development LLC\r\nSpecification-Version: 1\r\nImplementation-Title: Minecraft Language Mod Provider\r\nImplementation-Version: 1\r\nImplementation-Vendor: Forge\r\n\r\nName: net/minecraftforge/versions/forge/\r\nSpecification-Title: Forge\r\nSpecification-Vendor: Forge Development LLC\r\nSpecification-Version: 47.4\r\nImplementation-Title: net.minecraftforge\r\nImplementation-Version: 47.4.16\r\nImplementation-Vendor: Forge Development LLC\r\n\r\nName: net/minecraftforge/versions/mcp/\r\nSpecification-Title: Minecraft\r\nSpecification-Vendor: Mojang\r\nSpecification-Version: 1.20.1\r\nImplementation-Title: MCP\r\nImplementation-Version: 20230612.114412\r\nImplementation-Vendor: Forge\r\n\r\n",
+      "path": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "resolvedCoordinates": [
+        "net.minecraftforge:forge:1.20.1-47.4.16_mapped_official_1.20.1"
+      ],
+      "sha256": "d50f909e092de1f72cfb86d854ba9fd845f68d0853990f0493c885b8ebc3bf8a"
+    }
+  ],
+  "classes": [
+    {
+      "classSha256": "750df1e0a7ace7d16490e490cb81a31f452710e176b6a394614d8a08ba780ef5",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.entities.AbstractChunkLoaderEntity.javap.txt",
+      "disassemblySha256": "4ece3d7feb37ca07a80517e0acff3df1cca3edfceff04ad8a5d03d882efec24e",
+      "name": "com.talhanation.recruits.entities.AbstractChunkLoaderEntity",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "7cf281b86e232a4367600495f2af20deb6e355aca2186145b421037efe46f652",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.entities.AbstractChunkLoaderEntity$1.javap.txt",
+      "disassemblySha256": "458fef222ed2e518c29f2693d33e5f4e8861847011726bd014b7e09ba79ae474",
+      "name": "com.talhanation.recruits.entities.AbstractChunkLoaderEntity$1",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "3a4a88449c842b32bcc9d157e7ca5d59d821f524126165168061419007f910b0",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.entities.AbstractChunkLoaderEntity$RecruitsChunk.javap.txt",
+      "disassemblySha256": "c1a4e3d5fc59e24ecba53db004acca790e3690bbd2700c08dd92945b4bb9fe10",
+      "name": "com.talhanation.recruits.entities.AbstractChunkLoaderEntity$RecruitsChunk",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "f5a03b06a82b4ccb920d5e060747592be9252bc3ba8ce78e9dbd80b2fc037602",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.entities.AbstractInventoryEntity.javap.txt",
+      "disassemblySha256": "c34ed0d3853dd717009b770a2e94a270e2f327ffbc6d77c46df6139ff4e4f29c",
+      "name": "com.talhanation.recruits.entities.AbstractInventoryEntity",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "d43abcd53a87d2942ad2d4c40a0a16613b7b85ba2a92bc58fb563ed92a984c41",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.entities.AbstractInventoryEntity$1.javap.txt",
+      "disassemblySha256": "60759ffed869239778097757384d656d80c07c127b7609bdd8fa049607ede3eb",
+      "name": "com.talhanation.recruits.entities.AbstractInventoryEntity$1",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "dd7b5c3b3193ff191b90e12f6dcceeac6d4f86cf19c8b32dd606b7e2a4b8bd47",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.entities.AbstractInventoryEntity$2.javap.txt",
+      "disassemblySha256": "54180f21591970e47b2d7cf9ec827a435e97920f5e8073b0f04064de80b49f98",
+      "name": "com.talhanation.recruits.entities.AbstractInventoryEntity$2",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "4158bb32157669da383b8e2633a8a8769e3e0911abc1644e9114e12c51ab2043",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.entities.AbstractInventoryEntity$3.javap.txt",
+      "disassemblySha256": "71d2d8a962d39841d80c5b003f1ec5319747f69250dd0d8c7c0b46041322f91c",
+      "name": "com.talhanation.recruits.entities.AbstractInventoryEntity$3",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "6f180af1b47dcc07381f949133ff43c546b2263eae0e8da94cea484ded432cfc",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.entities.AbstractRecruitEntity.javap.txt",
+      "disassemblySha256": "5307bef807396ff7098767437a46a7a9d71e14e2c696e67e2f2801d998c9d518",
+      "name": "com.talhanation.recruits.entities.AbstractRecruitEntity",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "15da4f572bb7177d1d51ca8f24fa0c453d0dcb6dd7938df26feda48965ec2526",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.entities.AbstractRecruitEntity$1.javap.txt",
+      "disassemblySha256": "66317d5c6617836906391de2df78a216d665be2720f2b6d7f102de3d07709e18",
+      "name": "com.talhanation.recruits.entities.AbstractRecruitEntity$1",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "221b48129bcf45b868816e2713d92d85bf1ea16e0812dc3b89fd42bebc225c3f",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.entities.AbstractRecruitEntity$2.javap.txt",
+      "disassemblySha256": "8b2d84708d128f2d529f32b5836c7795dafbf876af2daa0eddb9e9ed639462bf",
+      "name": "com.talhanation.recruits.entities.AbstractRecruitEntity$2",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "a1b5813e8a118e346a835e6a80c918847a018672b5162f8196ea81e5eb8c6c79",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.entities.AbstractRecruitEntity$3.javap.txt",
+      "disassemblySha256": "ac60a05600db19648face4520a70c5cc48bd006e46dc02f3c95bb88955a2ddce",
+      "name": "com.talhanation.recruits.entities.AbstractRecruitEntity$3",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "a7ce6ae81b83a8fda3a82393cd4fc29b6c7558ebb9cf3bde5a1817de4cc0b0b7",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.entities.AbstractRecruitEntity$4.javap.txt",
+      "disassemblySha256": "cacb9274f567189a1605f059ee60d96d164eeb275d8f37e5f0a04c7c32c0fd72",
+      "name": "com.talhanation.recruits.entities.AbstractRecruitEntity$4",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "fa180f3850ad28deadd548c527c3f3e4f47381272a463acd62722d06f485b540",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.entities.AbstractRecruitEntity$5.javap.txt",
+      "disassemblySha256": "c77e909a8dee1164108758c5e8a14d313386c5ec04102440cf04ef4040f24698",
+      "name": "com.talhanation.recruits.entities.AbstractRecruitEntity$5",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "d71a25c17928e7c7006d02aea30dd3f07bf10766b13dcd71f768fed1ec206946",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.entities.AbstractRecruitEntity$ArmPose.javap.txt",
+      "disassemblySha256": "a13176c63c4139decbeef73e91d3cff2d226611acc91d398786706bfa524e45a",
+      "name": "com.talhanation.recruits.entities.AbstractRecruitEntity$ArmPose",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "da27832a450c70e49c9b283426c01146be5a6847d0e257a202bda49384de15e1",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.entities.AbstractRecruitEntity$NoPaymentAction.javap.txt",
+      "disassemblySha256": "cb0063403672efa5b4154c347f2cf3e3d503e9820e17b788b72e79ebb079c993",
+      "name": "com.talhanation.recruits.entities.AbstractRecruitEntity$NoPaymentAction",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "fbeafd0b82545ca3a0b09af51bb6b01afcea84c22d7767f800f7f5da2ffac7a3",
+      "disassemblyFile": "bytecode/com.talhanation.recruits.pathfinding.AsyncPathfinderMob.javap.txt",
+      "disassemblySha256": "ff6913254987a44dbfe21b849c5ddd5662946bd90a9d182a796fa6c3df03e3fb",
+      "name": "com.talhanation.recruits.pathfinding.AsyncPathfinderMob",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/recruits-523860/8339846_mapped_official_1.20.1/recruits-523860-8339846_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "cc214c3d6ebb61860bc1d7830f30d83a132838730ce9cc4ab23e49b0de7a134b",
+      "disassemblyFile": "bytecode/com.talhanation.workers.entities.AbstractWorkerEntity.javap.txt",
+      "disassemblySha256": "266c3dbad00657d07b66111d337653f55af781aafadc9187c5787c10d199cfd9",
+      "name": "com.talhanation.workers.entities.AbstractWorkerEntity",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/workers-567450/8351157_mapped_official_1.20.1/workers-567450-8351157_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "935c115746e37327a88e776b88cbe28afaffda6bca1038f15ef3fb78248cb88e",
+      "disassemblyFile": "bytecode/com.talhanation.workers.entities.BuilderEntity.javap.txt",
+      "disassemblySha256": "18371f25240bf347800bcf801912726f8d252a474f0d6c35d9cc1f1a80cd264d",
+      "name": "com.talhanation.workers.entities.BuilderEntity",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/deobf_dependencies/curse/maven/workers-567450/8351157_mapped_official_1.20.1/workers-567450-8351157_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "df88b8d0188654278c5e6e9e696c203f82c486e136fae206ae71a1b7a2b15e82",
+      "disassemblyFile": "bytecode/net.minecraft.server.level.DistanceManager.javap.txt",
+      "disassemblySha256": "4a58c9ecbf0ee8e21c5382651d329f05c05d4c9e72e84ea3cee0801e0b2105be",
+      "name": "net.minecraft.server.level.DistanceManager",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "c95555767cfcba41271ea2de2a1880998cef55469c13d64b499478e7edbb40b1",
+      "disassemblyFile": "bytecode/net.minecraft.server.level.DistanceManager$ChunkTicketTracker.javap.txt",
+      "disassemblySha256": "60903f2ba4704cd1694e688d08a297fac6c2139783e4dda26d3ed55bb99ca7f9",
+      "name": "net.minecraft.server.level.DistanceManager$ChunkTicketTracker",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "8f34f3bed4c67258a106910ff44f008d00164a02e678ae215945303f53be71bf",
+      "disassemblyFile": "bytecode/net.minecraft.server.level.DistanceManager$FixedPlayerDistanceChunkTracker.javap.txt",
+      "disassemblySha256": "a01a9a7030f66aa4a592c64d3b4aecdc072624bf4942e87f95da1f9b0ee22ae5",
+      "name": "net.minecraft.server.level.DistanceManager$FixedPlayerDistanceChunkTracker",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "1f504aa6e677974778cf76e21c43a124691de90f913b652b4f98eb20662e1be7",
+      "disassemblyFile": "bytecode/net.minecraft.server.level.DistanceManager$PlayerTicketTracker.javap.txt",
+      "disassemblySha256": "ba187b91e2c2be7dfe4391e8e59b67d5cafafa686beae47900cec3383631cdf6",
+      "name": "net.minecraft.server.level.DistanceManager$PlayerTicketTracker",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "3d922fb36f54154a1d56bc50e1ff66ce96f9702d230106c5f948779643f7eb95",
+      "disassemblyFile": "bytecode/net.minecraft.server.level.ServerChunkCache.javap.txt",
+      "disassemblySha256": "e67ce9f1b33f13667caaa68e19afe6934740b7a62c1730ae7be4640c7d961cd4",
+      "name": "net.minecraft.server.level.ServerChunkCache",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "e5c5396a5d7ad038e7650373f85b0171dc7a0462344d3b0474443dbd69345cb9",
+      "disassemblyFile": "bytecode/net.minecraft.server.level.ServerChunkCache$ChunkAndHolder.javap.txt",
+      "disassemblySha256": "d8024df364c90bd51ab49a5c1b3023d19ba3c9e82a15e0c0d068b1cd3ac5459c",
+      "name": "net.minecraft.server.level.ServerChunkCache$ChunkAndHolder",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "1ff8b3fdde43d3a92fb7152a7ce619d3827d5742ae183fc20640ec524a5d6d08",
+      "disassemblyFile": "bytecode/net.minecraft.server.level.ServerChunkCache$MainThreadExecutor.javap.txt",
+      "disassemblySha256": "5b142fa3d0d3ff6a8f2097d61e5bf969d69195f448543fe35cec633c0f650b61",
+      "name": "net.minecraft.server.level.ServerChunkCache$MainThreadExecutor",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "0210ec59000410d4284eeec225699b49b592ba659c8a16b49ac76916192585d1",
+      "disassemblyFile": "bytecode/net.minecraft.server.level.ServerLevel.javap.txt",
+      "disassemblySha256": "3bc4951b4488a2f560d1a616a814c7e90ece8543e7673ebef8feee75925fa372",
+      "name": "net.minecraft.server.level.ServerLevel",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "73b44a929f30a3f4f97a7c4d90e3419b48271bbde192a02aebb72db8e36295cb",
+      "disassemblyFile": "bytecode/net.minecraft.server.level.ServerLevel$EntityCallbacks.javap.txt",
+      "disassemblySha256": "a45be974fd5de2c6ae89330ce6bf52a0aa2950a20bc1d5c4ccbcc6ec0b00d81c",
+      "name": "net.minecraft.server.level.ServerLevel$EntityCallbacks",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "b126016ae58d5c336f376c921bfd8e08451018ac459565ae44e3eff7dab3f1d0",
+      "disassemblyFile": "bytecode/net.minecraft.server.level.TicketType.javap.txt",
+      "disassemblySha256": "db6e33732f3614b956838d79830a04404e4d23c53a487d1a5ca978998e869eba",
+      "name": "net.minecraft.server.level.TicketType",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "23ba5073f3c3ff9abfffdcc34f1ebb9d32e9f0975e7df41a7951df5061796aeb",
+      "disassemblyFile": "bytecode/net.minecraft.world.entity.Entity.javap.txt",
+      "disassemblySha256": "83b078f18f58e0f1e76087f6ed96b7891e562c5b7de1d5cf90546284dfca5e14",
+      "name": "net.minecraft.world.entity.Entity",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "c4d433dadf544f4c5d2c75410347b4349eb523d64308ed2084717f34585af173",
+      "disassemblyFile": "bytecode/net.minecraft.world.entity.Entity$1.javap.txt",
+      "disassemblySha256": "87678657bc090108b0fc04e1cf29689a39dabd8172c586e9df93e10c9b135171",
+      "name": "net.minecraft.world.entity.Entity$1",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "b39fd3fe734f60e3bd945102e35777a66b188d4488439a37566798a36bea428a",
+      "disassemblyFile": "bytecode/net.minecraft.world.entity.Entity$FluidCalcs.javap.txt",
+      "disassemblySha256": "2c12a703f309d578788b43d264c91488c9fb8e7a3777dab88d2513a63c8a02ba",
+      "name": "net.minecraft.world.entity.Entity$FluidCalcs",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "6e48cde37602ba56f5dc89b3194ae432b88713f3862d320464a72eb7eef1e89b",
+      "disassemblyFile": "bytecode/net.minecraft.world.entity.Entity$MoveFunction.javap.txt",
+      "disassemblySha256": "9e5d34f001c7aa0bbf056716c74dc21999ead997a91ddaca6fbe674ce1e9d6a4",
+      "name": "net.minecraft.world.entity.Entity$MoveFunction",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "39d11615059faef6e1bcd7d0a61fc7c6e9f360865de64c95995ded0b051d7809",
+      "disassemblyFile": "bytecode/net.minecraft.world.entity.Entity$MovementEmission.javap.txt",
+      "disassemblySha256": "3aa706767ee78578ddf41ae3f9ad5c376bfc6a537661f9beeb6563ea3c4f199d",
+      "name": "net.minecraft.world.entity.Entity$MovementEmission",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "7fb79e3161c7dd124e59b3b59b52800137622114ede04f231c98e5e238e1a56f",
+      "disassemblyFile": "bytecode/net.minecraft.world.entity.Entity$RemovalReason.javap.txt",
+      "disassemblySha256": "73956a7614d48b3adf6fd67a0234b70ddd3c6d66757395e30b8753a13083b595",
+      "name": "net.minecraft.world.entity.Entity$RemovalReason",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "4d5d832b434153c4bbaed608b6d742730c0864830f283424f153bcb0ee5b4cab",
+      "disassemblyFile": "bytecode/net.minecraft.world.entity.LivingEntity.javap.txt",
+      "disassemblySha256": "8f8e0c5d8de1f181829b848ac28fa6360011ba4649e38652224fa3eccec0f9c0",
+      "name": "net.minecraft.world.entity.LivingEntity",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "f10903815c18606d9addfe8a79b9747bb74e2c8fd74b49e74150c707f23fad49",
+      "disassemblyFile": "bytecode/net.minecraft.world.entity.LivingEntity$1.javap.txt",
+      "disassemblySha256": "aa4a46b67456ec59846353491aa9d26953e3a478352f9a8587b3f5d7e33fb445",
+      "name": "net.minecraft.world.entity.LivingEntity$1",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "b2a2cefc0667598f1147d08c35799625a44756f0551b2b64ca57701f3b5eabee",
+      "disassemblyFile": "bytecode/net.minecraft.world.entity.LivingEntity$Fallsounds.javap.txt",
+      "disassemblySha256": "adb89fadb79474d9592c4e76b670a5c51dabe063d4c6067d21bf9ea11699b202",
+      "name": "net.minecraft.world.entity.LivingEntity$Fallsounds",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "6dd494cbf470a1fb072648f000cb6047a2a8bee0ab5419744d269230ce3b88f5",
+      "disassemblyFile": "bytecode/net.minecraft.world.entity.Mob.javap.txt",
+      "disassemblySha256": "62a874ee571db393e29e01f6cf9957726acee068523f98e950116bfa7f11ad6e",
+      "name": "net.minecraft.world.entity.Mob",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "b6cf5d7e80abec3f57055888b2c0661628543152a69058c2200b838692136631",
+      "disassemblyFile": "bytecode/net.minecraft.world.entity.Mob$1.javap.txt",
+      "disassemblySha256": "a03592718b7954683ec6d7f6bc809bb03c744ee95c98af43c185915773ae8730",
+      "name": "net.minecraft.world.entity.Mob$1",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "1654980d682860309d9b2ff092ffe34b933dbf9a7457239a250c771db837241b",
+      "disassemblyFile": "bytecode/net.minecraft.world.entity.PathfinderMob.javap.txt",
+      "disassemblySha256": "c4f0949e7056a3fa23a103e19d77e2b86433043a9437854652c4687abfc408b8",
+      "name": "net.minecraft.world.entity.PathfinderMob",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "2b6886c64e1eee43e7ce0ca64013c292b5d3b87ffacaf826e1b02070ed904c3b",
+      "disassemblyFile": "bytecode/net.minecraft.world.level.ForcedChunksSavedData.javap.txt",
+      "disassemblySha256": "28e6709be106efde23ed8b4440fed325c6a7f1385a86538d1d0000f29adfdf30",
+      "name": "net.minecraft.world.level.ForcedChunksSavedData",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "76c727376a62d6181d6cd4ee8612855ab28f01d94381f4f94e89050897bbd4fd",
+      "disassemblyFile": "bytecode/net.minecraft.world.level.entity.PersistentEntitySectionManager.javap.txt",
+      "disassemblySha256": "bd512284e7785b4f7c2e6b45e3165561e6bd580f666423fa426dba0cc56d10b0",
+      "name": "net.minecraft.world.level.entity.PersistentEntitySectionManager",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "96ed05a5e807c92fcbe376abf2d216474ba0412c2c350b31ecddd22dfebe4896",
+      "disassemblyFile": "bytecode/net.minecraft.world.level.entity.PersistentEntitySectionManager$Callback.javap.txt",
+      "disassemblySha256": "95ac7b0ac15a8a2f491da97c2c05c149417b55c7fc2efd76bce77aef4001b861",
+      "name": "net.minecraft.world.level.entity.PersistentEntitySectionManager$Callback",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "ce3959ccde6bd5eb880659b68ca4b3d46a94dcf339d7409119e85641b193552e",
+      "disassemblyFile": "bytecode/net.minecraft.world.level.entity.PersistentEntitySectionManager$ChunkLoadStatus.javap.txt",
+      "disassemblySha256": "677956cb83e719ae2c5b4e552a42464db21b55c965da12ea49472e2db935e9fd",
+      "name": "net.minecraft.world.level.entity.PersistentEntitySectionManager$ChunkLoadStatus",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "786b0b33d95a90faf88689f4e525744019ac56145c56b13c8fe5284bc052e9d1",
+      "disassemblyFile": "bytecode/net.minecraft.world.level.portal.PortalInfo.javap.txt",
+      "disassemblySha256": "58bcaaed6dc606272ea1f0c4213d0002c2fd1b8e91b360725798435caf7367ed",
+      "name": "net.minecraft.world.level.portal.PortalInfo",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "60fe69ff19cabd485565deb24139199ae706ba3b9563efffbb96c70e3baffba9",
+      "disassemblyFile": "bytecode/net.minecraftforge.common.ForgeHooks.javap.txt",
+      "disassemblySha256": "9495d5c75dc7c23ce68abd6275d5e9e93ea9319130ea0f85a14f39a5d5891a43",
+      "name": "net.minecraftforge.common.ForgeHooks",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "0b53113c6e5afec25c9da2c5569ddb0613712ff8e4aed2ebc448548b79b8bcc5",
+      "disassemblyFile": "bytecode/net.minecraftforge.common.ForgeHooks$1.javap.txt",
+      "disassemblySha256": "06ade3ea9db5caf988af26bf8783145e4586c93e8a9fb4cf4a31279ca3170df2",
+      "name": "net.minecraftforge.common.ForgeHooks$1",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "825898f241554a56a0b475e94c8150334b0799557ff318450c8108c4d18a8139",
+      "disassemblyFile": "bytecode/net.minecraftforge.common.ForgeHooks$2.javap.txt",
+      "disassemblySha256": "ffda412bc0f2fa9a249bbe5118d06eae9f1a2d5406442b90089b5dd4332510ad",
+      "name": "net.minecraftforge.common.ForgeHooks$2",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "2790d04485a19229c7af7fe6ce25a282cd74fafa23b097fcf37443828b6cb5e6",
+      "disassemblyFile": "bytecode/net.minecraftforge.common.ForgeHooks$BiomeCallbackFunction.javap.txt",
+      "disassemblySha256": "40fb420f5abd5d0d6ac8c36ef57b2cf5ebf663260f92b11ee7589a74d116a5d9",
+      "name": "net.minecraftforge.common.ForgeHooks$BiomeCallbackFunction",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "26bd73b85a692ee0ece1936bcaa561f4b762530af1d2edd733e988dc989a7f9f",
+      "disassemblyFile": "bytecode/net.minecraftforge.common.ForgeHooks$LootTableContext.javap.txt",
+      "disassemblySha256": "0afba0691000f42a68bf8a5d76522507c47be19c38162fea306862356259ab36",
+      "name": "net.minecraftforge.common.ForgeHooks$LootTableContext",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "e2774394eb8649734c77c732dcf999f24c5218f95b2abd5008ebc93268dfaa88",
+      "disassemblyFile": "bytecode/net.minecraftforge.common.util.ITeleporter.javap.txt",
+      "disassemblySha256": "dc35d959068f001905f618c04c9bda399bc6739d55333224cbbf3a4c376dfb3d",
+      "name": "net.minecraftforge.common.util.ITeleporter",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "dbc1c6b8131d9f7436b57da6d660b42293071e90fad1d0777ff0c5df4dd442a5",
+      "disassemblyFile": "bytecode/net.minecraftforge.common.world.ForgeChunkManager.javap.txt",
+      "disassemblySha256": "e994d7fc2e06a5214e2a4ced430c80f4cc3a74ec177cfcff534e425a71ea387d",
+      "name": "net.minecraftforge.common.world.ForgeChunkManager",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "5d77ced332a72d922a8b8586041faa7dfa7364af376e8aaf85fb4cafbc978413",
+      "disassemblyFile": "bytecode/net.minecraftforge.common.world.ForgeChunkManager$LoadingValidationCallback.javap.txt",
+      "disassemblySha256": "63bed6050473c176f7f1f081c0c39b67d8fc3e944502ace902fb636f4be2bc5d",
+      "name": "net.minecraftforge.common.world.ForgeChunkManager$LoadingValidationCallback",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "a3e6126ef79587854a4c693844383d16e27b2497bd1e31c8544511a85aa5f009",
+      "disassemblyFile": "bytecode/net.minecraftforge.common.world.ForgeChunkManager$TicketHelper.javap.txt",
+      "disassemblySha256": "c016dab23854c00c5e9298f46a54d2d64e166144b0eac59c228cbc2aeeee4446",
+      "name": "net.minecraftforge.common.world.ForgeChunkManager$TicketHelper",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "130318bf511bdfea79f03639ae9d0dfa88bff23b083dcb1abf520b758ee2e327",
+      "disassemblyFile": "bytecode/net.minecraftforge.common.world.ForgeChunkManager$TicketOwner.javap.txt",
+      "disassemblySha256": "0b98c0baebcd7182e016b93d7571432478e71c2cc3e1356a49ee70e118836c46",
+      "name": "net.minecraftforge.common.world.ForgeChunkManager$TicketOwner",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "9c1cc1334c1e8f3ec18173dead3d069feb625cfc05d159b14b7a903235a1964a",
+      "disassemblyFile": "bytecode/net.minecraftforge.common.world.ForgeChunkManager$TicketTracker.javap.txt",
+      "disassemblySha256": "74eb25968d6f3a5ee3fc81fd002900593d76f88cffcf04ec22075855d3c7439c",
+      "name": "net.minecraftforge.common.world.ForgeChunkManager$TicketTracker",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "87002fc5de4b178b6f09c18cf27ef4fce36fad6ffc7b90e14398295df18095cf",
+      "disassemblyFile": "bytecode/net.minecraftforge.event.entity.EntityJoinLevelEvent.javap.txt",
+      "disassemblySha256": "fb14f16196eed8455b5166b3a6d5ad1bd47665ea0881a854e9b99573607627ab",
+      "name": "net.minecraftforge.event.entity.EntityJoinLevelEvent",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "classSha256": "d9dc57f6a13433472a168e1264484ce55c934663e7d39c3d4e434de04dc58d6f",
+      "disassemblyFile": "bytecode/net.minecraftforge.event.entity.EntityLeaveLevelEvent.javap.txt",
+      "disassemblySha256": "2be27fa5ac29ae3c8192f67505c72b62c20cfa44ef105fc873352e882563f644",
+      "name": "net.minecraftforge.event.entity.EntityLeaveLevelEvent",
+      "supplier": "/home/runner/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.4.16_mapped_official_1.20.1/forge-1.20.1-47.4.16_mapped_official_1.20.1.jar",
+      "evidence": "api38160280135/artifact/api-capture"
+    },
+    {
+      "name": "com.talhanation.recruits.inventory.RecruitSimpleContainer",
+      "supplierSha256": "ddc93dd2d6ea0d97aef9b6a7a84dbe5a62e02978da3c37fe2c4e99f8c6581a99",
+      "disassemblyFile": "native-bytecode/RecruitSimpleContainer.javap.txt",
+      "disassemblySha256": "d05279a3beb8bf2c4f5ca49b811ae423035bf5c39adeda87f930374547fdafd3",
+      "evidence": "native38159579852/artifact",
+      "rawClassHashStatus": "Not measured in this older supplemental audit; exact supplier JAR pin fixes contained bytes. Record raw hash in expanded prelaunch capture."
+    },
+    {
+      "name": "com.talhanation.recruits.entities.BowmanEntity",
+      "supplierSha256": "ddc93dd2d6ea0d97aef9b6a7a84dbe5a62e02978da3c37fe2c4e99f8c6581a99",
+      "disassemblyFile": "native-bytecode/BowmanEntity.javap.txt",
+      "disassemblySha256": "ceb0502760b440c906f37821c34e89dc6522e21b61dbb8c8030499ac2a5d0e62",
+      "evidence": "native38159579852/artifact",
+      "rawClassHashStatus": "Not measured in this older supplemental audit; exact supplier JAR pin fixes contained bytes. Record raw hash in expanded prelaunch capture."
+    }
+  ],
+  "reviewedMethods": [
+    {
+      "className": "net.minecraft.world.entity.Entity",
+      "method": "saveWithoutId",
+      "declaration": "public net.minecraft.nbt.CompoundTag saveWithoutId(net.minecraft.nbt.CompoundTag);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/nbt/CompoundTag;",
+      "disassemblyLine": 6852
+    },
+    {
+      "className": "net.minecraft.world.entity.Entity",
+      "method": "load",
+      "declaration": "public void load(net.minecraft.nbt.CompoundTag);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;)V",
+      "disassemblyLine": 7239
+    },
+    {
+      "className": "net.minecraft.world.entity.Entity",
+      "method": "getAllSlots",
+      "declaration": "public java.lang.Iterable<net.minecraft.world.item.ItemStack> getAllSlots();",
+      "descriptor": "()Ljava/lang/Iterable;",
+      "disassemblyLine": 8945
+    },
+    {
+      "className": "net.minecraft.world.entity.Entity",
+      "method": "restoreFrom",
+      "declaration": "public void restoreFrom(net.minecraft.world.entity.Entity);",
+      "descriptor": "(Lnet/minecraft/world/entity/Entity;)V",
+      "disassemblyLine": 10425
+    },
+    {
+      "className": "net.minecraft.world.entity.Entity",
+      "method": "changeDimension",
+      "declaration": "public net.minecraft.world.entity.Entity changeDimension(net.minecraft.server.level.ServerLevel);",
+      "descriptor": "(Lnet/minecraft/server/level/ServerLevel;)Lnet/minecraft/world/entity/Entity;",
+      "disassemblyLine": 10462
+    },
+    {
+      "className": "net.minecraft.world.entity.Entity",
+      "method": "changeDimension",
+      "declaration": "public net.minecraft.world.entity.Entity changeDimension(net.minecraft.server.level.ServerLevel, net.minecraftforge.common.util.ITeleporter);",
+      "descriptor": "(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraftforge/common/util/ITeleporter;)Lnet/minecraft/world/entity/Entity;",
+      "disassemblyLine": 10478
+    },
+    {
+      "className": "net.minecraft.world.entity.Entity",
+      "method": "removeAfterChangingDimensions",
+      "declaration": "protected void removeAfterChangingDimensions();",
+      "descriptor": "()V",
+      "disassemblyLine": 10577
+    },
+    {
+      "className": "net.minecraft.world.entity.Entity",
+      "method": "setRemoved",
+      "declaration": "public final void setRemoved(net.minecraft.world.entity.Entity$RemovalReason);",
+      "descriptor": "(Lnet/minecraft/world/entity/Entity$RemovalReason;)V",
+      "disassemblyLine": 14049
+    },
+    {
+      "className": "net.minecraft.world.entity.Entity",
+      "method": "shouldBeSaved",
+      "declaration": "public boolean shouldBeSaved();",
+      "descriptor": "()Z",
+      "disassemblyLine": 14115
+    },
+    {
+      "className": "net.minecraft.world.entity.Entity",
+      "method": "lambda$changeDimension$16",
+      "declaration": "private net.minecraft.world.entity.Entity lambda$changeDimension$16(net.minecraft.server.level.ServerLevel, net.minecraft.world.level.portal.PortalInfo, java.lang.Boolean);",
+      "descriptor": "(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/portal/PortalInfo;Ljava/lang/Boolean;)Lnet/minecraft/world/entity/Entity;",
+      "disassemblyLine": 14960
+    },
+    {
+      "className": "net.minecraft.world.entity.Mob",
+      "method": "addAdditionalSaveData",
+      "declaration": "public void addAdditionalSaveData(net.minecraft.nbt.CompoundTag);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;)V",
+      "disassemblyLine": 1075
+    },
+    {
+      "className": "net.minecraft.world.entity.Mob",
+      "method": "readAdditionalSaveData",
+      "declaration": "public void readAdditionalSaveData(net.minecraft.nbt.CompoundTag);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;)V",
+      "disassemblyLine": 1398
+    },
+    {
+      "className": "net.minecraft.world.entity.Mob",
+      "method": "removeAfterChangingDimensions",
+      "declaration": "protected void removeAfterChangingDimensions();",
+      "descriptor": "()V",
+      "disassemblyLine": 5553
+    },
+    {
+      "className": "net.minecraft.world.entity.Mob",
+      "method": "lambda$removeAfterChangingDimensions$6",
+      "declaration": "private static void lambda$removeAfterChangingDimensions$6(net.minecraft.world.item.ItemStack);",
+      "descriptor": "(Lnet/minecraft/world/item/ItemStack;)V",
+      "disassemblyLine": 5649
+    },
+    {
+      "className": "net.minecraftforge.common.util.ITeleporter",
+      "method": "placeEntity",
+      "declaration": "public default net.minecraft.world.entity.Entity placeEntity(net.minecraft.world.entity.Entity, net.minecraft.server.level.ServerLevel, net.minecraft.server.level.ServerLevel, float, java.util.function.Function<java.lang.Boolean, net.minecraft.world.entity.Entity>);",
+      "descriptor": "(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/server/level/ServerLevel;FLjava/util/function/Function;)Lnet/minecraft/world/entity/Entity;",
+      "disassemblyLine": 3
+    },
+    {
+      "className": "net.minecraftforge.common.util.ITeleporter",
+      "method": "getPortalInfo",
+      "declaration": "public default net.minecraft.world.level.portal.PortalInfo getPortalInfo(net.minecraft.world.entity.Entity, net.minecraft.server.level.ServerLevel, java.util.function.Function<net.minecraft.server.level.ServerLevel, net.minecraft.world.level.portal.PortalInfo>);",
+      "descriptor": "(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/server/level/ServerLevel;Ljava/util/function/Function;)Lnet/minecraft/world/level/portal/PortalInfo;",
+      "disassemblyLine": 23
+    },
+    {
+      "className": "net.minecraftforge.common.util.ITeleporter",
+      "method": "isVanilla",
+      "declaration": "public default boolean isVanilla();",
+      "descriptor": "()Z",
+      "disassemblyLine": 54
+    },
+    {
+      "className": "net.minecraftforge.common.ForgeHooks",
+      "method": "onTravelToDimension",
+      "declaration": "public static boolean onTravelToDimension(net.minecraft.world.entity.Entity, net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>);",
+      "descriptor": "(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/resources/ResourceKey;)Z",
+      "disassemblyLine": 1843
+    },
+    {
+      "className": "net.minecraft.server.level.ServerLevel",
+      "method": "tick",
+      "declaration": "public void tick(java.util.function.BooleanSupplier);",
+      "descriptor": "(Ljava/util/function/BooleanSupplier;)V",
+      "disassemblyLine": 524
+    },
+    {
+      "className": "net.minecraft.server.level.ServerLevel",
+      "method": "addDuringTeleport",
+      "declaration": "public void addDuringTeleport(net.minecraft.world.entity.Entity);",
+      "descriptor": "(Lnet/minecraft/world/entity/Entity;)V",
+      "disassemblyLine": 2563
+    },
+    {
+      "className": "net.minecraft.server.level.ServerLevel",
+      "method": "addEntity",
+      "declaration": "private boolean addEntity(net.minecraft.world.entity.Entity);",
+      "descriptor": "(Lnet/minecraft/world/entity/Entity;)Z",
+      "disassemblyLine": 2697
+    },
+    {
+      "className": "net.minecraft.server.level.ServerLevel",
+      "method": "areEntitiesLoaded",
+      "declaration": "public boolean areEntitiesLoaded(long);",
+      "descriptor": "(J)Z",
+      "disassemblyLine": 5642
+    },
+    {
+      "className": "net.minecraft.server.level.ServerLevel",
+      "method": "isPositionEntityTicking",
+      "declaration": "public boolean isPositionEntityTicking(net.minecraft.core.BlockPos);",
+      "descriptor": "(Lnet/minecraft/core/BlockPos;)Z",
+      "disassemblyLine": 5680
+    },
+    {
+      "className": "net.minecraft.server.level.ServerLevel$EntityCallbacks",
+      "method": "onTrackingEnd",
+      "declaration": "public void onTrackingEnd(net.minecraft.world.entity.Entity);",
+      "descriptor": "(Lnet/minecraft/world/entity/Entity;)V",
+      "disassemblyLine": 188
+    },
+    {
+      "className": "net.minecraft.server.level.ServerLevel$EntityCallbacks",
+      "method": "onTrackingEnd",
+      "declaration": "public void onTrackingEnd(java.lang.Object);",
+      "descriptor": "(Ljava/lang/Object;)V",
+      "disassemblyLine": 333
+    },
+    {
+      "className": "net.minecraft.world.level.entity.PersistentEntitySectionManager",
+      "method": "addNewEntity",
+      "declaration": "public boolean addNewEntity(T);",
+      "descriptor": "(Lnet/minecraft/world/level/entity/EntityAccess;)Z",
+      "disassemblyLine": 169
+    },
+    {
+      "className": "net.minecraft.world.level.entity.PersistentEntitySectionManager",
+      "method": "addEntity",
+      "declaration": "private boolean addEntity(T, boolean);",
+      "descriptor": "(Lnet/minecraft/world/level/entity/EntityAccess;Z)Z",
+      "disassemblyLine": 199
+    },
+    {
+      "className": "net.minecraft.world.level.entity.PersistentEntitySectionManager",
+      "method": "addEntityWithoutEvent",
+      "declaration": "private boolean addEntityWithoutEvent(T, boolean);",
+      "descriptor": "(Lnet/minecraft/world/level/entity/EntityAccess;Z)Z",
+      "disassemblyLine": 235
+    },
+    {
+      "className": "net.minecraft.world.level.entity.PersistentEntitySectionManager",
+      "method": "storeChunkSections",
+      "declaration": "private boolean storeChunkSections(long, java.util.function.Consumer<T>);",
+      "descriptor": "(JLjava/util/function/Consumer;)Z",
+      "disassemblyLine": 546
+    },
+    {
+      "className": "net.minecraft.world.level.entity.PersistentEntitySectionManager",
+      "method": "requestChunkLoad",
+      "declaration": "private void requestChunkLoad(long);",
+      "descriptor": "(J)V",
+      "disassemblyLine": 637
+    },
+    {
+      "className": "net.minecraft.world.level.entity.PersistentEntitySectionManager",
+      "method": "processChunkUnload",
+      "declaration": "private boolean processChunkUnload(long);",
+      "descriptor": "(J)Z",
+      "disassemblyLine": 678
+    },
+    {
+      "className": "net.minecraft.world.level.entity.PersistentEntitySectionManager",
+      "method": "unloadEntity",
+      "declaration": "private void unloadEntity(net.minecraft.world.level.entity.EntityAccess);",
+      "descriptor": "(Lnet/minecraft/world/level/entity/EntityAccess;)V",
+      "disassemblyLine": 710
+    },
+    {
+      "className": "net.minecraft.world.level.entity.PersistentEntitySectionManager",
+      "method": "processPendingLoads",
+      "declaration": "private void processPendingLoads();",
+      "descriptor": "()V",
+      "disassemblyLine": 746
+    },
+    {
+      "className": "net.minecraft.world.level.entity.PersistentEntitySectionManager",
+      "method": "saveAll",
+      "declaration": "public void saveAll();",
+      "descriptor": "()V",
+      "disassemblyLine": 857
+    },
+    {
+      "className": "net.minecraft.world.level.entity.PersistentEntitySectionManager",
+      "method": "close",
+      "declaration": "public void close() throws java.io.IOException;",
+      "descriptor": "()V",
+      "disassemblyLine": 896
+    },
+    {
+      "className": "net.minecraft.world.level.entity.PersistentEntitySectionManager",
+      "method": "areEntitiesLoaded",
+      "declaration": "public boolean areEntitiesLoaded(long);",
+      "descriptor": "(J)Z",
+      "disassemblyLine": 976
+    },
+    {
+      "className": "net.minecraft.world.level.entity.PersistentEntitySectionManager",
+      "method": "lambda$processPendingLoads$11",
+      "declaration": "private void lambda$processPendingLoads$11(net.minecraft.world.level.entity.EntityAccess);",
+      "descriptor": "(Lnet/minecraft/world/level/entity/EntityAccess;)V",
+      "disassemblyLine": 1261
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager",
+      "method": "hasForcedChunks",
+      "declaration": "public static boolean hasForcedChunks(net.minecraft.server.level.ServerLevel);",
+      "descriptor": "(Lnet/minecraft/server/level/ServerLevel;)Z",
+      "disassemblyLine": 61
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager",
+      "method": "forceChunk",
+      "declaration": "public static boolean forceChunk(net.minecraft.server.level.ServerLevel, java.lang.String, net.minecraft.core.BlockPos, int, int, boolean, boolean);",
+      "descriptor": "(Lnet/minecraft/server/level/ServerLevel;Ljava/lang/String;Lnet/minecraft/core/BlockPos;IIZZ)Z",
+      "disassemblyLine": 100
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager",
+      "method": "forceChunk",
+      "declaration": "public static boolean forceChunk(net.minecraft.server.level.ServerLevel, java.lang.String, net.minecraft.world.entity.Entity, int, int, boolean, boolean);",
+      "descriptor": "(Lnet/minecraft/server/level/ServerLevel;Ljava/lang/String;Lnet/minecraft/world/entity/Entity;IIZZ)Z",
+      "disassemblyLine": 130
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager",
+      "method": "forceChunk",
+      "declaration": "public static boolean forceChunk(net.minecraft.server.level.ServerLevel, java.lang.String, java.util.UUID, int, int, boolean, boolean);",
+      "descriptor": "(Lnet/minecraft/server/level/ServerLevel;Ljava/lang/String;Ljava/util/UUID;IIZZ)Z",
+      "disassemblyLine": 155
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager",
+      "method": "forceChunk",
+      "declaration": "private static <T extends java.lang.Comparable<? super T>> boolean forceChunk(net.minecraft.server.level.ServerLevel, java.lang.String, T, int, int, boolean, boolean, net.minecraft.server.level.TicketType<net.minecraftforge.common.world.ForgeChunkManager$TicketOwner<T>>, java.util.function.Function<net.minecraft.world.level.ForcedChunksSavedData, net.minecraftforge.common.world.ForgeChunkManager$TicketTracker<T>>);",
+      "descriptor": "(Lnet/minecraft/server/level/ServerLevel;Ljava/lang/String;Ljava/lang/Comparable;IIZZLnet/minecraft/server/level/TicketType;Ljava/util/function/Function;)Z",
+      "disassemblyLine": 185
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager",
+      "method": "forceChunk",
+      "declaration": "private static <T extends java.lang.Comparable<? super T>> void forceChunk(net.minecraft.server.level.ServerLevel, net.minecraft.world.level.ChunkPos, net.minecraft.server.level.TicketType<net.minecraftforge.common.world.ForgeChunkManager$TicketOwner<T>>, net.minecraftforge.common.world.ForgeChunkManager$TicketOwner<T>, boolean, boolean);",
+      "descriptor": "(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/ChunkPos;Lnet/minecraft/server/level/TicketType;Lnet/minecraftforge/common/world/ForgeChunkManager$TicketOwner;ZZ)V",
+      "disassemblyLine": 299
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager",
+      "method": "reinstatePersistentChunks",
+      "declaration": "public static void reinstatePersistentChunks(net.minecraft.server.level.ServerLevel, net.minecraft.world.level.ForcedChunksSavedData);",
+      "descriptor": "(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/ForcedChunksSavedData;)V",
+      "disassemblyLine": 336
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager",
+      "method": "reinstatePersistentChunks",
+      "declaration": "private static <T extends java.lang.Comparable<? super T>> void reinstatePersistentChunks(net.minecraft.server.level.ServerLevel, net.minecraft.server.level.TicketType<net.minecraftforge.common.world.ForgeChunkManager$TicketOwner<T>>, java.util.Map<net.minecraftforge.common.world.ForgeChunkManager$TicketOwner<T>, it.unimi.dsi.fastutil.longs.LongSet>, boolean);",
+      "descriptor": "(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/server/level/TicketType;Ljava/util/Map;Z)V",
+      "disassemblyLine": 555
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager",
+      "method": "writeForgeForcedChunks",
+      "declaration": "public static void writeForgeForcedChunks(net.minecraft.nbt.CompoundTag, net.minecraftforge.common.world.ForgeChunkManager$TicketTracker<net.minecraft.core.BlockPos>, net.minecraftforge.common.world.ForgeChunkManager$TicketTracker<java.util.UUID>);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;Lnet/minecraftforge/common/world/ForgeChunkManager$TicketTracker;Lnet/minecraftforge/common/world/ForgeChunkManager$TicketTracker;)V",
+      "disassemblyLine": 613
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager",
+      "method": "readForgeForcedChunks",
+      "declaration": "public static void readForgeForcedChunks(net.minecraft.nbt.CompoundTag, net.minecraftforge.common.world.ForgeChunkManager$TicketTracker<net.minecraft.core.BlockPos>, net.minecraftforge.common.world.ForgeChunkManager$TicketTracker<java.util.UUID>);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;Lnet/minecraftforge/common/world/ForgeChunkManager$TicketTracker;Lnet/minecraftforge/common/world/ForgeChunkManager$TicketTracker;)V",
+      "disassemblyLine": 834
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager$TicketTracker",
+      "method": "getChunks",
+      "declaration": "public java.util.Map<net.minecraftforge.common.world.ForgeChunkManager$TicketOwner<T>, it.unimi.dsi.fastutil.longs.LongSet> getChunks();",
+      "descriptor": "()Ljava/util/Map;",
+      "disassemblyLine": 33
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager$TicketTracker",
+      "method": "getTickingChunks",
+      "declaration": "public java.util.Map<net.minecraftforge.common.world.ForgeChunkManager$TicketOwner<T>, it.unimi.dsi.fastutil.longs.LongSet> getTickingChunks();",
+      "descriptor": "()Ljava/util/Map;",
+      "disassemblyLine": 46
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager$TicketTracker",
+      "method": "isEmpty",
+      "declaration": "public boolean isEmpty();",
+      "descriptor": "()Z",
+      "disassemblyLine": 59
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager$TicketTracker",
+      "method": "getTickets",
+      "declaration": "private java.util.Map<net.minecraftforge.common.world.ForgeChunkManager$TicketOwner<T>, it.unimi.dsi.fastutil.longs.LongSet> getTickets(boolean);",
+      "descriptor": "(Z)Ljava/util/Map;",
+      "disassemblyLine": 80
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager$TicketTracker",
+      "method": "remove",
+      "declaration": "private boolean remove(net.minecraftforge.common.world.ForgeChunkManager$TicketOwner<T>, long, boolean);",
+      "descriptor": "(Lnet/minecraftforge/common/world/ForgeChunkManager$TicketOwner;JZ)Z",
+      "disassemblyLine": 98
+    },
+    {
+      "className": "net.minecraftforge.common.world.ForgeChunkManager$TicketTracker",
+      "method": "add",
+      "declaration": "private boolean add(net.minecraftforge.common.world.ForgeChunkManager$TicketOwner<T>, long, boolean);",
+      "descriptor": "(Lnet/minecraftforge/common/world/ForgeChunkManager$TicketOwner;JZ)Z",
+      "disassemblyLine": 147
+    },
+    {
+      "className": "net.minecraft.world.level.ForcedChunksSavedData",
+      "method": "load",
+      "declaration": "public static net.minecraft.world.level.ForcedChunksSavedData load(net.minecraft.nbt.CompoundTag);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/world/level/ForcedChunksSavedData;",
+      "disassemblyLine": 64
+    },
+    {
+      "className": "net.minecraft.world.level.ForcedChunksSavedData",
+      "method": "save",
+      "declaration": "public net.minecraft.nbt.CompoundTag save(net.minecraft.nbt.CompoundTag);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/nbt/CompoundTag;",
+      "disassemblyLine": 94
+    },
+    {
+      "className": "net.minecraft.world.level.ForcedChunksSavedData",
+      "method": "getEntityForcedChunks",
+      "declaration": "public net.minecraftforge.common.world.ForgeChunkManager$TicketTracker<java.util.UUID> getEntityForcedChunks();",
+      "descriptor": "()Lnet/minecraftforge/common/world/ForgeChunkManager$TicketTracker;",
+      "disassemblyLine": 144
+    },
+    {
+      "className": "net.minecraft.server.level.DistanceManager",
+      "method": "addRegionTicket",
+      "declaration": "public <T> void addRegionTicket(net.minecraft.server.level.TicketType<T>, net.minecraft.world.level.ChunkPos, int, T);",
+      "descriptor": "(Lnet/minecraft/server/level/TicketType;Lnet/minecraft/world/level/ChunkPos;ILjava/lang/Object;)V",
+      "disassemblyLine": 609
+    },
+    {
+      "className": "net.minecraft.server.level.DistanceManager",
+      "method": "addRegionTicket",
+      "declaration": "public <T> void addRegionTicket(net.minecraft.server.level.TicketType<T>, net.minecraft.world.level.ChunkPos, int, T, boolean);",
+      "descriptor": "(Lnet/minecraft/server/level/TicketType;Lnet/minecraft/world/level/ChunkPos;ILjava/lang/Object;Z)V",
+      "disassemblyLine": 631
+    },
+    {
+      "className": "net.minecraft.server.level.DistanceManager",
+      "method": "removeRegionTicket",
+      "declaration": "public <T> void removeRegionTicket(net.minecraft.server.level.TicketType<T>, net.minecraft.world.level.ChunkPos, int, T);",
+      "descriptor": "(Lnet/minecraft/server/level/TicketType;Lnet/minecraft/world/level/ChunkPos;ILjava/lang/Object;)V",
+      "disassemblyLine": 675
+    },
+    {
+      "className": "net.minecraft.server.level.DistanceManager",
+      "method": "removeRegionTicket",
+      "declaration": "public <T> void removeRegionTicket(net.minecraft.server.level.TicketType<T>, net.minecraft.world.level.ChunkPos, int, T, boolean);",
+      "descriptor": "(Lnet/minecraft/server/level/TicketType;Lnet/minecraft/world/level/ChunkPos;ILjava/lang/Object;Z)V",
+      "disassemblyLine": 697
+    },
+    {
+      "className": "net.minecraft.server.level.DistanceManager",
+      "method": "inEntityTickingRange",
+      "declaration": "public boolean inEntityTickingRange(long);",
+      "descriptor": "(J)Z",
+      "disassemblyLine": 951
+    },
+    {
+      "className": "com.talhanation.recruits.entities.AbstractInventoryEntity",
+      "method": "addAdditionalSaveData",
+      "declaration": "public void addAdditionalSaveData(net.minecraft.nbt.CompoundTag);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;)V",
+      "disassemblyLine": 83
+    },
+    {
+      "className": "com.talhanation.recruits.entities.AbstractInventoryEntity",
+      "method": "readAdditionalSaveData",
+      "declaration": "public void readAdditionalSaveData(net.minecraft.nbt.CompoundTag);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;)V",
+      "disassemblyLine": 161
+    },
+    {
+      "className": "com.talhanation.recruits.entities.AbstractInventoryEntity",
+      "method": "setItemSlot",
+      "declaration": "public void setItemSlot(net.minecraft.world.entity.EquipmentSlot, net.minecraft.world.item.ItemStack);",
+      "descriptor": "(Lnet/minecraft/world/entity/EquipmentSlot;Lnet/minecraft/world/item/ItemStack;)V",
+      "disassemblyLine": 484
+    },
+    {
+      "className": "com.talhanation.recruits.entities.AbstractInventoryEntity",
+      "method": "createInventory",
+      "declaration": "public void createInventory();",
+      "descriptor": "()V",
+      "disassemblyLine": 673
+    },
+    {
+      "className": "com.talhanation.recruits.entities.AbstractInventoryEntity",
+      "method": "resetItemInHand",
+      "declaration": "public void resetItemInHand();",
+      "descriptor": "()V",
+      "disassemblyLine": 1833
+    },
+    {
+      "className": "com.talhanation.recruits.entities.AbstractChunkLoaderEntity",
+      "method": "tick",
+      "declaration": "public void tick();",
+      "descriptor": "()V",
+      "disassemblyLine": 27
+    },
+    {
+      "className": "com.talhanation.recruits.entities.AbstractChunkLoaderEntity",
+      "method": "updateChunkLoading",
+      "declaration": "public void updateChunkLoading();",
+      "descriptor": "()V",
+      "disassemblyLine": 57
+    },
+    {
+      "className": "com.talhanation.recruits.entities.AbstractChunkLoaderEntity",
+      "method": "addAdditionalSaveData",
+      "declaration": "public void addAdditionalSaveData(net.minecraft.nbt.CompoundTag);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;)V",
+      "disassemblyLine": 161
+    },
+    {
+      "className": "com.talhanation.recruits.entities.AbstractChunkLoaderEntity",
+      "method": "readAdditionalSaveData",
+      "declaration": "public void readAdditionalSaveData(net.minecraft.nbt.CompoundTag);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;)V",
+      "disassemblyLine": 199
+    },
+    {
+      "className": "com.talhanation.recruits.entities.AbstractRecruitEntity",
+      "method": "addAdditionalSaveData",
+      "declaration": "public void addAdditionalSaveData(net.minecraft.nbt.CompoundTag);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;)V",
+      "disassemblyLine": 1416
+    },
+    {
+      "className": "com.talhanation.recruits.entities.AbstractRecruitEntity",
+      "method": "readAdditionalSaveData",
+      "declaration": "public void readAdditionalSaveData(net.minecraft.nbt.CompoundTag);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;)V",
+      "disassemblyLine": 1744
+    },
+    {
+      "className": "com.talhanation.workers.entities.AbstractWorkerEntity",
+      "method": "addAdditionalSaveData",
+      "declaration": "public void addAdditionalSaveData(net.minecraft.nbt.CompoundTag);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;)V",
+      "disassemblyLine": 764
+    },
+    {
+      "className": "com.talhanation.workers.entities.AbstractWorkerEntity",
+      "method": "readAdditionalSaveData",
+      "declaration": "public void readAdditionalSaveData(net.minecraft.nbt.CompoundTag);",
+      "descriptor": "(Lnet/minecraft/nbt/CompoundTag;)V",
+      "disassemblyLine": 803
+    }
+  ]
+}

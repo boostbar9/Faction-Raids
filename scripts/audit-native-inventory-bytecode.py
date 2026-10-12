@@ -40,6 +40,15 @@ TARGETS = {
     ]),
 }
 
+# Additional inheritance boundaries only for the explicit shared death-with-cargo scenario.
+SHARED_DEATH_TARGETS = {
+    'recruits': [
+        'com.talhanation.recruits.entities.AbstractChunkLoaderEntity',
+        'com.talhanation.recruits.pathfinding.AsyncPathfinderMob',
+    ],
+    'workers': ['com.talhanation.workers.entities.BuilderEntity'],
+}
+
 def sha256(path):
     digest = hashlib.sha256()
     with path.open('rb') as stream:
@@ -66,6 +75,9 @@ def main():
     report = {'status': 'passed', 'scope': 'Exact pinned remapped development JAR bytecode, before runtime mixin transformation',
               'noVendorJarsUploaded': True, 'artifacts': {}}
     for mod, (filename, classes) in TARGETS.items():
+        classes = list(classes)
+        if result.get('sharedCrewRequested') is True:
+            classes += SHARED_DEATH_TARGETS.get(mod, [])
         expected = receipt[mod]
         if expected['fileName'] != filename or len(expected['sha256']) != 64:
             raise RuntimeError(f'Unexpected actual runtime artifact for {mod}')
@@ -87,7 +99,7 @@ def main():
             outputs.append({'class': name, 'file': target.name, 'sha256': sha256(target)})
         report['artifacts'][mod] = {'fileName': filename, 'sha256': expected['sha256'], 'classes': outputs}
     (evidence / 'native-bytecode-audit.json').write_text(json.dumps(report, indent=2) + '\n')
-    total = sum(len(classes) for _, classes in TARGETS.values())
+    total = sum(len(artifact['classes']) for artifact in report['artifacts'].values())
     print(f'Verified disassembly evidence for {total} exact pinned native inventory/goal/claim/spawn/navigation classes; no vendor JARs copied.')
 
 if __name__ == '__main__':

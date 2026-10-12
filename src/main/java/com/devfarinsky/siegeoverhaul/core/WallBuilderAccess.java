@@ -86,6 +86,14 @@ public final class WallBuilderAccess extends Goal {
         return false;
     }
 
+    /** Read-only access for the authenticated shared-stage completion barrier. */
+    public static Goal protectedNativeGoal(Mob worker) {
+        if (worker == null || worker.goalSelector == null) return null;
+        for (var wrapped : worker.goalSelector.getAvailableGoals())
+            if (wrapped.getGoal() instanceof WallBuilderAccess access) return access.delegate;
+        return null;
+    }
+
     /** Reset only stale transient native goal state after the new area's assignment succeeds. */
     public static boolean prepareProtectedHandoff(Mob worker, Entity expectedArea) {
         if (worker.goalSelector == null || NativeConstructionGuard.currentArea(worker) != expectedArea) return false;
@@ -126,14 +134,16 @@ public final class WallBuilderAccess extends Goal {
     @Override public boolean isInterruptable() { return delegate.isInterruptable(); }
     @Override public boolean requiresUpdateEveryTick() { return delegate.requiresUpdateEveryTick(); }
     @Override public void start() { reservedArea = null; approachTarget = null; lastSelfObstruction = null; delegate.start(); }
-    @Override public void stop() { delegate.stop(); reservedArea = null; approachTarget = null; lastSelfObstruction = null; destination = null; destinationPartial = false; destinationDetour = false; lastTarget = null; pendingPath = null; pendingSites = Set.of(); pendingDetour = false; rejectedArrivals = Set.of(); }
+    @Override public void stop() { NativeConstructionGuard.releaseCrewWork(worker); delegate.stop(); reservedArea = null; approachTarget = null; lastSelfObstruction = null; destination = null; destinationPartial = false; destinationDetour = false; lastTarget = null; pendingPath = null; pendingSites = Set.of(); pendingDetour = false; rejectedArrivals = Set.of(); }
     @Override public void tick() {
         retainCommission();
         if (approachCommission()) return;
         if (recoverBuriedApproach()) return;
         // Access helpers can advance MOVE_TO_WORK_AREA to PREPARE_BREAK_BLOCKS.
         // Validate after those transitions, at the actual native dispatch boundary.
+        if (!NativeConstructionGuard.prepareCrewNativeTick(worker, delegate)) return;
         if (!NativeConstructionGuard.beforeNativeTick(worker, delegate)) {
+            NativeConstructionGuard.releaseCrewWork(worker);
             recoverGuardedSelfObstruction();
             return;
         }
@@ -145,6 +155,7 @@ public final class WallBuilderAccess extends Goal {
         if (awaitMutationArrival(mutationCells)) return;
         delegate.tick();
         NativeConstructionGuard.afterNativeTick(worker, guardedArea, mutationCells);
+        NativeConstructionGuard.afterCrewNativeTick(worker, guardedArea);
         if (!(worker.level() instanceof ServerLevel level) || worker.isPassenger()
                 || worker.isLeashed() || worker.getTarget() != null) return;
         try {
@@ -669,6 +680,10 @@ public final class WallBuilderAccess extends Goal {
         if (!(worker.level() instanceof ServerLevel level) || marker==null) return false;
         boolean obstructs=targets.stream().anyMatch(cell->worker.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(BlockPos.of(cell))));
         if (!obstructs) return true;
+        try {
+            if (!Boolean.FALSE.equals(worker.getClass().getMethod("needsToSleep").invoke(worker))
+                    || !Boolean.TRUE.equals(worker.getClass().getMethod("shouldWork").invoke(worker))) return false;
+        } catch (ReflectiveOperationException | RuntimeException unavailable) { return false; }
         if (worker.isPassenger() || worker.isLeashed() || worker.getTarget()!=null
                 || NativeConstructionGuard.currentArea(worker)!=null) return false;
         Set<Long> columns=new java.util.HashSet<>();

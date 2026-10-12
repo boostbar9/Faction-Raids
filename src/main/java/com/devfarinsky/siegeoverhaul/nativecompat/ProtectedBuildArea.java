@@ -226,7 +226,7 @@ public final class ProtectedBuildArea extends BuildArea {
     }
 
     @Override public boolean canWorkHere(AbstractWorkerEntity worker) {
-        return initialized && queuesReady && reservedBuilder != null && worker != null && reservedBuilder.equals(worker.getUUID())
+        return initialized && queuesReady && reservedBuilder != null && worker != null && NativeConstructionGuard.authorizedParticipant(worker, this, reservedBuilder)
                 && NativeConstructionGuard.commissionPaid(this) && WorkersConstructionRuntime.problem() == null
                 && super.canWorkHere(worker);
     }

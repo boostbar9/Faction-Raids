@@ -40,11 +40,7 @@ public final class PlayerFortificationJobs {
      */
     public static void link(Mob builder, Entity area, UUID owner) {
         if (builder == null || area == null || owner == null) return;
-        CompoundTag workerTag = builder.getPersistentData();
-        workerTag.putUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID, area.getUUID());
-        workerTag.putUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER, owner);
-        workerTag.putLong(ModConstants.Tags.PLAYER_FORTIFICATION_POS, area.blockPosition().asLong());
-        workerTag.remove(ModConstants.Tags.PLAYER_FORTIFICATION_MISSES);
+        linkWorker(builder, area, owner);
 
         CompoundTag areaTag = area.getPersistentData();
         areaTag.putBoolean(ModConstants.Tags.PLAYER_FORTIFICATION_AREA, true);
@@ -53,6 +49,20 @@ public final class PlayerFortificationJobs {
         // A player job must never enter NativeCampConstruction's raid-owned
         // area reload path. Older releases accidentally put this tag on it.
         areaTag.remove(ModConstants.Tags.CAMP_AREA_TEAM);
+    }
+
+    /**
+     * Save only the worker's job association. Shared helpers must not replace
+     * the area's coordinator or change its accepted seal or construction recipe.
+     * This association alone does not grant permission to work or recover a job.
+     */
+    public static void linkWorker(Mob builder, Entity area, UUID owner) {
+        if (builder == null || area == null || owner == null) return;
+        CompoundTag workerTag = builder.getPersistentData();
+        workerTag.putUUID(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID, area.getUUID());
+        workerTag.putUUID(ModConstants.Tags.PLAYER_FORTIFICATION_OWNER, owner);
+        workerTag.putLong(ModConstants.Tags.PLAYER_FORTIFICATION_POS, area.blockPosition().asLong());
+        workerTag.remove(ModConstants.Tags.PLAYER_FORTIFICATION_MISSES);
     }
 
     public static void unlink(Mob builder, UUID expectedArea) {

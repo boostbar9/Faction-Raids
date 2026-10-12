@@ -82,6 +82,25 @@ public final class ProtectedConstructionActions {
                 com.devfarinsky.siegeoverhaul.core.SiegeCore.key(sender));
     }
 
+    /** Read-only current assignment lookup; the paid manifest retains its original builder after succession. */
+    public static Mob projectBuilderForReport(net.minecraft.server.level.ServerLevel level,
+            com.devfarinsky.siegeoverhaul.core.PerimeterProject project) {
+        if (level == null || project == null) return null;
+        try {
+            var ledger = ConstructionEditLedger.get(level);
+            if (!ledger.matchesProjectIdentity(project)) return null;
+            UUID assigned = ledger.assignedBuilder(project);
+            if (!(level.getEntity(assigned) instanceof Mob builder) || !builder.isAlive()
+                    || builder.level() != level || !assigned.equals(builder.getUUID())
+                    || !WorkersBridge.isBuilder(builder)
+                    || !project.header().owner().equals(WorkersBridge.readWorkerOwner(builder))
+                    || !com.devfarinsky.siegeoverhaul.core.PerimeterProjectLink.matches(builder, project, assigned)
+                    || !ledger.sameGeneration(com.devfarinsky.siegeoverhaul.core.PerimeterProjectLink
+                        .ledgerGeneration(builder.getPersistentData()))) return null;
+            return builder;
+        } catch (RuntimeException | LinkageError unavailable) { return null; }
+    }
+
     /** Missing/malformed stage evidence must never fall back to an unrelated legacy job. */
     public static boolean projectScoped(net.minecraft.world.entity.Entity area) {
         try { return PerimeterProjectAuthority.tracked(area); }

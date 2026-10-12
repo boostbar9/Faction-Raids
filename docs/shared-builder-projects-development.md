@@ -1,0 +1,62 @@
+# Shared builder projects: alpha continuation
+
+This work continues experimental 4.53.0-alpha.3 (`2d817d7397a6bdb792dd67913b08d47fce28d1dc`). It does not replace that source with stable 4.52.11 or promote experimental features to stable.
+
+## Current implementation boundary
+
+The first reviewable increment carries the stable wither-rose recovery exclusion into the alpha source and introduces testable crew-membership and transient work-claim primitives. **The current draft integrates helper admission and native scheduling, but is not release-ready or natively verified.** The primitives themselves do not authorize native placement, consume materials, charge a commission, or change the paid blueprint. Passing their tests is not native crew gameplay evidence. Runtime integration is under review, including stage-scoped cleanup provenance and explicit coordinator transfer; do not ship this intermediate checkpoint.
+
+`PerimeterBuilderCrew` retains at most three active helper identities alongside the existing coordinator. Membership is bound to ledger generation, project ID/generation/hash and original coordinator, with admission-stage checks. Retired selectors remain cleanup-only history; they cannot silently regain authority. The immutable manifest and `PerimeterBuilderAssignments` replacement chain remain unchanged.
+
+Transient work claims are separate from durable completion. Claims fence a single worker/target, expire or release after interruption, and never survive marker reload. The actual durable construction receipts, loaded world and native inventory remain authoritative.
+
+## Integration gates still required
+
+- Keep one current native marker and sequential project stage. Preserve its sealed coordinator, recipe, original terrain, payment and reservation.
+- Enlist only loaded, idle, exactly owned native workers with no competing job. Authenticate each worker's own hand lifecycle and protected storage before creating work authority.
+- Add worker-only job links. Existing `PlayerFortificationJobs.link` also writes the marker's coordinator field and must not be called for helpers.
+- Add participant predicates only at worker work/storage boundaries. Marker seals, coordinator replacements and historical stage identities must continue to use coordinator predicates.
+- Validate raw native queues before pruning. Filter only private placement queues, never the shared/aliased mining stack. Initially keep native vegetation clearing with the coordinator.
+- Reserve the actual next target before native dispatch, then revalidate its world protection, player-edit history, body collision and arrival. Pruning cannot hide a removed previously completed block.
+- Helpers wait at native DONE. A shared completion barrier must verify world/shared queues, each worker's remaining native work, and safe inventory cleanup before retiring the marker or compacting the project.
+- Retain member-specific cleanup/destruction proof through reload and terminal compaction. Helper death must not mark the entire project destroyed. Unload is never proof of death or inventory cleanup.
+- Implement and verify continuation when a worker is dismissed/unloaded, including stale worker return, before claiming that requested behavior. Do not silently substitute a death-only feature.
+
+## Required evidence
+
+Full Java 17 regression Build on the exact final source; tests for persistence, ownership, stale selectors, duplicate claims/charges, sleep/work/supply, interruptions and cleanup. Actual native fixtures must demonstrate distinct concurrent placements, finite inventory conservation, one original fee, death/replacement, reload ordering, cancellation and shared completion. Audit exact loaded Workers bytecode; the published runtime's prefetch differs from pinned public source.
+
+Native source reference: Workers `29d26e1df6475fc8d043dc5d455f67b2fd1e9982`. Source review is not gameplay proof. No release may be described as enabling shared crews until integration and native acceptance pass. Publish only an independently reviewed exact tested artifact, preserving experimental release classification.
+
+The opt-in shared-crew native QA now requires a first-section death with real
+nonempty cargo after both workers resume from reload. Exact native new-drop
+identity/count evidence and unchanged other stores must precede exclusion of the
+original dying actor's retained inventory. Missing/extra/aliased drops fail finite
+conservation without compensation. This covers the pinned baseline companions,
+not corpse addons; it does not claim a runtime pass until the exact candidate
+produces verified gameplay evidence.
+
+The shared native helper's initial QA kit is bread only on reviewed clear terrain;
+the coordinator retains its normal tools. Run `38154872840` demonstrated correct
+full-cargo safety after recovery of two complete kits: all nine cargo slots were
+occupied, so the 55-oak request paused without withdrawing any of the 220 chest
+oak. The lean helper setup does not change that production guard or rearrange
+post-commission inventory.
+## Shared native fixture isolation
+
+Native runs `38152323781` and `38157092230` exposed the same setup obstruction:
+NoAI starter civilians parked outside the claim were returned by `CoreCivilians`
+to their saved west-courtyard positions. The helper's body overlapped the first
+returned villager while its valid target claim renewed; the other worker waited
+on that last floor target. Run `38155836811` routed past the same villagers, so
+its success did not demonstrate that the intermittent obstruction was fixed.
+
+Shared-mode QA now prepares at most four sealed same-claim holding cells at
+feet Y48, before creating or commissioning either participant. Stone shells at
+Y47–50, breathable interiors and the unchanged Y64 ground caps are captured in
+the non-plan baseline. The setup avoids both civilian return and overhead
+heightmap effects. Passive checks retain exact auxiliary IDs/positions/bodies
+and the complete baseline across reloads and final acceptance. No live rescue,
+inventory/receipt change, claim relaxation or time-limit extension is allowed.
+General stationary-crowd navigation and progress-aware claim turnover remain
+outside this representative fixture's coverage.

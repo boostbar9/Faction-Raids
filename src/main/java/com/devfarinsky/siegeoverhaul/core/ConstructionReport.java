@@ -132,8 +132,7 @@ public final class ConstructionReport {
                     project.stages().forEach(stage -> projectAreas.add(stage.areaId()));
                     if (result.size() >= 12) continue;
                     var area = project.active() == null ? null : level.getEntity(project.active().areaId());
-                    var candidate = level.getEntity(project.header().builder());
-                    Mob builder = candidate instanceof Mob mob ? mob : null;
+                    Mob builder = ProtectedConstructionActions.projectBuilderForReport(level, project);
                     WorkersConstructionView.Progress progress = null;
                     String activity = "", supplies = "";
                     if (ProtectedConstructionActions.validProjectProgress(area, builder, project)) {

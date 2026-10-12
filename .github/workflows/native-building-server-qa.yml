@@ -4,7 +4,7 @@ name: Native Building Server QA
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main]
+    branches: [main, 'release/4.53.0-alpha.3']
     types: [opened, reopened, synchronize, labeled]
 
 permissions:
@@ -78,10 +78,17 @@ jobs:
               'clearance-and-world-saveddata-disk-roundtrip',
               'fakeplayer-direct-handler-authorization-and-cancel',
               'offline-native-inventory-authority-and-loss-recovery',
+              'native-builder-recovery-vegetation-safety',
           ]
           assert data['checks'] == expected, data
           console = (root / 'server-console.log').read_text()
-          assert console.count('SIEGE_NATIVE_SERVER_QA_COMPLETED tests=1 checks=8') == 1, console[-5000:]
+          assert console.count('SIEGE_NATIVE_SERVER_QA_COMPLETED tests=1 checks=9') == 1, console[-5000:]
+          recovery = data['builderRecovery']
+          for case in ['airControl', 'allFeetRosesRejected', 'nearestFeetRoseRejected',
+                       'upperBodyRoseRejected', 'poppyControl', 'tallGrassControl',
+                       'sunflowerControl', 'workerUnmoved']:
+              assert recovery[case] == 'passed', (case, recovery)
+          assert 'Direct destination queries' in recovery['scope'], recovery
           authority = data['inventoryAuthority']
           assert authority['ownerConnected'] is False, authority
           assert authority['profileCacheSource'] == 'Explicit isolated GameProfileCache dependency; GameTest server cache remains absent', authority

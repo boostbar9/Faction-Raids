@@ -66,6 +66,40 @@ class PerimeterDestroyedBuilderCleanupTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void destroyedPendingHelperNoLongerBlocksActualCancellationAfterReload() {
+        for (boolean partialReceipt : new boolean[]{false, true}) try (var f = new Fixture()) {
+            Mob helper = mock(Mob.class); UUID helperId = UUID.randomUUID(); var helperData = new CompoundTag();
+            when(helper.getUUID()).thenReturn(helperId); when(helper.level()).thenReturn(f.level);
+            when(helper.getPersistentData()).thenReturn(helperData); when(helper.getRemovalReason()).thenReturn(Entity.RemovalReason.KILLED);
+            f.bridge.when(() -> WorkersBridge.isBuilder(helper)).thenReturn(true);
+            f.bridge.when(() -> WorkersBridge.readWorkerOwner(helper)).thenReturn(f.project.header().owner());
+            assertTrue(f.ledger.enlistCrew(f.project, helperId));
+            if (partialReceipt) {
+                PerimeterProjectLink.set(helper, f.project, helperId);
+                assertTrue(PerimeterProjectLink.bindLedgerGeneration(helper, f.ledger.generation()));
+                helperData.putUUID(AREA, f.project.active().areaId()); helperData.putUUID(GENERATION, f.ledger.generation());
+                assertTrue(f.ledger.retainHandLifecycle(helperData, helperId, f.project.header().owner(), f.project.active().areaId()));
+            }
+            CompoundTag helperBefore = helperData.copy(), coreBefore = f.core.copy();
+            NativeConstructionGuard.areaRemoved(new EntityLeaveLevelEvent(helper, f.level));
+            assertTrue(f.ledger.crewBuilderDestroyed(f.project, helperId));
+            assertTrue(f.ledger.reservedCrewMembers(f.project).isEmpty());
+            assertNull(f.ledger.projectBuilderDestructionReceipt(f.project));
+            assertEquals(coreBefore, f.core); f.reload();
+            assertTrue(f.ledger.crewBuilderDestroyed(f.project, helperId));
+            // A separately authenticated coordinator removal supplies only its own existing cleanup proof.
+            f.remove(Entity.RemovalReason.KILLED); assertTrue(f.cancel());
+            var terminal = PerimeterProjectStore.terminal(f.core, f.project.header().projectId());
+            assertNotNull(terminal); assertEquals(PerimeterProject.State.CANCELED, terminal.state());
+            assertNotNull(f.ledger.terminalCrewBuilderDestructionReceipt(terminal, helperId));
+            assertFalse(f.ledger.reserves(f.cells())); assertEquals(936, FactionBank.balance(f.core));
+            assertEquals(helperBefore, helperData); verify(helper, never()).setItemSlot(any(), any());
+            verify(helper, never()).remove(any()); verify(f.area).removeAuthorized();
+            verify(f.level, never()).setBlock(any(), any(), anyInt()); verify(f.level, never()).destroyBlock(any(), anyBoolean());
+            f.storage.verifyNoInteractions(); f.bridge.verify(() -> WorkersBridge.detachBuildAreaReference(any(), any()), never());
+        }
+    }
+
     @Test void missingUnloadedAndDimensionTransferredWorkersNeverSupplyDestructionEvidence() throws Exception {
         for(Entity.RemovalReason reason:new Entity.RemovalReason[]{null,Entity.RemovalReason.UNLOADED_TO_CHUNK,Entity.RemovalReason.CHANGED_DIMENSION}) {
             try(var f=new Fixture()) {
@@ -148,8 +182,10 @@ class PerimeterDestroyedBuilderCleanupTest extends MinecraftTestSupport {
                 assertNotNull(NativeConstructionGuard.commissionProblem(restored.worker()),"No new commission may reuse the stale worker");
                 assertNotNull(PerimeterProjectAuthority.problem(f.level,restored.worker(),f.area,false,false));
                 assertFalse(ProtectedStorageAccess.drainCleanup(restored.worker()));
-                // Reconciliation may allow ordinary living ticks while protected work stays blocked.
-                assertTrue(NativePerimeterProjects.reconcileWorker(restored.worker()));
+                // Cleanup completion is separate from the guarded living-tick deferral. An orphaned
+                // persisted cleanup/review journal is unsafe in both paths, not ordinary item use.
+                assertFalse(NativePerimeterProjects.reconcileWorker(restored.worker()));
+                assertFalse(NativePerimeterProjects.reconcileWorkerBeforeTick(restored.worker()));
                 assertFalse(NativeConstructionGuard.retireBuilderAssociation(restored.worker(),f.project.active().areaId()));
                 assertFalse(NativeConstructionGuard.beforeNativeTick(restored.worker(),mock(Goal.class)));
                 for(var wrapped:restored.goals()) {
