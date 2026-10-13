@@ -177,7 +177,10 @@ public final class PerimeterConstruction {
     static String territoryDenial(ServerLevel level, ChunkPos chunk, RecruitsClaimsBridge.TerritorySnapshot territory,
                                   RaidSavedData.Anchor identity) {
         if (ClaimBridge.providerBroken()) return DefenseStructures.PROVIDER_FAILURE;
-        if (!territory.chunks().contains(chunk) || !RecruitsClaimsBridge.isChunkOwnedBy(level, chunk, territory.factionStringId()))
+        boolean owned = territory.chunks().contains(chunk) && RecruitsClaimsBridge.isChunkOwnedBy(level, chunk, territory.factionStringId());
+        // A Recruits lookup that throws disables that bridge; that is unknown ownership, not lost territory.
+        if (ClaimBridge.providerBroken()) return DefenseStructures.PROVIDER_FAILURE;
+        if (!owned)
             return "Chunk " + chunk.x + ", " + chunk.z + " is no longer part of your faction territory. Refresh the territory and review again.";
         boolean foreign = ClaimBridge.isForeignClaim(level, chunk, identity);
         if (ClaimBridge.providerBroken()) return DefenseStructures.PROVIDER_FAILURE;

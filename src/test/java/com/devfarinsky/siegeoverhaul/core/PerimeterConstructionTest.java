@@ -18,6 +18,27 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class PerimeterConstructionTest extends MinecraftTestSupport {
+    @Test void territoryDenialReportsRecruitsFailureInsteadOfLostTerritory() {
+        var chunk = new ChunkPos(3, -2);
+        var territory = new com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.TerritorySnapshot("faction", Set.of(chunk), null);
+        try (var recruits = mockStatic(com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.class, CALLS_REAL_METHODS)) {
+            recruits.when(() -> com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.isChunkOwnedBy(any(), any(), any())).thenReturn(true);
+            assertNull(PerimeterConstruction.territoryDenial(mock(ServerLevel.class), chunk, territory, null));
+            var disabled = new java.util.concurrent.atomic.AtomicBoolean();
+            recruits.when(() -> com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.isChunkOwnedBy(any(), any(), any()))
+                    .thenAnswer(call -> { disabled.set(true); return false; });
+            recruits.when(com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge::failed).thenAnswer(call -> disabled.get());
+            String message = PerimeterConstruction.territoryDenial(mock(ServerLevel.class), chunk, territory, null);
+            assertEquals(DefenseStructures.PROVIDER_FAILURE, message);
+            assertFalse(message.contains("no longer part"), message);
+        }
+        // Without a failure, a chunk the faction lost is still reported as lost territory.
+        try (var recruits = mockStatic(com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.class, CALLS_REAL_METHODS)) {
+            recruits.when(() -> com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.isChunkOwnedBy(any(), any(), any())).thenReturn(false);
+            String lost = PerimeterConstruction.territoryDenial(mock(ServerLevel.class), chunk, territory, null);
+            assertTrue(lost.contains("no longer part of your faction territory"), lost);
+        }
+    }
     private PerimeterBlueprint.Plan plan() { return PerimeterBlueprint.create(Set.of(new ChunkPos(0,0)),
             (x,z)->PerimeterBlueprint.Surface.ready(64),PerimeterBlueprint.Palette.COBBLESTONE); }
     private ServerLevel level() {

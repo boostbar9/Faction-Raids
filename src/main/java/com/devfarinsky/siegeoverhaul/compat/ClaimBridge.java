@@ -159,7 +159,7 @@ public final class ClaimBridge {
      * command to surface provider-availability status.
      */
     /** True while a claim provider failed and ownership is unknown, so placement is blocked rather than foreign. */
-    public static boolean providerBroken() { return !BROKEN_PROVIDERS.isEmpty(); }
+    public static boolean providerBroken() { return !BROKEN_PROVIDERS.isEmpty() || RecruitsClaimsBridge.failed(); }
 
     public static boolean anyProviderAvailable() {
         return !BROKEN_PROVIDERS.isEmpty() || RecruitsClaimsBridge.available() || ftbAvailable() || opacAvailable();

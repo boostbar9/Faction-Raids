@@ -241,6 +241,22 @@ class DefenseStructuresTest extends MinecraftTestSupport {
             assertEquals(DefenseStructures.PROVIDER_FAILURE, DefenseStructures.claimDenial(clearLevel(), coreChunk, coreClaim, null));
         } finally { broken.clear(); }
     }
+    @Test void recruitsLookupThatFailsMidSessionIsUnknownOwnershipNotUnclaimed() {
+        var coreChunk = new net.minecraft.world.level.ChunkPos(origin);
+        var outside = new net.minecraft.world.level.ChunkPos(coreChunk.x + 1, coreChunk.z);
+        var coreClaim = new com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.ClaimSnapshot(
+                UUID.randomUUID(), "Home", "faction", coreChunk, java.util.Set.of(coreChunk), false, 10, 10);
+        try (var recruits = mockStatic(com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.class, CALLS_REAL_METHODS)) {
+            var disabled = new java.util.concurrent.atomic.AtomicBoolean();
+            // getClaimAt threw: the bridge disables itself and the ownership check reports "not owned".
+            recruits.when(() -> com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.isChunkOwnedBy(any(), any(), any()))
+                    .thenAnswer(call -> { disabled.set(true); return false; });
+            recruits.when(com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge::failed).thenAnswer(call -> disabled.get());
+            String message = DefenseStructures.claimDenial(clearLevel(), outside, coreClaim, null);
+            assertEquals(DefenseStructures.PROVIDER_FAILURE, message);
+            assertFalse(message.contains("Claim that chunk"), message);
+        }
+    }
     @Test void sameFactionChunkOutsideTheCoreClaimIsNotCalledUnclaimed() {
         var coreChunk = new net.minecraft.world.level.ChunkPos(origin);
         var sibling = new net.minecraft.world.level.ChunkPos(coreChunk.x, coreChunk.z + 1);

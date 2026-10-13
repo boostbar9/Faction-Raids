@@ -110,7 +110,10 @@ public final class DefenseStructures {
             // The lookup itself can mark a provider broken; that is unknown ownership, not a rival claim.
             if (ClaimBridge.providerBroken()) return PROVIDER_FAILURE;
             if (foreign) return "The plan reaches " + where + ", which belongs to another faction. Move the plan fully inside the claim holding your Siege Core.";
-            if (RecruitsClaimsBridge.isChunkOwnedBy(level, chunk, coreClaim.ownerFactionStringId()))
+            boolean ownClaim = RecruitsClaimsBridge.isChunkOwnedBy(level, chunk, coreClaim.ownerFactionStringId());
+            // A Recruits lookup that throws disables that bridge; never call unverified land unclaimed.
+            if (ClaimBridge.providerBroken()) return PROVIDER_FAILURE;
+            if (ownClaim)
                 return "The plan reaches " + where + ", which is a different claim of your faction. Manual plans must stay inside the claim holding your Siege Core; move the plan.";
             return "The plan reaches " + where + ", which is not part of the claim holding your Siege Core. Claim that chunk on the claim map or move the plan.";
         }

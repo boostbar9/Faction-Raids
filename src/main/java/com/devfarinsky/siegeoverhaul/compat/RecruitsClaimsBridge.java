@@ -76,6 +76,9 @@ public final class RecruitsClaimsBridge {
      * Master toggle: is Recruits loaded AND has reflection resolution
      * succeeded at least once? Cheap to call every raid tick.
      */
+    /** True once the Recruits bridge failed (incompatible shape or a lookup that threw); ownership is then unknown. */
+    public static boolean failed() { return RESOLUTION_FAILED.get(); }
+
     public static boolean available() {
         if (!OptionalCompatBridge.isLoaded(OptionalCompatBridge.RECRUITS)) return false;
         if (RESOLUTION_FAILED.get()) return false;
