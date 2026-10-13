@@ -26,8 +26,8 @@ Release channel and public-verification evidence. The historical
 with the [4.52.7 record](release-4.52.7.md), [4.52.8 record](release-4.52.8.md), and
 [4.52.9 record](release-4.52.9.md), preserve the preceding sealed-loot,
 builder-recovery, grass-compatibility, hub/capture, and builder-approach releases. These records
-distinguish verified accepted artifacts from unverified separate public-download
-byte hashes.
+distinguish verified accepted artifacts from separate public-download byte
+verification, and each states whether that public verification was performed.
 
 Players must install a version containing this feature before chat notifications
 can appear; older installed JARs cannot be retroactively changed. Forge's global
