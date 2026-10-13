@@ -132,6 +132,7 @@ public final class WallBuilderAccess extends Goal {
             return;
         }
         Entity guardedArea = NativeConstructionGuard.currentArea(worker);
+        clearPreparedPlacementTarget();
         var mutationCells = NativeConstructionGuard.mutationCells(delegate);
         // Workers checks movement every tenth tick but may place every fifth tick,
         // including the first target popped from its stack. Route before dispatch.
@@ -155,6 +156,23 @@ public final class WallBuilderAccess extends Goal {
             route(level, target, state instanceof Enum<?> e && e.name().equals("MOVE_TO_WORK_AREA") ? 20 : 40);
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             // Keep native behavior when a companion changes its public job state.
+        }
+    }
+
+    /** Workers rebuilds its material-filtered queue here but retains the previous block target. */
+    private void clearPreparedPlacementTarget() {
+        if (!(worker.level() instanceof ServerLevel)) return;
+        try {
+            if (stateField.get(delegate) instanceof Enum<?> state
+                    && state.name().equals("PREPARE_PLACE_BLOCKS")
+                    && areaField.get(worker) instanceof Entity area && isCommission(area)) {
+                // A depleted material can leave blockPos outside the newly prepared queue.
+                // Let the next native placement pop its own target; keep the durable plan,
+                // inventory and native supply requests untouched.
+                blockField.set(delegate, null);
+            }
+        } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            // Unsupported companions retain their own preparation behavior.
         }
     }
 
@@ -426,7 +444,9 @@ public final class WallBuilderAccess extends Goal {
         return sites.contains(reached) ? reached : null;
     }
 
-    private boolean moveToSite(BlockPos site) {
+    private boolean moveToSite(BlockPos site) { return moveToSite(worker, site); }
+
+    private static boolean moveToSite(Mob worker, BlockPos site) {
         // The multi-target path is a reachability probe. A late-installed AsyncPath misses
         // native target/reach-range callbacks; let native moveTo own its movement path.
         // Integer coordinates also avoid upstream truncation of negative half-coordinates.
@@ -436,6 +456,76 @@ public final class WallBuilderAccess extends Goal {
     /** At most 49 columns, inside native horizontal reach; never dig or move the blueprint. */
     static Set<BlockPos> standingSites(ServerLevel level, Mob worker, BlockPos target) {
         return standingSites(level, worker, target, 3, 16);
+    }
+
+    /** Called only after the controller authenticates a paid next-section handoff.
+     * Keep marker creation/lease admission untouched until the worker leaves its
+     * next footprint and the reused shovel-site marker box. This requests ordinary
+     * navigation toward a proven-reachable safe site; it never edits or teleports.
+     */
+    public static boolean clearNextSection(Mob worker, Set<Long> targets, Set<Long> reservation, BlockPos marker) {
+        if (!(worker.level() instanceof ServerLevel level) || marker == null) return false;
+        // The original shovel site is reused for the next marker, and marker creation
+        // rejects any living entity inside that box. Treat it like a planned block.
+        var markerBox = com.devfarinsky.siegeoverhaul.nativecompat.ConstructionMarkerSite.markerBox(marker);
+        var body = worker.getBoundingBox();
+        boolean obstructs = body.intersects(markerBox) || targets.stream().anyMatch(cell ->
+                body.intersects(new net.minecraft.world.phys.AABB(BlockPos.of(cell))));
+        if (!obstructs) return true;
+        if (worker.isPassenger() || worker.isLeashed() || worker.getTarget() != null
+                || NativeConstructionGuard.currentArea(worker) != null) return false;
+        var nav = worker.getNavigation();
+        if (!nav.isDone() && nav.getPath() != null) return false;
+        long now = level.getGameTime();
+        var pending = CLEARANCE_PROBES.get(worker);
+        if (pending != null && pending.marker().equals(marker) && now >= pending.started() && now <= pending.started() + 100) {
+            // Workers navigation can process paths asynchronously; keep the same probe until it finishes.
+            if (!pathReady(pending.path())) return false;
+            CLEARANCE_PROBES.remove(worker);
+            BlockPos reached = reachedSite(pending.path(), pending.sites());
+            if (reached != null && clearanceSites(level, worker, reservation, marker, markerBox).contains(reached))
+                moveToSite(worker, reached);
+            return false;
+        }
+        CLEARANCE_PROBES.remove(worker);
+        Set<BlockPos> sites = clearanceSites(level, worker, reservation, marker, markerBox);
+        if (sites.isEmpty()) return false;
+        // Probe every candidate at once, exactly like ordinary approach routing. A partial
+        // path toward an unreachable site must not be walked and retried forever.
+        var probe = nav.createPath(sites, 0);
+        if (probe == null) return false;
+        if (!pathReady(probe)) {
+            CLEARANCE_PROBES.put(worker, new ClearanceProbe(probe, Set.copyOf(sites), marker.immutable(), now));
+            return false;
+        }
+        BlockPos reached = reachedSite(probe, sites);
+        if (reached != null) moveToSite(worker, reached);
+        return false;
+    }
+
+    private record ClearanceProbe(Path path, Set<BlockPos> sites, BlockPos marker, long started) {}
+    /** Server-thread only; weak keys never retain unloaded or removed builders. */
+    private static final java.util.Map<Mob, ClearanceProbe> CLEARANCE_PROBES = new java.util.WeakHashMap<>();
+
+    /** Same-floor spaces first (the shovel site may be indoors), then loaded surface spaces. */
+    private static Set<BlockPos> clearanceSites(ServerLevel level, Mob worker, Set<Long> reservation,
+                                                BlockPos marker, net.minecraft.world.phys.AABB markerBox) {
+        Set<Long> columns = new java.util.HashSet<>();
+        reservation.forEach(cell -> columns.add(BlockPos.of(cell).atY(0).asLong()));
+        Set<BlockPos> sites = new LinkedHashSet<>();
+        for (int dy : new int[]{0, 1, -1}) for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) {
+            if (dx * dx + dz * dz >= 16) continue;
+            BlockPos feet = marker.offset(dx, dy, dz);
+            if (standingBody(level, worker, feet)) sites.add(feet);
+        }
+        sites.addAll(standingSites(level, worker, marker));
+        sites.removeIf(site -> !recoveryMargin(site, columns, worker.getBbWidth())
+                || bodyAt(worker, site).intersects(markerBox));
+        return sites;
+    }
+
+    static net.minecraft.world.phys.AABB bodyAt(Mob worker, BlockPos feet) {
+        return worker.getBoundingBox().move(Vec3.atBottomCenterOf(feet).subtract(worker.position()));
     }
 
     /** Recovery-only search: at most 169 loaded columns, still inside the native reach. */
@@ -462,9 +552,14 @@ public final class WallBuilderAccess extends Goal {
     }
 
     private static boolean safeStandingSite(ServerLevel level, Mob worker, BlockPos feet) {
-        if (!level.hasChunkAt(feet) || feet.getY() <= level.getMinBuildHeight()
-                || feet.getY()+2 >= level.getMaxBuildHeight()
-                || level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,feet.getX(),feet.getZ()) != feet.getY()) return false;
+        return level.hasChunkAt(feet)
+                && level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,feet.getX(),feet.getZ()) == feet.getY()
+                && standingBody(level, worker, feet);
+    }
+    /** Loaded, sturdy, dry, non-hazardous footing with clear body space; no surface requirement. */
+    private static boolean standingBody(ServerLevel level, Mob worker, BlockPos feet) {
+        if (!level.hasChunkAt(feet) || !level.hasChunkAt(feet.below()) || feet.getY() <= level.getMinBuildHeight()
+                || feet.getY()+2 >= level.getMaxBuildHeight()) return false;
         BlockPos floor=feet.below();
         var support=level.getBlockState(floor);
         if (!support.isFaceSturdy(level,floor,Direction.UP) || !support.getFluidState().isEmpty()

@@ -1,3 +1,10 @@
+## 4.52.12 - Builders keep working after supply changes and section handoffs
+
+- Fix a commissioned builder keeping its previous block target after a material runs out. Workers 2 rebuilds its placement queue from the remaining supplies, and the builder now takes the next block from that fresh queue instead of returning to a block it can no longer place. Finite chest supplies, native supply requests, payment and accepted plans are unchanged.
+- Walk the assigned builder out of the next perimeter section before that section is admitted. A builder standing inside its own upcoming wall footprint previously waited on the planned-block safety check; it now steps to checked safe ground nearby using ordinary navigation, without teleporting, digging or changing the plan. Construction shows "Waiting: assigned builder is walking out of the next section" while this happens.
+- These are the two stable-safe builder fixes from the experimental 4.53.0 line. Replacement builders, stepped walls and gates remain experimental and are not included.
+- Update the server and all clients together, and back up your world before updating.
+
 ## 4.52.11 — Safer builder recovery around wither roses
 
 - Keep emergency surface recovery from moving a stuck commissioned builder into wither roses, including roses touching its upper body. The builder chooses another safe nearby spot or stays put when none is available.
