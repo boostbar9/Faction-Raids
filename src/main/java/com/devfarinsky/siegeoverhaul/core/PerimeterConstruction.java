@@ -146,16 +146,11 @@ public final class PerimeterConstruction {
         } catch(IllegalArgumentException unavailable) {
             return new Preparation(null,plan,claimIdentity,"The complete perimeter cannot be represented as bounded native sections. No payment or partial job is created.",territory);
         }
-        Map<ChunkPos, String> permissions = new HashMap<>();
+        // Cache the nullable answer explicitly; computeIfAbsent would repeat provider lookups for permitted chunks.
+        Map<ChunkPos, java.util.Optional<String>> permissions = new HashMap<>();
         java.util.function.Function<BlockPos, String> denial = p -> {
-            String chunkDenial = permissions.computeIfAbsent(new ChunkPos(p), chunk -> {
-                if (!territory.chunks().contains(chunk)
-                        || !RecruitsClaimsBridge.isChunkOwnedBy(level, chunk, territory.factionStringId()))
-                    return "Chunk " + chunk.x + ", " + chunk.z + " is no longer part of your faction territory. Refresh the territory and review again.";
-                if (ClaimBridge.isForeignClaim(level, chunk, identity))
-                    return "Chunk " + chunk.x + ", " + chunk.z + " is also claimed by another faction.";
-                return null;
-            });
+            String chunkDenial = permissions.computeIfAbsent(new ChunkPos(p), chunk -> java.util.Optional.ofNullable(
+                    territoryDenial(level, chunk, territory, identity))).orElse(null);
             if (chunkDenial != null) return chunkDenial;
             return level.mayInteract(player, p) ? null : DefenseStructures.protectedDenial(p);
         };
@@ -176,6 +171,17 @@ public final class PerimeterConstruction {
         String hash=PerimeterReviewFingerprint.create(plan,layout,before,clearance,core,material,claimIdentity,player.getUUID(),builder.getUUID());
         Quote quote=new Quote(core,material,player.getUUID(),builder.getUUID(),layout,before,clearance,hash);
         return new Preparation(builder,plan,claimIdentity,null,territory,quote);
+    }
+
+    /** Automatic perimeters use the complete same-faction territory, not only the claim holding the core. */
+    static String territoryDenial(ServerLevel level, ChunkPos chunk, RecruitsClaimsBridge.TerritorySnapshot territory,
+                                  RaidSavedData.Anchor identity) {
+        if (ClaimBridge.providerBroken()) return DefenseStructures.PROVIDER_FAILURE;
+        if (!territory.chunks().contains(chunk) || !RecruitsClaimsBridge.isChunkOwnedBy(level, chunk, territory.factionStringId()))
+            return "Chunk " + chunk.x + ", " + chunk.z + " is no longer part of your faction territory. Refresh the territory and review again.";
+        if (ClaimBridge.isForeignClaim(level, chunk, identity))
+            return "Chunk " + chunk.x + ", " + chunk.z + " is also claimed by another faction.";
+        return null;
     }
 
     /** Validate every reserved cell, including the hollow body and empty walking headroom, before payment. */

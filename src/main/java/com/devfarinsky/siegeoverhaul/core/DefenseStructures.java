@@ -75,10 +75,12 @@ public final class DefenseStructures {
         var nativeClaim = claim.get();
         var identity = anchor.withIdentity(nativeClaim.ownerFactionStringId(), anchor.teamDisplay());
         var plan = DefenseBlueprint.create(kind, origin, facing);
-        var permissions = new java.util.HashMap<net.minecraft.world.level.ChunkPos, String>();
+        // Cache the nullable answer explicitly; computeIfAbsent would repeat provider lookups for permitted chunks.
+        var permissions = new java.util.HashMap<net.minecraft.world.level.ChunkPos, java.util.Optional<String>>();
         java.util.function.Function<BlockPos, String> denial = p -> {
             var chunk = new net.minecraft.world.level.ChunkPos(p);
-            String refused = permissions.computeIfAbsent(chunk, c -> claimDenial(level, c, nativeClaim, identity));
+            String refused = permissions.computeIfAbsent(chunk, c -> java.util.Optional.ofNullable(
+                    claimDenial(level, c, nativeClaim, identity))).orElse(null);
             if (refused != null) return refused;
             return level.mayInteract(player, p) ? null : protectedDenial(p);
         };
@@ -99,17 +101,23 @@ public final class DefenseStructures {
     /** Names the chunk and the reason, so "right next to the core" rejections are actionable. */
     static String claimDenial(ServerLevel level, net.minecraft.world.level.ChunkPos chunk,
                               RecruitsClaimsBridge.ClaimSnapshot coreClaim, RaidSavedData.Anchor identity) {
+        // A failed claim provider makes ownership unknown; that blocks placement but is not a foreign claim.
+        if (ClaimBridge.providerBroken()) return PROVIDER_FAILURE;
+        String where = "chunk " + chunk.x + ", " + chunk.z + " (blocks " + chunk.getMinBlockX() + ".." + chunk.getMaxBlockX()
+                + " x, " + chunk.getMinBlockZ() + ".." + chunk.getMaxBlockZ() + " z)";
         if (!coreClaim.chunks().contains(chunk)) {
             boolean foreign = ClaimBridge.isForeignClaim(level, chunk, identity);
-            return "The plan reaches chunk " + chunk.x + ", " + chunk.z + " (blocks " + chunk.getMinBlockX() + ".." + chunk.getMaxBlockX()
-                    + " x, " + chunk.getMinBlockZ() + ".." + chunk.getMaxBlockZ() + " z), which "
+            return "The plan reaches " + where + ", which "
                     + (foreign ? "belongs to another faction. Move the plan fully inside the claim holding your Siege Core."
                     : "is not part of the claim holding your Siege Core. Claim that chunk on the claim map or move the plan.");
         }
         if (ClaimBridge.isForeignClaim(level, chunk, identity))
-            return "Chunk " + chunk.x + ", " + chunk.z + " is also claimed by another faction. Move the plan fully inside your own claim.";
+            return "The plan reaches " + where + ", which is also claimed by another faction. Move the plan fully inside your own claim.";
         return null;
     }
+
+    static final String PROVIDER_FAILURE = "A claim mod failed to answer, so land ownership is unknown and building is paused. "
+            + "An operator can run /siegeoverhaul compat and check the server log.";
 
     static String protectedDenial(BlockPos p) {
         return "The server does not let you build at " + p.toShortString()

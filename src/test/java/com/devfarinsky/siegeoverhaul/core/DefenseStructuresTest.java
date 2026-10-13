@@ -184,6 +184,7 @@ class DefenseStructuresTest extends MinecraftTestSupport {
         assertTrue(unclaimed.contains(String.valueOf(outside.getMinBlockX())), unclaimed);
         assertTrue(unclaimed.contains("not part of the claim holding your Siege Core"), unclaimed);
         assertTrue(unclaimed.contains("claim map"), unclaimed);
+        assertFalse(unclaimed.contains("another faction"), unclaimed);
         String guarded = DefenseStructures.protectedDenial(origin);
         assertTrue(guarded.contains(origin.toShortString()) && guarded.contains("spawn protection"), guarded);
         // The site review reports the exact reason for the first refused cell instead of the generic sentence.
@@ -199,6 +200,32 @@ class DefenseStructuresTest extends MinecraftTestSupport {
         assertNotNull(headroomProblem);
         assertTrue(headroomProblem.contains(headroom.toShortString()), headroomProblem);
         verify(level, never()).setBlock(any(), any(), anyInt(), anyInt());
+    }
+    @Test void brokenClaimProviderIsReportedAsUnknownOwnershipNotAForeignClaim() throws Exception {
+        var field = com.devfarinsky.siegeoverhaul.compat.ClaimBridge.class.getDeclaredField("BROKEN_PROVIDERS");
+        field.setAccessible(true);
+        @SuppressWarnings("unchecked") var broken = (java.util.Set<String>) field.get(null);
+        var coreChunk = new net.minecraft.world.level.ChunkPos(origin);
+        var coreClaim = new com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.ClaimSnapshot(
+                UUID.randomUUID(), "Home", "faction", coreChunk, java.util.Set.of(coreChunk), false, 10, 10);
+        broken.add("ftbchunks");
+        try {
+            String inside = DefenseStructures.claimDenial(clearLevel(), coreChunk, coreClaim, null);
+            assertEquals(DefenseStructures.PROVIDER_FAILURE, inside);
+            assertFalse(inside.contains("another faction"), inside);
+        } finally { broken.clear(); }
+        assertNull(DefenseStructures.claimDenial(clearLevel(), coreChunk, coreClaim, null));
+    }
+    @Test void permittedChunksAreCheckedOncePerChunkDuringSiteReview() {
+        var level = clearLevel();
+        var plan = tower();
+        var seen = new java.util.HashMap<net.minecraft.world.level.ChunkPos, Integer>();
+        var cache = new java.util.HashMap<net.minecraft.world.level.ChunkPos, java.util.Optional<String>>();
+        java.util.function.Function<BlockPos, String> denial = p -> cache.computeIfAbsent(new net.minecraft.world.level.ChunkPos(p),
+                chunk -> { seen.merge(chunk, 1, Integer::sum); return java.util.Optional.empty(); }).orElse(null);
+        assertNull(DefenseStructures.siteDenial(level, plan, denial));
+        assertFalse(seen.isEmpty());
+        assertTrue(seen.values().stream().allMatch(count -> count == 1), seen.toString());
     }
     @Test void foreignClaimsAndWorldLimitsAreRejected() {
         assertNotNull(DefenseStructures.siteProblem(clearLevel(), tower(), p -> !p.equals(origin)));
