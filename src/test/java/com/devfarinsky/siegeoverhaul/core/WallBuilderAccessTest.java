@@ -21,47 +21,83 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class WallBuilderAccessTest extends MinecraftTestSupport {
+    private static final BlockPos MARKER=new BlockPos(22,64,0);
     private void nextSectionTerrain() {
         terrain();when(worker.level()).thenReturn(level);
         when(worker.getZ()).thenReturn(0.5);when(worker.getBbWidth()).thenReturn(.6f);
+        when(nav.isDone()).thenReturn(true);
         when(nav.moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble())).thenReturn(true);
     }
+    /** Pathfinder stub: reaches the first offered candidate in iteration order, like a real multi-target probe. */
+    private java.util.concurrent.atomic.AtomicReference<Set<BlockPos>> probeCandidates() {
+        var offered=new java.util.concurrent.atomic.AtomicReference<Set<BlockPos>>();
+        when(nav.createPath(anySet(),eq(0))).thenAnswer(call->{
+            Set<BlockPos> sites=call.getArgument(0);offered.set(Set.copyOf(sites));
+            BlockPos end=sites.iterator().next();
+            var path=mock(Path.class);when(path.canReach()).thenReturn(true);
+            when(path.getEndNode()).thenReturn(new Node(end.getX(),end.getY(),end.getZ()));return path;
+        });
+        return offered;
+    }
+    private static boolean overlapsMarkerBox(BlockPos site) {
+        return new AABB(site.getX()+.2,site.getY(),site.getZ()+.2,site.getX()+.8,site.getY()+1.8,site.getZ()+.8)
+                .intersects(com.devfarinsky.siegeoverhaul.nativecompat.ConstructionMarkerSite.markerBox(MARKER));
+    }
     @Test void nextSectionWaitsForNativeWalkingOutsideTheWholeReservedFootprint() {
-        nextSectionTerrain();
+        nextSectionTerrain();var offered=probeCandidates();
         long target=new BlockPos(20,64,0).asLong();
-        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),new BlockPos(22,64,0)));
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
         var x=org.mockito.ArgumentCaptor.forClass(Double.class);var z=org.mockito.ArgumentCaptor.forClass(Double.class);
         verify(nav).moveTo(x.capture(),eq(64.0),z.capture(),eq(0.8));
         BlockPos chosen=BlockPos.containing(x.getValue(),64,z.getValue());
-        assertTrue(WallBuilderAccess.recoveryMargin(chosen,Set.of(new BlockPos(20,0,0).asLong()),.6f));
-        // The nearest clear column is the shovel site itself; marker creation rejects a builder standing there.
-        assertNotEquals(new BlockPos(22,64,0),chosen);
-        assertFalse(WallBuilderAccess.bodyAt(worker,chosen).intersects(
-                com.devfarinsky.siegeoverhaul.nativecompat.ConstructionMarkerSite.markerBox(new BlockPos(22,64,0))));
-        assertTrue(chosen.distSqr(new BlockPos(22,64,0))<16);
+        assertTrue(offered.get().contains(chosen));
+        for (BlockPos site:offered.get()) {
+            assertTrue(WallBuilderAccess.recoveryMargin(site,Set.of(new BlockPos(20,0,0).asLong()),.6f),site.toString());
+            // The shovel site is reused for the next marker; marker creation rejects a builder standing in its box.
+            assertFalse(overlapsMarkerBox(site),site.toString());
+            assertTrue(site.distSqr(MARKER)<16,site.toString());
+        }
         verify(level,never()).setBlock(any(),any(),anyInt());verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
-        when(worker.getBoundingBox()).thenReturn(new AABB(22.2,64,.2,22.8,65.8,.8));
-        assertTrue(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),new BlockPos(22,64,0)));
+        when(worker.getBoundingBox()).thenReturn(new AABB(24.2,64,2.2,24.8,65.8,2.8));
+        assertTrue(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
         verify(nav,times(1)).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
     }
-    @Test void nextSectionNeverCreatesMovementThroughUnloadedGroundOrOverridesAnotherJob() {
-        nextSectionTerrain();when(level.hasChunkAt(any())).thenReturn(false);
+    @Test void builderStandingOnTheReusedShovelSiteIsMovedBeforeMarkerCreation() {
+        nextSectionTerrain();var offered=probeCandidates();
+        when(worker.position()).thenReturn(new Vec3(22.5,64,0.5));when(worker.getX()).thenReturn(22.5);
+        when(worker.getBoundingBox()).thenReturn(new AABB(22.2,64,0.2,22.8,65.8,0.8));
         long target=new BlockPos(20,64,0).asLong();
-        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),new BlockPos(22,64,0)));
-        verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
+        verify(nav).moveTo(anyDouble(),eq(64.0),anyDouble(),eq(0.8));
+        for (BlockPos site:offered.get()) assertFalse(overlapsMarkerBox(site),site.toString());
+        verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+    }
+    @Test void nextSectionNeverCreatesMovementThroughUnloadedGroundOrOverridesAnotherJob() {
+        nextSectionTerrain();probeCandidates();when(level.hasChunkAt(any())).thenReturn(false);
+        long target=new BlockPos(20,64,0).asLong();
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
+        verify(nav,never()).createPath(anySet(),anyInt());verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
         when(level.hasChunkAt(any())).thenReturn(true);worker.currentBuildArea=mock(Area.class);
-        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),new BlockPos(22,64,0)));
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
         verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
     }
-    @Test void nextSectionDoesNotReplaceAnActiveNativePathOrMoveWhileRidingOrFighting() {
+    @Test void nextSectionDoesNotWalkPartialOrPendingPathsAndKeepsAnActiveRoute() {
         nextSectionTerrain();
         long target=new BlockPos(20,64,0).asLong();
+        var partial=mock(Path.class);when(partial.canReach()).thenReturn(false);
+        when(partial.getEndNode()).thenReturn(new Node(21,64,2));
+        when(nav.createPath(anySet(),eq(0))).thenReturn(partial);
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
+        verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+        var pending=mock(DelayedPath.class);when(pending.isProcessed()).thenReturn(false);when(pending.canReach()).thenReturn(true);
+        when(nav.createPath(anySet(),eq(0))).thenReturn(pending);
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
+        verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
         var active=mock(Path.class);when(nav.getPath()).thenReturn(active);when(nav.isDone()).thenReturn(false);
-        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),new BlockPos(22,64,0)));
-        verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
-        when(nav.getPath()).thenReturn(null);when(worker.isPassenger()).thenReturn(true);
-        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),new BlockPos(22,64,0)));
-        verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
+        verify(nav,times(2)).createPath(anySet(),anyInt());
+        when(nav.getPath()).thenReturn(null);when(nav.isDone()).thenReturn(true);when(worker.isPassenger()).thenReturn(true);
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
         assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),null));
         verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
     }

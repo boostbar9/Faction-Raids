@@ -444,7 +444,9 @@ public final class WallBuilderAccess extends Goal {
         return sites.contains(reached) ? reached : null;
     }
 
-    private boolean moveToSite(BlockPos site) {
+    private boolean moveToSite(BlockPos site) { return moveToSite(worker, site); }
+
+    private static boolean moveToSite(Mob worker, BlockPos site) {
         // The multi-target path is a reachability probe. A late-installed AsyncPath misses
         // native target/reach-range callbacks; let native moveTo own its movement path.
         // Integer coordinates also avoid upstream truncation of negative half-coordinates.
@@ -458,28 +460,34 @@ public final class WallBuilderAccess extends Goal {
 
     /** Called only after the controller authenticates a paid next-section handoff.
      * Keep marker creation/lease admission untouched until the worker leaves its
-     * next footprint. This requests ordinary navigation, never edits or teleports.
+     * next footprint and the reused shovel-site marker box. This requests ordinary
+     * navigation toward a proven-reachable safe site; it never edits or teleports.
      */
     public static boolean clearNextSection(Mob worker, Set<Long> targets, Set<Long> reservation, BlockPos marker) {
         if (!(worker.level() instanceof ServerLevel level) || marker == null) return false;
-        boolean obstructs = targets.stream().anyMatch(cell ->
-                worker.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(BlockPos.of(cell))));
+        // The original shovel site is reused for the next marker, and marker creation
+        // rejects any living entity inside that box. Treat it like a planned block.
+        var markerBox = com.devfarinsky.siegeoverhaul.nativecompat.ConstructionMarkerSite.markerBox(marker);
+        var body = worker.getBoundingBox();
+        boolean obstructs = body.intersects(markerBox) || targets.stream().anyMatch(cell ->
+                body.intersects(new net.minecraft.world.phys.AABB(BlockPos.of(cell))));
         if (!obstructs) return true;
         if (worker.isPassenger() || worker.isLeashed() || worker.getTarget() != null
                 || NativeConstructionGuard.currentArea(worker) != null) return false;
-        Set<Long> columns = new java.util.HashSet<>();
-        reservation.forEach(cell -> columns.add(BlockPos.of(cell).atY(0).asLong()));
-        // The original shovel site is reused for the next marker, and marker creation
-        // rejects any living entity inside that box. Never park the builder there.
-        var markerBox = com.devfarinsky.siegeoverhaul.nativecompat.ConstructionMarkerSite.markerBox(marker);
-        var sites = new ArrayList<>(standingSites(level, worker, marker));
-        sites.removeIf(site -> !recoveryMargin(site, columns, worker.getBbWidth())
-                || bodyAt(worker, site).intersects(markerBox));
-        sites.sort(java.util.Comparator.comparingDouble(site -> site.distToCenterSqr(worker.position())));
         var nav = worker.getNavigation();
         if (!nav.isDone() && nav.getPath() != null) return false;
-        for (BlockPos site : sites)
-            if (nav.moveTo(site.getX(), site.getY(), site.getZ(), 0.8)) break;
+        Set<Long> columns = new java.util.HashSet<>();
+        reservation.forEach(cell -> columns.add(BlockPos.of(cell).atY(0).asLong()));
+        Set<BlockPos> sites = standingSites(level, worker, marker);
+        sites.removeIf(site -> !recoveryMargin(site, columns, worker.getBbWidth())
+                || bodyAt(worker, site).intersects(markerBox));
+        if (sites.isEmpty()) return false;
+        // Probe every candidate at once, exactly like ordinary approach routing. A partial
+        // path toward an unreachable site must not be walked and retried forever.
+        var probe = nav.createPath(sites, 0);
+        if (probe == null || !pathReady(probe)) return false;
+        BlockPos reached = reachedSite(probe, sites);
+        if (reached != null) moveToSite(worker, reached);
         return false;
     }
 
