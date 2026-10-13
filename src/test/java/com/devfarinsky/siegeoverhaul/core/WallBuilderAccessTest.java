@@ -32,8 +32,13 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),new BlockPos(22,64,0)));
         var x=org.mockito.ArgumentCaptor.forClass(Double.class);var z=org.mockito.ArgumentCaptor.forClass(Double.class);
         verify(nav).moveTo(x.capture(),eq(64.0),z.capture(),eq(0.8));
-        assertTrue(WallBuilderAccess.recoveryMargin(BlockPos.containing(x.getValue(),64,z.getValue()),
-                Set.of(new BlockPos(20,0,0).asLong()),.6f));
+        BlockPos chosen=BlockPos.containing(x.getValue(),64,z.getValue());
+        assertTrue(WallBuilderAccess.recoveryMargin(chosen,Set.of(new BlockPos(20,0,0).asLong()),.6f));
+        // The nearest clear column is the shovel site itself; marker creation rejects a builder standing there.
+        assertNotEquals(new BlockPos(22,64,0),chosen);
+        assertFalse(WallBuilderAccess.bodyAt(worker,chosen).intersects(
+                com.devfarinsky.siegeoverhaul.nativecompat.ConstructionMarkerSite.markerBox(new BlockPos(22,64,0))));
+        assertTrue(chosen.distSqr(new BlockPos(22,64,0))<16);
         verify(level,never()).setBlock(any(),any(),anyInt());verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
         when(worker.getBoundingBox()).thenReturn(new AABB(22.2,64,.2,22.8,65.8,.8));
         assertTrue(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),new BlockPos(22,64,0)));

@@ -469,14 +469,22 @@ public final class WallBuilderAccess extends Goal {
                 || NativeConstructionGuard.currentArea(worker) != null) return false;
         Set<Long> columns = new java.util.HashSet<>();
         reservation.forEach(cell -> columns.add(BlockPos.of(cell).atY(0).asLong()));
+        // The original shovel site is reused for the next marker, and marker creation
+        // rejects any living entity inside that box. Never park the builder there.
+        var markerBox = com.devfarinsky.siegeoverhaul.nativecompat.ConstructionMarkerSite.markerBox(marker);
         var sites = new ArrayList<>(standingSites(level, worker, marker));
-        sites.removeIf(site -> !recoveryMargin(site, columns, worker.getBbWidth()));
+        sites.removeIf(site -> !recoveryMargin(site, columns, worker.getBbWidth())
+                || bodyAt(worker, site).intersects(markerBox));
         sites.sort(java.util.Comparator.comparingDouble(site -> site.distToCenterSqr(worker.position())));
         var nav = worker.getNavigation();
         if (!nav.isDone() && nav.getPath() != null) return false;
         for (BlockPos site : sites)
             if (nav.moveTo(site.getX(), site.getY(), site.getZ(), 0.8)) break;
         return false;
+    }
+
+    static net.minecraft.world.phys.AABB bodyAt(Mob worker, BlockPos feet) {
+        return worker.getBoundingBox().move(Vec3.atBottomCenterOf(feet).subtract(worker.position()));
     }
 
     /** Recovery-only search: at most 169 loaded columns, still inside the native reach. */

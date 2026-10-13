@@ -25,7 +25,7 @@ import java.util.Map;
 import java.util.function.Predicate;
 
 /** Physical shovel and native pick box on clear accessible ground, independent of blueprint origin. */
-final class ConstructionMarkerSite {
+public final class ConstructionMarkerSite {
     private ConstructionMarkerSite() {}
 
     static BlockPos find(ServerPlayer owner, AcceptedConstructionPlan plan) {
@@ -118,7 +118,7 @@ final class ConstructionMarkerSite {
                 .getType() == HitResult.Type.MISS;
     }
 
-    static AABB markerBox(BlockPos feet) {
+    public static AABB markerBox(BlockPos feet) {
         return new AABB(feet.getX() - .1, feet.getY(), feet.getZ() - .1,
                 feet.getX() + 1.1, feet.getY() + 2, feet.getZ() + 1.1);
     }
