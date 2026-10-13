@@ -179,8 +179,9 @@ public final class PerimeterConstruction {
         if (ClaimBridge.providerBroken()) return DefenseStructures.PROVIDER_FAILURE;
         if (!territory.chunks().contains(chunk) || !RecruitsClaimsBridge.isChunkOwnedBy(level, chunk, territory.factionStringId()))
             return "Chunk " + chunk.x + ", " + chunk.z + " is no longer part of your faction territory. Refresh the territory and review again.";
-        if (ClaimBridge.isForeignClaim(level, chunk, identity))
-            return "Chunk " + chunk.x + ", " + chunk.z + " is also claimed by another faction.";
+        boolean foreign = ClaimBridge.isForeignClaim(level, chunk, identity);
+        if (ClaimBridge.providerBroken()) return DefenseStructures.PROVIDER_FAILURE;
+        if (foreign) return "Chunk " + chunk.x + ", " + chunk.z + " is also claimed by another faction.";
         return null;
     }
 

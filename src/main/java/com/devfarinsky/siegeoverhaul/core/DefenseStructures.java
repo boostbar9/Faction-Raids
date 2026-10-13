@@ -107,11 +107,16 @@ public final class DefenseStructures {
                 + " x, " + chunk.getMinBlockZ() + ".." + chunk.getMaxBlockZ() + " z)";
         if (!coreClaim.chunks().contains(chunk)) {
             boolean foreign = ClaimBridge.isForeignClaim(level, chunk, identity);
-            return "The plan reaches " + where + ", which "
-                    + (foreign ? "belongs to another faction. Move the plan fully inside the claim holding your Siege Core."
-                    : "is not part of the claim holding your Siege Core. Claim that chunk on the claim map or move the plan.");
+            // The lookup itself can mark a provider broken; that is unknown ownership, not a rival claim.
+            if (ClaimBridge.providerBroken()) return PROVIDER_FAILURE;
+            if (foreign) return "The plan reaches " + where + ", which belongs to another faction. Move the plan fully inside the claim holding your Siege Core.";
+            if (RecruitsClaimsBridge.isChunkOwnedBy(level, chunk, coreClaim.ownerFactionStringId()))
+                return "The plan reaches " + where + ", which is a different claim of your faction. Manual plans must stay inside the claim holding your Siege Core; move the plan.";
+            return "The plan reaches " + where + ", which is not part of the claim holding your Siege Core. Claim that chunk on the claim map or move the plan.";
         }
-        if (ClaimBridge.isForeignClaim(level, chunk, identity))
+        boolean foreign = ClaimBridge.isForeignClaim(level, chunk, identity);
+        if (ClaimBridge.providerBroken()) return PROVIDER_FAILURE;
+        if (foreign)
             return "The plan reaches " + where + ", which is also claimed by another faction. Move the plan fully inside your own claim.";
         return null;
     }

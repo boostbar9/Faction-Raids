@@ -178,7 +178,11 @@ class DefenseStructuresTest extends MinecraftTestSupport {
         var coreClaim = new com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.ClaimSnapshot(
                 UUID.randomUUID(), "Home", "faction", coreChunk, java.util.Set.of(coreChunk), false, 10, 10);
         assertNull(DefenseStructures.claimDenial(level, coreChunk, coreClaim, null));
-        String unclaimed = DefenseStructures.claimDenial(level, outside, coreClaim, null);
+        String unclaimed;
+        try (var recruits = mockStatic(com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.class, CALLS_REAL_METHODS)) {
+            recruits.when(() -> com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.isChunkOwnedBy(any(), any(), any())).thenReturn(false);
+            unclaimed = DefenseStructures.claimDenial(level, outside, coreClaim, null);
+        }
         assertNotNull(unclaimed);
         assertTrue(unclaimed.contains(outside.x + ", " + outside.z), unclaimed);
         assertTrue(unclaimed.contains(String.valueOf(outside.getMinBlockX())), unclaimed);
@@ -191,7 +195,11 @@ class DefenseStructuresTest extends MinecraftTestSupport {
         var plan = tower();
         java.util.function.Function<BlockPos, String> denial = p -> new net.minecraft.world.level.ChunkPos(p).equals(coreChunk) ? null
                 : DefenseStructures.claimDenial(level, new net.minecraft.world.level.ChunkPos(p), coreClaim, null);
-        String problem = DefenseStructures.siteDenial(level, plan, denial);
+        String problem;
+        try (var recruits = mockStatic(com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.class, CALLS_REAL_METHODS)) {
+            recruits.when(() -> com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.isChunkOwnedBy(any(), any(), any())).thenReturn(false);
+            problem = DefenseStructures.siteDenial(level, plan, denial);
+        }
         boolean crosses = plan.footprint().stream().anyMatch(p -> !new net.minecraft.world.level.ChunkPos(p).equals(coreChunk));
         if (crosses) { assertNotNull(problem); assertTrue(problem.contains("not part of the claim"), problem); }
         else assertNull(problem);
@@ -215,6 +223,36 @@ class DefenseStructuresTest extends MinecraftTestSupport {
             assertFalse(inside.contains("another faction"), inside);
         } finally { broken.clear(); }
         assertNull(DefenseStructures.claimDenial(clearLevel(), coreChunk, coreClaim, null));
+    }
+    @Test void providerThatFailsDuringTheLookupIsStillUnknownOwnership() throws Exception {
+        var field = com.devfarinsky.siegeoverhaul.compat.ClaimBridge.class.getDeclaredField("BROKEN_PROVIDERS");
+        field.setAccessible(true);
+        @SuppressWarnings("unchecked") var broken = (java.util.Set<String>) field.get(null);
+        var coreChunk = new net.minecraft.world.level.ChunkPos(origin);
+        var outside = new net.minecraft.world.level.ChunkPos(coreChunk.x + 1, coreChunk.z);
+        var coreClaim = new com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.ClaimSnapshot(
+                UUID.randomUUID(), "Home", "faction", coreChunk, java.util.Set.of(coreChunk), false, 10, 10);
+        try (var bridge = mockStatic(com.devfarinsky.siegeoverhaul.compat.ClaimBridge.class, CALLS_REAL_METHODS)) {
+            // The first ownership lookup marks the provider broken and fails closed.
+            bridge.when(() -> com.devfarinsky.siegeoverhaul.compat.ClaimBridge.isForeignClaim(any(ServerLevel.class),
+                    any(net.minecraft.world.level.ChunkPos.class), any())).thenAnswer(call -> { broken.add("ftbchunks"); return true; });
+            assertEquals(DefenseStructures.PROVIDER_FAILURE, DefenseStructures.claimDenial(clearLevel(), outside, coreClaim, null));
+            broken.clear();
+            assertEquals(DefenseStructures.PROVIDER_FAILURE, DefenseStructures.claimDenial(clearLevel(), coreChunk, coreClaim, null));
+        } finally { broken.clear(); }
+    }
+    @Test void sameFactionChunkOutsideTheCoreClaimIsNotCalledUnclaimed() {
+        var coreChunk = new net.minecraft.world.level.ChunkPos(origin);
+        var sibling = new net.minecraft.world.level.ChunkPos(coreChunk.x, coreChunk.z + 1);
+        var coreClaim = new com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.ClaimSnapshot(
+                UUID.randomUUID(), "Home", "faction", coreChunk, java.util.Set.of(coreChunk), false, 10, 10);
+        try (var recruits = mockStatic(com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.class, CALLS_REAL_METHODS)) {
+            recruits.when(() -> com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.isChunkOwnedBy(any(), eq(sibling), eq("faction")))
+                    .thenReturn(true);
+            String message = DefenseStructures.claimDenial(clearLevel(), sibling, coreClaim, null);
+            assertTrue(message.contains("different claim of your faction"), message);
+            assertFalse(message.contains("Claim that chunk"), message);
+        }
     }
     @Test void permittedChunksAreCheckedOncePerChunkDuringSiteReview() {
         var level = clearLevel();
