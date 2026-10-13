@@ -476,19 +476,52 @@ public final class WallBuilderAccess extends Goal {
                 || NativeConstructionGuard.currentArea(worker) != null) return false;
         var nav = worker.getNavigation();
         if (!nav.isDone() && nav.getPath() != null) return false;
-        Set<Long> columns = new java.util.HashSet<>();
-        reservation.forEach(cell -> columns.add(BlockPos.of(cell).atY(0).asLong()));
-        Set<BlockPos> sites = standingSites(level, worker, marker);
-        sites.removeIf(site -> !recoveryMargin(site, columns, worker.getBbWidth())
-                || bodyAt(worker, site).intersects(markerBox));
+        long now = level.getGameTime();
+        var pending = CLEARANCE_PROBES.get(worker);
+        if (pending != null && pending.marker().equals(marker) && now >= pending.started() && now <= pending.started() + 100) {
+            // Workers navigation can process paths asynchronously; keep the same probe until it finishes.
+            if (!pathReady(pending.path())) return false;
+            CLEARANCE_PROBES.remove(worker);
+            BlockPos reached = reachedSite(pending.path(), pending.sites());
+            if (reached != null && clearanceSites(level, worker, reservation, marker, markerBox).contains(reached))
+                moveToSite(worker, reached);
+            return false;
+        }
+        CLEARANCE_PROBES.remove(worker);
+        Set<BlockPos> sites = clearanceSites(level, worker, reservation, marker, markerBox);
         if (sites.isEmpty()) return false;
         // Probe every candidate at once, exactly like ordinary approach routing. A partial
         // path toward an unreachable site must not be walked and retried forever.
         var probe = nav.createPath(sites, 0);
-        if (probe == null || !pathReady(probe)) return false;
+        if (probe == null) return false;
+        if (!pathReady(probe)) {
+            CLEARANCE_PROBES.put(worker, new ClearanceProbe(probe, Set.copyOf(sites), marker.immutable(), now));
+            return false;
+        }
         BlockPos reached = reachedSite(probe, sites);
         if (reached != null) moveToSite(worker, reached);
         return false;
+    }
+
+    private record ClearanceProbe(Path path, Set<BlockPos> sites, BlockPos marker, long started) {}
+    /** Server-thread only; weak keys never retain unloaded or removed builders. */
+    private static final java.util.Map<Mob, ClearanceProbe> CLEARANCE_PROBES = new java.util.WeakHashMap<>();
+
+    /** Same-floor spaces first (the shovel site may be indoors), then loaded surface spaces. */
+    private static Set<BlockPos> clearanceSites(ServerLevel level, Mob worker, Set<Long> reservation,
+                                                BlockPos marker, net.minecraft.world.phys.AABB markerBox) {
+        Set<Long> columns = new java.util.HashSet<>();
+        reservation.forEach(cell -> columns.add(BlockPos.of(cell).atY(0).asLong()));
+        Set<BlockPos> sites = new LinkedHashSet<>();
+        for (int dy : new int[]{0, 1, -1}) for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) {
+            if (dx * dx + dz * dz >= 16) continue;
+            BlockPos feet = marker.offset(dx, dy, dz);
+            if (standingBody(level, worker, feet)) sites.add(feet);
+        }
+        sites.addAll(standingSites(level, worker, marker));
+        sites.removeIf(site -> !recoveryMargin(site, columns, worker.getBbWidth())
+                || bodyAt(worker, site).intersects(markerBox));
+        return sites;
     }
 
     static net.minecraft.world.phys.AABB bodyAt(Mob worker, BlockPos feet) {
@@ -519,9 +552,14 @@ public final class WallBuilderAccess extends Goal {
     }
 
     private static boolean safeStandingSite(ServerLevel level, Mob worker, BlockPos feet) {
-        if (!level.hasChunkAt(feet) || feet.getY() <= level.getMinBuildHeight()
-                || feet.getY()+2 >= level.getMaxBuildHeight()
-                || level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,feet.getX(),feet.getZ()) != feet.getY()) return false;
+        return level.hasChunkAt(feet)
+                && level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,feet.getX(),feet.getZ()) == feet.getY()
+                && standingBody(level, worker, feet);
+    }
+    /** Loaded, sturdy, dry, non-hazardous footing with clear body space; no surface requirement. */
+    private static boolean standingBody(ServerLevel level, Mob worker, BlockPos feet) {
+        if (!level.hasChunkAt(feet) || !level.hasChunkAt(feet.below()) || feet.getY() <= level.getMinBuildHeight()
+                || feet.getY()+2 >= level.getMaxBuildHeight()) return false;
         BlockPos floor=feet.below();
         var support=level.getBlockState(floor);
         if (!support.isFaceSturdy(level,floor,Direction.UP) || !support.getFluidState().isEmpty()

@@ -89,17 +89,61 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         when(nav.createPath(anySet(),eq(0))).thenReturn(partial);
         assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
         verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+        var offered=new java.util.concurrent.atomic.AtomicReference<Set<BlockPos>>();
         var pending=mock(DelayedPath.class);when(pending.isProcessed()).thenReturn(false);when(pending.canReach()).thenReturn(true);
-        when(nav.createPath(anySet(),eq(0))).thenReturn(pending);
+        when(nav.createPath(anySet(),eq(0))).thenAnswer(call->{offered.set(Set.copyOf(call.getArgument(0)));return pending;});
         assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
-        verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+        verify(nav,times(2)).createPath(anySet(),anyInt());
+        // An unprocessed asynchronous probe is retained, not replaced every controller tick.
+        when(level.getGameTime()).thenReturn(20L);
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
+        verify(nav,times(2)).createPath(anySet(),anyInt());
         var active=mock(Path.class);when(nav.getPath()).thenReturn(active);when(nav.isDone()).thenReturn(false);
         assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
         verify(nav,times(2)).createPath(anySet(),anyInt());
-        when(nav.getPath()).thenReturn(null);when(nav.isDone()).thenReturn(true);when(worker.isPassenger()).thenReturn(true);
+        when(nav.getPath()).thenReturn(null);when(nav.isDone()).thenReturn(true);
+        BlockPos end=offered.get().iterator().next();
+        when(pending.isProcessed()).thenReturn(true);when(pending.getEndNode()).thenReturn(new Node(end.getX(),end.getY(),end.getZ()));
+        when(level.getGameTime()).thenReturn(40L);
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
+        verify(nav).moveTo(end.getX(),end.getY(),end.getZ(),0.8);
+        verify(nav,times(2)).createPath(anySet(),anyInt());
+        when(worker.isPassenger()).thenReturn(true);
         assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
         assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),null));
+        verify(nav,times(1)).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+        verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+    }
+    @Test void staleOrForeignPendingProbesAreReplaced() {
+        nextSectionTerrain();
+        long target=new BlockPos(20,64,0).asLong();
+        var pending=mock(DelayedPath.class);when(pending.isProcessed()).thenReturn(false);
+        when(nav.createPath(anySet(),eq(0))).thenReturn(pending);
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
+        // A different reused marker never consumes another section's probe.
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER.east(2)));
+        verify(nav,times(2)).createPath(anySet(),anyInt());
+        when(level.getGameTime()).thenReturn(200L); // Beyond the 100-tick wait: probe again.
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER.east(2)));
+        verify(nav,times(3)).createPath(anySet(),anyInt());
         verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+    }
+    @Test void indoorShovelSiteOffersSameFloorSpaceBeforeRoofPositions() {
+        nextSectionTerrain();var offered=probeCandidates();
+        // Roof far above the marker floor: heightmap-only candidates would be empty.
+        when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(90);
+        doAnswer(i -> {BlockPos p=i.getArgument(0);
+            return p.getY()<64 || p.getY()==89 ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState();})
+                .when(level).getBlockState(any());
+        long target=new BlockPos(20,64,0).asLong();
+        assertFalse(WallBuilderAccess.clearNextSection(worker,Set.of(target),Set.of(target),MARKER));
+        assertFalse(offered.get().isEmpty());
+        for (BlockPos site:offered.get()) {
+            assertEquals(64,site.getY(),site.toString());
+            assertFalse(overlapsMarkerBox(site),site.toString());
+            assertTrue(WallBuilderAccess.recoveryMargin(site,Set.of(new BlockPos(20,0,0).asLong()),.6f),site.toString());
+        }
+        verify(nav).moveTo(anyDouble(),eq(64.0),anyDouble(),eq(0.8));
     }
     @Test void reachableNativeCaveEndpointIsStoppedAndReplacedWithSurfaceApproach() throws Exception {
         terrain();var goal=new WallBuilderAccess(worker,new NativeGoal());
