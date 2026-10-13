@@ -257,6 +257,40 @@ class DefenseStructuresTest extends MinecraftTestSupport {
             assertFalse(message.contains("Claim that chunk"), message);
         }
     }
+    @Test void preparationReportsARecruitsFailureInsteadOfMissingDependencyOrInvalidClaim() {
+        var level = clearLevel();
+        when(level.dimension()).thenReturn(net.minecraft.world.level.Level.OVERWORLD);
+        var player = mock(ServerPlayer.class);
+        when(player.serverLevel()).thenReturn(level);
+        when(player.isAlive()).thenReturn(true);
+        when(player.mayBuild()).thenReturn(true);
+        var data = new com.devfarinsky.siegeoverhaul.RaidSavedData();
+        data.anchors.put("team:a", new com.devfarinsky.siegeoverhaul.RaidSavedData.Anchor("team:a", "A", UUID.randomUUID(),
+                java.util.Set.of(), false, false, java.util.Map.of(), 0));
+        var failed = new java.util.concurrent.atomic.AtomicBoolean();
+        var lookups = new java.util.concurrent.atomic.AtomicInteger();
+        try (var cores = mockStatic(SiegeCore.class);
+             var saves = mockStatic(com.devfarinsky.siegeoverhaul.RaidSavedData.class);
+             var workers = mockStatic(WorkersBridge.class);
+             var recruits = mockStatic(com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.class, CALLS_REAL_METHODS)) {
+            cores.when(() -> SiegeCore.key(player)).thenReturn("team:a");
+            cores.when(() -> SiegeCore.point(any(), eq("team:a")))
+                    .thenReturn(new com.devfarinsky.siegeoverhaul.RaidSavedData.DefensePoint("siege_core", net.minecraft.world.level.Level.OVERWORLD.location(), origin));
+            saves.when(() -> com.devfarinsky.siegeoverhaul.RaidSavedData.get(any())).thenReturn(data);
+            workers.when(WorkersBridge::available).thenReturn(true);
+            recruits.when(com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge::available).thenAnswer(call -> !failed.get());
+            recruits.when(com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge::failed).thenAnswer(call -> failed.get());
+            // The first lookup fails while resolving the core claim: the bridge disables itself and returns empty.
+            recruits.when(() -> com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.resolveDefendingClaim(any(), any()))
+                    .thenAnswer(call -> { lookups.incrementAndGet(); failed.set(true); return java.util.Optional.empty(); });
+            var first = DefenseStructures.prepare(player, origin, Direction.SOUTH, DefenseBlueprint.Kind.WALL);
+            assertEquals(DefenseStructures.PROVIDER_FAILURE, first.problem());
+            // Later attempts in the same session must not be told the dependency is missing.
+            var later = DefenseStructures.prepare(player, origin, Direction.SOUTH, DefenseBlueprint.Kind.WALL);
+            assertEquals(DefenseStructures.PROVIDER_FAILURE, later.problem());
+            assertEquals(1, lookups.get(), "the disabled bridge is not queried again");
+        }
+    }
     @Test void sameFactionChunkOutsideTheCoreClaimIsNotCalledUnclaimed() {
         var coreChunk = new net.minecraft.world.level.ChunkPos(origin);
         var sibling = new net.minecraft.world.level.ChunkPos(coreChunk.x, coreChunk.z + 1);

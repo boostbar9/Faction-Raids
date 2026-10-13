@@ -167,7 +167,7 @@ public final class ClaimBridge {
 
     public static String diagnosticStatus() {
         StringBuilder sb = new StringBuilder();
-        sb.append("Recruits: ").append(RecruitsClaimsBridge.available() ? "on" : "off");
+        sb.append("Recruits: ").append(RecruitsClaimsBridge.failed() ? "ERROR (placement blocked)" : RecruitsClaimsBridge.available() ? "on" : "off");
         sb.append(" | FTB Chunks: ").append(BROKEN_PROVIDERS.contains("ftbchunks") ? "ERROR (placement blocked)" : ftbAvailable() ? "on" : "off");
         sb.append(" | Open Parties: ").append(BROKEN_PROVIDERS.contains("openpartiesandclaims") ? "ERROR (placement blocked)" : opacAvailable() ? "on" : "off");
         return sb.toString();

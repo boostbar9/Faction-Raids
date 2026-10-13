@@ -36,6 +36,15 @@ public class ClaimBridgeFailureTest extends MinecraftTestSupport {
         }
     }
 
+    @Test void recruitsBridgeFailureIsReportedAsBrokenInDiagnostics() {
+        try (var recruits = mockStatic(RecruitsClaimsBridge.class, CALLS_REAL_METHODS)) {
+            recruits.when(RecruitsClaimsBridge::failed).thenReturn(true);
+            assertTrue(ClaimBridge.providerBroken());
+            assertTrue(ClaimBridge.diagnosticStatus().startsWith("Recruits: ERROR (placement blocked)"), ClaimBridge.diagnosticStatus());
+        }
+        assertFalse(ClaimBridge.providerBroken());
+    }
+
     @Test void brokenFtbApiBlocksInitialAndLaterQueries() { checkBroken("ftbchunks", "FTB Chunks"); }
     @Test void brokenOpacApiBlocksInitialAndLaterQueries() { checkBroken("openpartiesandclaims", "Open Parties"); }
 

@@ -109,11 +109,15 @@ public final class PerimeterConstruction {
         if (!player.isAlive() || player.isSpectator() || !player.mayBuild() || !level.dimension().equals(Level.OVERWORLD)
                 || corePoint == null || !core.equals(corePoint.pos()))
             return Preparation.failed("Use your active Siege Core in your faction's Overworld claim.");
+        // A claim provider that already failed is a different problem from a missing dependency.
+        if (ClaimBridge.providerBroken()) return Preparation.failed(DefenseStructures.PROVIDER_FAILURE);
         if (!WorkersBridge.available() || !RecruitsClaimsBridge.available())
             return Preparation.failed("Perimeter construction requires Villager Recruits and Workers 2.");
         var anchor = RaidSavedData.get(player.server).anchors.get(key);
         var claim = anchor == null ? Optional.<RecruitsClaimsBridge.ClaimSnapshot>empty()
                 : RecruitsClaimsBridge.resolveDefendingClaim(level, anchor);
+        // Resolving the claim can disable the Recruits bridge; report that rather than an invalid claim.
+        if (ClaimBridge.providerBroken()) return Preparation.failed(DefenseStructures.PROVIDER_FAILURE);
         if (claim.isEmpty()) return Preparation.failed("Your core needs a valid faction claim.");
         var nativeClaim = claim.get();
         var territory = RecruitsClaimsBridge.getFactionTerritory(level, nativeClaim.ownerFactionStringId(), PerimeterTerritory.MAX_CHUNKS);
