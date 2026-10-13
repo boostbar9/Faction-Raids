@@ -85,8 +85,9 @@ Open each bag when ready. If your inventory fills, undelivered contents remain i
 
 1. Install The Siege Overhaul and **all four required companion mods** below.
 2. Open your starter bags.
-3. Create or join a Villager Recruits faction and claim land. Your first claim must be a 5x5 **Claim Area**: as faction leader in the Overworld, open the claim map (**M** by default), right-click a chunk within four chunks of you and choose **Claim Area**. **Claim Chunk** only adds a chunk touching an existing claim.
+3. Create or join a Villager Recruits faction and claim land. Factions are created in the Recruits faction screen (**U** by default), not with a command; neither mod adds a `/faction` command. Your first claim must be a 5x5 **Claim Area**: as faction leader in the Overworld, open the claim map (**M** by default), right-click a chunk within four chunks of you and choose **Claim Area**. **Claim Chunk** only adds a chunk touching an existing claim.
 4. Place your Siege Core inside your faction's **Overworld claim**.
+   Manual defense plans must fit entirely inside the claim that holds the core; automatic perimeters use your complete faction territory instead. A plan next to the core can still cross into a neighboring unclaimed chunk; the rejection names that chunk so you can claim it or move the plan. Server spawn protection is reported separately.
 5. Hire troops, assign your workers their normal work areas, and prepare your defenses.
 
 Use the **Warlord's Codex** for concise siege guidance, status, and access to the native faction and claim interfaces.

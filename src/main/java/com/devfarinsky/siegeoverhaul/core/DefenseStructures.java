@@ -66,19 +66,29 @@ public final class DefenseStructures {
         if (!player.isAlive() || player.isSpectator() || !player.mayBuild()
                 || !level.dimension().equals(Level.OVERWORLD) || SiegeCore.point(player.server, key) == null)
             return Preparation.failed("You need an active Siege Core in your faction's Overworld claim.");
+        // A claim provider that already failed is a different problem from a missing dependency.
+        if (ClaimBridge.providerBroken()) return Preparation.failed(PROVIDER_FAILURE);
         if (!WorkersBridge.available() || !RecruitsClaimsBridge.available())
             return Preparation.failed("Defense construction requires Villager Recruits and Workers 2.");
         var anchor = RaidSavedData.get(player.server).anchors.get(key);
         var claim = anchor == null ? java.util.Optional.<RecruitsClaimsBridge.ClaimSnapshot>empty()
                 : RecruitsClaimsBridge.resolveDefendingClaim(level, anchor);
+        // Resolving the claim can disable the Recruits bridge; report that rather than an invalid claim.
+        if (ClaimBridge.providerBroken()) return Preparation.failed(PROVIDER_FAILURE);
         if (claim.isEmpty()) return Preparation.failed("Your core needs a valid faction claim.");
         var nativeClaim = claim.get();
         var identity = anchor.withIdentity(nativeClaim.ownerFactionStringId(), anchor.teamDisplay());
         var plan = DefenseBlueprint.create(kind, origin, facing);
-        var permissions = new java.util.HashMap<net.minecraft.world.level.ChunkPos, Boolean>();
-        String problem = siteProblem(level, plan, p -> permissions.computeIfAbsent(new net.minecraft.world.level.ChunkPos(p),
-                chunk -> nativeClaim.chunks().contains(chunk) && !ClaimBridge.isForeignClaim(level, chunk, identity))
-                && level.mayInteract(player, p));
+        // Cache the nullable answer explicitly; computeIfAbsent would repeat provider lookups for permitted chunks.
+        var permissions = new java.util.HashMap<net.minecraft.world.level.ChunkPos, java.util.Optional<String>>();
+        java.util.function.Function<BlockPos, String> denial = p -> {
+            var chunk = new net.minecraft.world.level.ChunkPos(p);
+            String refused = permissions.computeIfAbsent(chunk, c -> java.util.Optional.ofNullable(
+                    claimDenial(level, c, nativeClaim, identity))).orElse(null);
+            if (refused != null) return refused;
+            return level.mayInteract(player, p) ? null : protectedDenial(p);
+        };
+        String problem = siteDenial(level, plan, denial);
         if (problem != null) return Preparation.failed(problem);
 
         String nativeProblem = com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.availabilityProblem();
@@ -92,8 +102,49 @@ public final class DefenseStructures {
         return new Preparation(builder, plan, null);
     }
 
-    /** Checks empty access space too, so hollow wall cavities, passages and stepped approaches cannot start obstructed. */
+    /** Names the chunk and the reason, so "right next to the core" rejections are actionable. */
+    static String claimDenial(ServerLevel level, net.minecraft.world.level.ChunkPos chunk,
+                              RecruitsClaimsBridge.ClaimSnapshot coreClaim, RaidSavedData.Anchor identity) {
+        // A failed claim provider makes ownership unknown; that blocks placement but is not a foreign claim.
+        if (ClaimBridge.providerBroken()) return PROVIDER_FAILURE;
+        String where = "chunk " + chunk.x + ", " + chunk.z + " (blocks " + chunk.getMinBlockX() + ".." + chunk.getMaxBlockX()
+                + " x, " + chunk.getMinBlockZ() + ".." + chunk.getMaxBlockZ() + " z)";
+        if (!coreClaim.chunks().contains(chunk)) {
+            boolean foreign = ClaimBridge.isForeignClaim(level, chunk, identity);
+            // The lookup itself can mark a provider broken; that is unknown ownership, not a rival claim.
+            if (ClaimBridge.providerBroken()) return PROVIDER_FAILURE;
+            if (foreign) return "The plan reaches " + where + ", which belongs to another faction. Move the plan fully inside the claim holding your Siege Core.";
+            boolean ownClaim = RecruitsClaimsBridge.isChunkOwnedBy(level, chunk, coreClaim.ownerFactionStringId());
+            // A Recruits lookup that throws disables that bridge; never call unverified land unclaimed.
+            if (ClaimBridge.providerBroken()) return PROVIDER_FAILURE;
+            if (ownClaim)
+                return "The plan reaches " + where + ", which is a different claim of your faction. Manual plans must stay inside the claim holding your Siege Core; move the plan.";
+            return "The plan reaches " + where + ", which is not part of the claim holding your Siege Core. Claim that chunk on the claim map or move the plan.";
+        }
+        boolean foreign = ClaimBridge.isForeignClaim(level, chunk, identity);
+        if (ClaimBridge.providerBroken()) return PROVIDER_FAILURE;
+        if (foreign)
+            return "The plan reaches " + where + ", which is also claimed by another faction. Move the plan fully inside your own claim.";
+        return null;
+    }
+
+    static final String PROVIDER_FAILURE = "A claim mod failed to answer, so land ownership is unknown and building is paused. "
+            + "An operator can run /siegeoverhaul compat and check the server log.";
+
+    static String protectedDenial(BlockPos p) {
+        return "The server does not let you build at " + p.toShortString()
+                + " (spawn protection or the world border). Move the plan or ask an operator.";
+    }
+
+    /** Backward-compatible permission check with the generic reason. */
     static String siteProblem(ServerLevel level, DefenseBlueprint.Plan plan, Predicate<BlockPos> permitted) {
+        return siteDenial(level, plan, p -> permitted.test(p) ? null
+                : "The whole structure must be inside your core's claim and allow building.");
+    }
+
+    /** Checks empty access space too, so hollow wall cavities, passages and stepped approaches cannot start obstructed.
+     * {@code denial} returns null for a permitted cell or the player-facing reason it is refused. */
+    static String siteDenial(ServerLevel level, DefenseBlueprint.Plan plan, java.util.function.Function<BlockPos, String> denial) {
         if (plan.min().getY() - 1 < level.getMinBuildHeight() || plan.max().getY() >= level.getMaxBuildHeight())
             return "The structure would exceed the world's build height.";
         for (BlockPos base : plan.footprint()) {
@@ -101,7 +152,8 @@ public final class DefenseStructures {
                 return "The whole structure must be in loaded terrain inside the world border.";
         }
         for (BlockPos base : plan.footprint()) {
-            if (!permitted.test(base)) return "The whole structure must be inside your core's claim and allow building.";
+            String denied = denial.apply(base);
+            if (denied != null) return denied;
             BlockPos ground = base.below();
             var support = level.getBlockState(ground);
             if (support.hasBlockEntity() || HirePlacement.dangerous(support) || !support.getFluidState().isEmpty()
@@ -109,7 +161,8 @@ public final class DefenseStructures {
                 return "Choose dry, solid, level ground under the whole structure. Flatten the site first.";
             for (int y = base.getY(); y <= plan.max().getY(); y++) {
                 BlockPos cell = base.atY(y);
-                if (!permitted.test(cell)) return "The whole structure's footprint and headroom must allow building.";
+                denied = denial.apply(cell);
+                if (denied != null) return denied;
                 var state = level.getBlockState(cell);
                 String problem = com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.initialPlacementProblem(
                         level, cell, state, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
