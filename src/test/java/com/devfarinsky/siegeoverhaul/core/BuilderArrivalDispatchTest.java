@@ -28,6 +28,83 @@ import static org.mockito.Mockito.*;
 
 /** Actual pinned Workers 2.0.3 goal; terrain/entity mocks isolate its dispatch contract. */
 class BuilderArrivalDispatchTest extends MinecraftTestSupport {
+    @Test void depletedPlankTargetCannotOverrideTheNewNativeCobblestoneBatch() throws Exception {
+        var f = new Fixture();
+        var plank = new BlockPos(2, 64, 0);
+        f.area.stackToPlace.push(new BuildBlock(plank, Blocks.OAK_PLANKS.defaultBlockState()));
+        var inventory = new net.minecraft.world.SimpleContainer(36);
+        inventory.setItem(0, f.material);
+        when(f.builder.getInventory()).thenReturn(inventory);
+        when(f.area.getArea()).thenReturn(new AABB(0, 64, 0, 81, 65, 1));
+        when(f.area.getStateFromPos(plank)).thenReturn(Blocks.OAK_PLANKS.defaultBlockState());
+        when(f.builder.getMatchingItem(any())).thenAnswer(call -> {
+            java.util.function.Predicate<ItemStack> predicate = call.getArgument(0);
+            return predicate.test(f.material) && !f.material.isEmpty() ? f.material : null;
+        });
+        f.nativeGoal.state = BuilderWorkGoal.State.PREPARE_PLACE_BLOCKS;
+        f.nativeGoal.blockPos = plank;
+        var wrapper = new WallBuilderAccess(f.builder, f.nativeGoal);
+        try (var guard = mockStatic(NativeConstructionGuard.class, CALLS_REAL_METHODS)) {
+            guard.when(() -> NativeConstructionGuard.beforeNativeTick(f.builder, f.nativeGoal)).thenReturn(true);
+            wrapper.tick();
+            assertNull(f.nativeGoal.blockPos);
+            assertEquals(BuilderWorkGoal.State.PLACE_BLOCKS, f.nativeGoal.state);
+            assertEquals(java.util.List.of(f.target), f.nativeGoal.stackToPlace);
+            assertEquals(2, f.area.stackToPlace.size());
+            assertEquals(8, f.material.getCount());
+            wrapper.tick(); // Far from the newly selected cobblestone: still no dispatch.
+            assertEquals(1, f.nativeGoal.stackToPlace.size());
+            verify(f.level, never()).setBlockAndUpdate(any(), any());
+            f.at(new Vec3(77.5, 64, .5));
+            wrapper.tick();
+            verify(f.level).setBlockAndUpdate(f.target, Blocks.COBBLESTONE.defaultBlockState());
+            verify(f.level, never()).setBlockAndUpdate(eq(plank), any());
+            assertEquals(7, f.material.getCount());
+            verify(f.builder, never()).addNeededItem(any());
+        }
+    }
+
+    @Test void emptyNativeBatchStillRequestsFiniteMaterialsThroughWorkers() throws Exception {
+        var f = new Fixture();
+        when(f.builder.getInventory()).thenReturn(new net.minecraft.world.SimpleContainer(36));
+        when(f.area.getArea()).thenReturn(new AABB(0, 64, 0, 81, 65, 1));
+        when(f.area.getRequiredMaterials()).thenReturn(new java.util.ArrayList<>(
+                java.util.List.of(new ItemStack(Items.COBBLESTONE, 128))));
+        f.nativeGoal.state = BuilderWorkGoal.State.PREPARE_PLACE_BLOCKS;
+        f.nativeGoal.blockPos = f.target;
+        var wrapper = new WallBuilderAccess(f.builder, f.nativeGoal);
+        try (var guard = mockStatic(NativeConstructionGuard.class, CALLS_REAL_METHODS)) {
+            guard.when(() -> NativeConstructionGuard.beforeNativeTick(f.builder, f.nativeGoal)).thenReturn(true);
+            wrapper.tick();
+            assertNull(f.nativeGoal.blockPos);
+            assertTrue(f.nativeGoal.stackToPlace.isEmpty());
+            verify(f.builder).addNeededItem(argThat(need -> need.count == 64 && need.required
+                    && need.matcher.test(new ItemStack(Items.COBBLESTONE))
+                    && !need.matcher.test(new ItemStack(Items.OAK_PLANKS))));
+            assertEquals(1, f.area.stackToPlace.size());
+            verify(f.level, never()).setBlockAndUpdate(any(), any());
+        }
+    }
+
+    @Test void blockedOrUnlinkedPreparationKeepsItsNativeTarget() throws Exception {
+        for (boolean blocked : new boolean[]{false, true}) {
+            var f = new Fixture();
+            when(f.builder.getInventory()).thenReturn(new net.minecraft.world.SimpleContainer(36));
+            when(f.area.getArea()).thenReturn(new AABB(0, 64, 0, 81, 65, 1));
+            when(f.area.getRequiredMaterials()).thenReturn(new java.util.ArrayList<>());
+            if (!blocked) f.builder.getPersistentData().remove(ModConstants.Tags.PLAYER_FORTIFICATION_AREA_ID);
+            f.nativeGoal.state = BuilderWorkGoal.State.PREPARE_PLACE_BLOCKS;
+            f.nativeGoal.blockPos = f.target;
+            var wrapper = new WallBuilderAccess(f.builder, f.nativeGoal);
+            try (var guard = mockStatic(NativeConstructionGuard.class, CALLS_REAL_METHODS)) {
+                guard.when(() -> NativeConstructionGuard.beforeNativeTick(f.builder, f.nativeGoal)).thenReturn(!blocked);
+                wrapper.tick();
+                assertEquals(f.target, f.nativeGoal.blockPos);
+                verify(f.level, never()).setBlockAndUpdate(any(), any());
+            }
+        }
+    }
+
     @Test void nativeHorizontalReachUsesTheSameStrictSquaredBoundaryRegardlessOfHeight() {
         var f = new Fixture();
         doCallRealMethod().when(f.builder).getHorizontalDistanceTo(any());

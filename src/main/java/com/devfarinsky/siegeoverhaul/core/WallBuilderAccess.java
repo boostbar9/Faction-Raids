@@ -132,6 +132,7 @@ public final class WallBuilderAccess extends Goal {
             return;
         }
         Entity guardedArea = NativeConstructionGuard.currentArea(worker);
+        clearPreparedPlacementTarget();
         var mutationCells = NativeConstructionGuard.mutationCells(delegate);
         // Workers checks movement every tenth tick but may place every fifth tick,
         // including the first target popped from its stack. Route before dispatch.
@@ -155,6 +156,23 @@ public final class WallBuilderAccess extends Goal {
             route(level, target, state instanceof Enum<?> e && e.name().equals("MOVE_TO_WORK_AREA") ? 20 : 40);
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             // Keep native behavior when a companion changes its public job state.
+        }
+    }
+
+    /** Workers rebuilds its material-filtered queue here but retains the previous block target. */
+    private void clearPreparedPlacementTarget() {
+        if (!(worker.level() instanceof ServerLevel)) return;
+        try {
+            if (stateField.get(delegate) instanceof Enum<?> state
+                    && state.name().equals("PREPARE_PLACE_BLOCKS")
+                    && areaField.get(worker) instanceof Entity area && isCommission(area)) {
+                // A depleted material can leave blockPos outside the newly prepared queue.
+                // Let the next native placement pop its own target; keep the durable plan,
+                // inventory and native supply requests untouched.
+                blockField.set(delegate, null);
+            }
+        } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            // Unsupported companions retain their own preparation behavior.
         }
     }
 
@@ -436,6 +454,29 @@ public final class WallBuilderAccess extends Goal {
     /** At most 49 columns, inside native horizontal reach; never dig or move the blueprint. */
     static Set<BlockPos> standingSites(ServerLevel level, Mob worker, BlockPos target) {
         return standingSites(level, worker, target, 3, 16);
+    }
+
+    /** Called only after the controller authenticates a paid next-section handoff.
+     * Keep marker creation/lease admission untouched until the worker leaves its
+     * next footprint. This requests ordinary navigation, never edits or teleports.
+     */
+    public static boolean clearNextSection(Mob worker, Set<Long> targets, Set<Long> reservation, BlockPos marker) {
+        if (!(worker.level() instanceof ServerLevel level) || marker == null) return false;
+        boolean obstructs = targets.stream().anyMatch(cell ->
+                worker.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(BlockPos.of(cell))));
+        if (!obstructs) return true;
+        if (worker.isPassenger() || worker.isLeashed() || worker.getTarget() != null
+                || NativeConstructionGuard.currentArea(worker) != null) return false;
+        Set<Long> columns = new java.util.HashSet<>();
+        reservation.forEach(cell -> columns.add(BlockPos.of(cell).atY(0).asLong()));
+        var sites = new ArrayList<>(standingSites(level, worker, marker));
+        sites.removeIf(site -> !recoveryMargin(site, columns, worker.getBbWidth()));
+        sites.sort(java.util.Comparator.comparingDouble(site -> site.distToCenterSqr(worker.position())));
+        var nav = worker.getNavigation();
+        if (!nav.isDone() && nav.getPath() != null) return false;
+        for (BlockPos site : sites)
+            if (nav.moveTo(site.getX(), site.getY(), site.getZ(), 0.8)) break;
+        return false;
     }
 
     /** Recovery-only search: at most 169 loaded columns, still inside the native reach. */
