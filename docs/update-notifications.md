@@ -19,10 +19,11 @@ has been selected as recommended. Other published release channels may advance
 `1.20.1-latest` after public verification; this does not require future versions to
 use the Release channel. Do not bump the feed during builds.
 
-The current publicly verified recommended Release is **4.52.12**.
-The [4.52.12 release record](release-4.52.12.md) identifies its exact source, artifact,
+The current publicly verified recommended Release is **4.52.13**.
+The [4.52.13 release record](release-4.52.13.md) identifies its exact source, artifact,
 Release channel and public-verification evidence. The historical
-[4.52.10 record](release-4.52.10.md) and [4.52.11 record](release-4.52.11.md), together
+[4.52.10 record](release-4.52.10.md), [4.52.11 record](release-4.52.11.md) and
+[4.52.12 record](release-4.52.12.md), together
 with the [4.52.7 record](release-4.52.7.md), [4.52.8 record](release-4.52.8.md), and
 [4.52.9 record](release-4.52.9.md), preserve the preceding sealed-loot,
 builder-recovery, grass-compatibility, hub/capture, and builder-approach releases. These records
