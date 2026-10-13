@@ -1,3 +1,9 @@
+## 4.52.13 - Clearer building and faction setup feedback
+
+- Name the exact chunk and cause when a defense plan or perimeter is refused for claim reasons. "The whole structure must be inside your core's claim and allow building" now says which chunk the plan reaches, whether that chunk is unclaimed or belongs to another faction, and separately reports server spawn protection or the world border. The rules themselves are unchanged: every planned block still has to sit inside the claim that holds your Siege Core.
+- Add a faction setup hint to `/siegeoverhaul help`: factions and claims are managed in Villager Recruits through its faction screen (U by default) and claim map (M by default); neither mod adds a `/faction` command.
+- No gameplay, pricing, claim or dependency changes. Update the server and all clients together, and back up your world before updating.
+
 ## 4.52.12 - Builders keep working after supply changes and section handoffs
 
 - Fix a commissioned builder keeping its previous block target after a material runs out. Workers 2 rebuilds its placement queue from the remaining supplies, and the builder now takes the next block from that fresh queue instead of returning to a block it can no longer place. Finite chest supplies, native supply requests, payment and accepted plans are unchanged.

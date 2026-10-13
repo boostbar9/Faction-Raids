@@ -75,10 +75,14 @@ public final class DefenseStructures {
         var nativeClaim = claim.get();
         var identity = anchor.withIdentity(nativeClaim.ownerFactionStringId(), anchor.teamDisplay());
         var plan = DefenseBlueprint.create(kind, origin, facing);
-        var permissions = new java.util.HashMap<net.minecraft.world.level.ChunkPos, Boolean>();
-        String problem = siteProblem(level, plan, p -> permissions.computeIfAbsent(new net.minecraft.world.level.ChunkPos(p),
-                chunk -> nativeClaim.chunks().contains(chunk) && !ClaimBridge.isForeignClaim(level, chunk, identity))
-                && level.mayInteract(player, p));
+        var permissions = new java.util.HashMap<net.minecraft.world.level.ChunkPos, String>();
+        java.util.function.Function<BlockPos, String> denial = p -> {
+            var chunk = new net.minecraft.world.level.ChunkPos(p);
+            String refused = permissions.computeIfAbsent(chunk, c -> claimDenial(level, c, nativeClaim, identity));
+            if (refused != null) return refused;
+            return level.mayInteract(player, p) ? null : protectedDenial(p);
+        };
+        String problem = siteDenial(level, plan, denial);
         if (problem != null) return Preparation.failed(problem);
 
         String nativeProblem = com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.availabilityProblem();
@@ -92,8 +96,35 @@ public final class DefenseStructures {
         return new Preparation(builder, plan, null);
     }
 
-    /** Checks empty access space too, so hollow wall cavities, passages and stepped approaches cannot start obstructed. */
+    /** Names the chunk and the reason, so "right next to the core" rejections are actionable. */
+    static String claimDenial(ServerLevel level, net.minecraft.world.level.ChunkPos chunk,
+                              RecruitsClaimsBridge.ClaimSnapshot coreClaim, RaidSavedData.Anchor identity) {
+        if (!coreClaim.chunks().contains(chunk)) {
+            boolean foreign = ClaimBridge.isForeignClaim(level, chunk, identity);
+            return "The plan reaches chunk " + chunk.x + ", " + chunk.z + " (blocks " + chunk.getMinBlockX() + ".." + chunk.getMaxBlockX()
+                    + " x, " + chunk.getMinBlockZ() + ".." + chunk.getMaxBlockZ() + " z), which "
+                    + (foreign ? "belongs to another faction. Move the plan fully inside the claim holding your Siege Core."
+                    : "is not part of the claim holding your Siege Core. Claim that chunk on the claim map or move the plan.");
+        }
+        if (ClaimBridge.isForeignClaim(level, chunk, identity))
+            return "Chunk " + chunk.x + ", " + chunk.z + " is also claimed by another faction. Move the plan fully inside your own claim.";
+        return null;
+    }
+
+    static String protectedDenial(BlockPos p) {
+        return "The server does not let you build at " + p.toShortString()
+                + " (spawn protection or the world border). Move the plan or ask an operator.";
+    }
+
+    /** Backward-compatible permission check with the generic reason. */
     static String siteProblem(ServerLevel level, DefenseBlueprint.Plan plan, Predicate<BlockPos> permitted) {
+        return siteDenial(level, plan, p -> permitted.test(p) ? null
+                : "The whole structure must be inside your core's claim and allow building.");
+    }
+
+    /** Checks empty access space too, so hollow wall cavities, passages and stepped approaches cannot start obstructed.
+     * {@code denial} returns null for a permitted cell or the player-facing reason it is refused. */
+    static String siteDenial(ServerLevel level, DefenseBlueprint.Plan plan, java.util.function.Function<BlockPos, String> denial) {
         if (plan.min().getY() - 1 < level.getMinBuildHeight() || plan.max().getY() >= level.getMaxBuildHeight())
             return "The structure would exceed the world's build height.";
         for (BlockPos base : plan.footprint()) {
@@ -101,7 +132,8 @@ public final class DefenseStructures {
                 return "The whole structure must be in loaded terrain inside the world border.";
         }
         for (BlockPos base : plan.footprint()) {
-            if (!permitted.test(base)) return "The whole structure must be inside your core's claim and allow building.";
+            String denied = denial.apply(base);
+            if (denied != null) return denied;
             BlockPos ground = base.below();
             var support = level.getBlockState(ground);
             if (support.hasBlockEntity() || HirePlacement.dangerous(support) || !support.getFluidState().isEmpty()
@@ -109,7 +141,8 @@ public final class DefenseStructures {
                 return "Choose dry, solid, level ground under the whole structure. Flatten the site first.";
             for (int y = base.getY(); y <= plan.max().getY(); y++) {
                 BlockPos cell = base.atY(y);
-                if (!permitted.test(cell)) return "The whole structure's footprint and headroom must allow building.";
+                denied = denial.apply(cell);
+                if (denied != null) return denied;
                 var state = level.getBlockState(cell);
                 String problem = com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.initialPlacementProblem(
                         level, cell, state, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());

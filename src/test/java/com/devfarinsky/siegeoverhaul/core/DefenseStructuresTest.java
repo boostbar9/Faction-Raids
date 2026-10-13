@@ -171,6 +171,35 @@ class DefenseStructuresTest extends MinecraftTestSupport {
         assertNotNull(DefenseStructures.siteProblem(level, tower(), p -> true));
         verify(level, never()).getBlockState(any());
     }
+    @Test void claimRejectionsNameTheChunkAndTheSpecificCause() {
+        var level = clearLevel();
+        var coreChunk = new net.minecraft.world.level.ChunkPos(origin);
+        var outside = new net.minecraft.world.level.ChunkPos(coreChunk.x + 1, coreChunk.z);
+        var coreClaim = new com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge.ClaimSnapshot(
+                UUID.randomUUID(), "Home", "faction", coreChunk, java.util.Set.of(coreChunk), false, 10, 10);
+        assertNull(DefenseStructures.claimDenial(level, coreChunk, coreClaim, null));
+        String unclaimed = DefenseStructures.claimDenial(level, outside, coreClaim, null);
+        assertNotNull(unclaimed);
+        assertTrue(unclaimed.contains(outside.x + ", " + outside.z), unclaimed);
+        assertTrue(unclaimed.contains(String.valueOf(outside.getMinBlockX())), unclaimed);
+        assertTrue(unclaimed.contains("not part of the claim holding your Siege Core"), unclaimed);
+        assertTrue(unclaimed.contains("claim map"), unclaimed);
+        String guarded = DefenseStructures.protectedDenial(origin);
+        assertTrue(guarded.contains(origin.toShortString()) && guarded.contains("spawn protection"), guarded);
+        // The site review reports the exact reason for the first refused cell instead of the generic sentence.
+        var plan = tower();
+        java.util.function.Function<BlockPos, String> denial = p -> new net.minecraft.world.level.ChunkPos(p).equals(coreChunk) ? null
+                : DefenseStructures.claimDenial(level, new net.minecraft.world.level.ChunkPos(p), coreClaim, null);
+        String problem = DefenseStructures.siteDenial(level, plan, denial);
+        boolean crosses = plan.footprint().stream().anyMatch(p -> !new net.minecraft.world.level.ChunkPos(p).equals(coreChunk));
+        if (crosses) { assertNotNull(problem); assertTrue(problem.contains("not part of the claim"), problem); }
+        else assertNull(problem);
+        BlockPos headroom = origin.above(2);
+        String headroomProblem = DefenseStructures.siteDenial(level, plan, p -> p.equals(headroom) ? DefenseStructures.protectedDenial(p) : null);
+        assertNotNull(headroomProblem);
+        assertTrue(headroomProblem.contains(headroom.toShortString()), headroomProblem);
+        verify(level, never()).setBlock(any(), any(), anyInt(), anyInt());
+    }
     @Test void foreignClaimsAndWorldLimitsAreRejected() {
         assertNotNull(DefenseStructures.siteProblem(clearLevel(), tower(), p -> !p.equals(origin)));
         var level = clearLevel(); level.getWorldBorder().setSize(10);

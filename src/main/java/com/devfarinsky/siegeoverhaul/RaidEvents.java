@@ -1410,8 +1410,14 @@ public final class RaidEvents {
                 .append(Component.literal(" — claim rewards from sieges you missed")), false);
         source.sendSuccess(() -> Component.literal("/siegeoverhaul notify on|off").withStyle(ChatFormatting.AQUA)
                 .append(Component.literal(" — hear about other factions' sieges on this server")), false);
+        source.sendSuccess(() -> Component.literal(FACTION_SETUP_HINT).withStyle(ChatFormatting.GRAY), false);
         return 1;
     }
+
+    /** Factions and claims are Villager Recruits features; there is no /faction command in either mod. */
+    static final String FACTION_SETUP_HINT = "Factions and claims are managed in Villager Recruits, not by commands: "
+            + "press U (default) for the faction screen to create or join a faction, then M (default) for the claim map. "
+            + "Your first claim must be a 5x5 Claim Area placed by the faction leader.";
 
     /**
      * v3.2.0 — /siegeoverhaul book. Rate-limited helper that gives the

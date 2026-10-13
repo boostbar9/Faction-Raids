@@ -146,13 +146,20 @@ public final class PerimeterConstruction {
         } catch(IllegalArgumentException unavailable) {
             return new Preparation(null,plan,claimIdentity,"The complete perimeter cannot be represented as bounded native sections. No payment or partial job is created.",territory);
         }
-        Map<ChunkPos, Boolean> permissions = new HashMap<>();
-        Predicate<BlockPos> permitted = p -> permissions.computeIfAbsent(new ChunkPos(p), chunk ->
-                territory.chunks().contains(chunk)
-                        && RecruitsClaimsBridge.isChunkOwnedBy(level, chunk, territory.factionStringId())
-                        && !ClaimBridge.isForeignClaim(level, chunk, identity))
-                && level.mayInteract(player, p);
-        String problem = siteProblem(level, plan, permitted);
+        Map<ChunkPos, String> permissions = new HashMap<>();
+        java.util.function.Function<BlockPos, String> denial = p -> {
+            String chunkDenial = permissions.computeIfAbsent(new ChunkPos(p), chunk -> {
+                if (!territory.chunks().contains(chunk)
+                        || !RecruitsClaimsBridge.isChunkOwnedBy(level, chunk, territory.factionStringId()))
+                    return "Chunk " + chunk.x + ", " + chunk.z + " is no longer part of your faction territory. Refresh the territory and review again.";
+                if (ClaimBridge.isForeignClaim(level, chunk, identity))
+                    return "Chunk " + chunk.x + ", " + chunk.z + " is also claimed by another faction.";
+                return null;
+            });
+            if (chunkDenial != null) return chunkDenial;
+            return level.mayInteract(player, p) ? null : DefenseStructures.protectedDenial(p);
+        };
+        String problem = siteDenial(level, plan, denial);
         if (problem != null) return new Preparation(null, plan, claimIdentity, problem, territory);
         String nativeProblem = NativeConstructionGuard.availabilityProblem();
         if (nativeProblem != null && !nativeProblem.isBlank()) return new Preparation(null, plan, claimIdentity, nativeProblem, territory);
@@ -173,6 +180,12 @@ public final class PerimeterConstruction {
 
     /** Validate every reserved cell, including the hollow body and empty walking headroom, before payment. */
     static String siteProblem(ServerLevel level, PerimeterBlueprint.Plan plan, Predicate<BlockPos> permitted) {
+        return siteDenial(level, plan, p -> permitted.test(p) ? null
+                : "The entire footprint and walkway must remain inside your faction territory with building permission.");
+    }
+
+    /** {@code denial} returns null for a permitted cell or the player-facing reason it is refused. */
+    static String siteDenial(ServerLevel level, PerimeterBlueprint.Plan plan, java.util.function.Function<BlockPos, String> denial) {
         if (plan == null || !plan.valid()) return "The full perimeter plan is not ready.";
         for (var column : plan.columns()) {
             BlockPos bottom = column.foundationBase();
@@ -189,7 +202,8 @@ public final class PerimeterConstruction {
                     || !support.isFaceSturdy(level, ground, Direction.UP)) return "The perimeter needs dry, safe, solid foundations.";
             for (int y = bottom.getY(); y <= column.base().getY() + 5; y++) {
                 BlockPos p = bottom.atY(y);
-                if (!permitted.test(p)) return "The entire footprint and walkway must remain inside your faction territory with building permission.";
+                String denied = denial.apply(p);
+                if (denied != null) return denied;
                 var current = level.getBlockState(p); String target = plan.blocks().get(p.asLong());
                 String currentId = String.valueOf(ForgeRegistries.BLOCKS.getKey(current.getBlock()));
                 boolean already = target != null && target.equals(currentId) && !current.hasBlockEntity()
