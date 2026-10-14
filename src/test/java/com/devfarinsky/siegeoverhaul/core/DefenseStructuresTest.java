@@ -1,6 +1,18 @@
 package com.devfarinsky.siegeoverhaul.core;
 
 import com.devfarinsky.siegeoverhaul.MinecraftTestSupport;
+import com.devfarinsky.siegeoverhaul.RaidSavedData;
+import com.devfarinsky.siegeoverhaul.compat.ClaimBridge;
+import com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge;
+import com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard;
+import net.minecraft.world.level.Level;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import net.minecraft.world.level.ChunkPos;
+import java.util.Set;
+
 import com.devfarinsky.siegeoverhaul.compat.WorkersBridge;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.BlockPos;
@@ -25,6 +37,83 @@ import static org.mockito.Mockito.*;
 
 class DefenseStructuresTest extends MinecraftTestSupport {
     private final BlockPos origin = new BlockPos(-20, 70, -30);
+
+    @Test void prepareCachesPermittedChunksInTheProductionPermissionCallback() {
+        assertPreparePermissionLookups(false, false);
+    }
+
+    @Test void prepareStillRejectsADifferentDeniedChunkAfterPermittedCells() {
+        assertPreparePermissionLookups(true, false);
+    }
+
+    @Test void prepareStillRejectsAProviderFailureAfterPermittedCells() {
+        assertPreparePermissionLookups(false, true);
+    }
+
+    private void assertPreparePermissionLookups(boolean denySecondChunk, boolean failSecondChunk) {
+        var site = new BlockPos(16, 70, 16);
+        var plan = DefenseBlueprint.create(DefenseBlueprint.Kind.WATCHTOWER, site, Direction.NORTH);
+        var chunks = plan.footprint().stream().map(ChunkPos::new).collect(java.util.stream.Collectors.toSet());
+        var level = clearLevel();
+        assertTrue(chunks.size() > 1, "The fixture must exercise separate chunks");
+        when(level.dimension()).thenReturn(Level.OVERWORLD);
+        var player = mock(ServerPlayer.class);
+        when(player.serverLevel()).thenReturn(level);
+        when(player.isAlive()).thenReturn(true);
+        when(player.mayBuild()).thenReturn(true);
+        when(level.mayInteract(eq(player), any(BlockPos.class))).thenReturn(true);
+        var anchor = new RaidSavedData.Anchor("team:a", "A", UUID.randomUUID(),
+                Set.of(), false, false, Map.of(), 0);
+        var data = new RaidSavedData();
+        data.anchors.put("team:a", anchor);
+        var claim = new RecruitsClaimsBridge.ClaimSnapshot(UUID.randomUUID(), "Home", "faction",
+                new ChunkPos(site), chunks, false, 10, 10);
+        var permissionLookups = new HashMap<ChunkPos, Integer>();
+        var broken = new AtomicBoolean();
+        // Stop only after the real plan/site/permission checks, before unrelated resource lookup.
+        String siteAccepted = "test: site validation completed";
+        try (var cores = mockStatic(SiegeCore.class);
+             var saves = mockStatic(RaidSavedData.class);
+             var workers = mockStatic(WorkersBridge.class);
+             var recruits = mockStatic(RecruitsClaimsBridge.class);
+             var claims = mockStatic(ClaimBridge.class);
+             var guard = mockStatic(NativeConstructionGuard.class, CALLS_REAL_METHODS)) {
+            cores.when(() -> SiegeCore.key(player)).thenReturn("team:a");
+            cores.when(() -> SiegeCore.point(player.server, "team:a"))
+                    .thenReturn(new RaidSavedData.DefensePoint("siege_core", Level.OVERWORLD.location(), site));
+            saves.when(() -> RaidSavedData.get(player.server)).thenReturn(data);
+            workers.when(WorkersBridge::available).thenReturn(true);
+            recruits.when(RecruitsClaimsBridge::available).thenReturn(true);
+            recruits.when(() -> RecruitsClaimsBridge.resolveDefendingClaim(level, anchor)).thenReturn(Optional.of(claim));
+            claims.when(ClaimBridge::providerBroken).thenAnswer(call -> broken.get());
+            claims.when(() -> ClaimBridge.isForeignClaim(eq(level), any(ChunkPos.class), any(RaidSavedData.Anchor.class)))
+                    .thenAnswer(call -> {
+                        ChunkPos chunk = call.getArgument(1);
+                        permissionLookups.merge(chunk, 1, Integer::sum);
+                        if (permissionLookups.size() == 2) {
+                            if (failSecondChunk) broken.set(true);
+                            return denySecondChunk || failSecondChunk;
+                        }
+                        return false;
+                    });
+            guard.when(NativeConstructionGuard::availabilityProblem).thenReturn(siteAccepted);
+            var result = DefenseStructures.prepare(player, site, Direction.NORTH, DefenseBlueprint.Kind.WATCHTOWER);
+            if (failSecondChunk) assertEquals(DefenseStructures.PROVIDER_FAILURE, result.problem());
+            else if (denySecondChunk) {
+                assertNotNull(result.problem());
+                assertTrue(result.problem().contains("also claimed by another faction"), result.problem());
+            } else assertEquals(siteAccepted, result.problem());
+            assertNull(result.builder(), "Read-only preparation must stop before resource selection");
+            assertEquals(denySecondChunk || failSecondChunk ? 2 : chunks.size(), permissionLookups.size());
+            if (!denySecondChunk && !failSecondChunk) assertEquals(chunks, permissionLookups.keySet());
+            assertTrue(permissionLookups.values().stream().allMatch(count -> count == 1), permissionLookups.toString());
+            verify(level, atLeast(2)).mayInteract(eq(player), any(BlockPos.class));
+            guard.verify(NativeConstructionGuard::availabilityProblem,
+                    denySecondChunk || failSecondChunk ? never() : times(1));
+            verify(level, never()).setBlock(any(), any(), anyInt(), anyInt());
+            verify(level, never()).destroyBlock(any(), anyBoolean(), any());
+        }
+    }
 
     @Test void allRotationsRetainMaterialsAndExactNativeWorldCoordinates() {
         for (var kind : DefenseBlueprint.Kind.values()) {
@@ -303,17 +392,6 @@ class DefenseStructuresTest extends MinecraftTestSupport {
             assertTrue(message.contains("different claim of your faction"), message);
             assertFalse(message.contains("Claim that chunk"), message);
         }
-    }
-    @Test void permittedChunksAreCheckedOncePerChunkDuringSiteReview() {
-        var level = clearLevel();
-        var plan = tower();
-        var seen = new java.util.HashMap<net.minecraft.world.level.ChunkPos, Integer>();
-        var cache = new java.util.HashMap<net.minecraft.world.level.ChunkPos, java.util.Optional<String>>();
-        java.util.function.Function<BlockPos, String> denial = p -> cache.computeIfAbsent(new net.minecraft.world.level.ChunkPos(p),
-                chunk -> { seen.merge(chunk, 1, Integer::sum); return java.util.Optional.empty(); }).orElse(null);
-        assertNull(DefenseStructures.siteDenial(level, plan, denial));
-        assertFalse(seen.isEmpty());
-        assertTrue(seen.values().stream().allMatch(count -> count == 1), seen.toString());
     }
     @Test void foreignClaimsAndWorldLimitsAreRejected() {
         assertNotNull(DefenseStructures.siteProblem(clearLevel(), tower(), p -> !p.equals(origin)));
