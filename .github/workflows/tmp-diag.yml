@@ -9,8 +9,25 @@ jobs:
   diag:
     runs-on: ubuntu-latest
     steps:
-      - env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api repos/${{ github.repository }}/actions/jobs/117324486991/logs > job.txt
-          grep -nE "error:|warning: \[|FAILED|AssertionFailed|Exception|tests completed|\.java:[0-9]+: " job.txt | head -60 | while IFS= read -r l; do echo "::error title=build::${l:0:450}"; done
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: 12092270616
+          run-id: 39008059717
+          github-token: ${{ github.token }}
+          path: qa
+      - run: |
+          python3 - <<'PY'
+          import pathlib, xml.etree.ElementTree as ET
+          n=0
+          for p in pathlib.Path('qa').rglob('*.xml'):
+              try: root=ET.parse(p).getroot()
+              except Exception: continue
+              for tc in root.iter('testcase'):
+                  for f in list(tc.findall('failure'))+list(tc.findall('error')):
+                      msg=(f.get('message') or '')[:300].replace('\n',' ')
+                      body=(f.text or '').splitlines()
+                      where=[l.strip() for l in body if 'devfarinsky' in l][:4]
+                      print(f"::error title={tc.get('classname')}.{tc.get('name')}::{msg} | {' | '.join(where)}"[:900])
+                      n+=1
+          print("failures",n)
+          PY
