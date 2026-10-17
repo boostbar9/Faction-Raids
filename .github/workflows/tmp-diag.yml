@@ -4,33 +4,13 @@ on:
     branches: [tmp/diag-native-qa]
 permissions:
   actions: read
-  contents: write
+  contents: read
 jobs:
   diag:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: tmp/diag-native-qa
-      - uses: actions/download-artifact@v4
-        with:
-          artifact-ids: 12089694804
-          run-id: 39003596174
-          github-token: ${{ github.token }}
-          path: qa
-      - run: |
-          find qa -type f | sed 's/^/FILE /' | head -80
-          python3 - <<'PY'
-          import json, pathlib
-          for p in pathlib.Path('qa').rglob('*.json'):
-              t=p.read_text(errors='replace')
-              print(f"::notice title={p.name}::{t[:1500]}")
-          for p in pathlib.Path('qa').rglob('*.log'):
-              lines=p.read_text(errors='replace').splitlines()
-              hits=[l for l in lines if any(w in l for w in ('Exception','FAIL','AssertionError','assert','HUD_QA','failed','Error'))]
-              for l in hits[:25]: print(f"::error title={p.name}::{l[:450]}")
-          PY
-          mkdir -p shots && find qa -name '*.png' -exec cp {} shots/ \;
-          ls shots | head -50
-          git config user.name diag-bot; git config user.email diag@example.invalid
-          git add shots && git commit -qm "diag shots" && git push -q origin HEAD:tmp/diag-native-qa || true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/${{ github.repository }}/actions/jobs/117324486991/logs > job.txt
+          grep -nE "error:|warning: \[|FAILED|AssertionFailed|Exception|tests completed|\.java:[0-9]+: " job.txt | head -60 | while IFS= read -r l; do echo "::error title=build::${l:0:450}"; done
