@@ -36,7 +36,7 @@ public final class BuilderGroundRecovery {
         boolean stationary = state.contains("Time") && time > previous && time - previous <= 80
                 && now.distanceToSqr(last) < 0.25D;
         int stalled = stationary ? state.getInt("Still") + 1 : 0;
-        if (!stationary) state.putInt("Repaths", 0);
+        if (!stationary) { state.putInt("Repaths", 0); state.putInt("IdleStalls", 0); }
         state.putDouble("X", now.x); state.putDouble("Y", now.y); state.putDouble("Z", now.z);
         state.putLong("Time", time); state.putInt("Still", stalled);
         root.put(STATE, state);
@@ -75,13 +75,27 @@ public final class BuilderGroundRecovery {
     static void unstick(ServerLevel level, Mob builder, CompoundTag state) {
         var navigation = builder.getNavigation();
         Path path = navigation.getPath();
-        if (navigation.isDone() || path == null) { state.putInt("Repaths", 0); return; }
+        if (navigation.isDone() || path == null) {
+            // No route at all: the access helper found no reachable standing site for the next
+            // block. After a second consecutive stall, move to a safe site within its reach.
+            state.putInt("Repaths", 0);
+            int idle = state.getInt("IdleStalls");
+            if (idle < 1) { state.putInt("IdleStalls", idle + 1); return; }
+            BlockPos site = WallBuilderAccess.rescueSite(builder);
+            if (site == null) return;
+            hop(builder, site);
+            return;
+        }
         int repaths = state.getInt("Repaths");
         navigation.stop();
         if (repaths < 1) { state.putInt("Repaths", repaths + 1); return; }
         BlockPos hop = pathHop(level, builder, path);
-        if (hop == null) return;
-        builder.teleportTo(hop.getX() + 0.5D, hop.getY(), hop.getZ() + 0.5D);
+        if (hop != null) hop(builder, hop);
+    }
+
+    private static void hop(Mob builder, BlockPos feet) {
+        builder.getNavigation().stop();
+        builder.teleportTo(feet.getX() + 0.5D, feet.getY(), feet.getZ() + 0.5D);
         builder.setDeltaMovement(Vec3.ZERO);
         builder.fallDistance = 0;
         reset(builder);

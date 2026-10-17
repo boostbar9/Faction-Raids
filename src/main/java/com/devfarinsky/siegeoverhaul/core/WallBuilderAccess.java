@@ -81,6 +81,36 @@ public final class WallBuilderAccess extends Goal {
         return false;
     }
 
+    /**
+     * Last-resort recovery target for a commissioned builder that has stood still for several
+     * seconds without a route: the nearest safe standing site within native reach of its pending
+     * block, outside reserved wall columns. Null when it already stands in reach or none exists.
+     */
+    public static BlockPos rescueSite(Mob worker) {
+        if (worker.goalSelector == null || !(worker.level() instanceof ServerLevel level)) return null;
+        for (var goal : worker.goalSelector.getAvailableGoals())
+            if (goal.getGoal() instanceof WallBuilderAccess access) return access.rescueSite(level);
+        return null;
+    }
+
+    private BlockPos rescueSite(ServerLevel level) {
+        try {
+            if (!(areaField.get(worker) instanceof Entity area) || !isCommission(area) || !reserveColumns(area)) return null;
+            var cells = NativeConstructionGuard.mutationCells(delegate);
+            BlockPos target = !cells.isEmpty() ? cells.iterator().next()
+                    : blockField.get(delegate) instanceof BlockPos p ? p : null;
+            if (target == null || workStandingSite(level, target, BlockPos.containing(worker.position()))
+                    || worker.position().distanceToSqr(Vec3.atBottomCenterOf(target)) > 24 * 24) return null;
+            BlockPos best = null; double score = Double.MAX_VALUE;
+            for (BlockPos site : routeSites(level, target, 16, false)) {
+                if (!safeStandingSite(level, worker, site)) continue;
+                double distance = worker.position().distanceToSqr(Vec3.atBottomCenterOf(site));
+                if (distance < score) { best = site; score = distance; }
+            }
+            return best;
+        } catch (ReflectiveOperationException | RuntimeException unavailable) { return null; }
+    }
+
     /** Reset only stale transient native goal state after the new area's assignment succeeds. */
     public static boolean prepareProtectedHandoff(Mob worker, Entity expectedArea) {
         if (worker.goalSelector == null || NativeConstructionGuard.currentArea(worker) != expectedArea) return false;
