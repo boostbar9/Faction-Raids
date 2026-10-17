@@ -3,28 +3,21 @@ on:
   push:
     branches: [tmp/diag-native-qa]
 permissions:
-  actions: read
   contents: read
 jobs:
   diag:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
         with:
-          artifact-ids: 12094643936
-          run-id: 39014897381
-          github-token: ${{ github.token }}
-          path: qa
+          ref: fix/marker-site-cover
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - run: |
           set +e
-          python3 - <<'PY'
-          import json, pathlib
-          for p in pathlib.Path('qa').rglob('result.json'):
-              d=json.loads(p.read_text())
-              print("::error title=failure::"+str(d.get('failure'))[:900])
-              print("::error title=stage::"+str(d.get('stage')))
-              v=d.get('blockerDiagnostics') or {}
-              t=json.dumps({k:x for k,x in v.items() if k not in ('footprintEntities','treasuryObservation','missingTargets','inventorySlots','pathNodes')})
-              for i in range(0,min(len(t),9000),900): print(f"::error title=b{i}::{t[i:i+900]}")
-          PY
-          for f in $(find qa -name '*.log'); do grep -o '"placed":[0-9]*' "$f" | awk 'NR%20==1' | tr '\n' ' ' | sed 's/^/::warning title=progress::/'; echo; done
+          ./gradlew clean build --console=plain > out.txt 2>&1
+          echo "exit $?"
+          grep -nE "error:|warning: \[|FAILED|What went wrong|Exception|expected:|> " out.txt | head -60 | while IFS= read -r l; do echo "::error title=log::${l:0:900}"; done
+          tail -40 out.txt
