@@ -46,6 +46,10 @@ class NativeHandLifecycleBoundaryTest extends MinecraftTestSupport {
         final MockedStatic<ProtectedStorageAccess> storage = mockStatic(ProtectedStorageAccess.class);
         final MockedStatic<WallBuilderAccess> goals = mockStatic(WallBuilderAccess.class);
         Fixture(boolean provenance) {
+            // Existing hand-only fixtures have positively known empty new-job authority, not an unreadable world store.
+            var earthworksStorage=mock(net.minecraft.world.level.storage.DimensionDataStorage.class);
+            when(level.getDataStorage()).thenReturn(earthworksStorage);
+            when(earthworksStorage.<EarthworksJobLedger>computeIfAbsent(any(),any(),eq("siege_earthworks_jobs_v1"))).thenReturn(new EarthworksJobLedger());
             var server = mock(MinecraftServer.class); when(level.getServer()).thenReturn(server); when(server.overworld()).thenReturn(level);
             when(worker.level()).thenReturn(level); when(worker.getUUID()).thenReturn(builder); when(worker.getPersistentData()).thenReturn(data);
             when(worker.getInventory()).thenReturn(inventory); when(worker.getMainHandItem()).thenAnswer(i -> hand.get());

@@ -23,6 +23,11 @@ public final class ProtectedConstructionAreas {
                     .sized(1.2F, 2.0F).fireImmune().noSummon()
                     .clientTrackingRange(ConstructionTracking.TRACKING_CHUNKS).build(ID.toString()));
 
+    public static final RegistryObject<EntityType<EarthworksBuildArea>> EARTHWORKS_TYPE = TYPES.register("earthworks_build_area", () ->
+            EntityType.Builder.<EarthworksBuildArea>of(EarthworksBuildArea::new, MobCategory.MISC)
+                    .sized(1.2F, 2.0F).fireImmune().noSummon().clientTrackingRange(ConstructionTracking.TRACKING_CHUNKS)
+                    .build(new ResourceLocation(SiegeOverhaul.MOD_ID, "earthworks_build_area").toString()));
+
     private ProtectedConstructionAreas() {}
 
     /** The caller still registers, starts, protects, assigns and pays for this sealed area. */

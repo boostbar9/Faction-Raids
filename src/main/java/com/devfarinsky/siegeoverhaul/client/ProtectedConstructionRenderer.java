@@ -14,5 +14,6 @@ public final class ProtectedConstructionRenderer {
     private ProtectedConstructionRenderer() {}
     @SubscribeEvent public static void register(EntityRenderersEvent.RegisterRenderers event) {
         event.registerEntityRenderer(ProtectedConstructionAreas.TYPE.get(), WorkerAreaRenderer::new);
+        event.registerEntityRenderer(ProtectedConstructionAreas.EARTHWORKS_TYPE.get(), WorkerAreaRenderer::new);
     }
 }
