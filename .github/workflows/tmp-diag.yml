@@ -11,18 +11,20 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          artifact-ids: 12092787478
-          run-id: 39010539674
+          artifact-ids: 12092657645
+          run-id: 39010538202
           github-token: ${{ github.token }}
           path: qa
       - run: |
           set +e
           python3 - <<'PY'
           import json, pathlib
-          for p in pathlib.Path('qa').rglob('*.json'):
+          for p in pathlib.Path('qa').rglob('result.json'):
               d=json.loads(p.read_text())
-              if not isinstance(d,dict): continue
-              short={k:v for k,v in d.items() if not isinstance(v,(list,dict))}
-              t=p.name+' '+json.dumps(short)
-              for i in range(0,min(len(t),4000),900): print(f"::error title=r{i}::{t[i:i+900]}")
+              print("::error title=failure::"+str(d.get('failure'))[:900])
+              v=d.get('blockerDiagnostics') or {}
+              keep=['placed','builderPosition','nativeBuildState','nativeTarget','nativeRemaining','storageState','storageChestTarget','navigationDone','pathCanReach','pathTarget','pathNextIndex','pathNodeCount','pathNodes','selfClearanceRequests','selfClearanceTarget','mainHand','builderCobble','chestCobble','guardStatus','project','sleeping','followState','requestedSupplies']
+              t=json.dumps({k:v.get(k) for k in keep})
+              for i in range(0,min(len(t),5000),900): print(f"::error title=b{i}::{t[i:i+900]}")
           PY
+          for f in $(find qa -name '*.log'); do grep -n "SiegeWallGroundRecovery\|teleport\|Native territory perimeter QA" "$f" | tail -3 | cut -c1-600 | sed 's/^/::warning title=log::/'; done
