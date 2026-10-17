@@ -3,7 +3,7 @@ package com.devfarinsky.siegeoverhaul.chat;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
-class BossbarLabelTest {
+class BossbarLabelTest extends com.devfarinsky.siegeoverhaul.MinecraftTestSupport {
     @Test void shortLabelsKeepEveryChipInOrder() {
         assertEquals("Ship-Wolves · Breach · stronghold 47m · 12 deployed",
                 ChatStyle.bossbarLabel("Ship-Wolves", "Breach", "stronghold 47m", null, "", "12 deployed"));
