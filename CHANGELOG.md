@@ -1,3 +1,11 @@
+## 4.52.19 - Defense plans start on grassy ground
+
+- Defense plans no longer fail with "no accessible native marker position" when you stand on grass, flowers, ferns or a thin layer of snow. The builder's marker clears that cover where it stands, and the plants drop as if you had picked them.
+- Your builder or your own pets standing next to you no longer block the marker spot. Other mobs, and you yourself, still need to be clear of it.
+- The marker can also stand on natural stone, snow, clay, and sand or gravel resting on solid ground, not only on grass, dirt and a few stone types.
+- Chests, crops, water, berry bushes, cactus and your own blocks still block the marker, and so do the planned blocks themselves. No payment is taken until the job starts, as before.
+- Back up your world and update the server and all clients together.
+
 ## 4.52.18 - Enemy camps keep building
 
 - Enemy war camps no longer go quiet once their walls and towers are done. Their builders keep working outside the walls for the rest of the siege, raising six war buildings one after another:
