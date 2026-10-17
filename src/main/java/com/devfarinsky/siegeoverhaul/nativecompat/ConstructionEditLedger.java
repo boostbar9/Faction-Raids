@@ -29,6 +29,7 @@ final class ConstructionEditLedger extends SavedData {
                                   com.devfarinsky.siegeoverhaul.core.PerimeterProject.Stage stage,
                                   String hash, long generation) {}
     private final Map<UUID, ValidatedLease> validatedLeases = new HashMap<>();
+    private com.devfarinsky.siegeoverhaul.core.PerimeterBuilderAssignments assignments = new com.devfarinsky.siegeoverhaul.core.PerimeterBuilderAssignments();
     private boolean invalid;
     private int totalCells;
     private UUID generation = UUID.randomUUID();
@@ -125,7 +126,7 @@ final class ConstructionEditLedger extends SavedData {
     boolean projectBuilderDestroyed(com.devfarinsky.siegeoverhaul.core.PerimeterProject project,
                                     UUID builder, UUID area, UUID ledgerGeneration) {
         if (!sameGeneration(ledgerGeneration) || !matchesProjectIdentity(project)
-                || !project.header().builder().equals(builder)) return false;
+                || !assignedBuilder(project).equals(builder)) return false;
         int stage = projectLeaseIndex(project.header().projectId());
         if (stage < 0 || stage >= project.stages().size() || !project.stages().get(stage).areaId().equals(area)
                 || stage != project.activeStage() && (stage != project.activeStage() - 1 || !retired(area))) return false;
@@ -150,12 +151,38 @@ final class ConstructionEditLedger extends SavedData {
     private String destructionReceipt(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID area) {
         var h = project.header();
         String evidence = "perimeter-builder-destroyed-v1:" + h.projectId() + ":" + h.generation() + ":"
-                + project.manifestHash() + ":" + h.builder() + ":" + area + ":" + generation;
+                + project.manifestHash() + ":" + assignedBuilder(project) + ":" + area + ":" + generation;
         try {
             return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
                     .digest(evidence.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         } catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
     }
+    UUID assignedBuilder(com.devfarinsky.siegeoverhaul.core.PerimeterProject project) {
+        if (invalid) throw new IllegalStateException("Construction ledger is invalid");
+        return assignments.builder(project);
+    }
+    UUID assignedTerminalBuilder(com.devfarinsky.siegeoverhaul.core.PerimeterTerminalReceipt terminal) {
+        if (invalid) throw new IllegalStateException("Construction ledger is invalid");
+        return assignments.builder(terminal.projectId(),terminal.generation(),terminal.manifestHash(),terminal.builder());
+    }
+    UUID builderForArea(com.devfarinsky.siegeoverhaul.core.PerimeterProject project,UUID area) {
+        if (invalid) throw new IllegalStateException("Construction ledger is invalid");
+        return assignments.builderForArea(project,area);
+    }
+    boolean canRebindBuilder(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID previous, UUID area) {
+        return !invalid && matchesProjectReservation(project) && assignments.canRebind(project, previous, area);
+    }
+    boolean replaceDeadBuilder(com.devfarinsky.siegeoverhaul.core.PerimeterProject project, UUID replacement) {
+        String proof = projectBuilderDestructionReceipt(project);
+        if (proof == null || edited(project.header().projectId()) || project.active() == null) return false;
+        UUID id = project.header().projectId(); Site site = sites.get(id);
+        try {
+            assignments.replace(project, assignedBuilder(project), replacement, site.destruction().area(), proof);
+            sites.put(id, new Site(site.cells(), site.edited(), false, site.completeReservation(), null));
+            validatedLeases.remove(id); setDirty(); return true;
+        } catch (RuntimeException refusal) { return false; }
+    }
+
     private static Set<Long> packed(Set<BlockPos> positions) {
         Set<Long> result = new HashSet<>(); positions.forEach(pos -> result.add(pos.asLong())); return result;
     }
@@ -284,7 +311,7 @@ final class ConstructionEditLedger extends SavedData {
         var ledger = new ConstructionEditLedger();
         // NBT getters coerce wrong types to empty/false. Never let damaged history
         // erase edit, destruction or retirement evidence while retaining authority.
-        if (!keys(root, Set.of("Sites", "Retired", "Generation", "Invalid"), Set.of("ProjectLeases", "HandLifecycles"))
+        if (!keys(root, Set.of("Sites", "Retired", "Generation", "Invalid"), Set.of("ProjectLeases", "HandLifecycles", "BuilderAssignments"))
                 || !compoundList(root, "Sites") || !compoundList(root, "Retired")
                 || !identity(root, "Generation") || !canonicalBoolean(root, "Invalid")
                 || root.getBoolean("Invalid")) {
@@ -363,6 +390,12 @@ final class ConstructionEditLedger extends SavedData {
                 }
             } catch (RuntimeException malformed) { ledger.invalid = true; }
         }
+        if (!ledger.invalid && root.contains("BuilderAssignments")) {
+            try {
+                if (!root.contains("BuilderAssignments", Tag.TAG_COMPOUND)) throw new IllegalArgumentException();
+                ledger.assignments = com.devfarinsky.siegeoverhaul.core.PerimeterBuilderAssignments.load(root.getCompound("BuilderAssignments"));
+            } catch (RuntimeException malformed) { ledger.invalid = true; }
+        }
         return ledger;
     }
 
@@ -407,6 +440,7 @@ final class ConstructionEditLedger extends SavedData {
         ListTag hands = new ListTag();
         handLifecycles.values().forEach(receipt -> hands.add(receipt.save()));
         root.put("HandLifecycles", hands);
+        root.put("BuilderAssignments", assignments.save());
         return root;
     }
 }

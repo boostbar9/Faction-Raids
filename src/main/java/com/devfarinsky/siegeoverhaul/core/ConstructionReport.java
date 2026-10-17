@@ -132,7 +132,7 @@ public final class ConstructionReport {
                     project.stages().forEach(stage -> projectAreas.add(stage.areaId()));
                     if (result.size() >= 12) continue;
                     var area = project.active() == null ? null : level.getEntity(project.active().areaId());
-                    var candidate = level.getEntity(project.header().builder());
+                    var candidate = level.getEntity(com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.currentBuilder(level, project));
                     Mob builder = candidate instanceof Mob mob ? mob : null;
                     WorkersConstructionView.Progress progress = null;
                     String activity = "", supplies = "";
