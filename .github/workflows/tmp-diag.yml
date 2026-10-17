@@ -21,8 +21,10 @@ jobs:
           echo "exit $?"
           python3 - <<'PY2'
           lines=open('out.txt').read().splitlines()
-          start=next((i for i,l in enumerate(lines) if 'Task :compileJava' in l),0)
-          body='\n'.join(l for l in lines[start:] if l.strip() and 'Running' not in l)
+          keep=[]
+          for i,l in enumerate(lines):
+              if ' error:' in l or 'What went wrong' in l or 'FAILED' in l or 'Test ' in l and 'FAIL' in l: keep.extend(lines[i:i+6])
+          body='\n'.join(keep) or '\n'.join(lines[-60:])
           chunks=[body[i:i+900] for i in range(0,min(len(body),8000),900)]
           for n,c in enumerate(chunks): print(f"::error title=c{n}::"+c.replace('\n',' %0A '))
           PY2
