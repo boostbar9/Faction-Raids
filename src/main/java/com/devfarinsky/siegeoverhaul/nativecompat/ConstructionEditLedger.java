@@ -237,6 +237,12 @@ final class ConstructionEditLedger extends SavedData {
         setDirty();
     }
     void acknowledgeRetirement(UUID id) { if (retired.remove(id)) setDirty(); }
+    /** Confirmed death of the builder reserved by a single (non-perimeter) protected job. */
+    boolean siteBuilderDestroyed(UUID id) {
+        if (invalid || id == null || projectLeases.parent(id) != null) return false;
+        Site site = sites.get(id);
+        return site != null && site.builderDestroyed();
+    }
     void builderDestroyed(UUID id) {
         UUID parent = projectLeases.parent(id);
         UUID siteId = parent == null ? id : parent;

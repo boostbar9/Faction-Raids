@@ -644,6 +644,19 @@ public final class NativeConstructionGuard {
         return value.substring(0, Math.min(160, value.length()));
     }
 
+    /**
+     * True when this single protected job's reserved builder is confirmed dead.
+     * Unloaded builders never qualify. The marker then explains how to recover.
+     */
+    public static boolean reservedBuilderDestroyed(Entity area) {
+        if (!(area instanceof ProtectedBuildArea) || !(area.level() instanceof ServerLevel level)) return false;
+        try {
+            if (!ConstructionEditLedger.get(level).siteBuilderDestroyed(area.getUUID())) return false;
+            pause(area, "Builder died. Cancel this job from its marker to free the site; placed blocks stay.");
+            return true;
+        } catch (RuntimeException unavailable) { return false; }
+    }
+
     public static Entity currentArea(Mob builder) {
         try {
             Object value = builder.getClass().getField("currentBuildArea").get(builder);

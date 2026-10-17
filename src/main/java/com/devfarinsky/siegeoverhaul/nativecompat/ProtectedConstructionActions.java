@@ -58,7 +58,10 @@ public final class ProtectedConstructionActions {
             return;
         }
         Mob builder = loadedReservedBuilder(sender, area.reservedBuilderId());
-        if (builder == null && ledger.handLifecycle(area.reservedBuilderId()) == null) {
+        // Jobs from before hand provenance existed can still be canceled once the
+        // ledger has confirmed their builder's death; nothing is left to detach.
+        if (builder == null && ledger.handLifecycle(area.reservedBuilderId()) == null
+                && !ledger.siteBuilderDestroyed(area.getUUID())) {
             fail(sender, "Older protected job cleanup needs original builder hand provenance. Load that builder if available; otherwise recovery review is required.");
             return;
         }
