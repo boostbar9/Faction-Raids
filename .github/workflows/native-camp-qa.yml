@@ -102,7 +102,8 @@ jobs:
               assert case['ordinaryTicksSinceEstablishment'] >= 60, case
               assert case['unregisteredGuardRoles'] == ['assassin'], case
               recovered = [guard for guard in case['guards'] if guard['type'] == 'recruits:scout' and guard['scoutSpawnTailRecovered']]
-              assert len(recovered) == 2 and len(case['guards']) == 5, case
+              assert len(recovered) == 2 and len(case['guards']) == 6, case
+              assert sum(guard['type'] == 'recruits:recruit' for guard in case['guards']) == 1, case
               for unit in case['workers'] + case['guards']:
                   assert not unit['noAi'] and unit['faction'] == case['expectedEnemyFaction'], unit
               assert case['nativeJobOwnershipVerified'] and case['nativeJobOwner'] != case['guardOwner'], case
