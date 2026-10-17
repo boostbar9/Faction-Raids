@@ -48,6 +48,7 @@ class CampCrewTest extends MinecraftTestSupport {
         RaidState raid = raid();
         raid.campUsesWorkers = true;
         raid.campUpgradeStage = CampPerimeter.COMPLETE_STAGE;
+        RaidConfig.CAMP_WAR_WORKS.set(false); // A fully finished camp: no war works left to staff.
         raid.pendingCampBlocks.clear();
         UUID dead = UUID.randomUUID(), unloaded = UUID.randomUUID();
         raid.campWorkers.add(dead);
@@ -88,7 +89,21 @@ class CampCrewTest extends MinecraftTestSupport {
         RaidState raid = raid();
         raid.pendingCampBlocks.clear();
         raid.campUpgradeStage = CampPerimeter.COMPLETE_STAGE;
+        assertTrue(CampCrew.needsCrew(raid), "a finished perimeter moves on to war works");
+        RaidConfig.CAMP_WAR_WORKS.set(false);
         assertFalse(CampCrew.needsCrew(raid));
+        RaidConfig.CAMP_WAR_WORKS.set(true);
+        RaidConfig.CAMP_WORKS_TENTS.set(0);
+        var works = new net.minecraft.nbt.CompoundTag();
+        for (var work : CampWarWorks.Work.values()) {
+            var entry = new net.minecraft.nbt.CompoundTag();
+            entry.putBoolean("Built", true); entry.putBoolean("Active", true);
+            works.put(work.key, entry);
+        }
+        var root = new net.minecraft.nbt.CompoundTag(); root.put("Works", works);
+        raid.campaign.put(CampWarWorks.ROOT, root);
+        assertFalse(CampCrew.needsCrew(raid), "every work standing and no expansion left");
+        RaidConfig.CAMP_WAR_WORKS.set(false);
         raid.campUpgradeStage = CampPerimeter.FIRST_STAGE + 2;
         assertTrue(CampCrew.needsCrew(raid));
         raid.coreCaptured = true;

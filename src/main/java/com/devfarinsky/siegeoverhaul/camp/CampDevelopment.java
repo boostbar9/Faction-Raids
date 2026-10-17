@@ -13,15 +13,19 @@ import java.util.*;
 public final class CampDevelopment {
     private CampDevelopment() {}
     public static void tick(ServerLevel level,RaidSavedData.RaidState raid) {
-        if(!WarGate.ready(level,raid) || raid.campPos==null || raid.campClaimId==null || raid.campUpgradeStage>CampPerimeter.LAST_STAGE || raid.coreCaptured
+        // After the last wall/tower the crew moves on to war works instead of idling.
+        boolean works=raid.campUpgradeStage>CampPerimeter.LAST_STAGE;
+        if(!WarGate.ready(level,raid) || raid.campPos==null || raid.campClaimId==null || (works && !CampWarWorks.enabled()) || raid.coreCaptured
                 || !RaidConfig.ENABLE_CAMP_CONSTRUCTION.get() || !RaidConfig.CLEANUP_WAR_CAMPS.get()
                 || !raid.pendingCampBlocks.isEmpty() || !raid.pendingFortifications.isEmpty()
                 || NativeCampConstruction.active(raid) || !CampClaims.owns(level,raid)) return;
         if(raid.campWorkers.stream().noneMatch(id -> level.getEntity(id) instanceof Mob worker && worker.isAlive())) return;
         raid.campUpgradeTicks+=ModConstants.TICK_INTERVAL;
         RaidSavedData.get(level.getServer()).setDirty();
-        if(raid.campUpgradeTicks<RaidConfig.CAMP_UPGRADE_SECONDS.get()*20)return;
+        int interval=works ? CampWarWorks.intervalTicks(raid) : RaidConfig.CAMP_UPGRADE_SECONDS.get()*20;
+        if(raid.campUpgradeTicks<interval)return;
         raid.campUpgradeTicks=0;
+        if(works) { CampWarWorks.develop(level,raid); return; }
         if(CampPerimeter.perimeterStage(raid.campUpgradeStage)) { tryPerimeter(level,raid); return; }
         Direction front=CampPerimeter.mainGateSide(raid);
         Direction extension=raid.campUpgradeStage==0?front.getClockWise():raid.campUpgradeStage==1?front.getCounterClockWise():front.getOpposite();
@@ -80,49 +84,16 @@ public final class CampDevelopment {
         var anchor=RaidSavedData.get(level.getServer()).anchors.get(raid.teamKey);
         if(anchor==null)return false;
         Set<net.minecraft.world.level.ChunkPos> checked=new HashSet<>();
-        Map<Long,String> plan=new LinkedHashMap<>();
-        int y=Integer.MIN_VALUE;
-        for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++) {
-            BlockPos p=center.offset(dx,0,dz);
-            if(CampPerimeter.mainApproachColumn(raid,p))return false;
-            if(!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p))return false;
-            if(!claimed(level,raid,anchor,checked,p))return false;
-            y=Math.max(y,level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,p.getX(),p.getZ()));
-        }
-        if(Math.abs(y-raid.campPos.getY())>2)return false;
-        center=new BlockPos(center.getX(),y,center.getZ());
-        for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++) {
-            BlockPos p=center.offset(dx,0,dz);
-            int ground=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,p.getX(),p.getZ());
-            BlockPos support=p.atY(ground-1);
-            if(y-ground>2 || !level.getFluidState(support).isEmpty()
-                    || !level.getBlockState(support).isFaceSturdy(level,support,Direction.UP))return false;
-            for(int sy=ground;sy<y;sy++)plan.put(new BlockPos(p.getX(),sy,p.getZ()).asLong(),"minecraft:cobblestone");
-            plan.put(p.asLong(),"minecraft:spruce_planks");
-        }
-        // Entrances face the main camp; each upgrade has its own purpose and silhouette.
-        int towardX=raid.campPos.getX()-center.getX(), towardZ=raid.campPos.getZ()-center.getZ();
-        Direction entrance=Math.abs(towardX)>=Math.abs(towardZ)
-                ? (towardX>=0?Direction.EAST:Direction.WEST) : (towardZ>=0?Direction.SOUTH:Direction.NORTH);
-        plan.putAll(CampUpgradeLayout.structure(center, entrance, raid.campUpgradeStage, raid.factionId));
-
-        // Hollow cells are absent from Workers' placement list, so validate
-        // them too: a valid shell must not enclose an existing obstruction.
-        if (!CampBuildingAccess.clearInterior(level, raid, center, plan)) return false;
-        var access=CampBuildingAccess.plan(level,raid,center,entrance,
-                pos -> claimed(level,raid,anchor,checked,pos));
-        if(access.isEmpty())return false;
-        // A raised apron can reach past the pavilion footprint. Do not fill
-        // the gate avenue even when the pavilion itself sits safely beside it.
-        if(access.get().keySet().stream().anyMatch(key ->
-                CampPerimeter.mainApproachColumn(raid,BlockPos.of(key))))return false;
-        plan.putAll(access.get());
-        raid.pendingCampBlocks.putAll(plan);
+        int stage=raid.campUpgradeStage;
+        var site=sitePlan(level,raid,anchor,checked,center,false,
+                (c,entrance) -> CampUpgradeLayout.structure(c,entrance,stage,raid.factionId));
+        if(site.isEmpty())return false;
+        raid.pendingCampBlocks.putAll(site.get().plan());
         // Never fall back to remote placement for an upgrade or replace an obstructing player block.
         String structures=com.devfarinsky.siegeoverhaul.ModConstants.Tags.CAMP_STRUCTURES;
         var previous=raid.campaign.getCompound(structures).copy();
         // Reserve the entrance before choosing a supply barrel for this job.
-        CampStructures.record(raid,raid.campUpgradeStage,center,entrance);
+        CampStructures.record(raid,raid.campUpgradeStage,site.get().center(),site.get().entrance());
         if(NativeCampConstruction.start(level,raid)) {
             CampStructures.constructionStarted(level,raid,raid.campUpgradeStage);
             raid.campUpgradeStage++;
@@ -132,7 +103,59 @@ public final class CampDevelopment {
         raid.pendingCampBlocks.clear(); return false;
     }
 
-    private static boolean claimed(ServerLevel level,RaidSavedData.RaidState raid,
+    /** A validated 7x7 hall site: its raised floor, the layout and its entrance steps. */
+    record Site(BlockPos center, Direction entrance, Map<Long,String> plan) {}
+
+    /**
+     * Plan a 7x7 hall at {@code center}: loaded, claimed, near the camp's height, on supported
+     * ground, with clear interior and buildable three-wide entrance steps. {@code outward}
+     * turns the doorway away from the camp (for halls outside the perimeter wall). Read-only.
+     */
+    static Optional<Site> sitePlan(ServerLevel level,RaidSavedData.RaidState raid,RaidSavedData.Anchor anchor,
+                                   Set<net.minecraft.world.level.ChunkPos> checked,BlockPos center,boolean outward,
+                                   java.util.function.BiFunction<BlockPos,Direction,Map<Long,String>> layout) {
+        Map<Long,String> plan=new LinkedHashMap<>();
+        int y=Integer.MIN_VALUE;
+        for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++) {
+            BlockPos p=center.offset(dx,0,dz);
+            if(CampPerimeter.mainApproachColumn(raid,p))return Optional.empty();
+            if(!level.hasChunkAt(p) || !level.getWorldBorder().isWithinBounds(p))return Optional.empty();
+            if(!claimed(level,raid,anchor,checked,p))return Optional.empty();
+            y=Math.max(y,level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,p.getX(),p.getZ()));
+        }
+        if(Math.abs(y-raid.campPos.getY())>2)return Optional.empty();
+        center=new BlockPos(center.getX(),y,center.getZ());
+        for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++) {
+            BlockPos p=center.offset(dx,0,dz);
+            int ground=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,p.getX(),p.getZ());
+            BlockPos support=p.atY(ground-1);
+            if(y-ground>2 || !level.getFluidState(support).isEmpty()
+                    || !level.getBlockState(support).isFaceSturdy(level,support,Direction.UP))return Optional.empty();
+            for(int sy=ground;sy<y;sy++)plan.put(new BlockPos(p.getX(),sy,p.getZ()).asLong(),"minecraft:cobblestone");
+            plan.put(p.asLong(),"minecraft:spruce_planks");
+        }
+        // Entrances face the main camp; halls outside the wall face away from it.
+        int towardX=raid.campPos.getX()-center.getX(), towardZ=raid.campPos.getZ()-center.getZ();
+        Direction entrance=Math.abs(towardX)>=Math.abs(towardZ)
+                ? (towardX>=0?Direction.EAST:Direction.WEST) : (towardZ>=0?Direction.SOUTH:Direction.NORTH);
+        if(outward)entrance=entrance.getOpposite();
+        plan.putAll(layout.apply(center,entrance));
+
+        // Hollow cells are absent from Workers' placement list, so validate
+        // them too: a valid shell must not enclose an existing obstruction.
+        if (!CampBuildingAccess.clearInterior(level, raid, center, plan)) return Optional.empty();
+        var access=CampBuildingAccess.plan(level,raid,center,entrance,
+                pos -> claimed(level,raid,anchor,checked,pos));
+        if(access.isEmpty())return Optional.empty();
+        // A raised apron can reach past the pavilion footprint. Do not fill
+        // the gate avenue even when the pavilion itself sits safely beside it.
+        if(access.get().keySet().stream().anyMatch(key ->
+                CampPerimeter.mainApproachColumn(raid,BlockPos.of(key))))return Optional.empty();
+        plan.putAll(access.get());
+        return Optional.of(new Site(center,entrance,plan));
+    }
+
+    static boolean claimed(ServerLevel level,RaidSavedData.RaidState raid,
                                    RaidSavedData.Anchor anchor,
                                    Set<net.minecraft.world.level.ChunkPos> checked,BlockPos pos) {
         if(!checked.add(new net.minecraft.world.level.ChunkPos(pos)))return true;
