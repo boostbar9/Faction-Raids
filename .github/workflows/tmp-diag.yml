@@ -19,5 +19,10 @@ jobs:
           set +e
           ./gradlew clean build --console=plain > out.txt 2>&1
           echo "exit $?"
-          grep -nE "error:|warning: \[|FAILED|What went wrong|Exception|expected:|> " out.txt | head -60 | while IFS= read -r l; do echo "::error title=log::${l:0:900}"; done
-          tail -40 out.txt
+          python3 - <<'PY2'
+          lines=open('out.txt').read().splitlines()
+          start=next((i for i,l in enumerate(lines) if 'Task :compileJava' in l),0)
+          body='\n'.join(l for l in lines[start:] if l.strip() and 'Running' not in l)
+          chunks=[body[i:i+900] for i in range(0,min(len(body),8000),900)]
+          for n,c in enumerate(chunks): print(f"::error title=c{n}::"+c.replace('\n',' %0A '))
+          PY2
