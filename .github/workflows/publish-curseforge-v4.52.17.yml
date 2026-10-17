@@ -1,0 +1,244 @@
+# One-use exact-artifact publisher. Keep this workflow off main.
+name: Publish tested 4.52.17 release to CurseForge
+
+on:
+  push:
+    branches: [publish/curseforge-v4.52.17]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+concurrency:
+  group: curseforge-1364352-v4.52.17
+  cancel-in-progress: false
+
+env:
+  VERSION: '4.52.17'
+  PULL_REQUEST_NUMBER: '310'
+  REVIEWED_SOURCE_SHA: '6ff0c3e582e9c4f20f64d7c34e80fb2e8d3bd3df'
+  MERGED_SOURCE_SHA: '7b7ff215ab55079c8756435adfd527e158a3536e'
+  SOURCE_TREE_SHA: '3fe37b883626cec9c242f99162b0cb9988e49dbc'
+  REVIEWED_BUILD_RUN_ID: '39019412075'
+  REVIEWED_JAR_ARTIFACT_ID: '12096117418'
+  REVIEWED_REGRESSION_ARTIFACT_ID: '12096197186'
+  BUILD_RUN_ID: '39021306846'
+  JAR_ARTIFACT_ID: '12097245375'
+  JAR_ARTIFACT_DIGEST: 'sha256:989d3d6627a174e0e6ab9a51a3caf66f691b35fb4ab7e1d0d365f27c9effcd59'
+  REGRESSION_ARTIFACT_ID: '12096681980'
+  QA_RUNS: '39019415892,39019412072,39019412162,39019412062,39019412146,39019412110'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prevent duplicate or ambiguous uploads
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.parse, urllib.request
+          BASE = 'https://api.github.com/repos/boostbar9/Faction-Raids/'
+          HEADERS = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'}
+          def get(path):
+              with urllib.request.urlopen(urllib.request.Request(BASE + path, headers=HEADERS), timeout=30) as response:
+                  return json.load(response)
+          current = int(os.environ['GITHUB_RUN_ID'])
+          current_attempt = int(os.environ.get('GITHUB_RUN_ATTEMPT', '1'))
+          inspect = [(current, attempt) for attempt in range(1, current_attempt)]
+          query = urllib.parse.urlencode({'branch': 'publish/curseforge-v4.52.17', 'event': 'push', 'per_page': 100})
+          history = get('actions/workflows/publish-curseforge-v4.52.17.yml/runs?' + query)
+          assert history['total_count'] == len(history['workflow_runs']), 'Publisher history is truncated'
+          for run in history['workflow_runs']:
+              if run['id'] != current:
+                  inspect.extend((run['id'], attempt) for attempt in range(1, run['run_attempt'] + 1))
+          for run_id, attempt in inspect:
+              jobs = get(f'actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100')
+              uploads = [step for job in jobs['jobs'] for step in job.get('steps', []) if step.get('name') == 'Publish to CurseForge']
+              if not uploads:
+                  raise RuntimeError(f'Prior publisher attempt {run_id}/{attempt} has ambiguous upload history')
+              for step in uploads:
+                  if step.get('conclusion') != 'skipped':
+                      raise RuntimeError(f'Prior upload may have reached CurseForge: {run_id}/{attempt} {step}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('publish=true\n')
+          print('No prior upload attempt exists for 4.52.17.')
+          PY
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Verify merged source, PR and successful pinned runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          BASE = 'https://api.github.com/repos/boostbar9/Faction-Raids/'
+          HEADERS = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'}
+          def get(path):
+              with urllib.request.urlopen(urllib.request.Request(BASE + path, headers=HEADERS), timeout=30) as response:
+                  return json.load(response)
+          reviewed, merged, tree = (os.environ[k] for k in ('REVIEWED_SOURCE_SHA', 'MERGED_SOURCE_SHA', 'SOURCE_TREE_SHA'))
+          assert get('branches/main')['commit']['sha'] == merged, 'Main advanced after release build'
+          pr = get('pulls/' + os.environ['PULL_REQUEST_NUMBER'])
+          assert pr['merged'] and pr['merge_commit_sha'] == merged and pr['head']['sha'] == reviewed
+          assert get('git/commits/' + reviewed)['tree']['sha'] == tree
+          runs = {os.environ['REVIEWED_BUILD_RUN_ID']: ('Build', reviewed), os.environ['BUILD_RUN_ID']: ('Build', merged)}
+          for qa in os.environ['QA_RUNS'].split(','):
+              runs[qa] = (None, reviewed)
+          for run_id, (name, sha) in runs.items():
+              run = get('actions/runs/' + run_id)
+              assert run['head_sha'] == sha and run['status'] == 'completed' and run['conclusion'] == 'success', (run_id, run['name'])
+              if name: assert run['name'] == name
+              print('verified', run_id, run['name'])
+          listing = get('actions/runs/' + os.environ['BUILD_RUN_ID'] + '/artifacts?per_page=100')
+          jar = [a for a in listing['artifacts'] if a['name'] == 'Faction-Raids-Forge-1.20.1']
+          assert len(jar) == 1 and str(jar[0]['id']) == os.environ['JAR_ARTIFACT_ID'] and not jar[0]['expired']
+          assert jar[0].get('digest') == os.environ['JAR_ARTIFACT_DIGEST'], jar[0].get('digest')
+          PY
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download exact merged-main tested JAR
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.JAR_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: dist
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download merged-main regression results
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.REGRESSION_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: regression
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Download reviewed PR JAR
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.REVIEWED_JAR_ARTIFACT_ID }}
+          merge-multiple: true
+          run-id: ${{ env.REVIEWED_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: reviewed
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Verify tested bytes, metadata and regressions
+        id: verify
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, os, tomllib, xml.etree.ElementTree as ET, zipfile
+          jar = Path('dist/siegeoverhaul-4.52.17.jar')
+          assert sorted(Path('dist').glob('*.jar')) == [jar]
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          with zipfile.ZipFile(jar) as archive:
+              assert archive.testzip() is None
+              names = set(archive.namelist())
+              for cls in ['core/SiteClearance', 'core/BuilderGroundRecovery', 'core/WallBuilderAccess', 'camp/CampGuards']:
+                  assert f'com/devfarinsky/siegeoverhaul/{cls}.class' in names, cls
+              assert not any('/test/' in n or 'NativeBuildingServerGameTests' in n for n in names)
+              metadata = tomllib.loads(archive.read('META-INF/mods.toml').decode())
+          mod = metadata['mods'][0]
+          assert mod['modId'] == 'siegeoverhaul' and mod['version'] == os.environ['VERSION'] and mod['displayTest'] == 'MATCH_VERSION'
+          deps = {d['modId']: d['mandatory'] for d in metadata['dependencies']['siegeoverhaul']}
+          for required in ['forge', 'minecraft', 'recruits', 'workers', 'smallships', 'siegeweapons']:
+              assert deps.get(required) is True, required
+          totals = dict.fromkeys(('tests', 'failures', 'errors', 'skipped'), 0); suites = 0
+          for report in Path('regression').rglob('TEST-*.xml'):
+              suite = ET.parse(report).getroot(); suites += 1
+              for key in totals: totals[key] += int(suite.get(key))
+          assert totals['tests'] > 1500 and totals['failures'] == totals['errors'] == totals['skipped'] == 0, totals
+          with zipfile.ZipFile(jar) as main_zip, zipfile.ZipFile('reviewed/siegeoverhaul-4.52.17.jar') as reviewed_zip:
+              assert set(main_zip.namelist()) == set(reviewed_zip.namelist())
+              for name in main_zip.namelist():
+                  if name != 'META-INF/MANIFEST.MF': assert main_zip.read(name) == reviewed_zip.read(name), name
+          print('JAR sha256', digest, '|', totals['tests'], 'tests in', suites, 'suites, zero failures')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out: out.write(f'sha256={digest}\n')
+          PY
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Recheck main immediately before upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'}
+          with urllib.request.urlopen(urllib.request.Request('https://api.github.com/repos/boostbar9/Faction-Raids/branches/main', headers=headers), timeout=30) as r:
+              assert json.load(r)['commit']['sha'] == os.environ['MERGED_SOURCE_SHA'], 'Main advanced before upload'
+          PY
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Publish to CurseForge
+        id: curseforge
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: 1364352
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          curseforge-retry-attempts: 1
+          files: dist/siegeoverhaul-4.52.17.jar
+          name: The Siege Overhaul v4.52.17 - Beaches and Snow
+          version: v4.52.17
+          version-type: release
+          changelog: |
+            Small follow-up to 4.52.16 so builders can handle beaches, deserts and snowy places.
+
+            Walls next to sand or gravel used to get refused, which made beach and desert bases a pain. Sand that's sitting on solid ground can't fall, so builders now just work next to it. Floating sand, or sand sitting on something the builder is about to dig out, still needs clearing by hand.
+
+            If it snows while your builder is working on a wall, it no longer stops the job. The builder clears the fresh snow and keeps going. Anything else changing on the site still pauses it, so your own builds stay protected.
+
+            Giant mushrooms in the way get cleared like trees now too.
+
+            Back up your world, and update the server and every client together.
+          loaders: forge
+          game-versions: 1.20.1
+          java: 17
+          curseforge-dependencies: |
+            recruits(required)
+            workers(required)
+            small-ships(required)
+            siegeweapons(required)
+            ftb-chunks-forge(optional)
+            open-parties-and-claims(optional)
+            corpse(optional)
+            epic-knights-armor-and-weapons(optional)
+            ewewukeks-musket-mod(optional)
+            curios(optional)
+            epic-knights-addon(optional)
+          fail-mode: fail
+
+      - if: steps.guard.outputs.publish == 'true'
+        name: Record accepted upload
+        env:
+          RELEASE_URL: ${{ steps.curseforge.outputs.curseforge-url }}
+          RELEASE_FILE_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+          JAR_SHA256: ${{ steps.verify.outputs.sha256 }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          receipt = {'version': os.environ['VERSION'], 'project': 1364352, 'file_id': os.environ['RELEASE_FILE_ID'],
+                     'url': os.environ['RELEASE_URL'], 'sha256': os.environ['JAR_SHA256'],
+                     'merged_source': os.environ['MERGED_SOURCE_SHA'], 'reviewed_source': os.environ['REVIEWED_SOURCE_SHA'],
+                     'build_run': int(os.environ['BUILD_RUN_ID']), 'status': 'accepted_upload',
+                     'public_availability': 'not_yet_verified', 'publisher_run': int(os.environ['GITHUB_RUN_ID'])}
+          open('curseforge-4.52.17-receipt.json', 'w').write(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+          print(json.dumps(receipt, sort_keys=True))
+          print(f"::notice title=CurseForge upload::{receipt['url']} sha256={receipt['sha256']}")
+          PY
+
+      - if: always() && steps.guard.outputs.publish == 'true'
+        name: Preserve receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: curseforge-4.52.17-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: curseforge-4.52.17-receipt.json
+          if-no-files-found: warn
+          retention-days: 90
