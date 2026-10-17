@@ -4,30 +4,25 @@ on:
     branches: [tmp/diag-native-qa]
 permissions:
   actions: read
-  contents: write
+  contents: read
 jobs:
   diag:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: tmp/diag-native-qa
       - uses: actions/download-artifact@v4
         with:
-          artifact-ids: 12092481194
-          run-id: 39009005776
+          artifact-ids: 12092986476
+          run-id: 39008919972
           github-token: ${{ github.token }}
           path: qa
       - run: |
           set +e
           python3 - <<'PY'
           import json, pathlib
-          for p in pathlib.Path('qa').rglob('result.json'):
+          for p in pathlib.Path('qa').rglob('*.json'):
               d=json.loads(p.read_text())
-              for key in ('blockerDiagnostics','finalDiagnostics','diagnosticFailure','failure'):
-                  if key not in d: continue
-                  v=d[key]
-                  if isinstance(v,dict): v={k:x for k,x in v.items() if k in ('pathNodes','builderPosition','nativeTarget','pathTarget','selfClearanceTarget','inventorySlots')}
-                  t=json.dumps(v)
-                  for i in range(0,min(len(t),9000),950): print(f"::error title={key}{i}::{t[i:i+950]}")
+              if not isinstance(d,dict): continue
+              short={k:v for k,v in d.items() if not isinstance(v,(list,dict))}
+              t=p.name+' '+json.dumps(short)
+              for i in range(0,min(len(t),4000),900): print(f"::error title=r{i}::{t[i:i+900]}")
           PY
