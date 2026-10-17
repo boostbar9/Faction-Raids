@@ -249,7 +249,8 @@ public final class NativeCampQa {
             var roles = com.devfarinsky.siegeoverhaul.narrative.OlympianHostIdentity.forFaction(raid.factionId).campDoctrine().guardRoles();
             Set<Integer> expectedGuardSlots = new LinkedHashSet<>(), actualGuardSlots = new LinkedHashSet<>();
             for (int slot = 0; slot < roles.size(); slot++)
-                if (ForgeRegistries.ENTITY_TYPES.containsKey(new net.minecraft.resources.ResourceLocation("recruits", roles.get(slot))))
+                if (ForgeRegistries.ENTITY_TYPES.containsKey(new net.minecraft.resources.ResourceLocation("recruits",
+                        CampGuards.nativeRole(roles.get(slot), ForgeRegistries.ENTITY_TYPES::containsKey))))
                     expectedGuardSlots.add(slot);
             for (UUID id : raid.campGuards) {
                 require(level.getEntity(id) instanceof com.talhanation.recruits.entities.AbstractRecruitEntity guard
@@ -260,17 +261,19 @@ public final class NativeCampQa {
                 Mob guard = (Mob)level.getEntity(id);
                 int slot = guard.getPersistentData().getInt("SiegeGuardSlot");
                 require(expectedGuardSlots.contains(slot) && actualGuardSlots.add(slot)
-                                && new net.minecraft.resources.ResourceLocation("recruits", roles.get(slot)).equals(ForgeRegistries.ENTITY_TYPES.getKey(guard.getType())),
-                        "Native camp guard does not match its exact requested registered role/slot");
+                                && new net.minecraft.resources.ResourceLocation("recruits", CampGuards.nativeRole(roles.get(slot),
+                                        ForgeRegistries.ENTITY_TYPES::containsKey)).equals(ForgeRegistries.ENTITY_TYPES.getKey(guard.getType())),
+                        "Native camp guard does not match its registered role (or recruit fallback) for its slot");
                 guards.add(entity(guard));
             }
             require(actualGuardSlots.equals(expectedGuardSlots), "Controlled camp failed to establish every registered requested guard role: expected="
                     + expectedGuardSlots + ", actual=" + actualGuardSlots);
             require("wilds_marauders".equals(raid.factionId) && roles.equals(List.of("bowman", "scout", "crossbowman", "bowman", "scout", "assassin"))
                             && !ForgeRegistries.ENTITY_TYPES.containsKey(new net.minecraft.resources.ResourceLocation("recruits", "assassin"))
-                            && guards.size() == 5 && guards.stream().filter(guard -> "recruits:scout".equals(guard.get("type"))
-                            && Boolean.TRUE.equals(guard.get("scoutSpawnTailRecovered"))).count() == 2,
-                    "Camp acceptance did not exercise both actual native scout recoveries and the unavailable assassin slot");
+                            && guards.size() == 6 && guards.stream().filter(guard -> "recruits:scout".equals(guard.get("type"))
+                            && Boolean.TRUE.equals(guard.get("scoutSpawnTailRecovered"))).count() == 2
+                            && guards.stream().filter(guard -> "recruits:recruit".equals(guard.get("type"))).count() == 1,
+                    "Camp acceptance did not exercise both actual native scout recoveries and the recruit fallback for the unregistered assassin slot");
             NativeCampFixture.verifyProtected(level, fixture);
             require(raid.campBlocks.keySet().stream().noneMatch(pos -> fixture.protectedCells().containsKey(BlockPos.of(pos))),
                     "Camp restoration ledger includes a protected player/neighbor cell");

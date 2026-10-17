@@ -39,7 +39,7 @@ def fixture(root):
                 'ordinaryTicksSinceEstablishment':60,'preservedEdgesRescue':True,'warGateReadyAtCrewCheck':False,
                 'expectedEnemyFaction':'enemy','nativeJobOwner':'22222222-2222-4222-8222-222222222222',
                 'workers':[{'uuid':'33333333-3333-4333-8333-333333333333','type':'workers:builder','owner':'22222222-2222-4222-8222-222222222222','noAi':False,'faction':'enemy'}],
-                'guards':[{'uuid':f'44444444-4444-4444-8444-{i:012d}','type':'recruits:recruit','owner':verifier.GUARD_OWNER,'noAi':False,'faction':'enemy'} for i in range(5)]})
+                'guards':[{'uuid':f'44444444-4444-4444-8444-{i:012d}','type':'recruits:recruit','owner':verifier.GUARD_OWNER,'noAi':False,'faction':'enemy'} for i in range(6)]})
     for index,case in enumerate([impossible,recovery]):
         case['campSearchDiagnostics']='{Exhausted:'+('1b' if index==0 else '0b')+',FLUID:200}'
         case['finalState']={'scenario':index,'gameTime':case['firstWaveAtGameTime']+1,'searchRecovery':True,'retryTicks':0,

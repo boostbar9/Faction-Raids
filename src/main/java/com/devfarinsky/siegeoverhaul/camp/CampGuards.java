@@ -14,7 +14,18 @@ import java.util.*;
 public final class CampGuards {
     public static final String TEAM_TAG = "SiegeCampGuardTeam";
     private static final int GUARD_COUNT = 6;
+    /** Basic native role that fills a doctrine slot the installed Recruits build does not register. */
+    public static final String FALLBACK_ROLE = "recruit";
     private CampGuards() {}
+
+    /**
+     * The native role spawned for a doctrine slot. Recruits 1.15.2 has no assassin entity, which
+     * used to leave that camp one guard short; an unregistered role now becomes a basic recruit.
+     * Only registered keys are ever looked up, so Forge's default entity is never instantiated.
+     */
+    public static String nativeRole(String role, java.util.function.Predicate<ResourceLocation> registered) {
+        return registered.test(new ResourceLocation("recruits", role)) ? role : FALLBACK_ROLE;
+    }
     public static void start(ServerLevel level, RaidSavedData data, RaidSavedData.RaidState raid) {
         if (raid.campGuardsStarted || raid.campPos == null || !level.hasChunkAt(raid.campPos)) return;
         if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level, raid)) return;
@@ -22,11 +33,14 @@ public final class CampGuards {
         data.setDirty();
         List<String> guardRoles = doctrine(raid.factionId).guardRoles();
         for (int slot=0; slot<guardRoles.size(); slot++) {
-            String id=guardRoles.get(slot);
+            String doctrineRole=guardRoles.get(slot);
+            String id=nativeRole(doctrineRole, ForgeRegistries.ENTITY_TYPES::containsKey);
             int total = data.raids.values().stream().mapToInt(r -> r.raiders.size() + r.campGuards.size()).sum();
             if (total >= RaidConfig.MAX_GLOBAL_RAIDERS.get() || raid.raiders.size()+raid.campGuards.size() >= RaidConfig.MAX_ACTIVE_RAIDERS.get()) break;
             var requested = new ResourceLocation("recruits", id);
             var type = CampGuardSpawn.exactType(ForgeRegistries.ENTITY_TYPES, requested);
+            if (type != null && !id.equals(doctrineRole))
+                FactionLogger.LOG.debug("Camp {} guard slot {}: recruits:{} is not registered; using {}", raid.teamKey, slot, doctrineRole, requested);
             if (type == null) {
                 FactionLogger.LOG.warn("Camp {} guard slot {} unavailable: requested native type {} is not registered; no replacement spawned", raid.teamKey, slot, requested);
                 continue;
