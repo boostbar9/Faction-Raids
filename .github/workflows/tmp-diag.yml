@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: fix/marker-site-cover
+          ref: feat/combat-rewards
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
