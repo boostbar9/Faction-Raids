@@ -25,7 +25,13 @@ jobs:
                   if k in d: print(f"::warning::{k}={json.dumps(d[k])[:900]}")
               for k,v in d.items():
                   if k not in ('checks',): print(f"::notice::{k}={json.dumps(v)[:400]}")
-          for p in pathlib.Path('qa').rglob('*.log'):
+          for p in pathlib.Path('qa').rglob('server-console.log'):
+              lines = p.read_text(errors='replace').splitlines()
+              for i,l in enumerate(lines):
+                  if 'NullPointerException' in l:
+                      for x in lines[max(0,i-3):i+45]: print(f"::error title=trace::{x[:400]}")
+                      break
+          for p in []:
               lines = p.read_text(errors='replace').splitlines()
               hits = [l for l in lines if any(w in l for w in ('Exception','ERROR','FAIL','failed','assert','Caused by'))]
               for l in hits[:40]: print(f"::error title={p.name}::{l[:500]}")

@@ -506,7 +506,7 @@ private static String context(ServerLevel level,ServerPlayer owner,Mob builder,P
             return "Paused: the perimeter owner must be online in the Overworld to authorize construction.";
         if(builder==null || !builder.isAlive() || builder.level()!=level || !WorkersBridge.isBuilder(builder)
                 || !assignedBuilder(builder,project) || !project.header().owner().equals(WorkersBridge.readWorkerOwner(builder)))
-            return "Paused: load the assigned owned builder to continue this perimeter.";
+            return "Paused: load the original owned builder to continue this perimeter.";
         if(!SiegeCore.key(owner).equals(project.header().coreKey()) || !level.dimension().equals(Level.OVERWORLD))
             return "Paused: the original faction authority changed.";
         var point=SiegeCore.point(level.getServer(),project.header().coreKey());
