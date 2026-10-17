@@ -37,6 +37,40 @@ public final class CommandFrame {
     }
 
     /**
+     * Translucent in-world HUD card: soft drop shadow, see-through body, hairline
+     * border, a state-coloured accent rail and a faint top highlight. Menus keep the
+     * opaque {@link #surface}; HUD cards should never hide the world behind them.
+     */
+    public static void hudSurface(GuiGraphics g, int x, int y, int w, int h, int accent) {
+        if (w <= 4 || h <= 4) return;
+        g.fill(x + 2, y + 2, x + w + 2, y + h + 2, 0x55000000);
+        g.fill(x, y, x + w, y + h, 0xcc34465c);
+        g.fillGradient(x + 1, y + 1, x + w - 1, y + h - 1, 0xd8101a26, 0xc00b121c);
+        g.fill(x + 1, y + 1, x + w - 1, y + 2, 0x22ffffff);
+        g.fill(x + 1, y + 1, x + 3, y + h - 1, accent);
+    }
+
+    /**
+     * Progress bar with an inset track, a lighter top edge on the fill and notches
+     * every 10%. {@code fraction} is clamped to [0, 1].
+     */
+    public static void progressBar(GuiGraphics g, int x, int y, int w, int h, float fraction, int accent) {
+        if (w <= 2 || h <= 0) return;
+        float value = Float.isNaN(fraction) ? 0F : Math.max(0F, Math.min(1F, fraction));
+        g.fill(x - 1, y - 1, x + w + 1, y + h + 1, 0x99000000);
+        g.fill(x, y, x + w, y + h, 0xff16222e);
+        int filled = Math.round(w * value);
+        if (filled > 0) {
+            g.fill(x, y, x + filled, y + h, accent);
+            g.fill(x, y, x + filled, y + 1, (accent & 0x00ffffff) | 0xff000000 | 0x00404040);
+        }
+        for (int i = 1; i < 10; i++) {
+            int nx = x + w * i / 10;
+            g.fill(nx, y, nx + 1, y + h, 0x40000000);
+        }
+    }
+
+    /**
      * Draw a small ornamental L-bracket at ({@code x},{@code y}) in the given
      * direction. Used as a corner ornament on the outer window and around
      * portrait tiles for a heraldic frame feel.

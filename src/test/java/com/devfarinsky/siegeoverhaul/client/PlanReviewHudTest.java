@@ -23,4 +23,16 @@ class PlanReviewHudTest {
             }
         }
     }
+    @Test void reviewCardStaysClearOfTheActionBarAndShrinksToItsText() {
+        for(int[] size:new int[][]{{320,240},{480,360},{854,480},{1440,960}}) {
+            for(int count:new int[]{1,4,10}) {
+                var box=PlanReviewHud.bounds(size[0],size[1],count,180);
+                boolean inCentreThird=box.x()+box.width()>size[0]/3 && box.x()<size[0]*2/3;
+                boolean inActionBarBand=box.y()+box.height()>size[1]-80 && box.y()<size[1]-60;
+                assertFalse(inCentreThird && inActionBarBand,"plan card must not cover the action bar");
+                assertTrue(box.width()<=180+12);
+            }
+        }
+        assertTrue(PlanReviewHud.bounds(854,480,3,40).width()<PlanReviewHud.bounds(854,480,3,280).width());
+    }
 }
