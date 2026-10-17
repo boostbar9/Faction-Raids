@@ -35,10 +35,11 @@
     "4.52.15": "Olympian bows and crossbows are held the right way, patron weapons and spells get proper magic effects, the starter bags take about half the inventory space, and HUD cards no longer cover chat, titles or the player list. Update the server and all clients together (network protocol 23) and back up your world first.",
     "4.52.16": "Builders clear tall grass, ferns, snow, vines and trees in the way of walls and dig small hills instead of refusing the plan, and they no longer stop partway through large perimeters. Enemy camps get all six guards again and the camp-search log spam is gone. Back up your world and update the server and all clients together.",
     "4.52.17": "Walls next to beach or desert sand and gravel are no longer refused when it rests on solid ground, snow falling during construction no longer pauses the job, and giant mushrooms are cleared like trees. Back up your world and update the server and all clients together.",
-    "4.52.18": "After their wall is done, enemy camps keep building war works (supply depot, lookout, infirmary, weaponsmith, barracks and war shrine) that each help the enemy until you break the key block inside, then spread out with tents. All of it can be tuned or turned off in the config. Back up your world and update the server and all clients together."
+    "4.52.18": "After their wall is done, enemy camps keep building war works (supply depot, lookout, infirmary, weaponsmith, barracks and war shrine) that each help the enemy until you break the key block inside, then spread out with tents. All of it can be tuned or turned off in the config. Back up your world and update the server and all clients together.",
+    "4.52.19": "Defense plans no longer fail with \"no accessible native marker position\" on grass, flowers or thin snow: the builder's marker clears that cover, and your own builder or pets standing nearby no longer block it. Back up your world and update the server and all clients together."
   },
   "promos": {
-    "1.20.1-latest": "4.52.18",
-    "1.20.1-recommended": "4.52.18"
+    "1.20.1-latest": "4.52.19",
+    "1.20.1-recommended": "4.52.19"
   }
 }
