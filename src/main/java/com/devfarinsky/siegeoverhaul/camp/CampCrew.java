@@ -130,7 +130,7 @@ public final class CampCrew {
     /** Work remains, or the camp still has outbuildings and perimeter sections to raise. */
     static boolean needsCrew(RaidSavedData.RaidState raid) {
         return !raid.coreCaptured && (!raid.pendingCampBlocks.isEmpty() || NativeCampConstruction.active(raid)
-                || raid.campUpgradeStage < CampPerimeter.COMPLETE_STAGE);
+                || raid.campUpgradeStage < CampPerimeter.COMPLETE_STAGE || CampWarWorks.hasWork(raid));
     }
 
     static boolean replacementAllowed(RaidSavedData.RaidState raid) {

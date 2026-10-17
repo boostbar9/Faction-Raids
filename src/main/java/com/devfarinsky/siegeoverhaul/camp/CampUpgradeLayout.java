@@ -16,23 +16,7 @@ final class CampUpgradeLayout {
     static Map<Long, String> structure(BlockPos center, Direction entrance, int stage, String factionId) {
         if (entrance.getAxis().isVertical() || stage < 0 || stage > 2)
             throw new IllegalArgumentException("Invalid camp upgrade");
-        Map<Long, String> plan = new LinkedHashMap<>();
-        Palette palette=palette(factionId,stage);
-        // Every host keeps the same finite, navigable footprint, but the wall,
-        // columns, rails and roof communicate its patron before combat begins.
-        for (int y=1;y<=3;y++) for (int x=-3;x<=3;x++) for (int z=-3;z<=3;z++) {
-            boolean edge=Math.abs(x)==3 || Math.abs(z)==3;
-            boolean corner=Math.abs(x)==3 && Math.abs(z)==3;
-            boolean doorway=z==3 && Math.abs(x)<=1 && y<=2;
-            if (!edge || doorway) continue;
-            String block=corner || y==3 ? palette.column
-                    : y==1 ? palette.base : palette.rail;
-            put(plan,center,entrance,x,y,z,block);
-        }
-        // A continuous eave supports each host's deliberately different skyline.
-        for(int x=-3;x<=3;x++) for(int z=-3;z<=3;z++)
-            put(plan,center,entrance,x,4,z,palette.roof);
-        skyline(plan,center,entrance,factionId,palette);
+        Map<Long, String> plan = hall(center, entrance, stage, factionId);
         // Supplies stay against the rear wall, leaving the center aisle unobstructed.
         // A named centrepiece keystone at x=0,z=-2 gives each building its identity
         // and a single block whose loss (broken or burned) ends its camp effect.
@@ -50,6 +34,32 @@ final class CampUpgradeLayout {
             put(plan,center,entrance,-2,1,-2,"minecraft:bookshelf");
             put(plan,center,entrance,2,1,-2,"minecraft:bookshelf");
         }
+        return plan;
+    }
+
+    /**
+     * The shared 7x7 faction hall shell (walls, doorway, eave and skyline) without furnishings.
+     * {@code variant} 0..2 picks the roof colour so neighbouring halls stay distinguishable.
+     */
+    static Map<Long, String> hall(BlockPos center, Direction entrance, int variant, String factionId) {
+        if (entrance.getAxis().isVertical()) throw new IllegalArgumentException("Invalid camp hall");
+        Map<Long, String> plan = new LinkedHashMap<>();
+        Palette palette=palette(factionId,Math.floorMod(variant,3));
+        // Every host keeps the same finite, navigable footprint, but the wall,
+        // columns, rails and roof communicate its patron before combat begins.
+        for (int y=1;y<=3;y++) for (int x=-3;x<=3;x++) for (int z=-3;z<=3;z++) {
+            boolean edge=Math.abs(x)==3 || Math.abs(z)==3;
+            boolean corner=Math.abs(x)==3 && Math.abs(z)==3;
+            boolean doorway=z==3 && Math.abs(x)<=1 && y<=2;
+            if (!edge || doorway) continue;
+            String block=corner || y==3 ? palette.column
+                    : y==1 ? palette.base : palette.rail;
+            put(plan,center,entrance,x,y,z,block);
+        }
+        // A continuous eave supports each host's deliberately different skyline.
+        for(int x=-3;x<=3;x++) for(int z=-3;z<=3;z++)
+            put(plan,center,entrance,x,4,z,palette.roof);
+        skyline(plan,center,entrance,factionId,palette);
         return plan;
     }
 
@@ -115,8 +125,8 @@ final class CampUpgradeLayout {
 
     record Palette(String base,String column,String rail,String roof) {}
 
-    private static void put(Map<Long,String> plan,BlockPos center,Direction front,
-                            int x,int y,int z,String block) {
+    static void put(Map<Long,String> plan,BlockPos center,Direction front,
+                    int x,int y,int z,String block) {
         plan.put(center.relative(front,z).relative(front.getClockWise(),x).above(y).asLong(),block);
     }
 }

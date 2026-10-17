@@ -169,6 +169,11 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue GRANARY_GUARD_REGEN;
     public static final ForgeConfigSpec.DoubleValue ARMOURY_GUARD_DAMAGE;
     public static final ForgeConfigSpec.IntValue COMMAND_POST_WAVE_INTERVAL_PERCENT;
+    public static final ForgeConfigSpec.BooleanValue CAMP_WAR_WORKS;
+    public static final ForgeConfigSpec.IntValue CAMP_WORKS_SECONDS;
+    public static final ForgeConfigSpec.IntValue BARRACKS_EXTRA_RAIDERS;
+    public static final ForgeConfigSpec.IntValue CAMP_WORKS_REBUILDS;
+    public static final ForgeConfigSpec.IntValue CAMP_WORKS_TENTS;
     public static final ForgeConfigSpec.BooleanValue SIEGE_ENGINE_UNSTICK;
     public static final ForgeConfigSpec.IntValue SIEGE_ENGINE_STALL_PASSES;
     public static final ForgeConfigSpec.BooleanValue SHOW_ARMY_ON_MAP;
@@ -535,6 +540,16 @@ public final class RaidConfig {
                 .defineInRange("armouryGuardDamageBonus", 2.0, 0.0, 10.0);
         COMMAND_POST_WAVE_INTERVAL_PERCENT = b.comment("Percent of the normal between-wave delay used while the enemy Command Post (stage 2 war room) stands and coordinates faster waves. 100 disables the effect; lower values shorten the delay.")
                 .defineInRange("commandPostWaveIntervalPercent", 60, 20, 100);
+        CAMP_WAR_WORKS = b.comment("After its walls and towers are finished, a war camp keeps building war works outside its walls: a supply depot (faster camp building), a lookout (reveals defenders near the camp), an infirmary (heals raiders and guards near the camp), a weaponsmith (new raiders spawn with extra armor), barracks (extra raiders each wave) and a war shrine (new raiders spawn with Strength). Each works while its centrepiece block stands; destroyed works are rebuilt, and once everything is up the camp keeps expanding with tents.")
+                .define("campWarWorks", true);
+        CAMP_WORKS_SECONDS = b.comment("Seconds a war camp waits between war-works projects once its perimeter is finished. A standing supply depot halves this.")
+                .defineInRange("campWorksSeconds", 30, 10, 600);
+        BARRACKS_EXTRA_RAIDERS = b.comment("Extra raiders added to each wave while the enemy barracks stands. 0 disables it.")
+                .defineInRange("barracksExtraRaiders", 2, 0, 10);
+        CAMP_WORKS_REBUILDS = b.comment("How many times a war camp may rebuild each destroyed war work per siege.")
+                .defineInRange("campWorksRebuilds", 2, 0, 10);
+        CAMP_WORKS_TENTS = b.comment("Tents a war camp may add once all its war works stand, so its builders keep expanding the camp. 0 disables expansion.")
+                .defineInRange("campWorksTents", 6, 0, 16);
         SIEGE_ENGINE_UNSTICK = b.comment("Allow a siege engine that repeated detours could not free to be set down a few blocks further along its own march line. It only ever moves forward onto solid, empty ground at its own height.")
                 .define("siegeEngineUnstick", true);
         SIEGE_ENGINE_STALL_PASSES = b.comment("How many five second advance passes a siege engine may make no progress on before it is freed. Higher values let engines struggle longer before being helped.")

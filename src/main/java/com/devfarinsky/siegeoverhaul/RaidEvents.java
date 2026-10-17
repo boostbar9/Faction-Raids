@@ -2246,6 +2246,7 @@ public final class RaidEvents {
         com.devfarinsky.siegeoverhaul.camp.CampCrew.tick(level,state);
         com.devfarinsky.siegeoverhaul.camp.CampDevelopment.tick(level,state);
         com.devfarinsky.siegeoverhaul.camp.CampStructures.tick(level,state);
+        com.devfarinsky.siegeoverhaul.camp.CampWarWorks.tick(level,state);
         // Camp progress is persisted even when no wave or breach changed this pass.
         if (!state.pendingCampBlocks.isEmpty()) {
             progressDeferredCampBuilds(level, state);
@@ -2635,7 +2636,8 @@ public final class RaidEvents {
         OptionalCompatBridge.CompatSnapshot compat = nearbyCompatAssets(level, point, anchor);
         int assetScale = assetScalingEnemies(compat);
         int baseSize = RaidConfig.BASE_ENEMIES_PER_WAVE.get() +
-                (playerCount - 1) * RaidConfig.ENEMIES_PER_EXTRA_PLAYER.get() + recruitScale + assetScale;
+                (playerCount - 1) * RaidConfig.ENEMIES_PER_EXTRA_PLAYER.get() + recruitScale + assetScale
+                + com.devfarinsky.siegeoverhaul.camp.CampWarWorks.waveBonus(state);
         int wanted = EndlessSiege.active(state) ? EndlessSiege.waveSize(baseSize, nextWave, RaidConfig.MAX_ACTIVE_RAIDERS.get())
                 : Math.min(baseSize + (nextWave - 1) * 2, Math.max(0, RaidConfig.MAX_ACTIVE_RAIDERS.get() - state.campGuards.size()));
         if (wanted <= 0) {
@@ -2760,6 +2762,7 @@ public final class RaidEvents {
             raider.getPersistentData().putString(RAID_TEAM_TAG, anchor.teamKey());
             if (level.addFreshEntity(raider)) {
                 assignSiegeRole(raider, state, waveIndex, squadLeader);
+                com.devfarinsky.siegeoverhaul.camp.CampWarWorks.onRaiderSpawned(state, raider);
                 state.raiders.add(raider.getUUID());
                 state.totalSpawned++;
                 if (com.devfarinsky.siegeoverhaul.core.EnemyHeroes.active(raider)) {

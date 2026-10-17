@@ -384,6 +384,7 @@ public final class NativeCampConstruction {
         if (completed == raid.pendingCampBlocks.size()) {
             FactionLogger.LOG.info("Camp builders for {} completed {} planned cells", raid.teamKey, completed);
             CampStructures.constructionCompleted(raid);
+            CampWarWorks.constructionCompleted(raid);
             stop(level, raid); return;
         }
         if (completed > raid.campCompletedBlocks) raid.campBuildTicks = 0;
