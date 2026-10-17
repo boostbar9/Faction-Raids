@@ -5295,10 +5295,10 @@ public final class RaidEvents {
         } else if (!state.breached && RaidConfig.ENABLE_BREACH_PHASE.get()) {
             String target = objectiveName + distanceHint;
             String deployed = state.raiders.size() + " deployed";
-            String pressure = "breach " + breachPercent + "% | " + compactObjectiveStatus(state);
+            String pressure = "breach " + breachPercent + "% " + compactObjectiveStatus(state);
             label = com.devfarinsky.siegeoverhaul.chat.ChatStyle.bossbarLabel(epithet, phase, target, deployed, pressure);
         } else {
-            String held = objectiveName + " " + capturePercent + "% | " + compactObjectiveStatus(state);
+            String held = objectiveName + " " + capturePercent + "% " + compactObjectiveStatus(state);
             String waveChip = EndlessSiege.waveLabel(state, totalWaves);
             String signatureChip = state.pendingWaveSpawns > 0 || !state.raiders.isEmpty()
                     ? signatureAssault(state)
