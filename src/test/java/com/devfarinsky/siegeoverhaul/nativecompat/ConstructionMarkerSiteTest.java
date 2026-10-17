@@ -36,7 +36,7 @@ class ConstructionMarkerSiteTest extends MinecraftTestSupport {
     @Test void theCommissioningBuilderAndOwnedMobsDoNotBlockButOthersAndTheOwnerDo() {
         UUID id = UUID.randomUUID();
         var owner = mock(ServerPlayer.class); when(owner.getUUID()).thenReturn(id);
-        var builder = mock(Mob.class), stranger = mock(Mob.class);
+        Mob builder = mock(Mob.class), stranger = mock(Mob.class);
         var pet = mock(Wolf.class); when(pet.getOwnerUUID()).thenReturn(id);
         var otherPet = mock(Wolf.class); when(otherPet.getOwnerUUID()).thenReturn(UUID.randomUUID());
         assertTrue(ConstructionMarkerSite.ownedBy(builder, owner, builder));
