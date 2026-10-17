@@ -200,4 +200,14 @@ class BuilderGroundRecoveryTest extends MinecraftTestSupport {
         verify(worker).teleportTo(2.5,60,0.5);
         verify(level,never()).setBlock(any(),any(),anyInt());
     }
+    @Test void walledOutSupplyRunLandsOnSafeGroundBesideTheChest() {
+        setup();
+        BlockPos chest=new BlockPos(5,64,0);
+        BlockPos site=BuilderGroundRecovery.siteNear(level,worker,chest);
+        assertNotNull(site);
+        assertEquals(64,site.getY());
+        assertTrue(Math.abs(site.getX()-chest.getX())<=2 && Math.abs(site.getZ()-chest.getZ())<=2);
+        assertFalse(site.getX()==chest.getX() && site.getZ()==chest.getZ());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
 }

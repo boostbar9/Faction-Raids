@@ -657,6 +657,12 @@ public final class NativeConstructionGuard {
         } catch (RuntimeException unavailable) { return false; }
     }
 
+    /** Chest a builder is walking to for materials, or null when it is not fetching supplies. */
+    public static BlockPos supplyChest(Mob builder) {
+        try { return ProtectedStorageAccess.supplyChest(builder); }
+        catch (RuntimeException | LinkageError unavailable) { return null; }
+    }
+
     public static Entity currentArea(Mob builder) {
         try {
             Object value = builder.getClass().getField("currentBuildArea").get(builder);

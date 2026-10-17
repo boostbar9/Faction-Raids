@@ -15,13 +15,17 @@ import net.minecraft.world.phys.Vec3;
 
 /** Last-resort surface recovery for an actively commissioned wall builder, never a general NPC teleport. */
 public final class BuilderGroundRecovery {
-    private static final String STATE = "SiegeWallGroundRecovery";
+    private static final String STATE = "SiegeWallGroundRecovery", SUPPLY = "SiegeWallSupplyRecovery";
     private BuilderGroundRecovery() {}
 
-    public static void reset(Mob builder) { builder.getPersistentData().remove(STATE); }
+    public static void reset(Mob builder) { builder.getPersistentData().remove(STATE); builder.getPersistentData().remove(SUPPLY); }
 
     /** Called every 40 ticks after job/owner validation; native interruptions reset the observation window. */
     public static void tick(ServerLevel level, Mob builder) {
+        BlockPos chest = builder.goalSelector == null ? null
+                : com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.supplyChest(builder);
+        if (chest != null) { supplyTick(level, builder, chest); return; }
+        builder.getPersistentData().remove(SUPPLY);
         if (!builder.isAlive() || builder.isNoAi() || builder.isPassenger() || builder.isLeashed()
                 || builder.getTarget() != null || !WorkersBridge.readyForGroundRecovery(builder)) {
             reset(builder); return;
@@ -64,6 +68,51 @@ public final class BuilderGroundRecovery {
         builder.setDeltaMovement(Vec3.ZERO);
         builder.fallDistance = 0;
         reset(builder);
+    }
+
+    /**
+     * A builder fetching materials whose route to the supply chest cannot reach it (on a big
+     * perimeter it can wall itself out of its own courtyard) and that has not moved for twelve
+     * seconds is moved to a safe standing site beside that chest. Inventory is not touched;
+     * the native supply goal then opens the chest as usual.
+     */
+    static void supplyTick(ServerLevel level, Mob builder, BlockPos chest) {
+        var root = builder.getPersistentData();
+        if (!builder.isAlive() || builder.isNoAi() || builder.isPassenger() || builder.isLeashed()
+                || builder.getTarget() != null || builder.isSleeping()
+                || builder.position().distanceToSqr(Vec3.atCenterOf(chest)) < 16) { root.remove(SUPPLY); return; }
+        Path path = builder.getNavigation().getPath();
+        boolean blocked = path == null || !path.canReach();
+        var state = root.getCompound(SUPPLY);
+        Vec3 now = builder.position();
+        long time = level.getGameTime(), previous = state.getLong("Time");
+        Vec3 last = new Vec3(state.getDouble("X"), state.getDouble("Y"), state.getDouble("Z"));
+        boolean stationary = blocked && state.contains("Time") && time > previous && time - previous <= 80
+                && now.distanceToSqr(last) < 0.25D;
+        int stalled = stationary ? state.getInt("Still") + 1 : 0;
+        state.putDouble("X", now.x); state.putDouble("Y", now.y); state.putDouble("Z", now.z);
+        state.putLong("Time", time); state.putInt("Still", stalled);
+        root.put(SUPPLY, state);
+        if (stalled < 6) return;
+        state.putInt("Still", 0);
+        BlockPos site = siteNear(level, builder, chest);
+        if (site != null) hop(builder, site);
+    }
+
+    /** Nearest safe standing cell within two blocks of the chest, at its height or one off. */
+    static BlockPos siteNear(ServerLevel level, Mob builder, BlockPos chest) {
+        BlockPos best = null; double score = Double.MAX_VALUE;
+        for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) for (int dy = -1; dy <= 1; dy++) {
+            BlockPos feet = chest.offset(dx, dy, dz);
+            if ((dx == 0 && dz == 0) || !level.hasChunkAt(feet) || !level.hasChunkAt(feet.below())) continue;
+            var support = level.getBlockState(feet.below());
+            if (!support.isFaceSturdy(level, feet.below(), Direction.UP) || !support.getFluidState().isEmpty()
+                    || support.is(Blocks.MAGMA_BLOCK) || support.is(Blocks.CAMPFIRE) || support.is(Blocks.SOUL_CAMPFIRE)) continue;
+            if (!standable(level, builder, feet)) continue;
+            double distance = Vec3.atBottomCenterOf(feet).distanceToSqr(Vec3.atCenterOf(chest));
+            if (distance < score) { best = feet; score = distance; }
+        }
+        return best;
     }
 
     /**
