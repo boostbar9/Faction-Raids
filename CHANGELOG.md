@@ -1,3 +1,12 @@
+## 4.52.16 - Builders clear the way and finish big walls
+
+- Builders now clear natural stuff in the way of a wall or defense instead of refusing the plan: tall grass, large ferns and other two-block plants, snow, vines, saplings, cactus, bamboo, and the trunks and leaves of real trees. On slopes they dig up to three blocks of natural dirt or stone out of the high side instead of rejecting the wall. Everything they break drops as items. The review itself still changes nothing; clearing happens when you confirm.
+- Your own builds stay protected: placed blocks, stripped logs and planks, leaves you placed, chests, water, crops, sand and gravel, blocks from other mods, and wither roses still need clearing by hand.
+- Fix builders stopping partway through a large perimeter. When the next block was far down the wall, the builder waited forever for a path it could never get; it now walks toward it and carries on. Builders stuck against a block they just placed, with no route to their next block, or walled out of their own supply chests are also moved back to safe ground nearby.
+- Enemy war camps get their full six guards again. Recruits 1.15.2 has no assassin, so that guard slot now spawns a regular recruit instead of staying empty.
+- The server log no longer fills with a "Camp site search failed" line every second while enemy scouts look for a camp site.
+- Existing worlds, paid jobs and claims stay compatible. Update the server and all clients together, and back up your world first.
+
 ## 4.52.15 - Bows held right, patron magic, a lighter starter kit
 
 - Olympian bows and crossbows are no longer held sideways. Their art was drawn a quarter turn off from vanilla's, which the vanilla grip then turned sideways; all of it now matches vanilla, for players and hero NPCs alike. Fishing-rod skins face the right way and relics shimmer like enchanted gear.
