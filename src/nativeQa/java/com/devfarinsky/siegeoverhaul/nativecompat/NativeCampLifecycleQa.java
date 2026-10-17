@@ -386,7 +386,7 @@ public final class NativeCampLifecycleQa {
                         && raid.campfirePos != null && level.getBlockState(raid.campfirePos).is(Blocks.CAMPFIRE)
                         && raid.barrelPos != null && level.getBlockState(raid.barrelPos).is(Blocks.BARREL),
                 "Recovery camp strategic blocks are incomplete");
-        require(!raid.campWorkers.isEmpty() && raid.campGuards.size() == 5, "Recovery native workers or five registered guards missing");
+        require(!raid.campWorkers.isEmpty() && raid.campGuards.size() == 6, "Recovery native workers or six guards (assassin slot as recruit) missing");
         require(com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.active(raid), "Recovery native construction job missing");
         UUID nativeOwner = raid.nativeCamp.getUUID(ModConstants.Tags.CAMP_OWNER);
         List<Map<String,Object>> workers = new ArrayList<>(), guards = new ArrayList<>();
