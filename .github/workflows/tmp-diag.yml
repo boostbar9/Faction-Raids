@@ -11,23 +11,21 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          artifact-ids: 12092270616
-          run-id: 39008059717
+          artifact-ids: 12091736942
+          run-id: 39008423919
           github-token: ${{ github.token }}
           path: qa
       - run: |
+          find qa -type f | head -40
           python3 - <<'PY'
-          import pathlib, xml.etree.ElementTree as ET
-          n=0
-          for p in pathlib.Path('qa').rglob('*.xml'):
-              try: root=ET.parse(p).getroot()
-              except Exception: continue
-              for tc in root.iter('testcase'):
-                  for f in list(tc.findall('failure'))+list(tc.findall('error')):
-                      msg=(f.get('message') or '')[:300].replace('\n',' ')
-                      body=(f.text or '').splitlines()
-                      where=[l.strip() for l in body if 'devfarinsky' in l][:4]
-                      print(f"::error title={tc.get('classname')}.{tc.get('name')}::{msg} | {' | '.join(where)}"[:900])
-                      n+=1
-          print("failures",n)
+          import json, pathlib
+          for p in pathlib.Path('qa').rglob('result.json'):
+              d=json.loads(p.read_text())
+              short={k:v for k,v in d.items() if not isinstance(v,(list,dict)) or k in ('finalDiagnostics',)}
+              t=json.dumps(short)
+              for i in range(0,min(len(t),6000),900): print(f"::error title=result{i}::{t[i:i+900]}")
+          for p in pathlib.Path('qa').rglob('*.log'):
+              lines=p.read_text(errors='replace').splitlines()
+              hits=[l for l in lines if any(w in l for w in ('Exception','QA','Paused','problem','failed','Perimeter','IllegalState'))]
+              for l in hits[-30:]: print(f"::warning title={p.name}::{l[:450]}")
           PY
