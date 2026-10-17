@@ -3543,7 +3543,9 @@ public final class RaidEvents {
             } else if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.create(level, state, center)) { rejClaimCreate++; continue; }
             return center;
         }
-        FactionLogger.LOG.info("Camp site search failed: cap={} remote={} terraform={} "+
+        // Per-candidate detail is recorded in campSearchDiagnostics and summarized
+        // on recovery/abandon; logging every rejected candidate flooded server logs.
+        FactionLogger.LOG.debug("Camp site search failed: cap={} remote={} terraform={} "+
                 "rejects[chunk={}, excluded={}, claim={}, foreign={}, surface={}, navalGuard={}, terrainPlan={}, claimCreate={}, terrainApply={}] terrainReasons={}",
                 cap, remote, state != null && state.campTerraformed,
                 rejChunk, rejExcluded, rejClaim, rejForeign, rejSurface,

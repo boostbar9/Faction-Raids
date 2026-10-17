@@ -104,6 +104,9 @@ final class WallSurface {
             String compatibility = com.devfarinsky.siegeoverhaul.camp.CampVegetation.optionalPlantProblem(occupied);
             if (compatibility != null) return Ground.blocked("Perimeter build space is occupied at "
                     + describe(feet, occupied) + ". " + compatibility + " No payment taken.");
+            if (occupied.getBlock() instanceof net.minecraft.world.level.block.DoublePlantBlock)
+                return Ground.blocked("Perimeter build space is occupied at " + describe(feet, occupied)
+                        + ". Two-block plants are not cleared automatically; break it by hand and review again. No payment taken.");
             return TerritoryFortification.safeWallReplacement(occupied) ? Ground.ready(feet)
                     : Ground.blocked("Perimeter build space is occupied at " + describe(feet, occupied)
                     + ". Existing blocks are protected; no payment taken.");
