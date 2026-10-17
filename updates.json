@@ -31,10 +31,11 @@
     "4.52.11": "Emergency builder recovery avoids wither roses while harmless flowers and tall vegetation remain eligible on checked safe ground. Native schedules, supplies, claims and paid jobs are unchanged. This stable update does not include experimental replacement-builder changes. Back up your world and update the server and all clients together.",
     "4.52.12": "Builders keep working after a material runs out and walk clear of the next wall section before it starts. Supplies, claims, paid jobs and payments are unchanged; gates, stepped walls and replacement builders remain experimental. Back up your world and update the server and all clients together.",
     "4.52.13": "Building plan rejections for claim reasons now name the chunk and the cause (unclaimed, another faction's, or a different claim of your faction); perimeter rejections name the chunk that left your territory or is also claimed by another faction. Spawn-protected blocks and a failed claim mod get their own messages, and /siegeoverhaul help explains that factions and claims are managed in Villager Recruits. No gameplay, pricing, claim or dependency changes. Back up your world and update the server and all clients together.",
-    "4.52.14": "Builders cover for each other: a dead perimeter builder is replaced by an idle builder you own near your Siege Core with no second fee, and enemy camps send replacements and keep their supplies. Raiders no longer hop through walls, lost or circling raiders cannot hold a wave open, and waves no longer end early from loading chunks. Back up your world and update the server and all clients together."
+    "4.52.14": "Builders cover for each other: a dead perimeter builder is replaced by an idle builder you own near your Siege Core with no second fee, and enemy camps send replacements and keep their supplies. Raiders no longer hop through walls, lost or circling raiders cannot hold a wave open, and waves no longer end early from loading chunks. Back up your world and update the server and all clients together.",
+    "4.52.15": "Olympian bows and crossbows are held the right way, patron weapons and spells get proper magic effects, the starter bags take about half the inventory space, and HUD cards no longer cover chat, titles or the player list. Update the server and all clients together (network protocol 23) and back up your world first."
   },
   "promos": {
-    "1.20.1-latest": "4.52.14",
-    "1.20.1-recommended": "4.52.14"
+    "1.20.1-latest": "4.52.15",
+    "1.20.1-recommended": "4.52.15"
   }
 }
