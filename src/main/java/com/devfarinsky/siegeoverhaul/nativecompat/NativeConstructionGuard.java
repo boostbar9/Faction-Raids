@@ -738,14 +738,24 @@ public final class NativeConstructionGuard {
 
     /** Read-only preview of the same neighboring-block gate that still runs at native admission/placement. */
     public static String placementNeighborhoodProblem(ServerLevel level, Collection<BlockPos> targets) {
+        return placementNeighborhoodProblem(level, targets, pos -> false);
+    }
+
+    /** Review-only variant: {@code cleared} names neighbours the builder removes before the native handoff. */
+    public static String placementNeighborhoodProblem(ServerLevel level, Collection<BlockPos> targets,
+                                                      java.util.function.Predicate<BlockPos> cleared) {
         for (BlockPos target : targets) {
-            String problem = neighborhoodProblem(level, target);
+            String problem = neighborhoodProblem(level, target, cleared);
             if (problem != null) return problem;
         }
         return null;
     }
 
     static String neighborhoodProblem(ServerLevel level, BlockPos target) {
+        return neighborhoodProblem(level, target, pos -> false);
+    }
+
+    static String neighborhoodProblem(ServerLevel level, BlockPos target, java.util.function.Predicate<BlockPos> cleared) {
         // Conductors can query a second neighbor ring while resolving power.
         // Validate that bounded envelope before any state/signal read.
         java.util.List<BlockPos> neighbors = new java.util.ArrayList<>(24);
@@ -758,6 +768,7 @@ public final class NativeConstructionGuard {
         }
         for (BlockPos neighbor : neighbors) {
             BlockState state = level.getBlockState(neighbor);
+            if (cleared.test(neighbor)) continue;
             if (!stableNeighbor(state) || level.getBlockEntity(neighbor) != null) {
                 String block = state == null ? "unreadable block"
                         : net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
@@ -782,7 +793,7 @@ public final class NativeConstructionGuard {
                 || state.is(Blocks.BEDROCK) || clearablePlant(state);
     }
 
-    static boolean blocksPlacement(Entity entity) {
+    public static boolean blocksPlacement(Entity entity) {
         return entity.isAlive() && !(entity instanceof net.minecraft.world.entity.item.ItemEntity)
                 && !(entity instanceof net.minecraft.world.entity.ExperienceOrb);
     }

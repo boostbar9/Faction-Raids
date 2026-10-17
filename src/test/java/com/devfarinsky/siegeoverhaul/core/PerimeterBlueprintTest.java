@@ -232,14 +232,19 @@ class PerimeterBlueprintTest extends MinecraftTestSupport {
         assertEquals(1144, plan.blocks().size());
     }
 
-    @Test void eightSupportBlocksAreAllowedButNineBlockReliefRejectsTheWholeWall() {
-        for (int relief : List.of(8, 9)) {
+    @Test void deepReliefIsCutIntoHighGroundUntilFoundationAndCutBudgetsAreSpent() {
+        for (int relief : List.of(8, 9, 11, 12)) {
             var plan = PerimeterBlueprint.create(Set.of(new ChunkPos(0, 0)),
                     (x, z) -> PerimeterBlueprint.Surface.ready(x == 0 && z == 0 ? 64 - relief : 64), COBBLE);
-            if (relief == 8) {
-                assertTrue(plan.valid(), plan.problemSummary());
-                assertEquals(8, plan.materialCounts().get("minecraft:dirt"));
-            } else assertBlocked(plan, PerimeterBlueprint.ProblemCode.FOUNDATION_LIMIT);
+            if (relief == 12) { assertBlocked(plan, PerimeterBlueprint.ProblemCode.FOUNDATION_LIMIT); continue; }
+            assertTrue(plan.valid(), relief + ": " + plan.problemSummary());
+            assertEquals(8, plan.materialCounts().get("minecraft:dirt"));
+            int base = 64 - Math.max(0, relief - 8);
+            for (var column : plan.columns()) {
+                assertEquals(base, column.base().getY(), "relief " + relief);
+                if (column.base().getX() != 0 || column.base().getZ() != 0) assertEquals(0, column.supportDepth());
+            }
+            assertEquals(Math.min(64 - relief, base), plan.min().getY());
         }
     }
 

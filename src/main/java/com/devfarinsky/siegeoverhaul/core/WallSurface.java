@@ -88,7 +88,8 @@ final class WallSurface {
         for (int i=0; i<16 && y>level.getMinBuildHeight(); i++,y--) {
             BlockPos below=column.atY(y-1);
             var support=level.getBlockState(below);
-            if (support.is(BlockTags.LEAVES) || support.is(BlockTags.LOGS) || support.is(BlockTags.SAPLINGS)) continue;
+            if (support.is(BlockTags.LEAVES) || support.is(BlockTags.LOGS) || support.is(BlockTags.SAPLINGS)
+                    || SiteClearance.vegetation(level, below, support)) continue;
             if (y>=level.getMaxBuildHeight())
                 return Ground.blocked("The perimeter footing exceeds the build height at " + horizontal + ". No payment taken.");
             if (!support.getFluidState().isEmpty() || support.is(Blocks.WATER) || support.is(Blocks.LAVA))
@@ -104,9 +105,8 @@ final class WallSurface {
             String compatibility = com.devfarinsky.siegeoverhaul.camp.CampVegetation.optionalPlantProblem(occupied);
             if (compatibility != null) return Ground.blocked("Perimeter build space is occupied at "
                     + describe(feet, occupied) + ". " + compatibility + " No payment taken.");
-            if (occupied.getBlock() instanceof net.minecraft.world.level.block.DoublePlantBlock)
-                return Ground.blocked("Perimeter build space is occupied at " + describe(feet, occupied)
-                        + ". Two-block plants are not cleared automatically; break it by hand and review again. No payment taken.");
+            // Builders clear natural cover (tall grass, snow, saplings, tree trunks) on confirmation.
+            if (SiteClearance.vegetation(level, feet, occupied)) return Ground.ready(feet);
             return TerritoryFortification.safeWallReplacement(occupied) ? Ground.ready(feet)
                     : Ground.blocked("Perimeter build space is occupied at " + describe(feet, occupied)
                     + ". Existing blocks are protected; no payment taken.");
