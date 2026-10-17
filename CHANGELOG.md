@@ -1,3 +1,12 @@
+## 4.52.15 - Bows held right, patron magic, a lighter starter kit
+
+- Olympian bows and crossbows are no longer held sideways. Their art was drawn a quarter turn off from vanilla's, which the vanilla grip then turned sideways; all of it now matches vanilla, for players and hero NPCs alike. Fishing-rod skins face the right way and relics shimmer like enchanted gear.
+- Patron weapons and spells now have proper magic effects in each god's colours: glowing spiral trails on spell bolts and patron arrows, impact bursts with shockwave rings, lightning that strikes from above, rune circles while a spellbook charges, a tightening spiral as you draw a bow or crossbow, and a faint glow around held patron weapons. Hero casts, relics, supply blessings and loot boxes have their own effects too. Everything follows the Hero visual settings for particle amount, distance and reduced flashes.
+- The starter bags used to fill almost your entire inventory. They now take about a dozen slots: the faction bag drops the loom and dyes, iron armor goes straight on, and building blocks, workstations and more come packed in a Starter Supply Chest you place at your base, with more stone than before.
+- HUD cards no longer cover chat, titles, the TAB list or F3, and they hide with F1. They have a see-through style, the capture bar moves smoothly with a percentage and turns red when you're outnumbered, it no longer flickers, and the building-plan card sits top-left out of the way. Long raid boss-bar names no longer get cut off at large GUI sizes.
+- Builder and raid fixes: a stuck later wall section retries instead of pausing a paid perimeter, dead builders free their saved slot, and raiders that can't reach a ladder stop searching for it every second.
+- Update the server and every client together (network protocol 23), and back up your world first. Already opened starter bags keep their old contents.
+
 ## 4.52.14 - Builders cover for each other, raiders stop getting stuck
 
 - Paid perimeters no longer freeze when the builder dies. Once the death is confirmed, an idle builder you own within 64 blocks of your Siege Core takes over the same job. The plan, finished sections, supplies and the original 64-emerald fee all carry over, and there is no second fee. A builder that is only unloaded or far away never counts as dead.
