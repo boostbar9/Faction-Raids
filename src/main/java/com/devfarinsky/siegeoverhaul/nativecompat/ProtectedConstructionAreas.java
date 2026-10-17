@@ -48,9 +48,9 @@ public final class ProtectedConstructionAreas {
         if (owner == null || builder == null || builder.level() != owner.serverLevel())
             throw new IllegalArgumentException("An owned builder in this dimension is required");
         var plan = AcceptedConstructionPlan.decode(origin, Direction.SOUTH, width, depth, height, blueprint);
-        BlockPos marker = project==null?ConstructionMarkerSite.find(owner, plan)
-                :originalMarker==null?ConstructionMarkerSite.find(owner,plan,project.reservation(),project.header().territory())
-                :ConstructionMarkerSite.reusable(owner,originalMarker,plan,project.reservation(),project.header().territory())?originalMarker:null;
+        BlockPos marker = project==null?ConstructionMarkerSite.find(owner, plan, builder)
+                :originalMarker==null?ConstructionMarkerSite.find(owner,plan,project.reservation(),project.header().territory(),builder)
+                :ConstructionMarkerSite.reusable(owner,originalMarker,plan,project.reservation(),project.header().territory(),builder)?originalMarker:null;
         if (marker == null) throw new IllegalStateException(
                 "Move onto clear ground inside your claim near the build site; no accessible native marker position is available.");
         var nativeBounds = new net.minecraft.world.phys.AABB(origin, origin.relative(Direction.SOUTH, depth - 1)
@@ -62,6 +62,7 @@ public final class ProtectedConstructionAreas {
             if(!ConstructionTracking.covers(net.minecraft.world.phys.Vec3.atBottomCenterOf(marker),bounds))
                 throw new IllegalStateException("The original shovel site must cover every section's native tracking envelope. Move closer to the territory's center before commissioning.");
         }
+        ConstructionMarkerSite.clearCover(owner.serverLevel(), marker);
         var area = TYPE.get().create(owner.serverLevel());
         if (area == null) throw new IllegalStateException("Native marker entity is unavailable");
         area.initialize(origin, marker, owner.getUUID(), owner.getGameProfile().getName(), builder.getUUID(),

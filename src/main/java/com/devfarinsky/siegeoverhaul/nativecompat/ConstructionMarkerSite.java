@@ -3,12 +3,14 @@ package com.devfarinsky.siegeoverhaul.nativecompat;
 import com.devfarinsky.siegeoverhaul.RaidSavedData;
 import com.devfarinsky.siegeoverhaul.compat.ClaimBridge;
 import com.devfarinsky.siegeoverhaul.compat.RecruitsClaimsBridge;
+import com.devfarinsky.siegeoverhaul.core.SiteClearance;
 import com.devfarinsky.siegeoverhaul.core.SiegeCore;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.Blocks;
@@ -31,10 +33,17 @@ public final class ConstructionMarkerSite {
     static BlockPos find(ServerPlayer owner, AcceptedConstructionPlan plan) {
         return find(owner,plan,java.util.Set.of(),null);
     }
+    static BlockPos find(ServerPlayer owner, AcceptedConstructionPlan plan, Entity builder) {
+        return find(owner,plan,java.util.Set.of(),null,builder);
+    }
+    static BlockPos find(ServerPlayer owner, AcceptedConstructionPlan plan, java.util.Set<Long> reserved,
+                         java.util.Set<ChunkPos> territory) {
+        return find(owner,plan,reserved,territory,null);
+    }
 
     /** A staged commission may use any still-owned reviewed claim, with all future cells excluded. */
     static BlockPos find(ServerPlayer owner, AcceptedConstructionPlan plan, java.util.Set<Long> reserved,
-                         java.util.Set<ChunkPos> territory) {
+                         java.util.Set<ChunkPos> territory, Entity builder) {
         ServerLevel level = owner.serverLevel();
         String key = SiegeCore.key(owner);
         var anchor = RaidSavedData.get(level.getServer()).anchors.get(key);
@@ -60,7 +69,7 @@ public final class ConstructionMarkerSite {
                 if (y == column.getY() || Math.abs(y - column.getY()) > 2) continue;
                 feet = column.atY(y);
             }
-            if (safe(level, owner, feet, plan, permitted,reserved)) return feet;
+            if (safe(level, owner, feet, plan, permitted,reserved,true,builder)) return feet;
         }
         return null;
     }
@@ -71,22 +80,26 @@ public final class ConstructionMarkerSite {
     }
     static boolean safe(ServerLevel level, ServerPlayer owner, BlockPos feet,
                         AcceptedConstructionPlan plan, Predicate<BlockPos> permitted, java.util.Set<Long> reserved) {
-        return safe(level,owner,feet,plan,permitted,reserved,true);
+        return safe(level,owner,feet,plan,permitted,reserved,true,null);
     }
     /** Subsequent sections reuse the original accepted site, never an unseen new marker location. */
     static boolean reusable(ServerPlayer owner,BlockPos feet,AcceptedConstructionPlan plan,
                             java.util.Set<Long> reserved,java.util.Set<ChunkPos> territory) {
+        return reusable(owner,feet,plan,reserved,territory,null);
+    }
+    static boolean reusable(ServerPlayer owner,BlockPos feet,AcceptedConstructionPlan plan,
+                            java.util.Set<Long> reserved,java.util.Set<ChunkPos> territory,Entity builder) {
         ServerLevel level=owner.serverLevel();var anchor=RaidSavedData.get(level.getServer()).anchors.get(SiegeCore.key(owner));
         var claim=RecruitsClaimsBridge.resolveDefendingClaim(level,anchor).orElse(null);if(claim==null)return false;
         var identity=anchor.withIdentity(claim.ownerFactionStringId(),anchor.teamDisplay());
         Map<ChunkPos,Boolean> permissions=new HashMap<>();
         return safe(level,owner,feet,plan,pos->permissions.computeIfAbsent(new ChunkPos(pos),chunk->territory.contains(chunk)
                 &&RecruitsClaimsBridge.isChunkOwnedBy(level,chunk,claim.ownerFactionStringId())
-                &&!ClaimBridge.isForeignClaim(level,chunk,identity))&&level.mayInteract(owner,pos),reserved,false);
+                &&!ClaimBridge.isForeignClaim(level,chunk,identity))&&level.mayInteract(owner,pos),reserved,false,builder);
     }
     private static boolean safe(ServerLevel level, ServerPlayer owner, BlockPos feet,
                                 AcceptedConstructionPlan plan, Predicate<BlockPos> permitted,
-                                java.util.Set<Long> reserved,boolean requireInitialVisibility) {
+                                java.util.Set<Long> reserved,boolean requireInitialVisibility,Entity builder) {
         AABB box = markerBox(feet);
         if (feet.getY() <= level.getMinBuildHeight() || box.maxY >= level.getMaxBuildHeight()
                 || !level.getWorldBorder().isWithinBounds(box)) return false;
@@ -95,13 +108,14 @@ public final class ConstructionMarkerSite {
             if (!level.hasChunkAt(cell) || !permitted.test(cell) || plan.cells.containsKey(cell) || reserved.contains(cell.asLong())) return false;
             BlockState state = level.getBlockState(cell);
             if (state.hasBlockEntity() || level.getBlockEntity(cell) != null || !state.getFluidState().isEmpty() || hazardous(state)) return false;
-            if (cell.getY() >= feet.getY() && !state.isAir()) return false;
-            if (cell.getY() < feet.getY() && !NativeConstructionGuard.stableNeighbor(state)) return false;
+            if (cell.getY() >= feet.getY() && !state.isAir() && !clearableCover(level, cell, state)) return false;
+            if (cell.getY() < feet.getY() && !NativeConstructionGuard.stableNeighbor(state) && !naturalGround(level, cell, state)) return false;
         }
         BlockPos floor = feet.below();
         if (!level.getBlockState(floor).isFaceSturdy(level, floor, Direction.UP)
                 || !level.noCollision((Entity) null, box)
-                || !level.getEntities((Entity) null, box, NativeConstructionGuard::blocksPlacement).isEmpty()) return false;
+                || !level.getEntities((Entity) null, box, entity -> NativeConstructionGuard.blocksPlacement(entity)
+                        && !ownedBy(entity, owner, builder)).isEmpty()) return false;
         if(!requireInitialVisibility)return true;
         Vec3 eye = owner.getEyePosition(), target = new Vec3(feet.getX() + .5, feet.getY() + 1, feet.getZ() + .5);
         // A close current ray target is usable without assuming a creative reach extension.
@@ -116,6 +130,37 @@ public final class ConstructionMarkerSite {
         }
         return level.clip(new ClipContext(eye, target, ClipContext.Block.COLLIDER, ClipContext.Fluid.ANY, owner))
                 .getType() == HitResult.Type.MISS;
+    }
+
+    /**
+     * Grass, flowers, thin snow and similar walk-through cover where the marker will stand. It is
+     * broken (dropping as if mined) when the marker is created instead of refusing the site.
+     */
+    static boolean clearableCover(ServerLevel level, BlockPos pos, BlockState state) {
+        return !hazardous(state) && SiteClearance.vegetation(level, pos, state)
+                && state.getCollisionShape(level, pos).isEmpty();
+    }
+
+    /** Clears {@link #clearableCover} from the marker's footprint right before the marker is placed. */
+    static void clearCover(ServerLevel level, BlockPos feet) {
+        AABB box = markerBox(feet);
+        for (BlockPos cell : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ),
+                BlockPos.containing(Math.nextDown(box.maxX), Math.nextDown(box.maxY), Math.nextDown(box.maxZ)))) {
+            BlockState state = level.getBlockState(cell);
+            if (!state.isAir() && clearableCover(level, cell, state)) level.destroyBlock(cell, true);
+        }
+    }
+
+    /** Natural ground under the marker that the native allowlist omits: stone, snow, clay, and supported sand or gravel. */
+    private static boolean naturalGround(ServerLevel level, BlockPos pos, BlockState state) {
+        return SiteClearance.terrain(state) && state.isCollisionShapeFullBlock(level, pos)
+                || NativeConstructionGuard.supportedLooseGround(level, pos, state, p -> false);
+    }
+
+    /** The commissioning builder and the owner's own mobs step aside instead of refusing the site. */
+    static boolean ownedBy(Entity entity, ServerPlayer owner, Entity builder) {
+        return entity == builder
+                || entity != owner && entity instanceof OwnableEntity ownable && owner.getUUID().equals(ownable.getOwnerUUID());
     }
 
     public static AABB markerBox(BlockPos feet) {
