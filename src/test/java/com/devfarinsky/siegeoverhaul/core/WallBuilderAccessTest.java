@@ -315,8 +315,17 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
     @Test void targetBeyondNativePathRangeWalksPartWayInsteadOfWaitingForever() throws Exception {
         terrain(); var goal=new WallBuilderAccess(worker,new NativeGoal());
         // createPath returns null: the next queued block is beyond follow range.
+        when(nav.moveTo(32,64,0,0.8)).thenReturn(true);
         goal.route(level,new BlockPos(60,64,0),40);
         verify(nav).moveTo(32,64,0,0.8);
+        // The approach path is kept on the next pass instead of being stopped as "not in reach".
+        var approach=mock(Path.class);when(approach.canReach()).thenReturn(true);
+        when(approach.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(32,64,0));
+        when(nav.getPath()).thenReturn(approach);
+        when(level.getGameTime()).thenReturn(20L);
+        goal.route(level,new BlockPos(60,64,0),40);
+        verify(nav,never()).stop();
+        when(nav.getPath()).thenReturn(null);
         verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
         verify(level,never()).setBlock(any(),any(),anyInt());
         clearInvocations(nav);

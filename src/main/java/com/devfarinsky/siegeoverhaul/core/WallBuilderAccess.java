@@ -460,7 +460,9 @@ public final class WallBuilderAccess extends Goal {
             if (!level.hasChunkAt(column) || reservedColumns.contains(column.asLong())) continue;
             BlockPos feet = new BlockPos(x, level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z);
             if (Math.abs(feet.getY() - from.y) > 8 || !safeStandingSite(level, worker, feet)) continue;
-            if (moveToSite(feet)) return;
+            // Record the waypoint as this target's destination; otherwise the next route pass
+            // sees a path that does not end in reach and stops it before the builder moves.
+            if (moveToSite(feet)) { lastTarget = target.immutable(); destination = feet; return; }
         }
     }
 
