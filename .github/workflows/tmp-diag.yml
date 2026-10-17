@@ -11,8 +11,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          artifact-ids: 12093556519
-          run-id: 39012175877
+          artifact-ids: 12093817239
+          run-id: 39012922644
           github-token: ${{ github.token }}
           path: qa
       - run: |
