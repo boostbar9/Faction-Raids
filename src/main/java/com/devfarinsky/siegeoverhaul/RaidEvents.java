@@ -171,9 +171,13 @@ public final class RaidEvents {
         String team = mob.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM);
         if (team.isBlank()) return;
         RaidSavedData.RaidState raid = RaidSavedData.get(level.getServer()).raids.get(team);
+        // An offline faction freezes the crew. A paused blueprint only stops native
+        // placement (BuilderWorkShift): freezing the whole entity tick also froze
+        // movement, combat and even the death animation while a player stood inside.
         if (raid != null && com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.active(raid)
                 && ((RaidConfig.PAUSE_WHEN_FACTION_OFFLINE.get() && onlineMembers(level.getServer(), team).isEmpty())
-                || !com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.safeToTick(level, raid))) event.setCanceled(true);
+                || (!com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.safeThisTick(level, raid)
+                    && !com.devfarinsky.siegeoverhaul.camp.BuilderWorkShift.installed(mob)))) event.setCanceled(true);
         if(raid!=null && !event.isCanceled())com.devfarinsky.siegeoverhaul.camp.BuilderSupport.tick(level,mob,raid);
     }
 
@@ -516,6 +520,12 @@ public final class RaidEvents {
             }
         }
 
+        // Camp builders are not wave enemies: free their crew slot so the job is
+        // handed to the survivors (or a replacement) instead of a stale identity.
+        if (event.getEntity() instanceof Mob campWorker
+                && !campWorker.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM).isBlank()) {
+            com.devfarinsky.siegeoverhaul.camp.CampCrew.onDeath(level, campWorker);
+        }
         if (victimTeamKey.isBlank()) return;
         RaidSavedData data = RaidSavedData.get(level.getServer());
         // v2.26.0 scout death: drop the intel letter and record the removal
@@ -2227,6 +2237,7 @@ public final class RaidEvents {
             finishRaid(server,data,teamKey,false,false,"Enemy reinforcements could not deploy. The siege withdrew; camp and breached blocks are being restored. No victory rewards.");
             return;
         }
+        com.devfarinsky.siegeoverhaul.camp.CampCrew.tick(level,state);
         com.devfarinsky.siegeoverhaul.camp.CampDevelopment.tick(level,state);
         com.devfarinsky.siegeoverhaul.camp.CampStructures.tick(level,state);
         // Camp progress is persisted even when no wave or breach changed this pass.

@@ -49,6 +49,8 @@ public final class CampPerimeter {
     /** One stage per wall side, then one per corner tower. */
     static final int STAGES = 8;
     static final int LAST_STAGE = FIRST_STAGE + STAGES - 1;
+    /** Saved stage once every outbuilding and perimeter section has been attempted. */
+    public static final int COMPLETE_STAGE = LAST_STAGE + 1;
 
     private CampPerimeter() {}
 

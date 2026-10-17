@@ -74,7 +74,11 @@ public final class CampBuilder {
             if (!stand.equals(worker.blockPosition()) || !CampBuilderAccess.safe(level, raid,
                     worker.blockPosition(), worker.getBoundingBox(), worker)) continue;
             int placed = placeNearby(raid, worker.position(), BLOCKS_PER_BUILDER, place);
-            if (placed > 0) worker.swing(InteractionHand.MAIN_HAND);
+            if (placed > 0) {
+                worker.swing(InteractionHand.MAIN_HAND);
+                // campMaxBuildSeconds bounds time WITHOUT progress, not total build time.
+                raid.campBuildTicks = 0;
+            }
         }
     }
 
