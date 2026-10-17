@@ -11,20 +11,19 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          artifact-ids: 12093817239
-          run-id: 39012922644
+          artifact-ids: 12093698477
+          run-id: 39013629984
           github-token: ${{ github.token }}
           path: qa
       - run: |
-          set +e
           python3 - <<'PY'
-          import json, pathlib
-          for p in pathlib.Path('qa').rglob('result.json'):
-              d=json.loads(p.read_text())
-              print("::error title=failure::"+str(d.get('failure'))[:900])
-              v=d.get('blockerDiagnostics') or {}
-              keep=['placed','builderPosition','nativeBuildState','nativeTarget','nativeRemaining','storageState','storageChestTarget','navigationDone','pathCanReach','pathTarget','pathNextIndex','pathNodeCount','pathNodes','selfClearanceRequests','selfClearanceTarget','mainHand','builderCobble','chestCobble','guardStatus','project','sleeping','followState','requestedSupplies']
-              t=json.dumps({k:x for k,x in v.items() if k not in ('pathNodes','footprintEntities','treasuryObservation')})
-              for i in range(0,min(len(t),12000),900): print(f"::error title=b{i}::{t[i:i+900]}")
+          import pathlib, xml.etree.ElementTree as ET
+          for p in pathlib.Path('qa').rglob('*.xml'):
+              try: root=ET.parse(p).getroot()
+              except Exception: continue
+              for tc in root.iter('testcase'):
+                  for f in list(tc.findall('failure'))+list(tc.findall('error')):
+                      msg=(f.get('message') or '')[:300].replace('\n',' ')
+                      where=[l.strip() for l in (f.text or '').splitlines() if 'devfarinsky' in l][:4]
+                      print(f"::error title={tc.get('classname')}.{tc.get('name')}::{msg} | {' | '.join(where)}"[:900])
           PY
-          for f in $(find qa -name '*.log'); do grep -n "SiegeWallGroundRecovery\|teleport\|Native staged perimeter QA" "$f" | tail -3 | cut -c1-600 | sed 's/^/::warning title=log::/'; done
