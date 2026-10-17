@@ -61,6 +61,13 @@ public final class HeroCasting {
         }
         hero.swing(InteractionHand.MAIN_HAND);
         send(hero,cast.role,level.getGameTime(),1);
+        var theme=com.devfarinsky.siegeoverhaul.items.MagicTheme.ofRole(cast.role);var feet=hero.position();
+        if (feet != null) {
+            com.devfarinsky.siegeoverhaul.items.MagicFx.ring(level,feet,theme,(float)radius(cast.role),12);
+            com.devfarinsky.siegeoverhaul.items.MagicFx.burst(level,feet.add(0,hero.getBbHeight()*.6,0),theme,1F);
+            if (cast.role==22) foes.stream().filter(enemy -> enemy.position()!=null).limit(6).forEach(enemy ->
+                    com.devfarinsky.siegeoverhaul.items.MagicFx.beam(level,enemy.position().add(0,8,0),enemy.position(),theme));
+        }
         return true;
     }
     private static List<LivingEntity> foes(ServerLevel level,Mob hero,int role) {

@@ -17,9 +17,9 @@ import java.util.function.Supplier;
 public final class RaidNetwork {
     // v4 introduced in 2.12.0: added threat breakdown, defense explainer,
     // discovered units/factions, and War Journal rows to DashboardSync.
-    // Protocol 22 includes bounded civilian reports and live capture-boundary details.
-    // Older clients cannot safely decode these server-authoritative snapshots.
-    private static final String PROTOCOL = "22";
+    // Protocol 23 adds patron magic effect packets on top of protocol 22's bounded
+    // civilian reports and live capture-boundary details.
+    private static final String PROTOCOL = "23";
     static boolean acceptsProtocol(String version) { return PROTOCOL.equals(version); }
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(SiegeOverhaul.MOD_ID, "main"))
@@ -42,6 +42,13 @@ public final class RaidNetwork {
                 .consumerMainThread((packet,supplier) -> {
                     DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
                             () -> () -> com.devfarinsky.siegeoverhaul.client.HeroCastVisuals.accept(packet));
+                    supplier.get().setPacketHandled(true);
+                }).add();
+        CHANNEL.messageBuilder(MagicFxPacket.class,messageId++,NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(MagicFxPacket::encode).decoder(MagicFxPacket::decode)
+                .consumerMainThread((packet,supplier) -> {
+                    DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
+                            () -> () -> com.devfarinsky.siegeoverhaul.client.MagicFxClient.accept(packet));
                     supplier.get().setPacketHandled(true);
                 }).add();
         CHANNEL.messageBuilder(CoreDetails.class,messageId++,NetworkDirection.PLAY_TO_CLIENT)
@@ -199,6 +206,30 @@ public final class RaidNetwork {
             return new HeroCast(b.readVarInt(),b.readUUID(),b.readVarInt(),b.readLong(),b.readUnsignedByte(),b.readDouble(),b.readDouble(),b.readDouble());
         }
     }
+    /** One compact description of a magic effect; the client expands it into particles. */
+    public record MagicFxPacket(int shape, int theme, float x, float y, float z, float a, float b, float c, int ticks, int entity) {
+        public MagicFxPacket {
+            if (shape < 0 || shape > 4 || com.devfarinsky.siegeoverhaul.items.MagicTheme.byId(theme) == null
+                    || ticks < 1 || ticks > 200 || !Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(z)
+                    || !Float.isFinite(a) || !Float.isFinite(b) || !Float.isFinite(c))
+                throw new IllegalArgumentException("Invalid magic effect");
+        }
+        public void encode(FriendlyByteBuf b) {
+            b.writeByte(shape); b.writeByte(theme);
+            b.writeFloat(x); b.writeFloat(y); b.writeFloat(z);
+            b.writeFloat(a); b.writeFloat(this.b); b.writeFloat(c);
+            b.writeShort(ticks); b.writeVarInt(entity + 1);
+        }
+        public static MagicFxPacket decode(FriendlyByteBuf b) {
+            return new MagicFxPacket(b.readUnsignedByte(), b.readUnsignedByte(), b.readFloat(), b.readFloat(), b.readFloat(),
+                    b.readFloat(), b.readFloat(), b.readFloat(), b.readUnsignedShort(), b.readVarInt() - 1);
+        }
+    }
+    public static void sendMagicFx(net.minecraft.server.level.ServerLevel level, MagicFxPacket packet) {
+        CHANNEL.send(PacketDistributor.NEAR.with(() -> new PacketDistributor.TargetPoint(packet.x(), packet.y(), packet.z(),
+                com.devfarinsky.siegeoverhaul.items.MagicFx.RANGE, level.dimension())), packet);
+    }
+
     public static void sendHeroCast(net.minecraft.world.entity.LivingEntity hero,HeroCast packet) {
         CHANNEL.send(PacketDistributor.TRACKING_ENTITY.with(() -> hero),packet);
     }

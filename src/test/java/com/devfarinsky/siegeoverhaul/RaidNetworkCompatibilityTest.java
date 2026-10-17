@@ -34,14 +34,15 @@ class RaidNetworkCompatibilityTest {
     }
 
     @Test void matchingSnapshotProtocolIsAccepted() {
-        withChannelRegistration(() -> assertTrue(RaidNetwork.acceptsProtocol("22")));
+        withChannelRegistration(() -> assertTrue(RaidNetwork.acceptsProtocol("23")));
     }
 
     @Test void olderPriceContractsAndMissingOrMalformedPeersAreRejected() {
         withChannelRegistration(() -> {
-            for (String version : new String[]{"19", "18", "20", "21", "4.52.4", "ABSENT", "ACCEPTVANILLA", "", " 22", "22 "})
+            for (String version : new String[]{"19", "18", "20", "21", "22", "4.52.4", "ABSENT", "ACCEPTVANILLA", "", " 23", "23 "})
                 assertFalse(RaidNetwork.acceptsProtocol(version), version);
             assertFalse(RaidNetwork.acceptsProtocol(null));
         });
     }
+
 }

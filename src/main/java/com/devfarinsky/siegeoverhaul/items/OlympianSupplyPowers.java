@@ -118,6 +118,7 @@ public final class OlympianSupplyPowers {
         if(!player.getAbilities().instabuild)stack.shrink(cost);
         player.getInventory().setChanged();
         server.sendParticles(ParticleTypes.ENCHANT,player.getX(),player.getY()+1,player.getZ(),12,.4,.4,.4,.02);
+        MagicFx.helix(server,player,MagicTheme.ATHENA,2F,16);
         server.playSound(null,player.getX(),player.getY(),player.getZ(),SoundEvents.AMETHYST_BLOCK_CHIME,SoundSource.PLAYERS,.5F,1.1F);
         return InteractionResult.CONSUME;
     }

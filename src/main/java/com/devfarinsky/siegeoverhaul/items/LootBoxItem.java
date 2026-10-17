@@ -85,6 +85,11 @@ public final class LootBoxItem extends Item {
                 sp.getX(), sp.getY() + 1.6D, sp.getZ(),
                 18, 0.35D, 0.25D, 0.35D, 0.02D);
 
+        var revealTheme = MagicTheme.of(loot.get(0));
+        if (revealTheme != null && sp.position() != null) {
+            MagicFx.burst(serverLevel, sp.position().add(0, 1.2, 0), revealTheme, 1.2F);
+            MagicFx.ring(serverLevel, sp.position(), revealTheme, 2.2F, 10);
+        }
         serverLevel.sendParticles(OlympianLoot.revealParticle(loot.get(0)),
                 sp.getX(), sp.getY() + 1.2D, sp.getZ(),
                 12, 0.4D, 0.3D, 0.4D, 0.02D);

@@ -19,28 +19,40 @@ final class PlanReviewHud {
     }
 
     static Bounds bounds(int viewportWidth, int viewportHeight, int requestedLines) {
-        int width = Math.max(1, Math.min(460, viewportWidth - 16));
+        return bounds(viewportWidth, viewportHeight, requestedLines, MAX_TEXT_WIDTH);
+    }
+
+    static final int MAX_TEXT_WIDTH = 300;
+
+    /**
+     * Top-left card sized to its text. The bottom-left anchor used to sit on the chat
+     * and over the action bar, hiding the plan items' own feedback messages.
+     */
+    static Bounds bounds(int viewportWidth, int viewportHeight, int requestedLines, int textWidth) {
+        int width = Math.max(1, Math.min(Math.min(MAX_TEXT_WIDTH, Math.max(60, textWidth)), viewportWidth - 22));
         int capacity = Math.max(1, (viewportHeight - 76) / 11);
         int count = Math.max(1, Math.min(capacity, requestedLines));
         int height = count * 11 + 10;
-        return new Bounds(5, Math.max(4, viewportHeight - 60 - height), width + 6, height, width, capacity);
+        return new Bounds(6, 6, width + 12, height, width, capacity);
     }
 
     static void render(GuiGraphics graphics, Font font, int viewportWidth, int viewportHeight,
                        String title, String status, boolean ready, List<String> details) {
         var initial = bounds(viewportWidth, viewportHeight, 1);
         var lines = new ArrayList<Line>();
-        append(lines, font, title, initial.textWidth() - 4, CommandPalette.ACCENT_GOLD);
+        append(lines, font, title, initial.textWidth(), CommandPalette.ACCENT_GOLD);
         // Keep the authoritative readiness/problem ahead of optional explanatory material text.
-        append(lines, font, status, initial.textWidth() - 4,
+        append(lines, font, status, initial.textWidth(), ready ? CommandPalette.ACCENT_TEAL : CommandPalette.ACCENT_BLOOD);
+        for (String detail : details) append(lines, font, detail, initial.textWidth(), CommandPalette.TEXT_MUTED);
+        int widest = 0;
+        for (var line : lines) widest = Math.max(widest, font.width(line.text()));
+        var box = bounds(viewportWidth, viewportHeight, lines.size(), widest);
+        CommandFrame.hudSurface(graphics, box.x(), box.y(), box.width(), box.height(),
                 ready ? CommandPalette.ACCENT_TEAL : CommandPalette.ACCENT_BLOOD);
-        for (String detail : details) append(lines, font, detail, initial.textWidth() - 4, CommandPalette.TEXT_MUTED);
-        var box = bounds(viewportWidth, viewportHeight, lines.size());
-        CommandFrame.surface(graphics, box.x(), box.y(), box.width(), box.height());
         int count = Math.min(lines.size(), box.lineCapacity());
         for (int i = 0; i < count; i++) {
             var line = lines.get(i);
-            graphics.drawString(font, line.text(), box.x() + 5, box.y() + 5 + i * 11, line.color(), false);
+            graphics.drawString(font, line.text(), box.x() + 8, box.y() + 5 + i * 11, line.color(), true);
         }
     }
     private static void append(List<Line> lines, Font font, String text, int width, int color) {

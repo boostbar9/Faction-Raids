@@ -273,17 +273,28 @@ public final class ChatStyle {
      * instead of jumping between hyphens, colons, and bullets.</p>
      */
     public static String bossbarLabel(String epithet, String phase, String... chips) {
+        java.util.List<String> kept = new java.util.ArrayList<>();
+        if (chips != null) for (String c : chips) if (c != null && !c.isEmpty()) kept.add(c);
+        String label = join(epithet, phase, kept);
+        // The vanilla bar centres its name, so an over-long label is cut off at both
+        // ends at large GUI scales. Drop the flavour epithet first, then the least
+        // important trailing chips, always keeping the phase and its main chip.
+        if (label.length() > BOSSBAR_MAX) label = join(null, phase, kept);
+        while (label.length() > BOSSBAR_MAX && kept.size() > 1) {
+            kept.remove(kept.size() - 1);
+            label = join(null, phase, kept);
+        }
+        return label.length() > BOSSBAR_MAX ? label.substring(0, BOSSBAR_MAX - 1) + "\u2026" : label;
+    }
+
+    /** Longest boss-bar name that still fits on screen at GUI scale 4 on a 1080p window. */
+    public static final int BOSSBAR_MAX = 72;
+
+    private static String join(String epithet, String phase, java.util.List<String> chips) {
         StringBuilder out = new StringBuilder();
-        if (epithet != null && !epithet.isEmpty()) {
-            out.append(epithet).append(SEP);
-        }
+        if (epithet != null && !epithet.isEmpty()) out.append(epithet).append(SEP);
         out.append(phase);
-        if (chips != null) {
-            for (String c : chips) {
-                if (c == null || c.isEmpty()) continue;
-                out.append(SEP).append(c);
-            }
-        }
+        for (String c : chips) out.append(SEP).append(c);
         return out.toString();
     }
 }

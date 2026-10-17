@@ -33,6 +33,7 @@ public final class OlympianRelicItem extends Item {
         this.kind = kind;
     }
     private String cooldownKey() { return "SiegeRelicNext" + kind.name(); }
+    @Override public boolean isFoil(ItemStack stack) { return true; }
 
     @Override public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         var stack = player.getItemInHand(hand);
@@ -66,6 +67,12 @@ public final class OlympianRelicItem extends Item {
             case CLEANSE -> ParticleTypes.END_ROD;
         };
         server.sendParticles(particle, player.getX(), player.getY() + 1, player.getZ(), 16, .45, .45, .45, .02);
+        var feet = player.position();
+        if (feet != null) switch (kind) {
+            case FORGE -> MagicFx.burst(server, feet.add(0, 1, 0), MagicTheme.HEPHAESTUS, 1F);
+            case WATCH -> MagicFx.ring(server, feet, MagicTheme.ATHENA, WATCH_RADIUS, 14);
+            case CLEANSE -> MagicFx.helix(server, player, MagicTheme.APOLLO, 2.2F, 20);
+        }
         server.playSound(null, player.getX(), player.getY(), player.getZ(),
                 kind == OlympianRelics.Kind.FORGE ? SoundEvents.ANVIL_USE : SoundEvents.AMETHYST_BLOCK_CHIME,
                 SoundSource.PLAYERS, .55F, kind == OlympianRelics.Kind.WATCH ? .8F : 1.2F);

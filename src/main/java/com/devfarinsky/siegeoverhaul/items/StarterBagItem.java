@@ -30,23 +30,60 @@ public final class StarterBagItem extends Item {
             // creation, claiming land, and placing the Siege Core in the correct
             // order. Intel tab still holds the full codex; this is the quick-start.
             out.add(setupGuide());
-            add(out,ModItems.SIEGE_CORE.get(),1);add(out,Items.LOOM,1);
-            add(out,Items.WHITE_BANNER,2);add(out,Items.BLUE_DYE,16);add(out,Items.WHITE_DYE,16);add(out,Items.BLACK_DYE,16);
+            // What founding a faction needs: the core, a loom, a banner and dyes to design
+            // the faction flag Villager Recruits asks for, and hiring funds.
+            add(out,ModItems.SIEGE_CORE.get(),1);add(out,Items.LOOM,1);add(out,Items.WHITE_BANNER,1);
+            add(out,Items.BLUE_DYE,16);add(out,Items.WHITE_DYE,16);add(out,Items.BLACK_DYE,16);
             add(out,CoreHiring.currency(),budget(configured("FactionCreationCost"),configured("ClaimingCost"),CoreHiring.cost(1),CoreHiring.cost(2)));
         } else out.addAll(survivalContents());
         return out;
     }
+    /**
+     * Personal gear plus one placeable supply chest. The armor is worn straight from
+     * the bag when the slot is free, and every building material and workstation
+     * rides inside the chest, so unpacking costs about eight inventory slots instead
+     * of twenty-five while delivering more supplies for a first base.
+     */
     static List<ItemStack> survivalContents() {
-        // v4.18.0 slimmed building supplies so the bag doesn't bloat inventory.
-        // Previous amounts:  STONE_BRICKS 256, STAIRS/SLAB 32, OAK_PLANKS 64.
-        // Tuned down to a shelter-starter kit rather than a full castle load.
         List<ItemStack> out=new ArrayList<>();
-            for(Item item:List.of(Items.IRON_SWORD,Items.IRON_PICKAXE,Items.IRON_AXE,Items.IRON_SHOVEL,Items.SHIELD,
-                    Items.IRON_HELMET,Items.IRON_CHESTPLATE,Items.IRON_LEGGINGS,Items.IRON_BOOTS,Items.WATER_BUCKET,Items.CRAFTING_TABLE,Items.FURNACE,Items.WHITE_BED))add(out,item,1);
-            add(out,Items.COOKED_BEEF,16);add(out,Items.BREAD,16);add(out,Items.TORCH,32);
-            add(out,Items.STONE_BRICKS,96);add(out,Items.STONE_BRICK_STAIRS,16);add(out,Items.STONE_BRICK_SLAB,16);
-            add(out,Items.OAK_PLANKS,32);add(out,Items.GLASS_PANE,8);add(out,Items.OAK_DOOR,2);add(out,Items.CHEST,2);add(out,Items.COAL,16);
+        for(Item item:List.of(Items.IRON_HELMET,Items.IRON_CHESTPLATE,Items.IRON_LEGGINGS,Items.IRON_BOOTS,
+                Items.IRON_SWORD,Items.IRON_PICKAXE,Items.IRON_AXE,Items.SHIELD,Items.WHITE_BED))add(out,item,1);
+        add(out,Items.COOKED_BEEF,32);add(out,Items.TORCH,32);
+        out.add(supplyChest());
         return out;
+    }
+
+    /** Contents of the starter supply chest; one stack per slot, at most 27 slots. */
+    static List<ItemStack> supplyChestContents() {
+        List<ItemStack> out=new ArrayList<>();
+        add(out,Items.STONE_BRICKS,128);add(out,Items.STONE_BRICK_STAIRS,16);add(out,Items.STONE_BRICK_SLAB,16);
+        add(out,Items.OAK_PLANKS,64);add(out,Items.OAK_LOG,16);add(out,Items.GLASS_PANE,16);add(out,Items.OAK_DOOR,2);
+        add(out,Items.CRAFTING_TABLE,1);add(out,Items.FURNACE,1);add(out,Items.CHEST,2);add(out,Items.COAL,16);
+        add(out,Items.IRON_SHOVEL,1);add(out,Items.WATER_BUCKET,1);add(out,Items.BREAD,16);
+        return out;
+    }
+
+    /**
+     * A vanilla chest item carrying its contents as block-entity data. Placing it
+     * yields a filled chest; chests are not operator-only blocks, so this works in
+     * Survival without any custom block or menu.
+     */
+    static ItemStack supplyChest() {
+        ItemStack chest=new ItemStack(Items.CHEST);
+        ListTag items=new ListTag();
+        List<ItemStack> contents=supplyChestContents();
+        for(int slot=0;slot<contents.size() && slot<27;slot++) {
+            CompoundTag entry=contents.get(slot).save(new CompoundTag());
+            entry.putByte("Slot",(byte)slot);items.add(entry);
+        }
+        CompoundTag blockEntity=new CompoundTag();blockEntity.put("Items",items);
+        chest.getOrCreateTag().put(BlockItem.BLOCK_ENTITY_TAG,blockEntity);
+        chest.setHoverName(Component.literal("Starter Supply Chest").withStyle(ChatFormatting.GOLD));
+        CompoundTag display=chest.getOrCreateTagElement("display");ListTag lore=new ListTag();
+        lore.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal("Place it at your base to unpack").withStyle(ChatFormatting.GRAY))));
+        lore.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal("building blocks, tools and workstations.").withStyle(ChatFormatting.GRAY))));
+        display.put("Lore",lore);
+        return chest;
     }
 
     /**
@@ -107,6 +144,10 @@ public final class StarterBagItem extends Item {
         List<ItemStack> remaining=new ArrayList<>();int delivered=0;
         for(Tag entry:tag.getList("Supplies",Tag.TAG_COMPOUND)) {
             ItemStack item=ItemStack.of((CompoundTag)entry);int before=item.getCount();
+            // Wear starter armor directly when that slot is free; it never needs a bag slot.
+            if(item.getItem() instanceof ArmorItem armor && player.getItemBySlot(armor.getEquipmentSlot()).isEmpty()) {
+                player.setItemSlot(armor.getEquipmentSlot(),item.split(1));
+            }
             insert(player.getInventory(),item);delivered+=before-item.getCount();
             if(!item.isEmpty())remaining.add(item);
         }
@@ -117,7 +158,7 @@ public final class StarterBagItem extends Item {
         return InteractionResultHolder.sidedSuccess(bag,false);
     }
     @Override public void appendHoverText(ItemStack stack,Level level,List<Component> tooltip,TooltipFlag flag) {
-        tooltip.add(Component.literal(settlement?"Faction setup, core and hiring funds":"Iron gear, food and a small stone-brick shelter"));
+        tooltip.add(Component.literal(settlement?"Faction setup, core and hiring funds":"Iron gear, food and a supply chest for your first base"));
         tooltip.add(Component.literal("Right-click to unpack. Overflow stays inside."));
         if(stack.hasTag() && stack.getTag().contains("Supplies"))tooltip.add(Component.literal(stack.getTag().getList("Supplies",Tag.TAG_COMPOUND).size()+" stacks remaining"));
     }

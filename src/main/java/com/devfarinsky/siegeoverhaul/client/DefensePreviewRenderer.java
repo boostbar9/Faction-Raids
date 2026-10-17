@@ -13,7 +13,6 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.RenderGuiEvent;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -88,13 +87,15 @@ public final class DefensePreviewRenderer {
         pose.popPose(); buffers.endBatch(RenderType.lines());
     }
 
-    @SubscribeEvent public static void hud(RenderGuiEvent.Post event) {
+    /** Registered GUI overlay (see SiegeHudOverlays); chat and titles draw above it. */
+    public static void drawCard(net.minecraft.client.gui.GuiGraphics graphics) {
         var mc = Minecraft.getInstance();
+        if (HudVisibility.hidden(mc)) return;
         if (plan == null || selection == null || mc.level != world || mc.screen != null || mc.options.hideGui) return;
         if (mc.player == null || !PlanReviewHud.shouldDisplay(
                 mc.player.getMainHandItem().getItem() instanceof DefensePlanItem,
                 mc.player.getMainHandItem().getItem() instanceof com.devfarinsky.siegeoverhaul.items.PerimeterPlanItem)) return;
-        PlanReviewHud.render(event.getGuiGraphics(), mc.font,
+        PlanReviewHud.render(graphics, mc.font,
                 mc.getWindow().getGuiScaledWidth(), mc.getWindow().getGuiScaledHeight(),
                 kind.label + " · " + kind.price + " Treasury emeralds",
                 selection.ready() ? "Site ready. Confirmation checks it again." : selection.problem(), selection.ready(),

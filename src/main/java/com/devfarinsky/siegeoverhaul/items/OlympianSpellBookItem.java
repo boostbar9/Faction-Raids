@@ -44,6 +44,11 @@ public final class OlympianSpellBookItem extends Item {
             player.getPersistentData().putInt(ROLE, role);
             player.getCooldowns().addCooldown(this, cooldown());
             HeroCastPackets.send(player, role, now, 0);
+            if (level instanceof ServerLevel server) {
+                var theme = com.devfarinsky.siegeoverhaul.items.MagicTheme.ofRole(role);
+                com.devfarinsky.siegeoverhaul.items.MagicFx.castCircle(server, player, theme, getUseDuration(stack));
+                com.devfarinsky.siegeoverhaul.items.MagicFx.cue(server, player.position(), theme, false);
+            }
         }
         player.startUsingItem(hand);
         return InteractionResultHolder.consume(stack);

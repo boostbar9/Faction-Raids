@@ -64,12 +64,25 @@ class StarterBagTest extends MinecraftTestSupport {
         assertEquals(32, emeralds.getCount());
     }
 
-    @Test void buildingBagIsAShelterBudget() throws Exception {
+    @Test void survivalBagIsCompactButStillStocksAFirstBase() {
         var contents=StarterBagItem.survivalContents();
-        // v4.18.0 slimmed the shelter kit: stone bricks were 256, now 96.
-        assertEquals(96,contents.stream().filter(s->s.is(Items.STONE_BRICKS)).mapToInt(ItemStack::getCount).sum());
-        assertEquals(32,contents.stream().filter(s->s.is(Items.BREAD)||s.is(Items.COOKED_BEEF)).mapToInt(ItemStack::getCount).sum());
-        assertEquals(2,contents.stream().filter(s->s.is(Items.CHEST)).mapToInt(ItemStack::getCount).sum());
+        long armor=contents.stream().filter(s->s.getItem() instanceof ArmorItem).count();
+        // Armor is worn from the bag; everything else must fit in a handful of slots.
+        assertEquals(4,armor);
+        assertTrue(contents.size()-armor<=8,"survival bag should need at most 8 inventory slots, was "+(contents.size()-armor));
+        ItemStack chest=contents.stream().filter(s->s.is(Items.CHEST)).findFirst().orElseThrow();
+        var stored=chest.getTag().getCompound(BlockItem.BLOCK_ENTITY_TAG).getList("Items",Tag.TAG_COMPOUND);
+        var inside=StarterBagItem.supplyChestContents();
+        assertEquals(inside.size(),stored.size());
+        assertTrue(stored.size()<=27,"supply chest must fit a single chest");
+        for(int i=0;i<stored.size();i++){
+            assertEquals(i,stored.getCompound(i).getByte("Slot"));
+            assertTrue(ItemStack.matches(inside.get(i),ItemStack.of(stored.getCompound(i))));
+        }
+        assertTrue(inside.stream().filter(s->s.is(Items.STONE_BRICKS)).mapToInt(ItemStack::getCount).sum()>=96,"no less building stone than before");
+        assertTrue(inside.stream().anyMatch(s->s.is(Items.CRAFTING_TABLE)) && inside.stream().anyMatch(s->s.is(Items.FURNACE)));
+        assertEquals(2,inside.stream().filter(s->s.is(Items.CHEST)).mapToInt(ItemStack::getCount).sum());
+        assertTrue(contents.stream().anyMatch(s->s.is(Items.IRON_PICKAXE)) && contents.stream().anyMatch(s->s.is(Items.WHITE_BED)));
     }
     @Test void fundsCoverFirstFactionClaimAndFourTroops() {
         assertEquals(192,StarterBagItem.budget(10,64,10,6));

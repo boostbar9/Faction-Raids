@@ -34,6 +34,7 @@ public final class CaptureBeaconRenderer {
     private static CaptureStatus.Participation participation = CaptureStatus.Participation.UNAVAILABLE;
     private static int bossBottom;
     private static long projectedAt = Long.MIN_VALUE;
+    static final int FRESH_TICKS = 35;
     private CaptureBeaconRenderer() {}
     private static void world() {
         var current = Minecraft.getInstance().level;
@@ -94,7 +95,10 @@ public final class CaptureBeaconRenderer {
                 player.isAlive() && !player.isCreative() && !player.isSpectator(), loaded, visible);
     }
     private static CaptureStatus.Participation freshParticipation(RaidNetwork.CaptureBeam packet) {
-        return world.getGameTime() - packet.time() <= 25 ? packet.participation() : CaptureStatus.Participation.UNAVAILABLE;
+        // Snapshots arrive once a second; allow one interval plus slack so a single late
+        // packet does not flip the card between "counted" and "checking". Stays well
+        // inside CaptureBeacon.LIFETIME so a stopped feed still shows "checking" first.
+        return world.getGameTime() - packet.time() <= FRESH_TICKS ? packet.participation() : CaptureStatus.Participation.UNAVAILABLE;
     }
     @SubscribeEvent public static void render(RenderLevelStageEvent event) {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
@@ -147,40 +151,61 @@ public final class CaptureBeaconRenderer {
         bossBottom = Math.max(bossBottom, event.getY() + 6);
     }
 
-    @SubscribeEvent public static void hud(RenderGuiEvent.Post event) {
+    private static String cardKey = "";
+    private static List<FormattedCharSequence> cardText = List.of();
+    private static CaptureHudLayout.Bounds cardBox;
+    private static float shownPercent = Float.NaN;
+    private static long lastFrame;
+
+    /** Registered GUI overlay (see SiegeHudOverlays); drawn below titles, chat and the player list. */
+    public static void drawCard(net.minecraft.client.gui.GuiGraphics graphics) {
         world(); var mc = Minecraft.getInstance();
-        if (world == null || nearest == null || mc.player == null || mc.screen != null || mc.options.hideGui
-                || !HeroVisualConfig.CAPTURE_BEAMS.get() || !near(nearest, mc.player.position()) || !corePresent(nearest)) return;
+        if (world == null || nearest == null || HudVisibility.hidden(mc)
+                || !HeroVisualConfig.CAPTURE_BEAMS.get() || !near(nearest, mc.player.position()) || !corePresent(nearest)) {
+            shownPercent = Float.NaN; return;
+        }
         var local = participation;
         var server = freshParticipation(nearest);
-        int color = local == CaptureStatus.Participation.COUNTED && server == CaptureStatus.Participation.COUNTED
-                ? CommandPalette.ACCENT_TEAL : CommandPalette.ACCENT_GOLD;
+        boolean counted = local == CaptureStatus.Participation.COUNTED && server == CaptureStatus.Participation.COUNTED;
+        var contest = CaptureStatus.contest(nearest.percent(), nearest.allies(), nearest.enemies());
+        int color = contest == CaptureStatus.Contest.OUTNUMBERED ? CommandPalette.ACCENT_BLOOD
+                : counted ? CommandPalette.ACCENT_TEAL : CommandPalette.ACCENT_GOLD;
         Vec3 at = mc.player.position();
         double distance = Math.hypot(at.x - nearest.pos().getX() - .5, at.z - nearest.pos().getZ() - .5);
         int viewportWidth = mc.getWindow().getGuiScaledWidth(), viewportHeight = mc.getWindow().getGuiScaledHeight();
         int width = Math.min(350, viewportWidth - 16);
         if (width < 100 || viewportHeight < 160) return;
-        var text = new ArrayList<FormattedCharSequence>();
-        List<String> rows = hudRows(nearest, local, server, distance, viewportWidth);
-        for (String row : rows) text.addAll(mc.font.split(Component.literal(row), width - 14));
-        var box = CaptureHudLayout.bounds(viewportWidth, viewportHeight, text.size(), bossBottom);
-        if (box.width() != width) {
-            width = box.width(); text.clear();
-            for (String row : hudRows(nearest, local, server, distance, width))
+        // Rebuild wrapped text only when what it says or where it goes changes, not every frame.
+        String key = nearest.pos().asLong() + "|" + nearest.percent() + "|" + nearest.allies() + "|" + nearest.enemies() + "|"
+                + local + "|" + server + "|" + Math.round(distance) + "|" + viewportWidth + "x" + viewportHeight + "|" + bossBottom;
+        if (!key.equals(cardKey) || cardBox == null) {
+            var text = new ArrayList<FormattedCharSequence>();
+            for (String row : hudRows(nearest, local, server, distance, viewportWidth))
                 text.addAll(mc.font.split(Component.literal(row), width - 14));
-            box = CaptureHudLayout.bounds(viewportWidth, viewportHeight, text.size(), bossBottom);
-            // Keep the chosen narrow width even if the shortened wording fits above aim.
-            if (box.width() != width) box = new CaptureHudLayout.Bounds(8, box.y(), width, text.size() * 10 + 18, text.size());
+            var box = CaptureHudLayout.bounds(viewportWidth, viewportHeight, text.size(), bossBottom);
+            if (box.width() != width) {
+                width = box.width(); text.clear();
+                for (String row : hudRows(nearest, local, server, distance, width))
+                    text.addAll(mc.font.split(Component.literal(row), width - 14));
+                box = CaptureHudLayout.bounds(viewportWidth, viewportHeight, text.size(), bossBottom);
+                // Keep the chosen narrow width even if the shortened wording fits above aim.
+                if (box.width() != width) box = new CaptureHudLayout.Bounds(8, box.y(), width, text.size() * 10 + 18, text.size());
+            }
+            cardKey = key; cardText = List.copyOf(text); cardBox = box;
         }
+        var box = cardBox; width = box.width();
         int height = box.height(), x = box.x(), y = box.y();
-        var graphics = event.getGuiGraphics();
-        CommandFrame.surface(graphics, x, y, width, height);
-        graphics.fill(x + 1, y + 1, x + 3, y + height - 1, color);
-        for (int i = 0; i < box.lines(); i++) graphics.drawString(mc.font, text.get(i), x + 7, y + 5 + i * 10,
-                i == 0 ? CommandPalette.ACCENT_GOLD : i == 1 ? color : CommandPalette.TEXT_MUTED, false);
+        long now = net.minecraft.Util.getMillis();
+        shownPercent = HudAnim.approach(shownPercent, nearest.percent() / 100F, now - lastFrame);
+        lastFrame = now;
+        CommandFrame.hudSurface(graphics, x, y, width, height, color);
+        for (int i = 0; i < box.lines() && i < cardText.size(); i++) graphics.drawString(mc.font, cardText.get(i), x + 7, y + 5 + i * 10,
+                i == 0 ? CommandPalette.ACCENT_GOLD : i == 1 ? color : CommandPalette.TEXT_MUTED, true);
         int barY = y + height - 8;
-        graphics.fill(x + 7, barY, x + width - 7, barY + 3, CommandPalette.PANEL_INSET);
-        graphics.fill(x + 7, barY, x + 7 + (width - 14) * nearest.percent() / 100, barY + 3, color);
+        String percent = Math.round(shownPercent * 100) + "%";
+        int labelWidth = mc.font.width(percent);
+        CommandFrame.progressBar(graphics, x + 7, barY, width - 18 - labelWidth, 3, shownPercent, color);
+        graphics.drawString(mc.font, percent, x + width - 6 - labelWidth, barY - 3, color, true);
     }
     private static List<String> hudRows(RaidNetwork.CaptureBeam packet, CaptureStatus.Participation local,
                                         CaptureStatus.Participation server, double distance, int width) {
