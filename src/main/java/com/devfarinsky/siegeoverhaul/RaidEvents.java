@@ -124,6 +124,12 @@ public final class RaidEvents {
         return PATHING_TELEMETRY.computeIfAbsent(teamKey, ignored -> new PathingTelemetry());
     }
 
+    /** Current stuck escalation (0 = progressing or untracked) for siege helpers outside this class. */
+    public static int stuckEscalation(UUID raider) {
+        StuckEntry entry = STUCK_TRACKER.get(raider);
+        return entry == null ? 0 : entry.escalationLevel;
+    }
+
     static final class StuckEntry {
         double lastDistSq;
         long lastProgressGameTime;
