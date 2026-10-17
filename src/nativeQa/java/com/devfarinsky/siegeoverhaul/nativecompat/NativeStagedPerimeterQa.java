@@ -94,7 +94,7 @@ public final class NativeStagedPerimeterQa {
     private static Path directory, evidence;
     private static UUID playerId, projectId, jobId;
     private static String coreKey, reloadKind, hudFaction;
-    private static long started, constructionStarted, lastProgress, lastSampleTick = -1, placedBefore = -1, stageTick;
+    private static long started, constructionStarted, lastProgress, lastSampleTick = -1, placedBefore = -1, stageTick, lastCoreClick;
     private static long captureRequested, pauseStarted, pausedNanos;
     private static int clientPhase, stage, renderFrames, captureFrame, menuId, menuUiStage;
     private static boolean finished, finishing, midRestart, betweenRestart, restartRequested;
@@ -224,7 +224,11 @@ public final class NativeStagedPerimeterQa {
                 advance(now, 1); return Action.OPEN_CORE;
             }
             case 1 -> {
-                if (!(owner.containerMenu instanceof CoreHireMenu menu)) return Action.NONE;
+                // An early core click can be dropped while the client is still settling; click again.
+                if (!(owner.containerMenu instanceof CoreHireMenu menu)) {
+                    if (now - stageTick < 100 || now - lastCoreClick < 100) return Action.NONE;
+                    lastCoreClick = now; return Action.OPEN_CORE;
+                }
                 require(menu.stillValid(owner) && menu.bank() == 2000 && owner.getTeam() != null
                         && owner.getTeam().getName().equals(NativeStagedPerimeterFixture.FACTION), "Real core menu owner/Treasury mismatch");
                 menuId = menu.containerId;
