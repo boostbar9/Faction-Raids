@@ -47,14 +47,25 @@ class OlympianWeaponSkinsTest extends MinecraftTestSupport {
             var path=Path.of("src/main/resources/assets/siegeoverhaul/models/item/olympian",patron+"_"+shape+".json");
             var json=JsonParser.parseString(Files.readString(path)).getAsJsonObject();
             assertNotNull(net.minecraft.client.renderer.block.model.BlockModel.fromString(Files.readString(path)));
-            String family=shape.startsWith("crossbow")?"crossbow":shape.startsWith("bow")?"bow":"handheld";
+            String family=shape.startsWith("crossbow")?"crossbow":shape.startsWith("bow")?"bow":shape.equals("hook")?"handheld_rod":"handheld";
             assertEquals("minecraft:item/"+family,json.get("parent").getAsString());
             assertFalse(json.has("elements"));assertFalse(json.has("display"),"Use vanilla grip, scale and both hand poses");
-            if(!family.equals("handheld"))assertTrue(json.getAsJsonArray("overrides").isEmpty());
+            if(!family.startsWith("handheld"))assertTrue(json.getAsJsonArray("overrides").isEmpty());
             var texture=javax.imageio.ImageIO.read(Path.of("src/main/resources/assets/siegeoverhaul/textures/item/olympian",patron+"_"+shape+".png").toFile());
             assertEquals(32,texture.getWidth());assertEquals(32,texture.getHeight());
             int visible=0;for(int x=0;x<32;x++)for(int y=0;y<32;y++)if((texture.getRGB(x,y)>>>24)>0)visible++;
             assertTrue(visible>35 && visible<600,path.toString());
+        }
+    }
+    @Test void bowArtUsesVanillaOrientationSoItIsNotHeldSideways() throws Exception {
+        // Vanilla bow art bulges toward the top-left with the string running bottom-left to
+        // top-right; the inherited hand transforms assume that layout. Art drawn a quarter
+        // turn off kept most of its pixels in the bottom-right half and looked sideways.
+        for(var patron:OlympianWeaponSkins.PATRONS)for(var shape:new String[]{"bow","bow_1","bow_2","bow_3"}) {
+            var texture=javax.imageio.ImageIO.read(Path.of("src/main/resources/assets/siegeoverhaul/textures/item/olympian",patron+"_"+shape+".png").toFile());
+            int topLeft=0,visible=0;
+            for(int x=0;x<32;x++)for(int y=0;y<32;y++)if((texture.getRGB(x,y)>>>24)>0){visible++;if(x+y<31)topLeft++;}
+            assertTrue(topLeft>visible*0.55,patron+"_"+shape+" is not oriented like the vanilla bow");
         }
     }
 }

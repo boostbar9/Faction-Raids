@@ -40,10 +40,16 @@ public class OlympianBolt extends ThrowableItemProjectile {
         bolt.setPos(caster.getEyePosition());
         double speed=kind==LIGHTNING?4:kind==FIRE?1.2:kind==WATER?1.6:2;
         bolt.setDeltaMovement(caster.getLookAngle().normalize().scale(speed));
-        if (level.addFreshEntity(bolt)) level.playSound(null,caster.blockPosition(),
+        if (level.addFreshEntity(bolt)) {
+            level.playSound(null,caster.blockPosition(),
                 kind==FIRE?net.minecraft.sounds.SoundEvents.FIRECHARGE_USE:kind==ICE?net.minecraft.sounds.SoundEvents.SNOWBALL_THROW:
                 kind==WATER?net.minecraft.sounds.SoundEvents.GENERIC_SPLASH:net.minecraft.sounds.SoundEvents.TRIDENT_THROW,
                 net.minecraft.sounds.SoundSource.PLAYERS,kind==WATER?.2F:.6F,1.1F);
+            // The water channel launches a pulse every few ticks; keep its cast flourish to the first.
+            if (level instanceof net.minecraft.server.level.ServerLevel server && com.devfarinsky.siegeoverhaul.items.MagicFx.allow(caster))
+                com.devfarinsky.siegeoverhaul.items.MagicFx.burst(server,caster.getEyePosition().add(caster.getLookAngle().scale(.6)),
+                        com.devfarinsky.siegeoverhaul.items.MagicTheme.ofRole(kind),.5F);
+        }
     }
     @Override public void tick(){
         // Never load chunks for a travelling spell, and never resume orphaned casts after logout.
@@ -51,13 +57,7 @@ public class OlympianBolt extends ThrowableItemProjectile {
                 || !owner.isAlive() || owner.isSpectator() || !owner.getAbilities().instabuild
                 || !loadedTravel(level(),position(),getDeltaMovement()))){discard();return;}
         super.tick();
-        if(level().isClientSide && !isRemoved() && com.devfarinsky.siegeoverhaul.HeroVisualConfig.PARTICLES.get()>0) {
-            var particle=switch(kind()){case ICE->ParticleTypes.SNOWFLAKE;case WATER->ParticleTypes.SPLASH;
-                case LIGHTNING->ParticleTypes.ELECTRIC_SPARK;default->ParticleTypes.FLAME;};
-            // Fixed per-projectile budget; normal particle settings and distance culling apply.
-            Vec3 delta=getDeltaMovement();
-            for(int i=0;i<(com.devfarinsky.siegeoverhaul.HeroVisualConfig.PARTICLES.get()==1?1:3);i++)level().addParticle(particle,getX()-delta.x*i/3,getY()-delta.y*i/3,getZ()-delta.z*i/3,0,0,0);
-        }
+        // Flight trail: client/MagicFxClient follows every bolt with a themed spiral.
     }
     static boolean loadedTravel(Level level,Vec3 from,Vec3 motion) {
         Vec3 to=from.add(motion);
@@ -94,8 +94,11 @@ public class OlympianBolt extends ThrowableItemProjectile {
                         affect(owner,target);
             }
             if(level() instanceof net.minecraft.server.level.ServerLevel server){
-                server.sendParticles(kind()==FIRE?ParticleTypes.FLAME:kind()==ICE?ParticleTypes.SNOWFLAKE:kind()==WATER?ParticleTypes.SPLASH:ParticleTypes.ELECTRIC_SPARK,
-                        hit.getLocation().x,hit.getLocation().y,hit.getLocation().z,12,.3,.3,.3,.03);
+                var theme=com.devfarinsky.siegeoverhaul.items.MagicTheme.ofRole(kind());var at=hit.getLocation();
+                com.devfarinsky.siegeoverhaul.items.MagicFx.burst(server,at,theme,kind()==WATER?.6F:1.2F);
+                if(kind()!=WATER)com.devfarinsky.siegeoverhaul.items.MagicFx.ring(server,at,theme,kind()==FIRE?2.2F:1.4F,10);
+                if(kind()==LIGHTNING)com.devfarinsky.siegeoverhaul.items.MagicFx.beam(server,at.add(0,9,0),at,theme);
+                com.devfarinsky.siegeoverhaul.items.MagicFx.cue(server,at,theme,true);
                 server.playSound(null,blockPosition(),kind()==FIRE?net.minecraft.sounds.SoundEvents.FIRECHARGE_USE:kind()==ICE?net.minecraft.sounds.SoundEvents.GLASS_BREAK:kind()==WATER?net.minecraft.sounds.SoundEvents.GENERIC_SPLASH:net.minecraft.sounds.SoundEvents.TRIDENT_HIT,
                         net.minecraft.sounds.SoundSource.PLAYERS,.6F,1.2F);
             }
