@@ -100,6 +100,10 @@ public final class ProtectedBuildArea extends BuildArea {
 
     void verifyCompletion() { completionVerified = true; }
 
+    boolean rebindBuilder(UUID previous, UUID replacement) {
+        if (!initialized || !java.util.Objects.equals(reservedBuilder,previous) || replacement == null) return false;
+        reservedBuilder = replacement; return true;
+    }
     UUID reservedBuilderId() { return reservedBuilder; }
     void projectionAuthorized(boolean value) { super.setAlwaysShowProjection(value); }
     boolean retirementHandled() { return retirementHandled; }

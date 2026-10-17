@@ -22,6 +22,15 @@ public final class StragglerTracker {
 
     public static final int SAMPLE_INTERVAL_TICKS = 15 * 20; // 15 s
     public static final double PROGRESS_EPSILON = 2.0D;      // blocks
+    /**
+     * Consecutive samples of sideways movement (walking around a wall) that are
+     * forgiven before a raider that never gets any closer starts collecting
+     * strikes. Without a cap, a unit circling a ravine or pacing between two
+     * fallback targets was never retired and kept the wave open forever.
+     */
+    public static final int LATERAL_GRACE_SAMPLES = 4;
+    /** Raiders this close to the block being breached are working, not lost. */
+    private static final double BREACH_WORK_RADIUS = 4.0D;
 
     private static final Map<UUID, Vec3> POSITIONS = new HashMap<>();
     private static final Map<UUID, int[]> TRACKS = new HashMap<>();
@@ -73,6 +82,8 @@ public final class StragglerTracker {
                     || mob.isPassenger()
                     || com.devfarinsky.siegeoverhaul.naval.BridgeBuilder.assigned(mob)
                     || com.devfarinsky.siegeoverhaul.siege.RaiderLadderGoal.assigned(mob)
+                    || mob.getPersistentData().getBoolean(com.devfarinsky.siegeoverhaul.siege.CommanderWallStrikeGoal.CHARGING)
+                    || breaching(state, mob)
                     || (target != null && target.isAlive() && mob.getSensing().hasLineOfSight(target))) {
                 TRACKS.remove(id);
                 POSITIONS.remove(id);
@@ -88,16 +99,23 @@ public final class StragglerTracker {
             Vec3 previous = POSITIONS.put(id, mob.position());
             int[] track = TRACKS.get(id);
             if (track == null) {
-                TRACKS.put(id, new int[]{distBlocks, 0});
+                // {best distance so far, strikes, consecutive sideways samples}
+                TRACKS.put(id, new int[]{distBlocks, 0, 0});
                 teamSet.add(id);
                 continue;
             }
             int delta = track[0] - distBlocks;
-            if (delta >= PROGRESS_EPSILON || (previous != null
-                    && previous.distanceToSqr(mob.position()) >= PROGRESS_EPSILON * PROGRESS_EPSILON)) {
-                // Made progress toward objective -- reset strikes.
+            if (delta >= PROGRESS_EPSILON) {
+                // Got closer than ever before -- reset strikes.
                 track[0] = distBlocks;
                 track[1] = 0;
+                track[2] = 0;
+                continue;
+            }
+            if (previous != null && previous.distanceToSqr(mob.position()) >= PROGRESS_EPSILON * PROGRESS_EPSILON
+                    && track[2] < LATERAL_GRACE_SAMPLES) {
+                // Moving, but not closer: probably walking around an obstacle.
+                track[2]++;
                 continue;
             }
             // No meaningful progress in the sample window.
@@ -122,6 +140,11 @@ public final class StragglerTracker {
             }
         }
         return dropped;
+    }
+
+    static boolean breaching(RaidSavedData.RaidState state, Mob mob) {
+        if (state.currentBreachBlock == null) return false;
+        return mob.distanceToSqr(Vec3.atCenterOf(state.currentBreachBlock)) <= BREACH_WORK_RADIUS * BREACH_WORK_RADIUS;
     }
 
     /**

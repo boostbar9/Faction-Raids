@@ -262,6 +262,19 @@ public final class NativeCampConstruction {
         return null;
     }
 
+    /**
+     * {@link #safeToTick} evaluated at most once per game tick per camp. Every crew
+     * member asks before each AI tick; the full blueprint scan only needs to run once.
+     */
+    public static boolean safeThisTick(ServerLevel level, RaidSavedData.RaidState raid) {
+        long now = level.getGameTime();
+        if (raid.campSafeTick != now) {
+            raid.campSafe = active(raid) && safeToTick(level, raid);
+            raid.campSafeTick = now;
+        }
+        return raid.campSafe && active(raid);
+    }
+
     /** Called immediately before EACH worker AI tick, including between periodic raid passes. */
     public static boolean safeToTick(ServerLevel level, RaidSavedData.RaidState raid) {
         if (!com.devfarinsky.siegeoverhaul.compat.CampClaims.owns(level, raid)) return pause(raid, "Camp claim lost or unavailable");
@@ -349,6 +362,17 @@ public final class NativeCampConstruction {
     }
 
     public static void tick(ServerLevel level, RaidSavedData.RaidState raid) {
+        // Every builder is confirmed dead and no replacement can come: release the
+        // job now instead of holding it until the daytime stall timer expires.
+        if (raid.campWorkers.isEmpty() && raid.campBuilderReplacements >= RaidConfig.CAMP_BUILDER_REPLACEMENTS.get()) {
+            FactionLogger.LOG.info("Camp builders for {} were all lost; releasing the unfinished job ({}/{} cells placed)",
+                    raid.teamKey, raid.campCompletedBlocks, raid.pendingCampBlocks.size());
+            raid.campBuildTicks = 0;
+            raid.campCompletedBlocks = 0;
+            raid.constructionPauseReason = "";
+            stop(level, raid);
+            return;
+        }
         if (!safeToTick(level, raid)) {
             // A paused job still counts as a job going nowhere. Without this a
             // single permanently blocked cell keeps the camp on the same

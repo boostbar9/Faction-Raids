@@ -84,7 +84,7 @@ public final class LadderBuilder {
             if(!(level.getEntity(id) instanceof Mob mob) || !mob.isAlive() || mob.isPassenger() || !mob.onGround()
                     || com.devfarinsky.siegeoverhaul.naval.BridgeBuilder.assigned(mob)
                     || RaiderLadderGoal.assigned(mob))continue;
-            if(!mob.horizontalCollision && !mob.getNavigation().isDone())continue;
+            if(!blocked(mob))continue;
             if(++checked>8)break;
             Vec3 direction=Vec3.atCenterOf(objective).subtract(mob.position()).multiply(1,0,1).normalize();
             if(direction.lengthSqr()<.01)continue;
@@ -110,6 +110,16 @@ public final class LadderBuilder {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Ladders answer a wall that actually stopped the raider. A finished path is
+     * normal at a formation slot or waypoint, so on its own it no longer counts:
+     * otherwise ladders went up on any claimed wall nearby, even with the gate open.
+     */
+    public static boolean blocked(Mob mob) {
+        if(!RaidConfig.STUCK_DETECTION_ENABLED.get()) return mob.horizontalCollision || mob.getNavigation().isDone();
+        return com.devfarinsky.siegeoverhaul.RaidEvents.stuckEscalation(mob.getUUID())>=1;
     }
 
     /** Forget a raid's ladder-count tracking \u2014 call on raid end. */

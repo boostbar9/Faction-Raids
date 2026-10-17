@@ -1,3 +1,17 @@
+## 4.52.14 - Builders cover for each other, raiders stop getting stuck
+
+- Paid perimeters no longer freeze when the builder dies. Once the death is confirmed, an idle builder you own within 64 blocks of your Siege Core takes over the same job. The plan, finished sections, supplies and the original 64-emerald fee all carry over, and there is no second fee. A builder that is only unloaded or far away never counts as dead.
+- Single defense jobs whose builder died now say so on the marker, and older jobs that previously could not be canceled after a death can be.
+- Enemy war camps keep building when a builder is killed. The materials it was carrying go back into the camp barrel for the rest of the crew, and the camp can send up to two replacement builders per siege (`campBuilderReplacements`, `campBuilderReplaceSeconds`). If the whole crew is gone for good, the camp drops that job straight away instead of sitting on it.
+- Standing inside an enemy blueprint now only stops the builders from placing blocks. They can still move, fight back and die normally.
+- Fix enemy camp walls restarting after a world reload, which could stack a second wall on top of the first.
+- Stuck raiders no longer hop through walls or palisades. The short recovery jump now only skips small steps and loose terrain, and siege engines follow the same rule. A refused jump is tried again later.
+- Raiders that keep circling or pacing without getting closer are eventually dropped from the wave, so one lost raider can no longer hold a wave open forever. Raiders working on the breach and charging commanders are left alone.
+- Fix raiders being counted as killed while their chunk was still loading, which could end a wave or hand out a victory early.
+- Raiders marching in formation and mounted raiders now get unstuck too; a rider leaves a horse that has stopped making progress for 10 seconds.
+- Raiders climbing a ladder are no longer held in place on top of the wall, and ladders only go up when raiders are actually stuck.
+- Existing worlds, paid jobs and claims stay compatible. After saving with this version, going back to an older version pauses protected building jobs, so back up your world first. Update the server and all clients together.
+
 ## 4.52.13 - Clearer building and faction setup feedback
 
 - Name the exact chunk and cause when a defense plan or perimeter is refused for claim reasons. "The whole structure must be inside your core's claim and allow building" now says which chunk the plan reaches, whether that chunk is unclaimed or belongs to another faction, and separately reports server spawn protection, the world border, or a failed claim mod. The rules themselves are unchanged: manual plans still have to sit inside the claim that holds your Siege Core, and automatic perimeters still use your complete faction territory.

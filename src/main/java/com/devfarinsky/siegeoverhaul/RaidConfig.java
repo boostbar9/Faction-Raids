@@ -163,6 +163,8 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue CAMP_LUMBERJACK_MAX;
     public static final ForgeConfigSpec.IntValue CAMP_MAX_BUILD_SECONDS;
     public static final ForgeConfigSpec.BooleanValue CAMP_ABANDON_STALLED_BUILDS;
+    public static final ForgeConfigSpec.IntValue CAMP_BUILDER_REPLACEMENTS;
+    public static final ForgeConfigSpec.IntValue CAMP_BUILDER_REPLACE_SECONDS;
     public static final ForgeConfigSpec.IntValue CAMP_UPGRADE_SECONDS;
     public static final ForgeConfigSpec.IntValue GRANARY_GUARD_REGEN;
     public static final ForgeConfigSpec.DoubleValue ARMOURY_GUARD_DAMAGE;
@@ -521,6 +523,10 @@ public final class RaidConfig {
                 .defineInRange("campMaxBuildSeconds", 180, 30, 900);
         CAMP_ABANDON_STALLED_BUILDS = b.comment("Let a war camp give up on a construction job that has made no progress for campMaxBuildSeconds and move on to its next project. Without this a single unreachable block can stall a camp for the rest of the siege, so the perimeter wall and towers are never started.")
                 .define("campAbandonStalledBuilds", true);
+        CAMP_BUILDER_REPLACEMENTS = b.comment("Replacement builders a war camp may send per siege after its builders are killed, so unfinished construction is picked up instead of stalling. 0 restores the old behavior where a dead crew is never replaced.")
+                .defineInRange("campBuilderReplacements", 2, 0, 16);
+        CAMP_BUILDER_REPLACE_SECONDS = b.comment("Seconds a war camp waits after sending replacement builders before it may send more.")
+                .defineInRange("campBuilderReplaceSeconds", 90, 10, 900);
         CAMP_UPGRADE_SECONDS = b.comment("Seconds a war camp waits between finishing one construction project and starting the next, such as each side of its perimeter wall.")
                 .defineInRange("campUpgradeSeconds", 60, 10, 600);
         GRANARY_GUARD_REGEN = b.comment("Health the enemy Granary (stage 0 supply depot) restores to each camp guard per bookkeeping pass (~1s) while it stands. Destroying or burning the Granary stops the healing. 0 disables it.")

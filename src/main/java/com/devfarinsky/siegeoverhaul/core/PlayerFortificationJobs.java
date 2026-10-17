@@ -119,6 +119,13 @@ public final class PlayerFortificationJobs {
             else forgetPending(level, owner, area.getUUID());
             return;
         }
+        if (tag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_BUILDER)
+                && com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.reservedBuilderDestroyed(area)) {
+            // The reserved builder is confirmed dead: no idle builder can ever take this
+            // entry, so stop rescanning it every 40 ticks from every idle builder.
+            forgetPending(level, owner, area.getUUID());
+            return;
+        }
         Mob builder = null;
         if (tag.hasUUID(ModConstants.Tags.PLAYER_FORTIFICATION_BUILDER)
                 && level.getEntity(tag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_BUILDER)) instanceof Mob saved
@@ -180,6 +187,10 @@ public final class PlayerFortificationJobs {
                     ? areaTag.getUUID(ModConstants.Tags.PLAYER_FORTIFICATION_BUILDER) : null;
             if (!area.isAlive() || !areaTag.getBoolean(ModConstants.Tags.PLAYER_FORTIFICATION_AREA)
                     || areaOwner == null) {
+                forgetPending(level, owner, areaId);
+                continue;
+            }
+            if (reservedBuilder != null && com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.reservedBuilderDestroyed(area)) {
                 forgetPending(level, owner, areaId);
                 continue;
             }

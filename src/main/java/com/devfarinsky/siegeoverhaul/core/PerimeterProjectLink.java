@@ -13,7 +13,10 @@ public final class PerimeterProjectLink {
     private PerimeterProjectLink() {}
     public static boolean reserved(Mob worker) { return worker!=null && worker.getPersistentData().contains(KEY); }
     public static void set(Mob worker,PerimeterProject project) {
-        if(!worker.getUUID().equals(project.header().builder()))throw new IllegalArgumentException("Wrong perimeter builder");
+        set(worker,project,project.header().builder());
+    }
+    public static void set(Mob worker,PerimeterProject project,UUID assigned) {
+        if(worker==null || !worker.getUUID().equals(assigned))throw new IllegalArgumentException("Wrong perimeter builder");
         var expected=new Link(project.header().projectId(),project.header().generation(),project.manifestHash(),project.header().coreKey());
         if(reserved(worker)) { if(!expected.equals(read(worker.getPersistentData())))throw new IllegalArgumentException("Builder has another perimeter reservation");return; }
         var tag=new CompoundTag();tag.putInt("Version",1);tag.putUUID("Project",expected.id());tag.putLong("Generation",expected.generation());
@@ -34,7 +37,10 @@ public final class PerimeterProjectLink {
         return new Link(tag.getUUID("Project"),tag.getLong("Generation"),tag.getString("Hash"),tag.getString("Core"));
     }
     public static boolean matches(Mob worker,PerimeterProject project) {
-        try {var link=read(worker.getPersistentData());return worker.getUUID().equals(project.header().builder())
+        return matches(worker,project,project.header().builder());
+    }
+    public static boolean matches(Mob worker,PerimeterProject project,UUID assigned) {
+        try {var link=read(worker.getPersistentData());return worker.getUUID().equals(assigned)
                 &&link.equals(new Link(project.header().projectId(),project.header().generation(),project.manifestHash(),project.header().coreKey()));}
         catch(RuntimeException unavailable){return false;}
     }

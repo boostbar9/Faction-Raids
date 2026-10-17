@@ -645,6 +645,12 @@ public final class RaidSavedData extends SavedData {
         public int campBuildTicks;
         public int campUpgradeStage;
         public int campUpgradeTicks;
+        /** Replacement camp builders already sent this siege, and the saved cooldown before the next. */
+        public int campBuilderReplacements;
+        public int campBuilderReplaceTicks;
+        /** Per-game-tick cache of NativeCampConstruction.safeToTick; never saved. */
+        public transient long campSafeTick = Long.MIN_VALUE;
+        public transient boolean campSafe;
         /** Only true while collecting the initial camp plan; never saved. */
         public transient boolean planningCamp;
         /**
@@ -801,6 +807,8 @@ public final class RaidSavedData extends SavedData {
             tag.putInt(ModConstants.Tags.CAMP_BUILD_TICKS, campBuildTicks);
             tag.putInt("CampUpgradeStage",campUpgradeStage);
             tag.putInt("CampUpgradeTicks",campUpgradeTicks);
+            tag.putInt("CampBuilderReplacements",campBuilderReplacements);
+            tag.putInt("CampBuilderReplaceTicks",campBuilderReplaceTicks);
             ListTag breached = new ListTag();
             breachedBlocks.forEach((position, blockState) -> {
                 CompoundTag entry = new CompoundTag();
@@ -984,9 +992,14 @@ public final class RaidSavedData extends SavedData {
             if (tag.contains(ModConstants.Tags.WAVE_FORMATION)) state.waveFormation = tag.getString(ModConstants.Tags.WAVE_FORMATION);
             state.nativeCamp = tag.getCompound(ModConstants.Tags.NATIVE_CAMP).copy();
             state.campUsesWorkers = tag.getBoolean(ModConstants.Tags.CAMP_USES_WORKERS);
-            state.campUpgradeStage=Math.max(0,Math.min(3,tag.getInt("CampUpgradeStage")));
-            state.campUpgradeTicks=Math.max(0,Math.min(2400,tag.getInt("CampUpgradeTicks")));
+            // Perimeter sides and towers use stages 3..10; clamping to 3 restarted
+            // a finished or half-built palisade (and stacked walls) after every reload.
+            state.campUpgradeStage=Math.max(0,Math.min(com.devfarinsky.siegeoverhaul.camp.CampPerimeter.COMPLETE_STAGE,tag.getInt("CampUpgradeStage")));
+            state.campUpgradeTicks=Math.max(0,Math.min(ModConstants.secondsToTicks(600),tag.getInt("CampUpgradeTicks")));
             state.campBuildTicks = Math.max(0, tag.getInt(ModConstants.Tags.CAMP_BUILD_TICKS));
+            // Older saves omit these: no replacements used yet and no cooldown pending.
+            state.campBuilderReplacements = Math.max(0, tag.getInt("CampBuilderReplacements"));
+            state.campBuilderReplaceTicks = Math.max(0, Math.min(ModConstants.secondsToTicks(900), tag.getInt("CampBuilderReplaceTicks")));
             ListTag breached = tag.getList("BreachedBlocks", Tag.TAG_COMPOUND);
             for (int i = 0; i < breached.size(); i++) {
                 CompoundTag entry = breached.getCompound(i);

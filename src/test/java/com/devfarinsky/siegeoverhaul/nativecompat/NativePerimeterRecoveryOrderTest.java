@@ -10,6 +10,18 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class NativePerimeterRecoveryOrderTest extends MinecraftTestSupport {
+    @Test void nativeSelectionCommandDoesNotHideAnUnassignedReplacement() {
+        var builder=org.mockito.Mockito.mock(com.talhanation.workers.entities.BuilderEntity.class);
+        org.mockito.Mockito.when(builder.getFollowState()).thenReturn(6);
+        assertTrue(NativePerimeterProjects.idleReplacement(builder));
+        builder.currentBuildArea=org.mockito.Mockito.mock(com.talhanation.workers.entities.workarea.BuildArea.class);
+        assertFalse(NativePerimeterProjects.idleReplacement(builder));
+        builder.currentBuildArea=null;
+        org.mockito.Mockito.when(builder.getFollowState()).thenReturn(1,3,0);
+        assertFalse(NativePerimeterProjects.idleReplacement(builder));
+        assertFalse(NativePerimeterProjects.idleReplacement(builder));
+        assertTrue(NativePerimeterProjects.idleReplacement(builder));
+    }
     private final BlockPos marker=new BlockPos(8,64,8);
     private PerimeterStageJournal.Entry journal(PerimeterProject project,List<PerimeterStageJournal.Attempt> attempts) {
         return new PerimeterStageJournal.Entry(project.header().projectId(),project.header().generation(),project.manifestHash(),attempts);

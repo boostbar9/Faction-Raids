@@ -17,6 +17,11 @@ public final class BuilderWorkShift extends Goal {
         shouldWork=worker.getClass().getMethod("shouldWork");needsChest=worker.getClass().getMethod("needsToGetToChest");fleeing=worker.getClass().getField("isFleeing");
         setFlags(original.getFlags());
     }
+    /** True when this worker's native build goal runs behind the siege shift gate. */
+    public static boolean installed(Mob worker) {
+        return worker.goalSelector!=null
+                && worker.goalSelector.getAvailableGoals().stream().anyMatch(g->g.getGoal() instanceof BuilderWorkShift);
+    }
     public static void install(Mob worker) throws ReflectiveOperationException {
         var goals=new ArrayList<>(worker.goalSelector.getAvailableGoals());
         if(goals.stream().anyMatch(g->g.getGoal() instanceof BuilderWorkShift))return;
@@ -34,12 +39,22 @@ public final class BuilderWorkShift extends Goal {
         String team=worker.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM);
         var raid=RaidSavedData.get(level.getServer()).raids.get(team);
         if(raid==null || !NativeCampConstruction.active(raid) || raid.pendingCampBlocks.isEmpty())return false;
+        // A paused blueprint (player or obstruction inside it) stops placement only.
+        // The builder itself keeps moving, fleeing and fighting while it waits.
+        if(!NativeCampConstruction.safeThisTick(level,raid))return false;
         try {return !fleeing.getBoolean(worker) && Boolean.TRUE.equals(shouldWork.invoke(worker)) && !Boolean.TRUE.equals(needsChest.invoke(worker));}
         catch(ReflectiveOperationException ex){return false;}
     }
     @Override public boolean canContinueToUse(){return canUse();}
     @Override public void start(){nativeGoal.start();}
-    @Override public void tick(){nativeGoal.tick();}
+    @Override public void tick(){
+        // Running goals are not re-checked on every tick; never place into a blueprint that just paused.
+        if(worker.level() instanceof ServerLevel level) {
+            var raid=RaidSavedData.get(level.getServer()).raids.get(worker.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM));
+            if(raid==null || !NativeCampConstruction.safeThisTick(level,raid))return;
+        }
+        nativeGoal.tick();
+    }
     @Override public void stop(){nativeGoal.stop();}
     @Override public boolean requiresUpdateEveryTick(){return true;}
 }

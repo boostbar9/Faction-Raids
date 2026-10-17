@@ -33,4 +33,21 @@ class RaidMarchTickTest extends MinecraftTestSupport {
             assertEquals(1,raid.raiders.size());
         }
     }
+    @Test void raiderIsNotCountedDeadWhileItsChunkIsStillLoadingEntities() {
+        var level=mock(ServerLevel.class); var chunks=mock(net.minecraft.server.level.ServerChunkCache.class); var id=UUID.randomUUID();
+        var raid=new RaidSavedData.RaidState("team:test","siege_core",0);raid.raiders.add(id);
+        long chunk=new net.minecraft.world.level.ChunkPos(3,4).toLong();raid.lastKnownChunks.put(id,chunk);
+        when(level.getChunkSource()).thenReturn(chunks);when(chunks.hasChunk(3,4)).thenReturn(true);
+        when(level.areEntitiesLoaded(chunk)).thenReturn(false);
+        RaidEvents.updateTrackedMobs(level,raid,new BlockPos(0,64,0));
+        assertTrue(raid.raiders.contains(id),"entities not loaded yet: the raider is unloaded, not dead");
+        assertEquals(0,raid.totalDefeated);
+        raid.missingTicks.remove(id);
+        when(level.areEntitiesLoaded(chunk)).thenReturn(true);
+        RaidEvents.updateTrackedMobs(level,raid,new BlockPos(0,64,0));
+        assertTrue(raid.raiders.contains(id),"one missing pass is not enough to declare a death");
+        RaidEvents.updateTrackedMobs(level,raid,new BlockPos(0,64,0));
+        assertFalse(raid.raiders.contains(id));
+        assertEquals(1,raid.totalDefeated);
+    }
 }

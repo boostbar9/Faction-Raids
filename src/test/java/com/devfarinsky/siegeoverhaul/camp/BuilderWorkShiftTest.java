@@ -23,14 +23,37 @@ class BuilderWorkShiftTest extends MinecraftTestSupport {
         var tag=new CompoundTag();tag.putString(ModConstants.Tags.CAMP_WORKER_TEAM,"team:test");when(worker.getPersistentData()).thenReturn(tag);
         var data=new RaidSavedData();var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
         raid.nativeCamp.putUUID(ModConstants.Tags.CAMP_OWNER,UUID.randomUUID());raid.pendingCampBlocks.put(0L,"minecraft:stone_bricks");data.raids.put(raid.teamKey,raid);
-        try(var saves=mockStatic(RaidSavedData.class)) {
+        try(var saves=mockStatic(RaidSavedData.class);
+            var jobs=mockStatic(NativeCampConstruction.class,CALLS_REAL_METHODS)) {
             saves.when(()->RaidSavedData.get(null)).thenReturn(data);
+            jobs.when(()->NativeCampConstruction.safeThisTick(level,raid)).thenReturn(true);
             var goal=new BuilderWorkShift(worker,nativeGoal);
             assertFalse(level.isDay());assertTrue(goal.canUse());goal.start();goal.tick();goal.stop();
             verify(nativeGoal).start();verify(nativeGoal).tick();verify(nativeGoal).stop();
             worker.isFleeing=true;assertFalse(goal.canContinueToUse());worker.isFleeing=false;
             when(worker.needsToGetToChest()).thenReturn(true);assertFalse(goal.canUse());
             when(worker.needsToGetToChest()).thenReturn(false);raid.pendingCampBlocks.clear();assertFalse(goal.canUse());
+        }
+    }
+    @Test void pausedBlueprintStopsOnlyNativePlacement() throws Exception {
+        WorkerApi worker=mock(WorkerApi.class);ServerLevel level=mock(ServerLevel.class);Goal nativeGoal=mock(Goal.class);
+        when(nativeGoal.getFlags()).thenReturn(EnumSet.of(Goal.Flag.MOVE,Goal.Flag.LOOK));
+        when(worker.level()).thenReturn(level);when(worker.isAlive()).thenReturn(true);when(worker.shouldWork()).thenReturn(true);
+        var tag=new CompoundTag();tag.putString(ModConstants.Tags.CAMP_WORKER_TEAM,"team:test");when(worker.getPersistentData()).thenReturn(tag);
+        var data=new RaidSavedData();var raid=new RaidSavedData.RaidState("team:test","siege_core",0);
+        raid.nativeCamp.putUUID(ModConstants.Tags.CAMP_OWNER,UUID.randomUUID());raid.pendingCampBlocks.put(0L,"minecraft:stone_bricks");data.raids.put(raid.teamKey,raid);
+        try(var saves=mockStatic(RaidSavedData.class);
+            var jobs=mockStatic(NativeCampConstruction.class,CALLS_REAL_METHODS)) {
+            saves.when(()->RaidSavedData.get(null)).thenReturn(data);
+            jobs.when(()->NativeCampConstruction.safeThisTick(level,raid)).thenReturn(false);
+            var goal=new BuilderWorkShift(worker,nativeGoal);
+            assertFalse(goal.canUse());
+            // A goal that was already running must not place a block into the paused blueprint.
+            goal.tick();
+            verify(nativeGoal,never()).tick();
+            jobs.when(()->NativeCampConstruction.safeThisTick(level,raid)).thenReturn(true);
+            assertTrue(goal.canUse());goal.tick();
+            verify(nativeGoal).tick();
         }
     }
 }

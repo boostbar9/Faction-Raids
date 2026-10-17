@@ -124,6 +124,12 @@ public final class RaidEvents {
         return PATHING_TELEMETRY.computeIfAbsent(teamKey, ignored -> new PathingTelemetry());
     }
 
+    /** Current stuck escalation (0 = progressing or untracked) for siege helpers outside this class. */
+    public static int stuckEscalation(UUID raider) {
+        StuckEntry entry = STUCK_TRACKER.get(raider);
+        return entry == null ? 0 : entry.escalationLevel;
+    }
+
     static final class StuckEntry {
         double lastDistSq;
         long lastProgressGameTime;
@@ -171,9 +177,13 @@ public final class RaidEvents {
         String team = mob.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM);
         if (team.isBlank()) return;
         RaidSavedData.RaidState raid = RaidSavedData.get(level.getServer()).raids.get(team);
+        // An offline faction freezes the crew. A paused blueprint only stops native
+        // placement (BuilderWorkShift): freezing the whole entity tick also froze
+        // movement, combat and even the death animation while a player stood inside.
         if (raid != null && com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.active(raid)
                 && ((RaidConfig.PAUSE_WHEN_FACTION_OFFLINE.get() && onlineMembers(level.getServer(), team).isEmpty())
-                || !com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.safeToTick(level, raid))) event.setCanceled(true);
+                || (!com.devfarinsky.siegeoverhaul.camp.NativeCampConstruction.safeThisTick(level, raid)
+                    && !com.devfarinsky.siegeoverhaul.camp.BuilderWorkShift.installed(mob)))) event.setCanceled(true);
         if(raid!=null && !event.isCanceled())com.devfarinsky.siegeoverhaul.camp.BuilderSupport.tick(level,mob,raid);
     }
 
@@ -516,6 +526,12 @@ public final class RaidEvents {
             }
         }
 
+        // Camp builders are not wave enemies: free their crew slot so the job is
+        // handed to the survivors (or a replacement) instead of a stale identity.
+        if (event.getEntity() instanceof Mob campWorker
+                && !campWorker.getPersistentData().getString(ModConstants.Tags.CAMP_WORKER_TEAM).isBlank()) {
+            com.devfarinsky.siegeoverhaul.camp.CampCrew.onDeath(level, campWorker);
+        }
         if (victimTeamKey.isBlank()) return;
         RaidSavedData data = RaidSavedData.get(level.getServer());
         // v2.26.0 scout death: drop the intel letter and record the removal
@@ -2227,6 +2243,7 @@ public final class RaidEvents {
             finishRaid(server,data,teamKey,false,false,"Enemy reinforcements could not deploy. The siege withdrew; camp and breached blocks are being restored. No victory rewards.");
             return;
         }
+        com.devfarinsky.siegeoverhaul.camp.CampCrew.tick(level,state);
         com.devfarinsky.siegeoverhaul.camp.CampDevelopment.tick(level,state);
         com.devfarinsky.siegeoverhaul.camp.CampStructures.tick(level,state);
         // Camp progress is persisted even when no wave or breach changed this pass.
@@ -2513,10 +2530,18 @@ public final class RaidEvents {
             boolean chunkLoaded = false;
             if (chunkKey != null) {
                 net.minecraft.world.level.ChunkPos cp = new net.minecraft.world.level.ChunkPos(chunkKey);
-                chunkLoaded = level.getChunkSource().hasChunk(cp.x, cp.z);
+                // Entity sections load asynchronously after the chunk itself.
+                // A loaded chunk whose entities are not in yet says nothing about the raider.
+                chunkLoaded = level.getChunkSource().hasChunk(cp.x, cp.z) && level.areEntitiesLoaded(chunkKey);
+            }
+            if (chunkLoaded && !state.missingTicks.containsKey(id)) {
+                // First pass without it: it may have just crossed into a neighbouring,
+                // unloaded chunk. Confirm on the next pass before counting a death.
+                state.missingTicks.put(id, 20);
+                continue;
             }
             if (chunkLoaded) {
-                // Chunk is here, mob is not — dead by some other means.
+                // Chunk and its entities are here, mob is not — dead by some other means.
                 iterator.remove();
                 state.missingTicks.remove(id);
                 state.lastKnownChunks.remove(id);
@@ -4318,9 +4343,23 @@ public final class RaidEvents {
                 continue;
             }
             com.devfarinsky.siegeoverhaul.raid.RaidCavalry.advance(mob,objective,baseSpeed);
-            if (mob.isPassenger() || (marching && mob.getPersistentData().getBoolean(ModConstants.Tags.FORMATION_MARCH))) {
+            if (mob.isPassenger()) {
                 STUCK_TRACKER.remove(id);
                 continue;
+            }
+            if (marching && mob.getPersistentData().getBoolean(ModConstants.Tags.FORMATION_MARCH)) {
+                // Formation units still get stuck. Keep their stall clock running and,
+                // once a slot stops gaining ground, leave formation for direct routing
+                // (flank routes, ladders and the stuck ladder) instead of restarting
+                // the clock every pass and holding the wave open.
+                if (stuckEnabled && !acquired && distToObjectiveSq > 25.0) {
+                    updateStuckTracker(mob, id, state.teamKey, objective, distToObjectiveSq, gameTime,
+                            stuckTicksL1, stuckTicksL2, stuckTicksL3);
+                }
+                StuckEntry formationStall = stuckEnabled ? STUCK_TRACKER.get(id) : null;
+                if (formationStall == null || formationStall.escalationLevel < 1) continue;
+                com.devfarinsky.siegeoverhaul.formations.RecruitsFormationBridge.release(mob);
+                stuck = formationStall;
             }
 
             // 2.10.1 aggression pass: ALWAYS keep the objective nav goal alive.
@@ -4554,8 +4593,16 @@ public final class RaidEvents {
             // destination fails our sanity checks we skip and let the next
             // sample retry. This is the last-ditch fix for terrain the
             // pathfinder cannot solve.
-            if (RaidConfig.STUCK_L3_TELEPORT_ENABLED.get() && mob.level() instanceof ServerLevel serverLevel) {
-                teleportStuckRaiderForward(serverLevel, mob, objective);
+            boolean moved = RaidConfig.STUCK_L3_TELEPORT_ENABLED.get() && mob.level() instanceof ServerLevel serverLevel
+                    && teleportStuckRaiderForward(serverLevel, mob, objective);
+            if (!moved) {
+                // The hop was refused (wall in the way, unsafe landing, near the core).
+                // Stay at level 2 and retry after another L2->L3 interval instead of
+                // parking the raider at level 3 forever with no further recovery.
+                entry.lastProgressGameTime = gameTime - ticksL2;
+                entry.cachedFallbackTarget = null;
+                entry.fallbackCacheUntilGameTime = gameTime;
+                return;
             }
             entry.escalationLevel = 3;
             pathingTelemetry(teamKey).stuckEscalationsL3++;
@@ -4576,17 +4623,17 @@ public final class RaidEvents {
      * so we never drop the raider inside a wall or under the floor. If the
      * destination is not a safe standing position we abort.
      */
-    static void teleportStuckRaiderForward(ServerLevel level, Mob mob, Vec3 objective) {
+    static boolean teleportStuckRaiderForward(ServerLevel level, Mob mob, Vec3 objective) {
         // Recovery is for the march, not a way to bypass the defender's building.
-        if (mob.position().subtract(objective).multiply(1, 0, 1).lengthSqr() <= 24 * 24) return;
+        if (mob.position().subtract(objective).multiply(1, 0, 1).lengthSqr() <= 24 * 24) return false;
         int maxBlocks = RaidConfig.STUCK_L3_TELEPORT_BLOCKS.get();
         Vec3 pos = mob.position();
         double dx = objective.x - pos.x;
         double dz = objective.z - pos.z;
         double horizLen = Math.sqrt(dx * dx + dz * dz);
-        if (horizLen < 1.0) return;
+        if (horizLen < 1.0) return false;
         double step = Math.min(maxBlocks, horizLen - 1.0);
-        if (step < 2.0) return;
+        if (step < 2.0) return false;
         double nx = pos.x + (dx / horizLen) * step;
         double nz = pos.z + (dz / horizLen) * step;
         int destX = (int) Math.floor(nx);
@@ -4594,28 +4641,50 @@ public final class RaidEvents {
         // WORLD_SURFACE_WG returns the highest non-air block, so +0 lands us
         // one block above it, i.e. standing on top. Use WORLD_SURFACE (not
         // MOTION_BLOCKING) so leaves/liquid don't confuse us.
-        if (!level.hasChunkAt(new BlockPos(destX, mob.getBlockY(), destZ))) return;
+        if (!level.hasChunkAt(new BlockPos(destX, mob.getBlockY(), destZ))) return false;
         int destY = level.getHeight(Heightmap.Types.WORLD_SURFACE, destX, destZ);
-        if (destY > mob.getY() + 2 || destY < mob.getY() - 3) return;
+        if (destY > mob.getY() + 2 || destY < mob.getY() - 3) return false;
         Vec3 landing = new Vec3(destX + 0.5, destY, destZ + 0.5);
-        if (landing.subtract(objective).multiply(1, 0, 1).lengthSqr() <= 24 * 24) return;
+        // Never hop over a wall, palisade or ridge: that is what ladders and the
+        // breach are for. Only small steps and loose terrain may be skipped.
+        if (crossesBarrier(level, pos, landing)) return false;
+        if (landing.subtract(objective).multiply(1, 0, 1).lengthSqr() <= 24 * 24) return false;
         // Sanity check: destination must be loaded and non-lava under-block.
         BlockPos foot = new BlockPos(destX, destY, destZ);
-        if (!level.isLoaded(foot)) return;
+        if (!level.isLoaded(foot)) return false;
         var under = level.getBlockState(foot.below());
         if (!under.getFluidState().isEmpty() || !under.isFaceSturdy(level, foot.below(), Direction.UP)
                 || under.is(Blocks.MAGMA_BLOCK) || under.is(Blocks.CAMPFIRE)
-                || under.is(Blocks.SOUL_CAMPFIRE) || under.is(Blocks.CACTUS)) return;
+                || under.is(Blocks.SOUL_CAMPFIRE) || under.is(Blocks.CACTUS)) return false;
         // Two blocks of clearance above the destination for the raider hitbox.
-        if (!level.getBlockState(foot).isAir() || !level.getBlockState(foot.above()).isAir()) return;
+        if (!level.getBlockState(foot).isAir() || !level.getBlockState(foot.above()).isAir()) return false;
         var body = mob.getBoundingBox().move(landing.subtract(pos));
         if (!level.getWorldBorder().isWithinBounds(body) || body.minY < level.getMinBuildHeight()
-                || body.maxY >= level.getMaxBuildHeight() || !level.noCollision(mob, body)) return;
+                || body.maxY >= level.getMaxBuildHeight() || !level.noCollision(mob, body)) return false;
         mob.getNavigation().stop();
         mob.teleportTo(destX + 0.5, destY, destZ + 0.5);
         // A forward warp must never be charged as a fall: the raider was on
         // the ground before the teleport and is standing on the surface now.
         mob.fallDistance = 0;
+        return true;
+    }
+
+    /**
+     * True when any column between {@code from} and {@code landing} rises more
+     * than one block above both ends - a wall, fence line or ridge rather than a
+     * step the raider could not path up. Unloaded columns count as barriers.
+     */
+    public static boolean crossesBarrier(ServerLevel level, Vec3 from, Vec3 landing) {
+        double limit = Math.max(Math.floor(from.y), Math.floor(landing.y)) + 1;
+        double dx = landing.x - from.x, dz = landing.z - from.z;
+        int samples = (int) Math.ceil(Math.sqrt(dx * dx + dz * dz) * 2);
+        for (int i = 1; i < samples; i++) {
+            double t = (double) i / samples;
+            int x = (int) Math.floor(from.x + dx * t), z = (int) Math.floor(from.z + dz * t);
+            if (!level.hasChunkAt(new BlockPos(x, (int) Math.floor(from.y), z))) return true;
+            if (level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) > limit) return true;
+        }
+        return false;
     }
 
     /**

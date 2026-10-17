@@ -351,6 +351,8 @@ public final class SiegeIntegration {
             if (!level.getFluidState(ground).isEmpty()
                     || !level.getBlockState(floor).isFaceSturdy(level, floor, net.minecraft.core.Direction.UP)) continue;
             Vec3 target = new Vec3(ground.getX() + 0.5, ground.getY(), ground.getZ() + 0.5);
+            // Unsticking an engine must never carry it through a wall or palisade.
+            if (com.devfarinsky.siegeoverhaul.RaidEvents.crossesBarrier(level, vehicle.position(), target)) continue;
             AABB box = vehicle.getBoundingBox().move(target.subtract(vehicle.position()));
             if (!level.noCollision(vehicle, box)) continue;
             vehicle.moveTo(target.x, target.y, target.z, vehicle.getYRot(), vehicle.getXRot());
