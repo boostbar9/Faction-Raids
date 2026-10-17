@@ -248,7 +248,7 @@ def verify(root):
     boolean(camp['preservedEdgesRescue'],True);boolean(camp['warGateReadyAtCrewCheck'])
     assert integer(camp['ordinaryTicksSinceEstablishment'],60)<=recovery['firstWaveAtGameTime']-recovery['establishedAtGameTime']
     faction=text(camp['expectedEnemyFaction'])
-    assert type(camp['workers']) is list and camp['workers'] and type(camp['guards']) is list and len(camp['guards'])==5
+    assert type(camp['workers']) is list and camp['workers'] and type(camp['guards']) is list and len(camp['guards'])==6
     identities=set()
     for kind in ['workers','guards']:
         for unit in camp[kind]:
