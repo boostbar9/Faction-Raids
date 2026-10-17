@@ -34,6 +34,8 @@ public final class RaiderLadderGoal extends Goal {
             if (wrapped.getGoal() instanceof RaiderLadderGoal goal) return goal;
         return null;
     }
+    static final String PATH_RETRY = "SiegeLadderPathRetry";
+    static final long PATH_RETRY_TICKS = 100;
     public static boolean assigned(Mob mob) {
         if (mob.goalSelector == null) return false;
         var goal = find(mob);
@@ -91,12 +93,18 @@ public final class RaiderLadderGoal extends Goal {
                 best = route; nearest = distance;
             }
             if (best == null) continue;
+            // A raider that just failed to path to a ladder waits before searching again,
+            // instead of running a fresh path search every pass for every such raider.
+            if (level.getGameTime() < mob.getPersistentData().getLong(PATH_RETRY)) continue;
             // Path to solid ground at the ladder base, not the air block itself.
             // Vanilla ground navigation refuses to end a path on air, so aiming
             // directly at base() often produces no path even when a raider is
             // standing three blocks away with a clear approach.
             var approach = pathToBase(mob, best);
-            if (approach == null || !approach.canReach()) continue;
+            if (approach == null || !approach.canReach()) {
+                mob.getPersistentData().putLong(PATH_RETRY, level.getGameTime() + PATH_RETRY_TICKS);
+                continue;
+            }
             if (goal == null) { goal = new RaiderLadderGoal(mob); mob.goalSelector.addGoal(0, goal); }
             users.merge(best, 1, Integer::sum);
             goal.route = best; goal.deadline = level.getGameTime() + 400; goal.ticks = 0; goal.crestTicks=0; goal.landing=null; goal.grip=0;

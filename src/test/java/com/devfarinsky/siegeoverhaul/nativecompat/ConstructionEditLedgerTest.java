@@ -80,6 +80,16 @@ class ConstructionEditLedgerTest extends MinecraftTestSupport {
         ledger.acknowledgeRetirement(waiting); assertTrue(ledger.register(waiting, Set.of(BlockPos.ZERO)));
     }
 
+    @Test void destroyedBuilderReleasesItsHandSlotAndSurvivesReload() {
+        var ledger = new ConstructionEditLedger(); UUID builder = UUID.randomUUID(), owner = UUID.randomUUID(), area = UUID.randomUUID();
+        assertTrue(ledger.retainHandLifecycle(new net.minecraft.nbt.CompoundTag(), builder, owner, area));
+        assertNotNull(ledger.handLifecycle(builder));
+        ledger.releaseDestroyedHandLifecycle(builder);
+        assertNull(ledger.handLifecycle(builder));
+        assertNull(ConstructionEditLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag())).handLifecycle(builder));
+        ledger.releaseDestroyedHandLifecycle(UUID.randomUUID()); // unknown builders are a no-op
+    }
+
     @Test void knownDeadOrCleanedBuildersDoNotRetainCancellationSlots() {
         UUID dead = UUID.randomUUID(), loaded = UUID.randomUUID(); var ledger = new ConstructionEditLedger();
         ledger.register(dead, Set.of(BlockPos.ZERO)); ledger.builderDestroyed(dead); ledger.retire(dead, false);

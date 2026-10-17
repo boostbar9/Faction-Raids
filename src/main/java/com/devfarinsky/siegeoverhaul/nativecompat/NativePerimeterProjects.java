@@ -182,6 +182,7 @@ public final class NativePerimeterProjects {
             if (!PerimeterProjectLink.bindLedgerGeneration(builder,ledger.generation())) return;
         }
         if (builder != null && project.active() != null && level.getEntity(project.active().areaId()) instanceof ProtectedBuildArea live
+                && NativeConstructionGuard.hasAreaSnapshot(live)
                 && !NativeConstructionGuard.resumeReplacement(owner,builder,live,project)) {
             pause(core,project,"Waiting: replacement builder handoff needs loaded, unchanged section evidence.",dirty);return;
         }
@@ -234,6 +235,13 @@ public final class NativePerimeterProjects {
         if(!(area instanceof ProtectedBuildArea protectedArea) || !area.isAlive() || !area.blockPosition().equals(attempt.marker())) {
             pause(core,project,"Paused: recorded native marker is missing or moved. It will not be recreated.",dirty);return;
         }
+        if (!NativeConstructionGuard.hasAreaSnapshot(protectedArea)) {
+            // A later section whose admission stopped after the marker was registered but
+            // before protection was sealed (e.g. a mob stood on a target cell). Retry the
+            // same sealing step instead of parking the paid project in recovery forever.
+            problem=retryStageProtection(level,owner,builder,core,project,protectedArea,attempt,dirty);
+            if(problem!=null) {pause(core,project,problem,dirty);return;}
+        }
         if (!NativeConstructionGuard.resumeReplacement(owner, builder, protectedArea, project)) {
             pause(core,project,"Waiting: replacement builder handoff needs loaded, unchanged section evidence.",dirty);return;
         }
@@ -257,6 +265,31 @@ public final class NativePerimeterProjects {
             }catch(ReflectiveOperationException unavailable){pause(core,project,"Paused: native builder API is unavailable.",dirty);return;}
         }
         pause(core,project,"",dirty);
+    }
+
+    private static String retryStageProtection(ServerLevel level,ServerPlayer owner,Mob builder,CompoundTag core,PerimeterProject project,
+                                               ProtectedBuildArea area,PerimeterStageJournal.Attempt attempt,Runnable dirty) {
+        if(project.state()!=PerimeterProject.State.WAITING_FOR_NEXT_STAGE || attempt.state()!=PerimeterStageJournal.State.INTENT
+                || attempt.stage()!=project.activeStage() || !area.getUUID().equals(project.active().areaId()))
+            return "Paused: next section activation needs recovery review.";
+        String problem=context(level,owner,builder,project);
+        if(problem!=null)return problem;
+        if(!ConstructionEditLedger.get(level).matchesProjectLease(project))
+            return "Paused: next section reservation needs recovery review.";
+        Entity current=NativeConstructionGuard.currentArea(builder);
+        if(current!=null && current!=area)return "Waiting: reserved builder has another native assignment.";
+        try {
+            if(!NativeConstructionGuard.protectStage(owner,builder,area,project)) {
+                String status=NativeConstructionGuard.status(area);
+                return status.isBlank()?"Waiting: clear the next section so it can be sealed.":status;
+            }
+            var part=project.active().layout();
+            WorkersBridge.enableWallProjection(area,part.targets().size());WorkersBridge.enablePlayerJob(builder,owner.getUUID());
+            if(!WallBuilderAccess.install(builder) || !WorkersBridge.assignBuildAreaDirectly(builder,area))
+                return "Paused: native section reassignment could not be verified.";
+            PerimeterStageJournal.live(core,project,dirty);
+            return null;
+        }catch(ReflectiveOperationException | RuntimeException unavailable){return "Paused: native builder API is unavailable.";}
     }
 
     private static void tryReplaceDeadBuilder(ServerLevel level, ServerPlayer owner, PerimeterProject project,

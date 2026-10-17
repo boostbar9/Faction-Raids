@@ -1092,6 +1092,7 @@ public final class NativeConstructionGuard {
             var data = worker.getPersistentData(); UUID child = data.hasUUID(PROTECTED_LINK)?data.getUUID(PROTECTED_LINK):null;
             if (child != null && ledger.projectForArea(child) == null && !PerimeterProjectLink.reserved(worker)) {
                 ledger.builderDestroyed(child);
+                ledger.releaseDestroyedHandLifecycle(worker.getUUID());
             } else {
                 // A copied child UUID or a stale ledger generation is not proof that the reserved builder died.
                 // Keep this project-only boundary independent of native inventory/corpse cleanup.
@@ -1106,14 +1107,16 @@ public final class NativeConstructionGuard {
                             UUID wholeGeneration = PerimeterProjectLink.ledgerGeneration(data);
                             if (child != null && data.hasUUID(PROTECTED_GENERATION) && journal.at(project.activeStage()) != null
                                     && (wholeGeneration == null || wholeGeneration.equals(data.getUUID(PROTECTED_GENERATION)))) {
-                                ledger.projectBuilderDestroyed(project, worker.getUUID(), child, data.getUUID(PROTECTED_GENERATION));
+                                if (ledger.projectBuilderDestroyed(project, worker.getUUID(), child, data.getUUID(PROTECTED_GENERATION)))
+                                    ledger.releaseDestroyedHandLifecycle(worker.getUUID());
                             } else if (!data.contains(PROTECTED_LINK) && !data.contains(PROTECTED_GENERATION)
                                     && wholeGeneration != null && last >= 0 && last == project.activeStage() - 1
                                     && journal.attempts().size() == project.activeStage()
                                     && journal.attempts().stream().allMatch(attempt ->
                                     attempt.state() == com.devfarinsky.siegeoverhaul.core.PerimeterStageJournal.State.RETIRED
                                             && ledger.retired(attempt.area()))) {
-                                ledger.projectBuilderDestroyed(project, worker.getUUID(), project.stages().get(last).areaId(), wholeGeneration);
+                                if (ledger.projectBuilderDestroyed(project, worker.getUUID(), project.stages().get(last).areaId(), wholeGeneration))
+                                    ledger.releaseDestroyedHandLifecycle(worker.getUUID());
                             }
                         }
                     }

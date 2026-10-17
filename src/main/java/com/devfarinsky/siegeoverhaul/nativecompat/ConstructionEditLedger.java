@@ -257,6 +257,13 @@ final class ConstructionEditLedger extends SavedData {
 
     /** One bounded provenance record per commissioned builder; retirement releases all spatial reservations. */
     ProtectedBuilderHandLifecycle.Receipt handLifecycle(UUID builder) { return handLifecycles.get(builder); }
+    /**
+     * Free a confirmed-destroyed builder's hand slot. Its jobs are recovered through
+     * the site/project destruction evidence instead, and the slot cap is finite.
+     */
+    void releaseDestroyedHandLifecycle(UUID builder) {
+        if (!invalid && builder != null && handLifecycles.remove(builder) != null) setDirty();
+    }
 
     /** Read-only capacity/identity preflight, before creating an unpaid job or invoking its native setter. */
     boolean canRetainHandLifecycle(CompoundTag data, UUID builder) {
