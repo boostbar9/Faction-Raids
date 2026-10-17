@@ -81,12 +81,6 @@ public final class OlympianSpellBookItem extends Item {
 
     @Override public void releaseUsing(ItemStack stack, Level level, LivingEntity user, int remaining) {
         if (!level.isClientSide && user instanceof Player player) {
-            var tag = player.getPersistentData();
-            // "Release early to cancel": nothing was cast yet, so give the cooldown back.
-            // The water channel starts pulsing after its 1s charge; releasing then just ends it.
-            boolean nothingCast = tag.contains(START) && tag.getInt(ROLE) == role
-                    && level.getGameTime() - tag.getLong(START) < (role == 29 ? 20 : getUseDuration(stack));
-            if (nothingCast) { tag.remove(cooldownKey()); player.getCooldowns().removeCooldown(this); }
             player.getPersistentData().remove(START); player.getPersistentData().remove(ROLE);
             HeroCastPackets.send(player, role, level.getGameTime(), 2);
         }
