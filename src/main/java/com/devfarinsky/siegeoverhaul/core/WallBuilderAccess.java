@@ -413,6 +413,8 @@ public final class WallBuilderAccess extends Goal {
             BlockPos reached = now <= pendingUntil
                     ? routeEndpoint(level, target, ready, sites, nativeReachSquared, selfRecovery) : null;
             if (reached != null && moveToSite(reached)) destination = reached;
+            // Workers' async search finished without reaching any site (often a far target).
+            else if (reached == null && !selfRecovery) approachFar(level, target);
             return;
         }
         if (now < nextSearch && now >= nextSearch - 40) {
@@ -435,19 +437,22 @@ public final class WallBuilderAccess extends Goal {
         } else {
             BlockPos reached = routeEndpoint(level, target, path, candidates, nativeReachSquared, selfRecovery);
             if (reached != null && moveToSite(reached)) destination = reached;
+            else if (reached == null && !selfRecovery) approachFar(level, target);
         }
     }
 
     /**
      * Native path searches are bounded by follow range, so a target farther away (the next
-     * queued block can be 40+ blocks along a large perimeter) yields no path and the guarded
+     * queued block can be 40+ blocks along a large perimeter) yields no path, or an async search that
+     * finishes unreached, and the guarded
      * builder used to wait forever. Walk to safe surface ground part of the way and retry.
      */
     private void approachFar(ServerLevel level, BlockPos target) {
         Vec3 from = worker.position();
         double dx = target.getX() + 0.5 - from.x, dz = target.getZ() + 0.5 - from.z;
         double distance = Math.sqrt(dx * dx + dz * dz);
-        if (distance < 12) return;
+        // Nearer targets fail only when genuinely blocked; never walk around that verdict.
+        if (distance < 24) return;
         for (int step = 12; step >= 4; step -= 4) {
             int x = net.minecraft.util.Mth.floor(from.x + dx * step / distance);
             int z = net.minecraft.util.Mth.floor(from.z + dz * step / distance);
