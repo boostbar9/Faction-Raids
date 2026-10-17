@@ -19,6 +19,8 @@ public final class SiegeHudOverlays {
     public static void register(RegisterGuiOverlaysEvent event) {
         event.registerBelow(VanillaGuiOverlay.TITLE_TEXT.id(), "capture_card",
                 (gui, graphics, partialTick, width, height) -> CaptureBeaconRenderer.drawCard(graphics));
+        event.registerBelow(VanillaGuiOverlay.TITLE_TEXT.id(), "reward_popup",
+                (gui, graphics, partialTick, width, height) -> RewardPopups.draw(graphics));
         event.registerBelow(VanillaGuiOverlay.CHAT_PANEL.id(), "plan_review", (gui, graphics, partialTick, width, height) -> {
             DefensePreviewRenderer.drawCard(graphics);
             PerimeterPreviewRenderer.drawCard(graphics);

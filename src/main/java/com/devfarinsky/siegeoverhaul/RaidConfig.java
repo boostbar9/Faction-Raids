@@ -214,6 +214,13 @@ public final class RaidConfig {
     public static final ForgeConfigSpec.IntValue COMMANDER_BOUNTY_EMERALDS;
     public static final ForgeConfigSpec.IntValue SCOUT_BOUNTY_EMERALDS;
     public static final ForgeConfigSpec.IntValue MAX_BOUNTY_EMERALDS_PER_RAID;
+    public static final ForgeConfigSpec.BooleanValue COMBAT_REWARDS;
+    public static final ForgeConfigSpec.IntValue KILL_REWARD_EMERALDS;
+    public static final ForgeConfigSpec.IntValue KILL_STREAK_SECONDS;
+    public static final ForgeConfigSpec.DoubleValue JACKPOT_CHANCE;
+    public static final ForgeConfigSpec.IntValue JACKPOT_EMERALDS;
+    public static final ForgeConfigSpec.IntValue CAMP_SPOILS_EMERALDS;
+    public static final ForgeConfigSpec.IntValue MAX_COMBAT_REWARD_EMERALDS_PER_RAID;
     public static final ForgeConfigSpec.BooleanValue MANUAL_RAIDS_GRANT_REWARDS;
     public static final ForgeConfigSpec.BooleanValue ENABLE_WORKERS_COMPAT;
     public static final ForgeConfigSpec.BooleanValue PROTECT_WORKERS;
@@ -632,6 +639,20 @@ public final class RaidConfig {
                 .defineInRange("scoutBountyEmeralds", 2, 0, 128);
         MAX_BOUNTY_EMERALDS_PER_RAID = b.comment("Hard cap on the total bounty emeralds (raider + commander + scout combined) a single raid can deposit into the treasury. Wave-clear payouts are unaffected. Set to 0 to remove the cap.")
                 .defineInRange("maxBountyEmeraldsPerRaid", 32, 0, 10_000);
+        COMBAT_REWARDS = b.comment("Reward defenders who fight: emeralds for each raider a player kills, multiplied by kill streaks, rare emerald jackpots, and spoils dropped when an enemy camp building or war work is destroyed. Separate from raiderBountyEmeralds.")
+                .define("combatRewards", true);
+        KILL_REWARD_EMERALDS = b.comment("Treasury emeralds for each raider a faction player kills, before the streak multiplier (x1, x2 from 3 kills, x3 from 6, x4 from 10).")
+                .defineInRange("killRewardEmeralds", 1, 0, 64);
+        KILL_STREAK_SECONDS = b.comment("Seconds a player has after a kill to make the next one and keep the kill streak going.")
+                .defineInRange("killStreakSeconds", 8, 1, 60);
+        JACKPOT_CHANCE = b.comment("Chance that a raider killed by a player bursts into a jackpot of emeralds. The siege commander always does.")
+                .defineInRange("jackpotChance", 0.03, 0.0, 1.0);
+        JACKPOT_EMERALDS = b.comment("Most emeralds a jackpot drops; each jackpot drops between half this and this many.")
+                .defineInRange("jackpotEmeralds", 16, 1, 256);
+        CAMP_SPOILS_EMERALDS = b.comment("Most emeralds dropped when an enemy camp building or war work is destroyed; each drop is between half this and this many, plus supplies.")
+                .defineInRange("campSpoilsEmeralds", 10, 0, 256);
+        MAX_COMBAT_REWARD_EMERALDS_PER_RAID = b.comment("Cap on all combatRewards emeralds (kills, jackpots and camp spoils) in a single raid. Set to 0 to remove the cap.")
+                .defineInRange("maxCombatRewardEmeraldsPerRaid", 256, 0, 10_000);
 
         MANUAL_RAIDS_GRANT_REWARDS = b.comment("Allow raids started manually with /siegeoverhaul start to grant rewards. Enabled by default so single-player and small-server testing plays like a real siege; set to false on public servers to prevent reward farming.")
                 .define("manualRaidsGrantRewards", true);
