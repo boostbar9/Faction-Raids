@@ -63,6 +63,8 @@ public final class SiteClearance {
     public static BlockState reviewed(BlockGetter level, BlockPos pos, BlockState state, String target) {
         if (state == null || target != null && target.equals(String.valueOf(BuiltInRegistries.BLOCK.getKey(state.getBlock()))))
             return state;
+        // Native Workers already clears audited single-cell plants inside its protected job.
+        if (CampVegetation.singleCellPlant(state)) return state;
         return clearsCell(level, pos, state) ? Blocks.AIR.defaultBlockState() : state;
     }
 
@@ -77,15 +79,18 @@ public final class SiteClearance {
     /**
      * Breaks natural obstructions in {@code cells} (vegetation and terrain) and natural vegetation
      * within the two-block placement neighbourhood of {@code targets}. Items drop as if mined.
-     * Cells whose current block already matches its target in {@code keep} are left alone.
+     * Cells whose current block already matches its target in {@code keep} are left alone, and
+     * with {@code leaveNativePlants} so are single-cell plants the native job clears itself.
      */
-    public static int clear(ServerLevel level, Collection<BlockPos> cells, Collection<BlockPos> targets, Map<Long, String> keep) {
+    public static int clear(ServerLevel level, Collection<BlockPos> cells, Collection<BlockPos> targets,
+                            Map<Long, String> keep, boolean leaveNativePlants) {
         Set<BlockPos> work = new HashSet<>();
         for (BlockPos cell : cells) {
             if (!usable(level, cell)) continue;
             BlockState state = level.getBlockState(cell);
             String target = keep == null ? null : keep.get(cell.asLong());
             if (target != null && target.equals(String.valueOf(BuiltInRegistries.BLOCK.getKey(state.getBlock())))) continue;
+            if (leaveNativePlants && CampVegetation.singleCellPlant(state)) continue;
             if (clearsCell(level, cell, state)) work.add(cell.immutable());
         }
         for (BlockPos target : targets) {
@@ -93,7 +98,9 @@ public final class SiteClearance {
                 int distance = Math.abs(x) + Math.abs(y) + Math.abs(z);
                 if (distance == 0 || distance > 2) continue;
                 BlockPos pos = target.offset(x, y, z);
-                if (!work.contains(pos) && usable(level, pos) && vegetation(level, pos, level.getBlockState(pos)))
+                BlockState state = usable(level, pos) ? level.getBlockState(pos) : null;
+                // Single-cell plants are already stable native neighbours.
+                if (state != null && !work.contains(pos) && !CampVegetation.singleCellPlant(state) && vegetation(level, pos, state))
                     work.add(pos.immutable());
             }
         }

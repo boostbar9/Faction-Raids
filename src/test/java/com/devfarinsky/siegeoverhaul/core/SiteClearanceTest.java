@@ -61,6 +61,8 @@ class SiteClearanceTest extends MinecraftTestSupport {
         assertEquals(Blocks.DIRT.defaultBlockState(), SiteClearance.reviewed(level, BlockPos.ZERO, Blocks.DIRT.defaultBlockState(), "minecraft:dirt"));
         assertEquals(Blocks.CHEST.defaultBlockState(), SiteClearance.reviewed(level, BlockPos.ZERO, Blocks.CHEST.defaultBlockState(), null));
         assertEquals(Blocks.SAND.defaultBlockState(), SiteClearance.reviewed(level, BlockPos.ZERO, Blocks.SAND.defaultBlockState(), null));
+        // Audited single-cell plants stay recorded: the native job clears them itself.
+        assertEquals(Blocks.DANDELION.defaultBlockState(), SiteClearance.reviewed(level, BlockPos.ZERO, Blocks.DANDELION.defaultBlockState(), null));
     }
 
     @Test void neighbourReviewIgnoresVegetationEverywhereButTerrainOnlyInsideTheReservation() {

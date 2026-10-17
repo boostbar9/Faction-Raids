@@ -562,7 +562,7 @@ private static String context(ServerLevel level,ServerPlayer owner,Mob builder,P
                 BlockState original=project.before().getOrDefault(packed,project.clearanceBefore().get(packed));
                 if(original!=null && original.isAir())empty.add(BlockPos.of(packed));
             }
-            com.devfarinsky.siegeoverhaul.core.SiteClearance.clear(level,empty,targets.stream().map(BlockPos::of).toList(),null);
+            com.devfarinsky.siegeoverhaul.core.SiteClearance.clear(level,empty,targets.stream().map(BlockPos::of).toList(),null,false);
         } catch(RuntimeException unavailable) { FactionLogger.LOG.debug("Perimeter site clearance skipped: {}",unavailable.toString()); }
     }
 

@@ -195,7 +195,7 @@ public final class DefenseStructures {
         // The builder clears the natural obstructions the review already treated as empty.
         ServerLevel clearing = player.serverLevel();
         if (clearing != null) SiteClearance.clear(clearing, reservedCells(plan),
-                plan.blocks().keySet().stream().map(BlockPos::of).toList(), plan.blocks());
+                plan.blocks().keySet().stream().map(BlockPos::of).toList(), plan.blocks(), true);
         Entity build = null;
         boolean committed = false;
         CommissionStage stage = CommissionStage.BLUEPRINT;

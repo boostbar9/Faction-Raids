@@ -285,7 +285,7 @@ public final class PerimeterConstruction {
         // finds exactly the empty cells recorded in the quote.
         ServerLevel level=player.serverLevel();
         if(level!=null)SiteClearance.clear(level,reservedCells(prepared.plan()),
-                prepared.plan().blocks().keySet().stream().map(BlockPos::of).toList(),prepared.plan().blocks());
+                prepared.plan().blocks().keySet().stream().map(BlockPos::of).toList(),prepared.plan().blocks(),true);
         return com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.start(player,prepared.builder(),quote.core(),material,
                 prepared.plan(),quote.layout(),quote.before(),quote.clearance(),prepared.territory(),quote.fingerprint());
     }
