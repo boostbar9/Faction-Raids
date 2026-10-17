@@ -93,7 +93,8 @@ public final class NativeCaptureBoundaryQa {
             }
             result.add(new Step(prefix + " capture stop snapshots", () -> {
                 sending = false; scenario = "waiting";
-                submit(() -> {}, 32, Level.OVERWORLD);
+                // Past the renderer's 35-tick freshness window, inside the 60-tick snapshot lifetime.
+                submit(() -> {}, 37, Level.OVERWORLD);
             }));
             result.add(new Step(prefix + " capture waiting frame", () -> {
                 evidence(); NativeHudQa.captureWorld(prefix + "-capture-waiting", "QA SEEDED CAPTURE: stale server participation; awaiting a new snapshot");

@@ -34,6 +34,7 @@ public final class CaptureBeaconRenderer {
     private static CaptureStatus.Participation participation = CaptureStatus.Participation.UNAVAILABLE;
     private static int bossBottom;
     private static long projectedAt = Long.MIN_VALUE;
+    static final int FRESH_TICKS = 35;
     private CaptureBeaconRenderer() {}
     private static void world() {
         var current = Minecraft.getInstance().level;
@@ -94,9 +95,10 @@ public final class CaptureBeaconRenderer {
                 player.isAlive() && !player.isCreative() && !player.isSpectator(), loaded, visible);
     }
     private static CaptureStatus.Participation freshParticipation(RaidNetwork.CaptureBeam packet) {
-        // Snapshots arrive once a second; allow two intervals so one late packet does not
-        // flip the card between "counted" and "checking".
-        return world.getGameTime() - packet.time() <= 45 ? packet.participation() : CaptureStatus.Participation.UNAVAILABLE;
+        // Snapshots arrive once a second; allow one interval plus slack so a single late
+        // packet does not flip the card between "counted" and "checking". Stays well
+        // inside CaptureBeacon.LIFETIME so a stopped feed still shows "checking" first.
+        return world.getGameTime() - packet.time() <= FRESH_TICKS ? packet.participation() : CaptureStatus.Participation.UNAVAILABLE;
     }
     @SubscribeEvent public static void render(RenderLevelStageEvent event) {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
