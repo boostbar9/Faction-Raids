@@ -24,7 +24,7 @@ jobs:
               print("::error title=failure::"+str(d.get('failure'))[:900])
               v=d.get('blockerDiagnostics') or {}
               keep=['placed','builderPosition','nativeBuildState','nativeTarget','nativeRemaining','storageState','storageChestTarget','navigationDone','pathCanReach','pathTarget','pathNextIndex','pathNodeCount','pathNodes','selfClearanceRequests','selfClearanceTarget','mainHand','builderCobble','chestCobble','guardStatus','project','sleeping','followState','requestedSupplies']
-              t=json.dumps({k:v.get(k) for k in keep})
-              for i in range(0,min(len(t),5000),900): print(f"::error title=b{i}::{t[i:i+900]}")
+              t=json.dumps({k:x for k,x in v.items() if k not in ('pathNodes','footprintEntities','treasuryObservation')})
+              for i in range(0,min(len(t),12000),900): print(f"::error title=b{i}::{t[i:i+900]}")
           PY
           for f in $(find qa -name '*.log'); do grep -n "SiegeWallGroundRecovery\|teleport\|Native staged perimeter QA" "$f" | tail -3 | cut -c1-600 | sed 's/^/::warning title=log::/'; done
