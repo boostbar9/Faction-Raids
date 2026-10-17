@@ -105,7 +105,7 @@ public final class SiteClearance {
         }
         List<BlockPos> ordered = new ArrayList<>(work);
         // Top-down, so falling or supported blocks never land in a cell already cleared.
-        ordered.sort(Comparator.comparingInt(BlockPos::getY).reversed().thenComparingLong(BlockPos::asLong));
+        ordered.sort(Comparator.<BlockPos>comparingInt(BlockPos::getY).reversed().thenComparingLong(BlockPos::asLong));
         int cleared = 0;
         for (BlockPos pos : ordered) {
             BlockState state = level.getBlockState(pos);
