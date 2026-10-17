@@ -4,30 +4,26 @@ on:
     branches: [tmp/diag-native-qa]
 permissions:
   actions: read
-  contents: read
+  contents: write
 jobs:
   diag:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tmp/diag-native-qa
       - uses: actions/download-artifact@v4
         with:
-          artifact-ids: 12092721381
-          run-id: 39009717537
+          artifact-ids: 12092481194
+          run-id: 39009005776
           github-token: ${{ github.token }}
           path: qa
       - run: |
-          find qa -type f | head -40
-          python3 - <<'PY'
-          import json, pathlib
-          for p in pathlib.Path('qa').rglob('result.json'):
-              d=json.loads(p.read_text())
-              short={k:v for k,v in d.items() if not isinstance(v,(list,dict)) or k in ('finalDiagnostics','admissionReviews')}
-              g=d.get('gameplay') or {}
-              short['gameplayStatus']=g.get('status'); short['gameplayFailure']=g.get('failure'); short['admission']=g.get('admissionReviews')
-              t=json.dumps(short)
-              for i in range(0,min(len(t),6000),900): print(f"::error title=result{i}::{t[i:i+900]}")
-          for p in pathlib.Path('qa').rglob('*.log'):
-              lines=p.read_text(errors='replace').splitlines()
-              hits=[l for l in lines if any(w in l for w in ('Exception','QA','Paused','problem','failed','Perimeter','IllegalState'))]
-              for l in hits[-30:]: print(f"::warning title={p.name}::{l[:450]}")
-          PY
+          mkdir -p out
+          find qa -type f | sed 's/^/FILE /' > out/files.txt
+          for f in $(find qa -name '*.log'); do
+            grep -nE "Native territory perimeter QA|WARN|ERROR|Paused|Waiting|Exception" "$f" | grep -v "ResourceLocation\|netty\|setAccessible\|Reflection" | tail -150 > "out/$(basename $f).tail.txt" || true
+          done
+          find qa -name 'result.json' -exec cp {} out/ \;
+          git config user.name diag-bot; git config user.email diag@example.invalid
+          git add out && git commit -qm "diag out" && git push -q origin HEAD:tmp/diag-native-qa
