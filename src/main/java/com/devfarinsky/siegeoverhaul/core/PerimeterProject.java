@@ -22,7 +22,8 @@ import java.util.UUID;
 
 /** Immutable, server-only authority for one reviewed whole-territory commission. */
 public final class PerimeterProject {
-    public static final int FORMAT_VERSION = 1, FEE_VERSION = 1, NEW_PROJECT_PRICE = 64;
+    public static final int FORMAT_VERSION = 1, GATE_FORMAT_VERSION = 2, FEE_VERSION = 1, NEW_PROJECT_PRICE = 64;
+    public static final String GATE_EXECUTION_BLOCKER = "Gate-aware perimeter execution awaits live approach verification; no worker assignment or payment is allowed.";
     public enum State { PREPARED_UNPAID, PREPARED_PAID, RUNNING, STAGE_VERIFIED,
         WAITING_FOR_NEXT_STAGE, VERIFYING_COMPLETE, COMPLETE, CANCELED, RECOVERY_BLOCKED }
 
@@ -61,6 +62,8 @@ public final class PerimeterProject {
     public record Check(UUID projectId, long generation, String manifestHash, long revision, State state, int activeStage) {}
 
     private final Header header;
+    private final PerimeterGateContract gateContract;
+    private final List<Integer> gateStageComponents;
     private final PerimeterBlueprint.Plan plan;
     private final PerimeterStageLayout.Layout layout;
     private final Map<Long, BlockState> targets, before, clearanceBefore;
@@ -77,16 +80,20 @@ public final class PerimeterProject {
     private PerimeterProject(Header header, PerimeterBlueprint.Plan plan, PerimeterStageLayout.Layout layout,
                              Map<Long, BlockState> targets, Map<Long, BlockState> before, Map<Long, BlockState> clearanceBefore,
                              State state, State recoveryState, int activeStage, long revision,
-                             List<StageReceipt> receipts, PaymentReceipt payment, String blocker) {
+                             List<StageReceipt> receipts, PaymentReceipt payment, String blocker, PerimeterGateContract gateContract) {
+        this.gateContract = gateContract;
         this.header = Objects.requireNonNull(header); this.plan = freezePlan(plan); this.layout = Objects.requireNonNull(layout);
         this.targets = freeze(targets); this.before = freeze(before); this.clearanceBefore = freeze(clearanceBefore);
         Set<Long> reserved = new java.util.HashSet<>(this.targets.keySet()); reserved.addAll(this.clearanceBefore.keySet());
+        reserved.addAll(observations().keySet());
+        if (reserved.size() > PerimeterStageLayout.MAX_RESERVED) throw invalid("Complete gate reservation exceeds the manifest budget");
         this.reservation = Set.copyOf(reserved);
         this.state = Objects.requireNonNull(state); this.recoveryState = recoveryState; this.activeStage = activeStage;
         this.revision = revision; this.receipts = List.copyOf(receipts); this.payment = payment;
         if (blocker == null || blocker.length() > 256) throw invalid("Invalid project blocker");
         this.blocker = blocker;
         validatePlan();
+        this.gateStageComponents = gateContract == null ? List.of() : PerimeterGateStages.components(this.plan, this.layout);
         this.manifestHash = calculateHash();
         List<Stage> frozen = new ArrayList<>();
         for (PerimeterStageLayout.Stage part : layout.stages()) {
@@ -101,6 +108,19 @@ public final class PerimeterProject {
 
     public static PerimeterProject prepare(Header header, PerimeterBlueprint.Plan plan, PerimeterStageLayout.Layout layout,
                                            Map<Long, BlockState> before, Map<Long, BlockState> clearanceBefore) {
+        return prepare(header, plan, layout, before, clearanceBefore, null);
+    }
+
+    /** Opt-in data preparation only. Native execution remains blocked until live gate verification is integrated. */
+    public static PerimeterProject prepareWithGates(Header header, PerimeterBlueprint.Plan plan, PerimeterStageLayout.Layout layout,
+                                                    Map<Long, BlockState> before, Map<Long, BlockState> clearanceBefore,
+                                                    PerimeterGateContract gateContract) {
+        return prepare(header, plan, layout, before, clearanceBefore, Objects.requireNonNull(gateContract));
+    }
+
+    private static PerimeterProject prepare(Header header, PerimeterBlueprint.Plan plan, PerimeterStageLayout.Layout layout,
+                                            Map<Long, BlockState> before, Map<Long, BlockState> clearanceBefore,
+                                            PerimeterGateContract gateContract) {
         Map<Long, BlockState> targets = new LinkedHashMap<>();
         plan.blocks().forEach((cell, id) -> {
             ResourceLocation name = ResourceLocation.tryParse(id);
@@ -110,20 +130,30 @@ public final class PerimeterProject {
             targets.put(cell, target);
         });
         return new PerimeterProject(header, plan, layout, targets, before, clearanceBefore,
-                State.PREPARED_UNPAID, null, 0, 0, List.of(), null, "");
+                State.PREPARED_UNPAID, null, 0, 0, List.of(), null, "", gateContract);
     }
 
     static PerimeterProject restore(Header header, PerimeterBlueprint.Plan plan, PerimeterStageLayout.Layout layout,
                                     Map<Long, BlockState> targets, Map<Long, BlockState> before, Map<Long, BlockState> clearance,
                                     State state, State recoveryState, int activeStage, long revision,
-                                    List<StageReceipt> receipts, PaymentReceipt payment, String blocker, String expectedHash) {
+                                    List<StageReceipt> receipts, PaymentReceipt payment, String blocker, String expectedHash,
+                                    PerimeterGateContract gateContract) {
         PerimeterProject project = new PerimeterProject(header, plan, layout, targets, before, clearance,
-                state, recoveryState, activeStage, revision, receipts, payment, blocker);
+                state, recoveryState, activeStage, revision, receipts, payment, blocker, gateContract);
         if (!project.manifestHash.equals(expectedHash)) throw invalid("Changed perimeter manifest hash");
         return project;
     }
 
     public Header header() { return header; }
+    public int formatVersion() { return gateContract == null ? FORMAT_VERSION : GATE_FORMAT_VERSION; }
+    public PerimeterGateContract gateContract() { return gateContract; }
+    public Map<Long, BlockState> observations() { return gateContract == null ? Map.of() : gateContract.observations(); }
+    /** A persisted v2 contract is not live authorization. Remove this barrier only with complete gate runtime checks. */
+    public boolean executionSupported() { return gateContract == null; }
+    public int gateStageComponent(int stage) {
+        if (gateContract == null || stage < 0 || stage >= gateStageComponents.size()) throw invalid("No gate component for this stage");
+        return gateStageComponents.get(stage);
+    }
     public PerimeterBlueprint.Plan plan() { return plan; }
     public PerimeterStageLayout.Layout layout() { return layout; }
     public Map<Long, BlockState> targets() { return targets; }
@@ -220,6 +250,7 @@ public final class PerimeterProject {
     /** Progress copies share only deeply frozen geometry; they never rebuild or rehash it. */
     private PerimeterProject(PerimeterProject original, State state, State recoveryState, int activeStage,
                              List<StageReceipt> receipts, PaymentReceipt payment, String blocker) {
+        this.gateContract = original.gateContract; this.gateStageComponents = original.gateStageComponents;
         this.header = original.header; this.plan = original.plan; this.layout = original.layout;
         this.targets = original.targets; this.before = original.before; this.clearanceBefore = original.clearanceBefore;
         this.stages = original.stages; this.reservation = original.reservation; this.manifestHash = original.manifestHash;
@@ -299,10 +330,16 @@ public final class PerimeterProject {
         for (var entry : targets.entrySet()) if (!supported(entry.getValue())
                 || !String.valueOf(BuiltInRegistries.BLOCK.getKey(entry.getValue().getBlock())).equals(plan.blocks().get(entry.getKey()))
                 || !entry.getValue().equals(entry.getValue().getBlock().defaultBlockState())) throw invalid("Changed target state");
-        for (long cell : reservation()) {
+        // Native targets/clearance always remain inside the accepted claim. Observations have no mutation authority.
+        Set<Long> nativeCells = new java.util.HashSet<>(targets.keySet()); nativeCells.addAll(clearanceBefore.keySet());
+        for (long cell : nativeCells) {
             BlockPos pos = BlockPos.of(cell);
             if (!header.territory().contains(new ChunkPos(pos)) || pos.getY() < -2048 || pos.getY() > 2047)
                 throw invalid("Cell outside original reviewed territory or supported height");
+        }
+        if (gateContract != null) {
+            if (!Collections.disjoint(nativeCells, observations().keySet())) throw invalid("Read-only gate observations overlap native cells");
+            gateContract.validateAgainst(header.territory(), plan);
         }
     }
     private void validateState() {
@@ -336,7 +373,7 @@ public final class PerimeterProject {
         }
     }
     private String calculateHash() {
-        HashBuilder value = new HashBuilder().append("perimeter-project-v1\n");
+        HashBuilder value = new HashBuilder().append(gateContract == null ? "perimeter-project-v1\n" : "perimeter-project-v2\n");
         value.append(header.projectId()).append('\n').append(header.generation()).append('\n').append(header.owner()).append('\n')
                 .append(header.builder()).append('\n').append(header.coreKey()).append('\n').append(header.originalCore().asLong()).append('\n')
                 .append(header.faction()).append('\n').append(header.material()).append('\n').append(header.reviewedFingerprint()).append('\n')
@@ -346,6 +383,7 @@ public final class PerimeterProject {
                 .append(c.base().asLong()).append(':').append(c.supportDepth()).append(':').append(c.inwardDistance()).append(':').append(c.componentId()).append('\n'));
         appendStates(value, "target", targets); appendStates(value, "before", before); appendStates(value, "clear", clearanceBefore);
         value.append(layout.digest());
+        if (gateContract != null) value.append("\ngates:").append(gateContract.digest());
         return value.finish();
     }
     private String stageDigest(PerimeterStageLayout.Stage stage) {
