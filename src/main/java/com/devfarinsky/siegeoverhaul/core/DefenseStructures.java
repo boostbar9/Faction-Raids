@@ -163,18 +163,20 @@ public final class DefenseStructures {
                 BlockPos cell = base.atY(y);
                 denied = denial.apply(cell);
                 if (denied != null) return denied;
-                var state = level.getBlockState(cell);
+                // Natural obstructions are cleared by the builder when the job starts.
+                var state = SiteClearance.reviewed(level, cell, level.getBlockState(cell), plan.blocks().get(cell.asLong()));
                 String problem = com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.initialPlacementProblem(
                         level, cell, state, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
                 if (problem != null) return problem;
             }
         }
         for (long cell : plan.blocks().keySet()) {
-            if (!level.getEntities((Entity) null, new AABB(BlockPos.of(cell)), Entity::isAlive).isEmpty())
+            if (!level.getEntities((Entity) null, new AABB(BlockPos.of(cell)), com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard::blocksPlacement).isEmpty())
                 return "Move players, creatures and vehicles out of the planned blocks, then try again.";
         }
         String neighborhood = com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.placementNeighborhoodProblem(
-                level, plan.blocks().keySet().stream().map(BlockPos::of).toList());
+                level, plan.blocks().keySet().stream().map(BlockPos::of).toList(),
+                SiteClearance.clearedNeighbours(level, reservedCells(plan)));
         if (neighborhood != null) return neighborhood;
         String reservation = ConstructionReservations.problem(level, reservedCells(plan));
         if (reservation != null) return reservation;
@@ -190,6 +192,10 @@ public final class DefenseStructures {
     }
 
     static boolean startJob(ServerPlayer player, Mob builder, DefenseBlueprint.Plan plan, DefenseBlueprint.Kind kind) {
+        // The builder clears the natural obstructions the review already treated as empty.
+        ServerLevel clearing = player.serverLevel();
+        if (clearing != null) SiteClearance.clear(clearing, reservedCells(plan),
+                plan.blocks().keySet().stream().map(BlockPos::of).toList(), plan.blocks(), true);
         Entity build = null;
         boolean committed = false;
         CommissionStage stage = CommissionStage.BLUEPRINT;

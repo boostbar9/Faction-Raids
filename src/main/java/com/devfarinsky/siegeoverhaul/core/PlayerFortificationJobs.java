@@ -242,9 +242,21 @@ public final class PlayerFortificationJobs {
         }
     }
 
+    private static void perimeterGroundRecovery(ServerLevel level, Mob builder) {
+        Entity area = com.devfarinsky.siegeoverhaul.nativecompat.NativeConstructionGuard.currentArea(builder);
+        if (area instanceof com.devfarinsky.siegeoverhaul.nativecompat.ProtectedBuildArea && area.isAlive()
+                && WorkersBridge.workingOn(builder, area)) BuilderGroundRecovery.tick(level, builder);
+        else BuilderGroundRecovery.reset(builder);
+    }
+
     /** Called cheaply from the existing living-tick hook; meaningful work runs once every two seconds. */
     public static void tick(ServerLevel level, Mob builder) {
-        if (PerimeterProjectLink.reserved(builder)) return; // Whole-project recovery never treats a missing section as completion.
+        if (PerimeterProjectLink.reserved(builder)) {
+            // Whole-project recovery never treats a missing section as completion, but a builder
+            // working its own active section still needs the stuck/buried movement recovery.
+            if (builder.tickCount % RECOVERY_INTERVAL == 0) perimeterGroundRecovery(level, builder);
+            return;
+        }
         if (builder.tickCount % RECOVERY_INTERVAL != 0 || !WorkersBridge.isBuilder(builder)) return;
         CompoundTag tag = builder.getPersistentData();
         if (tag.contains(ModConstants.Tags.CAMP_WORKER_TEAM)) return;

@@ -192,6 +192,7 @@ public final class NativePerimeterProjects {
         var journal=PerimeterStageJournal.get(core,project);
         if(journal==null) {pause(core,project,"Paused: native marker creation history is unavailable.",dirty);return;}
         if(project.state()==PerimeterProject.State.VERIFYING_COMPLETE) {
+            clearNatural(level,project,project.clearanceBefore().keySet(),java.util.List.of());
             problem=wholeWorldProblem(level,owner,project);
             if(problem!=null) {pause(core,project,problem,dirty);return;}
             project=replace(core,project,project.complete(project.check(),project.manifestHash()),dirty);
@@ -213,6 +214,7 @@ public final class NativePerimeterProjects {
             }
             problem=NativeConstructionGuard.commissionProblem(builder);
             if(problem!=null) {pause(core,project,"Waiting: builder is finishing native supplies or item use.",dirty);return;}
+            clearNatural(level,project,project.active().layout().reservation(),project.active().layout().targets().keySet());
             problem=unstartedStageProblem(level,owner,project);
             if(problem!=null) {pause(core,project,problem,dirty);return;}
             if(!WallBuilderAccess.clearNextSection(builder,project.active().layout().targets().keySet(),project.reservation(),first.marker())) {
@@ -548,6 +550,22 @@ private static String context(ServerLevel level,ServerPlayer owner,Mob builder,P
         if(!PerimeterProjectAuthority.territoryMatches(project,territory))return "Paused: faction territory changed; cancel and review the complete perimeter again.";
         return null;
     }
+    /**
+     * Builders re-clear natural cover (fresh snow, regrown plants, a sapling) from cells that were
+     * empty at review, plus natural vegetation around the section's targets, before the next native
+     * section is admitted. Anything else that changed still pauses for review.
+     */
+    private static void clearNatural(ServerLevel level,PerimeterProject project,java.util.Collection<Long> cells,java.util.Collection<Long> targets) {
+        try {
+            var empty=new java.util.ArrayList<BlockPos>();
+            for(long packed:cells) {
+                BlockState original=project.before().getOrDefault(packed,project.clearanceBefore().get(packed));
+                if(original!=null && original.isAir())empty.add(BlockPos.of(packed));
+            }
+            com.devfarinsky.siegeoverhaul.core.SiteClearance.clear(level,empty,targets.stream().map(BlockPos::of).toList(),null,false);
+        } catch(RuntimeException unavailable) { FactionLogger.LOG.debug("Perimeter site clearance skipped: {}",unavailable.toString()); }
+    }
+
     private static String unstartedStageProblem(ServerLevel level,ServerPlayer owner,PerimeterProject project) {
         var part=project.active().layout();
         // Native break scans include the upper endpoint, so validate the complete rectangular read envelope.

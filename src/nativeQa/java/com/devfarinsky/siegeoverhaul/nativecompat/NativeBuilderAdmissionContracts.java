@@ -50,21 +50,31 @@ final class NativeBuilderAdmissionContracts {
             require(level.getBlockState(neighbor).is(Blocks.SAND), "Free review removed its outside obstruction");
             level.setBlock(neighbor, original.get(neighbor), 2);
 
+            // Natural paired plants are left for the builder to clear on confirmation;
+            // the free review must accept them without touching the world.
             plant(level, cavity);
             problem = PerimeterConstruction.prepare(owner, fixture.corePos(), 1).problem();
-            rejectedAt(problem, cavity, "minecraft:tall_grass");
+            notRejectedAt(problem, cavity);
             require(level.getBlockState(cavity).is(Blocks.TALL_GRASS)
                             && level.getBlockState(cavity.above()).is(Blocks.TALL_GRASS),
                     "Free perimeter review cleared part of a paired plant");
+            level.setBlock(cavity.above(), original.get(cavity.above()), 2);
+            level.setBlock(cavity, Blocks.COBBLESTONE.defaultBlockState(), 2);
+            problem = PerimeterConstruction.prepare(owner, fixture.corePos(), 1).problem();
+            rejectedAt(problem, cavity, "minecraft:cobblestone");
             for (BlockPos pos : java.util.List.of(cavity.above(), cavity, cavity.below()))
                 level.setBlock(pos, original.get(pos), 2);
 
             plant(level, manual);
             problem = DefenseStructures.prepare(owner, manual, Direction.SOUTH, DefenseBlueprint.Kind.GATEHOUSE).problem();
-            rejectedAt(problem, manual, "minecraft:tall_grass");
+            notRejectedAt(problem, manual);
             require(level.getBlockState(manual).is(Blocks.TALL_GRASS)
                             && level.getBlockState(manual.above()).is(Blocks.TALL_GRASS),
                     "Free manual review cleared part of a paired plant");
+            level.setBlock(manual.above(), original.get(manual.above()), 2);
+            level.setBlock(manual, Blocks.COBBLESTONE.defaultBlockState(), 2);
+            problem = DefenseStructures.prepare(owner, manual, Direction.SOUTH, DefenseBlueprint.Kind.GATEHOUSE).problem();
+            rejectedAt(problem, manual, "minecraft:cobblestone");
         } finally {
             original.forEach((pos, state) -> level.setBlock(pos, state, 2));
         }
@@ -75,10 +85,11 @@ final class NativeBuilderAdmissionContracts {
                         && inventory.getList("Items", 10).equals(inventory(builder))
                         && inventory.getCompound("MainHand").equals(builder.getMainHandItem().save(new CompoundTag())),
                 "Read-only admission checks changed Treasury, project, worker receipt or inventory");
-        return Map.of("perimeterNeighborRejected", true, "perimeterPairedClearanceRejected", true,
-                "manualPairedClearanceRejected", true, "exactInventoryAndTreasury", true,
+        return Map.of("perimeterNeighborRejected", true, "perimeterPairedPlantAccepted", true,
+                "perimeterPlayerBlockRejected", true, "manualPairedPlantAccepted", true,
+                "manualPlayerBlockRejected", true, "exactInventoryAndTreasury", true,
                 "noProjectOrWorkerReceiptChange", true, "fixtureTerrainRestored", true,
-                "scope", "Explicit pre-commission obstacle fixtures with real registry, claim and production prepare APIs; no clearing or native placement claimed");
+                "scope", "Explicit pre-commission obstacle fixtures with real registry, claim and production prepare APIs; review is read-only, clearing happens on confirmation");
     }
 
     private static void plant(ServerLevel level, BlockPos pos) {
@@ -94,6 +105,11 @@ final class NativeBuilderAdmissionContracts {
             item.putInt("Slot", slot); items.add(item);
         }
         return items;
+    }
+
+    private static void notRejectedAt(String problem, BlockPos pos) {
+        require(problem == null || !problem.contains(pos.toShortString()),
+                "Review refused natural cover the builder should clear: " + problem);
     }
 
     private static void rejectedAt(String problem, BlockPos pos, String block) {

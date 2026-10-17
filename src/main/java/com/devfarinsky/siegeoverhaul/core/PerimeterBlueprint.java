@@ -37,6 +37,8 @@ public final class PerimeterBlueprint {
     public static final int WALK_WIDTH = 3;
     public static final int DECK_OFFSET = 3;
     public static final int CLEAR_HEIGHT = 6;
+    /** Natural ground the builders may dig out above a level wall base where a run climbs a slope. */
+    public static final int MAX_CUT = 3;
     private static final int MAX_PROBLEMS = 32;
     private static final int WORLD_LIMIT = 30_000_000;
     private static final List<Direction> HORIZONTAL = List.of(
@@ -202,6 +204,7 @@ public final class PerimeterBlueprint {
 
         Map<Xz, Integer> surfaceY = new HashMap<>();
         Map<Integer, Integer> levelY = new HashMap<>();
+        Map<Integer, Integer> lowestY = new HashMap<>();
         for (HorizontalColumn column : fitted) {
             Xz pos = column.position();
             Surface surface;
@@ -220,10 +223,18 @@ public final class PerimeterBlueprint {
             } else {
                 surfaceY.put(pos, surface.baseY());
                 levelY.merge(column.componentId(), surface.baseY(), Math::max);
+                lowestY.merge(column.componentId(), surface.baseY(), Math::min);
             }
             if (problems.size() >= MAX_PROBLEMS) return failed(problems);
         }
         if (!problems.isEmpty()) return failed(problems);
+        // Relief deeper than the foundation budget: lower the level and dig the high ground out
+        // instead of refusing, as long as no column needs more than MAX_CUT blocks removed.
+        for (var entry : levelY.entrySet()) {
+            int lowest = lowestY.get(entry.getKey());
+            if (entry.getValue() - lowest > limits.maxFoundationDepth())
+                entry.setValue(Math.max(lowest + limits.maxFoundationDepth(), entry.getValue() - MAX_CUT));
+        }
 
         List<Column> columns = new ArrayList<>(fitted.size());
         long blockCount = 0;
@@ -235,16 +246,18 @@ public final class PerimeterBlueprint {
             int support = baseY - surfaceY.get(pos);
             if (support > limits.maxFoundationDepth()) {
                 problems.add(new Problem(ProblemCode.FOUNDATION_LIMIT, pos.at(surfaceY.get(pos)),
-                        "A level wall needs more than " + limits.maxFoundationDepth()
-                                + " support blocks here. Level the ground before commissioning."));
+                        "The ground here varies by more than " + (limits.maxFoundationDepth() + MAX_CUT)
+                                + " blocks along one wall. Level the ground before commissioning."));
                 if (problems.size() >= MAX_PROBLEMS) return failed(problems);
             }
+            // A negative support is a cut: the column's own ground above the base is dug out.
+            support = Math.max(0, support);
             Column result = new Column(pos.at(baseY), support, column.distance(), column.componentId());
             columns.add(result);
             blockCount += support + 1L + (result.parapet() ? DECK_OFFSET + 1 : 0);
             minX = Math.min(minX, pos.x()); maxX = Math.max(maxX, pos.x());
             minZ = Math.min(minZ, pos.z()); maxZ = Math.max(maxZ, pos.z());
-            minY = Math.min(minY, surfaceY.get(pos)); maxY = Math.max(maxY, baseY + CLEAR_HEIGHT - 1);
+            minY = Math.min(minY, Math.min(baseY, surfaceY.get(pos))); maxY = Math.max(maxY, baseY + CLEAR_HEIGHT - 1);
         }
         if (!problems.isEmpty()) return failed(problems);
         if (blockCount > limits.maxBlocks())

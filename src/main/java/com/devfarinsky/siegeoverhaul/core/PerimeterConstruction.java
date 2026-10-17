@@ -170,8 +170,15 @@ public final class PerimeterConstruction {
         if (!player.isCreative() && PaymentSource.available(player, TerritoryFortification.PRICE) < TerritoryFortification.PRICE)
             return new Preparation(builder, plan, claimIdentity, "You need " + TerritoryFortification.PRICE + " emeralds in the faction Treasury before commissioning.", territory);
         Map<Long,net.minecraft.world.level.block.state.BlockState> before=new HashMap<>(),clearance=new HashMap<>();
-        for(long cell:plan.blocks().keySet())before.put(cell,level.getBlockState(BlockPos.of(cell)));
-        for(long cell:plan.clearance())clearance.put(cell,level.getBlockState(BlockPos.of(cell)));
+        // Natural obstructions are quoted as empty: confirmation clears them before the native handoff.
+        for(var cell:plan.blocks().entrySet()) {
+            BlockPos pos=BlockPos.of(cell.getKey());
+            before.put(cell.getKey(),SiteClearance.reviewed(level,pos,level.getBlockState(pos),cell.getValue()));
+        }
+        for(long cell:plan.clearance()) {
+            BlockPos pos=BlockPos.of(cell);
+            clearance.put(cell,SiteClearance.reviewed(level,pos,level.getBlockState(pos),null));
+        }
         String hash=PerimeterReviewFingerprint.create(plan,layout,before,clearance,core,material,claimIdentity,player.getUUID(),builder.getUUID());
         Quote quote=new Quote(core,material,player.getUUID(),builder.getUUID(),layout,before,clearance,hash);
         return new Preparation(builder,plan,claimIdentity,null,territory,quote);
@@ -209,6 +216,7 @@ public final class PerimeterConstruction {
                 return "The whole perimeter must be loaded and inside the world border.";
         }
         List<BlockPos> remaining = new ArrayList<>();
+        Set<BlockPos> reserved = reservedCells(plan);
         for (var column : plan.columns()) {
             BlockPos bottom = column.foundationBase(); BlockPos ground = bottom.below();
             var support = level.getBlockState(ground);
@@ -218,7 +226,9 @@ public final class PerimeterConstruction {
                 BlockPos p = bottom.atY(y);
                 String denied = denial.apply(p);
                 if (denied != null) return denied;
-                var current = level.getBlockState(p); String target = plan.blocks().get(p.asLong());
+                String target = plan.blocks().get(p.asLong());
+                // Builders clear natural blocks on confirmation; review them as the empty cell they become.
+                var current = SiteClearance.reviewed(level, p, level.getBlockState(p), target);
                 String currentId = String.valueOf(ForgeRegistries.BLOCKS.getKey(current.getBlock()));
                 boolean already = target != null && target.equals(currentId) && !current.hasBlockEntity()
                         && current.getFluidState().isEmpty();
@@ -228,14 +238,15 @@ public final class PerimeterConstruction {
                         already ? current : Blocks.AIR.defaultBlockState());
                 if (cellProblem != null) return cellProblem;
                 if (target != null && !already) remaining.add(p.immutable());
-                if (target != null && !level.getEntities((Entity) null, new AABB(p), Entity::isAlive).isEmpty())
+                if (target != null && !level.getEntities((Entity) null, new AABB(p), NativeConstructionGuard::blocksPlacement).isEmpty())
                     return "Move players, creatures and vehicles out of the planned wall cells.";
             }
         }
         if (remaining.isEmpty()) return "This perimeter is already built. Nothing to commission.";
-        String neighborhood = NativeConstructionGuard.placementNeighborhoodProblem(level, remaining);
+        String neighborhood = NativeConstructionGuard.placementNeighborhoodProblem(level, remaining,
+                SiteClearance.clearedNeighbours(level, reserved));
         if (neighborhood != null) return neighborhood;
-        String reservation = ConstructionReservations.problem(level, reservedCells(plan));
+        String reservation = ConstructionReservations.problem(level, reserved);
         if (reservation != null) return reservation;
         return null;
     }
@@ -270,6 +281,11 @@ public final class PerimeterConstruction {
         String exact=PerimeterReviewFingerprint.create(prepared.plan(),quote.layout(),quote.before(),quote.clearance(),
                 quote.core(),material,prepared.claimIdentity(),player.getUUID(),prepared.builder().getUUID());
         if(!exact.equals(quote.fingerprint()))return false;
+        // The builder clears the reviewed natural obstructions, so the protected handoff
+        // finds exactly the empty cells recorded in the quote.
+        ServerLevel level=player.serverLevel();
+        if(level!=null)SiteClearance.clear(level,reservedCells(prepared.plan()),
+                prepared.plan().blocks().keySet().stream().map(BlockPos::of).toList(),prepared.plan().blocks(),true);
         return com.devfarinsky.siegeoverhaul.nativecompat.NativePerimeterProjects.start(player,prepared.builder(),quote.core(),material,
                 prepared.plan(),quote.layout(),quote.before(),quote.clearance(),prepared.territory(),quote.fingerprint());
     }

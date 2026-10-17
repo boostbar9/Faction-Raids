@@ -33,6 +33,16 @@ final class ProtectedStorageAccess extends ProtectedInventoryGoal {
         super(worker,delegate,session);this.chest=delegate;this.kind=kind;
     }
     @Override Kind kind(){return kind;}
+    /** Chest the builder's running supply-fetch goal is heading to, or null. Read-only. */
+    static BlockPos supplyChest(Mob worker) {
+        if(worker==null || worker.goalSelector==null)return null;
+        for(WrappedGoal wrapped:worker.goalSelector.getAvailableGoals()) {
+            Goal goal=wrapped.getGoal();
+            AbstractChestGoal chest=goal instanceof ProtectedStorageAccess access?access.chest:goal instanceof AbstractChestGoal c?c:null;
+            if(wrapped.isRunning() && chest instanceof GetNeededItemsFromStorage && chest.chestPos!=null)return chest.chestPos;
+        }
+        return null;
+    }
     @Override boolean cleanupObligation(){return closeOutstanding;}
     static String runningProblem(Mob worker) {
         if(ProtectedInventoryCleanup.outstanding(worker.getPersistentData()))

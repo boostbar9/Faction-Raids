@@ -312,6 +312,27 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         verify(level,never()).setBlock(any(),any(),anyInt());
         verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
     }
+    @Test void targetBeyondNativePathRangeWalksPartWayInsteadOfWaitingForever() throws Exception {
+        terrain(); var goal=new WallBuilderAccess(worker,new NativeGoal());
+        // createPath returns null: the next queued block is beyond follow range.
+        when(nav.moveTo(32,64,0,0.8)).thenReturn(true);
+        goal.route(level,new BlockPos(60,64,0),40);
+        verify(nav).moveTo(32,64,0,0.8);
+        // The approach path is kept on the next pass instead of being stopped as "not in reach".
+        var approach=mock(Path.class);when(approach.canReach()).thenReturn(true);
+        when(approach.getEndNode()).thenReturn(new net.minecraft.world.level.pathfinder.Node(32,64,0));
+        when(nav.getPath()).thenReturn(approach);
+        when(level.getGameTime()).thenReturn(20L);
+        goal.route(level,new BlockPos(60,64,0),40);
+        verify(nav,never()).stop();
+        when(nav.getPath()).thenReturn(null);
+        verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+        clearInvocations(nav);
+        when(level.getGameTime()).thenReturn(100L);
+        goal.route(level,new BlockPos(28,64,0),40); // Close targets keep the ordinary site search only.
+        verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+    }
     @Test void loadedSafeSpaceAndReachabilityAreRequired() throws Exception {
         terrain(); var goal=new WallBuilderAccess(worker,new NativeGoal());
         var marker=new BlockPos(0,60,0);
@@ -733,7 +754,10 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
                 case 5 -> when(partial.getNodeCount()).thenReturn(1);
             }
             goal.route(level, new BlockPos(80, 64, 0), 40);
-            verify(nav, never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+            // The rejected partial endpoint is never walked. A far target may still get the
+            // separately verified straight-line approach instead of freezing forever.
+            verify(nav, never()).moveTo(eq((double) endpoint.getX()), anyDouble(), eq((double) endpoint.getZ()), anyDouble());
+            verify(worker, never()).teleportTo(anyDouble(), anyDouble(), anyDouble());
         }
     }
 

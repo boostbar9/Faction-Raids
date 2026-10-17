@@ -81,6 +81,36 @@ public final class WallBuilderAccess extends Goal {
         return false;
     }
 
+    /**
+     * Last-resort recovery target for a commissioned builder that has stood still for several
+     * seconds without a route: the nearest safe standing site within native reach of its pending
+     * block, outside reserved wall columns. Null when it already stands in reach or none exists.
+     */
+    public static BlockPos rescueSite(Mob worker) {
+        if (worker.goalSelector == null || !(worker.level() instanceof ServerLevel level)) return null;
+        for (var goal : worker.goalSelector.getAvailableGoals())
+            if (goal.getGoal() instanceof WallBuilderAccess access) return access.rescueSite(level);
+        return null;
+    }
+
+    private BlockPos rescueSite(ServerLevel level) {
+        try {
+            if (!(areaField.get(worker) instanceof Entity area) || !isCommission(area) || !reserveColumns(area)) return null;
+            var cells = NativeConstructionGuard.mutationCells(delegate);
+            BlockPos target = !cells.isEmpty() ? cells.iterator().next()
+                    : blockField.get(delegate) instanceof BlockPos p ? p : null;
+            if (target == null || workStandingSite(level, target, BlockPos.containing(worker.position()))
+                    || worker.position().distanceToSqr(Vec3.atBottomCenterOf(target)) > 24 * 24) return null;
+            BlockPos best = null; double score = Double.MAX_VALUE;
+            for (BlockPos site : routeSites(level, target, 16, false)) {
+                if (!safeStandingSite(level, worker, site)) continue;
+                double distance = worker.position().distanceToSqr(Vec3.atBottomCenterOf(site));
+                if (distance < score) { best = site; score = distance; }
+            }
+            return best;
+        } catch (ReflectiveOperationException | RuntimeException unavailable) { return null; }
+    }
+
     /** Reset only stale transient native goal state after the new area's assignment succeeds. */
     public static boolean prepareProtectedHandoff(Mob worker, Entity expectedArea) {
         if (worker.goalSelector == null || NativeConstructionGuard.currentArea(worker) != expectedArea) return false;
@@ -383,6 +413,8 @@ public final class WallBuilderAccess extends Goal {
             BlockPos reached = now <= pendingUntil
                     ? routeEndpoint(level, target, ready, sites, nativeReachSquared, selfRecovery) : null;
             if (reached != null && moveToSite(reached)) destination = reached;
+            // Workers' async search finished without reaching any site (often a far target).
+            else if (reached == null && !selfRecovery) approachFar(level, target);
             return;
         }
         if (now < nextSearch && now >= nextSearch - 40) {
@@ -395,9 +427,9 @@ public final class WallBuilderAccess extends Goal {
         lastTarget = target.immutable();
         destination = null;
         Set<BlockPos> candidates = routeSites(level, target, nativeReachSquared, selfRecovery);
-        if (candidates.isEmpty()) return;
+        if (candidates.isEmpty()) { if (!selfRecovery) approachFar(level, target); return; }
         var path = nav.createPath(candidates, 0);
-        if (path == null) return;
+        if (path == null) { if (!selfRecovery) approachFar(level, target); return; }
         if (!pathReady(path)) {
             pendingPath = path;
             pendingSites = Set.copyOf(candidates);
@@ -405,6 +437,32 @@ public final class WallBuilderAccess extends Goal {
         } else {
             BlockPos reached = routeEndpoint(level, target, path, candidates, nativeReachSquared, selfRecovery);
             if (reached != null && moveToSite(reached)) destination = reached;
+            else if (reached == null && !selfRecovery) approachFar(level, target);
+        }
+    }
+
+    /**
+     * Native path searches are bounded by follow range, so a target farther away (the next
+     * queued block can be 40+ blocks along a large perimeter) yields no path, or an async search that
+     * finishes unreached, and the guarded
+     * builder used to wait forever. Walk to safe surface ground part of the way and retry.
+     */
+    private void approachFar(ServerLevel level, BlockPos target) {
+        Vec3 from = worker.position();
+        double dx = target.getX() + 0.5 - from.x, dz = target.getZ() + 0.5 - from.z;
+        double distance = Math.sqrt(dx * dx + dz * dz);
+        // Nearer targets fail only when genuinely blocked; never walk around that verdict.
+        if (distance < 24) return;
+        for (int step = 12; step >= 4; step -= 4) {
+            int x = net.minecraft.util.Mth.floor(from.x + dx * step / distance);
+            int z = net.minecraft.util.Mth.floor(from.z + dz * step / distance);
+            BlockPos column = new BlockPos(x, 0, z);
+            if (!level.hasChunkAt(column) || reservedColumns.contains(column.asLong())) continue;
+            BlockPos feet = new BlockPos(x, level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z);
+            if (Math.abs(feet.getY() - from.y) > 8 || !safeStandingSite(level, worker, feet)) continue;
+            // Record the waypoint as this target's destination; otherwise the next route pass
+            // sees a path that does not end in reach and stops it before the builder moves.
+            if (moveToSite(feet)) { lastTarget = target.immutable(); destination = feet; return; }
         }
     }
 
