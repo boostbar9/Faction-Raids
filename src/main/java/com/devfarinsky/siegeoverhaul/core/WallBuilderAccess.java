@@ -425,9 +425,9 @@ public final class WallBuilderAccess extends Goal {
         lastTarget = target.immutable();
         destination = null;
         Set<BlockPos> candidates = routeSites(level, target, nativeReachSquared, selfRecovery);
-        if (candidates.isEmpty()) return;
+        if (candidates.isEmpty()) { if (!selfRecovery) approachFar(level, target); return; }
         var path = nav.createPath(candidates, 0);
-        if (path == null) return;
+        if (path == null) { if (!selfRecovery) approachFar(level, target); return; }
         if (!pathReady(path)) {
             pendingPath = path;
             pendingSites = Set.copyOf(candidates);
@@ -435,6 +435,27 @@ public final class WallBuilderAccess extends Goal {
         } else {
             BlockPos reached = routeEndpoint(level, target, path, candidates, nativeReachSquared, selfRecovery);
             if (reached != null && moveToSite(reached)) destination = reached;
+        }
+    }
+
+    /**
+     * Native path searches are bounded by follow range, so a target farther away (the next
+     * queued block can be 40+ blocks along a large perimeter) yields no path and the guarded
+     * builder used to wait forever. Walk to safe surface ground part of the way and retry.
+     */
+    private void approachFar(ServerLevel level, BlockPos target) {
+        Vec3 from = worker.position();
+        double dx = target.getX() + 0.5 - from.x, dz = target.getZ() + 0.5 - from.z;
+        double distance = Math.sqrt(dx * dx + dz * dz);
+        if (distance < 12) return;
+        for (int step = 12; step >= 4; step -= 4) {
+            int x = net.minecraft.util.Mth.floor(from.x + dx * step / distance);
+            int z = net.minecraft.util.Mth.floor(from.z + dz * step / distance);
+            BlockPos column = new BlockPos(x, 0, z);
+            if (!level.hasChunkAt(column) || reservedColumns.contains(column.asLong())) continue;
+            BlockPos feet = new BlockPos(x, level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z);
+            if (Math.abs(feet.getY() - from.y) > 8 || !safeStandingSite(level, worker, feet)) continue;
+            if (moveToSite(feet)) return;
         }
     }
 

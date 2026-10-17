@@ -312,6 +312,18 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
         verify(level,never()).setBlock(any(),any(),anyInt());
         verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
     }
+    @Test void targetBeyondNativePathRangeWalksPartWayInsteadOfWaitingForever() throws Exception {
+        terrain(); var goal=new WallBuilderAccess(worker,new NativeGoal());
+        // createPath returns null: the next queued block is beyond follow range.
+        goal.route(level,new BlockPos(60,64,0),40);
+        verify(nav).moveTo(32,64,0,0.8);
+        verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+        verify(level,never()).setBlock(any(),any(),anyInt());
+        clearInvocations(nav);
+        when(level.getGameTime()).thenReturn(100L);
+        goal.route(level,new BlockPos(28,64,0),40); // Close targets keep the ordinary site search only.
+        verify(nav,never()).moveTo(anyDouble(),anyDouble(),anyDouble(),anyDouble());
+    }
     @Test void loadedSafeSpaceAndReachabilityAreRequired() throws Exception {
         terrain(); var goal=new WallBuilderAccess(worker,new NativeGoal());
         var marker=new BlockPos(0,60,0);
