@@ -58,10 +58,10 @@ Siege engines use supplied native crews. Deployment depends on available space, 
 
 Your first-join starter package occupies **two inventory slots**:
 
-- **Faction supplies:** the setup guide, a Siege Core, a banner, and emerald funding toward faction creation, claiming land, and hiring starting troops.
+- **Faction supplies:** the setup guide, a Siege Core, a loom, a banner and dyes for your faction flag, and emerald funding toward faction creation, claiming land, and hiring starting troops.
 - **Survival supplies:** iron tools and armor, food, torches, a bed, and a **Starter Supply Chest**. Place the chest at your base to unpack 128 stone bricks, planks, logs, a door, glass, a crafting table, a furnace and more.
 
-Opening both bags takes about a dozen inventory slots, and iron armor goes straight onto empty armor slots. If your inventory fills, undelivered contents remain in the bag.
+Opening both bags takes about sixteen inventory slots, and iron armor goes straight onto empty armor slots. If your inventory fills, undelivered contents remain in the bag.
 
 ### Quick Start
 

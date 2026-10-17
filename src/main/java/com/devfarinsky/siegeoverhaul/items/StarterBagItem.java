@@ -30,9 +30,10 @@ public final class StarterBagItem extends Item {
             // creation, claiming land, and placing the Siege Core in the correct
             // order. Intel tab still holds the full codex; this is the quick-start.
             out.add(setupGuide());
-            // Only what founding a faction needs: the core, one banner for the faction
-            // screen, and hiring funds. Looms and dyes cost five slots for cosmetics.
-            add(out,ModItems.SIEGE_CORE.get(),1);add(out,Items.WHITE_BANNER,1);
+            // What founding a faction needs: the core, a loom, a banner and dyes to design
+            // the faction flag Villager Recruits asks for, and hiring funds.
+            add(out,ModItems.SIEGE_CORE.get(),1);add(out,Items.LOOM,1);add(out,Items.WHITE_BANNER,1);
+            add(out,Items.BLUE_DYE,16);add(out,Items.WHITE_DYE,16);add(out,Items.BLACK_DYE,16);
             add(out,CoreHiring.currency(),budget(configured("FactionCreationCost"),configured("ClaimingCost"),CoreHiring.cost(1),CoreHiring.cost(2)));
         } else out.addAll(survivalContents());
         return out;
