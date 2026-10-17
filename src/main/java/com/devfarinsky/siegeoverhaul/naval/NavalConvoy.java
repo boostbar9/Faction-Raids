@@ -95,7 +95,7 @@ public final class NavalConvoy {
                 }
             }
             // No safe landing yet: retain the crew and keep steering, never teleport blindly to the beach.
-            if (boat.isInWater() && distance > 0.01) {
+            if (mayControl(boat, teamKey) && boat.isInWater() && distance > 0.01) {
                 double speed = RaidConfig.NAVAL_BOAT_SPEED.get() / 100.0;
                 Vec3 velocity = boat.getDeltaMovement();
                 boat.setDeltaMovement(velocity.x * 0.6 + dx / distance * speed * 0.4,
@@ -105,6 +105,26 @@ public final class NavalConvoy {
             }
         }
         if (boats.isEmpty()) TARGETS.remove(teamKey);
+    }
+
+    /** Tracking a rescued legacy crew does not confer ownership of its ship. */
+    static boolean mayControl(Entity vessel, String teamKey) {
+        if (vessel == null || teamKey == null || teamKey.isBlank()
+                || !vessel.getPersistentData().getBoolean(ModConstants.Tags.NAVAL_DISPOSABLE)
+                || !teamKey.equals(vessel.getPersistentData().getString(ModConstants.Tags.NAVAL_TEAM))) return false;
+        return !hasProtectedPassenger(vessel, teamKey);
+    }
+
+    private static boolean hasProtectedPassenger(Entity vessel, String teamKey) {
+        for (Entity passenger : vessel.getPassengers()) {
+            // A player taking a raider vessel's helm always keeps control, even if an
+            // administrator or another mod has given that player a matching raid tag.
+            if (passenger instanceof net.minecraft.world.entity.player.Player) return true;
+            if (passenger instanceof net.minecraft.world.entity.LivingEntity
+                    && !teamKey.equals(passenger.getPersistentData().getString(ModConstants.Tags.RAID_TEAM))) return true;
+            if (hasProtectedPassenger(passenger, teamKey)) return true;
+        }
+        return false;
     }
 
     static final class Progress {

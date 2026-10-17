@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "coordinate": "curse.maven:small-ships-450659:9061578",
+  "nativeRun": 37276889470,
+  "head": "9a2ac7e0fe05bc8e046d73c0b99ab3f93918701d",
+  "artifacts": {
+    "server": 11330941027,
+    "client": 11330258870
+  },
+  "serverDefaultsMatchAcrossIndependentFreshServerAndClientWorlds": true,
+  "gameplayValuesChanged": false,
+  "purpose": "Untouched native-generated defaults for fresh isolated QA only; first-start schematicVersion race remains an upstream limitation",
+  "sha256": {
+    "smallships-server.toml": "3558c0b7908980d54d61251655a5f0fbd8363a6bad3f6a1e5993d68b73e8ea84",
+    "smallships-client.toml": "bb0b961d8334d10588b7d5543faf62e6f767a38225f75d04c772b113148cd81f"
+  }
+}
