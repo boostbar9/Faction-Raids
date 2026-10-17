@@ -79,6 +79,30 @@ class StragglerTrackerTest extends MinecraftTestSupport {
     }
 
     @Test
+    void circlingWithoutEverGettingCloserIsEventuallyRetired() {
+        stationaryRaider(10000.0);
+        long[] clock = {0};
+        when(level.getGameTime()).thenAnswer(i -> (clock[0]++) * StragglerTracker.SAMPLE_INTERVAL_TICKS);
+        // Pacing back and forth between two fallback targets: always moving, never closer.
+        when(mob.position()).thenAnswer(i -> new Vec3(100, 0, (clock[0] % 2) * 10));
+        int dropped = 0;
+        for (int i = 0; i < 12 && dropped == 0; i++) dropped = StragglerTracker.tick(level, raid, BlockPos.ZERO);
+        assertEquals(1, dropped);
+        verify(mob).discard();
+        assertFalse(raid.raiders.contains(id), "a circling raider must not hold the wave open forever");
+    }
+
+    @Test
+    void raiderWorkingTheBreachIsNotRetired() {
+        stationaryRaider(400.0);
+        raid.currentBreachBlock = new BlockPos(100, 0, 0);
+        when(mob.distanceToSqr(Vec3.atCenterOf(raid.currentBreachBlock))).thenReturn(1.0);
+        for (int i = 0; i < 5; i++) assertEquals(0, StragglerTracker.tick(level, raid, BlockPos.ZERO));
+        verify(mob, never()).discard();
+        assertTrue(raid.raiders.contains(id));
+    }
+
+    @Test
     void raiderHoldingObjectiveIsNeverRescuedOrDiscarded() {
         stationaryRaider(1.0);
         for (int i = 0; i < 3; i++) assertEquals(0, StragglerTracker.tick(level, raid, BlockPos.ZERO));

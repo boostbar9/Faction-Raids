@@ -45,4 +45,23 @@ class RaiderHoleAvoidGoalTest extends MinecraftTestSupport {
             verifyNoInteractions(navigation);
         }
     }
+
+    @Test
+    void ladderClimberIsNotHeldAtTheWallTopEdge() {
+        PathfinderMob mob = mock(PathfinderMob.class);
+        PathNavigation navigation = mock(PathNavigation.class);
+        var level = mock(net.minecraft.world.level.Level.class);
+        when(mob.getNavigation()).thenReturn(navigation);
+        when(mob.level()).thenReturn(level);
+        when(mob.blockPosition()).thenReturn(new net.minecraft.core.BlockPos(0, 70, 0));
+        when(mob.onGround()).thenReturn(true);
+        when(level.hasChunkAt(any())).thenReturn(false);
+        try (var ladders = mockStatic(RaiderLadderGoal.class)) {
+            ladders.when(() -> RaiderLadderGoal.assigned(mob)).thenReturn(true);
+            new RaiderHoleAvoidGoal(mob).tick();
+            verify(navigation, never()).stop();
+            verify(mob, never()).setDeltaMovement(anyDouble(), anyDouble(), anyDouble());
+            verify(mob, never()).getPersistentData();
+        }
+    }
 }

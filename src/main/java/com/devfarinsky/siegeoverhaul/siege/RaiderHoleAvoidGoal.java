@@ -93,6 +93,10 @@ public class RaiderHoleAvoidGoal extends Goal {
 
         // ---------- Cliff / hole look-ahead ---------------------------------
         if (holeCooldown > 0) holeCooldown--;
+        // A ladder job deliberately crosses the wall top and drops (up to its own
+        // checked landing) into the courtyard. Holding it at the inner edge left
+        // climbers stranded on top of the wall.
+        if (RaiderLadderGoal.assigned(mob)) return;
 
         if (!mob.onGround()) return;
         Vec3 heading = heading();
