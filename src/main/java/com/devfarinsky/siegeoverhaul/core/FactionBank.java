@@ -155,6 +155,14 @@ public final class FactionBank {
         return paid;
     }
 
+    /** A ledger-recorded deposit without the chat notice, for rewards that show their own popup. */
+    public static long depositQuietly(CompoundTag core, int amount) {
+        if (core == null || amount <= 0) return 0;
+        long paid = creditQuietly(core, amount);
+        if (paid > 0) record(core, (int) Math.min(Integer.MAX_VALUE, paid));
+        return paid;
+    }
+
     /** Positive amount deposits, negative withdraws; requests are capped at 64 and fill partially when inventory or balance is limited. */
     public static boolean transact(ServerPlayer player, int amount) {
         String key = SiegeCore.key(player); var data = RaidSavedData.get(player.server);

@@ -1,3 +1,12 @@
+## 4.52.20 - Kill streaks, jackpots and camp spoils
+
+- Every raider you kill during a siege now pays emeralds into your Treasury. Chain kills together for a streak: kills pay double from the 3rd kill in a row, triple from the 6th and quadruple from the 10th. You have 8 seconds after each kill to land the next one.
+- Any raider can burst into a jackpot of emeralds when you kill it, with a flash of particles and a level-up chime. The siege commander always does.
+- Destroying an enemy camp building (Granary, Armoury, Command Post) or a war work now spills its spoils: emeralds, supplies like arrows, iron, gold and food, and sometimes an Uncommon or Rare Loot Box.
+- A new popup beside your crosshair shows what you just earned: a running total, your streak and multiplier, and a bigger banner for jackpots and camp spoils. Sounds rise in pitch as your streak climbs. Kill rewards no longer add a Treasury chat line for every kill.
+- Rewards only count during eligible sieges and share a cap of 256 emeralds per raid. Server owners can tune or turn everything off with the new combatRewards, killRewardEmeralds, killStreakSeconds, jackpotChance, jackpotEmeralds, campSpoilsEmeralds and maxCombatRewardEmeraldsPerRaid settings.
+- Network protocol 24: update the server and all clients together, and back up your world first.
+
 ## 4.52.19 - Defense plans start on grassy ground
 
 - Defense plans no longer fail with "no accessible native marker position" when you stand on grass, flowers, ferns or a thin layer of snow. The builder's marker clears that cover where it stands, and the plants drop as if you had picked them.

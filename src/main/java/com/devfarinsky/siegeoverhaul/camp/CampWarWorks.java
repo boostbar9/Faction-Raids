@@ -327,6 +327,7 @@ public final class CampWarWorks {
                 entry.putBoolean("Active", false);
                 announce(level.getServer(), raid.teamKey, Component.literal("Enemy " + work.title
                         + " destroyed. Its advantage is gone.").withStyle(ChatFormatting.GREEN));
+                com.devfarinsky.siegeoverhaul.core.CombatRewards.campSpoils(level, raid, pos, true);
                 dirty = true;
             }
             if (present && level.getGameTime() % 20L == 0L) {

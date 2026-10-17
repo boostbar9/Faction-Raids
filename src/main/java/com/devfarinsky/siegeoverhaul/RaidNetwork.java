@@ -18,8 +18,9 @@ public final class RaidNetwork {
     // v4 introduced in 2.12.0: added threat breakdown, defense explainer,
     // discovered units/factions, and War Journal rows to DashboardSync.
     // Protocol 23 adds patron magic effect packets on top of protocol 22's bounded
-    // civilian reports and live capture-boundary details.
-    private static final String PROTOCOL = "23";
+    // civilian reports and live capture-boundary details. Protocol 24 adds the
+    // combat reward popup.
+    private static final String PROTOCOL = "24";
     static boolean acceptsProtocol(String version) { return PROTOCOL.equals(version); }
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(SiegeOverhaul.MOD_ID, "main"))
@@ -133,6 +134,29 @@ public final class RaidNetwork {
                             && menu.containerId == packet.menuId()) menu.watchCivilians(player, packet.request(), packet.watch());
                     context.setPacketHandled(true);
                 }).add();
+        CHANNEL.messageBuilder(RewardPopup.class, messageId++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(RewardPopup::encode).decoder(RewardPopup::decode)
+                .consumerMainThread((packet, supplier) -> {
+                    DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
+                            () -> () -> com.devfarinsky.siegeoverhaul.client.RewardPopups.accept(packet));
+                    supplier.get().setPacketHandled(true);
+                }).add();
+    }
+
+    /** A personal "+N emeralds" popup: kind 0 kill, 1 jackpot, 2 camp spoils. */
+    public record RewardPopup(int kind, int emeralds, int streak, int multiplier) {
+        public static final int KILL = 0, JACKPOT = 1, SPOILS = 2;
+        public RewardPopup {
+            if (kind < KILL || kind > SPOILS || emeralds < 0 || emeralds > 10_000 || streak < 0 || streak > 10_000
+                    || multiplier < 1 || multiplier > 16) throw new IllegalArgumentException("Invalid reward popup");
+        }
+        public void encode(FriendlyByteBuf b) { b.writeByte(kind); b.writeVarInt(emeralds); b.writeVarInt(streak); b.writeByte(multiplier); }
+        public static RewardPopup decode(FriendlyByteBuf b) {
+            return new RewardPopup(b.readUnsignedByte(), b.readVarInt(), b.readVarInt(), b.readUnsignedByte());
+        }
+    }
+    public static void sendRewardPopup(ServerPlayer player, RewardPopup packet) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
     }
 
     public record CivilianWatch(int menuId, long request, boolean watch) {

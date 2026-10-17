@@ -588,6 +588,10 @@ public final class RaidEvents {
                 }
             }
         }
+        // Player kills also feed the kill-streak rewards and jackpots, on their own per-raid cap.
+        if (event.getSource().getEntity() instanceof ServerPlayer streakKiller && isFactionDefender(streakKiller, anchor))
+            com.devfarinsky.siegeoverhaul.core.CombatRewards.raiderKilled(streakKiller, state,
+                    data.siegeCores.get(victimTeamKey), event.getEntity().position(), isCommander);
         data.setDirty();
     }
 

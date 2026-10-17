@@ -138,6 +138,7 @@ public final class CampStructures {
                 announce(level.getServer(), raid.teamKey, Component.literal(
                         "Enemy " + title(raid,kind) + " destroyed. Its advantage is gone.").withStyle(ChatFormatting.GREEN));
                 FactionLogger.LOG.info("Camp {} lost its {}", raid.teamKey, title(raid,kind));
+                com.devfarinsky.siegeoverhaul.core.CombatRewards.campSpoils(level, raid, pos, false);
                 dirty = true;
             }
             if (present && level.getGameTime() % 20L == 0L) emitActivity(level, raid.factionId, pos);
