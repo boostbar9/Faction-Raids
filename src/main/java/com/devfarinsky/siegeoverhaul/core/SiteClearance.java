@@ -27,7 +27,8 @@ public final class SiteClearance {
 
     /** Plants, snow cover, vines and natural trees: cleared from planned cells and their placement neighbours. */
     public static boolean vegetation(BlockGetter level, BlockPos pos, BlockState state) {
-        if (!vanilla(state)) return false;
+        // Wither roses are trophies of a wither kill, not natural cover.
+        if (!vanilla(state) || state.is(Blocks.WITHER_ROSE)) return false;
         Block block = state.getBlock();
         if (CampVegetation.plant(state) || block instanceof SnowLayerBlock || block instanceof VineBlock
                 || block instanceof GlowLichenBlock || block instanceof SweetBerryBushBlock

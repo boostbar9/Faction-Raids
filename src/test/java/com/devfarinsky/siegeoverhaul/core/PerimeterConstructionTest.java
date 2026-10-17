@@ -171,16 +171,19 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
         verify(level, never()).getBlockState(argThat(pos -> pos.getX() < 0));
         verify(level, never()).hasNeighborSignal(any());
     }
-    @Test void pairedPlantsInUnderDeckClearanceAreRejectedDuringTheFreeReview() {
+    @Test void naturalPairedPlantsInUnderDeckClearanceAreLeftForTheBuilderToClear() {
         var plan = plan(); BlockPos cell = new BlockPos(2, 64, 8);
         assertTrue(plan.clearance().contains(cell.asLong()));
         assertFalse(plan.blocks().containsKey(cell.asLong()));
         for (var block : List.of(Blocks.TALL_GRASS, Blocks.LARGE_FERN, Blocks.SUNFLOWER, Blocks.WITHER_ROSE)) {
             var level = level(); when(level.getBlockState(cell)).thenReturn(block.defaultBlockState());
             String problem = PerimeterConstruction.siteProblem(level, plan, p -> true);
-            assertNotNull(problem);
-            assertTrue(problem.contains(cell.toShortString()), problem);
+            if (block == Blocks.WITHER_ROSE) {
+                assertNotNull(problem);
+                assertTrue(problem.contains(cell.toShortString()), problem);
+            } else assertNull(problem, block + " is natural cover cleared on confirmation");
             verify(level, never()).setBlock(any(), any(), anyInt(), anyInt());
+            verify(level, never()).destroyBlock(any(), anyBoolean(), any());
         }
         var level = level(); when(level.getBlockState(cell)).thenReturn(Blocks.DANDELION.defaultBlockState());
         assertNull(PerimeterConstruction.siteProblem(level, plan, p -> true));

@@ -213,15 +213,18 @@ class DefenseStructuresTest extends MinecraftTestSupport {
     @Test void clearFlatClaimedSiteIsAccepted() {
         assertNull(DefenseStructures.siteProblem(clearLevel(), tower(), p -> true));
     }
-    @Test void manualReviewUsesNativePlantRulesForTargetsAndReservedHeadroom() {
+    @Test void manualReviewAcceptsNaturalPairedPlantsTheBuilderClearsButNotProtectedOnes() {
         var plan = DefenseBlueprint.create(DefenseBlueprint.Kind.GATEHOUSE, origin, Direction.SOUTH);
         for (BlockPos cell : List.of(origin, origin.above(), plan.max())) {
             for (var block : List.of(Blocks.TALL_GRASS, Blocks.LARGE_FERN, Blocks.SUNFLOWER, Blocks.WITHER_ROSE)) {
                 var level = clearLevel();
                 when(level.getBlockState(cell)).thenReturn(block.defaultBlockState());
                 String problem = DefenseStructures.siteProblem(level, plan, p -> true);
-                assertNotNull(problem, block + " at " + cell);
-                assertTrue(problem.contains(cell.toShortString()), problem);
+                if (block == Blocks.WITHER_ROSE) {
+                    assertNotNull(problem, block + " at " + cell);
+                    assertTrue(problem.contains(cell.toShortString()), problem);
+                } else assertNull(problem, block + " at " + cell + " is natural cover cleared on confirmation");
+                // Review stays read-only; clearing happens only when the job starts.
                 verify(level, never()).setBlock(any(), any(), anyInt(), anyInt());
                 verify(level, never()).destroyBlock(any(), anyBoolean(), any());
             }

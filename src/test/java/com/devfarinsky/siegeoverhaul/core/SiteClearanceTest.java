@@ -34,7 +34,7 @@ class SiteClearanceTest extends MinecraftTestSupport {
 
     @Test void playerBlocksContainersFluidsAndCropsStayProtected() {
         for (var block : List.of(Blocks.CHEST, Blocks.WATER, Blocks.COBBLESTONE, Blocks.OAK_PLANKS, Blocks.WHEAT,
-                Blocks.TORCH, Blocks.WHITE_WOOL, Blocks.STRIPPED_OAK_LOG, Blocks.OAK_LOG, Blocks.GLASS)) {
+                Blocks.TORCH, Blocks.WHITE_WOOL, Blocks.STRIPPED_OAK_LOG, Blocks.OAK_LOG, Blocks.GLASS, Blocks.WITHER_ROSE)) {
             assertFalse(SiteClearance.vegetation(level, BlockPos.ZERO, block.defaultBlockState()), block.toString());
             assertFalse(SiteClearance.terrain(block.defaultBlockState()), block.toString());
         }
