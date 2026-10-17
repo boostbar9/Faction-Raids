@@ -577,6 +577,7 @@ public final class NativeConstructionGuard {
             // The audited native goal can mutate only every fifth tick. Other
             // ticks keep its look/availability updates without an O(plan) scan.
             if (builder.tickCount % 5 != 0) return true;
+            if (builder.tickCount % 40 == 0) clearFreshSnow(level, snapshot);
             String problem = nativeStacksProblem(area, nativeGoal, snapshot.plan);
             Set<BlockPos> candidates = state instanceof Enum<?> e && e.name().equals("DONE")
                     ? snapshot.plan.cells.keySet() : mutationCells(nativeGoal, state);
@@ -702,6 +703,28 @@ public final class NativeConstructionGuard {
         return CampVegetation.singleCellPlant(state);
     }
 
+    /**
+     * Snow that falls on a section after review is weather, not an edit. Clear snow layers from
+     * planned cells that were empty at review and are not built yet, and from walkway headroom
+     * that was empty; anything else that changed still pauses the job.
+     */
+    static int clearFreshSnow(ServerLevel level, Snapshot snapshot) {
+        int cleared = 0;
+        for (BlockPos pos : snapshot.plan.cells.keySet()) {
+            BlockState initial = snapshot.before.get(pos);
+            if (initial != null && initial.isAir() && !snapshot.completed.contains(pos.asLong())) cleared += clearSnow(level, pos);
+        }
+        for (var entry : snapshot.reservation.clearance.entrySet())
+            if (entry.getValue().isAir()) cleared += clearSnow(level, entry.getKey());
+        return cleared;
+    }
+
+    static int clearSnow(ServerLevel level, BlockPos pos) {
+        if (!level.hasChunkAt(pos) || level.getBlockEntity(pos) != null || !level.getBlockState(pos).is(Blocks.SNOW)) return 0;
+        level.setBlock(pos, Blocks.AIR.defaultBlockState(), net.minecraft.world.level.block.Block.UPDATE_ALL);
+        return 1;
+    }
+
     static boolean currentCellSafe(BlockState initial, BlockState target, BlockState current,
                                    boolean completed, boolean cleared) {
         if (initial == null || !initialCellSafe(current, target)) return false;
@@ -775,7 +798,8 @@ public final class NativeConstructionGuard {
         for (BlockPos neighbor : neighbors) {
             BlockState state = level.getBlockState(neighbor);
             if (cleared.test(neighbor)) continue;
-            if (!stableNeighbor(state) || level.getBlockEntity(neighbor) != null) {
+            if ((!stableNeighbor(state) && !supportedLooseGround(level, neighbor, state, cleared))
+                    || level.getBlockEntity(neighbor) != null) {
                 String block = state == null ? "unreadable block"
                         : net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
                 return "Paused: neighboring " + block + " at " + neighbor.toShortString() + " needs manual review";
@@ -783,6 +807,30 @@ public final class NativeConstructionGuard {
         }
         if (level.hasNeighborSignal(target)) return "Paused: powered construction sites need manual review";
         return null;
+    }
+
+    /**
+     * Beach and desert sand or gravel next to a wall only falls when its support goes. Placing
+     * wall blocks never removes support, so loose ground resting (through at most eight more
+     * loose blocks) on a stable sturdy block counts as stable. Support that the builder will
+     * clear first does not count.
+     */
+    static boolean supportedLooseGround(ServerLevel level, BlockPos pos, BlockState state,
+                                        java.util.function.Predicate<BlockPos> cleared) {
+        if (!looseGround(state)) return false;
+        BlockPos below = pos.below();
+        for (int i = 0; i < 9; i++, below = below.below()) {
+            if (below.getY() < level.getMinBuildHeight() || !level.hasChunkAt(below) || cleared.test(below)) return false;
+            BlockState support = level.getBlockState(below);
+            if (support == null || !support.isFaceSturdy(level, below, Direction.UP)) return false;
+            if (looseGround(support)) continue;
+            return stableNeighbor(support) && level.getBlockEntity(below) == null;
+        }
+        return false;
+    }
+
+    private static boolean looseGround(BlockState state) {
+        return state != null && (state.is(Blocks.SAND) || state.is(Blocks.RED_SAND) || state.is(Blocks.GRAVEL));
     }
 
     static boolean stableNeighbor(BlockState state) {

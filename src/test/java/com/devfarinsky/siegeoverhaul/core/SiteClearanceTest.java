@@ -28,7 +28,8 @@ class SiteClearanceTest extends MinecraftTestSupport {
     @Test void naturalCoverIncludingPairedPlantsIsClearedVegetation() {
         for (var block : List.of(Blocks.GRASS, Blocks.TALL_GRASS, Blocks.LARGE_FERN, Blocks.FERN, Blocks.SUNFLOWER,
                 Blocks.POPPY, Blocks.SNOW, Blocks.VINE, Blocks.OAK_SAPLING, Blocks.SWEET_BERRY_BUSH, Blocks.DEAD_BUSH,
-                Blocks.BROWN_MUSHROOM, Blocks.SUGAR_CANE, Blocks.MOSS_CARPET))
+                Blocks.BROWN_MUSHROOM, Blocks.SUGAR_CANE, Blocks.MOSS_CARPET,
+                Blocks.RED_MUSHROOM_BLOCK, Blocks.MUSHROOM_STEM))
             assertTrue(SiteClearance.vegetation(level, BlockPos.ZERO, block.defaultBlockState()), block.toString());
     }
 

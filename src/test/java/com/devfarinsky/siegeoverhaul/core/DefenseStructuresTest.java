@@ -244,6 +244,7 @@ class DefenseStructuresTest extends MinecraftTestSupport {
         var plan = DefenseBlueprint.create(DefenseBlueprint.Kind.WALL, origin, Direction.SOUTH);
         BlockPos sand = origin.east(3);
         when(level.getBlockState(sand)).thenReturn(Blocks.SAND.defaultBlockState());
+        when(level.getBlockState(sand.below())).thenReturn(Blocks.AIR.defaultBlockState()); // Unsupported: it can fall.
         assertFalse(plan.footprint().contains(sand), "The neighbor is outside the previously checked footprint");
         for (BlockPos base : plan.footprint()) {
             assertTrue(level.getBlockState(base).isAir());
