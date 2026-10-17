@@ -182,4 +182,22 @@ class BuilderGroundRecoveryTest extends MinecraftTestSupport {
         verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
         verify(worker.getNavigation(),never()).stop();
     }
+    @Test void workerPinnedAgainstItsOwnNewBlockRepathsThenHopsAlongItsPath() {
+        setup();
+        when(level.getHeight(any(),anyInt(),anyInt())).thenReturn(60);
+        doAnswer(i -> ((BlockPos)i.getArgument(0)).getY()<60
+                ? Blocks.STONE.defaultBlockState():Blocks.AIR.defaultBlockState()).when(level).getBlockState(any());
+        var navigation = worker.getNavigation();
+        var path = new net.minecraft.world.level.pathfinder.Path(java.util.List.of(
+                new net.minecraft.world.level.pathfinder.Node(0,60,0), new net.minecraft.world.level.pathfinder.Node(1,61,0),
+                new net.minecraft.world.level.pathfinder.Node(2,60,0), new net.minecraft.world.level.pathfinder.Node(9,60,0)),
+                new BlockPos(9,60,0), true);
+        when(navigation.getPath()).thenReturn(path);
+        pass(0);pass(40);pass(80);pass(120);
+        verify(navigation).stop();
+        verify(worker,never()).teleportTo(anyDouble(),anyDouble(),anyDouble());
+        pass(160);pass(200);pass(240);
+        verify(worker).teleportTo(2.5,60,0.5);
+        verify(level,never()).setBlock(any(),any(),anyInt());
+    }
 }
