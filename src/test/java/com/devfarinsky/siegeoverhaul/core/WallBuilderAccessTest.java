@@ -745,7 +745,10 @@ class WallBuilderAccessTest extends MinecraftTestSupport {
                 case 5 -> when(partial.getNodeCount()).thenReturn(1);
             }
             goal.route(level, new BlockPos(80, 64, 0), 40);
-            verify(nav, never()).moveTo(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+            // The rejected partial endpoint is never walked. A far target may still get the
+            // separately verified straight-line approach instead of freezing forever.
+            verify(nav, never()).moveTo(eq((double) endpoint.getX()), anyDouble(), eq((double) endpoint.getZ()), anyDouble());
+            verify(worker, never()).teleportTo(anyDouble(), anyDouble(), anyDouble());
         }
     }
 
