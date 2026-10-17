@@ -19,11 +19,15 @@ jobs:
           github-token: ${{ github.token }}
           path: qa
       - run: |
-          mkdir -p out
-          find qa -type f | sed 's/^/FILE /' > out/files.txt
-          for f in $(find qa -name '*.log'); do
-            grep -nE "Native territory perimeter QA|WARN|ERROR|Paused|Waiting|Exception" "$f" | grep -v "ResourceLocation\|netty\|setAccessible\|Reflection" | tail -150 > "out/$(basename $f).tail.txt" || true
-          done
-          find qa -name 'result.json' -exec cp {} out/ \;
-          git config user.name diag-bot; git config user.email diag@example.invalid
-          git add out && git commit -qm "diag out" && git push -q origin HEAD:tmp/diag-native-qa
+          set +e
+          python3 - <<'PY'
+          import json, pathlib
+          for p in pathlib.Path('qa').rglob('result.json'):
+              d=json.loads(p.read_text())
+              for key in ('blockerDiagnostics','finalDiagnostics','diagnosticFailure','failure'):
+                  if key not in d: continue
+                  v=d[key]
+                  if isinstance(v,dict): v={k:x for k,x in v.items() if k not in ('pathNodes',)}
+                  t=json.dumps(v)
+                  for i in range(0,min(len(t),9000),950): print(f"::error title={key}{i}::{t[i:i+950]}")
+          PY
