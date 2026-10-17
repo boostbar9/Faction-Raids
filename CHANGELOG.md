@@ -1,3 +1,17 @@
+## 4.52.18 - Enemy camps keep building
+
+- Enemy war camps no longer go quiet once their walls and towers are done. Their builders keep working outside the walls for the rest of the siege, raising six war buildings one after another:
+  - Supply Depot: the camp builds twice as fast.
+  - Lookout Tower: your players glow when they get within 40 blocks of the camp.
+  - Field Infirmary: raiders and guards near the camp slowly heal.
+  - Weaponsmith: new raiders arrive with extra armor.
+  - Barracks: every wave brings 2 extra raiders.
+  - War Shrine: new raiders arrive with Strength.
+- Each building only works while its centrepiece stands: the composter, note block, cauldron, grindstone, loom or crying obsidian. Break it and the advantage is gone straight away. You get a message when the enemy starts a building, when it's finished and when you destroy it.
+- The enemy rebuilds destroyed buildings (twice each by default), only filling in what's missing and never breaking your blocks. Once everything is up they keep expanding the camp with tents in their colours.
+- Everything they build is removed and the land restored when the raid ends, like the rest of the camp. Server owners can tune or turn it off with the new campWarWorks settings.
+- Back up your world and update the server and all clients together.
+
 ## 4.52.17 - Walls on beaches, building through snow
 
 - Walls next to beach or desert sand and gravel are no longer refused. Sand resting on solid ground can't fall, so builders now work right beside it. Floating sand, or sand sitting on something the builder is about to dig out, still has to be dealt with by hand.
