@@ -35,7 +35,9 @@ public final class SiteClearance {
                 || block instanceof MushroomBlock || block instanceof SaplingBlock || block instanceof SugarCaneBlock
                 || block instanceof CactusBlock || block instanceof BambooStalkBlock || block instanceof BambooSaplingBlock
                 || block instanceof CocoaBlock || block instanceof AzaleaBlock || block instanceof PinkPetalsBlock
-                || block instanceof HangingRootsBlock || state.is(Blocks.MOSS_CARPET))
+                || block instanceof HangingRootsBlock || state.is(Blocks.MOSS_CARPET)
+                // Giant mushroom caps and stems only grow from bone-mealed mushrooms in the wild.
+                || block instanceof HugeMushroomBlock)
             return true;
         if (block instanceof LeavesBlock) return state.hasProperty(LeavesBlock.PERSISTENT) && !state.getValue(LeavesBlock.PERSISTENT);
         return naturalLog(state) && level != null && pos != null && treeTrunk(level, pos);

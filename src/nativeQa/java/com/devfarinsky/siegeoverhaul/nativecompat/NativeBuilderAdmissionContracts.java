@@ -38,17 +38,20 @@ final class NativeBuilderAdmissionContracts {
         BlockPos cavity = new BlockPos(130, 65, 8);
         BlockPos manual = fixture.wallAnchor();
         var original = new LinkedHashMap<BlockPos, net.minecraft.world.level.block.state.BlockState>();
-        for (BlockPos pos : java.util.List.of(neighbor, cavity.below(), cavity, cavity.above(),
+        for (BlockPos pos : java.util.List.of(neighbor.below(), neighbor, cavity.below(), cavity, cavity.above(),
                 manual.below(), manual, manual.above())) {
             require(level.hasChunkAt(pos), "Admission fixture terrain must already be loaded");
             original.put(pos, level.getBlockState(pos));
         }
         try {
+            // Sand resting on solid ground is stable beside a wall; floating sand can fall into it.
+            level.setBlock(neighbor.below(), Blocks.AIR.defaultBlockState(), 2);
             level.setBlock(neighbor, Blocks.SAND.defaultBlockState(), 2);
             String problem = PerimeterConstruction.prepare(owner, fixture.corePos(), 1).problem();
             rejectedAt(problem, neighbor, "minecraft:sand");
             require(level.getBlockState(neighbor).is(Blocks.SAND), "Free review removed its outside obstruction");
             level.setBlock(neighbor, original.get(neighbor), 2);
+            level.setBlock(neighbor.below(), original.get(neighbor.below()), 2);
 
             // Natural paired plants are left for the builder to clear on confirmation;
             // the free review must accept them without touching the world.

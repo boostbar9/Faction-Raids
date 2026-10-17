@@ -155,6 +155,8 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
         BlockPos sand = new BlockPos(-1, 64, 8);
         assertFalse(PerimeterConstruction.reservedCells(plan).contains(sand));
         when(level.getBlockState(sand)).thenReturn(Blocks.SAND.defaultBlockState());
+        // Unsupported sand can fall into the site; sand resting on solid ground is accepted below.
+        when(level.getBlockState(sand.below())).thenReturn(Blocks.AIR.defaultBlockState());
         String problem = PerimeterConstruction.siteProblem(level, plan, p -> true);
         assertNotNull(problem);
         assertTrue(problem.contains("minecraft:sand") && problem.contains(sand.toShortString()), problem);
@@ -187,6 +189,14 @@ class PerimeterConstructionTest extends MinecraftTestSupport {
         }
         var level = level(); when(level.getBlockState(cell)).thenReturn(Blocks.DANDELION.defaultBlockState());
         assertNull(PerimeterConstruction.siteProblem(level, plan, p -> true));
+    }
+    @Test void beachSandRestingOnSolidGroundBesideTheWallIsAccepted() {
+        var level = level(); var plan = plan();
+        BlockPos sand = new BlockPos(-1, 64, 8);
+        when(level.getBlockState(sand)).thenReturn(Blocks.SAND.defaultBlockState());
+        when(level.getBlockState(sand.below())).thenReturn(Blocks.GRAVEL.defaultBlockState());
+        assertNull(PerimeterConstruction.siteProblem(level, plan, p -> true));
+        verify(level, never()).setBlock(any(), any(), anyInt(), anyInt());
     }
     @Test void completedCellsDoNotRequirePermissionToMutateTheirNeighborsAgain() {
         var plan = plan(); var level = level();

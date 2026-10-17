@@ -1,3 +1,10 @@
+## 4.52.17 - Walls on beaches, building through snow
+
+- Walls next to beach or desert sand and gravel are no longer refused. Sand resting on solid ground can't fall, so builders now work right beside it. Floating sand, or sand sitting on something the builder is about to dig out, still has to be dealt with by hand.
+- Snow falling on a wall section while it's being built no longer pauses the job. Builders clear fresh snow from spots that were empty when you reviewed the plan and keep going. Any other change to the site still pauses it, so your own builds stay protected.
+- Giant mushrooms in the way of a wall are cleared like trees.
+- Existing worlds, paid jobs and claims stay compatible. Update the server and all clients together, and back up your world first.
+
 ## 4.52.16 - Builders clear the way and finish big walls
 
 - Builders now clear natural stuff in the way of a wall or defense instead of refusing the plan: tall grass, large ferns and other two-block plants, snow, vines, saplings, cactus, bamboo, and the trunks and leaves of real trees. On slopes they dig up to three blocks of natural dirt or stone out of the high side instead of rejecting the wall. Everything they break drops as items. The review itself still changes nothing; clearing happens when you confirm.
