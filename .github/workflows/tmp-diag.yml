@@ -27,7 +27,7 @@ jobs:
               for key in ('blockerDiagnostics','finalDiagnostics','diagnosticFailure','failure'):
                   if key not in d: continue
                   v=d[key]
-                  if isinstance(v,dict): v={k:x for k,x in v.items() if k not in ('pathNodes',)}
+                  if isinstance(v,dict): v={k:x for k,x in v.items() if k in ('pathNodes','builderPosition','nativeTarget','pathTarget','selfClearanceTarget','inventorySlots')}
                   t=json.dumps(v)
                   for i in range(0,min(len(t),9000),950): print(f"::error title={key}{i}::{t[i:i+950]}")
           PY
